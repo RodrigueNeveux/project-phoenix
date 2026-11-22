@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  BIN: phoenix-app
+  APP_NAME: Discord Phoenix
+
+jobs:
+  linux:
+    name: Linux x86_64
+    runs-on: ubuntu-22.04 # older glibc for wider compatibility
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev \
+            libxcb1-dev libfontconfig-dev libssl-dev libasound2-dev pkg-config \
+            libfuse2 file
+      - uses: Swatinem/rust-cache@v2.7.8
+      - run: cargo build --release --locked -p phoenix-app
+      - name: Package tar.gz, .deb and AppImage
+        run: packaging/linux/package.sh "${GITHUB_REF_NAME#v}" target/release/phoenix-app dist
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: dist-linux
+          path: dist/*
+
+  windows:
+    name: Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2.7.8
+      - run: cargo build --release --locked -p phoenix-app
+      - name: Package
+        shell: pwsh
+        run: |
+          $v = "$env:GITHUB_REF_NAME".TrimStart('v')
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $stage = "discord-phoenix-$v-windows-x86_64"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item target/release/phoenix-app.exe $stage/
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, README.md $stage/
+          Compress-Archive -Path $stage -DestinationPath "dist/$stage.zip"
+          Copy-Item target/release/phoenix-app.exe "dist/discord-phoenix-$v-windows-x86_64.exe"
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: dist-windows
+          path: dist/*
+
+  macos:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            target: aarch64-apple-darwin
+            runner: macos-14
+          - arch: x86_64
+            target: x86_64-apple-darwin
+            runner: macos-13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2.7.8
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build --release --locked -p phoenix-app --target ${{ matrix.target }}
+      - name: Build unsigned .app, zip and dmg
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          packaging/macos/bundle.sh "$v" "target/${{ matrix.target }}/release/phoenix-app" \
+            dist "macos-${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: dist-macos-${{ matrix.arch }}
+          path: dist/*
+
+  publish:
+    name: GitHub release
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Create release
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, '-rc') }}
+          body: |
+            Unofficial third-party client, not affiliated with or endorsed by Discord Inc.
+            macOS builds are unsigned: right-click > Open, or run `xattr -dr com.apple.quarantine "Discord Phoenix.app"`.
+            Verify downloads with `sha256sum -c SHA256SUMS`.

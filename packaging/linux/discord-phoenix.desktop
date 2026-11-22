@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Discord Phoenix
+GenericName=Chat Client
+Comment=Unofficial native Discord client (not affiliated with Discord Inc.)
+Exec=phoenix-app %U
+Icon=discord-phoenix
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+Keywords=chat;voice;messaging;
+StartupWMClass=phoenix-app
