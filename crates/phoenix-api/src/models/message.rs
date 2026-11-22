@@ -35,6 +35,7 @@ int_enum! {
     }
 }
 
+#[allow(clippy::derivable_impls)] // enum is macro-generated
 impl Default for MessageType {
     fn default() -> Self {
         Self::Default

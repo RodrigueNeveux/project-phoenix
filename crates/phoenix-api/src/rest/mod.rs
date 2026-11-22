@@ -250,7 +250,7 @@ impl RestClient {
                     global: bool,
                 }
                 let rl: Rl = serde_json::from_slice(&bytes).unwrap_or_default();
-                let retry = Duration::from_secs_f64(rl.retry_after.max(0.0).min(3600.0))
+                let retry = Duration::from_secs_f64(rl.retry_after.clamp(0.0, 3600.0))
                     .max(info.reset_after.unwrap_or_default());
                 let global = rl.global || info.global;
                 self.inner.limiter.on_429(&route, &major, retry, global, now);
@@ -270,9 +270,9 @@ impl RestClient {
                 let raw = String::from_utf8_lossy(&bytes).into_owned();
                 let body: ApiErrorBody = serde_json::from_slice(&bytes).unwrap_or_default();
                 if body.captcha_key.is_some() {
-                    return Err(Error::CaptchaRequired { sitekey: body.captcha_sitekey.clone(), body });
+                    return Err(Error::CaptchaRequired { sitekey: body.captcha_sitekey.clone(), body: Box::new(body) });
                 }
-                return Err(Error::Api { status: status.as_u16(), body, raw });
+                return Err(Error::Api { status: status.as_u16(), body: Box::new(body), raw });
             }
             return Ok((status, bytes));
         }

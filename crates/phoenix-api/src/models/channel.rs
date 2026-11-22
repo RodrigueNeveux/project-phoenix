@@ -20,6 +20,7 @@ int_enum! {
     }
 }
 
+#[allow(clippy::derivable_impls)] // enum is macro-generated
 impl Default for ChannelType {
     fn default() -> Self {
         Self::GuildText

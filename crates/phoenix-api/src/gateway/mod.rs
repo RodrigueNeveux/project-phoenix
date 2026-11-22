@@ -22,7 +22,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use serde_json::value::RawValue;
 use tokio::sync::mpsc;
-use tokio::time::{Instant, sleep, sleep_until, timeout};
+use tokio::time::{Instant, sleep_until, timeout};
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;

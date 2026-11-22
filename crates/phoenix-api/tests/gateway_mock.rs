@@ -1,4 +1,5 @@
 //! Gateway state machine against a local mock websocket server.
+#![allow(clippy::result_large_err)] // tungstenite handshake callback signature
 
 use std::time::Duration;
 
