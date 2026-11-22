@@ -1,6 +1,8 @@
 //! Rate-limited REST client authenticated with a *user* token.
 
+pub mod auth;
 pub mod profile;
+pub mod settings;
 pub mod ratelimit;
 pub mod search;
 
@@ -347,6 +349,18 @@ impl RestClient {
         self.call(Method::GET, "/users/@me/relationships", Body::None).await
     }
 
+    /// Raw JSON call for endpoints without a typed wrapper (invites,
+    /// relationship actions, leaving a guild...). `body` is sent as JSON when
+    /// present; an empty response body comes back as `Value::Null`.
+    pub async fn request_json(&self, method: Method, path: &str, body: Option<Value>) -> Result<Value> {
+        let body = body.map(Body::Json).unwrap_or(Body::None);
+        let (_, bytes) = self.raw(method, path, body).await?;
+        if bytes.is_empty() {
+            return Ok(Value::Null);
+        }
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
     // ---- guilds / channels -------------------------------------------------
 
     pub async fn get_guild(&self, id: GuildId) -> Result<Guild> {
@@ -434,6 +448,27 @@ impl RestClient {
             Body::Json(json!({ "token": null })),
         )
         .await
+    }
+
+    /// Move the read marker back: everything after `message` becomes unread
+    /// ("Mark Unread"). `message` is the last message still considered read.
+    pub async fn ack_message_manual(&self, channel: ChannelId, message: MessageId, mention_count: u32) -> Result<()> {
+        self.call_empty(
+            Method::POST,
+            &format!("/channels/{channel}/messages/{message}/ack"),
+            Body::Json(json!({ "manual": true, "mention_count": mention_count })),
+        )
+        .await
+    }
+
+    /// `PUT /channels/{id}/pins/{message}`
+    pub async fn pin_message(&self, channel: ChannelId, message: MessageId) -> Result<()> {
+        self.call_empty(Method::PUT, &format!("/channels/{channel}/pins/{message}"), Body::None).await
+    }
+
+    /// `DELETE /channels/{id}/pins/{message}`
+    pub async fn unpin_message(&self, channel: ChannelId, message: MessageId) -> Result<()> {
+        self.call_empty(Method::DELETE, &format!("/channels/{channel}/pins/{message}"), Body::None).await
     }
 
     /// `POST /channels/{id}/typing` (lasts ~10 s).
