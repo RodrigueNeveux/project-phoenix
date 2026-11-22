@@ -2,6 +2,7 @@
 
 pub mod profile;
 pub mod ratelimit;
+pub mod search;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
