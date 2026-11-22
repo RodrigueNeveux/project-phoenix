@@ -290,7 +290,7 @@ mod tests {
         let p = au(&[vec![0x41, 9, 9]]);
         assert_eq!(roundtrip(&p, &mut pk, 1100), p);
         // Bare IDR: SPS/PPS injected
-        let out = roundtrip(&au(&[idr.clone()]), &mut pk, 1100);
+        let out = roundtrip(&au(std::slice::from_ref(&idr)), &mut pk, 1100);
         assert_eq!(out, au(&[sps, pps, idr]));
     }
 

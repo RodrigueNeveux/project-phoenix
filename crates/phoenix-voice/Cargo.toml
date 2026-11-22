@@ -2,5 +2,32 @@
 name = "phoenix-voice"
 version = "0.1.0"
 edition = "2024"
+description = "Voice/video transport (voice gateway v8, RTP, DAVE) for Discord Phoenix, an unofficial client"
+license = "MIT OR Apache-2.0"
+
+[features]
+default = []
+# Opus encode/decode via audiopus (builds bundled libopus with cmake if no system lib).
+opus = ["dep:audiopus"]
+# Video encoder backends (currently stubs, see src/media/video.rs).
+ffmpeg = []
+vaapi = []
+nvenc = []
 
 [dependencies]
+tokio = { version = "1", features = ["net", "time", "sync", "rt", "macros"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+rand = "0.9"
+aes-gcm = "0.10"
+chacha20poly1305 = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+audiopus = { version = "0.2", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }

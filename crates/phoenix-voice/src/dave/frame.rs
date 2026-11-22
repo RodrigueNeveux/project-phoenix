@@ -20,16 +20,40 @@
 //!   so encryption is retried with a fresh nonce when it does.
 //! - AV1: OBU headers and size fields clear, OBU payloads encrypted.
 
-use aes_gcm::aead::consts::{U12, U8};
 use aes_gcm::aead::{AeadInPlace, KeyInit};
-use aes_gcm::aes::Aes128;
-use aes_gcm::AesGcm;
+use aes_gcm::Aes128Gcm;
 
 use super::ratchet::KeyRatchet;
 use crate::codec::Codec;
 use crate::{leb128, Error, Result};
 
-type Aes128Gcm8 = AesGcm<Aes128, U12, U8>;
+/// AES-128-GCM; the 16-byte tag is truncated to [`TAG_LEN`] bytes on the wire
+/// (GCM's truncated tag is the prefix of the full tag, NIST SP 800-38D).
+type Aes128Gcm8 = Aes128Gcm;
+
+/// Seal in place, returning the truncated tag.
+fn seal(c: &Aes128Gcm8, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8]) -> Result<[u8; TAG_LEN]> {
+    let full = c.encrypt_in_place_detached(nonce.into(), aad, buf).map_err(|_| Error::Crypto("dave encrypt"))?;
+    let mut t = [0u8; TAG_LEN];
+    t.copy_from_slice(&full[..TAG_LEN]);
+    Ok(t)
+}
+
+/// Open in place with a truncated tag. GCM is CTR mode, so encrypting the
+/// ciphertext yields the plaintext; re-encrypting the plaintext then gives
+/// the full tag over the original ciphertext, compared in constant time.
+fn open(c: &Aes128Gcm8, nonce: &[u8; 12], aad: &[u8], buf: &mut [u8], tag: &[u8; TAG_LEN]) -> Result<()> {
+    let original = buf.to_vec();
+    c.encrypt_in_place_detached(nonce.into(), aad, buf).map_err(|_| Error::Crypto("dave decrypt"))?;
+    let mut check = buf.to_vec();
+    let full = c.encrypt_in_place_detached(nonce.into(), aad, &mut check).map_err(|_| Error::Crypto("dave decrypt"))?;
+    let diff = full[..TAG_LEN].iter().zip(tag).fold(0u8, |a, (x, y)| a | (x ^ y));
+    if diff != 0 || check != original {
+        buf.copy_from_slice(&original);
+        return Err(Error::Crypto("dave authentication failed"));
+    }
+    Ok(())
+}
 
 pub const MAGIC: [u8; 2] = [0xFA, 0xFA];
 pub const TAG_LEN: usize = 8;
@@ -206,9 +230,7 @@ impl FrameEncryptor {
             let generation = truncated >> GENERATION_SHIFT;
             let cipher = self.cipher(generation)?;
             let mut body = plain.clone();
-            let tag = cipher
-                .encrypt_in_place_detached((&nonce_bytes(truncated)).into(), &clear, &mut body)
-                .map_err(|_| Error::Crypto("dave encrypt"))?;
+            let tag = seal(cipher, &nonce_bytes(truncated), &clear, &mut body)?;
             let mut footer = Vec::with_capacity(32);
             footer.extend_from_slice(&tag);
             leb128::write(truncated as u64, &mut footer);
@@ -322,9 +344,7 @@ impl FrameDecryptor {
             }
         }
         let cipher = self.keys.get(&generation).ok_or(Error::Crypto("dave key"))?;
-        cipher
-            .decrypt_in_place_detached((&nonce_bytes(f.truncated_nonce)).into(), &clear, &mut enc, (&f.tag).into())
-            .map_err(|_| Error::Crypto("dave authentication failed"))?;
+        open(cipher, &nonce_bytes(f.truncated_nonce), &clear, &mut enc, &f.tag)?;
         interleave(&clear, &enc, &f.ranges, f.body_len)
     }
 }

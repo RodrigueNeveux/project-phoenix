@@ -92,11 +92,10 @@ impl GatewayMachine {
                 self.state = State::Connected;
             }
             ServerMessage::Resumed => self.state = State::Connected,
-            ServerMessage::HeartbeatAck { nonce } => {
-                if self.pending_nonce == Some(*nonce) || self.pending_nonce.is_some() {
-                    self.pending_nonce = None;
-                    self.missed_acks = 0;
-                }
+            // Any ack clears the outstanding heartbeat (servers may echo an older nonce).
+            ServerMessage::HeartbeatAck { .. } if self.pending_nonce.is_some() => {
+                self.pending_nonce = None;
+                self.missed_acks = 0;
             }
             _ => {}
         }

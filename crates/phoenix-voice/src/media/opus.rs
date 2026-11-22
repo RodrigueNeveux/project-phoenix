@@ -57,7 +57,10 @@ impl OpusDecoder {
 impl AudioDecoder for OpusDecoder {
     /// `None` = packet loss concealment.
     fn decode(&mut self, packet: Option<&[u8]>) -> Result<Vec<i16>> {
-        let mut out = vec![0i16; FRAME_SAMPLES * 2 * self.channels];
+        // With no packet libopus conceals exactly as many samples as the buffer
+        // holds, so limit loss concealment to one 20 ms frame.
+        let per_ch = if packet.is_some() { FRAME_SAMPLES * 6 } else { FRAME_SAMPLES };
+        let mut out = vec![0i16; per_ch * self.channels];
         let n = self.inner.decode(packet, &mut out, false).map_err(err)?;
         out.truncate(n * self.channels);
         Ok(out)
