@@ -39,7 +39,7 @@ Package: discord-phoenix
 Version: $DEBVER
 Architecture: $DEBARCH
 Maintainer: Discord Phoenix contributors <noreply@github.com>
-Homepage: https://github.com/RoxasYTB/discord-phoenix
+Homepage: https://github.com/RoxasYTB/project-phoenix
 Section: net
 Priority: optional
 Depends: libc6, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libvulkan1, libxcb1, libfontconfig1, libasound2 | libasound2t64, libssl3 | libssl3t64

@@ -11,7 +11,7 @@
 
 <p align="center">
 
-  <a href="https://github.com/RoxasYTB/discord-phoenix/releases"><img src="https://img.shields.io/github/v/release/RoxasYTB/discord-phoenix?include_prereleases&label=release" alt="Latest release"></a>
+  <a href="https://github.com/RoxasYTB/project-phoenix/releases"><img src="https://img.shields.io/github/v/release/RoxasYTB/project-phoenix?include_prereleases&label=release" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue" alt="License: Apache-2.0 OR MIT">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">
 </p>
@@ -57,7 +57,7 @@ hardware used, once the client can log in and display real servers. Nothing is c
 ## Installing
 
 Prebuilt beta builds for Linux (AppImage, `.deb`, tarball), Windows and macOS are attached to
-[releases](https://github.com/RoxasYTB/discord-phoenix/releases). macOS builds are not notarized:
+[releases](https://github.com/RoxasYTB/project-phoenix/releases). macOS builds are not notarized:
 right-click the app and choose **Open** the first time.
 
 ## Building from source
@@ -65,8 +65,8 @@ right-click the app and choose **Open** the first time.
 Requires a recent stable Rust toolchain (`rustup`).
 
 ```sh
-git clone https://github.com/RoxasYTB/discord-phoenix
-cd discord-phoenix
+git clone https://github.com/RoxasYTB/project-phoenix
+cd project-phoenix
 cargo run -p phoenix-app --release
 ```
 

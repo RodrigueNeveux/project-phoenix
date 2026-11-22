@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please **do not open a public issue**. Use [GitHub private vulnerability reporting](https://github.com/RoxasYTB/discord-phoenix/security/advisories/new). Include affected version/commit, platform, and reproduction steps. We aim to acknowledge within 7 days and fix serious issues before disclosure.
+Please **do not open a public issue**. Use [GitHub private vulnerability reporting](https://github.com/RoxasYTB/project-phoenix/security/advisories/new). Include affected version/commit, platform, and reproduction steps. We aim to acknowledge within 7 days and fix serious issues before disclosure.
 
 Vulnerabilities in Discord's own services should go to Discord's bug bounty programme, not to us.
 
