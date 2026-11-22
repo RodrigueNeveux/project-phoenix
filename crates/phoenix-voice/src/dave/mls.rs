@@ -13,12 +13,8 @@
 //! credentials whose identity is the big-endian 64-bit user id, and the
 //! voice server as the single external sender.
 //!
-//! TODO(openmls): provide an `OpenMlsSession` implementing this trait with the
-//! `openmls` crate (ciphersuite 2, external sender extension, proposal
-//! filtering against `recognized_user_ids`, exporter for sender keys). It is
-//! not included yet: it pulls a large dependency tree and needs interop
-//! testing against the real voice servers before shipping. Until then callers
-//! must announce `max_dave_protocol_version = 0` (transport encryption only).
+//! [`super::openmls_session::OpenMlsSession`] implements this trait with the
+//! `openmls` crate.
 
 use crate::Result;
 
@@ -51,6 +47,14 @@ pub trait MlsSession: Send {
     fn export_sender_secret(&self, user_id: u64) -> Result<[u8; 16]>;
     /// Epoch authenticator, used for the user-visible privacy/verification code.
     fn epoch_authenticator(&self) -> Result<Vec<u8>>;
+    /// True once this client is a member of an established group (epoch >= 1).
+    fn is_member(&self) -> bool {
+        self.epoch_authenticator().is_ok()
+    }
+    /// User ids of the current group members.
+    fn member_ids(&self) -> Vec<u64> {
+        Vec::new()
+    }
 }
 
 /// Build the ratchet for a sender from the current MLS epoch.

@@ -28,6 +28,8 @@ pub enum Error {
     Encoder(String),
     #[error("no usable codec left for stream")]
     NoCodecAvailable,
+    #[error("mls: {0}")]
+    Mls(String),
     #[error("timed out: {0}")]
     Timeout(&'static str),
 }

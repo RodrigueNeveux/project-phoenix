@@ -8,7 +8,9 @@
 
 pub mod frame;
 pub mod mls;
+pub mod openmls_session;
 pub mod ratchet;
+pub mod session;
 
 /// Highest DAVE protocol version this client implements the frame format for.
 pub const MAX_PROTOCOL_VERSION: u16 = 1;
