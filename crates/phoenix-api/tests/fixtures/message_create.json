@@ -1,0 +1,44 @@
+{
+  "id": "700000000000000051",
+  "channel_id": "400000000000000001",
+  "guild_id": "300000000000000001",
+  "type": 19,
+  "content": "check this <@200000000000000002> :ferris:",
+  "timestamp": "2024-05-01T12:00:00.000000+00:00",
+  "edited_timestamp": null,
+  "tts": false,
+  "flags": 0,
+  "pinned": false,
+  "nonce": "1234567890123456789",
+  "mention_everyone": false,
+  "mention_roles": ["500000000000000001"],
+  "author": {"id": "200000000000000003", "username": "bob", "discriminator": "4242", "global_name": null, "avatar": "bobhash", "public_flags": 64, "clan": null},
+  "member": {"roles": ["500000000000000001"], "nick": "Bobby", "joined_at": "2021-01-01T00:00:00+00:00", "deaf": false, "mute": false, "flags": 0},
+  "mentions": [{"id": "200000000000000002", "username": "alice", "discriminator": "0", "global_name": "Alice", "avatar": null, "member": {"roles": [], "joined_at": "2021-01-01T00:00:00+00:00", "nick": null, "deaf": false, "mute": false}}],
+  "attachments": [
+    {"id": "710000000000000001", "filename": "crab.png", "size": 51234, "url": "https://cdn.discordapp.com/attachments/1/2/crab.png", "proxy_url": "https://media.discordapp.net/attachments/1/2/crab.png", "width": 640, "height": 480, "content_type": "image/png", "placeholder": "abc", "placeholder_version": 1},
+    {"id": "710000000000000002", "filename": "voice-message.ogg", "size": 9000, "url": "u", "proxy_url": "p", "content_type": "audio/ogg", "duration_secs": 3.5, "waveform": "AAAA", "flags": 8192}
+  ],
+  "embeds": [
+    {"type": "rich", "title": "Rust 2024", "description": "Edition notes", "url": "https://blog.rust-lang.org", "color": 14177041, "timestamp": "2024-05-01T12:00:00+00:00",
+     "footer": {"text": "blog", "icon_url": "https://x/icon.png"}, "image": {"url": "https://x/i.png", "width": 100, "height": 50},
+     "thumbnail": {"url": "https://x/t.png", "proxy_url": "https://p/t.png", "width": 32, "height": 32},
+     "author": {"name": "Rust Team", "url": "https://rust-lang.org"}, "provider": {"name": "Rust Blog"},
+     "fields": [{"name": "Edition", "value": "2024", "inline": true}, {"name": "Status", "value": "stable"}]},
+    {"type": "gifv", "url": "https://tenor.com/x", "video": {"url": "https://x/v.mp4", "width": 200, "height": 200}, "content_scan_version": 1}
+  ],
+  "reactions": [
+    {"count": 3, "count_details": {"burst": 1, "normal": 2}, "me": true, "me_burst": false, "burst_me": false, "emoji": {"id": null, "name": "🦀"}, "burst_colors": ["#ff0000"]},
+    {"count": 1, "count_details": {"burst": 0, "normal": 1}, "me": false, "me_burst": false, "emoji": {"id": "600000000000000001", "name": "ferris", "animated": false}, "burst_colors": []}
+  ],
+  "sticker_items": [{"id": "750000000000000001", "name": "Wave", "format_type": 1}, {"id": "750000000000000002", "name": "Dance", "format_type": 3}],
+  "message_reference": {"type": 0, "message_id": "700000000000000050", "channel_id": "400000000000000001", "guild_id": "300000000000000001"},
+  "referenced_message": {
+    "id": "700000000000000050", "channel_id": "400000000000000001", "type": 0, "content": "original",
+    "author": {"id": "200000000000000002", "username": "alice", "discriminator": "0", "global_name": "Alice", "avatar": null},
+    "timestamp": "2024-05-01T11:59:00+00:00", "edited_timestamp": "2024-05-01T11:59:30+00:00",
+    "tts": false, "mention_everyone": false, "mentions": [], "mention_roles": [], "attachments": [], "embeds": [], "pinned": false, "flags": 0, "components": []
+  },
+  "components": [],
+  "some_future_field": [1, 2, 3]
+}

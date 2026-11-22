@@ -1,0 +1,16 @@
+{
+  "id": "300000000000000003",
+  "name": "Classic Shape",
+  "icon": null,
+  "owner_id": "100000000000000001",
+  "features": [],
+  "joined_at": "2023-01-01T00:00:00+00:00",
+  "member_count": 3,
+  "roles": [{"id": "300000000000000003", "name": "@everyone", "permissions": "104324673", "position": 0, "color": 0, "hoist": false, "managed": false, "mentionable": false}],
+  "channels": [{"id": "410000000000000001", "type": 0, "name": "lobby", "position": 0, "permission_overwrites": []}],
+  "threads": [],
+  "members": [{"user": {"id": "100000000000000001", "username": "phoenix", "discriminator": "0"}, "roles": [], "joined_at": "2023-01-01T00:00:00+00:00", "deaf": false, "mute": false}],
+  "voice_states": [{"user_id": "100000000000000001", "channel_id": null, "session_id": "s", "deaf": false, "mute": false, "self_deaf": false, "self_mute": true, "self_video": false, "suppress": false, "request_to_speak_timestamp": null}],
+  "presences": [],
+  "emojis": []
+}

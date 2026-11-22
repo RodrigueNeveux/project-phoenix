@@ -1,0 +1,193 @@
+//! Embedded assets: hand-drawn monochrome SVG icons (tinted at render time
+//! via `text_color`) and the app icon PNG.
+
+use std::borrow::Cow;
+
+use gpui::{AssetSource, SharedString};
+
+pub const APP_ICON_PNG: &[u8] = include_bytes!("../assets/icon.png");
+
+macro_rules! s {
+    ($body:expr) => {
+        concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">"#,
+            $body,
+            "</svg>"
+        )
+    };
+}
+macro_rules! f {
+    ($body:expr) => {
+        concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
+            $body,
+            "</svg>"
+        )
+    };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icon {
+    Hash,
+    Speaker,
+    Megaphone,
+    Forum,
+    Stage,
+    Chevron,
+    Plus,
+    Mic,
+    MicOff,
+    Headphones,
+    HeadphonesOff,
+    Gear,
+    Bell,
+    Pin,
+    Members,
+    Search,
+    Inbox,
+    Help,
+    Gift,
+    Gif,
+    Sticker,
+    Emoji,
+    PlusCircle,
+    Compass,
+    Download,
+    Close,
+    Threads,
+    Friends,
+    Nitro,
+    Lock,
+    Reply,
+    File,
+    Image,
+    PhoneHangup,
+}
+
+impl Icon {
+    pub fn path(self) -> SharedString {
+        SharedString::new_static(match self {
+            Icon::Hash => "icons/hash.svg",
+            Icon::Speaker => "icons/speaker.svg",
+            Icon::Megaphone => "icons/megaphone.svg",
+            Icon::Forum => "icons/forum.svg",
+            Icon::Stage => "icons/stage.svg",
+            Icon::Chevron => "icons/chevron.svg",
+            Icon::Plus => "icons/plus.svg",
+            Icon::Mic => "icons/mic.svg",
+            Icon::MicOff => "icons/mic-off.svg",
+            Icon::Headphones => "icons/headphones.svg",
+            Icon::HeadphonesOff => "icons/headphones-off.svg",
+            Icon::Gear => "icons/gear.svg",
+            Icon::Bell => "icons/bell.svg",
+            Icon::Pin => "icons/pin.svg",
+            Icon::Members => "icons/members.svg",
+            Icon::Search => "icons/search.svg",
+            Icon::Inbox => "icons/inbox.svg",
+            Icon::Help => "icons/help.svg",
+            Icon::Gift => "icons/gift.svg",
+            Icon::Gif => "icons/gif.svg",
+            Icon::Sticker => "icons/sticker.svg",
+            Icon::Emoji => "icons/emoji.svg",
+            Icon::PlusCircle => "icons/plus-circle.svg",
+            Icon::Compass => "icons/compass.svg",
+            Icon::Download => "icons/download.svg",
+            Icon::Close => "icons/close.svg",
+            Icon::Threads => "icons/threads.svg",
+            Icon::Friends => "icons/friends.svg",
+            Icon::Nitro => "icons/nitro.svg",
+            Icon::Lock => "icons/lock.svg",
+            Icon::Reply => "icons/reply.svg",
+            Icon::File => "icons/file.svg",
+            Icon::Image => "icons/image.svg",
+            Icon::PhoneHangup => "icons/phone-hangup.svg",
+        })
+    }
+}
+
+fn svg_for(path: &str) -> Option<&'static str> {
+    Some(match path {
+        "icons/hash.svg" => s!(r#"<path d="M10 3 8 21M16 3l-2 18M4 8.5h17M3 15.5h17"/>"#),
+        "icons/speaker.svg" => f!(r#"<path d="M11.4 3.2A1 1 0 0 1 13 4v16a1 1 0 0 1-1.6.8L6.7 17H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h3.7zM15.5 8.5a1 1 0 0 1 1.4 0 5 5 0 0 1 0 7 1 1 0 1 1-1.4-1.4 3 3 0 0 0 0-4.2 1 1 0 0 1 0-1.4zm2.8-2.8a1 1 0 0 1 1.4 0 9 9 0 0 1 0 12.6 1 1 0 1 1-1.4-1.4 7 7 0 0 0 0-9.8 1 1 0 0 1 0-1.4z"/>"#),
+        "icons/megaphone.svg" => s!(r#"<path d="M3 10v4a1 1 0 0 0 1 1h3l8 5V4L7 9H4a1 1 0 0 0-1 1zM7 15l1.5 5M19 9.5a3 3 0 0 1 0 5"/>"#),
+        "icons/forum.svg" => s!(r#"<path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4 3V5a1 1 0 0 1 1-1zM20 8h0a1 1 0 0 1 1 1v11l-3-2.5H10a1 1 0 0 1-1-1V17"/>"#),
+        "icons/stage.svg" => s!(r#"<circle cx="12" cy="9" r="3"/><path d="M5.6 15.5A8 8 0 1 1 18.4 15.5M8 21l1-5h6l1 5"/>"#),
+        "icons/chevron.svg" => s!(r#"<path d="m6 9 6 6 6-6"/>"#),
+        "icons/plus.svg" => s!(r#"<path d="M12 5v14M5 12h14"/>"#),
+        "icons/mic.svg" => f!(r#"<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11a1 1 0 0 1 1 1 6 6 0 0 0 12 0 1 1 0 1 1 2 0 8 8 0 0 1-7 7.9V22h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.1A8 8 0 0 1 4 12a1 1 0 0 1 1-1z"/>"#),
+        "icons/mic-off.svg" => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">"#,
+            r#"<rect x="8" y="2" width="8" height="13" rx="4" fill="black"/><path d="M5 11a1 1 0 0 1 1 1 6 6 0 0 0 12 0 1 1 0 1 1 2 0 8 8 0 0 1-7 7.9V22h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.1A8 8 0 0 1 4 12a1 1 0 0 1 1-1z" fill="black"/>"#,
+            r#"<path d="M3 2 21 22" stroke="black" stroke-width="2.4" stroke-linecap="round"/></svg>"#
+        ),
+        "icons/headphones.svg" => f!(r#"<path d="M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5v-1a7 7 0 0 1 14 0v1h-2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z"/>"#),
+        "icons/headphones-off.svg" => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">"#,
+            r#"<path fill="black" d="M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5v-1a7 7 0 0 1 14 0v1h-2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z"/>"#,
+            r#"<path d="M3 2 21 22" stroke="black" stroke-width="2.4" stroke-linecap="round"/></svg>"#
+        ),
+        "icons/gear.svg" => f!(r#"<path fill-rule="evenodd" d="M10.6 2h2.8l.5 2.6 1.7.7 2.2-1.5 2 2-1.5 2.2.7 1.7 2.6.5v2.8l-2.6.5-.7 1.7 1.5 2.2-2 2-2.2-1.5-1.7.7-.5 2.6h-2.8l-.5-2.6-1.7-.7-2.2 1.5-2-2 1.5-2.2-.7-1.7L2 13.4v-2.8l2.6-.5.7-1.7-1.5-2.2 2-2 2.2 1.5 1.7-.7zM12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z"/>"#),
+        "icons/bell.svg" => f!(r#"<path d="M12 2a7 7 0 0 0-7 7v4l-2 3v1h18v-1l-2-3V9a7 7 0 0 0-7-7zM9 19a3 3 0 0 0 6 0z"/>"#),
+        "icons/pin.svg" => f!(r#"<path d="M15 2 22 9l-2 1-3.5 3.5L17 19l-1.5 1.5-4.5-4.5-6 6L3 20l6-6-4.5-4.5L6 8l5.5.5L15 5z"/>"#),
+        "icons/members.svg" => f!(r#"<circle cx="9" cy="8" r="4"/><path d="M1 20a8 6 0 0 1 16 0v1H1zM16 4a4 4 0 0 1 0 8 6 6 0 0 0 0-8zM18 14a7 6 0 0 1 5 6v1h-4v-1a8 8 0 0 0-1-6z"/>"#),
+        "icons/search.svg" => s!(r#"<circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/>"#),
+        "icons/inbox.svg" => f!(r#"<path d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v9h3.5a3.5 3.5 0 0 0 7 0H19V5z"/>"#),
+        "icons/help.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 14.5a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6zM12 5a4 4 0 0 0-4 4h2.2a1.8 1.8 0 1 1 2.6 1.6c-1.2.6-1.9 1.4-1.9 2.9v.5h2.2v-.4c0-.6.3-1 1-1.4A4 4 0 0 0 12 5z"/>"#),
+        "icons/gift.svg" => f!(r#"<path d="M3 8h18v4H3zM4 13h7v8H5a1 1 0 0 1-1-1zm9 0h7v7a1 1 0 0 1-1 1h-6zM11 8V7a3 3 0 1 0-3 0zM13 8V7a3 3 0 1 1 3 0z"/>"#),
+        "icons/gif.svg" => f!(r#"<path fill-rule="evenodd" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm4.5 5A2.5 2.5 0 0 0 6 11.5v1A2.5 2.5 0 0 0 8.5 15h1.5v-3H8.5v1.2H8v-1.7a.5.5 0 0 1 .5-.5H10V9zm3 0v6h1.6V9zm2.8 0v6h1.6v-2H18v-1.5h-2.1V10.5H18.2V9z"/>"#),
+        "icons/sticker.svg" => f!(r#"<path d="M5 3h14a2 2 0 0 1 2 2v9l-7 7H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm8 18v-5a2 2 0 0 1 2-2h6z"/>"#),
+        "icons/emoji.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zM8.5 8a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm7 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM6.5 13.5a5.5 5.5 0 0 0 11 0z"/>"#),
+        "icons/plus-circle.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm-1 5v4H7v2h4v4h2v-4h4v-2h-4V7z"/>"#),
+        "icons/compass.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm4.5 5.5-6.4 2.6-2.6 6.4 6.4-2.6zM12 10.7a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z"/>"#),
+        "icons/download.svg" => s!(r#"<path d="M12 3v12m-5-5 5 5 5-5M4 21h16"/>"#),
+        "icons/close.svg" => s!(r#"<path d="M6 6l12 12M18 6 6 18"/>"#),
+        "icons/threads.svg" => s!(r#"<path d="M5 4h14v10H11l-4 3v-3H5zM9 8h6M9 11h4"/>"#),
+        "icons/friends.svg" => f!(r#"<circle cx="12" cy="7" r="4.5"/><path d="M3 21a9 7 0 0 1 18 0z"/>"#),
+        "icons/nitro.svg" => f!(r#"<path d="M3 9h5v2H3zm1 4h4v2H4zM14 4a8 8 0 1 1 0 16 8 8 0 0 1-6.9-4h2.5A6 6 0 1 0 9.6 8H7.1A8 8 0 0 1 14 4zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/>"#),
+        "icons/lock.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/>"#),
+        "icons/reply.svg" => s!(r#"<path d="M4 20v-5a6 6 0 0 1 6-6h10M15 4l5 5-5 5"/>"#),
+        "icons/file.svg" => f!(r#"<path d="M6 2h8l6 6v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm7 1.5V9h5.5z"/>"#),
+        "icons/image.svg" => s!(r#"<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>"#),
+        "icons/phone-hangup.svg" => f!(r#"<path d="M12 9c-3.5 0-6.8 1-9.4 2.9a1.5 1.5 0 0 0-.2 2.2l1.8 2a1.5 1.5 0 0 0 1.9.3l2.4-1.4a1.5 1.5 0 0 0 .7-1.3v-1.6a12 12 0 0 1 5.6 0v1.6c0 .5.3 1 .7 1.3l2.4 1.4a1.5 1.5 0 0 0 1.9-.3l1.8-2a1.5 1.5 0 0 0-.2-2.2C18.8 10 15.5 9 12 9z"/>"#),
+        _ => return None,
+    })
+}
+
+pub struct Assets;
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
+        if path == "icon.png" {
+            return Ok(Some(Cow::Borrowed(APP_ICON_PNG)));
+        }
+        Ok(svg_for(path).map(|s| Cow::Borrowed(s.as_bytes())))
+    }
+
+    fn list(&self, path: &str) -> gpui::Result<Vec<SharedString>> {
+        Ok(ALL
+            .iter()
+            .map(|i| i.path())
+            .filter(|p| p.starts_with(path))
+            .collect())
+    }
+}
+
+const ALL: &[Icon] = &[
+    Icon::Hash, Icon::Speaker, Icon::Megaphone, Icon::Forum, Icon::Stage, Icon::Chevron,
+    Icon::Plus, Icon::Mic, Icon::MicOff, Icon::Headphones, Icon::HeadphonesOff, Icon::Gear,
+    Icon::Bell, Icon::Pin, Icon::Members, Icon::Search, Icon::Inbox, Icon::Help, Icon::Gift,
+    Icon::Gif, Icon::Sticker, Icon::Emoji, Icon::PlusCircle, Icon::Compass, Icon::Download,
+    Icon::Close, Icon::Threads, Icon::Friends, Icon::Nitro, Icon::Lock, Icon::Reply, Icon::File,
+    Icon::Image, Icon::PhoneHangup,
+];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_icon_has_svg() {
+        for i in ALL {
+            assert!(svg_for(&i.path()).is_some(), "{i:?}");
+        }
+    }
+}

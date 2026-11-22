@@ -1,0 +1,522 @@
+//! Standalone fake data source so the UI runs without the network layer.
+
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
+use crate::{
+    backend::*,
+    model::*,
+};
+
+pub const ME: Id = Id(1);
+
+struct Lcg(u64);
+impl Lcg {
+    fn next(&mut self) -> u64 {
+        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 >> 33
+    }
+    fn pick<'a, T>(&mut self, v: &'a [T]) -> &'a T {
+        &v[(self.next() as usize) % v.len()]
+    }
+}
+
+const NAMES: &[(&str, &str)] = &[
+    ("phoenix", "Phoenix"),
+    ("wumpus", "Wumpus"),
+    ("clyde", "Clyde"),
+    ("ferris", "Ferris 🦀"),
+    ("nelly", "Nelly"),
+    ("lester", "Lester"),
+    ("aiko", "Aiko"),
+    ("kaze", "kaze"),
+    ("mira", "Mira"),
+    ("toast", "toast"),
+    ("orbit", "Orbit"),
+    ("pixel", "pixel.dev"),
+    ("quartz", "Quartz"),
+    ("rune", "Rune"),
+    ("sable", "Sable"),
+    ("tidal", "Tidal"),
+    ("umbra", "Umbra"),
+    ("vexel", "Vexel"),
+    ("willow", "Willow"),
+    ("xeno", "xeno"),
+    ("yuzu", "Yuzu"),
+    ("zephyr", "Zephyr"),
+    ("gpui-bot", "GPUI Bot"),
+];
+
+const LINES: &[&str] = &[
+    "hey everyone 👋",
+    "has anyone tried the new **GPUI** release?",
+    "it's *really* fast, like 120fps fast",
+    "`cargo build --release` takes forever on my laptop though",
+    "lol",
+    "same",
+    "check this out https://github.com/zed-industries/zed",
+    "> quoting for posterity\nthat's a hot take",
+    "```rust\nfn main() {\n    println!(\"hello from phoenix\");\n}\n```",
+    "||spoiler: it was the borrow checker all along||",
+    "anyone up for voice later? <@1>",
+    "I pushed a fix to <#1003>, take a look",
+    "__underlined__ and ~~struck~~ text works too",
+    "brb",
+    "that's wild",
+    "the member list virtualization is smooth",
+    "@everyone meeting in 10",
+    "did you see the [docs](https://docs.rs/gpui)?",
+    "ok I'm convinced, rewriting everything in rust 🦀",
+    "gm",
+    "can't reproduce on wayland, works fine here",
+    "nvidia moment",
+];
+
+struct Inner {
+    sink: Option<EventSink>,
+    next_id: u64,
+    history: HashMap<Id, Vec<Message>>,
+    users: Vec<User>,
+    guilds: Vec<Guild>,
+    channels: Vec<Channel>,
+    members: HashMap<Id, Vec<Member>>,
+    roles: Vec<(Id, Vec<Role>)>,
+}
+
+#[derive(Clone)]
+pub struct MockBackend {
+    inner: Arc<Mutex<Inner>>,
+    latency: Duration,
+}
+
+impl Default for MockBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn user(i: usize) -> User {
+    let (n, d) = NAMES[i % NAMES.len()];
+    User {
+        id: Id(i as u64 + 1),
+        name: n.into(),
+        display_name: d.into(),
+        avatar: ImageRef::Default((i % 5) as u8),
+        bot: n.ends_with("bot") || n == "clyde",
+    }
+}
+
+impl MockBackend {
+    pub fn new() -> Self {
+        let mut rng = Lcg(0x5eed);
+        let users: Vec<User> = (0..NAMES.len()).map(user).collect();
+
+        let guild_names = [
+            ("Rust Programming", Some(0xCE422B)),
+            ("GPUI Devs", None),
+            ("Discord Phoenix", Some(0xCE422B)),
+            ("Linux Gaming", None),
+            ("KDE Community", Some(0x1D99F3)),
+            ("Wayland Club", None),
+            ("Pixel Art", None),
+            ("Lo-fi Beats", None),
+            ("Open Source Café", None),
+            ("Mechanical Keyboards", None),
+        ];
+        let mut guilds = Vec::new();
+        let mut channels = Vec::new();
+        let mut roles = Vec::new();
+        let mut members = HashMap::new();
+        let mut cid = 1000u64;
+        for (gi, (name, banner)) in guild_names.iter().enumerate() {
+            let gid = Id(100 + gi as u64);
+            guilds.push(Guild {
+                id: gid,
+                name: (*name).into(),
+                acronym: acronym(name),
+                icon: ImageRef::Default((gi % 5) as u8),
+                unread: gi % 3 == 1,
+                mentions: if gi == 3 { 4 } else if gi == 5 { 1 } else { 0 },
+                banner_color: *banner,
+            });
+            let layout: &[(&str, &[(&str, ChannelKind)])] = &[
+                (
+                    "Information",
+                    &[
+                        ("welcome", ChannelKind::Text),
+                        ("announcements", ChannelKind::Announcement),
+                        ("rules", ChannelKind::Text),
+                    ],
+                ),
+                (
+                    "Text Channels",
+                    &[
+                        ("general", ChannelKind::Text),
+                        ("help", ChannelKind::Forum),
+                        ("showcase", ChannelKind::Text),
+                        ("off-topic", ChannelKind::Text),
+                        ("memes", ChannelKind::Text),
+                    ],
+                ),
+                (
+                    "Voice Channels",
+                    &[
+                        ("Lounge", ChannelKind::Voice),
+                        ("Pair Programming", ChannelKind::Voice),
+                        ("Stage", ChannelKind::Stage),
+                        ("AFK", ChannelKind::Voice),
+                    ],
+                ),
+            ];
+            let mut pos = 0;
+            for (cat, chans) in layout {
+                cid += 1;
+                let cat_id = Id(cid);
+                channels.push(Channel {
+                    id: cat_id,
+                    guild: Some(gid),
+                    parent: None,
+                    name: (*cat).into(),
+                    topic: None,
+                    kind: ChannelKind::Category,
+                    position: pos,
+                    unread: false,
+                    muted: false,
+                    mentions: 0,
+                    voice_users: vec![],
+                });
+                pos += 1;
+                for (cn, kind) in chans.iter() {
+                    cid += 1;
+                    let voice_users = if *cn == "Lounge" {
+                        vec![Id(3), Id(4), Id(7)]
+                    } else if *cn == "Pair Programming" && gi == 0 {
+                        vec![Id(6)]
+                    } else {
+                        vec![]
+                    };
+                    channels.push(Channel {
+                        id: Id(cid),
+                        guild: Some(gid),
+                        parent: Some(cat_id),
+                        name: (*cn).into(),
+                        topic: match *cn {
+                            "general" => Some(format!("General chat for {name}. Be nice! https://example.com/rules").into()),
+                            "help" => Some("Ask questions, get answers".into()),
+                            _ => None,
+                        },
+                        kind: *kind,
+                        position: pos,
+                        unread: matches!(*cn, "showcase" | "memes" | "announcements"),
+                        muted: *cn == "memes",
+                        mentions: if *cn == "showcase" && gi == 0 { 2 } else { 0 },
+                        voice_users,
+                    });
+                    pos += 1;
+                }
+            }
+            let role_list = vec![
+                Role { id: Id(gid.0 * 10 + 1), name: "Admin".into(), color: Some(0xE74C3C), position: 3, hoist: true },
+                Role { id: Id(gid.0 * 10 + 2), name: "Moderator".into(), color: Some(0x3498DB), position: 2, hoist: true },
+                Role { id: Id(gid.0 * 10 + 3), name: "Contributor".into(), color: Some(0x2ECC71), position: 1, hoist: true },
+            ];
+            let mut ms = Vec::new();
+            for u in &users {
+                let r = rng.next() % 10;
+                let mut role_ids = Vec::new();
+                if u.id.0 == 2 {
+                    role_ids.push(role_list[0].id);
+                } else if r < 2 {
+                    role_ids.push(role_list[1].id);
+                } else if r < 5 {
+                    role_ids.push(role_list[2].id);
+                }
+                let presence = match rng.next() % 6 {
+                    0 => Presence::Idle,
+                    1 => Presence::Dnd,
+                    2 => Presence::Offline,
+                    _ => Presence::Online,
+                };
+                let activity = match rng.next() % 5 {
+                    0 => Some("Playing Rust".into()),
+                    1 => Some("Listening to Spotify".into()),
+                    _ => None,
+                };
+                ms.push(Member {
+                    user: u.id,
+                    roles: role_ids,
+                    presence: if u.id == ME { Presence::Online } else { presence },
+                    activity,
+                });
+            }
+            members.insert(gid, ms);
+            roles.push((gid, role_list));
+        }
+
+        Self {
+            inner: Arc::new(Mutex::new(Inner {
+                sink: None,
+                next_id: 10_000_000,
+                history: HashMap::new(),
+                users,
+                guilds,
+                channels,
+                members,
+                roles,
+            })),
+            latency: Duration::from_millis(120),
+        }
+    }
+
+    fn generate_history(inner: &mut Inner, channel: Id) -> Vec<Message> {
+        let mut rng = Lcg(channel.0.wrapping_mul(2654435761));
+        let n = 120 + (rng.next() % 200) as usize;
+        let mut ts = now() - n as i64 * 150 - 86_400;
+        let mut out = Vec::with_capacity(n);
+        let mut author = Id(2);
+        for i in 0..n {
+            ts += (rng.next() % 300) as i64 + 5;
+            if rng.next() % 3 == 0 {
+                author = rng.pick(&inner.users).id;
+            }
+            inner.next_id += 1;
+            let mut m = Message {
+                id: Id(inner.next_id),
+                channel,
+                author,
+                timestamp: ts,
+                edited: rng.next() % 17 == 0,
+                content: (*rng.pick(LINES)).into(),
+                reply_to: None,
+                embeds: vec![],
+                attachments: vec![],
+                reactions: vec![],
+            };
+            if i > 3 && rng.next() % 11 == 0 {
+                m.reply_to = Some(out[i - 2 - (rng.next() as usize % 2)].id);
+            }
+            if rng.next() % 9 == 0 {
+                m.reactions.push(Reaction { emoji: "👍".into(), count: 1 + (rng.next() % 5) as u32, me: rng.next() % 2 == 0 });
+                if rng.next() % 2 == 0 {
+                    m.reactions.push(Reaction { emoji: "🔥".into(), count: 1 + (rng.next() % 3) as u32, me: false });
+                }
+            }
+            if m.content.contains("github.com") {
+                m.embeds.push(Embed {
+                    color: Some(0x24292F),
+                    provider: Some("GitHub".into()),
+                    title: Some("zed-industries/zed".into()),
+                    description: Some("Code at the speed of thought – Zed is a high-performance, multiplayer code editor.".into()),
+                    url: Some("https://github.com/zed-industries/zed".into()),
+                });
+            }
+            if rng.next() % 23 == 0 {
+                m.content = "".into();
+                m.attachments.push(Attachment {
+                    filename: "screenshot.png".into(),
+                    url: "https://example.invalid/screenshot.png".into(),
+                    width: 1280,
+                    height: 720,
+                    is_image: true,
+                    size: 345_678,
+                });
+            } else if rng.next() % 41 == 0 {
+                m.attachments.push(Attachment {
+                    filename: "phoenix-0.1.0.tar.gz".into(),
+                    url: "https://example.invalid/phoenix.tar.gz".into(),
+                    width: 0,
+                    height: 0,
+                    is_image: false,
+                    size: 4_213_337,
+                });
+            }
+            out.push(m);
+        }
+        out
+    }
+
+    fn delayed<T: Send + 'static>(&self, f: impl FnOnce() -> T + Send + 'static) -> BoxFuture<T> {
+        let latency = self.latency;
+        Box::pin(async move {
+            let (tx, rx) = futures::channel::oneshot::channel();
+            std::thread::spawn(move || {
+                std::thread::sleep(latency);
+                let _ = tx.send(f());
+            });
+            rx.await.map_err(|_| BackendError("mock canceled".into()))
+        })
+    }
+
+    fn emit_later(&self, delay: Duration, ev: impl FnOnce() -> AppEvent + Send + 'static) {
+        let inner = self.inner.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(delay);
+            let sink = inner.lock().ok().and_then(|i| i.sink.clone());
+            if let Some(sink) = sink {
+                sink(ev());
+            }
+        });
+    }
+}
+
+impl Backend for MockBackend {
+    fn set_event_sink(&self, sink: EventSink) {
+        if let Ok(mut i) = self.inner.lock() {
+            i.sink = Some(sink);
+        }
+    }
+
+    fn login(&self, creds: Credentials) -> BoxFuture<ReadyData> {
+        let inner = self.inner.clone();
+        let ok = match &creds {
+            Credentials::Token(t) => !t.trim().is_empty(),
+            Credentials::Password { login, password } => !login.is_empty() && !password.is_empty(),
+        };
+        Box::pin(async move {
+            if !ok {
+                return Err(BackendError("Login or password is invalid.".into()));
+            }
+            let i = inner.lock().map_err(|_| BackendError("poisoned".into()))?;
+            let dm_channels = i.users[1..8]
+                .iter()
+                .enumerate()
+                .map(|(n, u)| Channel {
+                    id: Id(900 + n as u64),
+                    guild: None,
+                    parent: None,
+                    name: u.display_name.clone(),
+                    topic: None,
+                    kind: ChannelKind::Text,
+                    position: n as i32,
+                    unread: n == 1,
+                    muted: false,
+                    mentions: 0,
+                    voice_users: vec![u.id],
+                })
+                .collect();
+            Ok(ReadyData {
+                me: i.users[0].clone(),
+                users: i.users.clone(),
+                guilds: i.guilds.clone(),
+                channels: i.channels.clone(),
+                roles: i.roles.clone(),
+                dm_channels,
+            })
+        })
+    }
+
+    fn select_guild(&self, guild: Option<Id>) -> BoxFuture<()> {
+        if let Some(g) = guild {
+            let members = self.inner.lock().ok().and_then(|i| i.members.get(&g).cloned());
+            if let Some(members) = members {
+                self.emit_later(Duration::from_millis(60), move || AppEvent::GuildMembers { guild: g, members });
+            }
+        }
+        Box::pin(async { Ok(()) })
+    }
+
+    fn select_channel(&self, _channel: Id) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn load_messages(&self, channel: Id, before: Option<Id>, limit: u32) -> BoxFuture<Vec<Message>> {
+        let inner = self.inner.clone();
+        self.delayed(move || {
+            let Ok(mut i) = inner.lock() else { return vec![] };
+            if !i.history.contains_key(&channel) {
+                let h = Self::generate_history(&mut i, channel);
+                i.history.insert(channel, h);
+            }
+            let h = &i.history[&channel];
+            let end = before
+                .and_then(|b| h.iter().position(|m| m.id == b))
+                .unwrap_or(h.len());
+            let start = end.saturating_sub(limit as usize);
+            h[start..end].to_vec()
+        })
+    }
+
+    fn send_message(&self, channel: Id, content: String, reply_to: Option<Id>) -> BoxFuture<Message> {
+        let inner = self.inner.clone();
+        let msg = {
+            let Ok(mut i) = inner.lock() else {
+                return Box::pin(async { Err(BackendError("poisoned".into())) });
+            };
+            i.next_id += 1;
+            let m = Message {
+                id: Id(i.next_id),
+                channel,
+                author: ME,
+                timestamp: now(),
+                edited: false,
+                content: content.clone().into(),
+                reply_to,
+                embeds: vec![],
+                attachments: vec![],
+                reactions: vec![],
+            };
+            i.history.entry(channel).or_default().push(m.clone());
+            m
+        };
+        // Simulate someone answering.
+        if content.to_lowercase().contains("wumpus") || content.ends_with('?') {
+            self.emit_later(Duration::from_millis(400), move || AppEvent::TypingStart { channel, user: Id(2) });
+            let inner2 = self.inner.clone();
+            let reply_to = msg.id;
+            self.emit_later(Duration::from_millis(2600), move || {
+                let id = inner2.lock().map(|mut i| {
+                    i.next_id += 1;
+                    i.next_id
+                });
+                AppEvent::MessageCreate(Message {
+                    id: Id(id.unwrap_or(1)),
+                    channel,
+                    author: Id(2),
+                    timestamp: now(),
+                    edited: false,
+                    content: "*wumpus noises* — this is a **mock** reply from the fake backend".into(),
+                    reply_to: Some(reply_to),
+                    embeds: vec![],
+                    attachments: vec![],
+                    reactions: vec![Reaction { emoji: "💜".into(), count: 1, me: false }],
+                })
+            });
+        }
+        let out = msg.clone();
+        self.delayed(move || out)
+    }
+
+    fn edit_message(&self, channel: Id, id: Id, content: String) -> BoxFuture<Message> {
+        let inner = self.inner.clone();
+        Box::pin(async move {
+            let mut i = inner.lock().map_err(|_| BackendError("poisoned".into()))?;
+            let m = i
+                .history
+                .get_mut(&channel)
+                .and_then(|h| h.iter_mut().find(|m| m.id == id))
+                .ok_or_else(|| BackendError("Unknown Message".into()))?;
+            m.content = content.into();
+            m.edited = true;
+            Ok(m.clone())
+        })
+    }
+
+    fn trigger_typing(&self, _channel: Id) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
+        self.emit_later(Duration::from_millis(50), move || AppEvent::VoiceStateUpdate { channel, user: ME });
+        Box::pin(async { Ok(()) })
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "guild_id": "300000000000000001",
+  "id": "everyone",
+  "member_count": 1523,
+  "online_count": 210,
+  "groups": [{"id": "500000000000000001", "count": 3}, {"id": "online", "count": 200}, {"id": "offline", "count": 1313}],
+  "ops": [
+    {"op": "SYNC", "range": [0, 99], "items": [
+      {"group": {"id": "500000000000000001", "count": 3}},
+      {"member": {"user": {"id": "200000000000000002", "username": "alice", "discriminator": "0", "global_name": "Alice", "avatar": null}, "roles": ["500000000000000001"], "nick": null, "joined_at": "2021-01-01T00:00:00+00:00", "deaf": false, "mute": false, "presence": {"status": "online", "activities": [], "client_status": {"desktop": "online"}, "user": {"id": "200000000000000002"}}}}
+    ]},
+    {"op": "UPDATE", "index": 1, "item": {"member": {"user": {"id": "200000000000000002", "username": "alice", "discriminator": "0"}, "roles": [], "joined_at": "2021-01-01T00:00:00+00:00", "deaf": false, "mute": false, "presence": {"status": "idle"}}}},
+    {"op": "DELETE", "index": 5},
+    {"op": "INVALIDATE", "range": [100, 199]}
+  ]
+}

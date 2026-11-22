@@ -1,0 +1,605 @@
+//! Rate-limited REST client authenticated with a *user* token.
+
+pub mod ratelimit;
+
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::{Method, StatusCode};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+use crate::error::{ApiErrorBody, Error, Result};
+use crate::models::*;
+use crate::props::ClientProperties;
+use ratelimit::{RateLimitInfo, RateLimiter, major_param, route_key};
+
+pub const API_BASE: &str = "https://discord.com/api/v10";
+
+/// File to upload with a message.
+#[derive(Debug, Clone)]
+pub struct FileUpload {
+    pub filename: String,
+    pub bytes: Vec<u8>,
+    pub content_type: Option<String>,
+    pub description: Option<String>,
+    pub spoiler: bool,
+}
+
+/// Pagination for `GET /channels/{id}/messages`. Only one of
+/// before/after/around is honored by Discord.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MessageQuery {
+    pub before: Option<MessageId>,
+    pub after: Option<MessageId>,
+    pub around: Option<MessageId>,
+    /// 1..=100, default 50.
+    pub limit: Option<u8>,
+}
+
+impl MessageQuery {
+    pub fn latest(limit: u8) -> Self {
+        Self { limit: Some(limit), ..Default::default() }
+    }
+    pub fn before(id: MessageId, limit: u8) -> Self {
+        Self { before: Some(id), limit: Some(limit), ..Default::default() }
+    }
+    pub fn after(id: MessageId, limit: u8) -> Self {
+        Self { after: Some(id), limit: Some(limit), ..Default::default() }
+    }
+    pub fn around(id: MessageId, limit: u8) -> Self {
+        Self { around: Some(id), limit: Some(limit), ..Default::default() }
+    }
+
+    fn to_query(self) -> String {
+        let mut q = vec![format!("limit={}", self.limit.unwrap_or(50).clamp(1, 100))];
+        if let Some(b) = self.before {
+            q.push(format!("before={b}"));
+        } else if let Some(a) = self.after {
+            q.push(format!("after={a}"));
+        } else if let Some(a) = self.around {
+            q.push(format!("around={a}"));
+        }
+        q.join("&")
+    }
+}
+
+/// Body for sending a message.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct CreateMessage {
+    pub content: String,
+    /// Filled automatically with a time-based snowflake if `None`; keep it to
+    /// match the echoed MESSAGE_CREATE against the optimistic local message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub tts: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flags: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_reference: Option<MessageReference>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sticker_ids: Vec<Snowflake>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_mentions: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enforce_nonce: Option<bool>,
+}
+
+impl CreateMessage {
+    pub fn text(content: impl Into<String>) -> Self {
+        Self { content: content.into(), ..Default::default() }
+    }
+
+    pub fn reply_to(mut self, channel: ChannelId, message: MessageId, mention: bool) -> Self {
+        self.message_reference = Some(MessageReference {
+            kind: None,
+            message_id: Some(message),
+            channel_id: Some(channel),
+            guild_id: None,
+            fail_if_not_exists: Some(false),
+        });
+        if !mention {
+            self.allowed_mentions = Some(json!({"parse": ["users", "roles", "everyone"], "replied_user": false}));
+        }
+        self
+    }
+}
+
+/// Result of `POST /auth/login`.
+#[derive(Debug, Clone)]
+pub enum LoginResponse {
+    /// Logged in; store this token.
+    Token { user_id: Option<UserId>, token: String },
+    /// Second factor required. Pass `ticket` to [`RestClient::login_mfa_totp`].
+    MfaRequired { user_id: Option<UserId>, ticket: String, totp: bool, sms: bool, backup: bool, webauthn: bool },
+}
+
+#[derive(Deserialize)]
+struct RawLogin {
+    #[serde(default)]
+    user_id: Option<UserId>,
+    #[serde(default)]
+    token: Option<String>,
+    #[serde(default)]
+    mfa: bool,
+    #[serde(default)]
+    ticket: Option<String>,
+    #[serde(default)]
+    totp: bool,
+    #[serde(default)]
+    sms: bool,
+    #[serde(default)]
+    backup: bool,
+    #[serde(default)]
+    webauthn: Option<Value>,
+}
+
+enum Body {
+    None,
+    Json(Value),
+    Multipart { payload: Value, files: Arc<Vec<FileUpload>> },
+}
+
+struct Inner {
+    http: reqwest::Client,
+    base: String,
+    token: Option<String>,
+    props: ClientProperties,
+    super_props: String,
+    limiter: RateLimiter,
+    max_retries: u32,
+}
+
+/// Cheaply cloneable REST client.
+#[derive(Clone)]
+pub struct RestClient {
+    inner: Arc<Inner>,
+}
+
+impl std::fmt::Debug for RestClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RestClient").field("base", &self.inner.base).finish_non_exhaustive()
+    }
+}
+
+impl RestClient {
+    /// Client authenticated with a user token (sent as-is, no `Bot ` prefix).
+    pub fn new(token: impl Into<String>, props: ClientProperties) -> Self {
+        Self::build(Some(token.into()), props, API_BASE.to_owned())
+    }
+
+    /// Client without a token, for [`Self::login`].
+    pub fn unauthenticated(props: ClientProperties) -> Self {
+        Self::build(None, props, API_BASE.to_owned())
+    }
+
+    /// Override the API base URL (tests / proxies).
+    pub fn with_base(token: Option<String>, props: ClientProperties, base: impl Into<String>) -> Self {
+        Self::build(token, props, base.into())
+    }
+
+    fn build(token: Option<String>, props: ClientProperties, base: String) -> Self {
+        let http = reqwest::Client::builder()
+            .user_agent(props.user_agent())
+            .use_rustls_tls()
+            .build()
+            .expect("reqwest client");
+        let super_props = props.to_header();
+        Self {
+            inner: Arc::new(Inner { http, base, token, props, super_props, limiter: RateLimiter::new(), max_retries: 3 }),
+        }
+    }
+
+    pub fn token(&self) -> Option<&str> {
+        self.inner.token.as_deref()
+    }
+
+    pub fn properties(&self) -> &ClientProperties {
+        &self.inner.props
+    }
+
+    fn headers(&self) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        if let Some(t) = &self.inner.token
+            && let Ok(v) = HeaderValue::from_str(t)
+        {
+            h.insert(reqwest::header::AUTHORIZATION, v);
+        }
+        if let Ok(v) = HeaderValue::from_str(&self.inner.super_props) {
+            h.insert("x-super-properties", v);
+        }
+        if let Ok(v) = HeaderValue::from_str(&self.inner.props.system_locale) {
+            h.insert("x-discord-locale", v);
+        }
+        h.insert("x-debug-options", HeaderValue::from_static("bugReporterEnabled"));
+        h
+    }
+
+    async fn raw(&self, method: Method, path: &str, body: Body) -> Result<(StatusCode, Vec<u8>)> {
+        let route = route_key(method.as_str(), path);
+        let major = major_param(path).to_owned();
+        let url = format!("{}{}", self.inner.base, path);
+        let mut attempt = 0;
+        loop {
+            while let Some(wait) = self.inner.limiter.acquire(&route, &major, Instant::now()) {
+                tracing::debug!(%route, ?wait, "rate limit: waiting");
+                tokio::time::sleep(wait).await;
+            }
+            let mut req = self.inner.http.request(method.clone(), &url).headers(self.headers());
+            req = match &body {
+                Body::None => req,
+                Body::Json(v) => req.json(v),
+                Body::Multipart { payload, files } => req.multipart(build_form(payload, files)?),
+            };
+            let resp = req.send().await?;
+            let status = resp.status();
+            let info = RateLimitInfo::from_headers(resp.headers());
+            let now = Instant::now();
+            self.inner.limiter.update(&route, &major, &info, now);
+            let bytes = resp.bytes().await?.to_vec();
+
+            if status == StatusCode::TOO_MANY_REQUESTS {
+                #[derive(Deserialize, Default)]
+                struct Rl {
+                    #[serde(default)]
+                    retry_after: f64,
+                    #[serde(default)]
+                    global: bool,
+                }
+                let rl: Rl = serde_json::from_slice(&bytes).unwrap_or_default();
+                let retry = Duration::from_secs_f64(rl.retry_after.max(0.0).min(3600.0))
+                    .max(info.reset_after.unwrap_or_default());
+                let global = rl.global || info.global;
+                self.inner.limiter.on_429(&route, &major, retry, global, now);
+                if attempt >= self.inner.max_retries {
+                    return Err(Error::RateLimited { retry_after: retry, global });
+                }
+                attempt += 1;
+                tracing::warn!(%route, ?retry, global, "429, retrying");
+                continue;
+            }
+            if status.is_server_error() && attempt < self.inner.max_retries {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
+                continue;
+            }
+            if !status.is_success() {
+                let raw = String::from_utf8_lossy(&bytes).into_owned();
+                let body: ApiErrorBody = serde_json::from_slice(&bytes).unwrap_or_default();
+                if body.captcha_key.is_some() {
+                    return Err(Error::CaptchaRequired { sitekey: body.captcha_sitekey.clone(), body });
+                }
+                return Err(Error::Api { status: status.as_u16(), body, raw });
+            }
+            return Ok((status, bytes));
+        }
+    }
+
+    async fn call<T: DeserializeOwned>(&self, method: Method, path: &str, body: Body) -> Result<T> {
+        let (_, bytes) = self.raw(method, path, body).await?;
+        Ok(serde_json::from_slice(&bytes)?)
+    }
+
+    async fn call_empty(&self, method: Method, path: &str, body: Body) -> Result<()> {
+        self.raw(method, path, body).await.map(|_| ())
+    }
+
+    // ---- users -------------------------------------------------------------
+
+    /// `GET /users/@me`
+    pub async fn get_me(&self) -> Result<User> {
+        self.call(Method::GET, "/users/@me", Body::None).await
+    }
+
+    /// `GET /users/{id}`
+    pub async fn get_user(&self, id: UserId) -> Result<User> {
+        self.call(Method::GET, &format!("/users/{id}"), Body::None).await
+    }
+
+    /// `GET /users/@me/guilds`
+    pub async fn get_guilds(&self) -> Result<Vec<PartialGuild>> {
+        self.call(Method::GET, "/users/@me/guilds?with_counts=true", Body::None).await
+    }
+
+    /// `GET /users/@me/channels` (DMs and group DMs)
+    pub async fn get_private_channels(&self) -> Result<Vec<Channel>> {
+        self.call(Method::GET, "/users/@me/channels", Body::None).await
+    }
+
+    /// Open (or fetch) a DM with a user.
+    pub async fn create_dm(&self, recipient: UserId) -> Result<Channel> {
+        self.call(Method::POST, "/users/@me/channels", Body::Json(json!({ "recipients": [recipient] })))
+            .await
+    }
+
+    /// Create a group DM with several users.
+    pub async fn create_group_dm(&self, recipients: &[UserId]) -> Result<Channel> {
+        self.call(Method::POST, "/users/@me/channels", Body::Json(json!({ "recipients": recipients })))
+            .await
+    }
+
+    /// `GET /users/@me/relationships`
+    pub async fn get_relationships(&self) -> Result<Vec<Relationship>> {
+        self.call(Method::GET, "/users/@me/relationships", Body::None).await
+    }
+
+    // ---- guilds / channels -------------------------------------------------
+
+    pub async fn get_guild(&self, id: GuildId) -> Result<Guild> {
+        self.call(Method::GET, &format!("/guilds/{id}"), Body::None).await
+    }
+
+    pub async fn get_guild_channels(&self, id: GuildId) -> Result<Vec<Channel>> {
+        self.call(Method::GET, &format!("/guilds/{id}/channels"), Body::None).await
+    }
+
+    pub async fn get_guild_member(&self, guild: GuildId, user: UserId) -> Result<Member> {
+        self.call(Method::GET, &format!("/guilds/{guild}/members/{user}"), Body::None).await
+    }
+
+    pub async fn get_channel(&self, id: ChannelId) -> Result<Channel> {
+        self.call(Method::GET, &format!("/channels/{id}"), Body::None).await
+    }
+
+    // ---- messages ----------------------------------------------------------
+
+    pub async fn get_messages(&self, channel: ChannelId, q: MessageQuery) -> Result<Vec<Message>> {
+        self.call(Method::GET, &format!("/channels/{channel}/messages?{}", q.to_query()), Body::None)
+            .await
+    }
+
+    pub async fn get_pinned_messages(&self, channel: ChannelId) -> Result<Vec<Message>> {
+        self.call(Method::GET, &format!("/channels/{channel}/pins"), Body::None).await
+    }
+
+    /// Send a message. A nonce is generated when absent.
+    pub async fn send_message(&self, channel: ChannelId, mut msg: CreateMessage) -> Result<Message> {
+        fill_nonce(&mut msg);
+        let body = serde_json::to_value(&msg)?;
+        self.call(Method::POST, &format!("/channels/{channel}/messages"), Body::Json(body)).await
+    }
+
+    /// Send a message with attachments (multipart `payload_json` + `files[n]`).
+    pub async fn send_message_with_files(
+        &self,
+        channel: ChannelId,
+        mut msg: CreateMessage,
+        files: Vec<FileUpload>,
+    ) -> Result<Message> {
+        fill_nonce(&mut msg);
+        let mut payload = serde_json::to_value(&msg)?;
+        let attachments: Vec<Value> = files
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                let mut a = json!({ "id": i, "filename": upload_name(f) });
+                if let Some(d) = &f.description {
+                    a["description"] = json!(d);
+                }
+                a
+            })
+            .collect();
+        payload["attachments"] = Value::Array(attachments);
+        self.call(
+            Method::POST,
+            &format!("/channels/{channel}/messages"),
+            Body::Multipart { payload, files: Arc::new(files) },
+        )
+        .await
+    }
+
+    pub async fn edit_message(&self, channel: ChannelId, message: MessageId, content: &str) -> Result<Message> {
+        self.call(
+            Method::PATCH,
+            &format!("/channels/{channel}/messages/{message}"),
+            Body::Json(json!({ "content": content })),
+        )
+        .await
+    }
+
+    pub async fn delete_message(&self, channel: ChannelId, message: MessageId) -> Result<()> {
+        self.call_empty(Method::DELETE, &format!("/channels/{channel}/messages/{message}"), Body::None)
+            .await
+    }
+
+    /// Mark a message as read (user-account endpoint).
+    pub async fn ack_message(&self, channel: ChannelId, message: MessageId) -> Result<()> {
+        self.call_empty(
+            Method::POST,
+            &format!("/channels/{channel}/messages/{message}/ack"),
+            Body::Json(json!({ "token": null })),
+        )
+        .await
+    }
+
+    /// `POST /channels/{id}/typing` (lasts ~10 s).
+    pub async fn trigger_typing(&self, channel: ChannelId) -> Result<()> {
+        self.call_empty(Method::POST, &format!("/channels/{channel}/typing"), Body::None).await
+    }
+
+    // ---- reactions ---------------------------------------------------------
+
+    fn reaction_path(channel: ChannelId, message: MessageId, emoji: &ReactionEmoji) -> String {
+        let e: String = url::form_urlencoded::byte_serialize(emoji.route_form().as_bytes()).collect();
+        format!("/channels/{channel}/messages/{message}/reactions/{e}")
+    }
+
+    pub async fn add_reaction(&self, channel: ChannelId, message: MessageId, emoji: &ReactionEmoji) -> Result<()> {
+        let p = format!("{}/@me", Self::reaction_path(channel, message, emoji));
+        self.call_empty(Method::PUT, &p, Body::None).await
+    }
+
+    pub async fn remove_own_reaction(&self, channel: ChannelId, message: MessageId, emoji: &ReactionEmoji) -> Result<()> {
+        let p = format!("{}/@me", Self::reaction_path(channel, message, emoji));
+        self.call_empty(Method::DELETE, &p, Body::None).await
+    }
+
+    pub async fn remove_user_reaction(
+        &self,
+        channel: ChannelId,
+        message: MessageId,
+        emoji: &ReactionEmoji,
+        user: UserId,
+    ) -> Result<()> {
+        let p = format!("{}/{user}", Self::reaction_path(channel, message, emoji));
+        self.call_empty(Method::DELETE, &p, Body::None).await
+    }
+
+    pub async fn get_reactions(
+        &self,
+        channel: ChannelId,
+        message: MessageId,
+        emoji: &ReactionEmoji,
+        limit: u8,
+    ) -> Result<Vec<User>> {
+        let p = format!("{}?limit={}", Self::reaction_path(channel, message, emoji), limit.clamp(1, 100));
+        self.call(Method::GET, &p, Body::None).await
+    }
+
+    // ---- misc --------------------------------------------------------------
+
+    /// `GET /gateway` -> websocket URL.
+    pub async fn get_gateway_url(&self) -> Result<String> {
+        #[derive(Deserialize)]
+        struct G {
+            url: String,
+        }
+        let g: G = self.call(Method::GET, "/gateway", Body::None).await?;
+        Ok(g.url)
+    }
+
+    // ---- auth --------------------------------------------------------------
+
+    /// Email/phone + password login. May return [`LoginResponse::MfaRequired`]
+    /// or [`Error::CaptchaRequired`] (captcha solving is not implemented).
+    pub async fn login(&self, login: &str, password: &str) -> Result<LoginResponse> {
+        let raw: RawLogin = self
+            .call(
+                Method::POST,
+                "/auth/login",
+                Body::Json(json!({
+                    "login": login,
+                    "password": password,
+                    "undelete": false,
+                    "login_source": null,
+                    "gift_code_sku_id": null,
+                })),
+            )
+            .await?;
+        parse_login(raw)
+    }
+
+    /// Complete an MFA login with a TOTP (authenticator app) code.
+    pub async fn login_mfa_totp(&self, ticket: &str, code: &str) -> Result<String> {
+        #[derive(Deserialize)]
+        struct T {
+            token: String,
+        }
+        let t: T = self
+            .call(
+                Method::POST,
+                "/auth/mfa/totp",
+                Body::Json(json!({
+                    "code": code,
+                    "ticket": ticket,
+                    "login_source": null,
+                    "gift_code_sku_id": null,
+                })),
+            )
+            .await?;
+        Ok(t.token)
+    }
+}
+
+fn parse_login(raw: RawLogin) -> Result<LoginResponse> {
+    if let Some(token) = raw.token {
+        return Ok(LoginResponse::Token { user_id: raw.user_id, token });
+    }
+    if raw.mfa
+        && let Some(ticket) = raw.ticket
+    {
+        return Ok(LoginResponse::MfaRequired {
+            user_id: raw.user_id,
+            ticket,
+            totp: raw.totp,
+            sms: raw.sms,
+            backup: raw.backup,
+            webauthn: raw.webauthn.is_some_and(|v| !v.is_null()),
+        });
+    }
+    Err(Error::Protocol("login response had neither token nor MFA ticket".into()))
+}
+
+fn fill_nonce(msg: &mut CreateMessage) {
+    if msg.nonce.is_none() {
+        msg.nonce = Some(Snowflake::now().to_string());
+        msg.enforce_nonce.get_or_insert(true);
+    }
+}
+
+fn upload_name(f: &FileUpload) -> String {
+    if f.spoiler && !f.filename.starts_with("SPOILER_") {
+        format!("SPOILER_{}", f.filename)
+    } else {
+        f.filename.clone()
+    }
+}
+
+fn build_form(payload: &Value, files: &[FileUpload]) -> Result<reqwest::multipart::Form> {
+    let mut form = reqwest::multipart::Form::new().part(
+        "payload_json",
+        reqwest::multipart::Part::text(payload.to_string()).mime_str("application/json")?,
+    );
+    for (i, f) in files.iter().enumerate() {
+        let mut part = reqwest::multipart::Part::bytes(f.bytes.clone()).file_name(upload_name(f));
+        if let Some(ct) = &f.content_type {
+            part = part.mime_str(ct)?;
+        }
+        form = form.part(format!("files[{i}]"), part);
+    }
+    Ok(form)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_query() {
+        assert_eq!(MessageQuery::latest(50).to_query(), "limit=50");
+        assert_eq!(MessageQuery::before(Snowflake(5), 200).to_query(), "limit=100&before=5");
+    }
+
+    #[test]
+    fn login_shapes() {
+        let t: RawLogin = serde_json::from_str(r#"{"user_id":"1","token":"abc","user_settings":{}}"#).unwrap();
+        assert!(matches!(parse_login(t).unwrap(), LoginResponse::Token { token, .. } if token == "abc"));
+        let m: RawLogin = serde_json::from_str(
+            r#"{"user_id":"1","mfa":true,"sms":false,"ticket":"tkt","backup":true,"totp":true,"webauthn":null}"#,
+        )
+        .unwrap();
+        match parse_login(m).unwrap() {
+            LoginResponse::MfaRequired { ticket, totp, webauthn, .. } => {
+                assert_eq!(ticket, "tkt");
+                assert!(totp);
+                assert!(!webauthn);
+            }
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn nonce_and_reply_serialization() {
+        let mut m = CreateMessage::text("hi").reply_to(Snowflake(1), Snowflake(2), false);
+        fill_nonce(&mut m);
+        let v = serde_json::to_value(&m).unwrap();
+        assert_eq!(v["content"], "hi");
+        assert_eq!(v["message_reference"]["message_id"], "2");
+        assert_eq!(v["allowed_mentions"]["replied_user"], false);
+        assert!(v["nonce"].as_str().unwrap().parse::<u64>().is_ok());
+        assert!(v.get("tts").is_none());
+    }
+}

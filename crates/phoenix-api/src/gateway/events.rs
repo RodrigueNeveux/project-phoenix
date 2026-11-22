@@ -1,0 +1,445 @@
+//! Typed gateway events.
+
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::models::*;
+
+/// READY for a user account (with deduplicated user objects).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct Ready {
+    #[serde(default)]
+    pub v: u8,
+    pub user: User,
+    pub session_id: String,
+    #[serde(default)]
+    pub resume_gateway_url: Option<String>,
+    #[serde(default, deserialize_with = "null_default")]
+    pub guilds: Vec<Guild>,
+    #[serde(default, deserialize_with = "null_default")]
+    pub private_channels: Vec<Channel>,
+    #[serde(default, deserialize_with = "null_default")]
+    pub relationships: Vec<Relationship>,
+    /// Users referenced by id elsewhere in the payload.
+    #[serde(default, deserialize_with = "null_default")]
+    pub users: Vec<User>,
+    /// `merged_members[i]` = current user's member objects for `guilds[i]`.
+    #[serde(default, deserialize_with = "null_default")]
+    pub merged_members: Vec<Vec<Member>>,
+    #[serde(default)]
+    pub read_state: Option<Value>,
+    #[serde(default)]
+    pub user_guild_settings: Option<Value>,
+    #[serde(default)]
+    pub user_settings: Option<Value>,
+    #[serde(default)]
+    pub user_settings_proto: Option<String>,
+    #[serde(default)]
+    pub sessions: Option<Value>,
+    #[serde(default)]
+    pub country_code: Option<String>,
+    #[serde(default)]
+    pub auth_session_id_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct SupplementalGuild {
+    pub id: GuildId,
+    #[serde(default, deserialize_with = "null_default")]
+    pub voice_states: Vec<VoiceState>,
+}
+
+/// READY_SUPPLEMENTAL: presences and voice states sent right after READY.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ReadySupplemental {
+    #[serde(default, deserialize_with = "null_default")]
+    pub guilds: Vec<SupplementalGuild>,
+    #[serde(default)]
+    pub merged_presences: Option<Value>,
+    #[serde(default)]
+    pub merged_members: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MessageDelete {
+    pub id: MessageId,
+    pub channel_id: ChannelId,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MessageDeleteBulk {
+    pub ids: Vec<MessageId>,
+    pub channel_id: ChannelId,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReactionEvent {
+    pub user_id: UserId,
+    pub channel_id: ChannelId,
+    pub message_id: MessageId,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+    #[serde(default)]
+    pub member: Option<Member>,
+    pub emoji: ReactionEmoji,
+    #[serde(default)]
+    pub burst: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReactionRemoveAll {
+    pub channel_id: ChannelId,
+    pub message_id: MessageId,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+    /// Set for MESSAGE_REACTION_REMOVE_EMOJI.
+    #[serde(default)]
+    pub emoji: Option<ReactionEmoji>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TypingStart {
+    pub channel_id: ChannelId,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+    pub user_id: UserId,
+    #[serde(default)]
+    pub timestamp: u64,
+    #[serde(default)]
+    pub member: Option<Member>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UnavailableGuild {
+    pub id: GuildId,
+    #[serde(default)]
+    pub unavailable: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuildMemberRemove {
+    pub guild_id: GuildId,
+    pub user: User,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuildMembersChunk {
+    pub guild_id: GuildId,
+    #[serde(default)]
+    pub members: Vec<Member>,
+    #[serde(default)]
+    pub chunk_index: u32,
+    #[serde(default)]
+    pub chunk_count: u32,
+    #[serde(default)]
+    pub not_found: Vec<UserId>,
+    #[serde(default)]
+    pub nonce: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuildRoleEvent {
+    pub guild_id: GuildId,
+    pub role: Role,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuildRoleDelete {
+    pub guild_id: GuildId,
+    pub role_id: RoleId,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuildEmojisUpdate {
+    pub guild_id: GuildId,
+    pub emojis: Vec<Emoji>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MessageAck {
+    pub channel_id: ChannelId,
+    pub message_id: MessageId,
+    #[serde(default)]
+    pub version: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PresenceUser {
+    pub id: UserId,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PresenceUpdate {
+    pub user: PresenceUser,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub activities: Vec<Value>,
+    #[serde(default)]
+    pub client_status: Option<Value>,
+}
+
+/// Item in a lazy member list (GUILD_MEMBER_LIST_UPDATE).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MemberListItem {
+    Group { id: String, #[serde(default)] count: u32 },
+    Member(Box<MemberListMember>),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MemberListMember {
+    #[serde(flatten)]
+    pub member: Member,
+    #[serde(default)]
+    pub presence: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "op", rename_all = "UPPERCASE")]
+pub enum MemberListOp {
+    Sync { range: [u32; 2], #[serde(default)] items: Vec<MemberListItem> },
+    Insert { index: u32, item: MemberListItem },
+    Update { index: u32, item: MemberListItem },
+    Delete { index: u32 },
+    Invalidate { range: [u32; 2] },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MemberListGroup {
+    pub id: String,
+    #[serde(default)]
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GuildMemberListUpdate {
+    pub guild_id: GuildId,
+    /// List id (hash of the channel's view permissions, or "everyone").
+    pub id: String,
+    #[serde(default)]
+    pub member_count: u32,
+    #[serde(default)]
+    pub online_count: u32,
+    #[serde(default)]
+    pub groups: Vec<MemberListGroup>,
+    #[serde(default)]
+    pub ops: Vec<MemberListOp>,
+}
+
+/// Everything the gateway task reports: connection lifecycle + dispatches.
+#[derive(Debug, Clone)]
+pub enum GatewayEvent {
+    /// Websocket open and HELLO received.
+    Connected { heartbeat_interval: Duration },
+    /// Round-trip of the last heartbeat.
+    HeartbeatAck { latency: Duration },
+    Disconnected { code: Option<u16>, reason: String },
+    Reconnecting { attempt: u32, delay: Duration, resume: bool },
+    /// Unrecoverable (e.g. 4004 auth failed). The task has stopped.
+    Fatal { code: u16, reason: String },
+
+    Ready(Box<Ready>),
+    ReadySupplemental(Box<ReadySupplemental>),
+    Resumed,
+    UserUpdate(Box<User>),
+
+    GuildCreate(Box<Guild>),
+    GuildUpdate(Box<Guild>),
+    GuildDelete(UnavailableGuild),
+    GuildMemberAdd(Box<Member>),
+    GuildMemberUpdate(Box<Member>),
+    GuildMemberRemove(GuildMemberRemove),
+    GuildMembersChunk(Box<GuildMembersChunk>),
+    GuildMemberListUpdate(Box<GuildMemberListUpdate>),
+    GuildRoleCreate(GuildRoleEvent),
+    GuildRoleUpdate(GuildRoleEvent),
+    GuildRoleDelete(GuildRoleDelete),
+    GuildEmojisUpdate(GuildEmojisUpdate),
+
+    ChannelCreate(Box<Channel>),
+    ChannelUpdate(Box<Channel>),
+    ChannelDelete(Box<Channel>),
+    ThreadCreate(Box<Channel>),
+    ThreadUpdate(Box<Channel>),
+    ThreadDelete(Box<Channel>),
+
+    MessageCreate(Box<Message>),
+    /// May be partial; the cache merges it into the stored message.
+    MessageUpdate(Box<Value>),
+    MessageDelete(MessageDelete),
+    MessageDeleteBulk(MessageDeleteBulk),
+    MessageReactionAdd(Box<ReactionEvent>),
+    MessageReactionRemove(Box<ReactionEvent>),
+    MessageReactionRemoveAll(ReactionRemoveAll),
+    MessageReactionRemoveEmoji(ReactionRemoveAll),
+    MessageAck(MessageAck),
+    TypingStart(Box<TypingStart>),
+    PresenceUpdate(Box<PresenceUpdate>),
+
+    RelationshipAdd(Box<Relationship>),
+    RelationshipRemove(Box<Relationship>),
+
+    VoiceStateUpdate(Box<VoiceState>),
+    VoiceServerUpdate(VoiceServerUpdate),
+
+    /// Any dispatch not modelled above (or that failed to parse), verbatim.
+    Unknown { name: String, data: Value },
+}
+
+macro_rules! parse_events {
+    ($name:expr, $raw:expr, { $($ev:literal => $variant:ident $(($wrap:path))?),* $(,)? }) => {
+        match $name {
+            $( $ev => serde_json::from_str($raw).map(|v| GatewayEvent::$variant($($wrap)?(v))), )*
+            _ => return GatewayEvent::Unknown { name: $name.to_owned(), data: serde_json::from_str($raw).unwrap_or(Value::Null) },
+        }
+    };
+}
+
+/// Parse a dispatch payload (`t`, raw `d`) into a [`GatewayEvent`].
+/// Parse failures degrade to [`GatewayEvent::Unknown`].
+pub fn parse_dispatch(name: &str, raw: &str) -> GatewayEvent {
+    if name == "RESUMED" {
+        return GatewayEvent::Resumed;
+    }
+    let res: Result<GatewayEvent, serde_json::Error> = parse_events!(name, raw, {
+        "READY" => Ready(Box::new),
+        "READY_SUPPLEMENTAL" => ReadySupplemental(Box::new),
+        "USER_UPDATE" => UserUpdate(Box::new),
+        "GUILD_CREATE" => GuildCreate(Box::new),
+        "GUILD_UPDATE" => GuildUpdate(Box::new),
+        "GUILD_DELETE" => GuildDelete,
+        "GUILD_MEMBER_ADD" => GuildMemberAdd(Box::new),
+        "GUILD_MEMBER_UPDATE" => GuildMemberUpdate(Box::new),
+        "GUILD_MEMBER_REMOVE" => GuildMemberRemove,
+        "GUILD_MEMBERS_CHUNK" => GuildMembersChunk(Box::new),
+        "GUILD_MEMBER_LIST_UPDATE" => GuildMemberListUpdate(Box::new),
+        "GUILD_ROLE_CREATE" => GuildRoleCreate,
+        "GUILD_ROLE_UPDATE" => GuildRoleUpdate,
+        "GUILD_ROLE_DELETE" => GuildRoleDelete,
+        "GUILD_EMOJIS_UPDATE" => GuildEmojisUpdate,
+        "CHANNEL_CREATE" => ChannelCreate(Box::new),
+        "CHANNEL_UPDATE" => ChannelUpdate(Box::new),
+        "CHANNEL_DELETE" => ChannelDelete(Box::new),
+        "THREAD_CREATE" => ThreadCreate(Box::new),
+        "THREAD_UPDATE" => ThreadUpdate(Box::new),
+        "THREAD_DELETE" => ThreadDelete(Box::new),
+        "MESSAGE_CREATE" => MessageCreate(Box::new),
+        "MESSAGE_UPDATE" => MessageUpdate(Box::new),
+        "MESSAGE_DELETE" => MessageDelete,
+        "MESSAGE_DELETE_BULK" => MessageDeleteBulk,
+        "MESSAGE_REACTION_ADD" => MessageReactionAdd(Box::new),
+        "MESSAGE_REACTION_REMOVE" => MessageReactionRemove(Box::new),
+        "MESSAGE_REACTION_REMOVE_ALL" => MessageReactionRemoveAll,
+        "MESSAGE_REACTION_REMOVE_EMOJI" => MessageReactionRemoveEmoji,
+        "MESSAGE_ACK" => MessageAck,
+        "TYPING_START" => TypingStart(Box::new),
+        "PRESENCE_UPDATE" => PresenceUpdate(Box::new),
+        "RELATIONSHIP_ADD" => RelationshipAdd(Box::new),
+        "RELATIONSHIP_REMOVE" => RelationshipRemove(Box::new),
+        "VOICE_STATE_UPDATE" => VoiceStateUpdate(Box::new),
+        "VOICE_SERVER_UPDATE" => VoiceServerUpdate,
+    });
+    match res {
+        Ok(ev) => ev,
+        Err(e) => {
+            tracing::warn!(event = name, error = %e, "failed to parse dispatch; passing through raw");
+            GatewayEvent::Unknown { name: name.to_owned(), data: serde_json::from_str(raw).unwrap_or(Value::Null) }
+        }
+    }
+}
+
+// ---- outgoing command payloads ---------------------------------------------
+
+/// Op 4: join/leave/move voice. `channel_id: None` disconnects.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct UpdateVoiceState {
+    pub guild_id: Option<GuildId>,
+    pub channel_id: Option<ChannelId>,
+    pub self_mute: bool,
+    pub self_deaf: bool,
+    pub self_video: bool,
+}
+
+/// Op 3.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct UpdatePresence {
+    pub since: u64,
+    pub activities: Vec<Value>,
+    /// "online", "idle", "dnd", "invisible".
+    pub status: String,
+    pub afk: bool,
+}
+
+/// Op 8.
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+pub struct RequestGuildMembers {
+    pub guild_id: Vec<GuildId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    pub limit: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_ids: Option<Vec<UserId>>,
+    pub presences: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+}
+
+/// Member list ranges: `[[0, 99], [100, 199]]`.
+pub type Ranges = Vec<[u32; 2]>;
+
+/// Op 14: lazy guild request (member sidebar, typing, threads, activities).
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+pub struct LazyGuildRequest {
+    pub guild_id: GuildId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub threads: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activities: Option<bool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<UserId>,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub channels: std::collections::BTreeMap<ChannelId, Ranges>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub thread_member_lists: Vec<ChannelId>,
+}
+
+/// One guild's entry for op 37.
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
+pub struct GuildSubscription {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub threads: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activities: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub member_updates: Option<bool>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<UserId>,
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub channels: std::collections::BTreeMap<ChannelId, Ranges>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub thread_member_lists: Vec<ChannelId>,
+}
+
+impl GuildSubscription {
+    /// What the official client sends when a guild is opened.
+    pub fn focused(channel: Option<ChannelId>) -> Self {
+        let mut s = Self { typing: Some(true), threads: Some(true), activities: Some(true), ..Default::default() };
+        if let Some(c) = channel {
+            s.channels.insert(c, vec![[0, 99]]);
+        }
+        s
+    }
+}

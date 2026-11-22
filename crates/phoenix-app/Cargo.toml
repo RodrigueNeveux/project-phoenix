@@ -1,0 +1,23 @@
+[package]
+name = "phoenix-app"
+version.workspace = true
+edition.workspace = true
+description = "Discord Phoenix - native GPUI desktop client (UI shell)"
+
+[[bin]]
+name = "discord-phoenix"
+path = "src/main.rs"
+
+[lib]
+name = "phoenix_app"
+path = "src/lib.rs"
+
+[dependencies]
+# gpui-component 0.10 is built on the `gpui-pre` snapshot of GPUI (not gpui 0.2.x),
+# so we alias it as `gpui` and pull the matching native platform crate.
+gpui = { package = "gpui-pre", version = "=0.3.12" }
+gpui-platform = { package = "gpui-pre-platform", version = "=0.3.12" }
+gpui-component = "0.10.0"
+futures = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+image = { version = "0.25", default-features = false, features = ["png"] }

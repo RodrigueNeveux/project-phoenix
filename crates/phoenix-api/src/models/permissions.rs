@@ -1,0 +1,177 @@
+use bitflags::bitflags;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use super::{GuildId, PermissionOverwrite, OverwriteType, Role, RoleId, UserId};
+
+bitflags! {
+    /// Discord permission bits.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+    pub struct Permissions: u64 {
+        const CREATE_INSTANT_INVITE = 1 << 0;
+        const KICK_MEMBERS = 1 << 1;
+        const BAN_MEMBERS = 1 << 2;
+        const ADMINISTRATOR = 1 << 3;
+        const MANAGE_CHANNELS = 1 << 4;
+        const MANAGE_GUILD = 1 << 5;
+        const ADD_REACTIONS = 1 << 6;
+        const VIEW_AUDIT_LOG = 1 << 7;
+        const PRIORITY_SPEAKER = 1 << 8;
+        const STREAM = 1 << 9;
+        const VIEW_CHANNEL = 1 << 10;
+        const SEND_MESSAGES = 1 << 11;
+        const SEND_TTS_MESSAGES = 1 << 12;
+        const MANAGE_MESSAGES = 1 << 13;
+        const EMBED_LINKS = 1 << 14;
+        const ATTACH_FILES = 1 << 15;
+        const READ_MESSAGE_HISTORY = 1 << 16;
+        const MENTION_EVERYONE = 1 << 17;
+        const USE_EXTERNAL_EMOJIS = 1 << 18;
+        const VIEW_GUILD_INSIGHTS = 1 << 19;
+        const CONNECT = 1 << 20;
+        const SPEAK = 1 << 21;
+        const MUTE_MEMBERS = 1 << 22;
+        const DEAFEN_MEMBERS = 1 << 23;
+        const MOVE_MEMBERS = 1 << 24;
+        const USE_VAD = 1 << 25;
+        const CHANGE_NICKNAME = 1 << 26;
+        const MANAGE_NICKNAMES = 1 << 27;
+        const MANAGE_ROLES = 1 << 28;
+        const MANAGE_WEBHOOKS = 1 << 29;
+        const MANAGE_GUILD_EXPRESSIONS = 1 << 30;
+        const USE_APPLICATION_COMMANDS = 1 << 31;
+        const REQUEST_TO_SPEAK = 1 << 32;
+        const MANAGE_EVENTS = 1 << 33;
+        const MANAGE_THREADS = 1 << 34;
+        const CREATE_PUBLIC_THREADS = 1 << 35;
+        const CREATE_PRIVATE_THREADS = 1 << 36;
+        const USE_EXTERNAL_STICKERS = 1 << 37;
+        const SEND_MESSAGES_IN_THREADS = 1 << 38;
+        const USE_EMBEDDED_ACTIVITIES = 1 << 39;
+        const MODERATE_MEMBERS = 1 << 40;
+        const VIEW_CREATOR_MONETIZATION_ANALYTICS = 1 << 41;
+        const USE_SOUNDBOARD = 1 << 42;
+        const CREATE_GUILD_EXPRESSIONS = 1 << 43;
+        const CREATE_EVENTS = 1 << 44;
+        const USE_EXTERNAL_SOUNDS = 1 << 45;
+        const SEND_VOICE_MESSAGES = 1 << 46;
+        const SEND_POLLS = 1 << 49;
+        const USE_EXTERNAL_APPS = 1 << 50;
+        // Keep unknown future bits instead of dropping them.
+        const _ = !0;
+    }
+}
+
+impl Serialize for Permissions {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(&self.bits())
+    }
+}
+
+impl<'de> Deserialize<'de> for Permissions {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            S(String),
+            N(u64),
+        }
+        let bits = match Raw::deserialize(d)? {
+            Raw::S(s) => s.parse().map_err(serde::de::Error::custom)?,
+            Raw::N(n) => n,
+        };
+        Ok(Permissions::from_bits_retain(bits))
+    }
+}
+
+/// Guild-level permissions for a member: @everyone role + all member roles.
+/// Owners and administrators get everything.
+pub fn compute_base_permissions(
+    guild_id: GuildId,
+    owner_id: Option<UserId>,
+    user_id: UserId,
+    member_roles: &[RoleId],
+    roles: &[Role],
+) -> Permissions {
+    if owner_id == Some(user_id) {
+        return Permissions::all();
+    }
+    // The @everyone role shares the guild id.
+    let mut perms = roles
+        .iter()
+        .find(|r| r.id == guild_id)
+        .map(|r| r.permissions)
+        .unwrap_or_default();
+    for role in roles.iter().filter(|r| member_roles.contains(&r.id)) {
+        perms |= role.permissions;
+    }
+    if perms.contains(Permissions::ADMINISTRATOR) {
+        return Permissions::all();
+    }
+    perms
+}
+
+/// Apply channel overwrites on top of base permissions following the
+/// documented order: @everyone overwrite, then the union of role overwrites
+/// (deny then allow), then the member-specific overwrite.
+pub fn apply_overwrites(
+    base: Permissions,
+    guild_id: GuildId,
+    user_id: UserId,
+    member_roles: &[RoleId],
+    overwrites: &[PermissionOverwrite],
+) -> Permissions {
+    if base.contains(Permissions::ADMINISTRATOR) {
+        return Permissions::all();
+    }
+    let mut perms = base;
+    if let Some(ow) = overwrites
+        .iter()
+        .find(|o| o.id == guild_id && o.kind == OverwriteType::Role)
+    {
+        perms &= !ow.deny;
+        perms |= ow.allow;
+    }
+    let mut allow = Permissions::empty();
+    let mut deny = Permissions::empty();
+    for ow in overwrites
+        .iter()
+        .filter(|o| o.kind == OverwriteType::Role && member_roles.contains(&o.id))
+    {
+        allow |= ow.allow;
+        deny |= ow.deny;
+    }
+    perms &= !deny;
+    perms |= allow;
+    if let Some(ow) = overwrites
+        .iter()
+        .find(|o| o.id == user_id && o.kind == OverwriteType::Member)
+    {
+        perms &= !ow.deny;
+        perms |= ow.allow;
+    }
+    // Implicit rules: without VIEW_CHANNEL nothing else applies, and
+    // without SEND_MESSAGES the message-sending sub-permissions are moot.
+    if !perms.contains(Permissions::VIEW_CHANNEL) {
+        return Permissions::empty();
+    }
+    if !perms.contains(Permissions::SEND_MESSAGES) {
+        perms &= !(Permissions::SEND_TTS_MESSAGES
+            | Permissions::MENTION_EVERYONE
+            | Permissions::EMBED_LINKS
+            | Permissions::ATTACH_FILES);
+    }
+    perms
+}
+
+/// Convenience: full channel permission computation.
+pub fn compute_channel_permissions(
+    guild_id: GuildId,
+    owner_id: Option<UserId>,
+    user_id: UserId,
+    member_roles: &[RoleId],
+    roles: &[Role],
+    overwrites: &[PermissionOverwrite],
+) -> Permissions {
+    let base = compute_base_permissions(guild_id, owner_id, user_id, member_roles, roles);
+    apply_overwrites(base, guild_id, user_id, member_roles, overwrites)
+}

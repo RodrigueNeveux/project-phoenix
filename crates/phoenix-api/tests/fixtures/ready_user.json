@@ -1,0 +1,66 @@
+{
+  "v": 10,
+  "user": {"id": "100000000000000001", "username": "phoenix", "discriminator": "0", "global_name": "Phoenix", "avatar": "a_abcdef", "email": "me@example.com", "verified": true, "mfa_enabled": true, "premium_type": 2, "flags": 0, "phone": null, "bio": "", "brand_new_field": {"x": 1}},
+  "session_id": "6e1a7b5f0c9d4e2f",
+  "resume_gateway_url": "wss://gateway-us-east1-b.discord.gg",
+  "country_code": "FR",
+  "auth_session_id_hash": "abc=",
+  "users": [
+    {"id": "200000000000000002", "username": "alice", "discriminator": "0", "global_name": "Alice", "avatar": null},
+    {"id": "200000000000000003", "username": "bob", "discriminator": "4242", "global_name": null, "avatar": "bobhash", "bot": false}
+  ],
+  "guilds": [
+    {
+      "id": "300000000000000001",
+      "data_mode": "full",
+      "joined_at": "2021-03-04T10:00:00.000000+00:00",
+      "member_count": 1523,
+      "lazy": true,
+      "large": true,
+      "version": 1700000000000,
+      "properties": {"id": "300000000000000001", "name": "Rustaceans", "icon": "iconhash", "owner_id": "200000000000000002", "features": ["COMMUNITY", "NEWS"], "verification_level": 2, "preferred_locale": "en-US", "system_channel_id": "400000000000000001", "premium_tier": 2, "nsfw_level": 0, "max_members": 500000},
+      "roles": [
+        {"id": "300000000000000001", "name": "@everyone", "permissions": "1071698660929", "position": 0, "color": 0, "hoist": false, "managed": false, "mentionable": false, "flags": 0},
+        {"id": "500000000000000001", "name": "Moderator", "permissions": "1099511627775", "position": 5, "color": 15844367, "hoist": true, "managed": false, "mentionable": true, "icon": null, "unicode_emoji": null, "flags": 0, "tags": {}}
+      ],
+      "emojis": [{"id": "600000000000000001", "name": "ferris", "roles": [], "require_colons": true, "managed": false, "animated": false, "available": true}],
+      "stickers": [],
+      "guild_scheduled_events": [],
+      "stage_instances": [],
+      "channels": [
+        {"id": "400000000000000000", "type": 4, "name": "Text Channels", "position": 0, "permission_overwrites": [], "flags": 0},
+        {"id": "400000000000000001", "type": 0, "name": "general", "position": 0, "parent_id": "400000000000000000", "topic": "Say hi", "nsfw": false, "last_message_id": "700000000000000050", "rate_limit_per_user": 0, "permission_overwrites": [{"id": "300000000000000001", "type": 0, "allow": "0", "deny": "2048"}, {"id": "500000000000000001", "type": 0, "allow": "2048", "deny": "0"}], "flags": 0},
+        {"id": "400000000000000002", "type": 2, "name": "Voice", "position": 1, "bitrate": 64000, "user_limit": 0, "rtc_region": null, "parent_id": "400000000000000000", "permission_overwrites": []},
+        {"id": "400000000000000003", "type": 15, "name": "help", "position": 2, "available_tags": [{"id": "800000000000000001", "name": "solved", "moderated": false, "emoji_id": null, "emoji_name": "✅"}], "default_reaction_emoji": {"emoji_id": null, "emoji_name": "👍"}, "default_sort_order": 0, "default_forum_layout": 1, "permission_overwrites": []},
+        {"id": "400000000000000004", "type": 5, "name": "announcements", "position": 3, "permission_overwrites": []},
+        {"id": "400000000000000005", "type": 13, "name": "Stage", "position": 4, "permission_overwrites": []},
+        {"id": "400000000000000006", "type": 16, "name": "media", "position": 5, "permission_overwrites": []},
+        {"id": "400000000000000007", "type": 99, "name": "from-the-future", "position": 6, "permission_overwrites": []}
+      ],
+      "threads": [
+        {"id": "400000000000000010", "type": 11, "name": "help me pls", "parent_id": "400000000000000003", "owner_id": "200000000000000003", "message_count": 4, "member_count": 2, "applied_tags": ["800000000000000001"], "thread_metadata": {"archived": false, "auto_archive_duration": 1440, "archive_timestamp": "2024-01-01T00:00:00+00:00", "locked": false, "create_timestamp": "2024-01-01T00:00:00+00:00"}}
+      ]
+    },
+    {"id": "300000000000000002", "unavailable": true}
+  ],
+  "merged_members": [
+    [{"user_id": "100000000000000001", "roles": ["500000000000000001"], "nick": "phx", "joined_at": "2021-03-04T10:00:00.000000+00:00", "deaf": false, "mute": false, "flags": 0, "pending": false, "premium_since": null}],
+    []
+  ],
+  "private_channels": [
+    {"id": "900000000000000001", "type": 1, "recipient_ids": ["200000000000000002"], "last_message_id": "900000000000000500", "flags": 0, "is_spam": false},
+    {"id": "900000000000000002", "type": 3, "name": null, "icon": null, "owner_id": "200000000000000003", "recipient_ids": ["200000000000000002", "200000000000000003"], "last_message_id": "900000000000000400", "flags": 0}
+  ],
+  "relationships": [
+    {"id": "200000000000000002", "type": 1, "nickname": null, "user_id": "200000000000000002", "since": "2022-01-01T00:00:00+00:00"},
+    {"id": "200000000000000009", "type": 7, "nickname": null, "user_id": "200000000000000009"}
+  ],
+  "read_state": {"version": 1, "partial": false, "entries": []},
+  "user_guild_settings": {"version": 1, "partial": false, "entries": []},
+  "user_settings": {"theme": "dark", "locale": "fr"},
+  "sessions": [],
+  "experiments": [],
+  "guild_experiments": [],
+  "connected_accounts": [],
+  "analytics_token": "xyz"
+}
