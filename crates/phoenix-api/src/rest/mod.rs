@@ -109,12 +109,31 @@ impl CreateMessage {
 }
 
 /// Result of `POST /auth/login`.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum LoginResponse {
     /// Logged in; store this token.
     Token { user_id: Option<UserId>, token: String },
     /// Second factor required. Pass `ticket` to [`RestClient::login_mfa_totp`].
     MfaRequired { user_id: Option<UserId>, ticket: String, totp: bool, sms: bool, backup: bool, webauthn: bool },
+}
+
+impl std::fmt::Debug for LoginResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Token { user_id, .. } => {
+                f.debug_struct("Token").field("user_id", user_id).field("token", &"<redacted>").finish()
+            }
+            Self::MfaRequired { user_id, totp, sms, backup, webauthn, .. } => f
+                .debug_struct("MfaRequired")
+                .field("user_id", user_id)
+                .field("ticket", &"<redacted>")
+                .field("totp", totp)
+                .field("sms", sms)
+                .field("backup", backup)
+                .field("webauthn", webauthn)
+                .finish(),
+        }
+    }
 }
 
 #[derive(Deserialize)]

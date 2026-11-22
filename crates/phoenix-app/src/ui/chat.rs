@@ -2,7 +2,7 @@
 
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, IntoElement, KeyDownEvent, ParentElement,
-    SharedString, StyledText, Styled, InteractiveText, Window, div, list, prelude::*, px,
+    SharedString, StyledText, Styled, InteractiveText, Window, div, img, list, prelude::*, px,
 };
 use gpui_component::input::Input;
 
@@ -223,6 +223,7 @@ fn message(
     let color = role_color(app.author_color(msg.author));
     let id = msg.id;
     let editing = app.editing == Some(id);
+    let own = msg.author == app.me.id;
     let replying = app.replying_to == Some(id);
     let highlight = r.mentions_me || replying;
 
@@ -388,12 +389,20 @@ fn message(
                 .rounded(px(4.))
                 .child(icon_button("react", Icon::Emoji, c(Palette::INTERACTIVE), 20.))
                 .child(
-                    icon_button("reply", Icon::Reply, c(Palette::INTERACTIVE), 20.).on_click(
+                    icon_button("reply", Icon::Reply, c(Palette::INTERACTIVE), 20.).on_click({
+                        let e = e.clone();
                         move |_, w, cx| {
                             e.update(cx, |a, cx| a.start_reply(id, w, cx));
+                        }
+                    }),
+                )
+                .when(own, |d| {
+                    d.child(icon_button("delete", Icon::Close, c(Palette::INTERACTIVE), 20.).on_click(
+                        move |_, _, cx| {
+                            e.update(cx, |a, cx| a.delete_message(id, cx));
                         },
-                    ),
-                ),
+                    ))
+                }),
         );
     if let Some(label) = r.day_divider.clone() {
         div().child(day_divider(label)).child(body).into_any_element()
@@ -465,6 +474,14 @@ fn attachment(a: &Attachment) -> AnyElement {
     if a.is_image {
         // Placeholder box sized to the image aspect ratio (max 400x300).
         let scale = (400. / a.width.max(1) as f32).min(300. / a.height.max(1) as f32).min(1.);
+        if a.url.starts_with("https://") {
+            return img(a.url.clone())
+                .mt(px(4.))
+                .w(px(a.width as f32 * scale))
+                .h(px(a.height as f32 * scale))
+                .rounded(px(8.))
+                .into_any_element();
+        }
         return div()
             .mt(px(4.))
             .w(px(a.width as f32 * scale))

@@ -81,6 +81,9 @@ pub struct PhoenixApp {
     pub login_password: Entity<InputState>,
     pub login_token: Entity<InputState>,
     pub login_with_token: bool,
+    /// TOTP code input, shown after a password login asked for 2FA.
+    pub login_mfa: Entity<InputState>,
+    pub login_mfa_step: bool,
     pub login_error: Option<SharedString>,
     pub logging_in: bool,
 
@@ -93,6 +96,8 @@ pub struct PhoenixApp {
     pub dms: Vec<Id>,
     pub roles: HashMap<Id, Vec<Role>>,
     pub members: HashMap<Id, Vec<Member>>,
+    /// Presence of users outside the open guild's member list (DMs, friends).
+    pub presences: HashMap<Id, Presence>,
     pub messages: HashMap<Id, ChannelMessages>,
 
     // Selection
@@ -179,6 +184,7 @@ impl PhoenixApp {
         let login_email = cx.new(|cx| InputState::new(window, cx));
         let login_password = cx.new(|cx| InputState::new(window, cx).masked(true));
         let login_token = cx.new(|cx| InputState::new(window, cx).masked(true));
+        let login_mfa = cx.new(|cx| InputState::new(window, cx).placeholder("6-digit code"));
         let composer = cx.new(|cx| InputState::new(window, cx));
 
         let mut subs = Vec::new();
@@ -189,7 +195,7 @@ impl PhoenixApp {
                 _ => {}
             }
         }));
-        for input in [&login_email, &login_password, &login_token] {
+        for input in [&login_email, &login_password, &login_token, &login_mfa] {
             subs.push(cx.subscribe_in(input, window, |this, _, ev: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { .. } = ev {
                     this.submit_login(window, cx);
@@ -231,6 +237,26 @@ impl PhoenixApp {
             }
         });
 
+        // Auto-login from the stored session (keyring), if any.
+        let restore = backend.restore_session();
+        let logging_in = restore.is_some();
+        if let Some(fut) = restore {
+            cx.spawn(async move |this, cx| {
+                let res = fut.await;
+                let _ = this.update(cx, |this, cx| {
+                    this.logging_in = false;
+                    match res {
+                        Ok(ready) => this.apply_ready(ready, cx),
+                        // Empty message = nothing stored: stay quietly on the login screen.
+                        Err(e) if e.0.is_empty() => {}
+                        Err(e) => this.login_error = Some(e.0.into()),
+                    }
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+
         let utc_offset = Local::now().offset().local_minus_utc() as i64;
         Self {
             backend,
@@ -240,8 +266,10 @@ impl PhoenixApp {
             login_password,
             login_token,
             login_with_token: false,
+            login_mfa,
+            login_mfa_step: false,
             login_error: None,
-            logging_in: false,
+            logging_in,
             me: User {
                 id: Id(0),
                 name: "".into(),
@@ -256,6 +284,7 @@ impl PhoenixApp {
             dms: Vec::new(),
             roles: HashMap::new(),
             members: HashMap::new(),
+            presences: HashMap::new(),
             messages: HashMap::new(),
             selected_guild: None,
             selected_channel: None,
@@ -290,7 +319,9 @@ impl PhoenixApp {
         if self.logging_in {
             return;
         }
-        let creds = if self.login_with_token {
+        let creds = if self.login_mfa_step && !self.login_with_token {
+            Credentials::Mfa { code: self.login_mfa.read(cx).value().to_string() }
+        } else if self.login_with_token {
             Credentials::Token(self.login_token.read(cx).value().to_string())
         } else {
             Credentials::Password {
@@ -307,8 +338,14 @@ impl PhoenixApp {
             let _ = this.update(cx, |this, cx| {
                 this.logging_in = false;
                 match res {
-                    Ok(ready) => this.apply_ready(ready, cx),
-                    Err(e) => this.login_error = Some(e.0.into()),
+                    Ok(ready) => {
+                        this.login_mfa_step = false;
+                        this.apply_ready(ready, cx)
+                    }
+                    Err(e) => {
+                        this.login_mfa_step = this.backend.needs_mfa();
+                        this.login_error = Some(e.0.into());
+                    }
                 }
                 cx.notify();
             });
@@ -316,7 +353,50 @@ impl PhoenixApp {
         .detach();
     }
 
+    /// Drop everything tied to the logged-in account.
+    fn clear_session(&mut self) {
+        self.users.clear();
+        self.guilds.clear();
+        self.channels.clear();
+        self.guild_channels.clear();
+        self.dms.clear();
+        self.roles.clear();
+        self.members.clear();
+        self.presences.clear();
+        self.messages.clear();
+        self.selected_guild = None;
+        self.selected_channel = None;
+        self.last_channel.clear();
+        self.sidebar_rows.clear();
+        self.member_rows.clear();
+        self.typing.clear();
+        self.typing_label = None;
+        self.replying_to = None;
+        self.editing = None;
+        self.voice_channel = None;
+        self.switcher = None;
+        self.guild_list.reset(0);
+        self.sidebar_list.reset(0);
+        self.message_list.reset(0);
+        self.member_list.reset(0);
+    }
+
+    pub fn logout(&mut self, cx: &mut Context<Self>) {
+        let fut = self.backend.logout();
+        cx.spawn(async move |_, _| {
+            let _ = fut.await;
+        })
+        .detach();
+        self.clear_session();
+        self.login_mfa_step = false;
+        self.login_error = None;
+        self.screen = Screen::Login;
+        cx.notify();
+    }
+
     fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
+        self.clear_session();
+        self.presences = r.presences.into_iter().collect();
         self.me = r.me;
         self.users = r.users.into_iter().map(|u| (u.id, u)).collect();
         self.guilds = r.guilds;
@@ -585,6 +665,7 @@ impl PhoenixApp {
                 }
             }
             AppEvent::PresenceUpdate { user, presence } => {
+                self.presences.insert(user, presence);
                 for ms in self.members.values_mut() {
                     for m in ms.iter_mut().filter(|m| m.user == user) {
                         m.presence = presence;
@@ -606,7 +687,8 @@ impl PhoenixApp {
                 self.rebuild_sidebar();
             }
             AppEvent::VoiceStateUpdate { channel, user } => {
-                for ch in self.channels.values_mut() {
+                // DMs keep their recipient in `voice_users` (avatar): skip them.
+                for ch in self.channels.values_mut().filter(|c| c.guild.is_some()) {
                     ch.voice_users.retain(|u| *u != user);
                 }
                 if let Some(c) = channel.and_then(|c| self.channels.get_mut(&c)) {
@@ -617,11 +699,114 @@ impl PhoenixApp {
                 }
                 self.rebuild_sidebar();
             }
+            AppEvent::Users(users) => {
+                for u in users {
+                    self.users.insert(u.id, u);
+                }
+            }
+            AppEvent::GuildChannels { guild, channels } => {
+                self.set_guild_channels(guild, channels);
+                if self.selected_guild == Some(guild) {
+                    self.rebuild_sidebar();
+                }
+            }
+            AppEvent::GuildRoles { guild, roles } => {
+                self.roles.insert(guild, roles);
+                if self.selected_guild == Some(guild) {
+                    self.rebuild_members();
+                }
+            }
+            AppEvent::GuildUnread { guild, unread, mentions } => {
+                if let Some(g) = self.guilds.iter_mut().find(|g| g.id == guild) {
+                    g.unread = unread;
+                    g.mentions = mentions;
+                }
+            }
+            AppEvent::GuildCreate { guild, channels, roles } => {
+                let gid = guild.id;
+                match self.guilds.iter_mut().find(|g| g.id == gid) {
+                    Some(g) => *g = guild,
+                    None => {
+                        self.guilds.insert(0, guild);
+                        self.guild_list.reset(self.guilds.len() + 5);
+                    }
+                }
+                self.roles.insert(gid, roles);
+                self.set_guild_channels(gid, channels);
+                if self.selected_guild == Some(gid) {
+                    self.rebuild_sidebar();
+                }
+            }
+            AppEvent::GuildDelete(gid) => {
+                self.guilds.retain(|g| g.id != gid);
+                self.guild_list.reset(self.guilds.len() + 5);
+                self.set_guild_channels(gid, Vec::new());
+                self.guild_channels.remove(&gid);
+                self.members.remove(&gid);
+                if self.selected_guild == Some(gid) {
+                    self.select_guild(None, cx);
+                }
+            }
+            AppEvent::DmUpsert(ch) => {
+                let id = ch.id;
+                let keep_unread = self.selected_channel == Some(id);
+                let mut ch = ch;
+                if keep_unread {
+                    ch.unread = false;
+                    ch.mentions = 0;
+                }
+                self.channels.insert(id, ch);
+                self.dms.retain(|d| *d != id);
+                self.dms.insert(0, id);
+                if self.selected_guild.is_none() {
+                    self.rebuild_sidebar();
+                }
+            }
+            AppEvent::DmDelete(id) => {
+                self.dms.retain(|d| *d != id);
+                self.channels.remove(&id);
+                if self.selected_guild.is_none() {
+                    self.rebuild_sidebar();
+                }
+            }
             AppEvent::Disconnected(reason) => {
+                self.clear_session();
                 self.login_error = Some(reason.into());
                 self.screen = Screen::Login;
             }
         }
+        cx.notify();
+    }
+
+    /// Replace a guild's channel list (already in display order).
+    fn set_guild_channels(&mut self, guild: Id, channels: Vec<crate::model::Channel>) {
+        if let Some(old) = self.guild_channels.remove(&guild) {
+            for id in old {
+                self.channels.remove(&id);
+            }
+        }
+        let mut ids = Vec::with_capacity(channels.len());
+        for mut ch in channels {
+            // The open channel is read by definition.
+            if self.selected_channel == Some(ch.id) {
+                ch.unread = false;
+                ch.mentions = 0;
+            }
+            ids.push(ch.id);
+            self.channels.insert(ch.id, ch);
+        }
+        ids.sort_by_key(|id| self.channels[id].position);
+        self.guild_channels.insert(guild, ids);
+        if let Some(sel) = self.selected_channel
+            && self.channels.get(&sel).is_none()
+        {
+            self.selected_channel = None;
+        }
+    }
+
+    pub fn delete_message(&mut self, id: Id, cx: &mut Context<Self>) {
+        let Some(ch) = self.selected_channel else { return };
+        self.backend.delete_message(ch, id).detach_ok();
         cx.notify();
     }
 
@@ -835,11 +1020,13 @@ impl PhoenixApp {
         if user == self.me.id {
             return self.presence;
         }
+        let known = self.presences.get(&user).copied();
         self.selected_guild
             .and_then(|g| self.members.get(&g))
             .and_then(|ms| ms.iter().find(|m| m.user == user))
             .map(|m| m.presence)
-            .unwrap_or(Presence::Online)
+            .or(known)
+            .unwrap_or(Presence::Offline)
     }
 
     // ------------------------------------------------------ quick switcher

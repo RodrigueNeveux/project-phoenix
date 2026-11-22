@@ -83,6 +83,14 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("Your token is stored only in your system keyring and never shared."),
                 )
+            } else if app.login_mfa_step {
+                d.child(label("TWO-FACTOR CODE", err)).child(field(&app.login_mfa)).child(
+                    div()
+                        .mt(px(8.))
+                        .text_size(px(12.))
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child("Open your authenticator app and enter the 6-digit code."),
+                )
             } else {
                 d.child(label("EMAIL OR PHONE NUMBER", err))
                     .child(field(&app.login_email))
@@ -136,6 +144,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .cursor_pointer()
                 .on_click(cx.listener(|a, _, _, cx| {
                     a.login_with_token = !a.login_with_token;
+                    a.login_mfa_step = false;
                     a.login_error = None;
                     cx.notify();
                 }))

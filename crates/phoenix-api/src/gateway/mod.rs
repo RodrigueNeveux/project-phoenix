@@ -80,7 +80,7 @@ mod op {
     pub const GUILD_SUBSCRIPTIONS_BULK: u8 = 37;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GatewayConfig {
     pub token: String,
     /// Base URL without query (e.g. `wss://gateway.discord.gg`).
@@ -97,6 +97,17 @@ pub struct GatewayConfig {
     pub invalid_session_delay: Duration,
     /// Max wait for HELLO after connecting.
     pub hello_timeout: Duration,
+}
+
+impl std::fmt::Debug for GatewayConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GatewayConfig")
+            .field("token", &"<redacted>")
+            .field("url", &self.url)
+            .field("capabilities", &self.capabilities)
+            .field("compress", &self.compress)
+            .finish_non_exhaustive()
+    }
 }
 
 impl GatewayConfig {

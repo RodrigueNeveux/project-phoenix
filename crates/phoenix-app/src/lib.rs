@@ -3,6 +3,7 @@
 pub mod app;
 pub mod assets;
 pub mod backend;
+pub mod discord_backend;
 pub mod grouping;
 pub mod markdown;
 pub mod mock;

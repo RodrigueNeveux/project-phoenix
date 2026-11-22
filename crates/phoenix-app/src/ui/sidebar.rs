@@ -441,5 +441,10 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 cx.notify();
             })),
         )
-        .child(icon_button("settings", Icon::Gear, normal, 20.))
+        .child(
+            // No settings screen yet: the gear logs out (and forgets the stored token).
+            icon_button("settings", Icon::Gear, normal, 20.)
+                .tooltip(|window, cx| gpui_component::tooltip::Tooltip::new("Log out").build(window, cx))
+                .on_click(cx.listener(|a, _, _, cx| a.logout(cx))),
+        )
 }

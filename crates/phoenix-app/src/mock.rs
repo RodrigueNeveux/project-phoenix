@@ -381,6 +381,7 @@ impl Backend for MockBackend {
         let ok = match &creds {
             Credentials::Token(t) => !t.trim().is_empty(),
             Credentials::Password { login, password } => !login.is_empty() && !password.is_empty(),
+            Credentials::Mfa { code } => !code.is_empty(),
         };
         Box::pin(async move {
             if !ok {
@@ -411,6 +412,7 @@ impl Backend for MockBackend {
                 channels: i.channels.clone(),
                 roles: i.roles.clone(),
                 dm_channels,
+                presences: i.users.iter().map(|u| (u.id, Presence::Online)).collect(),
             })
         })
     }
@@ -517,6 +519,13 @@ impl Backend for MockBackend {
 
     fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
         self.emit_later(Duration::from_millis(50), move || AppEvent::VoiceStateUpdate { channel, user: ME });
+        Box::pin(async { Ok(()) })
+    }
+    fn delete_message(&self, channel: Id, id: Id) -> BoxFuture<()> {
+        if let Some(h) = self.inner.lock().unwrap().history.get_mut(&channel) {
+            h.retain(|m| m.id != id);
+        }
+        self.emit_later(Duration::from_millis(20), move || AppEvent::MessageDelete { channel, id });
         Box::pin(async { Ok(()) })
     }
 }
