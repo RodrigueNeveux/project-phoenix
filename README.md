@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/RoxasYTB/discord-phoenix/actions/workflows/ci.yml"><img src="https://github.com/RoxasYTB/discord-phoenix/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+
   <a href="https://github.com/RoxasYTB/discord-phoenix/releases"><img src="https://img.shields.io/github/v/release/RoxasYTB/discord-phoenix?include_prereleases&label=release" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue" alt="License: Apache-2.0 OR MIT">
   <img src="https://img.shields.io/badge/status-beta-orange" alt="Status: beta">

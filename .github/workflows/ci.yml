@@ -1,9 +1,9 @@
 name: CI
 
+# Runs only on demand (Actions tab -> CI -> Run workflow) to save Actions minutes.
+# Full verification happens locally; the release workflow builds on version tags.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
