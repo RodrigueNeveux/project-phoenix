@@ -798,7 +798,7 @@ impl PhoenixApp {
         ids.sort_by_key(|id| self.channels[id].position);
         self.guild_channels.insert(guild, ids);
         if let Some(sel) = self.selected_channel
-            && self.channels.get(&sel).is_none()
+            && !self.channels.contains_key(&sel)
         {
             self.selected_channel = None;
         }

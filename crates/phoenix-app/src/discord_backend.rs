@@ -255,10 +255,8 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
         for e in events {
             inner.emit(e);
         }
-        if let GatewayEvent::Fatal { code, .. } = ev {
-            if code == 4004 {
-                let _ = store_op(&inner.store, |st| st.clear()).await;
-            }
+        if let GatewayEvent::Fatal { code: 4004, .. } = ev {
+            let _ = store_op(&inner.store, |st| st.clear()).await;
         }
         if fatal {
             inner.session.lock().take();
