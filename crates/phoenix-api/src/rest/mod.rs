@@ -1,5 +1,6 @@
 //! Rate-limited REST client authenticated with a *user* token.
 
+pub mod profile;
 pub mod ratelimit;
 
 use std::sync::Arc;
