@@ -457,11 +457,9 @@ impl PhoenixApp {
             entry.reached_start = true;
         }
         let n = page.len();
-        let mut all = if older { page } else { Vec::new() };
+        let mut all = page;
         if older {
             all.extend(std::mem::take(&mut entry.msgs));
-        } else {
-            all = page;
         }
         // Re-render only the new rows plus the first old row (its grouping may change).
         let rendered: Vec<RenderedMessage> = if older {

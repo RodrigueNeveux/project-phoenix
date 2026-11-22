@@ -282,11 +282,11 @@ impl MockBackend {
         let mut rng = Lcg(channel.0.wrapping_mul(2654435761));
         let n = 120 + (rng.next() % 200) as usize;
         let mut ts = now() - n as i64 * 150 - 86_400;
-        let mut out = Vec::with_capacity(n);
+        let mut out: Vec<Message> = Vec::with_capacity(n);
         let mut author = Id(2);
         for i in 0..n {
             ts += (rng.next() % 300) as i64 + 5;
-            if rng.next() % 3 == 0 {
+            if rng.next().is_multiple_of(3) {
                 author = rng.pick(&inner.users).id;
             }
             inner.next_id += 1;
@@ -295,19 +295,19 @@ impl MockBackend {
                 channel,
                 author,
                 timestamp: ts,
-                edited: rng.next() % 17 == 0,
+                edited: rng.next().is_multiple_of(17),
                 content: (*rng.pick(LINES)).into(),
                 reply_to: None,
                 embeds: vec![],
                 attachments: vec![],
                 reactions: vec![],
             };
-            if i > 3 && rng.next() % 11 == 0 {
+            if i > 3 && rng.next().is_multiple_of(11) {
                 m.reply_to = Some(out[i - 2 - (rng.next() as usize % 2)].id);
             }
-            if rng.next() % 9 == 0 {
-                m.reactions.push(Reaction { emoji: "👍".into(), count: 1 + (rng.next() % 5) as u32, me: rng.next() % 2 == 0 });
-                if rng.next() % 2 == 0 {
+            if rng.next().is_multiple_of(9) {
+                m.reactions.push(Reaction { emoji: "👍".into(), count: 1 + (rng.next() % 5) as u32, me: rng.next().is_multiple_of(2) });
+                if rng.next().is_multiple_of(2) {
                     m.reactions.push(Reaction { emoji: "🔥".into(), count: 1 + (rng.next() % 3) as u32, me: false });
                 }
             }
@@ -320,7 +320,7 @@ impl MockBackend {
                     url: Some("https://github.com/zed-industries/zed".into()),
                 });
             }
-            if rng.next() % 23 == 0 {
+            if rng.next().is_multiple_of(23) {
                 m.content = "".into();
                 m.attachments.push(Attachment {
                     filename: "screenshot.png".into(),
@@ -330,7 +330,7 @@ impl MockBackend {
                     is_image: true,
                     size: 345_678,
                 });
-            } else if rng.next() % 41 == 0 {
+            } else if rng.next().is_multiple_of(41) {
                 m.attachments.push(Attachment {
                     filename: "phoenix-0.1.0.tar.gz".into(),
                     url: "https://example.invalid/phoenix.tar.gz".into(),

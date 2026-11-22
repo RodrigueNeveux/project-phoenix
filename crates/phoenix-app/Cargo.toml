@@ -21,3 +21,8 @@ gpui-component = "0.10.0"
 futures = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[dev-dependencies]
+gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
+anyhow = "1"
+gpui-platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["test-support"] }
