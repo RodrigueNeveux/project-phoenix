@@ -7,9 +7,10 @@
 //! [`convert::Adapter`].
 
 pub mod convert;
-mod expressions;
 mod account;
+mod expressions;
 pub mod http;
+mod nav;
 mod people;
 pub mod store;
 
@@ -238,6 +239,7 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready(ready.user_guild_settings.as_ref())),
     });
     *inner.session.lock() = Some(session.clone());
+    nav::snapshot(&session.cache, &ready).into_iter().for_each(|e| inner.emit(e));
     tokio::spawn(pump(inner.clone(), session, rx));
     Ok(data)
 }
@@ -260,6 +262,7 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             crate::voice::call::manager().on_gateway(&emit, s.adapter.lock().me.0, &ev);
         }
         account::on_gateway(&s, &ev);
+        nav::on_gateway(&s.cache, &ev).into_iter().for_each(|e| inner.emit(e));
         let events = s.adapter.lock().map(&s.cache, &ev);
         if let GatewayEvent::MessageCreate(m) = &ev
             && *s.selected_channel.lock() == Some(m.channel_id)
@@ -383,6 +386,10 @@ impl Backend for DiscordBackend {
         self.inner.mfa_ticket.lock().is_some()
     }
 
+    fn nav(&self, req: crate::ui::home::data::NavRequest) -> BoxFuture<crate::ui::home::data::NavReply> {
+        self.with_session(move |_, s| nav::request(s.rest.clone(), req))
+    }
+
     fn logout(&self) -> BoxFuture<()> {
         self.spawn(move |inner| async move {
             inner.mfa_ticket.lock().take();
@@ -485,21 +492,6 @@ impl Backend for DiscordBackend {
         })
     }
 
-    fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
-        self.with_session(move |inner, s| async move {
-            let emit: crate::voice::call::Emit = Arc::new(move |e| inner.emit(e));
-            crate::voice::call::manager().join(&emit, &s.gateway, &s.cache, channel.map(|c| c.0)).map_err(err)
-        })
-    }
-
-    fn voice_control(&self, control: crate::voice::VoiceControl) -> BoxFuture<()> {
-        let s = self.inner.session.lock().clone();
-        crate::voice::call::manager().apply_control(s.as_ref().map(|s| &s.gateway), control);
-        Box::pin(async { Ok(()) })
-    }
-
-    fn subscribe_member_ranges(&self, guild: Id, channel: Id, ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
-        self.people_ranges(guild, channel, ranges)
     fn send_message_ex(
         &self,
         channel: Id,
@@ -531,31 +523,6 @@ impl Backend for DiscordBackend {
             s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             Ok(convert::message(&m))
         })
-    }
-
-    fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
-        self.inner.session().map(|s| expressions::guild_emojis(&s, guild)).unwrap_or_default()
-    }
-    fn guild_stickers(&self, guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
-        self.inner.session().map(|s| expressions::guild_stickers(&s, guild)).unwrap_or_default()
-    }
-    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
-        self.with_session(|_, s| expressions::sticker_packs(s))
-    }
-    fn send_sticker(&self, channel: Id, sticker: Id) -> BoxFuture<()> {
-        self.with_session(move |_, s| expressions::send_sticker(s, channel, sticker))
-    }
-    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
-        self.with_session(|_, s| expressions::gif_trending(s))
-    }
-    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        self.with_session(|_, s| expressions::gif_trending_gifs(s))
-    }
-    fn gif_search(&self, query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        self.with_session(move |_, s| expressions::gif_search(s, query))
-    }
-    fn search_messages(&self, req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
-        self.with_session(move |inner, s| expressions::search(inner, s, req))
     }
 
     fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
@@ -629,6 +596,21 @@ impl Backend for DiscordBackend {
         })
     }
 
+    fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
+        self.with_session(move |inner, s| async move {
+            let emit: crate::voice::call::Emit = Arc::new(move |e| inner.emit(e));
+            crate::voice::call::manager().join(&emit, &s.gateway, &s.cache, channel.map(|c| c.0)).map_err(err)
+        })
+    }
+
+    fn voice_control(&self, control: crate::voice::VoiceControl) -> BoxFuture<()> {
+        let s = self.inner.session.lock().clone();
+        crate::voice::call::manager().apply_control(s.as_ref().map(|s| &s.gateway), control);
+        Box::pin(async { Ok(()) })
+    }
+
+    fn subscribe_member_ranges(&self, guild: Id, channel: Id, ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
+        self.people_ranges(guild, channel, ranges)
     }
     fn user_profile(&self, user: Id, guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
         self.people_profile(user, guild)

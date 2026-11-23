@@ -48,6 +48,8 @@ pub enum Screen {
 pub enum SidebarRow {
     Category(Id),
     Channel(Id),
+    /// Active thread under its parent channel.
+    Thread(Id),
     VoiceUser { user: Id },
 }
 
@@ -102,6 +104,7 @@ pub struct PhoenixApp {
     pub selected_channel: Option<Id>,
     pub last_channel: HashMap<Option<Id>, Id>,
     pub collapsed: HashSet<Id>,
+    pub nav: crate::ui::home::data::NavState,
 
     // Derived rows (rebuilt on change, not per frame)
     pub sidebar_rows: Vec<SidebarRow>,
@@ -132,8 +135,8 @@ pub struct PhoenixApp {
     pub switcher: Option<Switcher>,
     pub settings: Option<ui::settings::SettingsState>,
     pub prefs: ui::settings::Prefs,
-    pub chat: crate::ui::chat::ChatState,
     pub login_ui: crate::auth::LoginUi,
+    pub chat: crate::ui::chat::ChatState,
     pub revealed: HashSet<(Id, usize)>,
     pub utc_offset: i64,
     _subs: Vec<Subscription>,
@@ -295,6 +298,7 @@ impl PhoenixApp {
             selected_channel: None,
             last_channel: HashMap::new(),
             collapsed: HashSet::new(),
+            nav: Default::default(),
             sidebar_rows: Vec::new(),
             member_rows: Vec::new(),
             guild_list: ListState::new(0, ListAlignment::Top, px(200.)),
@@ -314,8 +318,8 @@ impl PhoenixApp {
             show_members: true,
             people: Default::default(),
             switcher: None,
-            revealed: HashSet::new(),
             chat: Default::default(),
+            revealed: HashSet::new(),
             utc_offset,
             settings: None,
             prefs: ui::settings::Prefs::load(),
@@ -390,8 +394,8 @@ impl PhoenixApp {
         self.editing = None;
         self.voice_channel = None;
         self.switcher = None;
-        self.guild_list.reset(0);
         self.chat = Default::default();
+        self.guild_list.reset(0);
         self.sidebar_list.reset(0);
         self.message_list.reset(0);
         self.member_list.reset(0);
@@ -435,6 +439,7 @@ impl PhoenixApp {
         // Home + separator + guilds + separator + add + discover
         self.guild_list.reset(self.guilds.len() + 5);
         self.screen = Screen::Main;
+        self.nav_after_ready();
         let first = self.guilds.first().map(|g| g.id);
         self.select_guild(first, cx);
         ui::settings::on_ready(self, cx);
@@ -462,8 +467,9 @@ impl PhoenixApp {
                     l.iter().copied().find(|id| self.channels[id].kind == ChannelKind::Text)
                 })
             }),
-            None => self.dms.first().copied(),
+            None => None,
         });
+        self.nav_home_target(guild, target.is_some());
         if let Some(t) = target {
             self.select_channel(t, cx);
         }
@@ -486,13 +492,14 @@ impl PhoenixApp {
         }
         self.selected_channel = Some(id);
         self.last_channel.insert(guild, id);
+        self.nav_channel_selected(guild);
         self.replying_to = None;
         self.editing = None;
+        self.chat_on_select(id);
         self.update_typing_label();
         self.backend.select_channel(id).detach_ok();
         let entry = self.messages.entry(id).or_default();
         self.message_list.reset(entry.msgs.len() + 1);
-        self.chat_on_select(id);
         if !entry.loaded_once && !entry.loading {
             entry.loading = true;
             let fut = self.backend.load_messages(id, None, 50);
@@ -616,18 +623,18 @@ impl PhoenixApp {
             return;
         }
         let r = self.render_msg(&m, entry.msgs.last());
+        let (own, ts) = (m.author == self.me.id, m.timestamp);
         entry.msgs.push(m);
         entry.rendered.push(r);
         let len = entry.msgs.len();
         self.messages.insert(ch, entry);
-        let (own, ts) = (m.author == self.me.id, m.timestamp);
         if selected {
             self.message_list.splice(len..len, 1);
+            self.chat_note_incoming(own, ts);
         } else if let Some(c) = self.channels.get_mut(&ch) {
             c.unread = true;
         }
         self.update_typing_label();
-            self.chat_note_incoming(own, ts);
         cx.notify();
     }
 
@@ -791,8 +798,9 @@ impl PhoenixApp {
                     self.rebuild_sidebar();
                 }
             }
-            AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
+            AppEvent::Nav(e) => self.on_nav_event(e, cx),
             ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => ui::members::on_event(self, ev, cx),
+            AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
             AppEvent::Disconnected(reason) => {
                 self.clear_session();
                 self.login_error = Some(reason.into());
@@ -875,12 +883,12 @@ impl PhoenixApp {
     }
 
     pub fn submit_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing.is_none() && self.chat_submit(window, cx) {
+            return;
+        }
         let Some(ch) = self.selected_channel else { return };
         let text = self.composer.read(cx).value().trim().to_string();
         if text.is_empty() {
-            return;
-        }
-        if self.editing.is_none() && self.chat_submit(window, cx) {
             return;
         }
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
@@ -947,35 +955,7 @@ impl PhoenixApp {
     }
 
     pub fn rebuild_sidebar(&mut self) {
-        self.sidebar_rows.clear();
-        match self.selected_guild {
-            None => {
-                self.sidebar_rows.extend(self.dms.iter().map(|id| SidebarRow::Channel(*id)));
-            }
-            Some(g) => {
-                let ids = self.guild_channels.get(&g).cloned().unwrap_or_default();
-                let mut current_cat: Option<Id> = None;
-                for id in ids {
-                    let ch = &self.channels[&id];
-                    if ch.kind == ChannelKind::Category {
-                        current_cat = Some(id);
-                        self.sidebar_rows.push(SidebarRow::Category(id));
-                        continue;
-                    }
-                    let collapsed = current_cat.is_some_and(|c| self.collapsed.contains(&c));
-                    // Collapsed categories still show the selected / unread channels.
-                    if collapsed && Some(id) != self.selected_channel && !ch.unread {
-                        continue;
-                    }
-                    self.sidebar_rows.push(SidebarRow::Channel(id));
-                    if !collapsed {
-                        self.sidebar_rows
-                            .extend(ch.voice_users.iter().map(|u| SidebarRow::VoiceUser { user: *u }));
-                    }
-                }
-            }
-        }
-        self.sidebar_list.reset(self.sidebar_rows.len() + 1);
+        ui::sidebar::build_rows(self);
     }
 
     pub fn rebuild_members(&mut self) {
@@ -1057,7 +1037,6 @@ impl PhoenixApp {
             .or(known)
             .unwrap_or(Presence::Offline)
     }
-        } else if self.chat_escape(window, cx) {
 
     // ------------------------------------------------------ quick switcher
 
@@ -1070,20 +1049,18 @@ impl PhoenixApp {
         self.composer.update(cx, |s, cx| s.focus(window, cx));
         cx.notify();
     }
-            .children(ui::chat::panels::overlays(self, window, cx))
-            .children(ui::home::overlay(self, window, cx))
 
     fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         if ui::settings::on_escape(self, cx) {
             return;
         }
         if crate::media::close_viewer(cx) {
-            return;
-        }
-        if self.people.any_overlay() {
+        } else if self.people.any_overlay() {
             self.people.close_overlays();
+            cx.notify();
         } else if self.switcher.is_some() {
             self.close_switcher(window, cx);
+        } else if self.chat_escape(window, cx) {
         } else if self.editing.take().is_some() {
             self.composer.update(cx, |s, cx| s.set_value("", window, cx));
         } else if self.replying_to.take().is_none() {
@@ -1144,6 +1121,8 @@ impl Render for PhoenixApp {
             .bg(c(Palette::BG_TERTIARY))
             .child(body)
             .children(ui::settings::render(self, window, cx))
+            .children(ui::chat::panels::overlays(self, window, cx))
+            .children(ui::home::overlay(self, window, cx))
             .when_some(self.switcher.as_ref(), |d, sw| d.child(ui::switcher::render(self, sw, cx)))
             .children(ui::image_viewer::render(window, cx))
             .children(ui::pickers::render_overlays(self, window, cx))

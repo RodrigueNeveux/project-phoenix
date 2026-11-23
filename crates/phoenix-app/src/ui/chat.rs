@@ -116,15 +116,18 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .child(name),
         )
         .when_some(topic, |d, t| {
+            let topic_click = crate::ui::home::topic::on_click(app, cx);
             d.child(div().w(px(1.)).h(px(24.)).mx(px(8.)).bg(c(Palette::DIVIDER)))
                 .child(
                     div()
+                        .id("channel-topic")
                         .flex_1()
                         .min_w_0()
+                        .cursor_pointer()
                         .text_size(px(14.))
                         .text_color(c(Palette::TEXT_MUTED))
-                        .cursor_pointer()
                         .text_ellipsis()
+                        .on_click(topic_click)
                         .child(t),
                 )
         })
@@ -290,13 +293,13 @@ fn message(
     if let Some(t) = &msg.thread {
         content = content.child(message_ext::thread_chip(app, entity, t));
     }
-
-    let reply = msg.reply_to.map(|rid| {
-        let found = entry.msgs.iter().position(|m| m.id == rid);
     let content = match message_ext::edit_box(app, entity, msg) {
         Some(b) => b,
         None => content,
     };
+
+    let reply = msg.reply_to.map(|rid| {
+        let found = entry.msgs.iter().position(|m| m.id == rid);
         let (ru, preview) = match found {
             Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone()),
             None => (None, SharedString::from("Original message was deleted")),
@@ -344,11 +347,11 @@ fn message(
     let body = div()
         .id(("msg", id.0))
         .group("msg")
+        .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
+        .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.bg(c(Palette::BG_MSG_HOVER)))
         .relative()
         .pl(px(m::MSG_GUTTER))
         .pr(px(48.))
-        .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
-        .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.bg(c(Palette::BG_MSG_HOVER)))
         .py(px(2.))
         .when(r.group_start, |d| d.mt(px(17.)))
         .when(highlight, |d| {
@@ -365,12 +368,12 @@ fn message(
                     .absolute()
                     .left(px(16.))
                     .top(px(if msg.reply_to.is_some() { 24. } else { 4. }))
+                    .id(("msg-avatar", id.0))
                     .cursor_pointer()
+                    .on_click(message_ext::open_author(entity, msg))
                     .child(avatar(author, m::AVATAR)),
             )
-                    .id(("msg-avatar", id.0))
             .child(
-                    .on_click(message_ext::open_author(entity, msg))
                 div()
                     .flex()
                     .items_baseline()
@@ -382,13 +385,13 @@ fn message(
                             .line_height(px(22.))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(color)
-                            .cursor_pointer()
-                            .child(name),
-                    )
                             .id(("msg-author", id.0))
-                    .when(author.is_some_and(|a| a.bot), |d| {
+                            .cursor_pointer()
                             .hover(|s| s.underline())
                             .on_click(message_ext::open_author(entity, msg))
+                            .child(name),
+                    )
+                    .when(author.is_some_and(|a| a.bot), |d| {
                         d.child(
                             div()
                                 .px(px(4.))
@@ -440,6 +443,9 @@ fn message(
 }
 
 fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText) -> AnyElement {
+    if !t.emoji.is_empty() {
+        return message_ext::rich_with_emoji(entity, msg, bi, t);
+    }
     let styled = StyledText::new(t.text.clone()).with_runs(t.runs.clone());
     if t.click_ranges.is_empty() {
         return div().text_size(px(16.)).line_height(px(22.)).child(styled).into_any_element();

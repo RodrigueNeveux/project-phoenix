@@ -1,0 +1,433 @@
+//! Navigation data for the real backend: relationships, guild folders,
+//! threads, channel decorations and the REST calls behind the Friends page,
+//! invites and the guild menu. Emits `AppEvent::Nav`.
+
+use base64::Engine;
+use phoenix_api::{
+    Cache, RestClient,
+    gateway::{GatewayEvent, Ready},
+    models::{self as api, ChannelType, RelationshipType},
+};
+use reqwest::Method;
+use serde_json::{Value, json};
+
+use super::convert::{self, id, sf};
+use crate::{
+    backend::{AppEvent, BackendError},
+    model::{self, Id, ImageRef},
+    ui::home::data::{
+        ChannelExtra, GuildFolder, InvitePreview, NavEvent, NavReply, NavRequest, RelAction, Relationship,
+        RelationshipKind,
+    },
+};
+
+fn rel_kind(k: RelationshipType) -> Option<RelationshipKind> {
+    Some(match k {
+        RelationshipType::Friend => RelationshipKind::Friend,
+        RelationshipType::Blocked => RelationshipKind::Blocked,
+        RelationshipType::IncomingRequest => RelationshipKind::Incoming,
+        RelationshipType::OutgoingRequest => RelationshipKind::Outgoing,
+        _ => return None,
+    })
+}
+
+fn relationship(r: &api::Relationship) -> Option<Relationship> {
+    Some(Relationship {
+        user: id(r.user.as_ref().map(|u| u.id).or(r.user_id).unwrap_or(r.id)),
+        kind: rel_kind(r.kind)?,
+        nickname: r.nickname.clone().filter(|n| !n.is_empty()).map(Into::into),
+    })
+}
+
+// ------------------------------------------------------------ folders
+
+fn varint(b: &[u8], i: &mut usize) -> Option<u64> {
+    let mut v = 0u64;
+    for shift in (0..64).step_by(7) {
+        let byte = *b.get(*i)?;
+        *i += 1;
+        v |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Some(v);
+        }
+    }
+    None
+}
+
+/// Minimal protobuf walk: (field, wire type, length-delimited payload, scalar).
+fn fields(b: &[u8]) -> Vec<(u64, u8, &[u8], u64)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let Some(key) = varint(b, &mut i) else { break };
+        let (num, wt) = (key >> 3, (key & 7) as u8);
+        match wt {
+            0 => {
+                let Some(v) = varint(b, &mut i) else { break };
+                out.push((num, wt, &b[0..0], v));
+            }
+            1 => {
+                let Some(s) = b.get(i..i + 8) else { break };
+                i += 8;
+                out.push((num, wt, s, u64::from_le_bytes(s.try_into().unwrap_or_default())));
+            }
+            2 => {
+                let Some(len) = varint(b, &mut i) else { break };
+                let Some(s) = b.get(i..i + len as usize) else { break };
+                i += len as usize;
+                out.push((num, wt, s, 0));
+            }
+            5 => {
+                let Some(s) = b.get(i..i + 4) else { break };
+                i += 4;
+                out.push((num, wt, s, u64::from(u32::from_le_bytes(s.try_into().unwrap_or_default()))));
+            }
+            _ => break,
+        }
+    }
+    out
+}
+
+/// Value of a wrapper message (`Int64Value` / `UInt64Value`: field 1).
+fn wrapped_u64(b: &[u8]) -> Option<u64> {
+    fields(b).into_iter().find(|f| f.0 == 1).map(|f| f.3)
+}
+
+fn wrapped_str(b: &[u8]) -> Option<String> {
+    fields(b).into_iter().find(|f| f.0 == 1 && f.1 == 2).map(|f| String::from_utf8_lossy(f.2).into_owned())
+}
+
+/// `PreloadedUserSettings.guild_folders` (field 14) -> folders (field 1).
+pub fn folders_from_proto(b64: &str) -> Vec<GuildFolder> {
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) else { return Vec::new() };
+    let mut out = Vec::new();
+    for (num, wt, payload, _) in fields(&bytes) {
+        if num != 14 || wt != 2 {
+            continue;
+        }
+        for (n, w, p, _) in fields(payload) {
+            if n != 1 || w != 2 {
+                continue;
+            }
+            let mut f = GuildFolder::default();
+            for (fnum, fw, fp, fs) in fields(p) {
+                match fnum {
+                    1 if fw == 2 => {
+                        f.guilds.extend(fp.chunks_exact(8).map(|c| Id(u64::from_le_bytes(c.try_into().unwrap()))))
+                    }
+                    1 if fw == 1 => f.guilds.push(Id(fs)),
+                    2 => f.id = wrapped_u64(fp).filter(|v| *v != 0),
+                    3 => f.name = wrapped_str(fp).filter(|s| !s.is_empty()).map(Into::into),
+                    4 => f.color = wrapped_u64(fp).map(|c| c as u32),
+                    _ => {}
+                }
+            }
+            if !f.guilds.is_empty() {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
+fn snowflake(v: &Value) -> Option<u64> {
+    match v {
+        Value::String(s) => s.parse().ok(),
+        Value::Number(n) => n.as_u64(),
+        _ => None,
+    }
+}
+
+pub fn folders_from_json(v: Option<&Value>) -> Vec<GuildFolder> {
+    let Some(Value::Array(fs)) = v.and_then(|v| v.get("guild_folders")) else { return Vec::new() };
+    fs.iter()
+        .map(|f| GuildFolder {
+            id: f.get("id").and_then(snowflake).filter(|v| *v != 0),
+            name: f.get("name").and_then(Value::as_str).filter(|s| !s.is_empty()).map(|s| s.to_owned().into()),
+            color: f.get("color").and_then(Value::as_u64).map(|c| c as u32),
+            guilds: f.get("guild_ids").and_then(Value::as_array).into_iter().flatten().filter_map(snowflake).map(Id).collect(),
+        })
+        .filter(|f| !f.guilds.is_empty())
+        .collect()
+}
+
+// ------------------------------------------------------- channel bits
+
+fn thread(c: &api::Channel) -> Option<model::Channel> {
+    if !c.kind.is_thread() || c.thread_metadata.as_ref().is_some_and(|m| m.archived) {
+        return None;
+    }
+    Some(model::Channel {
+        id: id(c.id),
+        guild: c.guild_id.map(id),
+        parent: c.parent_id.map(id),
+        name: c.display_name().into(),
+        topic: None,
+        kind: model::ChannelKind::Text,
+        position: 0,
+        unread: false,
+        muted: false,
+        mentions: 0,
+        voice_users: Vec::new(),
+    })
+}
+
+fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
+    let everyone_denied = |ch: &api::Channel| {
+        ch.guild_id.is_some_and(|g| {
+            ch.permission_overwrites.iter().any(|o| o.id == g && o.deny.contains(api::Permissions::VIEW_CHANNEL))
+        })
+    };
+    let group = c.kind == ChannelType::GroupDm;
+    ChannelExtra {
+        nsfw: c.nsfw,
+        locked: everyone_denied(c),
+        group_icon: c
+            .icon
+            .as_ref()
+            .filter(|_| group)
+            .map(|h| ImageRef::Url(format!("{}/channel-icons/{}/{h}.png?size=64", api::CDN_BASE, c.id).into())),
+        recipients: if c.kind.is_private() { c.recipient_user_ids().len() } else { 0 },
+        group_name: group.then(|| group_name(cache, c)).flatten(),
+    }
+}
+
+fn guild_extras(cache: &Cache, g: api::Snowflake) -> Vec<(Id, ChannelExtra)> {
+    cache.guild_channels(g).iter().map(|c| (id(c.id), extra(cache, c))).collect()
+}
+
+/// Group DM name when READY only gave recipient ids (else "Unnamed").
+fn group_name(cache: &Cache, c: &api::Channel) -> Option<gpui::SharedString> {
+    if c.name.as_deref().is_some_and(|n| !n.is_empty()) || !c.recipients.is_empty() {
+        return None;
+    }
+    let names: Vec<String> =
+        c.recipient_ids.iter().filter_map(|u| cache.user(*u)).map(|u| u.display_name().to_owned()).collect();
+    (!names.is_empty()).then(|| names.join(", ").into())
+}
+
+pub fn snapshot(cache: &Cache, ready: &Ready) -> Vec<AppEvent> {
+    let relationships = ready.relationships.iter().filter_map(relationship).collect();
+    let mut folders = ready.user_settings_proto.as_deref().map(folders_from_proto).unwrap_or_default();
+    if folders.is_empty() {
+        folders = folders_from_json(ready.user_settings.as_ref());
+    }
+    let mut threads = Vec::new();
+    let mut extras = Vec::new();
+    for g in cache.guilds() {
+        for c in cache.guild_channels(g.id) {
+            if let Some(t) = thread(&c) {
+                threads.push(t);
+            }
+        }
+        extras.extend(guild_extras(cache, g.id));
+    }
+    let banners = cache.guilds().iter().map(|g| (id(g.id), g.properties.banner.clone())).collect();
+    extras.extend(cache.private_channels().iter().map(|c| (id(c.id), extra(cache, c))));
+    vec![
+        AppEvent::Nav(NavEvent::Snapshot { relationships, folders, threads, extras, message_requests: Vec::new() }),
+        AppEvent::Nav(NavEvent::Banners(banners)),
+    ]
+}
+
+/// Live gateway events that matter to navigation.
+pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
+    let mut out = Vec::new();
+    match ev {
+        GatewayEvent::RelationshipAdd(r) => {
+            if let Some(u) = &r.user {
+                out.push(AppEvent::Users(vec![convert::user(u)]));
+            }
+            if let Some(r) = relationship(r) {
+                out.push(AppEvent::Nav(NavEvent::RelationshipUpsert(r)));
+            }
+        }
+        GatewayEvent::RelationshipRemove(r) => {
+            out.push(AppEvent::Nav(NavEvent::RelationshipRemove(id(r.user_id.unwrap_or(r.id)))));
+        }
+        GatewayEvent::ThreadCreate(c) | GatewayEvent::ThreadUpdate(c) => {
+            out.push(AppEvent::Nav(match thread(c) {
+                Some(t) => NavEvent::ThreadUpsert(t),
+                None => NavEvent::ThreadDelete(id(c.id)),
+            }));
+        }
+        GatewayEvent::ThreadDelete(c) => out.push(AppEvent::Nav(NavEvent::ThreadDelete(id(c.id)))),
+        GatewayEvent::ChannelCreate(c) | GatewayEvent::ChannelUpdate(c) => {
+            out.push(AppEvent::Nav(NavEvent::Extras(vec![(id(c.id), extra(cache, c))])));
+        }
+        GatewayEvent::GuildUpdate(g) => {
+            out.push(AppEvent::Nav(NavEvent::Banners(vec![(id(g.id), g.properties.banner.clone())])));
+        }
+        GatewayEvent::GuildCreate(g) => {
+            out.push(AppEvent::Nav(NavEvent::Banners(vec![(id(g.id), g.properties.banner.clone())])));
+            out.push(AppEvent::Nav(NavEvent::Extras(guild_extras(cache, g.id))));
+            for c in cache.guild_channels(g.id) {
+                if let Some(t) = thread(&c) {
+                    out.push(AppEvent::Nav(NavEvent::ThreadUpsert(t)));
+                }
+            }
+        }
+        GatewayEvent::PresenceUpdate(p) if p.guild_id.is_none() => {
+            out.push(AppEvent::Nav(NavEvent::Activity { user: id(p.user.id), activity: convert::activity(&p.activities) }));
+        }
+        GatewayEvent::ReadySupplemental(r) => {
+            let friends = r.merged_presences.as_ref().and_then(|m| m.get("friends")).and_then(Value::as_array);
+            for f in friends.into_iter().flatten() {
+                let Some(u) = f.get("user_id").and_then(snowflake) else { continue };
+                let acts = f.get("activities").and_then(Value::as_array).cloned().unwrap_or_default();
+                if let Some(a) = convert::activity(&acts) {
+                    out.push(AppEvent::Nav(NavEvent::Activity { user: Id(u), activity: Some(a) }));
+                }
+                if let Some(s) = f.get("status").and_then(Value::as_str) {
+                    out.push(AppEvent::PresenceUpdate { user: Id(u), presence: convert::presence(s) });
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+// --------------------------------------------------------------- REST
+
+fn api_err(e: phoenix_api::Error) -> BackendError {
+    let s = e.to_string();
+    BackendError(if s.contains("captcha") || s.contains("Captcha") {
+        "Discord asked for a captcha. Join from the official client once.".into()
+    } else {
+        s
+    })
+}
+
+fn invite_preview(v: &Value) -> InvitePreview {
+    let s = |v: Option<&Value>| v.and_then(Value::as_str).map(str::to_owned);
+    let g = v.get("guild");
+    let gid = g.and_then(|g| g.get("id")).and_then(snowflake);
+    let icon = match (gid, s(g.and_then(|g| g.get("icon")))) {
+        (Some(gid), Some(h)) => Some(ImageRef::Url(format!("{}/icons/{gid}/{h}.png?size=128", api::CDN_BASE).into())),
+        _ => None,
+    };
+    let inviter = v.get("inviter").map(|u| s(u.get("global_name")).or_else(|| s(u.get("username"))).unwrap_or_default());
+    InvitePreview {
+        code: s(v.get("code")).unwrap_or_default().into(),
+        guild: gid.map(Id),
+        guild_name: s(g.and_then(|g| g.get("name")))
+            .or_else(|| s(v.get("channel").and_then(|c| c.get("name"))))
+            .unwrap_or_else(|| "Group DM".into())
+            .into(),
+        guild_icon: icon,
+        channel_name: s(v.get("channel").and_then(|c| c.get("name"))).map(Into::into),
+        inviter: inviter.filter(|i| !i.is_empty()).map(Into::into),
+        online: v.get("approximate_presence_count").and_then(Value::as_u64).unwrap_or(0) as u32,
+        members: v.get("approximate_member_count").and_then(Value::as_u64).unwrap_or(0) as u32,
+    }
+}
+
+fn enc(code: &str) -> String {
+    code.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').collect()
+}
+
+pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, BackendError> {
+    let call = |m: Method, p: String, b: Option<Value>| {
+        let rest = rest.clone();
+        async move { rest.request_json(m, &p, b).await.map_err(api_err) }
+    };
+    Ok(match req {
+        NavRequest::FetchInvite(code) => {
+            let v = call(Method::GET, format!("/invites/{}?with_counts=true&with_expiration=true", enc(&code)), None).await?;
+            NavReply::Invite(invite_preview(&v))
+        }
+        NavRequest::AcceptInvite(code) => {
+            call(Method::POST, format!("/invites/{}", enc(&code)), Some(json!({}))).await?;
+            NavReply::Done
+        }
+        NavRequest::CreateInvite(ch) => {
+            let v = call(
+                Method::POST,
+                format!("/channels/{}/invites", sf(ch)),
+                Some(json!({ "max_age": 604800, "max_uses": 0, "temporary": false })),
+            )
+            .await?;
+            let code = v.get("code").and_then(Value::as_str).unwrap_or_default();
+            NavReply::Text(format!("https://discord.gg/{code}").into())
+        }
+        NavRequest::LeaveGuild(g) => {
+            call(Method::DELETE, format!("/users/@me/guilds/{}", sf(g)), Some(json!({ "lurking": false }))).await?;
+            NavReply::Done
+        }
+        NavRequest::Relationship { user, action } => {
+            let path = format!("/users/@me/relationships/{}", sf(user));
+            match action {
+                RelAction::Accept => call(Method::PUT, path, Some(json!({}))).await?,
+                RelAction::Block => call(Method::PUT, path, Some(json!({ "type": 2 }))).await?,
+                RelAction::Remove => call(Method::DELETE, path, None).await?,
+                RelAction::AddByName(name) => {
+                    let name = name.trim().trim_start_matches('@').to_owned();
+                    call(
+                        Method::POST,
+                        "/users/@me/relationships".into(),
+                        Some(json!({ "username": name, "discriminator": Value::Null })),
+                    )
+                    .await?
+                }
+            };
+            NavReply::Done
+        }
+        NavRequest::OpenDm(user) => {
+            let c = rest.create_dm(sf(user)).await.map_err(api_err)?;
+            NavReply::Channel(model::Channel {
+                id: id(c.id),
+                guild: None,
+                parent: None,
+                name: c.display_name().into(),
+                topic: None,
+                kind: model::ChannelKind::Text,
+                position: 0,
+                unread: false,
+                muted: false,
+                mentions: 0,
+                voice_users: c.recipient_user_ids().first().copied().map(id).into_iter().collect(),
+            })
+        }
+        NavRequest::CloseDm(ch) => {
+            call(Method::DELETE, format!("/channels/{}?silent=false", sf(ch)), None).await?;
+            NavReply::Done
+        }
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn folder_proto() {
+        // guild_folders { folders { guild_ids: [1,2] id { value: 9 } name { value: "ab" } color { value: 255 } } }
+        let mut folder = vec![0x0a, 16];
+        folder.extend(1u64.to_le_bytes());
+        folder.extend(2u64.to_le_bytes());
+        folder.extend([0x12, 2, 0x08, 9]);
+        folder.extend([0x1a, 4, 0x0a, 2, b'a', b'b']);
+        folder.extend([0x22, 3, 0x08, 0xff, 0x01]);
+        let mut gf = vec![0x0a, folder.len() as u8];
+        gf.extend(folder);
+        let mut top = vec![0x72, gf.len() as u8];
+        top.extend(gf);
+        let b64 = base64::engine::general_purpose::STANDARD.encode(top);
+        let f = folders_from_proto(&b64);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].guilds, vec![Id(1), Id(2)]);
+        assert_eq!(f[0].id, Some(9));
+        assert_eq!(f[0].name.as_deref(), Some("ab"));
+        assert_eq!(f[0].color, Some(255));
+    }
+
+    #[test]
+    fn invite_json() {
+        let v = json!({"code":"x","guild":{"id":"5","name":"G","icon":"h"},"approximate_member_count":10,"approximate_presence_count":3,"inviter":{"username":"u"}});
+        let p = invite_preview(&v);
+        assert_eq!(p.guild, Some(Id(5)));
+        assert_eq!(p.members, 10);
+        assert_eq!(p.inviter.as_deref(), Some("u"));
+    }
+}

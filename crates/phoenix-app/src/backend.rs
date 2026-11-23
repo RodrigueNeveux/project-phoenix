@@ -79,6 +79,8 @@ pub enum AppEvent {
     DmUpsert(Channel),
     DmDelete(Id),
     Disconnected(String),
+    /// Friends, guild folders, threads, channel decorations (`ui::home`).
+    Nav(crate::ui::home::data::NavEvent),
     /// Server-ordered lazy member list of a guild (groups + members).
     MemberListRows { guild: Id, rows: Vec<crate::presence::ListEntry> },
     /// Rich presence of a user (empty = no activity).
@@ -86,8 +88,6 @@ pub enum AppEvent {
     /// QR code login progress (see [`Backend::remote_auth`]).
     RemoteAuth(crate::auth::RemoteAuthUpdate),
 }
-
-pub type EventSink = Arc<dyn Fn(AppEvent) + Send + Sync>;
 
 /// A file to attach to an outgoing message.
 #[derive(Clone)]
@@ -102,6 +102,8 @@ impl std::fmt::Debug for Upload {
         f.debug_struct("Upload").field("filename", &self.filename).field("len", &self.bytes.len()).finish()
     }
 }
+
+pub type EventSink = Arc<dyn Fn(AppEvent) + Send + Sync>;
 
 pub trait Backend: Send + Sync + 'static {
     /// Register where gateway events must be delivered.
@@ -122,8 +124,6 @@ pub trait Backend: Send + Sync + 'static {
         Box::pin(async { Ok(()) })
     }
     fn delete_message(&self, channel: Id, id: Id) -> BoxFuture<()>;
-    /// Log in from a stored session at startup, if the backend has one.
-    /// The future fails with an empty message when nothing is stored.
     /// Send with reply options (`mention` pings the replied-to author) and
     /// file attachments. Defaults to [`Backend::send_message`] without files.
     fn send_message_ex(
@@ -155,12 +155,39 @@ pub trait Backend: Send + Sync + 'static {
         let _ = (channel, last_read);
         Box::pin(async { Ok(()) })
     }
+    /// Log in from a stored session at startup, if the backend has one.
+    /// The future fails with an empty message when nothing is stored.
     fn restore_session(&self) -> Option<BoxFuture<ReadyData>> {
         None
     }
     /// True after a password login asked for a TOTP code.
     fn needs_mfa(&self) -> bool {
         false
+    }
+    /// Custom emojis of a guild (from the cache).
+    fn guild_emojis(&self, _guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
+        Vec::new()
+    }
+    fn guild_stickers(&self, _guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
+        Vec::new()
+    }
+    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn send_sticker(&self, _channel: Id, _sticker: Id) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("Stickers aren't available.".into())) })
+    }
+    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
+        Box::pin(async { Err(BackendError("GIFs aren't available.".into())) })
+    }
+    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn gif_search(&self, _query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn search_messages(&self, _req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
+        Box::pin(async { Err(BackendError("Search isn't available.".into())) })
     }
     /// Second-factor methods offered by the pending password login.
     fn mfa_options(&self) -> crate::auth::MfaOptions {
@@ -195,6 +222,10 @@ pub trait Backend: Send + Sync + 'static {
     fn logout(&self) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    /// Navigation REST calls: invites, relationships, leaving a guild...
+    fn nav(&self, _req: crate::ui::home::data::NavRequest) -> BoxFuture<crate::ui::home::data::NavReply> {
+        Box::pin(async { Err(BackendError("Not available offline.".into())) })
+    }
     /// Op 37 member list ranges for the open channel (sidebar scrolling).
     fn subscribe_member_ranges(&self, _guild: Id, _channel: Id, _ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
@@ -213,29 +244,5 @@ pub trait Backend: Send + Sync + 'static {
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })
-    }
-    fn guild_emojis(&self, _guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
-        Vec::new()
-    }
-    fn guild_stickers(&self, _guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
-        Vec::new()
-    }
-    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-    fn send_sticker(&self, _channel: Id, _sticker: Id) -> BoxFuture<()> {
-        Box::pin(async { Err(BackendError("Stickers aren't available.".into())) })
-    }
-    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
-        Box::pin(async { Err(BackendError("GIFs aren't available.".into())) })
-    }
-    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-    fn gif_search(&self, _query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-    fn search_messages(&self, _req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
-        Box::pin(async { Err(BackendError("Search isn't available.".into())) })
     }
 }

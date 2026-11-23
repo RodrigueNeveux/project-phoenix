@@ -1,0 +1,421 @@
+//! Join a server from a pasted invite (live preview card + Join), the
+//! "Invite People" link dialog, leave-server confirmation and placeholder
+//! dialogs for screens that don't exist yet.
+
+use gpui::{
+    AnyElement, Context, FontWeight, ImageSource, IntoElement, ParentElement, SharedString, Styled, Window, div,
+    img, prelude::*, px,
+};
+use gpui_component::input::{Input, InputEvent, InputState};
+
+use crate::{
+    app::PhoenixApp,
+    model::{Id, ImageRef},
+    theme::{DEFAULT_AVATAR, Palette, c, ca},
+    ui::home::data::{InvitePreview, NavReply, NavRequest, Overlay, invite_code},
+};
+
+impl PhoenixApp {
+    pub fn open_join_server(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("https://discord.gg/hTKzmak"));
+        let sub = cx.subscribe_in(&input, window, |this: &mut PhoenixApp, _, ev: &InputEvent, _w, cx| match ev {
+            InputEvent::Change => this.preview_invite(cx),
+            InputEvent::PressEnter { .. } => this.join_invite(cx),
+            _ => {}
+        });
+        input.update(cx, |s, cx| s.focus(window, cx));
+        self.show_overlay(Overlay::JoinServer, cx);
+        self.nav.subs = vec![sub];
+        self.nav.invite_input = Some(input);
+    }
+
+    fn preview_invite(&mut self, cx: &mut Context<Self>) {
+        let Some(input) = &self.nav.invite_input else { return };
+        let code = invite_code(&input.read(cx).value());
+        if code == self.nav.invite_code {
+            return;
+        }
+        self.nav.invite_code = code.clone();
+        self.nav.invite_preview = None;
+        let Some(code) = code else {
+            cx.notify();
+            return;
+        };
+        self.nav_request(NavRequest::FetchInvite(code.clone()), cx, move |this, res, _| {
+            // Ignore stale answers for a code the user already edited away.
+            if this.nav.invite_code.as_deref() != Some(code.as_str()) {
+                return;
+            }
+            this.nav.invite_preview = Some(match res {
+                Ok(NavReply::Invite(p)) => Ok(p),
+                Ok(_) => Err("The invite is invalid or has expired.".into()),
+                Err(_) => Err("The invite is invalid or has expired.".into()),
+            });
+        });
+    }
+
+    pub fn join_invite(&mut self, cx: &mut Context<Self>) {
+        let Some(code) = self.nav.invite_code.clone() else {
+            self.nav.invite_preview = Some(Err("Please enter a valid invite link or invite code.".into()));
+            cx.notify();
+            return;
+        };
+        // Already a member: just go there.
+        if let Some(Ok(p)) = &self.nav.invite_preview
+            && let Some(g) = p.guild
+            && self.guilds.iter().any(|x| x.id == g)
+        {
+            self.close_overlay(cx);
+            self.select_guild(Some(g), cx);
+            return;
+        }
+        self.nav.busy = true;
+        self.nav_request(NavRequest::AcceptInvite(code), cx, |this, res, cx| {
+            this.nav.busy = false;
+            match res {
+                Ok(_) => {
+                    let g = this.nav.invite_preview.as_ref().and_then(|p| p.as_ref().ok()).and_then(|p| p.guild);
+                    this.close_overlay(cx);
+                    // GUILD_CREATE usually lands right after the join.
+                    if let Some(g) = g.filter(|g| this.guilds.iter().any(|x| x.id == *g)) {
+                        this.select_guild(Some(g), cx);
+                    }
+                }
+                Err(e) => this.nav.invite_preview = Some(Err(e.0.into())),
+            }
+        });
+        cx.notify();
+    }
+
+    pub fn open_invite_people(&mut self, guild: Id, cx: &mut Context<Self>) {
+        self.show_overlay(Overlay::InviteLink { guild, link: None }, cx);
+        let channel = self
+            .selected_channel
+            .filter(|c| self.channels.get(c).is_some_and(|c| c.guild == Some(guild)))
+            .or_else(|| {
+                self.guild_channels.get(&guild).and_then(|l| {
+                    l.iter().copied().find(|id| self.channels[id].kind == crate::model::ChannelKind::Text)
+                })
+            });
+        let Some(channel) = channel else { return };
+        self.nav_request(NavRequest::CreateInvite(channel), cx, move |this, res, _| {
+            let link: SharedString = match res {
+                Ok(NavReply::Text(t)) => t,
+                Ok(_) => "".into(),
+                Err(e) => format!("Couldn't create an invite: {}", e.0).into(),
+            };
+            if let Some(Overlay::InviteLink { guild: g, .. }) = &this.nav.overlay
+                && *g == guild
+            {
+                this.nav.overlay = Some(Overlay::InviteLink { guild, link: Some(link) });
+            }
+        });
+    }
+
+    pub fn leave_guild(&mut self, guild: Id, cx: &mut Context<Self>) {
+        self.close_overlay(cx);
+        self.nav_request(NavRequest::LeaveGuild(guild), cx, move |this, res, cx| {
+            if res.is_ok() && this.guilds.iter().any(|g| g.id == guild) {
+                // GUILD_DELETE will follow; don't wait for it.
+                this.handle_event(crate::backend::AppEvent::GuildDelete(guild), cx);
+            }
+        });
+    }
+}
+
+fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> AnyElement {
+    div()
+        .id(id)
+        .absolute()
+        .inset_0()
+        .bg(ca(0x000000B3))
+        .flex()
+        .items_center()
+        .justify_center()
+        .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx)))
+        .child(
+            div()
+                .id("modal-card")
+                .w(px(440.))
+                .rounded(px(8.))
+                .bg(c(Palette::BG_PRIMARY))
+                .shadow_lg()
+                .overflow_hidden()
+                .on_click(|_, _, cx| cx.stop_propagation())
+                .child(inner),
+        )
+        .into_any_element()
+}
+
+fn title(t: impl Into<SharedString>) -> gpui::Div {
+    div()
+        .text_size(px(24.))
+        .font_weight(FontWeight::BOLD)
+        .text_color(c(Palette::TEXT_HEADER))
+        .text_center()
+        .child(t.into())
+}
+
+fn button(id: &'static str, label: impl Into<SharedString>, bg: u32) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(px(38.))
+        .px(px(16.))
+        .rounded(px(4.))
+        .bg(c(bg))
+        .text_color(gpui::white())
+        .text_size(px(14.))
+        .font_weight(FontWeight::MEDIUM)
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .hover(|s| s.opacity(0.85))
+        .child(label.into())
+}
+
+fn footer() -> gpui::Div {
+    div().p(px(16.)).bg(c(Palette::BG_SECONDARY)).flex().justify_end().items_center().gap(px(8.))
+}
+
+pub fn guild_icon(icon: Option<&ImageRef>, name: &str, size: f32) -> AnyElement {
+    match icon {
+        Some(ImageRef::Url(u)) => img(ImageSource::from(u.clone())).size(px(size)).rounded(px(size * 0.3)).into_any_element(),
+        _ => div()
+            .size(px(size))
+            .rounded(px(size * 0.3))
+            .bg(c(DEFAULT_AVATAR[0]))
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(gpui::white())
+            .text_size(px(size * 0.35))
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(crate::model::acronym(name))
+            .into_any_element(),
+    }
+}
+
+fn preview_card(p: &InvitePreview) -> gpui::Div {
+    let dot = |col: u32| div().size(px(8.)).rounded_full().bg(c(col));
+    div()
+        .mt(px(12.))
+        .p(px(16.))
+        .rounded(px(8.))
+        .bg(c(Palette::BG_SECONDARY))
+        .flex()
+        .items_center()
+        .gap(px(16.))
+        .child(guild_icon(p.guild_icon.as_ref(), &p.guild_name, 50.))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .when_some(p.inviter.clone(), |d, i| {
+                    d.child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(c(Palette::TEXT_MUTED))
+                            .child(SharedString::from(format!("{i} invited you to join"))),
+                    )
+                })
+                .child(
+                    div()
+                        .text_size(px(16.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(Palette::TEXT_HEADER))
+                        .text_ellipsis()
+                        .child(p.guild_name.clone()),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(4.))
+                        .text_size(px(12.))
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child(dot(Palette::GREEN))
+                        .child(SharedString::from(format!("{} Online", p.online)))
+                        .child(div().w(px(8.)))
+                        .child(dot(Palette::GREY))
+                        .child(SharedString::from(format!("{} Members", p.members))),
+                ),
+        )
+}
+
+pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    match ov {
+        Overlay::JoinServer => {
+            let preview = app.nav.invite_preview.clone();
+            let busy = app.nav.busy;
+            let mut body = div()
+                .p(px(16.))
+                .flex()
+                .flex_col()
+                .child(title("Join a Server"))
+                .child(
+                    div()
+                        .mt(px(8.))
+                        .text_size(px(14.))
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .text_center()
+                        .child("Enter an invite below to join an existing server"),
+                )
+                .child(
+                    div()
+                        .mt(px(16.))
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child("INVITE LINK"),
+                )
+                .child(
+                    div()
+                        .mt(px(8.))
+                        .h(px(40.))
+                        .px(px(10.))
+                        .rounded(px(4.))
+                        .bg(c(Palette::BG_TERTIARY))
+                        .flex()
+                        .items_center()
+                        .text_size(px(16.))
+                        .when_some(app.nav.invite_input.clone(), |d, i| {
+                            d.child(Input::new(&i).appearance(false).bordered(false))
+                        }),
+                );
+            body = match preview {
+                Some(Ok(p)) => body.child(preview_card(&p)),
+                Some(Err(e)) => body.child(div().mt(px(8.)).text_size(px(12.)).text_color(c(Palette::RED)).child(e)),
+                None => body.child(
+                    div()
+                        .mt(px(12.))
+                        .text_size(px(12.))
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child("Invites should look like hTKzmak, https://discord.gg/hTKzmak or https://discord.gg/cool-people"),
+                ),
+            };
+            let inner = div().flex().flex_col().child(body).child(
+                footer()
+                    .child(
+                        button("join-back", "Back", Palette::BG_SECONDARY)
+                            .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
+                    )
+                    .child(
+                        button("join-go", if busy { "Joining..." } else { "Join Server" }, Palette::BLURPLE)
+                            .on_click(cx.listener(|a, _, _, cx| a.join_invite(cx))),
+                    ),
+            );
+            modal("join-modal", cx, inner)
+        }
+        Overlay::InviteLink { guild, link } => {
+            let name = app.guilds.iter().find(|g| g.id == *guild).map(|g| g.name.clone()).unwrap_or_default();
+            let link = link.clone();
+            let shown: SharedString = link.clone().unwrap_or_else(|| "Creating invite...".into());
+            let inner = div()
+                .p(px(16.))
+                .flex()
+                .flex_col()
+                .gap(px(12.))
+                .child(title(format!("Invite friends to {name}")))
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child("OR, SEND A SERVER INVITE LINK TO A FRIEND"),
+                )
+                .child(
+                    div()
+                        .h(px(44.))
+                        .pl(px(10.))
+                        .pr(px(4.))
+                        .rounded(px(4.))
+                        .bg(c(Palette::BG_TERTIARY))
+                        .flex()
+                        .items_center()
+                        .child(div().flex_1().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(shown))
+                        .child(button("copy-invite", "Copy", Palette::BLURPLE).h(px(32.)).on_click(cx.listener(
+                            move |_, _, _, cx| {
+                                if let Some(l) = &link {
+                                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(l.to_string()));
+                                }
+                            },
+                        ))),
+                )
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child("Your invite link expires in 7 days."),
+                );
+            modal("invite-modal", cx, inner)
+        }
+        Overlay::LeaveGuild(g) => {
+            let g = *g;
+            let name = app.guilds.iter().find(|x| x.id == g).map(|x| x.name.clone()).unwrap_or_default();
+            let inner = div()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .p(px(16.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(12.))
+                        .child(
+                            div()
+                                .text_size(px(20.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(Palette::TEXT_HEADER))
+                                .child(SharedString::from(format!("Leave '{name}'"))),
+                        )
+                        .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(
+                            format!("Are you sure you want to leave {name}? You won't be able to rejoin this server unless you are re-invited."),
+                        ))),
+                )
+                .child(
+                    footer()
+                        .child(
+                            button("leave-cancel", "Cancel", Palette::BG_SECONDARY)
+                                .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
+                        )
+                        .child(
+                            button("leave-ok", "Leave Server", Palette::RED)
+                                .on_click(cx.listener(move |a, _, _, cx| a.leave_guild(g, cx))),
+                        ),
+                );
+            modal("leave-modal", cx, inner)
+        }
+        Overlay::Stub(what) => {
+            let inner = div()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .p(px(16.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .child(title(what.clone()))
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .text_color(c(Palette::TEXT_MUTED))
+                                .text_center()
+                                .child("This screen isn't available in Phoenix yet."),
+                        ),
+                )
+                .child(
+                    footer().child(
+                        button("stub-ok", "Okay", Palette::BLURPLE)
+                            .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
+                    ),
+                );
+            modal("stub-modal", cx, inner)
+        }
+        Overlay::Topic(_) => div().into_any_element(),
+    }
+}
