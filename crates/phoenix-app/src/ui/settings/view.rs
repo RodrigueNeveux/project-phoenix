@@ -128,11 +128,11 @@ fn radio(id: impl Into<String>, label: impl Into<SharedString>, selected: bool) 
                 .size(z(20.))
                 .rounded_full()
                 .border_2()
-                .border_color(c(if selected { 0xFFFFFF } else { Palette::INTERACTIVE }))
+                .border_color(c(if selected { Palette::BLURPLE } else { Palette::INTERACTIVE }))
                 .flex()
                 .items_center()
                 .justify_center()
-                .when(selected, |d| d.child(div().size(z(10.)).rounded_full().bg(gpui::white()))),
+                .when(selected, |d| d.child(div().size(z(10.)).rounded_full().bg(c(Palette::BLURPLE)))),
         )
         .child(
             div()
@@ -468,49 +468,109 @@ fn language(app: &PhoenixApp, cx: &mut Cx) -> Div {
     }))
 }
 
+/// A theme choice drawn as a miniature chat window in that theme's own colours
+/// (rail, channel list, two messages and a composer), with its name below.
+fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
+    let tc = |tok: u32| c(crate::theme::resolve_for(tok, t));
+    let line = |w: f32, tok: u32| div().h(z(6.)).w(z(w)).rounded(z(3.)).bg(tc(tok));
+    let msg = |w1: f32, w2: f32, av: u32| {
+        div()
+            .flex()
+            .gap(z(6.))
+            .items_center()
+            .child(div().size(z(14.)).flex_none().rounded_full().bg(c(av)))
+            .child(div().flex().flex_col().gap(z(3.)).child(line(w1, Palette::TEXT_HEADER)).child(line(w2, Palette::TEXT_MUTED)))
+    };
+    let preview = div()
+        .w(z(128.))
+        .h(z(84.))
+        .rounded(z(8.))
+        .overflow_hidden()
+        .flex()
+        .bg(tc(Palette::BG_TERTIARY))
+        .border_2()
+        .border_color(c(if selected { Palette::BLURPLE } else { Palette::DIVIDER }))
+        .child(
+            div()
+                .w(z(18.))
+                .flex_none()
+                .pt(z(6.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(z(4.))
+                .children((0..3).map(|i| div().size(z(10.)).rounded(z(3.)).bg(tc(if i == 0 { Palette::BLURPLE } else { Palette::BG_SECONDARY })))),
+        )
+        .child(
+            div()
+                .w(z(32.))
+                .flex_none()
+                .bg(tc(Palette::BG_SECONDARY))
+                .pt(z(8.))
+                .px(z(4.))
+                .flex()
+                .flex_col()
+                .gap(z(5.))
+                .children([20., 16., 22.].map(|w| line(w, Palette::CHANNEL_ICON))),
+        )
+        .child(
+            div()
+                .flex_1()
+                .bg(tc(Palette::BG_PRIMARY))
+                .p(z(8.))
+                .flex()
+                .flex_col()
+                .gap(z(8.))
+                .child(msg(30., 42., 0x5865F2))
+                .child(msg(24., 36., 0x3BA55C))
+                .child(div().mt_auto().h(z(12.)).rounded(z(4.)).bg(tc(Palette::INPUT_BG))),
+        );
+    div()
+        .id(eid(format!("theme-{}", t.label())))
+        .flex()
+        .flex_col()
+        .gap(z(6.))
+        .cursor_pointer()
+        .child(
+            div()
+                .relative()
+                .rounded(z(10.))
+                .when(!selected, |d| d.hover(|s| s.opacity(0.85)))
+                .child(preview)
+                .when(selected, |d| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .top(z(-6.))
+                            .right(z(-6.))
+                            .size(z(22.))
+                            .rounded_full()
+                            .bg(c(Palette::BLURPLE))
+                            .border_2()
+                            .border_color(c(Palette::BG_PRIMARY))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(gpui::svg().path("icons/check.svg").size(z(14.)).text_color(gpui::white())),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .text_size(z(14.))
+                .font_weight(if selected { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
+                .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
+                .child(t.label()),
+        )
+}
+
 fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let s = &app.prefs.synced;
     let theme = s.theme;
     let compact = s.compact;
     let l = &app.prefs.local;
-    let swatches = div().mb(z(24.)).flex().gap(z(16.)).children(AppTheme::ALL.map(|t| {
-        div()
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(z(6.))
-            .child(
-                div()
-                    .id(eid(format!("theme-{}", t.label())))
-                    .size(z(60.))
-                    .rounded_full()
-                    .bg(c(t.swatch()))
-                    .border_2()
-                    .border_color(c(if t == theme { Palette::BLURPLE } else { Palette::DIVIDER }))
-                    .cursor_pointer()
-                    .relative()
-                    .when(t != theme, |d| d.hover(|s| s.border_color(c(Palette::INTERACTIVE_HOVER))))
-                    // Selected: blurple ring plus a check badge on the top-right.
-                    .when(t == theme, |d| {
-                        d.child(
-                            div()
-                                .absolute()
-                                .top(z(-4.))
-                                .right(z(-4.))
-                                .size(z(22.))
-                                .rounded_full()
-                                .bg(c(Palette::BLURPLE))
-                                .border_2()
-                                .border_color(c(Palette::BG_PRIMARY))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(gpui::svg().path("icons/check.svg").size(z(14.)).text_color(gpui::white())),
-                        )
-                    })
-                    .on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx))),
-            )
-            .child(note(t.label()))
+    let swatches = div().mb(z(24.)).flex().gap(z(12.)).children(AppTheme::ALL.map(|t| {
+        theme_card(t, t == theme).on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx)))
     }));
     let (fs, zoom) = (l.font_size, l.zoom);
     div()

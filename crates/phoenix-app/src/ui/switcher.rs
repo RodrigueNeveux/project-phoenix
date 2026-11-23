@@ -311,6 +311,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
         .bg(ca(0x000000B3))
         .flex()
         .justify_center()
+        .items_start()
         .pt(z(120.))
         .on_click(cx.listener(|a, _, w, cx| a.close_switcher(w, cx)))
         .child(
