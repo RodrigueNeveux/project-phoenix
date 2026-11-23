@@ -98,7 +98,8 @@ impl PhoenixApp {
                 }
             }
             InboxTab::Saved => ParityRequest::SavedMessages,
-            InboxTab::Unreads | InboxTab::Reminders | InboxTab::Scheduled => return,
+            InboxTab::Reminders => return self.load_reminders_tab(cx),
+            InboxTab::Unreads | InboxTab::Scheduled => return,
         };
         i.loading = true;
         let tab = i.tab;
@@ -279,7 +280,7 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
     if has_perm(perms, MODERATE_MEMBERS) {
         let e = entity.clone();
         items.push(MenuItem::action(crate::t!("menu.mod_view"), None, move |_, _, cx: &mut App| {
-            e.update(cx, |a, cx| a.stub(&crate::t!("menu.mod_view"), cx))
+            e.update(cx, |a, cx| a.open_mod_view(g, user, cx))
         }));
     }
     if user != app.me.id {
@@ -927,6 +928,13 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             for m in &i.saved {
                 let (ch, id) = (m.channel, m.id);
                 list = list.child(message_entry(app, m, cx, "close", move |a, cx| a.unsave(ch, id, cx)));
+            }
+        }
+        InboxTab::Reminders if !crate::actions::message::reminders().is_empty() => {
+            list = scroller(list);
+            for m in crate::actions::message::reminders() {
+                let (ch, id) = (m.channel, m.id);
+                list = list.child(message_entry(app, &m, cx, "check", move |a, cx| a.clear_reminder(ch, id, cx)));
             }
         }
         InboxTab::Reminders => {

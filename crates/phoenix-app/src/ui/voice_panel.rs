@@ -47,7 +47,7 @@ pub fn set_flags(user: Id, flags: VoiceFlags) {
     FLAGS.with(|f| f.borrow_mut().insert(user, flags));
 }
 
-fn flags(user: Id) -> VoiceFlags {
+pub fn flags(user: Id) -> VoiceFlags {
     FLAGS.with(|f| f.borrow().get(&user).copied().unwrap_or_default())
 }
 

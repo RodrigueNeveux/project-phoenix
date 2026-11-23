@@ -43,6 +43,8 @@ pub fn build_rows(app: &mut PhoenixApp) {
             let reqs = &app.nav.message_requests;
             let rows: Vec<SidebarRow> =
                 app.dms.iter().filter(|d| !reqs.contains(d)).map(|id| SidebarRow::Channel(*id)).collect();
+            let mut rows = rows;
+            crate::actions::pins::apply(&mut rows);
             app.sidebar_rows = rows;
         }
         Some(g) => {
@@ -90,6 +92,7 @@ pub fn build_rows(app: &mut PhoenixApp) {
                     .collect();
                 rows = keep;
             }
+            crate::actions::pins::apply(&mut rows);
             app.sidebar_rows = rows;
         }
     }

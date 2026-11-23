@@ -276,6 +276,14 @@ pub trait Backend: Send + Sync + 'static {
     fn forum_tags(&self, _forum: Id) -> Vec<crate::commands::ForumTag> {
         Vec::new()
     }
+    /// Context menu actions (`crate::actions`).
+    fn action(&self, _req: crate::actions::ActionRequest) -> BoxFuture<crate::actions::ActionReply> {
+        Box::pin(async { Err(BackendError("Not available offline.".into())) })
+    }
+    /// Guild feature flags (`COMMUNITY`, ...).
+    fn guild_features(&self, _guild: Id) -> Vec<String> {
+        Vec::new()
+    }
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })

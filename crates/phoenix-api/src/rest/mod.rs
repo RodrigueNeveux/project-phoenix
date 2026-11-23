@@ -9,6 +9,10 @@ pub mod commands;
 pub mod inbox;
 pub mod moderation;
 pub mod forum;
+pub mod message_actions;
+pub mod members;
+pub mod guild_admin;
+pub mod reporting;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

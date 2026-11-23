@@ -76,21 +76,21 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let bot = app.users.get(&u).is_some_and(|x| x.bot);
     let stub = |key: &'static str| act(crate::t!(key), Rc::new(move |a, _, _, cx| a.stub(&crate::t!(key), cx)));
     if !me && friend {
-        items.push(stub("menu.call"));
+        items.push(act(crate::t!("menu.call"), Rc::new(move |a, _, _, cx| a.open_call_ui(u, cx))));
     }
     items.push(
         act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx)))
             .with_subtext(crate::t!("menu.note_subtext")),
     );
     if !me && friend {
-        items.push(stub("menu.friend_nickname"));
+        items.push(act(crate::t!("menu.friend_nickname"), Rc::new(move |a, _, _, cx| a.open_friend_nickname(u, cx))));
     }
     items.push(MenuItem::Separator);
     if let Some(gid) = g {
         if me {
-            items.push(stub("menu.edit_server_profile"));
+            items.push(act(crate::t!("menu.edit_server_profile"), Rc::new(move |a, _, _, cx| a.open_server_profile(gid, cx))));
         } else if crate::ui::inbox::has_perm(app.backend.guild_permissions(gid), MANAGE_NICKNAMES) {
-            items.push(stub("menu.change_nickname"));
+            items.push(act(crate::t!("menu.change_nickname"), Rc::new(move |a, _, _, cx| a.open_nickname(gid, Some(u), cx))));
         }
     }
     items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![stub("menu.apps_none")]));
@@ -114,7 +114,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         } else if rel.is_none() && !bot {
             items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
         }
-        items.push(stub("menu.ignore"));
+        let ign = if crate::actions::user::is_ignored(u) { "menu.unignore" } else { "menu.ignore" };
+        items.push(act(crate::t!(ign), Rc::new(move |a, _, _, cx| a.toggle_ignore(u, cx))));
         items.push(MenuItem::danger(crate::t!("menu.block"), None, {
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.relationship_action(u, RelAction::Block, cx))
@@ -130,8 +131,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .into_iter()
             .map(|r| {
                 let e = e.clone();
-                MenuItem::check(r.name.clone(), has.contains(&r.id), move |_, _, cx: &mut App| {
-                    e.update(cx, |a, cx| a.stub(&crate::t!("menu.roles"), cx))
+                let (role, on) = (r.id, has.contains(&r.id));
+                MenuItem::check(r.name.clone(), on, move |_, _, cx: &mut App| {
+                    e.update(cx, |a, cx| a.set_member_role(gid, u, role, !on, cx))
                 })
             })
             .collect();
@@ -145,7 +147,16 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         items.push(MenuItem::Separator);
         items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
     }
+    if !me {
+        items.extend(crate::actions::user::voice_items(app, u, g, &e));
+    }
     items.extend(crate::ui::inbox::moderation_items(app, u, g, &e));
+    if !me {
+        items.push(MenuItem::danger(crate::t!("menu.report_user"), Some(crate::icons::path("flag")), {
+            let e = e.clone();
+            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.report_user(u, g, cx))
+        }));
+    }
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
         items.push(MenuItem::action(crate::t!("common.copy_user_id"), Some(crate::icons::path("id")), move |_, _, cx: &mut App| {

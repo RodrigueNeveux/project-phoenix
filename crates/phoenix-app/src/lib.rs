@@ -1,5 +1,6 @@
 //! Discord Phoenix UI shell (GPUI). Network-agnostic: see [`backend`].
 
+pub mod actions;
 pub mod app;
 pub mod assets;
 pub mod auth;

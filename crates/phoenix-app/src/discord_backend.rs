@@ -424,6 +424,18 @@ impl Backend for DiscordBackend {
         })
     }
 
+    fn action(&self, req: crate::actions::ActionRequest) -> BoxFuture<crate::actions::ActionReply> {
+        self.with_session(move |inner, s| {
+            let emit: crate::backend::EventSink = Arc::new(move |e| inner.emit(e));
+            crate::actions::exec::request(s.rest.clone(), req, emit)
+        })
+    }
+
+    fn guild_features(&self, guild: Id) -> Vec<String> {
+        let Ok(s) = self.inner.session() else { return Vec::new() };
+        s.cache.guild(sf(guild)).map(|g| g.properties.features.clone()).unwrap_or_default()
+    }
+
     fn guild_permissions(&self, guild: Id) -> u64 {
         let Ok(s) = self.inner.session() else { return 0 };
         // Base permissions are the same in every channel for the bits we use.

@@ -1166,3 +1166,4 @@ impl Render for PhoenixApp {
             .children(ui::voice_panel::overlays(self, window, cx))
     }
 }
+            .children(crate::actions::overlays(self, window, cx))

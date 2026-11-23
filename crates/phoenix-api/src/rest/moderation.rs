@@ -20,7 +20,7 @@ pub fn timeout_body(now_unix: u64, secs: u64) -> Value {
 }
 
 /// UTC RFC 3339 timestamp (days-to-civil algorithm by H. Hinnant).
-fn rfc3339(unix: u64) -> String {
+pub(crate) fn rfc3339(unix: u64) -> String {
     let (days, rem) = ((unix / 86_400) as i64, unix % 86_400);
     let z = days + 719_468;
     let era = z.div_euclid(146_097);

@@ -625,3 +625,11 @@ impl Backend for MockBackend {
         Box::pin(async { Ok(()) })
     }
 }
+    fn action(&self, req: crate::actions::ActionRequest) -> BoxFuture<crate::actions::ActionReply> {
+        let users = self.inner.lock().unwrap().users.clone();
+        Box::pin(async move { crate::actions::mock::reply(req, users) })
+    }
+
+    fn guild_features(&self, _guild: Id) -> Vec<String> {
+        vec!["COMMUNITY".into()]
+    }

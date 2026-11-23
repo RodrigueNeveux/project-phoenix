@@ -86,7 +86,13 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         ee.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
     if has_reactions {
-        items.push(stub("msg.view_reactions", "chat/eye"));
+        let ee = e.clone();
+        items.push(MenuItem::action(crate::t!("msg.view_reactions"), Some(crate::icons::path("chat/eye")), move |_, _, cx| {
+            ee.update(cx, |a, cx| {
+                a.chat.menu = None;
+                a.open_reactions(ch, id, 0, cx)
+            })
+        }));
     }
     items.push(MenuItem::Separator);
     if own {
@@ -99,9 +105,15 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.reply"), Some(Icon::Reply.path()), move |_, w, cx| {
         ee.update(cx, |a, cx| a.start_reply(id, w, cx))
     }));
-    items.push(stub("msg.forward", "nav/forward"));
-    if in_guild {
-        items.push(stub("msg.create_thread", "chat/thread"));
+    let ee = e.clone();
+    items.push(MenuItem::action(crate::t!("msg.forward"), Some(crate::icons::path("nav/forward")), move |_, _, cx| {
+        ee.update(cx, |a, cx| a.open_forward(ch, id, cx))
+    }));
+    if in_guild && msg.is_some_and(|m| m.thread.is_none()) {
+        let ee = e.clone();
+        items.push(MenuItem::action(crate::t!("msg.create_thread"), Some(crate::icons::path("chat/thread")), move |_, _, cx| {
+            ee.update(cx, |a, cx| a.open_thread_form(ch, id, cx))
+        }));
     }
     items.push(MenuItem::Separator);
     if has_text {
@@ -116,13 +128,27 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         Some(Icon::Pin.path()),
         move |_, _, cx| ee.update(cx, |a, cx| a.toggle_pin(ch, id, cx)),
     ));
-    items.push(stub("msg.bookmark", "inbox/bookmark"));
-    let reminders = ["msg.remind.30m", "msg.remind.1h", "msg.remind.4h", "msg.remind.tomorrow", "msg.remind.custom"];
-    items.push(MenuItem::submenu_with_icon(
-        crate::t!("msg.remind"),
-        "inbox/clock",
-        reminders.iter().map(|k| { let mut i = stub(k, "inbox/clock"); if let MenuItem::Action { icon, .. } = &mut i { *icon = None; } i }).collect(),
-    ));
+    let ee = e.clone();
+    items.push(MenuItem::action(crate::t!("msg.bookmark"), Some(crate::icons::path("inbox/bookmark")), move |_, _, cx| {
+        ee.update(cx, |a, cx| {
+            a.chat.menu = None;
+            a.save_message(ch, id, cx)
+        })
+    }));
+    let mut reminders: Vec<MenuItem> = crate::actions::message::REMINDERS
+        .iter()
+        .map(|&(k, secs)| {
+            let ee = e.clone();
+            MenuItem::action(crate::t!(k), None, move |_, _, cx| {
+                ee.update(cx, |a, cx| a.remind_message(ch, id, crate::actions::message::due_for(secs), cx))
+            })
+        })
+        .collect();
+    let ee = e.clone();
+    reminders.push(MenuItem::action(crate::t!("msg.remind.custom"), None, move |_, _, cx| {
+        ee.update(cx, |a, cx| a.open_custom_reminder(ch, id, cx))
+    }));
+    items.push(MenuItem::submenu_with_icon(crate::t!("msg.remind"), "inbox/clock", reminders));
     items.push(MenuItem::submenu_with_icon(crate::t!("menu.apps"), "apps", vec![stub("menu.apps_none", "apps")]));
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.mark_unread"), ic(ChatIcon::Unread), move |_, _, cx| {
@@ -134,6 +160,24 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }));
     items.push(stub("msg.speak", "speaker"));
     items.push(MenuItem::Separator);
+    let guild = app.channels.get(&ch).and_then(|c| c.guild);
+    if has_reactions && crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | crate::actions::ADMINISTRATOR) {
+        let emojis: Vec<MenuItem> = msg
+            .map(|m| m.reactions.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|r| {
+                let ee = e.clone();
+                let label: gpui::SharedString = format!("{} {}", r.emoji, r.count).into();
+                MenuItem::action(label, None, move |_, _, cx| ee.update(cx, |a, cx| a.remove_reactions(ch, id, Some(r.clone()), cx)))
+            })
+            .collect();
+        items.push(MenuItem::submenu(crate::t!("msg.remove_emoji_reactions"), emojis));
+        let ee = e.clone();
+        items.push(MenuItem::danger(crate::t!("msg.remove_all_reactions"), None, move |_, _, cx| {
+            ee.update(cx, |a, cx| a.remove_reactions(ch, id, None, cx))
+        }));
+    }
     if own {
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |ev, _, cx| {
@@ -143,7 +187,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     } else {
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.report"), Some(crate::icons::path("flag")), move |_, _, cx| {
-            ee.update(cx, |a, cx| a.stub(&crate::t!("msg.report"), cx))
+            ee.update(cx, |a, cx| a.report_message(ch, id, cx))
         }));
     }
     if app.prefs.synced.developer_mode {

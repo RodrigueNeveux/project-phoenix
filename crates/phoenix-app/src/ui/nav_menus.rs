@@ -184,36 +184,6 @@ fn move_to(e: &Ent, folder: bool) -> MenuItem {
     )
 }
 
-/// "Add to Favorites" > Favorites (vanilla `*-context-favorite-channel`).
-fn favorite(e: &Ent) -> MenuItem {
-    MenuItem::submenu_with_icon(crate::t!("menu.favorite"), "star", vec![stub(e, "menu.favorites")])
-}
-
-/// Sections of `guild-context-guild-settings` (owner view of the live client).
-const GUILD_SETTINGS: [&str; 21] = [
-    "menu.gs.profile",
-    "menu.gs.tag",
-    "menu.gs.engagement",
-    "menu.gs.boost_perks",
-    "menu.gs.emoji",
-    "menu.gs.stickers",
-    "menu.gs.soundboard",
-    "menu.gs.members",
-    "menu.gs.roles",
-    "menu.gs.invites",
-    "menu.gs.access",
-    "menu.gs.integrations",
-    "menu.gs.app_directory",
-    "menu.gs.safety",
-    "menu.gs.audit_log",
-    "menu.gs.bans",
-    "menu.gs.community",
-    "menu.gs.onboarding",
-    "menu.gs.analytics",
-    "menu.gs.discovery",
-    "menu.gs.templates",
-];
-
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let (target, pos) = OPEN.with(|o| *o.borrow())?;
     let e = cx.entity();
@@ -257,10 +227,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         }
                     }));
                 } else {
-                    items.push(favorite(&e));
+                    items.push(crate::actions::channel::favorite_item(&e, id));
                     items.push(MenuItem::Separator);
                     items.push(act(&e, crate::t!("menu.invite_channel"), move |a, _, cx| a.open_invite_people(g, cx)));
-                    items.push(stub(&e, "menu.pin_channel"));
+                    items.push(crate::actions::channel::pin_item(&e, id, false));
                     items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, id.0)));
                 }
                 items.push(MenuItem::Separator);
@@ -273,7 +243,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(notify_item(app, &e, guild, Some(id)).with_subtext(level_label(app, guild, Some(id))));
                 if manage {
                     items.push(MenuItem::Separator);
-                    items.push(move_to(&e, false));
+                    items.push(if cat { move_to(&e, false) } else { crate::actions::channel::move_to_item(app, &e, g, id) });
                     items.push(MenuItem::Separator);
                     if cat {
                         items.push(stub(&e, "menu.edit_category"));
@@ -283,7 +253,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         }));
                     } else {
                         items.push(stub(&e, "menu.edit_channel"));
-                        items.push(stub(&e, "menu.clone_channel"));
+                        items.push(act(&e, crate::t!("menu.clone_channel"), move |a, _, cx| a.open_clone_channel(g, id, cx)));
                         items.push(stub(&e, "menu.create_text_channel"));
                         items.push(MenuItem::danger(crate::t!("menu.delete_channel"), None, {
                             let e = e.clone();
@@ -305,8 +275,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 // Invites, Edit Group | Mute Conversation > | Leave Group | Copy Channel ID.
                 let peer = ch.voice_users.first().copied();
                 let is_group = app.nav.extras.get(&id).is_some_and(|x| x.recipients > 1);
-                items.push(stub(&e, "menu.pin_dm").with_icon("pin"));
-                items.push(favorite(&e));
+                items.push(crate::actions::channel::pin_item(&e, id, true).with_icon("pin"));
+                items.push(crate::actions::channel::favorite_item(&e, id));
                 items.push(MenuItem::Separator);
                 if is_group {
                     items.push(stub(&e, "menu.invites"));
@@ -321,9 +291,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 } else {
                     if let Some(u) = peer {
                         items.push(act(&e, crate::t!("menu.profile"), move |a, _, cx| a.open_profile_modal(u, cx)));
-                        items.push(act(&e, crate::t!("menu.call"), move |a, _, cx| a.join_voice(Some(id), cx)));
+                        items.push(act(&e, crate::t!("menu.call"), move |a, _, cx| a.open_call_ui(u, cx)));
                         items.push(act(&e, crate::t!("menu.add_note"), move |a, _, cx| a.open_profile_modal(u, cx)).with_subtext(crate::t!("menu.note_subtext")));
-                        items.push(stub(&e, "menu.friend_nickname"));
+                        if app.nav.relationship(u).is_some() {
+                            items.push(act(&e, crate::t!("menu.friend_nickname"), move |a, _, cx| a.open_friend_nickname(u, cx)));
+                        }
                     }
                     items.push(act(&e, crate::t!("menu.close_dm"), move |a, _, cx| a.close_dm(id, cx)));
                     if let Some(u) = peer {
@@ -349,7 +321,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         if app.nav.relationship(u).is_some() {
                             items.push(act(&e, crate::t!("menu.remove_friend"), rel(|| crate::ui::home::data::RelAction::Remove)));
                         }
-                        items.push(stub(&e, "menu.ignore"));
+                        let ign = if crate::actions::user::is_ignored(u) { "menu.unignore" } else { "menu.ignore" };
+                        items.push(act(&e, crate::t!(ign), move |a, _, cx| a.toggle_ignore(u, cx)));
                         let block = rel(|| crate::ui::home::data::RelAction::Block);
                         let eb = e.clone();
                         items.push(MenuItem::danger(crate::t!("menu.block"), None, move |_, w, cx: &mut App| eb.update(cx, |a, cx| block(a, w, cx))));
@@ -398,12 +371,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     })
                 }
             }));
+            items.extend(crate::actions::channel::show_all_item(app, &e, g));
             items.push(MenuItem::Separator);
             if manage_guild {
-                items.push(MenuItem::submenu(crate::t!("menu.server_settings"), GUILD_SETTINGS.iter().map(|k| stub(&e, k)).collect()));
+                items.push(crate::actions::channel::server_settings_item(&e, g));
             }
             items.push(stub(&e, "menu.privacy_settings"));
-            items.push(stub(&e, "menu.edit_server_profile"));
+            items.push(act(&e, crate::t!("menu.edit_server_profile"), move |a, _, cx| a.open_server_profile(g, cx)));
             if manage_channels || events {
                 items.push(MenuItem::Separator);
                 if manage_channels {
@@ -411,7 +385,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     items.push(stub(&e, "menu.create_category"));
                 }
                 if events {
-                    items.push(stub(&e, "menu.create_event"));
+                    items.push(act(&e, crate::t!("menu.create_event"), move |a, _, cx| a.open_create_event(g, cx)));
                 }
             }
             items.push(MenuItem::Separator);

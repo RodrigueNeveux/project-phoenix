@@ -1,0 +1,194 @@
+//! User menu actions: nicknames, friend nickname, per-server profile, ignore,
+//! call card, roles, mod view, report, voice moderation and Watch Stream.
+
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
+
+use gpui::{App, Context};
+use phoenix_api::rest::{members::VoiceMod, reporting::ReportTarget};
+
+use super::{ActionRequest, DEAFEN_MEMBERS, MOVE_MEMBERS, MUTE_MEMBERS, has, open_modal};
+use crate::{
+    app::PhoenixApp,
+    discord_backend::convert::sf,
+    model::{ChannelKind, Id},
+    ui::{
+        context_menu::MenuItem,
+        modals::{Field, Form, Modal},
+    },
+};
+
+thread_local! {
+    /// Users ignored from the menus this session.
+    static IGNORED: RefCell<HashSet<Id>> = RefCell::new(HashSet::new());
+}
+
+pub fn is_ignored(u: Id) -> bool {
+    IGNORED.with(|s| s.borrow().contains(&u))
+}
+
+fn text_form(title: gpui::SharedString, label: gpui::SharedString, initial: String, on: impl Fn(&mut PhoenixApp, String, &mut Context<PhoenixApp>) + 'static) -> Modal {
+    Modal::Form(Form {
+        title,
+        subtitle: None,
+        fields: vec![Field::new(label, gpui::SharedString::default(), initial)],
+        choices: Vec::new(),
+        choice: None,
+        submit: crate::t!("common.save"),
+        danger: false,
+        on_submit: Rc::new(move |a, v, _, cx| on(a, v.into_iter().next().unwrap_or_default(), cx)),
+    })
+}
+
+impl PhoenixApp {
+    /// "Change Nickname" (`user: None` = our own).
+    pub fn open_nickname(&mut self, guild: Id, user: Option<Id>, cx: &mut Context<Self>) {
+        let who = user.unwrap_or(self.me.id);
+        let initial = self.users.get(&who).map(|u| u.display_name.to_string()).unwrap_or_default();
+        open_modal(
+            text_form(crate::t!("menu.change_nickname"), crate::t!("nick.label"), initial, move |a, nick, cx| {
+                a.action_toast(ActionRequest::SetNick { guild, user, nick }, Some(crate::t!("nick.saved")), cx);
+            }),
+            None,
+        );
+        cx.notify();
+    }
+
+    pub fn open_friend_nickname(&mut self, user: Id, cx: &mut Context<Self>) {
+        let initial = self.nav.relationship(user).and_then(|r| r.nickname.clone()).map(|s| s.to_string()).unwrap_or_default();
+        open_modal(
+            text_form(crate::t!("menu.friend_nickname"), crate::t!("nick.friend_label"), initial, move |a, nick, cx| {
+                if let Some(r) = a.nav.relationships.iter_mut().find(|r| r.user == user) {
+                    r.nickname = (!nick.trim().is_empty()).then(|| nick.trim().to_owned().into());
+                }
+                a.action_toast(ActionRequest::FriendNick { user, nick }, Some(crate::t!("nick.saved")), cx);
+            }),
+            None,
+        );
+        cx.notify();
+    }
+
+    /// "Edit Per-server Profile": settings > Profiles (server profile tab).
+    pub fn open_server_profile(&mut self, _guild: Id, cx: &mut Context<Self>) {
+        crate::ui::settings::open(self, cx);
+        if let Some(s) = self.settings.as_mut() {
+            s.page = crate::ui::settings::Page::Profiles;
+        }
+        cx.notify();
+    }
+
+    pub fn toggle_ignore(&mut self, user: Id, cx: &mut Context<Self>) {
+        let ignored = IGNORED.with(|s| {
+            let mut s = s.borrow_mut();
+            if s.remove(&user) {
+                false
+            } else {
+                s.insert(user);
+                true
+            }
+        });
+        let ok = if ignored { crate::t!("ignore.done") } else { crate::t!("ignore.undone") };
+        self.action_toast(ActionRequest::Ignore { user, ignored }, Some(ok), cx);
+    }
+
+    /// "Call": open the DM and show the outgoing call card. No call is placed.
+    pub fn open_call_ui(&mut self, user: Id, cx: &mut Context<Self>) {
+        self.open_dm_with(user, cx);
+        let ch = self.selected_channel.unwrap_or(Id(0));
+        open_modal(Modal::Call { channel: ch, user }, None);
+        cx.notify();
+    }
+
+    pub fn set_member_role(&mut self, guild: Id, user: Id, role: Id, add: bool, cx: &mut Context<Self>) {
+        if let Some(m) = self.members.get_mut(&guild).and_then(|m| m.iter_mut().find(|m| m.user == user)) {
+            if add {
+                if !m.roles.contains(&role) {
+                    m.roles.push(role);
+                }
+            } else {
+                m.roles.retain(|r| *r != role);
+            }
+        }
+        self.action_toast(ActionRequest::SetRole { guild, user, role, add }, None, cx);
+        cx.notify();
+    }
+
+    pub fn open_mod_view(&mut self, guild: Id, user: Id, cx: &mut Context<Self>) {
+        open_modal(Modal::ModView { guild, user }, None);
+        cx.notify();
+    }
+
+    pub fn report_user(&mut self, user: Id, guild: Option<Id>, cx: &mut Context<Self>) {
+        self.open_report(ReportTarget::User { user: sf(user), guild: guild.map(sf) }, cx);
+    }
+
+    pub fn voice_moderate(&mut self, guild: Id, user: Id, op: VoiceMod, cx: &mut Context<Self>) {
+        self.action_toast(ActionRequest::VoiceMod { guild, user, op }, None, cx);
+    }
+}
+
+type Ent = gpui::Entity<PhoenixApp>;
+
+fn item(e: &Ent, label: gpui::SharedString, f: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static) -> MenuItem {
+    let e = e.clone();
+    MenuItem::action(label, None, move |_, _, cx: &mut App| e.update(cx, |a, cx| f(a, cx)))
+}
+
+/// Watch Stream + server voice moderation rows for a user in a guild voice
+/// channel (shown under the volume rows of the user menu).
+pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vec<MenuItem> {
+    let mut out = Vec::new();
+    let Some(vc) = app.channels.values().find(|c| c.kind != ChannelKind::Category && c.guild.is_some() && c.voice_users.contains(&user)).map(|c| (c.id, c.guild)) else {
+        return out;
+    };
+    let g = guild.or(vc.1);
+    let f = crate::ui::voice_panel::flags(user);
+    if f.stream && user != app.me.id {
+        out.push(item(e, crate::t!("voice.watch_stream"), move |a, cx| {
+            a.select_channel(vc.0, cx);
+            a.parity_toast(crate::t!("voice.watch_unsupported"), cx);
+        }));
+    }
+    let Some(g) = g else { return out };
+    let admin = has(app, Some(g), super::ADMINISTRATOR);
+    let mut mods = Vec::new();
+    if admin || has(app, Some(g), MUTE_MEMBERS) {
+        let on = f.server_mute;
+        let e = e.clone();
+        mods.push(MenuItem::check(crate::t!("voice.server_mute"), on, move |_, _, cx: &mut App| {
+            e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Mute(!on), cx))
+        }));
+    }
+    if admin || has(app, Some(g), DEAFEN_MEMBERS) {
+        let on = f.server_deaf;
+        let e = e.clone();
+        mods.push(MenuItem::check(crate::t!("voice.server_deafen"), on, move |_, _, cx: &mut App| {
+            e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Deafen(!on), cx))
+        }));
+    }
+    if admin || has(app, Some(g), MOVE_MEMBERS) {
+        let targets: Vec<MenuItem> = app
+            .guild_channels
+            .get(&g)
+            .into_iter()
+            .flatten()
+            .filter_map(|id| app.channels.get(id))
+            .filter(|c| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage) && c.id != vc.0)
+            .map(|c| {
+                let to = crate::discord_backend::convert::sf(c.id);
+                item(e, c.name.clone(), move |a, cx| a.voice_moderate(g, user, VoiceMod::Move(Some(to)), cx))
+            })
+            .collect();
+        if !targets.is_empty() {
+            mods.push(MenuItem::submenu(crate::t!("voice.move_to"), targets));
+        }
+        let e2 = e.clone();
+        mods.push(MenuItem::danger(crate::t!("voice.disconnect"), None, move |_, _, cx: &mut App| {
+            e2.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Move(None), cx))
+        }));
+    }
+    if !mods.is_empty() {
+        out.push(MenuItem::Separator);
+        out.extend(mods);
+    }
+    out
+}
