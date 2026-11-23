@@ -6137,6 +6137,7 @@ dependencies = [
  "gpui-pre-platform",
  "image",
  "keyring",
+ "memchr",
  "notify-rust",
  "parking_lot",
  "phoenix-api",

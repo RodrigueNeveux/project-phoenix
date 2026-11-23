@@ -46,8 +46,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("phone-hangup", &["PhoneHangUpIcon"]),
     ("phone-call", &["PhoneCallIcon", "PhoneIcon"]),
     ("video-call", &["VideoIcon"]),
-    ("add-to-dm", &["UserPlusIcon", "GroupPlusIcon"]),
-    ("user-profile", &["UserCircleIcon"]),
+    ("add-to-dm", &["GroupPlusIcon", "UserPlusIcon"]),
+    ("user-profile", &["UserCircleStatusIcon", "UserCircleIcon"]),
     ("apps", &["AppsIcon"]),
     ("chat/edit", &["PencilIcon"]),
     ("chat/trash", &["TrashIcon"]),
@@ -66,6 +66,6 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("voice/video-small", &["VideoIcon"]),
     ("voice/screen", &["ScreenArrowIcon"]),
     ("voice/soundboard", &["SoundboardIcon"]),
-    ("voice/activity", &["RocketIcon"]),
+    ("voice/activity", &["RocketIcon", "ActivitiesPlusIcon"]),
     ("voice/noise", &["WaveformIcon"]),
 ];

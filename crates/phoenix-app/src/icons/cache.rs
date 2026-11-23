@@ -16,31 +16,36 @@ fn js_key(head: &[u8]) -> Option<String> {
     let kl = u32::from_le_bytes(head[12..16].try_into().ok()?) as usize;
     let key = std::str::from_utf8(head.get(24..24 + kl)?).ok()?;
     let name = key.rsplit_once("/assets/")?.1;
+    // The main bundle is cached as `web.<hash>.js?cdt=1`: drop the query.
+    let name = name.split_once('?').map_or(name, |(n, _)| n);
     (name.ends_with(".js") && !name.contains('/')).then(|| name.to_owned())
 }
 
-/// `(asset file name, cache entry path)` for every cached JS bundle.
+/// `(asset file name, cache entry path)` for every cached JS bundle,
+/// largest first (the main `web.*.js` bundle holds most icons, so the
+/// extractor can stop early).
 pub fn js_entries(cache: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(cache) else { return out };
+    let Ok(rd) = std::fs::read_dir(cache) else { return Vec::new() };
     for e in rd.flatten() {
         let p = e.path();
         if !p.is_file() {
             continue;
         }
-        let mut head = vec![0u8; 1024];
+        let mut head = [0u8; 1024];
         let Ok(mut f) = std::fs::File::open(&p) else { continue };
         let n = f.read(&mut head).unwrap_or(0);
         if let Some(k) = js_key(&head[..n]) {
-            out.push((k, p));
+            let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+            out.push((len, k, p));
         }
     }
-    out.sort();
-    out
+    out.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    out.into_iter().map(|(_, k, p)| (k, p)).collect()
 }
 
 fn find(h: &[u8], n: &[u8], from: usize) -> Option<usize> {
-    h.get(from..)?.windows(n.len()).position(|w| w == n).map(|p| p + from)
+    memchr::memmem::find(h.get(from..)?, n).map(|p| p + from)
 }
 
 /// Decoded text of a cached JS bundle.
@@ -53,7 +58,7 @@ pub fn read_body(entry: &Path) -> Option<String> {
     if let Ok(s) = std::str::from_utf8(body) {
         return Some(s.to_owned());
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(body.len() * 5);
     if brotli_decompressor::Decompressor::new(body, 4096).read_to_end(&mut out).is_ok()
         && let Ok(s) = String::from_utf8(out)
     {
@@ -62,4 +67,26 @@ pub fn read_body(entry: &Path) -> Option<String> {
     let mut out = String::new();
     flate2::read::GzDecoder::new(body).read_to_string(&mut out).ok()?;
     Some(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn head(key: &str) -> Vec<u8> {
+        let mut h = MAGIC.to_vec();
+        h.extend_from_slice(&5u32.to_le_bytes());
+        h.extend_from_slice(&(key.len() as u32).to_le_bytes());
+        h.extend_from_slice(&[0; 8]);
+        h.extend_from_slice(key.as_bytes());
+        h
+    }
+
+    #[test]
+    fn js_key_accepts_query_and_rejects_other_assets() {
+        assert_eq!(js_key(&head("1/0/https://discord.com/assets/web.abc.js?cdt=1")).as_deref(), Some("web.abc.js"));
+        assert_eq!(js_key(&head("1/0/https://discord.com/assets/0a1b.js")).as_deref(), Some("0a1b.js"));
+        assert_eq!(js_key(&head("1/0/https://discord.com/assets/x.css")), None);
+        assert_eq!(js_key(&head("1/0/https://cdn.discordapp.com/avatars/1/a.png")), None);
+    }
 }

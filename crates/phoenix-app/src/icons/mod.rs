@@ -132,26 +132,45 @@ pub fn refresh(dir: &Path) -> bool {
     true
 }
 
+/// Decodes and scans bundles on a few worker threads. Entries come largest
+/// first; for each name the earliest entry that defines it wins, so the
+/// result does not depend on thread timing, and workers stop once every
+/// name is found in an earlier entry than the one they would open next.
 fn extract_all(entries: &[(String, PathBuf)]) -> HashMap<&'static str, String> {
-    let mut found = HashMap::new();
-    for (_, p) in entries {
-        if found.len() == NAMES.len() {
-            break;
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let found: Mutex<HashMap<&'static str, (usize, String)>> = Mutex::new(HashMap::new());
+    let next = AtomicUsize::new(0);
+    let workers = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(1, 4);
+    std::thread::scope(|sc| {
+        for _ in 0..workers {
+            sc.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some((_, p)) = entries.get(i) else { break };
+                let todo: Vec<_> = {
+                    let f = found.lock().unwrap_or_else(|e| e.into_inner());
+                    NAMES.iter().filter(|(n, _)| f.get(n).is_none_or(|(j, _)| *j > i)).collect()
+                };
+                if todo.is_empty() {
+                    break;
+                }
+                let Some(js) = cache::read_body(p) else { continue };
+                if !js.contains("Icon:function(") {
+                    continue;
+                }
+                for (name, candidates) in todo {
+                    if let Some(svg) = candidates.iter().find_map(|c| extract::icon_svg(&js, c)) {
+                        let mut f = found.lock().unwrap_or_else(|e| e.into_inner());
+                        if f.get(name).is_none_or(|(j, _)| *j > i) {
+                            f.insert(*name, (i, svg));
+                        }
+                    }
+                }
+            });
         }
-        let Some(js) = cache::read_body(p) else { continue };
-        if !js.contains("Icon:function(") {
-            continue;
-        }
-        for (name, candidates) in NAMES {
-            if found.contains_key(name) {
-                continue;
-            }
-            if let Some(svg) = candidates.iter().find_map(|c| extract::icon_svg(&js, c)) {
-                found.insert(*name, svg);
-            }
-        }
-    }
-    found
+    });
+    found.into_inner().unwrap_or_else(|e| e.into_inner()).into_iter().map(|(k, (_, v))| (k, v)).collect()
 }
 
 #[cfg(test)]

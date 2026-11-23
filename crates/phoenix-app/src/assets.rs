@@ -161,6 +161,11 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/file.svg" => f!(r#"<path d="M6 2h8l6 6v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm7 1.5V9h5.5z"/>"#),
         "icons/image.svg" => s!(r#"<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>"#),
         "icons/phone-hangup.svg" => f!(r#"<path d="M12 9c-3.5 0-6.8 1-9.4 2.9a1.5 1.5 0 0 0-.2 2.2l1.8 2a1.5 1.5 0 0 0 1.9.3l2.4-1.4a1.5 1.5 0 0 0 .7-1.3v-1.6a12 12 0 0 1 5.6 0v1.6c0 .5.3 1 .7 1.3l2.4 1.4a1.5 1.5 0 0 0 1.9-.3l1.8-2a1.5 1.5 0 0 0-.2-2.2C18.8 10 15.5 9 12 9z"/>"#),
+        "icons/phone-call.svg" => f!(r#"<path d="M7.4 2.5a1 1 0 0 1 .9.6l1.6 3.6a1 1 0 0 1-.2 1.1L8 9.5a12 12 0 0 0 6.5 6.5l1.7-1.7a1 1 0 0 1 1.1-.2l3.6 1.6a1 1 0 0 1 .6.9V20a2 2 0 0 1-2 2A17.5 17.5 0 0 1 2 4.5a2 2 0 0 1 2-2z"/><path d="M14 4.5a5.5 5.5 0 0 1 5.5 5.5M14 8a2 2 0 0 1 2 2" stroke="black" stroke-width="2" stroke-linecap="round" fill="none"/>"#),
+        "icons/video-call.svg" => f!(r#"<rect x="2" y="5" width="13" height="14" rx="3"/><path d="M17 10.2 21.4 7a1 1 0 0 1 1.6.8v8.4a1 1 0 0 1-1.6.8L17 13.8z"/>"#),
+        "icons/add-to-dm.svg" => f!(r#"<circle cx="9" cy="8" r="4"/><path d="M1 20a8 6.5 0 0 1 15.5-2.2V21H1zM19 13a1 1 0 0 1 1 1v3h3a1 1 0 1 1 0 2h-3v3a1 1 0 1 1-2 0v-3h-3a1 1 0 1 1 0-2h3v-3a1 1 0 0 1 1-1z"/>"#),
+        "icons/user-profile.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm-6 12.2a8 8 0 0 0 12 0 7 5 0 0 0-12 0z"/>"#),
+        "icons/apps.svg" => f!(r#"<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>"#),
         _ => return crate::ui::chat::icons::svg(path).or_else(|| crate::ui::voice_panel::svg_asset(path)),
     })
 }
