@@ -52,24 +52,17 @@ pub fn icon(i: Icon, size: f32, color: Hsla) -> gpui::Svg {
 /// Circle avatar. URL images go through GPUI's asset cache, which fetches
 /// lazily only when the element is actually painted (rows are virtualized).
 pub fn avatar(user: Option<&User>, size: f32) -> AnyElement {
-    let (img_ref, initial) = match user {
-        Some(u) => (u.avatar.clone(), u.display_name.chars().next().unwrap_or('?')),
-        None => (ImageRef::Default(1), '?'),
-    };
+    let img_ref = user.map(|u| u.avatar.clone()).unwrap_or(ImageRef::Default(0));
     match img_ref {
         ImageRef::Url(url) => crate::media::avatar_image(url, size),
+        // The client shows the CDN default avatar (embed/avatars/<n>.png), fetched at runtime;
+        // the colour shows while it loads.
         ImageRef::Default(ix) => div()
             .size(px(size))
             .flex_none()
             .rounded_full()
             .bg(c(DEFAULT_AVATAR[ix as usize % DEFAULT_AVATAR.len()]))
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_color(gpui::white())
-            .text_size(px(size * 0.42))
-            .font_weight(FontWeight::SEMIBOLD)
-            .child(SharedString::from(initial.to_uppercase().to_string()))
+            .child(crate::media::avatar_image(format!("https://cdn.discordapp.com/embed/avatars/{ix}.png").into(), size))
             .into_any_element(),
     }
 }

@@ -1043,6 +1043,12 @@ impl PhoenixApp {
             .and_then(|r| r.color)
     }
 
+    /// Guild nickname of `user` in the selected guild, from the member cache.
+    pub fn member_nick(&self, user: Id) -> Option<SharedString> {
+        let g = self.selected_guild?;
+        self.members.get(&g)?.iter().find(|m| m.user == user)?.nick.clone()
+    }
+
     pub fn author_color(&self, user: Id) -> Option<u32> {
         let g = self.selected_guild?;
         let m = self.members.get(&g)?.iter().find(|m| m.user == user)?;

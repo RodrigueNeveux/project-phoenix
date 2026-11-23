@@ -39,7 +39,7 @@ pub fn user(u: &api::User) -> model::User {
         model::ImageRef::Url(u.avatar_url(AVATAR_SIZE).into())
     } else {
         let idx = if u.discriminator.is_empty() || u.discriminator == "0" {
-            (u.id.0 >> 22) % 5
+            (u.id.0 >> 22) % 6 // client: (id >> 22) % 6 for pomelo usernames
         } else {
             u.discriminator.parse::<u64>().unwrap_or(0) % 5
         };
@@ -768,6 +768,7 @@ impl MemberList {
                     .and_then(|p| p.get("activities"))
                     .and_then(Value::as_array)
                     .and_then(|a| activity(a)),
+                nick: m.member.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
             });
         }
         (ms, us)
@@ -814,6 +815,14 @@ impl Adapter {
             *list = MemberList { id: l.id.clone(), items: Vec::new() };
         }
         list.apply(&l.ops);
+        // Group rows in ops may omit `count`; the top-level `groups` array is authoritative.
+        for it in list.items.iter_mut().flatten() {
+            if let MemberListItem::Group { id: gid, count } = it
+                && let Some(g) = l.groups.iter().find(|g| &g.id == gid)
+            {
+                *count = g.count;
+            }
+        }
         // Rows past the synced ranges are placeholders, so the sidebar can scroll to them.
         let total: usize = l.groups.iter().filter(|g| g.count > 0).map(|g| g.count as usize + 1).sum();
         if total > 0 {

@@ -244,6 +244,8 @@ pub struct Member {
     pub roles: Vec<Id>,
     pub presence: Presence,
     pub activity: Option<SharedString>,
+    /// Guild nickname (`member.nick`), shown instead of the display name.
+    pub nick: Option<SharedString>,
 }
 
 pub fn acronym(name: &str) -> SharedString {

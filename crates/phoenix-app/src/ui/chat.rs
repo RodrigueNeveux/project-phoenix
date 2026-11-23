@@ -614,7 +614,7 @@ fn message(
     cx: &App,
 ) -> AnyElement {
     let author = app.users.get(&msg.author);
-    let name = msg.author_nick.clone().or_else(|| author.map(|u| u.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown"));
+    let name = msg.author_nick.clone().or_else(|| app.member_nick(msg.author)).or_else(|| author.map(|u| u.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown"));
     // username_ color: role colour, else --text-strong.
     let color = app.author_color(msg.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG));
     let id = msg.id;
@@ -624,7 +624,10 @@ fn message(
     let compact = app.prefs.synced.compact;
     let editing = app.chat.edit.as_ref().is_some_and(|e| e.id == id);
     let replying = app.replying_to == Some(id);
-    let mentioned = r.mentions_me || msg.mention_everyone;
+    // mentioned_: content mentions, @everyone, or a pinging reply to one of my messages.
+    let reply_pings_me = msg.reply_mentions_author
+        && msg.reply_to.and_then(|rid| entry.index_of(rid)).is_some_and(|p| entry.msgs[p].author == app.me.id);
+    let mentioned = r.mentions_me || msg.mention_everyone || reply_pings_me;
     let ts = msg.timestamp;
 
     let mut content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL));
@@ -683,7 +686,7 @@ fn message(
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);
         let (ru, preview, rnick) = match found {
-            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone()),
+            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author))),
             None => (None, crate::t!("chat.reply_deleted"), None),
         };
         // repliedMessage_: 14px, line-height --custom-message-reply-message-preview-line-height
