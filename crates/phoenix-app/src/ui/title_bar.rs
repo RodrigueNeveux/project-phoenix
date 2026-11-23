@@ -7,7 +7,7 @@ use gpui::{Context, FontWeight, IntoElement, ParentElement, SharedString, Styled
 use crate::{
     app::PhoenixApp,
     assets::Icon,
-    theme::{Palette, c, generated::idx, m, tok, z, zoom},
+    theme::{c, generated::idx, m, tok, z, zoom},
     ui::{home::data::HomeView, icon},
 };
 
@@ -39,9 +39,37 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpu
         .tooltip(crate::ui::tooltip::tip(tip))
 }
 
+/// `backForwardButtons_nS9Yqn` half (dump -channels-N-N+ #20/#22): 26×24, 18px
+/// arrow, `padding 0 2 0 6` / `0 6 0 2`, outer corners `6px`, `--interactive-icon-default`.
+fn nav_arrow(id: &'static str, name: &'static str, back: bool, enabled: bool) -> gpui::Stateful<gpui::Div> {
+    let d = div()
+        .id(id)
+        .w(z(26.))
+        .h(z(24.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .when(back, |d| d.pl(z(6.)).pr(z(2.)).rounded_l(z(6.)))
+        .when(!back, |d| d.pl(z(2.)).pr(z(6.)).rounded_r(z(6.)))
+        .child(
+            gpui::svg()
+                .path(crate::icons::path(name))
+                .size(z(18.))
+                .flex_none()
+                .text_color(c(tok(idx::INTERACTIVE_ICON_DEFAULT))),
+        );
+    if enabled {
+        d.cursor_pointer().hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+    } else {
+        // `disabled_nS9Yqn`
+        d.opacity(0.5)
+    }
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let (glyph, text) = title(app);
-    let in_guild = app.selected_guild.is_some();
+    let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    // `bar_3zSH5d` (dump #13): 32px, no fill (the app background shows through).
     div()
         .id("app-title-bar")
         .h(z(m::TITLE_BAR_H))
@@ -50,26 +78,46 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .relative()
         .flex()
         .items_center()
-        .justify_end()
-        .pr(z(12.))
-        .bg(c(Palette::BG_TERTIARY))
+        .justify_between()
         .child(
+            // `title_LnjVAX` (dump #15): centered, gap 8; 16px guild icon (radius 4) +
+            // `body-sm/medium` name in `--text-strong`.
             div()
                 .absolute()
                 .inset_0()
                 .flex()
                 .items_center()
                 .justify_center()
-                .gap(z(6.))
+                .gap(z(8.))
                 .text_size(z(14.))
+                .line_height(z(18.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(Palette::TEXT_HEADER))
-                .when(!in_guild, |d| d.child(icon(glyph, 16. * zoom(), c(Palette::INTERACTIVE))))
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .map(|d| match guild {
+                    Some(g) => d.child(
+                        div().rounded(z(4.)).overflow_hidden().child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16. * zoom())),
+                    ),
+                    None => d.child(icon(glyph, 16. * zoom(), c(tok(idx::INTERACTIVE_ICON_DEFAULT)))),
+                })
                 .child(div().max_w(z(480.)).text_ellipsis().child(text)),
         )
         .child(
+            // `leading_3zSH5d` > `backForwardButtons_nS9Yqn` (dump #18/#19): 80px wide, gap 2.
             div()
                 .relative()
+                .w(z(80.))
+                .h(z(24.))
+                .flex()
+                .justify_center()
+                .gap(z(2.))
+                .child(nav_arrow("title-back", "nav/back", true, true))
+                .child(nav_arrow("title-forward", "nav/forward", false, false)),
+        )
+        .child(
+            // `trailing_3zSH5d` (dump #24): gap 12, 24px `clickable_fErCLM` buttons.
+            div()
+                .relative()
+                .pr(z(12.))
                 .flex()
                 .items_center()
                 .gap(z(12.))

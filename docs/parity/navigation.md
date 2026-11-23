@@ -1,5 +1,48 @@
 # Navigation parity audit
 
+Primary source: the live-client DOM dumps (`/mnt/windata/project-phoenix/dumps/-channels-N-N+.json` = "N-N", `-channels-me+.json` = "me"; node `#i` = dump index, inspected with `~/discord-phoenix-ref/tree.py`). The user's client runs `.density-cozy` + `.enlarge-target-size` + `.theme-midnight` (Onyx), so the dump values below override the default-density CSS rows further down where they disagree.
+
+## Dump-verified (density-cozy)
+
+| element | dump node | property | dump value | our code | status |
+|---|---|---|---|---|---|
+| title bar | N-N #13 `bar_3zSH5d` | height / background | 32 / none (app bg) | title_bar.rs `render` | ✅ |
+| back / forward | N-N #19..#23 `backForwardButtons_nS9Yqn` | box / padding / radius / glyph | 80px leading, 26×24, `0 2 0 6`/`0 6 0 2`, 6px outer, 18px `--interactive-icon-default` | title_bar.rs `nav_arrow` | ✅ (history not wired) |
+| title | N-N #15..#17 `title_LnjVAX` | gap / icon / text | 8 / 16px guild icon r4 / 14/500 `--text-strong` | title_bar.rs | ✅ |
+| trailing | N-N #24..#38 | gap / button / glyph | 12 / 24 r6 / 18 `--icon-muted` | title_bar.rs `bar_button` | ✅ (Quests, window buttons: ❌ not implemented) |
+| guild list | N-N #50 `nav.guilds_` | width | 80 (40 + 2×20, `--space-md` cozy) | `m::SERVER_BAR_W` | ✅ |
+| guild list | N-N #55 `scroller_5dqHTG` | gap / padding | 10 / `0 0 26` (linux) | server_bar.rs `GAP`, `PAD_*` | ✅ |
+| guild icon | N-N #160..#163 | size / mask | 40 / squircle | server_bar.rs `ICON` | ✅ |
+| separator | N-N #66 `guildSeparator_3WHVfy` | size / color | 32×1 / `#97979f33` | server_bar.rs `separator` | ✅ |
+| folder | N-N #68..#81 | header / bg / radius / list | 48 / folder colour 15% / 16 / first item margin-top 6, gap 10 | server_bar.rs `folder` | ✅ |
+| channel list | N-N #585 `sidebarList_pog62O` | border / radius | 1px top+left `--border-subtle`, 12px top-left | sidebar.rs `render` | ✅ (width is user-resized 336 in the dump; we keep 268 default) |
+| guild header | N-N #588 `header_XH4OpX` | height / padding / border | 49 / 10 / 1px `--border-subtle` | sidebar.rs `header` | ✅ |
+| guild dropdown | N-N #590 `guildDropdown_XH4OpX` | height / padding / radius / gap | 32 / 0 10 / 8 / 2 | sidebar.rs `header` | ✅ |
+| guild name | N-N #605 | font | 16/20 600 `--text-strong` + 16px chevron | sidebar.rs `header` | ✅ |
+| invite button | N-N #609 `inviteButton_XH4OpX` | size / radius / glyph | 32 / 8 / 20 | sidebar.rs `header` (icon `invite`) | ✅ |
+| channel row | N-N #628 `wrapper_TNyK-N` | margin-left / padding | 10 / 1 0 | sidebar.rs `channel_row` | ✅ |
+| channel link | N-N #629/#638 `link_TNyK-N` | height / padding / radius / gap | 36 / 4 10 / 8 / 10 | sidebar.rs `channel_row` | ✅ |
+| channel name | N-N #643 | font | 16 / 500 / line 28, `--channels-default` | sidebar.rs `channel_row` | ✅ |
+| channel selected | N-N #858 | bg / color | `#97979f3d` / `--text-strong` | `INTERACTIVE_BACKGROUND_SELECTED` | ✅ |
+| channel hover actions | N-N #865 `children_TNyK-N` | size | 2×24 at margin -4 | sidebar.rs `invite_hover` | ✅ |
+| category | N-N #655..#663 | padding-top / height / padding / font | 16 / 24 / 0 6 0 20 / 14/18 500 | sidebar.rs `row` | ✅ |
+| category add | N-N #662 `addButton forceVisible` | size / visibility | 24 (padding 4, 16 glyph) / always | sidebar.rs `row` | ✅ |
+| panels card | N-N #976 `panels_pog62O` | inset / radius / border | 10 / 8 / 1px `--border-muted` | sidebar.rs `panels_card` | ✅ |
+| user panel | N-N #979 `container_g6VwXp` | height / padding / gap | 56 / 14 / 10 | sidebar.rs `user_panel` | ✅ |
+| account button | N-N #980 | margin / padding / gap / radius | -6 / 5 6 / 8 / 4 | sidebar.rs `user_panel` | ✅ |
+| name / subtext | N-N #985 / #989 | font | 16/22 500 `--text-strong` / 12/13 500 `--interactive-text-default` | sidebar.rs `user_panel` | ✅ |
+| mic / deafen | N-N #999..#1016 | button / chevron | 32 (r `8 0 0 8`) + 1 + 16 (r `0 8 8 0`), red 12% when muted | voice_panel.rs `audio_button` | ✅ |
+| settings | N-N #1017 | size / radius | 32 / 8 | voice_panel.rs `panel_button` | ✅ |
+| DM search | me #587/#588 `searchBar_u88IQl` | header / button | 49, padding 0 10 / 31px r8 `--control-secondary-background-default`, 1px `--border-muted`, 14/18 500 centred | sidebar.rs `header` | ✅ |
+| DM nav rows | me #597..#625 `channel_zln_tS` | li / inner / link | 40 (margin-left 8) / 38 r8 / padding 8 16 8 10, 20px glyph + 12, 16/20 500 | sidebar.rs `dm_top` | ✅ |
+| DM nav selected | me #598 | bg / color | `--background-mod-strong` / `--text-default` | sidebar.rs `dm_top` | ✅ |
+| DM divider | me #648 `sectionDivider_u88IQl` | margin / color | 12 8 / `--border-subtle` | sidebar.rs `dm_top` | ✅ |
+| DM header | me #649 `privateChannelsHeaderContainer_Bce46W` | height / padding / font | 24 / 0 6 4 20 / 14/18 500 `--channels-default` | sidebar.rs `dm_top` | ✅ |
+| DM row | me #656..#665 `dm_zln_tS` | li / link / avatar | 50 (margin-left 8) / 48, pl 10 / 32 + margin 12 | sidebar.rs `channel_row` | ✅ |
+| voice users, threads, voice panel | — | — | not present in the dumps yet (needs a dump of a guild with people in voice and a connected call) | voice_panel.rs | ❓ |
+
+## CSS reference (default density)
+
 Source: `~/discord-phoenix-ref/current-client/css/`, using the default density (`.density-default`: `--space-xs` 8, `--space-sm` 12, `--space-md` 16) and without the `refresh-fast-follow-avatars` experiment (`--guildbar-avatar-size` 40, `--guildbar-folder-size` 48). Colours are generated tokens (`theme::generated::idx`). Paths are relative to `crates/phoenix-app/src/ui/`.
 
 | element | CSS source (file + selector prefix) | property | CSS value | our code | status |

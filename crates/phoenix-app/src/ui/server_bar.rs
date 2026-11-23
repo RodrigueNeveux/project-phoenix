@@ -1,4 +1,4 @@
-//! 72px guild rail (40px rounded-square tiles, animated pill, name tooltips): Home, guilds and guild folders (from `guild_folders`),
+//! 80px guild rail (40px rounded-square tiles, animated pill, name tooltips): Home, guilds and guild folders (from `guild_folders`),
 //! Add a Server (join by invite) and Discover. Guilds can be dragged to
 //! reorder them locally (not synced to Discord yet).
 
@@ -95,7 +95,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     div().w(z(m::SERVER_BAR_W)).flex_none().h_full().bg(c(Palette::BG_TERTIARY)).child(col)
 }
 
-// Observed metrics of the official guild rail (refresh layout, default density).
+// Metrics of the official guild rail (refresh layout, `.density-cozy`, dump -channels-N-N+ #50..#583).
 /// `--guildbar-avatar-size`.
 const ICON: f32 = 40.;
 /// `--guildbar-folder-size`.
@@ -104,12 +104,13 @@ const FOLDER: f32 = 48.;
 const ICON_RADIUS: f32 = 12.;
 /// `--radius-lg`: open folder background.
 const FOLDER_RADIUS: f32 = 16.;
-/// `--space-xs`: spacing between rail items (`scroller_5dqHTG>[hidden]` margin-top).
-const GAP: f32 = 8.;
-/// `scroller_5dqHTG` padding-top (desktop `.platform-win`/`.platform-osx`).
-const PAD_TOP: f32 = 4.;
-/// `scroller_5dqHTG` padding-bottom: `calc(var(--space-xs) + 16px)`.
-const PAD_BOTTOM: f32 = 24.;
+/// `--space-xs` (`.density-cozy` = 10px): `stack_TWWX0S scroller_5dqHTG` gap.
+/// Dump -channels-N-N+ #55 gap 10px.
+const GAP: f32 = 10.;
+/// `scroller_5dqHTG` padding-top is 0 on `.platform-linux` (dump #55 starts at y=32).
+const PAD_TOP: f32 = 0.;
+/// `scroller_5dqHTG` padding-bottom: `calc(var(--space-xs) + 16px)` = 26px (dump #55).
+const PAD_BOTTOM: f32 = 26.;
 /// `--custom-folder-padding`: `(--guildbar-folder-size - --guildbar-avatar-size) / 2`.
 const FOLDER_PAD: f32 = (FOLDER - ICON) / 2.;
 /// `--custom-folder-preview-padding` (`--space-4`).

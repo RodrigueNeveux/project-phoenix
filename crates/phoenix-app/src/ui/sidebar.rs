@@ -131,19 +131,27 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
             .flex()
             .items_center()
             .border_b_1()
-            .border_color(c(Palette::HEADER_SHADOW))
+            .border_color(t(idx::BORDER_SUBTLE))
             .child(
+                // dump -channels-me+ #588: `button_F7qvhY sm secondary fullWidth`: ~31px,
+                // radius 8, `--control-secondary-background-default`, 1px `--border-muted`,
+                // centered `body-sm/medium` (14/18) `--text-strong`.
                 div()
                     .w_full()
-                    .h(z(28.))
+                    .h(z(31.))
                     .rounded(z(8.))
-                    .bg(c(Palette::BG_TERTIARY))
-                    .px(z(6.))
+                    .bg(t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+                    .border_1()
+                    .border_color(t(idx::BORDER_MUTED))
+                    .px(z(11.))
                     .flex()
                     .items_center()
+                    .justify_center()
                     .text_size(z(14.))
-                    .text_color(c(Palette::TEXT_MUTED))
-                    .child(crate::t!("dm.find")),
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(t(idx::TEXT_STRONG))
+                    .child(div().min_w_0().text_ellipsis().child(crate::t!("dm.find"))),
             )
             .id("dm-search")
             .cursor_pointer()
@@ -197,40 +205,74 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                             )),
                         )
                 })
-                .child(
+                .child({
+                    // `header_XH4OpX` (dump -channels-N-N+ #588): `--custom-channel-header-height`,
+                    // padding `--space-xs` (10px cozy), 1px `--border-subtle` bottom.
+                    // `guildDropdown_XH4OpX` (#590): 32px, padding 0 10, radius 8, gap 2;
+                    // name `body-md/semibold` (16/20) + 16px chevron. `inviteButton_XH4OpX`
+                    // (#609): 32px, radius 8, 20px glyph.
+                    let fg = if banner.is_some() { gpui::white() } else { t(idx::TEXT_STRONG) };
                     div()
-                        .id("guild-header")
                         .absolute()
                         .top_0()
                         .left_0()
                         .right_0()
                         .h(px(m::HEADER_H))
-                        .px(z(16.))
+                        .p(z(10.))
                         .flex()
                         .items_center()
                         .justify_between()
-                        .cursor_pointer()
-                        .on_click(cx.listener(|a, _, _, cx| {
-                            a.nav.guild_menu = !a.nav.guild_menu;
-                            cx.notify();
-                        }))
-                        .when(banner.is_none(), |d| {
-                            d.border_b_1().border_color(c(Palette::HEADER_SHADOW)).hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                        })
+                        .gap(z(4.))
+                        .when(banner.is_none(), |d| d.border_b_1().border_color(t(idx::BORDER_SUBTLE)))
                         .child(
                             div()
-                                .text_size(z(16.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(if banner.is_some() { gpui::white() } else { c(Palette::TEXT_HEADER) })
-                                .text_ellipsis()
-                                .child(g.name.clone()),
+                                .id("guild-header")
+                                .h(z(32.))
+                                .min_w_0()
+                                .px(z(10.))
+                                .flex()
+                                .items_center()
+                                .gap(z(2.))
+                                .rounded(z(8.))
+                                .cursor_pointer()
+                                .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                                .when(menu_open, |d| d.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                                .on_click(cx.listener(|a, _, _, cx| {
+                                    a.nav.guild_menu = !a.nav.guild_menu;
+                                    cx.notify();
+                                }))
+                                .child(
+                                    div()
+                                        .min_w_0()
+                                        .text_size(z(16.))
+                                        .line_height(z(20.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(fg)
+                                        .text_ellipsis()
+                                        .child(g.name.clone()),
+                                )
+                                .child(icon(if menu_open { Icon::Close } else { Icon::Chevron }, 16. * crate::theme::zoom(), fg)),
                         )
-                        .child(if menu_open {
-                            icon(Icon::Close, 18., if banner.is_some() { gpui::white() } else { c(Palette::TEXT_HEADER) })
-                        } else {
-                            icon(Icon::Chevron, 18., if banner.is_some() { gpui::white() } else { c(Palette::TEXT_HEADER) })
-                        }),
-                )
+                        .child(
+                            div()
+                                .id("guild-invite")
+                                .size(z(32.))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(z(8.))
+                                .cursor_pointer()
+                                .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                                .child(
+                                    gpui::svg()
+                                        .path(crate::icons::path("invite"))
+                                        .size(z(20.))
+                                        .flex_none()
+                                        .text_color(fg),
+                                ),
+                        )
+                })
                 .when(banner.is_none(), |d| d.h(px(m::HEADER_H)))
                 .into_any_element()
         }
@@ -263,9 +305,11 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
             div()
                 .id(("cat", id.0))
                 .group("cat")
+                // dump -channels-N-N+ #655/#656: li padding-top 16, row 24px,
+                // `.enlarge-target-size .wrapper_yOdhm_` padding-inline 20 / 6 (cozy).
                 .pt(z(16.))
-                .pl(z(16.))
-                .pr(z(8.))
+                .pl(z(20.))
+                .pr(z(6.))
                 .h(z(40.))
                 .flex()
                 .items_center()
@@ -300,10 +344,13 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                         ),
                 )
                 .child(
+                    // `addButton_yOdhm_ forceVisible_yOdhm_` (dump #662): 24px box, padding 4,
+                    // 16px glyph, always shown.
                     div()
-                        .opacity(0.)
-                        .group_hover("cat", |s| s.opacity(1.))
-                        .child(icon(Icon::Plus, 16., t(idx::CHANNELS_DEFAULT))),
+                        .size(z(24.))
+                        .flex_none()
+                        .p(z(4.))
+                        .child(icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::CHANNELS_DEFAULT))),
                 )
                 .into_any_element()
         }
@@ -322,59 +369,75 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         let selected = view.is_some_and(|v| v == home);
         let e = entity.clone();
         let stub = label.clone();
-        div()
-            .id(id)
-            .mx(z(8.))
-            .h(z(42.))
-            .px(z(8.))
-            .rounded(z(ROW_RADIUS))
-            .flex()
-            .items_center()
-            .gap(z(12.))
-            .cursor_pointer()
-            .text_size(z(16.))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
-            .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-            .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER)))
-            .on_click(move |_, _, cx| {
-                e.update(cx, |a, cx| match view {
-                    Some(v) => a.open_home_view(v, cx),
-                    None => a.stub(&stub, cx),
+        // dump -channels-me+ #597..#609: `channel_zln_tS` li 40px (padding 1/0, margin-left 8),
+        // `interactive_zln_tS` 38px radius 8, `link_zln_tS` padding 8 16 8 10; 20px glyph
+        // + 12px margin; `body-md/medium` label. Idle `--text-muted`, selected
+        // `--background-mod-strong` + `--text-default`.
+        div().w_full().pl(z(8.)).pr(z(8.)).py(z(1.)).child(
+            div()
+                .id(id)
+                .h(z(38.))
+                .pl(z(10.))
+                .pr(z(16.))
+                .rounded(z(8.))
+                .flex()
+                .items_center()
+                .gap(z(12.))
+                .cursor_pointer()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t(if selected { idx::TEXT_DEFAULT } else { idx::TEXT_MUTED }))
+                .when(selected, |d| d.bg(t(idx::BACKGROUND_MOD_STRONG)))
+                .when(!selected, |d| {
+                    d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                 })
-            })
-            .child(icon(i, 24., c(Palette::INTERACTIVE)))
-            .child(div().flex_1().child(label))
-            .when(count > 0, |d| d.child(badge(count).bg(c(Palette::NOTIFICATION))))
+                .on_click(move |_, _, cx| {
+                    e.update(cx, |a, cx| match view {
+                        Some(v) => a.open_home_view(v, cx),
+                        None => a.stub(&stub, cx),
+                    })
+                })
+                .child(icon(i, 20. * crate::theme::zoom(), t(if selected { idx::TEXT_STRONG } else { idx::TEXT_MUTED })))
+                .child(div().flex_1().min_w_0().text_ellipsis().child(label))
+                .when(count > 0, |d| d.child(badge(count).bg(c(Palette::NOTIFICATION)))),
+        )
     };
     let e = entity.clone();
     div()
-        .pt(z(8.))
+        .pt(z(8.)) // dump -channels-me+ #595: 8px spacer
         .flex()
         .flex_col()
-        .gap(z(2.))
         .child(nav("friends", Icon::Friends, crate::t!("friends.title"), Some(HomeView::Friends), pending))
         .child(nav("msg-requests", Icon::Inbox, crate::t!("friends.message_requests"), Some(HomeView::MessageRequests), requests))
         .child(nav("nitro", Icon::Nitro, crate::t!("dm.nitro"), None, 0))
         .child(nav("shop", Icon::Gift, crate::t!("dm.shop"), None, 0))
+        // `sectionDivider_u88IQl` (#648): 1px, margin 12/8, `--border-subtle`.
+        .child(div().mx(z(8.)).my(z(12.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
         .child(
+            // `privateChannelsHeaderContainer_Bce46W` (#649): 24px, padding 0 6 4 20,
+            // `body-sm/medium` 14/18 `--channels-default`; 24px action (padding 4, 16px glyph).
             div()
-                .pt(z(18.))
+                .h(z(24.))
+                .pl(z(20.))
+                .pr(z(6.))
                 .pb(z(4.))
-                .px(z(18.))
                 .flex()
                 .justify_between()
                 .items_center()
-                .text_size(z(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_MUTED))
-                .child(crate::t!("dm.header"))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t(idx::CHANNELS_DEFAULT))
+                .child(div().min_w_0().text_ellipsis().child(crate::t!("dm.header")))
                 .child(
                     div()
                         .id("new-dm")
+                        .size(z(24.))
+                        .p(z(4.))
                         .cursor_pointer()
                         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_group_dm_picker(cx)))
-                        .child(icon(Icon::Plus, 16., c(Palette::TEXT_MUTED))),
+                        .child(icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::TEXT_MUTED))),
                 ),
         )
 }
@@ -492,7 +555,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     div()
         .id(("ch", id.0))
         .relative()
-        .pl(z(8.))
+        // `wrapper_TNyK-N` margin-inline-start `--space-xs` (10px cozy, dump -channels-N-N+
+        // #628); DM `channel_zln_tS` margin 8 (dump -channels-me+ #656). Right: scrollbar gutter.
+        .pl(z(if is_dm { 8. } else { 10. }))
         .pr(z(8.))
         .py(z(1.))
         .child(
@@ -501,7 +566,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             div()
                 .absolute()
                 .left(z(1.))
-                .top(z(if is_dm { 18. } else { 13. }))
+                .top(z(if is_dm { 21. } else { 15. }))
                 .w(z(4.))
                 .h(z(8.))
                 .rounded_r(z(4.))
@@ -511,12 +576,14 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             div()
                 .id(("chrow", id.0))
                 .group(group)
-                .h(z(if is_dm { 42. } else { 32. }))
-                .px(z(8.))
+                // `link_TNyK-N` 36px, padding 4/10 (dump #629); DM `link_zln_tS` 48px, pl 10 (me #658).
+                .h(z(if is_dm { 48. } else { 36. }))
+                .pl(z(10.))
+                .pr(z(if is_dm { 4. } else { 10. }))
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
-                .gap(z(if is_dm { 12. } else { 8. })) // basicChannelRowLink_TNyK-N gap --space-xs
+                .gap(z(if is_dm { 12. } else { 10. })) // linkTop_TNyK-N gap --space-xs (10 cozy); DM avatar margin 12
                 .cursor_pointer()
                 .text_color(c(fg))
                 .when(ch.muted && !selected, |d| d.opacity(0.5))
@@ -540,7 +607,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .child(
                             div()
                                 .text_size(z(16.))
-                                .line_height(z(if is_dm { 20. } else { 24. })) // --channels-name-line-height
+                                .line_height(z(if is_dm { 20. } else { 28. })) // --channels-name-line-height (.density-cozy 28px)
                                 .font_weight(FontWeight::MEDIUM) // --font-weight-semibold-1x-light-theme (500)
                                 .text_ellipsis()
                                 .child(name),
@@ -573,14 +640,14 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
     div()
         .id(("thread", id.0))
         .relative()
-        .pl(z(8.))
+        .pl(z(10.)) // --space-xs (.density-cozy)
         .pr(z(8.))
         .child(
             div()
                 // `spine_reDhww`: `--channels-spine-offset-left`, `--spine-default`.
                 .absolute()
-                .left(z(24.))
-                .top(z(-12.))
+                .left(z(28.)) // --channels-spine-offset-left (.density-cozy 28px)
+                .top(z(-14.))
                 .w(z(12.))
                 .h(z(28.))
                 .border_l_1()
@@ -594,14 +661,14 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                 // `typeThread_TNyK-N.wrapper`: margin `28px + --space-xs` from the list
                 // (8px of it is the row inset); link padding 4px / `--space-xs`.
                 .ml(z(28.))
-                .h(z(32.))
-                .px(z(8.))
+                .h(z(36.))
+                .px(z(10.))
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
                 .cursor_pointer()
                 .text_size(z(16.))
-                .line_height(z(24.))
+                .line_height(z(28.)) // --channels-name-line-height (cozy)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t(if selected || unread { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNELS_DEFAULT }))
                 .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
@@ -641,7 +708,7 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     div()
         .flex_none()
-        .m(z(8.))
+        .m(z(10.)) // dump -channels-N-N+ #976 `panels_pog62O` at x=10 / bottom 10 (cozy --space-xs)
         .rounded(z(8.))
         .border_1()
         .border_color(t(idx::BORDER_MUTED)) // panels_pog62O
@@ -662,15 +729,15 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         crate::model::Presence::Offline => crate::t!("status.invisible"),
     };
     let muted = app.mic_muted || app.deafened;
-    // `container_g6VwXp`: 56px, padding `--custom-guild-list-padding -
-    // --custom-panels-spacing + 4px` (12px), `--space-xs` gap.
+    // `container_g6VwXp` (dump -channels-N-N+ #979): 56px, padding 14px, gap
+    // `--space-xs` (10px cozy).
     div()
         .h(z(m::USER_PANEL_H))
         .flex_none()
-        .px(z(12.))
+        .px(z(14.))
         .flex()
         .items_center()
-        .gap(z(8.))
+        .gap(z(10.))
         .child(
             // `accountPopoutButtonWrapper_g6VwXp`: -4px inline-start margin,
             // 5px 4px padding, `--radius-xs`, 8px gap, hover `--background-mod-normal`.
@@ -678,9 +745,9 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .id("me")
                 .flex_1()
                 .min_w(z(112.))
-                .ml(z(-4.))
+                .ml(z(-6.)) // dump #980: margin-inline-start -6, padding 5/6
                 .py(z(5.))
-                .px(z(4.))
+                .px(z(6.))
                 .flex()
                 .items_center()
                 .gap(z(8.))
@@ -698,18 +765,21 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                             div()
                                 .mt(z(-1.)) // panelTitleContainer_g6VwXp
                                 .mb(z(2.))
-                                .text_size(z(14.))
-                                .line_height(z(18.))
-                                .font_weight(FontWeight::SEMIBOLD)
+                                // dump #985 `body-md/medium` 16/22, `--text-strong`
+                                .text_size(z(16.))
+                                .line_height(z(22.))
+                                .font_weight(FontWeight::MEDIUM)
                                 .text_color(t(idx::TEXT_STRONG))
                                 .text_ellipsis()
                                 .child(app.me.display_name.clone()),
                         )
                         .child(
                             div()
+                                // dump #989 `body-xs/medium` 12/13, `--interactive-text-default`
                                 .text_size(z(12.))
-                                .line_height(z(14.))
-                                .text_color(t(idx::TEXT_MUTED))
+                                .line_height(z(13.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
                                 .text_ellipsis()
                                 .child(app.people.custom_status.clone().unwrap_or(status)),
                         ),
