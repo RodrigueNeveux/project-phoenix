@@ -168,6 +168,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/deny.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="m5 5 14 14"/>"#),
         "icons/blur.svg" => s!(r#"<circle cx="12" cy="12" r="9" stroke-dasharray="2 3"/><circle cx="12" cy="12" r="4"/>"#),
         "icons/play.svg" => f!(r#"<path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/>"#),
+        "icons/refresh.svg" => s!(r#"<path d="M20 4v5h-5"/><path d="M19.5 9A8 8 0 0 0 5 7"/><path d="M4 20v-5h5"/><path d="M4.5 15A8 8 0 0 0 19 17"/>"#),
         "icons/image-plus.svg" => s!(r#"<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9M3 17l5-5 4 4 2-2 7 7M18 2v6M15 5h6"/>"#),
         "icons/palette.svg" => s!(r#"<path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/>"#),
         "icons/info.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h0"/>"#),
