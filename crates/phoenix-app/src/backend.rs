@@ -214,4 +214,28 @@ pub trait Backend: Send + Sync + 'static {
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })
     }
+    fn guild_emojis(&self, _guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
+        Vec::new()
+    }
+    fn guild_stickers(&self, _guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
+        Vec::new()
+    }
+    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn send_sticker(&self, _channel: Id, _sticker: Id) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("Stickers aren't available.".into())) })
+    }
+    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
+        Box::pin(async { Err(BackendError("GIFs aren't available.".into())) })
+    }
+    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn gif_search(&self, _query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn search_messages(&self, _req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
+        Box::pin(async { Err(BackendError("Search isn't available.".into())) })
+    }
 }
