@@ -529,7 +529,8 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
     let banner_bg = e.theme.map(|t| t.0).or(e.profile.as_ref().and_then(|p| p.accent)).unwrap_or(0x5865F2);
     let banner_tile: AnyElement = match (&e.banner, e.profile.as_ref().and_then(|p| p.banner.clone())) {
         (Some(p), _) => img(p.clone()).size_full().into_any_element(),
-        (None, Some(url)) => img(url).size_full().into_any_element(),
+        // bannerImage_xC0IIt (#3293): object-fit cover in the 100x100 tile.
+        (None, Some(url)) => img(url).size_full().object_fit(gpui::ObjectFit::Cover).into_any_element(),
         (None, None) => plus_icon(24.).into_any_element(),
     };
     let swatch = |i: u8, col: u32| {
@@ -606,13 +607,18 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
                 .flex()
                 .gap(z(8.))
                 .child(tile("avatar", 100., 100., false).child(avatar_preview).on_click(cx.listener(|_, _, _, cx| pick_image(false, cx))))
-                .child(tile("decoration", 100., 100., locked).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Decoration, cx))))
+                .child(tile("decoration", 100., 100., locked).map(|t| match decoration_url(e) {
+                    // decorationPreview: the avatar (72, #3249) wearing the chosen decoration.
+                    Some(d) => t.child(div().relative().size(z(72.)).child(avatar(Some(me), 72.)).child(img(d).absolute().size(z(86.4)).left(z(-7.2)).top(z(-7.2)))),
+                    None => t.child(plus_icon(24.)),
+                }).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Decoration, cx))))
                 .into_any_element(),
         ))
         .child(group(
             group_label("sp.pf.name_style", true),
             tile("name-style", 208., 42., locked)
-                .child(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(me.display_name.clone()))
+                // displayNamePreview_ewY9mf (#3265): dnsFont_ + the style's font.
+                .child(crate::fonts::styled_name(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))), Some(me), true).child(me.display_name.clone()))
                 .into_any_element(),
         ))
         .child(group(
@@ -733,7 +739,7 @@ fn inline_field(child: AnyElement) -> Div {
     div().rounded(z(8.)).px(z(7.)).ml(z(-7.)).hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))).child(child)
 }
 
-fn card(app: &PhoenixApp, e: &EditorState) -> Div {
+fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Div {
     let me = &app.me;
     let banner_col = e.theme.map(|t| t.0).or(e.profile.as_ref().and_then(|p| p.accent)).unwrap_or(0x5865F2);
     let banner: AnyElement = match (&e.banner, e.profile.as_ref().and_then(|p| p.banner.clone())) {
@@ -775,12 +781,25 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
         None => SharedString::from(e.original.name.clone()).into_any_element(),
     };
     let pronouns: AnyElement = match &e.pronouns {
-        Some(i) => div().w(z(140.)).child(Input::new(i).appearance(false).bordered(false)).into_any_element(),
+        // container_IEutSJ compact_ (#3399): 134 wide, no inline offset.
+        Some(i) => div().w(z(134.)).child(Input::new(i).appearance(false).bordered(false)).into_any_element(),
         None => SharedString::from(e.original.pronouns.clone()).into_any_element(),
     };
+    // Unfocused, the client shows the rendered bio (markup_ku1OHH bio_qjJ3Wv,
+    // links in --text-link, dump #3447) over the editable box (#3443).
+    let bio_text: SharedString = e.bio.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| e.original.bio.clone()).into();
     let bio: AnyElement = match &e.bio {
-        Some(i) => Textarea::new(i).appearance(false).bordered(false).into_any_element(),
-        None => SharedString::from(e.original.bio.clone()).into_any_element(),
+        Some(i) if bio_focused || bio_text.is_empty() => Textarea::new(i).appearance(false).bordered(false).into_any_element(),
+        Some(i) => {
+            let fh = gpui::Focusable::focus_handle(i.read(cx), cx);
+            div()
+                .id("pe-bio-preview")
+                .cursor_text()
+                .on_click(move |_, window, cx| window.focus(&fh, cx))
+                .child(bio_markup(bio_text))
+                .into_any_element()
+        }
+        None => bio_markup(bio_text).into_any_element(),
     };
     let created = e.profile.as_ref().map(|p| p.created).unwrap_or_else(|| crate::presence::snowflake_time(me.id.0));
     let sec_btn = |id: &str, icon: &str| {
@@ -806,19 +825,27 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
             div()
                 .flex()
                 .flex_col()
-                .child(inline_field(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name).into_any_element()))
+                .child(inline_field(
+                    // dnsFont_OAgVZM + font class (dump #3387): the name style font and first colour.
+                    crate::fonts::styled_name(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(strong), Some(me), true)
+                        .child(name)
+                        .into_any_element(),
+                ))
                 .child(
                     div()
                         .flex()
                         .items_center()
                         .gap(z(6.))
                         .h(z(32.))
+                        .mt(z(4.)) // usernameAndPronounsRow_ at body+44 (#3395)
                         .text_size(z(14.))
                         .line_height(z(18.))
                         .text_color(strong)
                         .child(me.name.clone())
                         .child(div().size(z(4.)).mx(z(1.)).rounded_full().bg(strong)) // dotSpacer_C2XpHA
-                        .child(inline_field(div().italic().child(pronouns).into_any_element())),
+                        .child(div().flex_none().rounded(z(8.)).hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))).italic().child(pronouns))
+                        .when_some(me.tag.clone(), |d, t| d.child(tag_select(t, strong)))
+                        .when_some(badges_row(e.profile.as_ref()), |d, b| d.child(b)),
                 ),
         )
         .child(
@@ -836,12 +863,14 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                         .text_size(z(14.))
                         .line_height(z(18.))
                         .opacity(0.5)
-                        .when_some(e.theme, |b, t| b.bg(hex(mix(t.0, 0, 0.6)))),
+                        .when_some(e.theme, |b, t| b.bg(hex(gradient_button_color(t.0)))),
                 )
-                .child(sec_btn("gift", "gift"))
+                .child(sec_btn("shop", "shop")) // "Boutique" (dump #3427))
                 .child(sec_btn("more", "more-vertical")),
         )
-        .child(section("pe.bio", heading, inline_field(div().text_size(z(14.)).line_height(z(18.)).text_color(strong).child(bio).into_any_element())))
+        // editable_IEutSJ (#3443) starts right under the heading (-8 of the
+        // section gap), markup at +5/+7 (#3444).
+        .child(section("pe.bio", heading, inline_field(div().mt(z(-8.)).pt(z(5.)).pb(z(4.)).text_size(z(14.)).line_height(z(18.)).text_color(strong).child(bio).into_any_element())))
         .child(section(
             "pe.member_since",
             heading,
@@ -860,6 +889,24 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                 .text_color(if themed { white(0.76) } else { c(tok(idx::TEXT_MUTED)) })
                 .child(gpui::svg().path(crate::icons::path("plus")).size(z(18.)).text_color(if themed { white(0.76) } else { c(tok(idx::TEXT_MUTED)) }))
                 .child(crate::t!("pe.add_connection")),
+        ))
+        // Note section (#3462-#3475): container_IEutSJ note_nr7Zul margin -4 -7 0,
+        // notePreview_zt0NuP body-sm 14/18, placeholder when empty.
+        .child(section(
+            "pe.note",
+            heading,
+            div()
+                .mt(z(-4.))
+                .ml(z(-7.))
+                .px(z(7.))
+                .rounded(z(8.))
+                .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .map(|d| match e.profile.as_ref().map(|p| p.note.clone()).filter(|n| !n.is_empty()) {
+                    Some(n) => d.text_color(strong).child(n),
+                    None => d.text_color(if themed { white(0.6) } else { c(tok(idx::TEXT_MUTED)) }).child(crate::t!("profile.note_placeholder")),
+                }),
         ));
     div()
         .w(z(400.))
@@ -895,6 +942,8 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                         .items_center()
                         .justify_center()
                         .child(av)
+                        // Avatar decorations are drawn at 1.2x the avatar, centred.
+                        .children(decoration_url(e).map(|d| img(d).absolute().size(z(134.4)).left(z(-7.2)).top(z(-7.2))))
                         .child(
                             // editButton_2IR9L0: opacity 0 until hover (dump #3344).
                             div().absolute().top(z(44.)).left(z(44.)).opacity(0.).group_hover("pe-avatar", |s| s.opacity(1.)).child(overlay_button("avatar", "pen")),
@@ -923,6 +972,140 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
             )
         })
         .child(div().id("pe-card-body").flex_1().min_h_0().overflow_y_scroll().child(body))
+}
+
+/// Decoration shown in the editor: the picker choice ("Apply", preview
+/// only) or the profile's current one.
+fn decoration_url(e: &EditorState) -> Option<SharedString> {
+    use super::collectibles::Kind;
+    match e.equipped.get(Kind::Decoration) {
+        Some(Some(sku)) => e.collectibles.as_ref()?.iter().find(|c| c.sku == sku && c.kind == Kind::Decoration)?.preview.clone(),
+        Some(None) => None,
+        None => e.profile.as_ref()?.decoration.clone(),
+    }
+}
+
+/// Bio rendered like the client's preview: bare http(s) links in --text-link.
+fn bio_markup(t: SharedString) -> gpui::StyledText {
+    let link = gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() };
+    let mut hl = Vec::new();
+    let mut i = 0;
+    while let Some(off) = t[i..].find("http") {
+        let st = i + off;
+        let rest = &t[st..];
+        if rest.starts_with("https://") || rest.starts_with("http://") {
+            let len = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            hl.push((st..st + len, link));
+            i = st + len;
+        } else {
+            i = st + 4;
+        }
+    }
+    gpui::StyledText::new(t).with_highlights(hl)
+}
+
+/// Server tag select (selectButtonPill_C3qxaU, dump #3408-#3411): 24 high,
+/// padding 0 6 0 8, r8, --background-mod-normal + 1px --border-subtle; content
+/// body-xs 12/16 gap 2, badge 14, chevron 16 with margin-left 2.
+fn tag_select((t, badge): (SharedString, Option<SharedString>), color: gpui::Hsla) -> Div {
+    div()
+        .flex_none()
+        .h(z(24.))
+        .pl(z(8.))
+        .pr(z(6.))
+        .flex()
+        .items_center()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(2.))
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .not_italic()
+                .text_color(color)
+                .when_some(badge, |d, b| d.child(img(b).size(z(14.)).flex_none()))
+                .child(t),
+        )
+        .child(gpui::svg().path(crate::icons::path("chevron")).size(z(16.)).ml(z(2.)).text_color(color))
+}
+
+/// Profile badges (container_IqWmhA managed_ customizable_, dump #3412):
+/// padding 1 3, margin 1 0, gap 2, r8, 20px badges.
+fn badges_row(p: Option<&Profile>) -> Option<Div> {
+    let b = p.map(|p| p.badges.as_slice()).unwrap_or_default();
+    (!b.is_empty()).then(|| {
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap(z(2.))
+            .my(z(1.))
+            .px(z(3.))
+            .py(z(1.))
+            .rounded(z(8.))
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_MUTED)))
+            .children(b.iter().map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none()))
+    })
+}
+
+/// sRGB channel to linear.
+fn lin(v: f32) -> f32 {
+    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+}
+
+fn unlin(v: f32) -> f32 {
+    if v <= 0.0031308 { v * 12.92 } else { 1.055 * v.powf(1. / 2.4) - 0.055 }
+}
+
+fn luminance(rgb: u32) -> f32 {
+    let ch = |s: u32| lin(((rgb >> s) & 0xff) as f32 / 255.);
+    0.2126 * ch(16) + 0.7152 * ch(8) + 0.0722 * ch(0)
+}
+
+/// Lab (D65) lightness shift by `d`, like chroma.js darken/brighten (18 per step).
+fn lab_shift(rgb: u32, d: f32) -> u32 {
+    let ch = |s: u32| lin(((rgb >> s) & 0xff) as f32 / 255.);
+    let (r, g, b) = (ch(16), ch(8), ch(0));
+    let x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047;
+    let y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b;
+    let zz = (0.0193339 * r + 0.119192 * g + 0.9503041 * b) / 1.08883;
+    let f = |t: f32| if t > 0.008856452 { t.cbrt() } else { t / 0.12841855 + 0.137931034 };
+    let (fx, fy, fz) = (f(x), f(y), f(zz));
+    let (l, a, bb) = (116. * fy - 16. + d, 500. * (fx - fy), 200. * (fy - fz));
+    let fy = (l + 16.) / 116.;
+    let inv = |t: f32| if t > 0.206896552 { t * t * t } else { 0.12841855 * (t - 0.137931034) };
+    let (x, y, zz) = (0.95047 * inv(fy + a / 500.), inv(fy), 1.08883 * inv(fy - bb / 200.));
+    let r = 3.2404542 * x - 1.5371385 * y - 0.4985314 * zz;
+    let g = -0.969266 * x + 1.8760108 * y + 0.041556 * zz;
+    let b = 0.0556434 * x - 0.2040259 * y + 1.0572252 * zz;
+    let q = |v: f32| (unlin(v).clamp(0., 1.) * 255.).round() as u32;
+    (q(r) << 16) | (q(g) << 8) | q(b)
+}
+
+/// --profile-gradient-button-color: the client walks the primary colour in Lab
+/// steps until its contrast with white is in [7, 10] (HighContrastText 7,
+/// tolerance 3, at most 100 steps).
+fn gradient_button_color(primary: u32) -> u32 {
+    let contrast = |c: u32| 1.05 / (luminance(c) + 0.05);
+    let mut c = primary;
+    for _ in 0..100 {
+        let k = contrast(c);
+        if k < 7. {
+            c = lab_shift(c, -18.);
+        } else if k > 10. {
+            c = lab_shift(c, 18.);
+        } else {
+            break;
+        }
+    }
+    c
 }
 
 fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
@@ -1049,6 +1232,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
     };
     ensure_inputs(app, window, cx);
     let dirty = e.dirty(cx);
+    let bio_focused = e.bio.as_ref().is_some_and(|i| gpui::Focusable::focus_handle(i.read(cx), cx).is_focused(window));
     let close = div()
         .id("pe-close")
         .absolute()
@@ -1124,7 +1308,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
                 .pr(z(32.))
                 .pl(z(48.))
                 .flex()
-                .child(card(app, e))
+                .child(card(app, e, bio_focused, cx))
                 .child(tabs(e, cx)),
         )
         .when(dirty || e.error.is_some(), |d| d.child(unsaved_bar(e, cx)));
@@ -1154,6 +1338,16 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn button_color_matches_client() {
+        // Dump #3421: theme primary #00A7FF gives rgb(0, 77, 154).
+        // chroma.js rounds Lab slightly differently: allow 1/255 per channel.
+        let got = gradient_button_color(0x00A7FF);
+        for sh in [16, 8, 0] {
+            assert!((((got >> sh) & 0xff) as i32 - ((0x004D9A >> sh) & 0xff) as i32).abs() <= 1, "{got:06x}");
+        }
+    }
 
     #[test]
     fn diff_only_sends_changed_fields() {
