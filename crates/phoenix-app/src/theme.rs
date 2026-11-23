@@ -214,10 +214,10 @@ pub fn to_rgba(h: Hsla) -> Rgba {
 pub mod m {
     pub const SERVER_BAR_W: f32 = 72.;
     pub const GUILD_ICON: f32 = 48.;
-    pub const SIDEBAR_W: f32 = 240.;
+    pub const SIDEBAR_W: f32 = 268.;
     pub const MEMBER_LIST_W: f32 = 240.;
     pub const HEADER_H: f32 = 48.;
-    pub const USER_PANEL_H: f32 = 52.;
+    pub const USER_PANEL_H: f32 = 56.;
     pub const AVATAR: f32 = 40.;
     pub const MSG_GUTTER: f32 = 72.;
     pub const MEMBER_ROW_H: f32 = 42.;

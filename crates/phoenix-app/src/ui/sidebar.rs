@@ -1,4 +1,8 @@
-//! 240px channel sidebar: guild header, channel tree / DM list, user panel.
+//! Channel sidebar (268px, `--custom-guild-sidebar-width`): guild header,
+//! channel tree / DM list, and the floating panels card (voice + user).
+
+/// `--radius-sm`: channel and DM rows in the refreshed client.
+const ROW_RADIUS: f32 = 8.;
 
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled,
@@ -10,8 +14,8 @@ use crate::{
     ui::home::data::HomeView,
     assets::Icon,
     model::{ChannelKind, Id},
-    theme::{Palette, c, m},
-    ui::{avatar, avatar_with_status, badge, icon, icon_button},
+    theme::{Palette, c, m, z},
+    ui::{avatar_with_status, badge, icon},
 };
 
 pub fn channel_icon(kind: ChannelKind) -> Icon {
@@ -90,7 +94,7 @@ pub fn build_rows(app: &mut PhoenixApp) {
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     div()
-        .w(px(m::SIDEBAR_W))
+        .w(z(m::SIDEBAR_W))
         .flex_none()
         .h_full()
         .flex()
@@ -105,8 +109,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 list(app.sidebar_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full(),
             ),
         )
-        .when(app.voice_channel.is_some(), |d| d.child(crate::ui::voice_panel::voice_panel(app, cx)))
-        .child(user_panel(app, cx))
+        .child(panels(app, cx))
         .when_some(app.selected_guild.filter(|_| app.nav.guild_menu), |d, g| {
             d.child(crate::ui::guild_menu::render(app, g, m::HEADER_H + 4., cx))
         })
@@ -295,9 +298,9 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         div()
             .id(id)
             .mx(px(8.))
-            .h(px(42.))
-            .px(px(8.))
-            .rounded(px(4.))
+            .h(z(42.))
+            .px(z(8.))
+            .rounded(z(ROW_RADIUS))
             .flex()
             .items_center()
             .gap(px(12.))
@@ -315,7 +318,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
             })
             .child(icon(i, 24., c(Palette::INTERACTIVE)))
             .child(div().flex_1().child(label))
-            .when(count > 0, |d| d.child(badge(count)))
+            .when(count > 0, |d| d.child(badge(count).bg(c(Palette::NOTIFICATION))))
     };
     let e = entity.clone();
     div()
@@ -385,14 +388,18 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let extra = app.nav.extras.get(&id);
     let is_group = extra.is_some_and(|e| e.recipients > 1 || e.group_icon.is_some());
     let unread = ch.unread && !ch.muted;
+    // `--channels-default` at rest, `--interactive-text-active` when selected
+    // or unread, `--interactive-muted` when muted.
     let fg = if selected {
         Palette::TEXT_HEADER
     } else if ch.muted {
         Palette::INTERACTIVE_MUTED
     } else if ch.unread {
         Palette::TEXT_HEADER
-    } else {
+    } else if is_dm {
         Palette::TEXT_MUTED
+    } else {
+        Palette::CHANNEL_ICON
     };
     let e = entity.clone();
     let lead: AnyElement = if is_dm && is_group {
@@ -464,15 +471,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .w(px(4.))
                 .h(px(8.))
                 .rounded_r(px(4.))
-                .when(unread && !selected, |d| d.bg(gpui::white())),
+                .when(unread && !selected, |d| d.bg(c(Palette::TEXT_HEADER))),
         )
         .child(
             div()
                 .id(("chrow", id.0))
                 .group(group)
-                .h(px(if is_dm { 42. } else { 32. }))
-                .px(px(8.))
-                .rounded(px(4.))
+                .h(z(if is_dm { 42. } else { 32. }))
+                .px(z(8.))
+                .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
                 .gap(px(if is_dm { 12. } else { 6. }))
@@ -511,7 +518,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                             )
                         }),
                 )
-                .when(ch.mentions > 0, |d| d.child(badge(ch.mentions)))
+                .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
                 .when(ch.mentions == 0, |d| d.children(invite_hover))
                 .children(close),
         )
@@ -547,9 +554,9 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
             div()
                 .id(("threadrow", id.0))
                 .ml(px(36.))
-                .h(px(32.))
-                .px(px(8.))
-                .rounded(px(4.))
+                .h(z(32.))
+                .px(z(8.))
+                .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
                 .cursor_pointer()
@@ -562,9 +569,45 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_thread(id, cx)))
                 .child(div().flex_1().min_w_0().text_ellipsis().child(t.name.clone()))
-                .when(mentions > 0, |d| d.child(badge(mentions))),
+                .when(mentions > 0, |d| d.child(badge(mentions).bg(c(Palette::NOTIFICATION)))),
         )
         .into_any_element()
+}
+
+/// The floating panels card at the bottom of the sidebar: `--background-base-low`,
+/// 1px border, 8px radius, 8px from the edges. Holds the voice panel (when
+/// connected) above the user row.
+fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    div()
+        .flex_none()
+        .m(z(8.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(Palette::PANEL_BORDER))
+        .bg(c(Palette::BG_SECONDARY_ALT))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .when(app.voice_channel.is_some(), |d| d.child(crate::ui::voice_panel::voice_panel(app, cx)))
+        .child(user_panel(app, cx))
+}
+
+/// 32px panel button: 8px radius, mod-subtle on hover; red glyph on a
+/// critical tint when `danger` (muted / deafened).
+fn panel_button(id: &'static str, i: Icon, danger: bool, tip: &'static str) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .size(z(32.))
+        .flex_none()
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .when(danger, |d| d.bg(c(Palette::RED).opacity(0.15)).hover(|s| s.bg(c(Palette::RED).opacity(0.25))))
+        .when(!danger, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER))))
+        .child(icon(i, 20. * crate::theme::zoom(), c(if danger { Palette::RED } else { Palette::INTERACTIVE })))
+        .tooltip(crate::ui::tooltip::tip(tip))
 }
 
 fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -574,29 +617,28 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         crate::model::Presence::Dnd => "Do Not Disturb",
         crate::model::Presence::Offline => "Invisible",
     };
-    let red = c(Palette::RED);
-    let normal = c(Palette::INTERACTIVE);
+    let muted = app.mic_muted || app.deafened;
     div()
-        .h(px(m::USER_PANEL_H))
+        .h(z(m::USER_PANEL_H))
         .flex_none()
-        .bg(c(Palette::BG_SECONDARY_ALT))
-        .px(px(8.))
+        .px(z(8.))
         .flex()
         .items_center()
-        .gap(px(2.))
+        .gap(z(4.))
         .child(
             div()
                 .id("me")
                 .flex_1()
                 .min_w_0()
+                .h(z(40.))
                 .flex()
                 .items_center()
-                .gap(px(8.))
-                .pl(px(2.))
-                .py(px(4.))
-                .rounded(px(4.))
+                .gap(z(8.))
+                .pl(z(4.))
+                .pr(z(8.))
+                .rounded(z(8.))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(0x3D3E45)))
+                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
                 .child(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)))
                 .child(
@@ -606,8 +648,8 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .flex_col()
                         .child(
                             div()
-                                .text_size(px(14.))
-                                .line_height(px(18.))
+                                .text_size(z(14.))
+                                .line_height(z(18.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .text_ellipsis()
@@ -615,8 +657,8 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         )
                         .child(
                             div()
-                                .text_size(px(12.))
-                                .line_height(px(13.))
+                                .text_size(z(12.))
+                                .line_height(z(14.))
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .text_ellipsis()
                                 .child(app.people.custom_status.clone().unwrap_or(status.into())),
@@ -624,24 +666,19 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 ),
         )
         .child(
-            icon_button(
-                "mute",
-                if app.mic_muted || app.deafened { Icon::MicOff } else { Icon::Mic },
-                if app.mic_muted || app.deafened { red } else { normal },
-                20.,
-            )
-            .on_click(cx.listener(|a, _, _, cx| {
-                a.mic_muted = !a.mic_muted;
-                crate::voice::sync_self_state(a);
-                cx.notify();
-            })),
+            panel_button("mute", if muted { Icon::MicOff } else { Icon::Mic }, muted, if muted { "Unmute" } else { "Mute" })
+                .on_click(cx.listener(|a, _, _, cx| {
+                    a.mic_muted = !a.mic_muted;
+                    crate::voice::sync_self_state(a);
+                    cx.notify();
+                })),
         )
         .child(
-            icon_button(
+            panel_button(
                 "deafen",
                 if app.deafened { Icon::HeadphonesOff } else { Icon::Headphones },
-                if app.deafened { red } else { normal },
-                20.,
+                app.deafened,
+                if app.deafened { "Undeafen" } else { "Deafen" },
             )
             .on_click(cx.listener(|a, _, _, cx| {
                 a.deafened = !a.deafened;
@@ -650,9 +687,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             })),
         )
         .child(
-            // No settings screen yet: the gear logs out (and forgets the stored token).
-            icon_button("settings", Icon::Gear, normal, 20.)
-                .tooltip(|window, cx| gpui_component::tooltip::Tooltip::new("Log out").build(window, cx))
+            panel_button("settings", Icon::Gear, false, "User Settings")
                 .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
         )
 }

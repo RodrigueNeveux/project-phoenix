@@ -1,17 +1,24 @@
-//! 72px guild rail: Home, guilds and guild folders (from `guild_folders`),
+//! 72px guild rail (40px rounded-square tiles, animated pill, name tooltips): Home, guilds and guild folders (from `guild_folders`),
 //! Add a Server (join by invite) and Discover. Guilds can be dragged to
 //! reorder them locally (not synced to Discord yet).
 
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    time::Duration,
+};
+
 use gpui::{
-    AnyElement, App, Context, Entity, FontWeight, Hsla, ImageSource, IntoElement, ParentElement, Render,
-    SharedString, Styled, Window, div, img, prelude::*, px,
+    Animation, AnimationExt, AnchoredPositionMode, AnyElement, App, Context, ElementId, Entity, FontWeight,
+    ImageSource, IntoElement, ParentElement, Render, SharedString, Styled, Window, anchored, deferred, div,
+    ease_out_quint, img, point, prelude::*, px,
 };
 
 use crate::{
     app::PhoenixApp,
     assets::Icon,
     model::{Guild, Id, ImageRef},
-    theme::{Palette, c, m},
+    theme::{Palette, c, m, z},
     ui::{badge, icon},
 };
 
@@ -58,11 +65,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .id("guild-rail")
         .size_full()
         .overflow_y_scroll()
-        .pt(px(12.))
-        .pb(px(12.))
+        .pt(z(PAD_Y))
+        .pb(z(PAD_Y))
         .flex()
         .flex_col()
-        .gap(px(8.))
+        .gap(z(GAP))
         .child(home(app, &entity))
         .child(separator());
     for item in rail(app) {
@@ -76,87 +83,199 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     let e = entity.clone();
     col = col
         .child(separator())
-        .child(action("add-server", Icon::Plus).on_click(move |_, w, cx| e.update(cx, |a, cx| a.open_join_server(w, cx))))
+        .child(
+            action(&entity, "add-server", Icon::Plus, "Add a Server")
+                .on_click(move |_, w, cx| e.update(cx, |a, cx| a.open_join_server(w, cx))),
+        )
         .child({
             let e = entity.clone();
-            action("discover", Icon::Compass).on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub("Discover", cx)))
+            action(&entity, "discover", Icon::Compass, "Discover")
+                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub("Discover", cx)))
         });
-    div().w(px(m::SERVER_BAR_W)).flex_none().h_full().bg(c(Palette::BG_TERTIARY)).child(col)
+    div().w(z(m::SERVER_BAR_W)).flex_none().h_full().bg(c(Palette::BG_TERTIARY)).child(col)
 }
 
-/// White pill on the left edge: 40px selected, 8px unread, 20px on hover.
-fn pill(group: SharedString, selected: bool, unread: bool) -> impl IntoElement {
-    let h = if selected {
+// Observed metrics of the official guild rail (refresh layout, default density).
+/// `--guildbar-avatar-size`.
+const ICON: f32 = 40.;
+/// `--guildbar-folder-size`.
+const FOLDER: f32 = 48.;
+/// `--radius-md`: guild icons are rounded squares.
+const ICON_RADIUS: f32 = 12.;
+/// `--radius-lg`: open folder background.
+const FOLDER_RADIUS: f32 = 16.;
+const GAP: f32 = 8.;
+const PAD_Y: f32 = 12.;
+/// Pill animation duration.
+const PILL_MS: u64 = 150;
+
+thread_local! {
+    /// Rail item currently under the mouse (drives the pill and the tooltip).
+    static HOVERED: Cell<Option<u64>> = const { Cell::new(None) };
+    /// Last pill target height per rail item, so a change animates from it.
+    static PILLS: RefCell<HashMap<u64, (f32, f32, u32)>> = RefCell::new(HashMap::new());
+}
+
+fn hovered(key: u64) -> bool {
+    HOVERED.with(|h| h.get() == Some(key))
+}
+
+/// Make `el` update the shared hover state (and re-render) on enter/leave.
+fn track_hover(el: gpui::Stateful<gpui::Div>, key: u64, entity: &Entity<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let e = entity.clone();
+    el.on_hover(move |over, _, cx| {
+        let changed = HOVERED.with(|h| {
+            let next = if *over { Some(key) } else if h.get() == Some(key) { None } else { h.get() };
+            let changed = next != h.get();
+            h.set(next);
+            changed
+        });
+        if changed {
+            e.update(cx, |_, cx| cx.notify());
+        }
+    })
+}
+
+/// Server-name tooltip to the right of the rail, like the official client
+/// (surface-high card, 1px subtle border, 8px radius, 8/12 padding, pointer).
+pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
+    let card = div()
+        .max_w(z(196.))
+        .px(z(12.))
+        .py(z(8.))
+        .rounded(z(8.))
+        .bg(c(Palette::BG_FLOATING))
+        .border_1()
+        .border_color(c(Palette::PANEL_BORDER))
+        .shadow_lg()
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(Palette::TEXT_NORMAL))
+        .child(text);
+    // Left-pointing 5px triangle, drawn as stacked 1px slices.
+    let mut pointer = div().flex().flex_col().justify_center().items_end().w(z(5.));
+    for i in 0..9 {
+        let w = 5. - (4. - i as f32).abs();
+        pointer = pointer.child(div().w(z(w)).h(z(1.)).bg(c(Palette::BG_FLOATING)));
+    }
+    let tip = deferred(
+        anchored().position_mode(AnchoredPositionMode::Local).position(point(z(m::SERVER_BAR_W), px(0.))).child(
+            div()
+                .h(z(item_h))
+                .flex()
+                .items_center()
+                .child(pointer)
+                .child(card)
+                .with_animation(
+                    "rail-tip",
+                    Animation::new(Duration::from_millis(100)).with_easing(ease_out_quint()),
+                    |d, t| d.opacity(t).ml(z(-6. * (1. - t))),
+                ),
+        ),
+    )
+    .with_priority(2);
+    div().absolute().top_0().left_0().child(tip).into_any_element()
+}
+
+/// Pill on the left edge: 40px selected, 20px hovered, 8px unread.
+/// `--text-strong`, 8px wide with half of it off-screen, 0 4 4 0 radius.
+fn pill(key: u64, selected: bool, hover: bool, unread: bool) -> AnyElement {
+    let target = if selected {
         40.
+    } else if hover {
+        20.
     } else if unread {
         8.
     } else {
         0.
     };
-    div().absolute().left_0().top_0().h(px(m::GUILD_ICON)).w(px(4.)).flex().items_center().child(
-        div()
-            .w(px(4.))
-            .h(px(h))
-            .bg(gpui::white())
-            .rounded_r(px(4.))
-            .when(!selected, |d| d.group_hover(group, |s| s.h(px(20.)))),
+    let (from, to, epoch) = PILLS.with(|p| {
+        let mut p = p.borrow_mut();
+        let e = p.entry(key).or_insert((target, target, 0));
+        if e.1 != target {
+            *e = (e.1, target, e.2.wrapping_add(1));
+        }
+        *e
+    });
+    let bar = div().w(z(4.)).rounded_r(z(4.)).bg(c(Palette::TEXT_HEADER));
+    let bar: AnyElement = if from == to {
+        bar.h(z(to)).into_any_element()
+    } else {
+        bar.with_animation(
+            ElementId::Name(format!("pill-{key}-{epoch}").into()),
+            Animation::new(Duration::from_millis(PILL_MS)).with_easing(ease_out_quint()),
+            move |d, t| d.h(z(from + (to - from) * t)),
+        )
+        .into_any_element()
+    };
+    div().absolute().left_0().top_0().h_full().w(z(4.)).flex().items_center().child(bar).into_any_element()
+}
+
+/// Red count badge cut out of the rail background (bottom-right of the icon).
+fn mention_badge(n: u32) -> impl IntoElement {
+    div()
+        .absolute()
+        .right(z(-4.))
+        .bottom(z(-4.))
+        .p(z(3.))
+        .rounded(z(12.))
+        .bg(c(Palette::BG_TERTIARY))
+        .child(badge(n).bg(c(Palette::NOTIFICATION)))
+}
+
+/// One 72px-wide rail row holding a centred 40px tile.
+fn row(id: impl Into<ElementId>, key: u64, entity: &Entity<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    track_hover(
+        div().id(id).w_full().h(z(ICON)).flex_none().flex().justify_center().relative().cursor_pointer(),
+        key,
+        entity,
     )
 }
 
-fn mention_badge(n: u32) -> impl IntoElement {
-    div().absolute().right(px(-4.)).bottom(px(-4.)).p(px(3.)).rounded(px(12.)).bg(c(Palette::BG_TERTIARY)).child(badge(n))
-}
+const HOME_KEY: u64 = 1;
+const ADD_KEY: u64 = 2;
+const DISCOVER_KEY: u64 = 3;
 
 fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
     let selected = app.selected_guild.is_none();
+    let hover = hovered(HOME_KEY);
     let unread_dms: u32 = app.dms.iter().filter_map(|d| app.channels.get(d)).map(|c| c.mentions).sum();
     let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
     let e = entity.clone();
-    let group: SharedString = "rail-home".into();
-    div()
-        .id("home")
-        .group(group.clone())
-        .w_full()
-        .h(px(m::GUILD_ICON))
-        .flex()
-        .justify_center()
-        .relative()
-        .cursor_pointer()
+    row("home", HOME_KEY, entity)
         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_guild(None, cx)))
-        .child(pill(group.clone(), selected, false))
+        .child(pill(HOME_KEY, selected, hover, false))
         .child(
             div()
                 .relative()
-                .size(px(m::GUILD_ICON))
+                .size(z(ICON))
                 .child(
                     div()
                         .size_full()
                         .flex()
                         .items_center()
                         .justify_center()
-                        .when(selected, |d| d.rounded(px(16.)).bg(c(Palette::BLURPLE)))
-                        .when(!selected, |d| {
-                            d.rounded(px(24.))
-                                .bg(c(Palette::BG_PRIMARY))
-                                .group_hover(group, |s| s.rounded(px(16.)).bg(c(Palette::BLURPLE)))
-                        })
-                        .child(img(ImageSource::from("icon.png")).size(px(30.))),
+                        .rounded(z(ICON_RADIUS))
+                        .bg(c(if selected || hover { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
+                        .child(img(ImageSource::from("icon.png")).size(z(28.))),
                 )
                 .when(unread_dms + pending > 0, |d| d.child(mention_badge(unread_dms + pending))),
         )
+        .when(hover, |d| d.child(right_tooltip("Direct Messages".into(), ICON)))
         .into_any_element()
 }
 
 fn guild_inner(g: &Guild, size: f32) -> AnyElement {
     match &g.icon {
-        ImageRef::Url(u) => img(u.clone()).size(px(size)).into_any_element(),
+        ImageRef::Url(u) => img(u.clone()).size(z(size)).into_any_element(),
         _ => div()
-            .text_size(px(if size < 30. {
+            .text_size(z(if size < 30. {
                 7.
             } else if g.acronym.len() > 2 {
                 14.
             } else {
-                18.
+                16.
             }))
             .font_weight(FontWeight::MEDIUM)
             .child(g.acronym.clone())
@@ -220,41 +339,23 @@ impl PhoenixApp {
 fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, _nested: bool) -> AnyElement {
     let id = g.id;
     let selected = app.selected_guild == Some(id);
-    let group: SharedString = format!("rail-{}", id.0).into();
-    let (base_bg, hover_bg): (Hsla, Hsla) = match g.icon {
-        ImageRef::Url(_) => (c(Palette::BG_PRIMARY), c(Palette::BG_PRIMARY)),
-        _ => (c(Palette::BG_PRIMARY), c(Palette::BLURPLE)),
-    };
+    let hover = hovered(id.0);
+    let has_icon = matches!(g.icon, ImageRef::Url(_));
+    let active = selected || hover;
     let e = entity.clone();
     let drop_e = entity.clone();
     let drag = DraggedGuild { id, icon: g.icon.clone(), acronym: g.acronym.clone() };
     let icon_box = div()
-        .size(px(m::GUILD_ICON))
+        .size(z(ICON))
         .flex()
         .items_center()
         .justify_center()
         .overflow_hidden()
-        .text_color(c(Palette::TEXT_NORMAL))
-        .when(selected, |d| d.rounded(px(16.)).bg(hover_bg).text_color(gpui::white()))
-        .when(!selected, |d| {
-            d.rounded(px(24.))
-                .bg(base_bg)
-                .group_hover(group.clone(), move |s| s.rounded(px(16.)).bg(hover_bg).text_color(gpui::white()))
-        })
-        .child(guild_inner(g, m::GUILD_ICON));
-    div()
-        .id(("guild", id.0))
-        .group(group.clone())
-        .w_full()
-        .h(px(m::GUILD_ICON))
-        .flex()
-        .justify_center()
-        .relative()
-        .cursor_pointer()
-        .tooltip({
-            let name = g.name.clone();
-            move |window, cx| gpui_component::tooltip::Tooltip::new(name.clone()).build(window, cx)
-        })
+        .rounded(z(ICON_RADIUS))
+        .bg(c(if active && !has_icon { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
+        .text_color(if active && !has_icon { gpui::white() } else { c(Palette::TEXT_NORMAL) })
+        .child(guild_inner(g, ICON));
+    row(("guild", id.0), id.0, entity)
         .on_click(move |_, _, cx| e.update(cx, |app, cx| app.select_guild(Some(id), cx)))
         .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
             crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Guild(id), ev.position, w)
@@ -262,8 +363,9 @@ fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, _nested: bool
         .on_drag(drag, |d: &DraggedGuild, _, _, cx: &mut App| cx.new(|_| d.clone()))
         .drag_over::<DraggedGuild>(|s, _, _, _| s.border_t_2().border_color(c(Palette::GREEN)))
         .on_drop(move |d: &DraggedGuild, _, cx| drop_e.update(cx, |a, cx| a.move_guild(d.id, id, cx)))
-        .child(pill(group, selected, g.unread))
-        .child(div().relative().size(px(m::GUILD_ICON)).child(icon_box).when(g.mentions > 0, |d| d.child(mention_badge(g.mentions))))
+        .child(pill(id.0, selected, hover, g.unread))
+        .child(div().relative().size(z(ICON)).child(icon_box).when(g.mentions > 0, |d| d.child(mention_badge(g.mentions))))
+        .when(hover, |d| d.child(right_tooltip(g.name.clone(), ICON)))
         .into_any_element()
 }
 
@@ -277,73 +379,78 @@ fn folder(
     guilds: &[&Guild],
     open: bool,
 ) -> AnyElement {
-    let tint = c(color).opacity(0.4);
+    let key = id | (1 << 63);
+    let hover = hovered(key);
     let unread = guilds.iter().any(|g| g.unread);
     let mentions: u32 = guilds.iter().map(|g| g.mentions).sum();
     let has_selected = guilds.iter().any(|g| Some(g.id) == app.selected_guild);
-    let group: SharedString = format!("folder-{id}").into();
     let e = entity.clone();
     let head_inner: AnyElement = if open {
-        // Open folder: folder glyph in the folder colour.
+        // Open folder: folder glyph in the folder colour on a hover-able tile.
         div()
-            .w(px(24.))
-            .h(px(18.))
-            .rounded(px(3.))
-            .bg(c(color))
-            .relative()
-            .child(div().absolute().top(px(-3.)).left_0().w(px(10.)).h(px(5.)).rounded_t(px(2.)).bg(c(color)))
+            .size(z(ICON))
+            .rounded(z(ICON_RADIUS))
+            .flex()
+            .items_center()
+            .justify_center()
+            .when(hover, |d| d.bg(c(Palette::GUILD_ICON_BG)))
+            .child(
+                div()
+                    .w(z(20.))
+                    .h(z(15.))
+                    .mt(z(2.))
+                    .rounded(z(2.))
+                    .bg(c(color))
+                    .relative()
+                    .child(div().absolute().top(z(-3.)).left_0().w(z(8.)).h(z(4.)).rounded_t(z(2.)).bg(c(color))),
+            )
             .into_any_element()
     } else {
-        // Closed folder: 2x2 grid of mini guild icons.
-        let mut grid = div().size(px(36.)).flex().flex_wrap().gap(px(4.));
-        for g in guilds.iter().take(4) {
+        // Closed folder: 2x2 preview of the first guilds on a tinted tile
+        // (folder colour at 40 %, 4px padding, 2px gap).
+        let cell = (ICON - 4. * 2. - 2.) / 2.;
+        let mut grid = div().size(z(ICON - 8.)).flex().flex_wrap().gap(z(2.));
+        for (i, g) in guilds.iter().take(4).enumerate() {
+            let r = |big: bool| if big { z(cell * 0.45) } else { z(4.) };
             grid = grid.child(
                 div()
-                    .size(px(16.))
-                    .rounded_full()
+                    .size(z(cell))
+                    .rounded_tl(r(i == 0))
+                    .rounded_tr(r(i == 1))
+                    .rounded_bl(r(i == 2))
+                    .rounded_br(r(i == 3))
                     .overflow_hidden()
-                    .bg(c(Palette::BG_PRIMARY))
+                    .bg(c(Palette::GUILD_ICON_BG))
                     .flex()
                     .items_center()
                     .justify_center()
                     .text_color(c(Palette::TEXT_NORMAL))
-                    .child(guild_inner(g, 16.)),
+                    .child(guild_inner(g, cell)),
             );
         }
-        grid.into_any_element()
+        div()
+            .size(z(ICON))
+            .rounded(z(ICON_RADIUS))
+            .p(z(4.))
+            .bg(c(color).opacity(0.4))
+            .child(grid)
+            .into_any_element()
     };
-    let header = div()
-        .id(("folder", id))
-        .group(group.clone())
-        .w_full()
-        .h(px(m::GUILD_ICON))
-        .flex()
-        .justify_center()
-        .relative()
-        .cursor_pointer()
-        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(name.clone()).build(window, cx))
+    let header = row(("folder", id), key, entity)
         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_folder(id, cx)))
-        .child(pill(group.clone(), !open && has_selected, !open && unread))
+        .child(pill(key, !open && has_selected, hover, !open && unread))
         .child(
             div()
                 .relative()
-                .size(px(m::GUILD_ICON))
-                .child(
-                    div()
-                        .size_full()
-                        .rounded(px(16.))
-                        .bg(if open { gpui::transparent_black() } else { tint })
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(head_inner),
-                )
+                .size(z(ICON))
+                .child(head_inner)
                 .when(!open && mentions > 0, |d| d.child(mention_badge(mentions))),
-        );
+        )
+        .when(hover, |d| d.child(right_tooltip(name.clone(), ICON)));
     if !open {
         return header.into_any_element();
     }
-    let mut body = div().w_full().flex().flex_col().gap(px(8.)).pb(px(8.));
+    let mut body = div().w_full().flex().flex_col().gap(z(GAP)).pb(z((FOLDER - ICON) / 2.));
     for g in guilds {
         body = body.child(guild(app, entity, g, true));
     }
@@ -351,50 +458,51 @@ fn folder(
         .w_full()
         .relative()
         .child(
-            // Tinted column behind the open folder.
+            // Tinted column behind the open folder: folder colour at 15 %
+            // over mod-subtle, 1px muted border, 16px radius, 48px wide.
             div()
                 .absolute()
-                .top_0()
+                .top(z(-(FOLDER - ICON) / 2.))
                 .bottom_0()
-                .left(px(12.))
-                .w(px(m::GUILD_ICON))
-                .rounded(px(16.))
+                .left(z((m::SERVER_BAR_W - FOLDER) / 2.))
+                .w(z(FOLDER))
+                .rounded(z(FOLDER_RADIUS))
+                .border_1()
+                .border_color(c(Palette::PANEL_BORDER).opacity(0.5))
                 .bg(c(color).opacity(0.15)),
         )
-        .child(div().flex().flex_col().gap(px(8.)).child(header).child(body))
+        .child(div().flex().flex_col().gap(z(GAP)).child(header).child(body))
         .into_any_element()
 }
 
+/// 32x1 `--app-frame-border` line between Home and the guilds.
 fn separator() -> AnyElement {
     div()
         .w_full()
-        .h(px(2.))
+        .h(z(1.))
         .flex_none()
         .flex()
         .justify_center()
-        .child(div().w(px(32.)).h(px(2.)).rounded(px(1.)).bg(c(0x35363C)))
+        .child(div().w(z(32.)).h(z(1.)).rounded(z(1.)).bg(c(Palette::GUILD_SEPARATOR)))
         .into_any_element()
 }
 
-fn action(id: &'static str, i: Icon) -> gpui::Stateful<gpui::Div> {
-    let group: SharedString = format!("rail-{id}").into();
-    div()
-        .id(id)
-        .group(group.clone())
-        .w_full()
-        .h(px(m::GUILD_ICON))
-        .flex()
-        .justify_center()
-        .cursor_pointer()
+/// Add a Server / Discover tiles: mod-subtle tile, text-default glyph,
+/// brand background with a white glyph on hover (150 ms colour fade).
+fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: &'static str) -> gpui::Stateful<gpui::Div> {
+    let key = if id == "add-server" { ADD_KEY } else { DISCOVER_KEY };
+    let hover = hovered(key);
+    row(id, key, entity)
+        .child(pill(key, false, hover, false))
         .child(
             div()
-                .size(px(m::GUILD_ICON))
-                .rounded(px(24.))
-                .bg(c(Palette::BG_PRIMARY))
+                .size(z(ICON))
+                .rounded(z(ICON_RADIUS))
+                .bg(c(if hover { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
                 .flex()
                 .items_center()
                 .justify_center()
-                .group_hover(group.clone(), |s| s.rounded(px(16.)).bg(c(Palette::GREEN)))
-                .child(icon(i, 24., c(Palette::GREEN)).group_hover(group, |s| s.text_color(gpui::white()))),
+                .child(icon(i, 20. * crate::theme::zoom(), if hover { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
         )
+        .when(hover, |d| d.child(right_tooltip(label.into(), ICON)))
 }
