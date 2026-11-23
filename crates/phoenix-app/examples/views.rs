@@ -44,7 +44,8 @@ fn main() -> anyhow::Result<()> {
     let v2 = view.clone();
     // PHOENIX_SHOT_H=700 matches the live client dumps (1280x700 viewport).
     let h: f32 = std::env::var("PHOENIX_SHOT_H").ok().and_then(|v| v.parse().ok()).unwrap_or(800.);
-    let win = cx.open_window(size(px(1280.), px(h)), move |window, cx| {
+    let w: f32 = std::env::var("PHOENIX_SHOT_W").ok().and_then(|v| v.parse().ok()).unwrap_or(1280.);
+    let win = cx.open_window(size(px(w), px(h)), move |window, cx| {
         let v = cx.new(|cx| PhoenixApp::new(Arc::new(MockBackend::new()), window, cx));
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))

@@ -30,8 +30,19 @@ pub fn marker_slider(
     let id: SharedString = id.into();
     let n = labels.len().max(2);
     let span = (n - 1) as f32;
-    let frac = (current.min(n - 1) as f32) / span;
-    let pos = |i: usize| i as f32 / span;
+    // markValue_OnqacX sits at the value's proportional position (vanilla
+    // accessibility dump: 12/14/15/16/18/20/24px are unevenly spaced). Labels
+    // that aren't numbers fall back to even spacing.
+    let nums: Vec<f32> = labels
+        .iter()
+        .filter_map(|l| l.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect::<String>().parse().ok())
+        .collect();
+    let pos_v: Vec<f32> = match (nums.len() == labels.len() && n == labels.len(), nums.first(), nums.last()) {
+        (true, Some(&a), Some(&b)) if b > a => nums.iter().map(|v| (v - a) / (b - a)).collect(),
+        _ => (0..n).map(|i| i as f32 / span).collect(),
+    };
+    let pos = |i: usize| pos_v.get(i).copied().unwrap_or(1.);
+    let frac = pos(current.min(n - 1));
 
     let mut marks = div().absolute().top_0().left_0().size_full();
     for (i, l) in labels.iter().enumerate() {
@@ -63,7 +74,10 @@ pub fn marker_slider(
     // Hit zones: one per marker, centred on it (ends are half width).
     let mut hits = div().absolute().top_0().left_0().size_full().flex();
     for i in 0..n {
-        let w = if i == 0 || i == n - 1 { 0.5 / span } else { 1. / span };
+        // zone = between the midpoints to the neighbouring markers
+        let lo = if i == 0 { 0. } else { (pos(i - 1) + pos(i)) / 2. };
+        let hi = if i == n - 1 { 1. } else { (pos(i) + pos(i + 1)) / 2. };
+        let w = hi - lo;
         let (s1, s2) = (on_set.clone(), on_set.clone());
         hits = hits.child(
             div()

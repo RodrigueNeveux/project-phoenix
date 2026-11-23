@@ -36,7 +36,9 @@ fn main() -> anyhow::Result<()> {
     });
     let view: Rc<RefCell<Option<Entity<PhoenixApp>>>> = Rc::default();
     let v2 = view.clone();
-    let win = cx.open_window(size(px(1280.), px(700.)), move |window, cx| {
+    // PHOENIX_SHOT_W/H match other dump viewports (vanilla dumps are 1920x1050).
+    let env = |k: &str, d: f32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
+    let win = cx.open_window(size(px(env("PHOENIX_SHOT_W", 1280.)), px(env("PHOENIX_SHOT_H", 700.))), move |window, cx| {
         let v = cx.new(|cx| PhoenixApp::new(Arc::new(MockBackend::new()), window, cx));
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
@@ -61,6 +63,16 @@ fn main() -> anyhow::Result<()> {
         cx.update_window(win.into(), |_, window, cx| {
             v.update(cx, |app, cx| {
                 use phoenix_app::ui::settings::Page;
+                // PHOENIX_SHOT_THEME=onyx matches the user's midnight dumps.
+                if let Ok(t) = std::env::var("PHOENIX_SHOT_THEME") {
+                    use phoenix_app::ui::settings::AppTheme;
+                    app.prefs.synced.theme = match t.as_str() {
+                        "light" => AppTheme::Light,
+                        "ash" => AppTheme::Ash,
+                        "onyx" => AppTheme::Onyx,
+                        _ => AppTheme::Dark,
+                    };
+                }
                 if let Some(p) = scene.strip_prefix("settings:") {
                     phoenix_app::ui::settings::open(app, cx);
                     let page = match p.split(':').next().unwrap_or("") {
@@ -78,6 +90,9 @@ fn main() -> anyhow::Result<()> {
                         "accessibility" => Page::Accessibility,
                         "voice" => Page::VoiceVideo,
                         "advanced" => Page::Advanced,
+                        "games" => Page::RegisteredGames,
+                        "nitro" => Page::Nitro,
+                        "billing" => Page::Billing,
                         _ => Page::MyAccount,
                     };
                     if let Some(s) = app.settings.as_mut() {

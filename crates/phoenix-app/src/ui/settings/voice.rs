@@ -210,25 +210,24 @@ pub(crate) fn slider(
         .child(
             div()
                 .absolute()
-                .top(z(8.))
+                // vanilla-settings-07 #2734 bar_OnqacX: 4px, radius 4, centred in 24.
+                .top(z(10.))
                 .left_0()
                 .w_full()
-                .h(z(8.))
+                .h(z(4.))
                 .rounded(z(4.))
                 .bg(c(hi))
                 .child(div().h_full().w(relative(frac)).rounded(z(4.)).bg(c(lo))),
         )
         .child(
-            div().absolute().top_0().left(relative(frac)).w(z(0.)).flex().justify_center().child(
+            // #2737 grabber_OnqacX: 16px white circle.
+            div().absolute().top(z(4.)).left(relative(frac)).w(z(0.)).flex().justify_center().child(
                 div()
                     .relative()
                     .flex_none()
-                    .w(z(10.))
-                    .h(z(24.))
-                    .rounded(z(3.))
+                    .size(z(16.))
+                    .rounded_full()
                     .bg(gpui::white())
-                    .border_1()
-                    .border_color(c(0xDBDEE1))
                     .shadow_sm()
                     .when(dragging, |d| {
                         d.child(
@@ -665,8 +664,8 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
     div()
         .flex()
         .flex_col()
-        .child(h5(crate::t!("voice.mic_test")))
-        .child(note(crate::t!("voice.mic_test_note")).mb(z(16.)))
+        // vanilla-settings-07 #2769: no heading/note, just the "Mic Test"
+        // button + meter, then the body-sm help line (#2776) 36px under.
         .child(
             div()
                 .flex()
@@ -690,6 +689,17 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 )
                 .child(meter(level, testing || in_call)),
         )
+        .child(
+            div()
+                .mt(z(36.))
+                .flex()
+                .gap(z(4.))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .text_color(c(tok(idx::TEXT_SUBTLE)))
+                .child(crate::t!("voice.help"))
+                .child(div().text_color(c(tok(idx::TEXT_LINK))).child(format!("{}.", crate::t!("voice.help_link")))),
+        )
         .when_some(err, |d, e| d.child(div().mt(z(8.)).text_size(z(12.)).text_color(c(Palette::RED)).child(SharedString::from(e))))
 }
 
@@ -706,8 +716,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
             }
         }))
         .child(h1(crate::t!("sp.vo.t1")))
+        // vanilla-settings-07 #2702: "Micro" label 67px under the title top
+        // (32 + 24 + 1px rule + 10 wrapper padding); volume labels 98 below.
         .child(
             div()
+                .mt(z(11.))
                 .flex()
                 .gap(z(16.))
                 .child(column([
@@ -721,7 +734,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         )
         .child(
             div()
-                .mt(z(20.))
+                .mt(z(30.))
                 .flex()
                 .gap(z(16.))
                 .child(column([
@@ -733,7 +746,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     pct_slider("output-volume", p.output_volume, 200, |p, v| p.output_volume = v, cx).into_any_element(),
                 ])),
         )
-        .child(div().mt(z(20.)).child(mic_test(app, cx)))
+        .child(div().mt(z(35.)).child(mic_test(app, cx)))
         .child(divider())
         .child(input_mode(&p, cx))
         .child(div().mt(z(20.)).child(if p.input_mode == InputMode::PushToTalk { keybind(&p, cx) } else { sensitivity(&p, cx) }))

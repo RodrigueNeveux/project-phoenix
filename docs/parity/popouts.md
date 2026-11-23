@@ -235,3 +235,16 @@ Dumps (private): `vanilla-menu-{message,message-reminder,member,member-1,member-
 | folder | vanilla-menu-folder | Mark Folder As Read ‖ Move To… > ‖ Folder Settings, Close All Folders | nav_menus.rs Target::Folder, server_bar.rs hook | ✅ (new) |
 | group DM | vanilla-menu-group-dm `#gdm-context` | Mark As Read ‖ Pin, Add to Favorites > ‖ Invites, Edit Group ‖ Mute Conversation > ‖ Leave Group (red) ‖ Copy Channel ID | nav_menus.rs | ✅ (was the 1:1 DM layout) |
 | tooltip | vanilla-tooltip-header #2826 | padding 8 12, r8, surface-high, inset 1px border + shadow-high; 14/18 500 | tooltip.rs | ✅ |
+
+### Box check against the vanilla dumps (2026-11-23)
+
+The `vanilla-picker-*`, `-quickswitcher`, `-inbox-*`, `-pins`, `-threads` and `-search-popout` PNGs were captured after the layer closed (only the chat shows), so the check is done on the JSON boxes instead of pixels:
+
+| screen | dump node | vanilla box | ours | status |
+|---|---|---|---|---|
+| expression picker | picker-emoji #2494 `contentWrapper_58b0l2` | 498x486, radius 8, tabs GIF / Autocollants / Émoji, 272px search, 38px diversity, "Ajouter l'émoji", 48px cells / 40px glyph, 9 per row | `pickers::PICKER_W/H` 498x486, same order | ✅ |
+| quick switcher | quickswitcher #2815 | 679 wide | `switcher.rs` W 679 | ✅ |
+| inbox | inbox-0 #2620 `container_uTMZTY` | 560 wide, radius 8; title 20/600; 5 tabs 14/600; empty "Tu es à jour !" 24/600 + protip | `inbox.rs` 560 | ✅ (anchor x differs: title-bar layout) |
+| pins | pins #2595 `messagesPopoutWrap_6bgemo` | 420x387 | `inbox.rs` 420 | ✅ |
+| threads | threads #2606 `browser_l-3BKx` | 480x449 | `inbox.rs` 480 | ✅ |
+| search popout | search-popout | no popout node in the dump | — | ❌ re-dump needed |

@@ -129,7 +129,7 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .child(category(
             crate::t!("settings.account.info"),
             vec![
-                field_row(crate::t!("settings.account.display_name"), me.display_name.clone(), Some(secondary("edit-dn", crate::t!("common.edit")).into_any_element())),
+                // vanilla-settings-01: no display-name row (it moved to Profiles).
                 field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element())),
                 email_row,
                 field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element())),
@@ -373,8 +373,11 @@ fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, s
 /// 20px apart.
 fn subnav(rows: Vec<SharedString>) -> Div {
     let n = rows.len() as f32;
+    // vanilla-settings-01 #2510/#2518: first row 40px under the item label
+    // (padding-top 10 minus the 4px sublist gap already above it).
     div()
-        .py(z(10.))
+        .pt(z(6.))
+        .pb(z(10.))
         .ml(z(19.))
         .flex()
         .gap(z(19.))
@@ -387,7 +390,7 @@ fn subnav(rows: Vec<SharedString>) -> Div {
                 .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
                 .child(div().w_full().h(z(20.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
         )
-        .child(div().flex_1().flex().flex_col().gap(z(20.)).children(rows.into_iter().enumerate().map(|(i, t)| {
+        .child(div().flex_1().min_w_0().flex().flex_col().gap(z(20.)).children(rows.into_iter().enumerate().map(|(i, t)| {
             div()
                 .text_size(z(16.))
                 .line_height(z(20.))
@@ -398,7 +401,13 @@ fn subnav(rows: Vec<SharedString>) -> Div {
 
 fn subnav_rows(p: Page) -> Vec<SharedString> {
     match p {
-        Page::MyAccount => vec![crate::t!("settings.account.info"), crate::t!("settings.account.security"), crate::t!("settings.account.status")],
+        // vanilla-settings-01 #2518..#2527: four rows incl. "Family Centre".
+        Page::MyAccount => vec![
+            crate::t!("settings.account.info"),
+            crate::t!("settings.account.security"),
+            crate::t!("settings.account.status"),
+            crate::t!("settings.account.family"),
+        ],
         Page::VoiceVideo => vec![crate::t!("sp.vo.t1"), crate::t!("sp.vo.t2")],
         p => super::pages::titles(p),
     }
@@ -452,7 +461,18 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
                         .overflow_hidden()
                         .child(app.me.display_name.clone()),
                 )
-                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("settings.edit_profiles"))),
+                // vanilla-settings-01 #2489/#2490: label + 12px pencil, 4px apart.
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(c(tok(idx::TEXT_MUTED)))
+                        .child(crate::t!("settings.edit_profiles"))
+                        .child(gpui::svg().path(crate::icons::path("pen")).size(z(12.)).flex_none().text_color(c(tok(idx::TEXT_MUTED)))),
+                ),
         );
     // searchBar: 40px text input (--input-*), 30px icon box + 16px glyph;
     // focused/filled it takes the --input-border-active ring and a clear button.
@@ -463,7 +483,8 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
             .min_w_0()
             .text_size(z(16.))
             .text_color(c(tok(idx::TEXT_DEFAULT)))
-            .child(gpui_component::input::Input::new(&input).appearance(false).bordered(false))
+            // input_0PLWhS: padding-inline-start 0, 16px text.
+            .child(gpui_component::input::Input::new(&input).appearance(false).bordered(false).px_0().text_size(z(16.)))
             .into_any_element(),
         None => div()
             .flex_1()

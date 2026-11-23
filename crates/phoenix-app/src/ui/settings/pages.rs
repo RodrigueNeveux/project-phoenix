@@ -92,10 +92,15 @@ fn item(title: SharedString, desc: Option<AnyElement>, trailing: Option<AnyEleme
         .flex()
         .gap(z(12.))
         .mx(z(-12.))
-        .p(z(12.))
-        .min_h(z(48.))
+        .px(z(12.))
+        // vanilla-settings-13 #2688 baseSettingWrapper_4Z: switch rows pad
+        // 10px 0 (no 48px floor); other rows keep baseControlItem's 12 / 48.
+        .when(top, |d| d.py(z(10.)))
+        .when(!top, |d| d.py(z(12.)).min_h(z(48.)))
         .rounded(z(16.)) // --radius-lg
-        .child(div().flex_1().min_w_0().flex().flex_col().justify_center().gap(z(4.)).child(title_text(title)).children(desc))
+        // vanilla-settings-02 #2700 description_VhFsFg: switch rows wrap
+        // their description at 572px, other rows use the full 696.
+        .child(div().flex_1().min_w_0().flex().flex_col().justify_center().gap(z(4.)).child(title_text(title)).children(desc.map(|d| div().when(top, |d| d.max_w(z(572.))).child(d))))
         .children(trailing.map(|t| {
             let d = div().flex_none().flex();
             if top { d.items_start().child(t) } else { d.items_center().child(t) }
@@ -302,7 +307,18 @@ fn related(icon: &'static str, title: &'static str, desc: &'static str, page: Pa
         .flex()
         .items_center()
         .justify_center()
-        .child(gpui::svg().path(crate::icons::path(icon)).size(z(24.)).text_color(c(tok(idx::ICON_DEFAULT))));
+        // vanilla-settings-13 #2733 icon_W6yko_: 48px tile, --radius-sm,
+        // --background-mod-muted, 24px glyph.
+        .child(
+            div()
+                .size(z(48.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_MOD_MUTED)))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(gpui::svg().path(crate::icons::path(icon)).size(z(24.)).text_color(c(tok(idx::ICON_DEFAULT)))),
+        );
     div()
         .id(eid(format!("rel-{title}")))
         .flex()
@@ -705,7 +721,8 @@ fn theme_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
         .flex()
         .flex_col()
         .pt(z(8.))
-        .child(title_text(tr("sp.ap.defaults")).pb(z(24.)))
+        // vanilla-settings-08 #2721 heading-sm/semibold 16/20, swatches 24px under it.
+        .child(title_text(tr("sp.ap.defaults")).font_weight(FontWeight::SEMIBOLD).pb(z(24.)))
         .child(div().flex().gap(z(8.)).children(AppTheme::ALL.map(|t| {
             super::view::theme_card(t, t == theme).on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx)))
         })))
