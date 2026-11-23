@@ -1,0 +1,33 @@
+# Voice call view (2026 vanilla client)
+
+Reference dump: `dumps/vanilla-call-view.json` (live vanilla client, focused Go Live + participant strip, chat closed).
+Code: `crates/phoenix-app/src/ui/call_view.rs`. Offscreen render: `cargo run -p phoenix-app --example call_view -- out.png [chat]` (mock voice state, never joins voice).
+
+| element | CSS source (file + selector prefix) | property | CSS value | our code | status |
+|---|---|---|---|---|---|
+| call container | callContainer_hbKzX7 | background / border-top | --black / 1px --app-frame-border | call_view.rs `render` | ✅ |
+| top bar | upperContainer_ (dump #1252) | height / padding-inline | 33px / 24px | `top_bar` | ✅ |
+| top bar title | title_ h1 body-md/medium (#1255) | font | 16px / 500 / 20px, --text-strong | `top_bar` | ✅ |
+| channel icon | channelIcon_ svg (#1257) | size / colour | 20px, --channel-icon | `top_bar` | ✅ |
+| chat toggle | chatIcon_Fy2P0m (#1288) | size | 24px, toolbar gap 20 | `top_bar` | ✅ |
+| tile | tile_p87Rny (#1405) | radius / overflow | --radius-sm 8px / hidden | `render_tile` | ✅ |
+| tile gap | tileSizer_ (#1403, #1448) | spacing | 8px | `grid`, `render` | ✅ |
+| tile background | background_ (#1456) | background | avatar dominant colour | `tile_color` | ✅ |
+| avatar | avatarWrapper_ (#1436) | size | 80px circle | `render_tile` | ✅ |
+| speaking ring | border_p87Rny (#1447) | box-shadow | inset 2px --status-positive + inset 3px --black | `render_tile` | ✅ |
+| name / mute pill | experimentOverlayTitle_7NOr2f (#1504) | bg / radius / padding / gap / font | --control-overlay-secondary-background-default / 8 / 6 8 / 4 / 14/18 | `render_tile` pill | ✅ |
+| mute/deaf icon | titleIcon_ (#1505) | size | 16px | `render_tile` | ✅ |
+| stream placeholder tile | emptyPreviewContainer_ (#1408) | bg | --background-base-lower | `render_tile` stream | ✅ |
+| LIVE pill | liveIndicator_ (#1413) | font / radius / bg | 12px 600 / 4px / --status-danger | `render_tile` | ✅ |
+| grid layout (no focus) | - | columns | biggest 16:9 tile | `grid` | ❌ not in dump (dump shows focused stream + strip; focus mode not done) |
+| button section | buttonSection_9bvEB0 (#1298) | bg / border / radius / gap / padding | --background-surface-high / 1px --border-muted / 12 / 8 / 4 | `section` | ✅ |
+| center button | centerButton_K9Xq13 (#1301) | size / radius | 40x40, 8 (attached 8 0 0 8) | `center_button` | ✅ |
+| caret nub | contextMenuNub_.attachedCaret_ (#1306) | size / radius / margin | 20x40 / 0 8 8 0 / 1px | `center_button` | ✅ |
+| green state | greenGlow_K9Xq13 (#1322) | bg / colour | --opacity-green-12 / --green-300 | `Look::Green` | ✅ |
+| red state | redGlow_K9Xq13 | bg / colour | --opacity-red-12 / --red-400 | `Look::Red` | ✅ |
+| section gap | wrapper_ (#1297) | gap | 12px | `bottom_controls` | ✅ |
+| disconnect | disconnect_K9Xq13.fullRegionButton_ (#1354) | size / radius / bg | 65x49 / 12 / --control-critical-primary-background-default | `bottom_controls` | ✅ |
+| edge controls | edgeControls_ (#1291, #1358) | width / gap / icon | 160 / 24 / 24px | `bottom_controls` | ✅ |
+| bottom bar | bottomControls_ (#1290) | height / padding / bottom margin | 49 / 20 / 12 | `bottom_controls` | ✅ |
+| side chat panel | channelChatWrapper_hbKzX7 | bg / width | --background-base-lowest / not in dump (closed) | `render` CHAT_W=400 | ❌ chat content lays out too narrow inside the panel |
+| hover-only name pills (idle opacity 0) | overlayTitle_.idle_ | opacity | 0 when idle | - | ❌ pills always shown |

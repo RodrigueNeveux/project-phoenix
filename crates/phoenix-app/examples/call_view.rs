@@ -62,10 +62,10 @@ fn main() -> anyhow::Result<()> {
                 use phoenix_app::model::{Id, VoiceFlags};
                 let Some(lounge) = app.channels.values().find(|c| c.name.as_ref() == "Lounge").map(|c| c.id) else { return };
                 let me = app.me.id;
-                if let Some(ch) = app.channels.get_mut(&lounge) {
-                    if !ch.voice_users.contains(&me) {
-                        ch.voice_users.insert(0, me);
-                    }
+                if let Some(ch) = app.channels.get_mut(&lounge)
+                    && !ch.voice_users.contains(&me)
+                {
+                    ch.voice_users.insert(0, me);
                 }
                 // Mock voice state: no backend join, only the UI fields.
                 app.voice_channel = Some(lounge);

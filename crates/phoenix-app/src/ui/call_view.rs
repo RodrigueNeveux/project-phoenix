@@ -173,7 +173,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .bg(t(idx::BACKGROUND_BASE_LOWEST))
                 .border_l_1()
                 .border_color(t(idx::APP_FRAME_BORDER))
-                .child(crate::ui::chat::render(app, window, cx)),
+                .overflow_hidden()
+                .child(div().w(z(CHAT_W)).h_full().flex().flex_col().child(crate::ui::chat::render(app, window, cx))),
         )
         .into_any_element()
     } else {
