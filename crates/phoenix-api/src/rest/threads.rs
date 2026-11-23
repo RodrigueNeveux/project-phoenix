@@ -3,6 +3,11 @@
 //! The client calls `GET /channels/{id}/threads/archived/public` and
 //! `GET /channels/{id}/users/@me/threads/archived/private`, both paged by
 //! `before` = the oldest `archive_timestamp` seen, `limit` 25.
+//!
+//! The browser's member facepile is NOT a `thread-members` list call: the
+//! row (ThreadBrowser `U`) reads `member_ids_preview` + `member_count` of the
+//! thread channel object and only requests missing users through the gateway
+//! (`requestMember`); unknown ones show the default avatar.
 
 use reqwest::Method;
 use serde::Deserialize;
@@ -78,6 +83,18 @@ impl RestClient {
 mod tests {
     use super::*;
     use crate::models::Snowflake;
+
+    #[test]
+    fn member_preview_parses() {
+        let a: ArchivedThreads = serde_json::from_str(
+            r#"{"threads":[{"id":"7","type":11,"member_count":5,"member_ids_preview":["1","2","3"]},
+              {"id":"8","type":11,"member_ids_preview":null}],"members":[],"has_more":false}"#,
+        )
+        .unwrap();
+        assert_eq!(a.threads[0].member_count, Some(5));
+        assert_eq!(a.threads[0].member_ids_preview, vec![Snowflake(1), Snowflake(2), Snowflake(3)]);
+        assert!(a.threads[1].member_ids_preview.is_empty());
+    }
 
     #[test]
     fn paths() {

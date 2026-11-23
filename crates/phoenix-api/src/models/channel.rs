@@ -155,6 +155,9 @@ pub struct Channel {
     pub thread_metadata: Option<ThreadMetadata>,
     #[serde(default)]
     pub member_count: Option<u32>,
+    /// Thread only: first few member ids (the threads browser facepile).
+    #[serde(default, deserialize_with = "null_default")]
+    pub member_ids_preview: Vec<UserId>,
     #[serde(default)]
     pub message_count: Option<u32>,
     #[serde(default)]

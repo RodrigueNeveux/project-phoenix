@@ -58,6 +58,9 @@ pub struct ForumPost {
     pub owner: Option<Id>,
     /// Latest message id (activity time), else the thread id.
     pub last_message: Option<Id>,
+    /// Thread `member_ids_preview` / `member_count` (threads browser facepile).
+    pub member_ids_preview: Vec<Id>,
+    pub member_count: u32,
 }
 
 /// Tag of a forum / media channel (`available_tags`).

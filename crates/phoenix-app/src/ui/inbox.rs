@@ -1701,6 +1701,66 @@ fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Contex
                         .child(crate::t!("threads.last_activity", date = date)),
                 ),
         )
+        .when_some(thread_facepile(app, &p.member_ids_preview, p.member_count), |d, f| d.child(f))
+}
+
+/// What the threads-browser facepile shows: every preview user (max 50 so
+/// all fit) then a pill — "50+" when count >= max, "+N" when the member
+/// count exceeds the preview (Facepile renderUsers / renderMoreUsers).
+fn facepile_more(preview: usize, count: u32) -> Option<String> {
+    const MAX: u32 = 50; // ThreadBrowser row: Facepile max 50
+    if count >= MAX {
+        Some(format!("{MAX}+"))
+    } else if count as usize > preview {
+        Some(format!("+{}", count as usize - preview))
+    } else {
+        None
+    }
+}
+
+/// facepile_yRVHqK container_m-EqeQ size24_m-EqeQ (threads-lrer #1392):
+/// margin-start 16, flex center; avatarContainerMasked_ 24px with
+/// margin-inline-end −6 except the last avatar (avatarContainer_, no margin)
+/// when no pill follows. moreUsers_ size24: h 24, min-w 24, r 12, padding 0 8,
+/// 12px semibold, --background-base-lowest, --text-default. Unknown users get
+/// the default avatar (showDefaultAvatarsForNullUsers).
+fn thread_facepile(app: &PhoenixApp, ids: &[Id], count: u32) -> Option<gpui::Div> {
+    if ids.is_empty() {
+        return None;
+    }
+    let more = facepile_more(ids.len(), count);
+    let n = ids.len();
+    let has_more = more.is_some();
+    Some(
+        div()
+            .flex_none()
+            .ml(z(16.))
+            .flex()
+            .items_center()
+            .children(ids.iter().enumerate().map(|(k, u)| {
+                let last = k + 1 == n && !has_more;
+                div().flex_none().size(z(24.)).when(!last, |d| d.mr(z(-6.))).child(avatar(app.users.get(u), 24.))
+            }))
+            .when_some(more, |d, t| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .h(z(24.))
+                        .min_w(z(24.))
+                        .px(z(8.))
+                        .rounded(z(12.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+                        .text_color(tk(idx::TEXT_DEFAULT))
+                        .text_size(z(12.))
+                        .line_height(z(12.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(t),
+                )
+            }),
+    )
 }
 
 #[cfg(test)]
@@ -1722,5 +1782,13 @@ mod tests {
         assert!(!keep_mention(&m("@everyone", true), me, false, true));
         assert!(!keep_mention(&m("<@&9>", false), me, true, false));
         assert!(keep_mention(&m("<@&9>", false), me, true, true));
+    }
+
+    #[test]
+    fn facepile_pill() {
+        assert_eq!(facepile_more(3, 3), None);
+        assert_eq!(facepile_more(3, 0), None);
+        assert_eq!(facepile_more(3, 7).as_deref(), Some("+4"));
+        assert_eq!(facepile_more(3, 50).as_deref(), Some("50+"));
     }
 }

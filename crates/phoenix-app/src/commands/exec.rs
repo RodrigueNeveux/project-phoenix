@@ -183,6 +183,8 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     first_message: r.first_messages.iter().find(|m| m.channel_id == t.id).map(message),
                     owner: t.owner_id.map(id),
                     last_message: t.last_message_id.map(id),
+                    member_ids_preview: t.member_ids_preview.iter().copied().map(id).collect(),
+                    member_count: t.member_count.unwrap_or(0),
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more: r.has_more }
@@ -230,6 +232,8 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     first_message: None,
                     owner: t.owner_id.map(id),
                     last_message: t.last_message_id.map(id),
+                    member_ids_preview: t.member_ids_preview.iter().copied().map(id).collect(),
+                    member_count: t.member_count.unwrap_or(0),
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more }
