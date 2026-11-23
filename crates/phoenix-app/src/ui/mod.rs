@@ -18,6 +18,8 @@ pub mod pickers;
 pub mod modals;
 pub mod profile;
 pub mod dm_profile_panel;
+pub mod avatar_color;
+pub mod profile_note;
 pub mod search;
 pub mod server_bar;
 pub mod sidebar;

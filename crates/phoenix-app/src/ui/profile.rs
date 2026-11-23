@@ -153,7 +153,7 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
         );
     }
     if app.people.status_picker {
-        out.push(status_picker::render(app, cx));
+        out.push(status_picker::render(app, window, cx));
     }
     out
 }
@@ -304,7 +304,13 @@ pub(crate) fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<
         Some(ImageRef::Default(i)) => DEFAULT_AVATAR[*i as usize % DEFAULT_AVATAR.len()],
         _ => Palette::BLURPLE,
     };
-    let accent = prof.and_then(|p| p.accent).unwrap_or(fallback_accent);
+    // No banner and no accent colour: the client paints the avatar's dominant
+    // colour (vanilla-dm-profile-panel #1562 `fill_vNEdYY`), see avatar_color.
+    let avatar_colour = match user.map(|u| &u.avatar) {
+        Some(ImageRef::Url(u)) if prof.is_none_or(|p| p.banner.is_none()) => crate::ui::avatar_color::get(u),
+        _ => None,
+    };
+    let accent = prof.and_then(|p| p.accent).or(avatar_colour).unwrap_or(fallback_accent);
     let mut role_ids: Vec<Id> =
         prof.map(|p| p.roles.clone()).filter(|r| !r.is_empty()).or_else(|| member.map(|m| m.roles.clone())).unwrap_or_default();
     let guild_roles = guild.and_then(|g| app.roles.get(&g));
@@ -390,7 +396,7 @@ fn status_bubble(t: SharedString) -> Div {
 /// Name block (866212 `displayNameRow_C2XpHA`, `usernameAndPronounsRow_`):
 /// display name heading-lg/semibold 20/24 (modal heading-xl/semibold 24/32),
 /// then username, pronouns, server tag and badges (gap 2px 6px).
-pub(crate) fn name_block(i: &Info, big: bool) -> Div {
+pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> Div {
     let tag = i.user.and_then(|u| u.tag.clone());
     let pronouns = i.prof.map(|p| p.pronouns.clone()).filter(|p| !p.is_empty());
     let bot = i.user.is_some_and(|u| u.bot);
@@ -399,6 +405,7 @@ pub(crate) fn name_block(i: &Info, big: bool) -> Div {
         .flex_col()
         .child(
             div()
+                .group(crate::ui::profile_note::NAME_ROW_GROUP)
                 .flex()
                 .items_center()
                 .gap(z(4.)) // displayNameRow gap --space-4
@@ -411,7 +418,9 @@ pub(crate) fn name_block(i: &Info, big: bool) -> Div {
                         .text_ellipsis()
                         .child(i.display.clone()),
                 )
-                .when(bot, |d| d.child(app_tag())),
+                .when(bot, |d| d.child(app_tag()))
+                // displayNameTrailing_C2XpHA: the note button (popout / DM panel)
+                .children(trailing),
         )
         .child(
             div()
@@ -582,7 +591,7 @@ pub fn mana_button(id: impl Into<gpui::ElementId>, label: impl Into<SharedString
 /// Round banner button (`bannerButton_C4gRrZ`: --custom-button-button-sm-height
 /// 32px, 50%, --control-overlay-secondary-background-default, 1px
 /// --opacity-white-8, icon 16px --white).
-fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<Div> {
+pub(crate) fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<Div> {
     div()
         .id(id)
         .size(z(32.))
@@ -598,6 +607,59 @@ fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<D
         .child(gpui::svg().path(crate::icons::path(icon)).size(z(16.)).text_color(c(tok(idx::WHITE))))
 }
 
+/// Nitro theme backdrop for `outer_P1YEjQ.custom-user-profile-theme`:
+/// `linear-gradient(primary, primary --custom-user-profile-banner-height (105px),
+/// secondary)` (sRGB interpolation). Two absolute layers so the 105px stop is
+/// exact whatever the card height; the content above lays the uniform
+/// `inner_P1YEjQ` overlay (--profile-gradient-overlay-color) on top.
+pub(crate) fn theme_backdrop((primary, secondary): (u32, u32)) -> [Div; 2] {
+    [
+        div().absolute().top_0().left_0().right_0().h(z(105.)).bg(c(primary)),
+        div().absolute().top(z(105.)).left_0().right_0().bottom_0().bg(gpui::linear_gradient(
+            180.,
+            gpui::linear_color_stop(c(primary), 0.),
+            gpui::linear_color_stop(c(secondary), 1.),
+        )),
+    ]
+}
+
+/// Kick off the avatar dominant-colour extraction for a banner-less user.
+pub(crate) fn ensure_avatar_colour(app: &PhoenixApp, uid: Id, cx: &mut gpui::App) {
+    let prof = app.people.profiles.get(&uid);
+    if prof.is_some_and(|p| p.banner.is_some() || p.accent.is_some()) {
+        return;
+    }
+    if let Some(ImageRef::Url(u)) = app.users.get(&uid).map(|u| &u.avatar) {
+        crate::ui::avatar_color::ensure(u, cx);
+    }
+}
+
+/// Banner buttons (`wrapper_xpwejc`, gap 8; vanilla-profile-popout #2008,
+/// vanilla-dm-profile-panel #1551): "Friend" (UserCheckIcon) for a friend,
+/// "Add Friend" (UserPlusIcon) when there is no relationship, then "More"
+/// (MoreHorizontalIcon) opening the user context menu. "Open in mod view"
+/// (ModerationIcon) only exists for moderators and is not reproduced.
+pub(crate) fn banner_buttons(app: &PhoenixApp, uid: Id, guild: Option<Id>, end: f32, cx: &mut Context<PhoenixApp>) -> Div {
+    use crate::ui::home::data::{NavRequest, RelAction, RelationshipKind};
+    let rel = app.nav.relationship(uid).map(|r| r.kind);
+    let bot = app.users.get(&uid).is_some_and(|u| u.bot);
+    let friend_btn = match rel {
+        Some(RelationshipKind::Friend) => Some(banner_button(("profile-friend", uid.0), "user-check")),
+        None if !bot => Some(
+            banner_button(("profile-add-friend", uid.0), "invite")
+                .on_click(cx.listener(move |a, _, _, cx| {
+                    a.nav_request(NavRequest::Relationship { user: uid, action: RelAction::Accept }, cx, |_, _, _| {})
+                })),
+        ),
+        _ => None,
+    };
+    let more = banner_button(("profile-more", uid.0), "chat/more").on_click(cx.listener(move |_, ev: &gpui::ClickEvent, w, cx| {
+        crate::ui::user_menu::open(uid, guild, ev.position(), w);
+        cx.notify();
+    }));
+    div().absolute().right(z(end)).top(z(8.)).flex().gap(z(8.)).children(friend_btn).child(more)
+}
+
 fn popout_card(
     app: &PhoenixApp,
     uid: Id,
@@ -605,6 +667,7 @@ fn popout_card(
     _note: Option<&gpui::Entity<InputState>>,
     cx: &mut Context<PhoenixApp>,
 ) -> Div {
+    ensure_avatar_colour(app, uid, cx);
     let i = info(app, uid, guild);
     let bg = tok(idx::BACKGROUND_SURFACE_HIGH); // outer_P1YEjQ background
     let e = cx.entity();
@@ -628,9 +691,7 @@ fn popout_card(
                 .child(avatar_block(&i, 80., 6., bg)),
         )
         // wrapper_xpwejc: inset-inline-end 12px, top --space-8, gap 8px
-        .when(uid != app.me.id, |d| {
-            d.child(div().absolute().right(z(12.)).top(z(8.)).flex().gap(z(8.)).child(banner_button(("profile-more", uid.0), "chat/more")))
-        })
+        .children((uid != app.me.id).then(|| banner_buttons(app, uid, guild, 12., cx)))
         // container_rmCN9_ popout: inset-inline-start 105px, top banner - 7px
         .when_some(i.custom.clone(), |d, t| d.child(div().absolute().left(z(105.)).top(z(98.)).child(status_bubble(t))));
 
@@ -652,11 +713,12 @@ fn popout_card(
                 .id(("profile-name", uid.0))
                 .cursor_pointer()
                 .on_click(move |_, _, cx| e_name.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
-                .child(name_block(&i, false)),
+                .child(name_block(&i, false, (uid != app.me.id).then(|| crate::ui::profile_note::note_button(uid, cx)))),
         );
     if uid == app.me.id {
         body = body.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(status_label(i.presence)));
     }
+    body = body.children(crate::ui::profile_note::note_section(i.prof.map(|p| p.note.clone()), uid, cx));
     match i.prof {
         None => {
             body = body.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("profile.loading")));
@@ -850,7 +912,7 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .pl(z(CARD_PAD))
         .pr(z(CARD_PAD - 8.))
         .pb(z(CARD_PAD))
-        .child(name_block(&i, true))
+        .child(name_block(&i, true, None))
         .children(buttons);
     match i.prof {
         None => {

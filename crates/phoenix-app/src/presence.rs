@@ -246,6 +246,16 @@ fn iso_to_unix(s: &str) -> Option<i64> {
 
 pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: String) -> Profile {
     let u = &p.user;
+    if std::env::var_os("PHX_DEBUG_PROFILE").is_some() {
+        // Diagnostics for the real-data captures: badge / widget payloads only.
+        eprintln!(
+            "profile {}: badges={} widgets={} extra_keys={:?}",
+            u.id,
+            Value::Array(p.badges.clone()),
+            Value::Array(p.widgets.clone()),
+            p.extra.keys().collect::<Vec<_>>()
+        );
+    }
     let banner_hash = p
         .guild_member_profile
         .as_ref()

@@ -14,7 +14,7 @@ use crate::{
     model::Id,
     presence::format_date,
     theme::{Palette, c, generated::idx, tok, z},
-    ui::profile::{avatar_block, banner, info, mutuals_row, name_block, section_title},
+    ui::profile::{avatar_block, banner, banner_buttons, ensure_avatar_colour, info, mutuals_row, name_block, section_title, theme_backdrop},
 };
 
 thread_local! {
@@ -52,6 +52,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     }
     let uid = peer(app)?;
     ensure_profile(app, uid, cx);
+    ensure_avatar_colour(app, uid, cx);
     let i = info(app, uid, None);
     // `:where(.outer_P1YEjQ).user-profile-sidebar-redesign:not(.custom-user-profile-theme)`
     // background --chat-background-default (dump vanilla-dm-profile-panel #1548).
@@ -59,28 +60,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     // `inner_P1YEjQ` lays --profile-gradient-overlay (black / .6) over it.
     let theme = i.prof.and_then(|p| p.theme);
     let card_bg = tok(idx::CHAT_BACKGROUND_DEFAULT);
+    // --profile-gradient-start = color-mix(in oklab, overlay 100%, primary) is the
+    // overlay itself (black / .6 in dark themes) painted over the outer gradient,
+    // so the composited colour is 40% of each channel.
     let mix = |rgb: u32| {
-        // color-mix(in oklab, overlay 100%, theme colour): approximated as 60% black over it.
         let ch = |sh: u32| (((rgb >> sh) & 0xFF) as f32 * 0.4).round() as u32;
         (ch(16) << 16) | (ch(8) << 8) | ch(0)
     };
     let ring_bg = theme.map(|(p, _)| mix(p)).unwrap_or(card_bg);
     let e = cx.entity();
-    // bannerButton_C4gRrZ: 32px circle, rgba(0,0,0,.56), 1px rgba(255,255,255,.08), 16px glyph.
-    let banner_btn = |id: &'static str, icon: &'static str| {
-        div()
-            .id(id)
-            .size(z(32.))
-            .rounded_full()
-            .bg(gpui::hsla(0., 0., 0., 0.56))
-            .border_1()
-            .border_color(gpui::hsla(0., 0., 1., 0.08))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .child(gpui::svg().path(icon).size(z(16.)).text_color(gpui::white()))
-    };
     let bio = i.prof.map(|p| p.bio.clone()).filter(|b| !b.is_empty());
     let created = i.prof.map(|p| p.created);
     let header = div()
@@ -89,16 +77,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .mb(z(8.))
         .child(banner(&i, 105., 6.)) // banner_vNEdYY 300x105
         // wrapper_xpwejc: top/right 8px, gap 8
-        .child(
-            div()
-                .absolute()
-                .top(z(8.))
-                .right(z(8.))
-                .flex()
-                .gap(z(8.))
-                .child(banner_btn("dm-panel-friend", "icons/friends.svg"))
-                .child(banner_btn("dm-panel-more", "icons/chat/more.svg")),
-        )
+        .child(banner_buttons(app, uid, None, 8., cx))
         // avatar_WRLIGC: 80px at (14, 55) incl. the ring
         .child(div().absolute().left(z(8.)).top(z(49.)).child(avatar_block(&i, 80., 6., ring_bg)));
     let mut body = div()
@@ -112,7 +91,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .flex()
                 .flex_col()
                 .gap(z(8.))
-                .child(name_block(&i, false))
+                .child(name_block(&i, false, Some(crate::ui::profile_note::note_button(uid, cx))))
+                // note_A7qlid: the inline note editor
+                .children(crate::ui::profile_note::note_section(i.prof.map(|p| p.note.clone()), uid, cx))
                 // mutuals_PXYMZ1: 16px face pile + "N mutual friends" • "N mutual servers"
                 .children(i.prof.and_then(mutuals_row)),
         );
@@ -189,29 +170,22 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .bg(c(Palette::BG_PRIMARY))
             .child(
                 div()
+                    .relative()
                     .size_full()
                     .p(z(2.)) // outer_P1YEjQ padding --custom-user-profile-theme-padding, radius --radius-sm
                     .rounded(z(8.))
-                    .map(|d| match theme {
-                        Some((p, s2)) => d.bg(gpui::linear_gradient(
-                            180.,
-                            gpui::linear_color_stop(c(p), 0.18), // primary until the banner height
-                            gpui::linear_color_stop(c(s2), 0.88), // secondary at 100% - footer height
-                        )),
-                        None => d.bg(c(card_bg)),
-                    })
+                    .overflow_hidden()
+                    .when(theme.is_none(), |d| d.bg(c(card_bg)))
+                    .when_some(theme, |d, t| d.children(theme_backdrop(t)))
                     .child(
                         div()
+                            .relative()
                             .size_full()
                             .rounded(z(6.)) // inner_P1YEjQ radius 6
                             .overflow_hidden()
-                            .when_some(theme, |d, (p, s2)| {
-                                d.bg(gpui::linear_gradient(
-                                    180.,
-                                    gpui::linear_color_stop(c(mix(p)), 0.18),
-                                    gpui::linear_color_stop(c(mix(s2)), 1.),
-                                ))
-                            })
+                            // inner_P1YEjQ: linear-gradient(start, start 105px, end) where
+                            // start = end = the overlay colour (oklab(0 0 0 / .6))
+                            .when(theme.is_some(), |d| d.bg(gpui::hsla(0., 0., 0., 0.6)))
                             .flex()
                             .flex_col()
                             .child(div().id("dm-panel-scroll").flex_1().min_h_0().overflow_y_scroll().child(header).child(body))

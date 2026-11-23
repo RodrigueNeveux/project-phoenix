@@ -91,4 +91,11 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("more-vertical", &["MoreVerticalIcon"]),
     ("new-group-dm", &["ChatPlusIcon"]),
     ("flag", &["FlagIcon"]),
+    ("quests", &["QuestsIcon"]),
+    ("note", &["PaperPlusIcon"]),
+    ("user-check", &["UserCheckIcon"]),
+    ("ribbon", &["RibbonIcon"]),
+    ("orbs", &["OrbsIcon"]),
+    ("user-circle", &["UserCircleIcon"]),
+    ("bell-slash", &["BellSlashIcon"]),
 ];

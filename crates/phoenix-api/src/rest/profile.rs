@@ -66,6 +66,12 @@ pub struct UserProfile {
     pub mutual_friends: Vec<User>,
     #[serde(default, deserialize_with = "null_default")]
     pub badges: Vec<Value>,
+    /// Profile widgets (`widgets`: game collection, application cards...).
+    #[serde(default, deserialize_with = "null_default")]
+    pub widgets: Vec<Value>,
+    /// Every other field, kept for diagnostics.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
 }
 
 impl UserProfile {
@@ -100,7 +106,9 @@ pub struct CustomStatus {
 }
 
 pub(crate) fn profile_path(user: UserId, guild: Option<GuildId>) -> String {
-    let mut p = format!("/users/{user}/profile?with_mutual_guilds=true&with_mutual_friends=true&with_mutual_friends_count=true");
+    // Same query as the client (`type` is always sent; with_mutual_friends_count
+    // only when the friends themselves are not requested).
+    let mut p = format!("/users/{user}/profile?type=popout&with_mutual_guilds=true&with_mutual_friends=true&with_mutual_friends_count=false");
     if let Some(g) = guild {
         p.push_str(&format!("&guild_id={g}"));
     }
@@ -166,7 +174,7 @@ mod tests {
     fn paths() {
         assert_eq!(
             profile_path(Snowflake(7), None),
-            "/users/7/profile?with_mutual_guilds=true&with_mutual_friends=true&with_mutual_friends_count=true"
+            "/users/7/profile?type=popout&with_mutual_guilds=true&with_mutual_friends=true&with_mutual_friends_count=false"
         );
         assert!(profile_path(Snowflake(7), Some(Snowflake(9))).ends_with("&guild_id=9"));
     }
