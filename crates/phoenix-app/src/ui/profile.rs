@@ -792,9 +792,13 @@ fn popout_card(
         )
     });
 
+    // Applied profile effect / frame (`ui::profile_fx`); the popout is 300 wide.
+    let (fx_sku, frame_sku) = i.prof.map(|p| (p.effect_sku, p.frame_sku)).unwrap_or_default();
+    let effect = fx_sku.and_then(|s| crate::ui::profile_fx::product(app, s, cx)).and_then(|c| crate::ui::profile_fx::effect(&c, 300., cx));
+    let frame = frame_sku.and_then(|s| crate::ui::profile_fx::product(app, s, cx)).and_then(|c| c.frame);
     // outer_P1YEjQ.user-profile-popout: --background-surface-high, --radius-sm,
     // --shadow-border + --shadow-high. inner_P1YEjQ: gap 8px, padding-bottom 4px.
-    div()
+    let card = div()
         .relative()
         .w_full()
         .max_h_full()
@@ -811,6 +815,19 @@ fn popout_card(
         .child(header)
         .child(body)
         .children(footer)
+        .children(effect);
+    match frame {
+        None => card,
+        Some(f) => div()
+            .relative()
+            .w_full()
+            .max_h_full()
+            .flex()
+            .flex_col()
+            .children(crate::ui::profile_fx::frame(&f, 300., false))
+            .child(card)
+            .children(crate::ui::profile_fx::frame(&f, 300., true)),
+    }
 }
 
 thread_local! {

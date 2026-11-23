@@ -38,6 +38,117 @@ pub struct Collectible {
     /// Profile effects: the full-card still (`reducedMotionSrc`) drawn over
     /// the picker's preview card.
     pub full: Option<SharedString>,
+    /// Profile effects: the animated layers (`effects[]`).
+    pub effects: Vec<EffectLayer>,
+    /// Profile frames: layers and geometry.
+    pub frame: Option<FrameSpec>,
+}
+
+/// One `effects[]` layer of a profile effect: an APNG drawn over the whole
+/// card from `start` ms, for `duration` ms, then (when `looping`) again after
+/// `loop_delay` ms. Higher `z` on top.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EffectLayer {
+    pub src: SharedString,
+    pub looping: bool,
+    pub start: u64,
+    pub duration: u64,
+    pub loop_delay: u64,
+    pub z: i64,
+}
+
+/// Where a frame layer sits on the card (`layers[].type` / `anchor`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Anchor {
+    Top,
+    Center,
+    Bottom,
+}
+
+/// A profile frame: images laid around the card. `inner_width` image px map
+/// to the card width; the art overflows by `overflow_*` image px.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FrameSpec {
+    /// (static image URL, anchor, drawn in front of the card content).
+    pub layers: Vec<(SharedString, Anchor, bool)>,
+    pub inner_width: f32,
+    pub overflow_top: f32,
+    pub overflow_bottom: f32,
+    pub overflow_horizontal: f32,
+}
+
+fn effects(kind: Kind, item: &Value) -> Vec<EffectLayer> {
+    if kind != Kind::Effect {
+        return Vec::new();
+    }
+    let n = |l: &Value, k: &str| l.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let mut v: Vec<EffectLayer> = item
+        .get("effects")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|l| {
+            Some(EffectLayer {
+                src: l.get("src")?.as_str()?.to_owned().into(),
+                looping: l.get("loop").and_then(Value::as_bool).unwrap_or(false),
+                start: n(l, "start"),
+                duration: n(l, "duration"),
+                loop_delay: n(l, "loopDelay"),
+                z: l.get("zIndex").and_then(Value::as_i64).unwrap_or(0),
+            })
+        })
+        .collect();
+    v.sort_by_key(|l| l.z);
+    v
+}
+
+fn frame(kind: Kind, item: &Value) -> Option<FrameSpec> {
+    if kind != Kind::Frame {
+        return None;
+    }
+    let sku = item.get("sku_id")?.as_str()?;
+    let f = |k: &str| item.get(k).and_then(Value::as_f64).unwrap_or(0.) as f32;
+    let layers = item
+        .get("layers")?
+        .as_array()?
+        .iter()
+        .filter_map(|l| {
+            let s = |k: &str| l.get(k).and_then(Value::as_str);
+            let anchor = match s("anchor") {
+                Some("top") => Anchor::Top,
+                Some("bottom") => Anchor::Bottom,
+                _ => Anchor::Center,
+            };
+            let url = format!("https://cdn.discordapp.com/media/v1/collectibles-shop/{sku}/{}/static", s("id")?);
+            Some((url.into(), anchor, s("order") != Some("back")))
+        })
+        .collect();
+    Some(FrameSpec {
+        layers,
+        inner_width: f("inner_width").max(1.),
+        overflow_top: f("overflow_top"),
+        overflow_bottom: f("overflow_bottom"),
+        overflow_horizontal: f("overflow_horizontal"),
+    })
+}
+
+fn item(kind: Kind, sku: u64, name: SharedString, it: &Value) -> Collectible {
+    Collectible { sku, kind, name, preview: preview(kind, it), full: full(kind, it), effects: effects(kind, it), frame: frame(kind, it) }
+}
+
+/// A `GET /collectibles-products/{sku}` reply: its first item.
+pub fn parse_product(v: &Value) -> Option<Collectible> {
+    let it = v.get("items")?.as_array()?.first()?;
+    let kind = Kind::from_type(it.get("type")?.as_u64()?)?;
+    let sku = it.get("sku_id")?.as_str()?.parse().ok()?;
+    Some(item(kind, sku, v.get("name").and_then(Value::as_str).unwrap_or_default().to_owned().into(), it))
+}
+
+/// Applied effect / frame SKUs of a profile (`user_profile.collectibles`,
+/// type 1 effect, 3 frame).
+pub fn applied_skus(c: &[Value]) -> (Option<u64>, Option<u64>) {
+    let find = |t: u64| c.iter().find(|x| x.get("type").and_then(Value::as_u64) == Some(t)).and_then(|x| x.get("sku_id")?.as_str()?.parse().ok());
+    (find(1), find(3))
 }
 
 fn full(kind: Kind, item: &Value) -> Option<SharedString> {
@@ -94,13 +205,7 @@ pub fn parse_shop(v: &Value) -> ShopCatalog {
         if !seen.insert(sku) {
             continue;
         }
-        let c = Collectible {
-            sku,
-            kind,
-            name: p.get("name").and_then(Value::as_str).unwrap_or_default().to_owned().into(),
-            preview: preview(kind, it),
-            full: full(kind, it),
-        };
+        let c = item(kind, sku, p.get("name").and_then(Value::as_str).unwrap_or_default().to_owned().into(), it);
         if p.get("premium_type").and_then(Value::as_u64) == Some(phoenix_api::rest::collectibles::PREMIUM_TYPE_NITRO) {
             out.nitro.push(c);
         } else {
@@ -131,13 +236,7 @@ pub fn parse_purchases(v: &Value) -> Vec<Collectible> {
             let name = p.get("name").and_then(Value::as_str).unwrap_or_default().to_owned();
             p.get("items").and_then(Value::as_array).cloned().unwrap_or_default().into_iter().filter_map(move |it| {
                 let kind = Kind::from_type(it.get("type")?.as_u64()?)?;
-                Some(Collectible {
-                    sku: it.get("sku_id")?.as_str()?.parse().ok()?,
-                    kind,
-                    name: name.clone().into(),
-                    preview: preview(kind, &it),
-                    full: full(kind, &it),
-                })
+                Some(item(kind, it.get("sku_id")?.as_str()?.parse().ok()?, name.clone().into(), &it))
             })
         })
         .collect()
@@ -182,5 +281,21 @@ mod tests {
         promote(&mut v, &[3, 99]);
         assert_eq!(v.iter().map(|c| c.sku).collect::<Vec<_>>(), vec![3, 2]);
         assert_eq!(s.shop[1].preview.as_deref(), Some("https://cdn.discordapp.com/media/v1/collectibles-shop/3/8/static"));
+        let f = s.shop[1].frame.as_ref().unwrap();
+        assert_eq!(f.layers.len(), 2);
+        assert_eq!(f.layers[1].1, Anchor::Center);
+    }
+
+    #[test]
+    fn parses_product_effects_and_applied() {
+        let v = json!({"name": "Fx", "type": 1, "items": [{"type": 1, "sku_id": "7", "effects": [
+            {"src": "https://b", "loop": true, "duration": 4000, "start": 7500, "loopDelay": 4500, "zIndex": 101},
+            {"src": "https://a", "loop": false, "duration": 5810, "start": 0, "zIndex": 100}]}]});
+        let c = parse_product(&v).unwrap();
+        assert_eq!(c.effects.len(), 2);
+        assert_eq!(c.effects[0].src.as_ref(), "https://a");
+        assert!(c.effects[1].looping && c.effects[1].loop_delay == 4500);
+        let a = applied_skus(&[json!({"type": 3, "sku_id": "5"}), json!({"type": 1, "sku_id": "7"})]);
+        assert_eq!(a, (Some(7), Some(5)));
     }
 }

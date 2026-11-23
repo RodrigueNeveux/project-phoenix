@@ -16,6 +16,7 @@ pub mod settings;
 pub mod members;
 pub mod activity_traits;
 pub mod nameplate;
+pub mod profile_fx;
 pub mod modal;
 pub mod pickers;
 pub mod modals;

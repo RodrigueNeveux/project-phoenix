@@ -148,6 +148,9 @@ impl Backend for ReadOnly {
     fn collectibles_shop(&self) -> BoxFuture<phoenix_app::ui::settings::collectibles::ShopCatalog> {
         self.0.collectibles_shop()
     }
+    fn collectible_product(&self, sku: u64) -> BoxFuture<Option<phoenix_app::ui::settings::collectibles::Collectible>> {
+        self.0.collectible_product(sku)
+    }
     /// Read-only GETs (profile, application identities, widget configs).
     fn profile_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_widgets::AppWidget>> {
         self.0.profile_widgets(u)

@@ -793,6 +793,9 @@ impl Backend for DiscordBackend {
     fn collectibles_shop(&self) -> BoxFuture<crate::ui::settings::collectibles::ShopCatalog> {
         self.collectibles_shop_impl()
     }
+    fn collectible_product(&self, sku: u64) -> BoxFuture<Option<crate::ui::settings::collectibles::Collectible>> {
+        self.collectible_product_impl(sku)
+    }
     fn profile_widgets(&self, user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
         self.profile_widgets_impl(user)
     }

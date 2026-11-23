@@ -239,6 +239,10 @@ pub struct Profile {
     pub badges: Vec<(SharedString, SharedString)>,
     /// Nitro profile theme (primary, secondary) colours, `theme_colors`.
     pub theme: Option<(u32, u32)>,
+    /// Applied profile effect / frame SKUs (`user_profile.collectibles`);
+    /// assets resolved by `ui::profile_fx`.
+    pub effect_sku: Option<u64>,
+    pub frame_sku: Option<u64>,
 }
 
 pub fn snowflake_time(id: u64) -> i64 {
@@ -285,6 +289,13 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
         .and_then(|x| x.theme_colors.as_ref().and_then(|t| t.first().copied()).or(x.accent_color))
         .or(u.accent_color);
     let gm = p.guild_member.as_ref();
+    // Guild profile collectibles override the global ones (client `profileEffect`).
+    let fx = [p.guild_member_profile.as_ref(), p.user_profile.as_ref()]
+        .into_iter()
+        .flatten()
+        .map(|m| crate::ui::settings::collectibles::applied_skus(&m.collectibles))
+        .find(|f| f.0.is_some() || f.1.is_some())
+        .unwrap_or_default();
     Profile {
         user: Id(u.id.0),
         banner,
@@ -311,6 +322,8 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
             })
             .collect(),
         theme: p.user_profile.as_ref().and_then(|x| x.theme_colors.as_ref()).and_then(|t| Some((*t.first()?, *t.get(1)?))),
+        effect_sku: fx.0,
+        frame_sku: fx.1,
     }
 }
 

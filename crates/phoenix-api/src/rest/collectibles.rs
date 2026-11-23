@@ -57,6 +57,12 @@ impl RestClient {
         Ok(recommended_skus(&v))
     }
 
+    /// One product by SKU (`COLLECTIBLES_PRODUCTS`), as the client fetches
+    /// the applied effect / frame of a profile it shows.
+    pub async fn get_collectibles_product(&self, sku: u64) -> Result<Value> {
+        self.call(Method::GET, &format!("/collectibles-products/{sku}"), Body::None).await
+    }
+
     /// Owned collectibles (raw JSON array of purchases).
     pub async fn get_collectibles_purchases(&self) -> Result<Value> {
         self.call(Method::GET, PURCHASES, Body::None).await

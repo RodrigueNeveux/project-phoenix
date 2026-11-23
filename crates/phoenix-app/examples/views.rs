@@ -175,6 +175,7 @@ fn main() -> anyhow::Result<()> {
                                     mutual_guild_ids: app.guilds.iter().take(3).map(|g| g.id).collect(),
                                     badges: Vec::new(),
                                     theme: None,
+                                    ..Default::default()
                                 },
                             );
                             if scene == "profile-modal" {

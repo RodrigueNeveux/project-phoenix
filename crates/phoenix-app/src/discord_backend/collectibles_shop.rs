@@ -1,7 +1,7 @@
 //! Shop catalogue for the collectible pickers (read-only GET).
 
 use super::{DiscordBackend, api_err};
-use crate::{backend::BoxFuture, ui::settings::collectibles::{ShopCatalog, parse_shop, promote}};
+use crate::{backend::BoxFuture, ui::settings::collectibles::{Collectible, ShopCatalog, parse_product, parse_shop, promote}};
 
 impl DiscordBackend {
     pub(super) fn collectibles_shop_impl(&self) -> BoxFuture<ShopCatalog> {
@@ -14,6 +14,13 @@ impl DiscordBackend {
                 promote(&mut cat.shop, &rec);
             }
             Ok(cat)
+        })
+    }
+
+    pub(super) fn collectible_product_impl(&self, sku: u64) -> BoxFuture<Option<Collectible>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.get_collectibles_product(sku).await.map_err(api_err)?;
+            Ok(parse_product(&v))
         })
     }
 }

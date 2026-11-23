@@ -25,6 +25,10 @@ pub struct ProfileMetadata {
     /// `[primary, accent]` Nitro profile theme colours.
     #[serde(default)]
     pub theme_colors: Option<Vec<u32>>,
+    /// Applied profile collectibles: `[{sku_id, type, expires_at}]`, type 1
+    /// profile effect, 3 profile frame (client `collectibles` parser).
+    #[serde(default, deserialize_with = "null_default")]
+    pub collectibles: Vec<serde_json::Value>,
 }
 
 /// The guild member part of a profile (only when `guild_id` was given).

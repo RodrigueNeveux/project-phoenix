@@ -586,7 +586,11 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
                 }))
         }))
     });
-    let nameplate = div().flex().items_center().justify_between().w_full().px(z(8.)).child(
+    // nameplatePreview_PaSpLC (dump #3203, 208x48): the applied plate behind the row.
+    let plate = nameplate_url(app, e).map(|u| {
+        div().absolute().top_0().left_0().size_full().rounded(z(8.)).overflow_hidden().child(img(u).absolute().top_0().right_0().h_full().w(z(48. * 213. / 40.)).opacity(0.6))
+    });
+    let nameplate = div().relative().flex().items_center().justify_between().w_full().px(z(8.)).children(plate).child(
         div().flex().items_center().gap(z(8.)).child(avatar(Some(me), 32.)).child(div().w(z(110.)).h(z(10.)).rounded_full().bg(c(tok(idx::BACKGROUND_MOD_STRONG)))),
     );
     let content = div()
@@ -908,7 +912,10 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
                     None => d.text_color(if themed { white(0.6) } else { c(tok(idx::TEXT_MUTED)) }).child(crate::t!("profile.note_placeholder")),
                 }),
         ));
-    div()
+    // Applied effect / frame (picker choice or the profile's own), see `ui::profile_fx`.
+    let effect = applied(app, e, super::collectibles::Kind::Effect, cx).and_then(|c| crate::ui::profile_fx::effect(&c, 400., cx));
+    let frame = applied(app, e, super::collectibles::Kind::Frame, cx).and_then(|c| c.frame);
+    let inner = div()
         .w(z(400.))
         .h_full()
         .flex_none()
@@ -972,6 +979,43 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
             )
         })
         .child(div().id("pe-card-body").flex_1().min_h_0().overflow_y_scroll().child(body))
+        // profileEffects_ZjcCyW: z-index 2, above the card content.
+        .children(effect);
+    // The frame art overflows the card, so it lives on an unclipped wrapper.
+    div()
+        .relative()
+        .w(z(400.))
+        .h_full()
+        .flex_none()
+        .flex()
+        .children(frame.as_ref().and_then(|f| crate::ui::profile_fx::frame(f, 400., false)))
+        .child(inner)
+        .children(frame.as_ref().and_then(|f| crate::ui::profile_fx::frame(f, 400., true)))
+}
+
+/// Applied effect / frame / nameplate: the picker choice ("Apply", preview
+/// only), else what the profile has applied (resolved by SKU).
+fn applied(app: &PhoenixApp, e: &EditorState, kind: super::collectibles::Kind, cx: &mut Cx) -> Option<super::collectibles::Collectible> {
+    use super::collectibles::Kind;
+    let sku = match e.equipped.get(kind) {
+        Some(s) => s?,
+        None => match kind {
+            Kind::Effect => e.profile.as_ref()?.effect_sku?,
+            Kind::Frame => e.profile.as_ref()?.frame_sku?,
+            _ => return None,
+        },
+    };
+    applied_item(e, kind, sku).cloned().or_else(|| crate::ui::profile_fx::product(app, sku, cx))
+}
+
+/// Nameplate image in the editor: picker choice, else the user's own.
+fn nameplate_url(app: &PhoenixApp, e: &EditorState) -> Option<SharedString> {
+    use super::collectibles::Kind;
+    match e.equipped.get(Kind::Nameplate) {
+        Some(Some(sku)) => applied_item(e, Kind::Nameplate, sku)?.preview.clone(),
+        Some(None) => None,
+        None => app.me.nameplate.as_ref().map(|n| n.0.clone()),
+    }
 }
 
 /// The applied collectible: owned, or a shop / Nitro item applied for

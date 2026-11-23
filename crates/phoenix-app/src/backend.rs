@@ -297,6 +297,11 @@ pub trait Backend: Send + Sync + 'static {
     fn collectibles_shop(&self) -> BoxFuture<crate::ui::settings::collectibles::ShopCatalog> {
         Box::pin(async { Ok(Default::default()) })
     }
+    /// One collectible by SKU (`GET /collectibles-products/{sku}`): the
+    /// applied profile effect / frame of a shown profile.
+    fn collectible_product(&self, _sku: u64) -> BoxFuture<Option<crate::ui::settings::collectibles::Collectible>> {
+        Box::pin(async { Ok(None) })
+    }
     /// Own status (op 3 + settings). `custom` = custom status text.
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
