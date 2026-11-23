@@ -522,18 +522,26 @@ impl PhoenixApp {
         });
         self.nav_home_target(guild, target.is_some());
         if let Some(t) = target {
-            self.select_channel(t, cx);
+            // Restoring the remembered chat (may be a voice channel's text chat): never joins.
+            self.open_channel_chat(t, cx);
         }
         cx.notify();
     }
 
     pub fn select_channel(&mut self, id: Id, cx: &mut Context<Self>) {
-        crate::commands::state::remember_read_mark(self, id);
-        let Some(ch) = self.channels.get_mut(&id) else { return };
+        let Some(ch) = self.channels.get(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
             self.join_voice(Some(id), cx);
             return;
         }
+        self.open_channel_chat(id, cx);
+    }
+
+    /// Show a channel's text chat without any side effect on voice: for voice/stage
+    /// channels this is the vanilla "Ouvrir la discussion" (voice channel text chat).
+    pub fn open_channel_chat(&mut self, id: Id, cx: &mut Context<Self>) {
+        crate::commands::state::remember_read_mark(self, id);
+        let Some(ch) = self.channels.get_mut(&id) else { return };
         ch.unread = false;
         ch.mentions = 0;
         let guild = ch.guild;

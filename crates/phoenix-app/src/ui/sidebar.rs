@@ -726,7 +726,11 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             None => icon(i, 16., col).into_any_element(),
         })
     };
-    let invite_hover = (!is_dm && !matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage)).then(|| {
+    let is_voice = matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage);
+    // Voice rows (vanilla-voice-sidebar #885/#889): "Ouvrir la discussion" (ChatIcon)
+    // then "Inviter dans le salon vocal", same 24px `iconItem_` boxes.
+    let chat_entity = entity.clone();
+    let invite_hover = (!is_dm).then(|| {
         div()
             .flex()
             .flex_none()
@@ -735,6 +739,18 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             .opacity(0.)
             .group_hover(group.clone(), |s| s.opacity(1.))
             .when(selected, |d| d.opacity(1.))
+            .when(is_voice, |d| {
+                d.child(
+                    div()
+                        .id(("vc-chat", id.0))
+                        .cursor_pointer()
+                        .on_click(move |_, _, cx| {
+                            cx.stop_propagation();
+                            chat_entity.update(cx, |a, cx| a.open_channel_chat(id, cx));
+                        })
+                        .child(action(Icon::Members, Some("chat"))),
+                )
+            })
             .child(action(Icon::Members, Some("invite")))
             .when(can_edit, |d| d.child(action(Icon::Gear, None)))
     });

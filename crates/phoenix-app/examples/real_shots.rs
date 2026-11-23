@@ -471,18 +471,11 @@ fn main() -> anyhow::Result<()> {
                 let thread = app.nav.find_thread(c).cloned();
                 let g = guild.or_else(|| app.channels.get(&c).or(thread.as_ref()).and_then(|ch| ch.guild));
                 app.select_guild(g, cx);
-                // `select_channel` on a voice channel means "join": just mark it selected
-                // (Discord is showing its text chat).
-                let voice = app.channels.get(&c).is_some_and(|ch| {
-                    matches!(ch.kind, phoenix_app::model::ChannelKind::Voice | phoenix_app::model::ChannelKind::Stage)
-                });
-                if voice {
-                    app.selected_channel = Some(c);
-                    app.rebuild_sidebar();
-                } else if thread.is_some() && !app.channels.contains_key(&c) {
+                // Voice channels: open their text chat only (never joins voice).
+                if thread.is_some() && !app.channels.contains_key(&c) {
                     app.select_thread(c, cx);
                 } else {
-                    app.select_channel(c, cx);
+                    app.open_channel_chat(c, cx);
                 }
             }
             cx.notify();

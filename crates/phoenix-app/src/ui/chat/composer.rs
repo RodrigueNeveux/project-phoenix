@@ -235,6 +235,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         // Group DMs read "Message <name>" (no @), like threads.
         Some(c) if c.guild.is_none() && crate::ui::dm_profile_panel::is_group_dm(app, c.id) => crate::t!("chat.placeholder_thread", name = c.name),
         Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = c.name),
+        // Voice channel text chat: no "#" prefix (the name follows the voice icon).
+        Some(c) if matches!(c.kind, crate::model::ChannelKind::Voice | crate::model::ChannelKind::Stage) => {
+            crate::t!("chat.placeholder_voice", name = c.name)
+        }
         Some(c) => crate::t!("chat.placeholder_channel", name = c.name),
         None => "".into(),
     };
