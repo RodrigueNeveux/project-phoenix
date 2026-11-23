@@ -53,8 +53,9 @@ fn member_list_update_maps() {
     cache.apply(&e);
     let out = a.map(&cache, &e);
     let ms = out.iter().find_map(|x| match x { AppEvent::GuildMembers { members, .. } => Some(members), _ => None }).unwrap();
-    assert_eq!(ms.len(), 1);
+    // The synced member, plus my own member (READY merged_members) for my server nick.
     assert_eq!(ms[0].presence, model::Presence::Idle);
+    assert!(ms.len() == 1 || (ms.len() == 2 && ms[1].user == Id(r.user.id.0)));
 }
 
 #[test]
