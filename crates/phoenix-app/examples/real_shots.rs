@@ -123,6 +123,10 @@ impl Backend for ReadOnly {
     fn has_premium(&self) -> bool {
         self.0.has_premium()
     }
+    /// Read-only `GET /users/{id}/profile` (DM profile panel, popouts).
+    fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
+        self.0.user_profile(u, g)
+    }
     fn subscribe_member_ranges(&self, g: Id, c: Id, r: Vec<[u32; 2]>) -> BoxFuture<()> {
         self.0.subscribe_member_ranges(g, c, r)
     }

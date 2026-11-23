@@ -356,6 +356,14 @@ fn badges(i: &Info) -> Option<Div> {
             .items_center()
             .gap(z(2.))
             .my(z(1.))
+            // managed_IqWmhA: padding 1px 3px, --radius-sm; :before --background-mod-subtle,
+            // 1px --border-muted (dump vanilla-dm-profile-panel #1580)
+            .px(z(3.))
+            .py(z(1.))
+            .rounded(z(8.))
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_MUTED)))
             .children(b.iter().map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none()))
     })
 }

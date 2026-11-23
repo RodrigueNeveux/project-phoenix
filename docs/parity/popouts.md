@@ -65,7 +65,7 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | confirm modal | `padding-size-sm_dvN-MP`, `section_dvN-MP` | padding | top 8 bottom 16; sections 16 24 8 | ui/modal.rs confirm | ✅ (was grey footer 16) |
 | confirm footer | `actionBarTrailing_dvN-MP` | gap / buttons | --space-8 / md secondary + primary/critical | ui/modal.rs confirm | ✅ (was "Cancel" link) |
 | modal backdrop | --background-scrim | bg | scrim token | ui/modal.rs frame, ui/profile.rs | ✅ (was #000000B3) |
-| settings, switcher, pickers, inbox, home rows, status picker | — | — | — | — | ❌ not audited yet |
+| settings, switcher, pickers, inbox, home rows, status picker | see settings.md, the pickers/switcher commit a09a2f6 and the inbox section below | — | — | — | ✅ audited (vanilla re-dumps vanilla-picker-*, vanilla-quickswitcher, vanilla-inbox-0..4, vanilla-search-popout, vanilla-pins, vanilla-threads) |
 
 ## Vanilla re-dump (2026-11-23, no Vencord)
 
@@ -117,6 +117,8 @@ client-mod additions, not Discord: kept as our counts row but not treated as ref
 | DM avatar | CDP `avatar_WRLIGC` | 80px at (14, 55) | — | ui/dm_profile_panel.rs | ✅ |
 | DM body | CDP `body_A7qlid` / `info_A7qlid` | margin 0 16, gap 20 / gap 8; name 20/24 600 | — | ui/dm_profile_panel.rs | ✅ |
 | DM mutuals | vanilla-dm-profile-panel #1587 `mutuals_PXYMZ1` | gap 2 6; sections padding 4 0 gap 4; 16px avatars margin-right -3; 12/16; 4px spacer dot | — | ui/profile.rs mutuals_row (shared) | ✅ friends + servers |
+| badges pill | #1580 `container_IqWmhA managed_` | padding 1 3, :before --background-mod-subtle + 1px --border-muted, --radius-sm | — | ui/profile.rs badges | ✅ (was bare icons) |
+| DM banner colour | #1562 `fill_vNEdYY` | rgb(76,49,53) for a user with no banner/accent | client derives it from the avatar | ui/profile.rs banner | ❌ we fall back to blurple |
 | DM note button | #1574 `button_AMrbh3` | 24px, padding 4, 16px pencil, next to the display name | — | — | ❌ missing (no icon name yet) |
 | DM footer button | #1613 `secondary_F7qvhY` | bg rgba(151,151,159,.12) | --background-mod-subtle | ui/dm_profile_panel.rs | ✅ (was mod-normal) |
 | DM bio | CDP `section_NcvRRg`, `viewFullBio_BcddaK` | 14/18 clamp; button margin-top 8, 12/16 | — | ui/dm_profile_panel.rs | ✅ |
@@ -150,12 +152,13 @@ do NOT contain the layer (it closed before the DOM snapshot); only their .png sh
 | danger | `#user-context-block` | color | --text-feedback-critical | row | ✅ |
 | checkbox | `#guild-context-hide-muted-channels .checkboxIndicator_vTUVyc` | size / radius / border / bg | 20 / 4 / 1px checkbox-border-default / checkbox-background-default | Check | ✅ (was 18, blurple border) |
 | submenu | 2nd `[role=menu]` while hovering `#user-context-favorite-channel` | x / y / w | parent right − 4 / row top − 9 / 188 | panel_at sub_panel | ✅ (was menu_w − 8, −6) |
-| DM menu order | `#user-context` groups | items | Mark As Read ‖ Pin, Add to Favorites > ‖ Profile, Call, Add Note (subtext), Add Friend Nickname, Close DM ‖ Apps >, Invite to Server >, Remove Friend, Ignore, Block ‖ Mute @user > | nav_menus.rs | ✅ (Pin/Favorite/Nickname/Apps/Ignore are stubs) |
-| message menu | `#message` | items | reaction strip (44px buttons, radius 8, gap 4) ‖ Add Reaction > ‖ Edit, Reply, Forward ‖ Copy Text, Pin, Bookmark, Remind Me >, Apps >, Mark Unread, Copy Link, Speak ‖ Delete ‖ Copy ID — all with LEFT icons | chat/panels.rs (not mine) | ❌ order/icons to align by chat owner |
+| DM menu order | vanilla-menu-dm `#user-context` | items | Mark As Read ‖ Pin, Add to Favorites > ‖ Profile, Call, Add Note (subtext), Add Friend Nickname, Close DM ‖ Apps >, Invite to Server >, Remove Friend, Ignore, Block ‖ Mute @user > ‖ Copy User ID, Copy Channel ID | nav_menus.rs | ✅ (Pin/Favorite/Nickname/Apps/Ignore are stubs) |
+| message menu | vanilla-menu-message `#message` | items | reaction strip ‖ Add Reaction >, View Reactions ‖ Edit (own), Reply, Forward, Create Thread ‖ Copy Text, Pin, Bookmark, Remind Me >, Apps >, Mark Unread, Copy Link, Speak ‖ Delete (own) / Report ‖ Copy ID — all with LEFT icons | chat/panels.rs message_menu | ✅ (Forward/Thread/Bookmark/Remind/Apps/Speak/Report are stubs; Remove Reactions and View Interaction Info need Manage Messages / interaction data) |
 | tooltip | `.tooltip_ZDdyhE` | padding / radius / bg / shadow | 8 12 / 8 / --background-surface-high / inset 1px --border-subtle + --shadow-high | tooltip.rs | ✅ (was legacy palette) |
 | tooltip text | `.tooltip_ZDdyhE` | color | --text-default | tooltip.rs | ✅ |
 | modal (settings) | `.container_dvN-MP.modal__F9ieB` | box / radius / border / shadow | 1200×620 at 40,40 / 12 / 1px --border-subtle / --shadow-high | modal.rs (radius/border ✅) | — settings owned elsewhere |
-| modal close | `button[aria-label=Fermer].icon-only_F7qvhY.sm_` | size / radius / pos | 32 / 8 / top 8 right 8 | modal.rs close | ❌ top is 16 (no confirm-dialog dump yet) |
+| modal close | vanilla-confirm-leave #2075 `button.md_F7qvhY.icon-only_` | size / radius / pos | 40 / 8 / top 8 right 8 (headerTrailing margin −16 −16), 20px icon | modal.rs close | ✅ |
+| confirm dialog | vanilla-confirm-leave #2068–#2102 `container_dvN-MP size-sm` | box | 400w, padding 8 0 16, r12, 1px --border-subtle, --shadow-high; header 16 24 8 gap 8, title 20/24 600; subtitle 16/20 with 600 `strong`; footer 16 24 8, two md buttons flex 1 gap 8 (secondary / critical-primary) | modal.rs confirm | ✅ (shadow was shadow_lg) |
 
 ## Inbox, search options, pins, threads, Friends rows — live CDP dumps (2026-11-23)
 
@@ -211,3 +214,24 @@ in the same box. Code: ui/inbox.rs (inbox, threads, pins), ui/search.rs, ui/home
 | row actions | all #59 `actionButton_5GqXgh` | bg / colour / hover | --background-base-lower / --interactive-text-default / --interactive-text-hover; accept --icon-feedback-positive, deny --icon-feedback-critical | friends.rs round_button | ✅ (glyphs were missing: chat/more-vertical now mapped) |
 | row hover | `peopleListItem_:hover` | bg | --background-mod-subtle | friends.rs | ✅ |
 | "Implicit" tab | friends-all header | — | client-mod (Vencord) tab, not Discord | — | — skipped |
+
+## Context menus — vanilla client re-dump (2026-11-23, Vencord off)
+
+Dumps (private): `vanilla-menu-{message,message-reminder,member,member-1,member-2,member-5,member-roles,channel,category,guild,guild-other,guild-other2,folder,dm,group-dm}`,
+`vanilla-tooltip-{guild,header}`, `vanilla-confirm-leave`. Item ids are the client's `<menu>-<item>` ids. No Vencord rows (Copy Raw, Quick Mention, View Raw, Translate…) exist in Phoenix.
+
+| menu | dump | vanilla items (‖ = separator) | our code | status |
+|---|---|---|---|---|
+| member (other, friend) | vanilla-menu-member-5 | Profile, Mention, Message, Call, Add/Edit Note (subtext), Add Friend Nickname ‖ Change Nickname (Manage Nicknames), Apps >, Invite to Server >, Remove Friend, Ignore, Block ‖ Roles > ‖ Open in Mod View, Timeout/Kick/Ban {user} (red) ‖ Copy User ID | user_menu.rs, inbox.rs moderation_items | ✅ (Call/Nickname/Apps/Ignore/Mod View stubs; "Remove timeout" removed: not in vanilla) |
+| member (self) | vanilla-menu-member-1 | Profile, Mention ‖ Edit Per-server Profile, Apps > ‖ Roles > ‖ Open in Mod View ‖ Copy User ID | user_menu.rs | ✅ |
+| member (bot) | vanilla-menu-member | no Invite to Server / Add Friend; Watch Stream when streaming; voice Move To > / Server Mute / Deafen / Disconnect when in voice | user_menu.rs | ✅ (Watch Stream / voice moderation ❌: no stream / voice-mod actions) |
+| roles submenu | vanilla-menu-member-roles | every role (highest first) as a checkbox | user_menu.rs | ✅ (toggling is a stub) |
+| text channel | vanilla-menu-channel | Mark As Read ‖ Add to Favorites > (star) ‖ Invite to Channel, Pin Channel to Top, Copy Link ‖ Mute Channel >, Notification Settings (subtext = effective level) > ‖ Move To… > ‖ Edit, Clone, Create Text Channel, Delete Channel ‖ Copy Channel ID | nav_menus.rs | ✅ (admin rows gated on Manage Channels; stubs) |
+| mute submenu | vanilla-menu-channel | For 15 Minutes, 1 Hour, 3 Hours, 8 Hours, 24 Hours, Until I turn it back on | nav_menus.rs DURATIONS | ✅ (FR label fixed) |
+| notification submenu | vanilla-menu-channel | Use Category/Server Default (subtext), All Messages, Only @mentions, Nothing (radios) | nav_menus.rs notify_item | ✅ (FR labels fixed; default subtext ❌) |
+| category | vanilla-menu-category | Mark As Read ‖ Collapse Category, Collapse All Categories ‖ Mute Category >, Notification Settings > ‖ Move To… > ‖ Edit Category, Delete Category ‖ Copy Category ID | nav_menus.rs | ✅ (category rows now open it) |
+| guild | vanilla-menu-guild, -other, -other2 | Mark As Read ‖ Invite to Server ‖ Mute Server >, Notification Settings >, Hide Muted Channels, Show All Channels ‖ Server Settings > (Manage Server), Privacy Settings, Edit Per-server Profile ‖ Create Channel, Create Category, Create Event (permissions) ‖ Move To… > ‖ Security Actions (Manage Server), Leave Server ‖ Copy Server ID | nav_menus.rs | ✅ (Show All Channels ❌: needs the community feature flag) |
+| server settings submenu | vanilla-menu-guild | Server Profile … Server Template (21 sections) | nav_menus.rs GUILD_SETTINGS | ✅ (stubs) |
+| folder | vanilla-menu-folder | Mark Folder As Read ‖ Move To… > ‖ Folder Settings, Close All Folders | nav_menus.rs Target::Folder, server_bar.rs hook | ✅ (new) |
+| group DM | vanilla-menu-group-dm `#gdm-context` | Mark As Read ‖ Pin, Add to Favorites > ‖ Invites, Edit Group ‖ Mute Conversation > ‖ Leave Group (red) ‖ Copy Channel ID | nav_menus.rs | ✅ (was the 1:1 DM layout) |
+| tooltip | vanilla-tooltip-header #2826 | padding 8 12, r8, surface-high, inset 1px border + shadow-high; 14/18 500 | tooltip.rs | ✅ |
