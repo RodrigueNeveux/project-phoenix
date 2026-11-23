@@ -370,7 +370,15 @@ fn badges(i: &Info) -> Option<Div> {
             .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
             .border_1()
             .border_color(c(tok(idx::BORDER_MUTED)))
-            .children(b.iter().map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none()))
+            .children({
+                // UserProfileBadgeListRows: first 6 + overflowSlot "+N" (ui::profile_bio).
+                let (shown, hidden) = crate::ui::profile_bio::split_badges(b, i.user.is_some_and(|u| u.bot));
+                shown
+                    .iter()
+                    .map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none().into_any_element())
+                    .chain((hidden > 0).then(|| crate::ui::profile_bio::overflow_slot(hidden).into_any_element()))
+                    .collect::<Vec<_>>()
+            })
     })
 }
 
@@ -489,7 +497,7 @@ fn roles_block(roles: Vec<crate::model::Role>) -> Div {
 /// clamps it to 3 lines (`descriptionClamp_BcddaK`, max-height 55px) with a
 /// "View Full Bio" text button (`viewFullBio_` margin-top 8px, body-xs).
 fn bio_block(bio: SharedString, clamp: bool) -> Div {
-    let long = clamp && (bio.len() > 120 || bio.lines().count() > 3);
+    let long = clamp && crate::ui::profile_bio::bio_is_long(&bio);
     div()
         .flex()
         .flex_col()
@@ -497,9 +505,7 @@ fn bio_block(bio: SharedString, clamp: bool) -> Div {
             div()
                 .text_size(z(14.))
                 .line_height(z(18.))
-                .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .when(clamp, |d| d.line_clamp(3).max_h(z(55.)).overflow_hidden())
-                .child(bio),
+                .child(crate::ui::profile_bio::bio(&bio, clamp, c(tok(idx::TEXT_DEFAULT)))),
         )
         .when(long, |d| {
             d.child(
