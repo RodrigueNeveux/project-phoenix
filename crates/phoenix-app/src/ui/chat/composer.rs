@@ -332,7 +332,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                                 .absolute()
                                                 .top_0()
                                                 .bottom_0()
-                                                .left(z(2.))
+                                                // #1445 placeholder_ sits at the editor's x (496 in live form, glyph at 497.3).
+                                                .left_0()
                                                 .right_0()
                                                 .flex()
                                                 .items_center()

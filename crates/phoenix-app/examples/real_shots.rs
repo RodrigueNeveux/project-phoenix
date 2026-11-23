@@ -306,6 +306,8 @@ fn parse_id(s: &str) -> Option<Id> {
 fn main() -> anyhow::Result<()> {
     let out = std::env::args().nth(1).unwrap_or_else(|| "real.png".into());
     phoenix_app::discord_backend::NO_ACKS.store(true, std::sync::atomic::Ordering::Relaxed);
+    // The desktop client draws its own window buttons; so does Phoenix with client decorations.
+    phoenix_app::ui::title_bar::FORCE_CLIENT_DECORATIONS.store(true, std::sync::atomic::Ordering::Relaxed);
 
     // Where: explicit env, else what the user's Discord shows.
     let (guild, channel) = if let Some(dm) = std::env::var("PHX_DM").ok().and_then(|v| parse_id(&v)) {

@@ -66,6 +66,15 @@ fn nav_arrow(id: &'static str, name: &'static str, back: bool, enabled: bool) ->
     }
 }
 
+/// Offscreen renders have no compositor, so gpui reports server-side decorations and the
+/// window buttons vanish. Examples comparing against the desktop client set this.
+pub static FORCE_CLIENT_DECORATIONS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn client_decorated(window: &gpui::Window) -> bool {
+    FORCE_CLIENT_DECORATIONS.load(std::sync::atomic::Ordering::Relaxed)
+        || matches!(window.window_decorations(), gpui::Decorations::Client { .. })
+}
+
 pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let (glyph, text) = title(app);
     let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
@@ -118,7 +127,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
             // With client-side decorations the window buttons end flush right (#46: 1163..1280).
             div()
                 .relative()
-                .when(!matches!(window.window_decorations(), gpui::Decorations::Client { .. }), |d| d.pr(z(12.)))
+                .when(!client_decorated(window), |d| d.pr(z(12.)))
                 .flex()
                 .items_center()
                 .gap(z(12.))
@@ -127,7 +136,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                         .on_click(cx.listener(|a, _, _, cx| a.toggle_inbox(cx))),
                 )
                 .child(bar_button("title-help", Icon::Help, false, crate::t!("title.help")))
-                .when(matches!(window.window_decorations(), gpui::Decorations::Client { .. }), |d| d.child(win_buttons(cx))),
+                .when(client_decorated(window), |d| d.child(win_buttons(cx))),
         )
 }
 
@@ -136,7 +145,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
 /// margin-inline `--space-4`; 32×32 `winButton_3zSH5d` with a 12px glyph in
 /// `--interactive-text-default`. Only drawn when the window has no server-side frame.
 fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let btn = |id: &'static str, glyph: &'static str, close: bool| {
+    let btn = |id: &'static str, glyph: gpui::AnyElement, close: bool| {
         div()
             .id(id)
             .size(z(m::TITLE_BAR_H))
@@ -157,14 +166,14 @@ fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     d.hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))).text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
                 }
             })
-            .child(div().text_size(z(12.)).line_height(z(12.)).child(glyph))
+            .child(glyph)
     };
     div()
         .flex()
         .items_center()
         .gap(z(4.))
         .child(div().mx(z(4.)).w(z(1.)).h(z(m::TITLE_BAR_H - 12.)).bg(c(tok(idx::BORDER_SUBTLE))))
-        .child(btn("win-min", "\u{2013}", false).on_click(cx.listener(|_, _, w, _| w.minimize_window())))
-        .child(btn("win-max", "\u{25a1}", false).on_click(cx.listener(|_, _, w, _| w.zoom_window())))
-        .child(btn("win-close", "\u{2715}", true).on_click(cx.listener(|_, _, w, _| w.remove_window())))
+        .child(btn("win-min", div().w(z(12.)).h(z(1.)).bg(gpui::transparent_black()).border_t_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.minimize_window())))
+        .child(btn("win-max", div().size(z(12.)).border_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.zoom_window())))
+        .child(btn("win-close", icon(Icon::Close, 14. * zoom(), c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), true).on_click(cx.listener(|_, _, w, _| w.remove_window())))
 }

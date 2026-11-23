@@ -174,7 +174,8 @@ fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c))?;
     // It points at the header label, which locked channels don't show.
     let locked = app.nav.extras.get(&ch.id).is_some_and(|e| e.locked);
-    if ch.guild.is_none() || locked || !guild_discoverable(app) || NOTICE_CLOSED.lock().ok()?.contains(&gid.0) {
+    let thread = app.nav.thread_parent(ch.id).is_some();
+    if ch.guild.is_none() || locked || thread || !guild_discoverable(app) || NOTICE_CLOSED.lock().ok()?.contains(&gid.0) {
         return None;
     }
     Some(
@@ -278,7 +279,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     // A private (locked) channel gets the *LockIcon glyph and no "Mode Découverte" label
     // (real compare 20261123-170026: locked #général shows hash-lock + dot, no label).
     let locked = ch.is_some_and(|c| app.nav.extras.get(&c.id).is_some_and(|e| e.locked));
-    let discoverable = !is_dm && !locked && guild_discoverable(app);
+    // Threads never show it either (vanilla-thread-channel, compare thread-more-1713).
+    let discoverable = !is_dm && !locked && thread_parent.is_none() && guild_discoverable(app);
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
     let on = tk(idx::ICON_STRONG);
@@ -444,7 +446,14 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     // Guild toolbar (#1055–#1061): threads, notifications, pins, member list.
                     // Inside a thread the toolbar has no Threads button (vanilla-thread-channel #1208).
                     d.when(thread_parent.is_none(), |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
-                        .child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
+                        .map(|d| {
+                            // Muted channel/thread: BellSlashIcon (compare thread-more-1713).
+                            if ch.is_some_and(|c| c.muted) {
+                                d.child(hdr_named("bell", "bell-slash", ic))
+                            } else {
+                                d.child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
+                            }
+                        })
                         .child(
                             hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
                                 .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
