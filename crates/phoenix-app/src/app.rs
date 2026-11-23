@@ -1093,6 +1093,7 @@ impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::auth::ensure_qr(self, cx);
         let body = match self.screen {
+        crate::theme::sync(&self.prefs, window, cx);
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),
             Screen::Main => div()
                 .size_full()
