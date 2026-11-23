@@ -52,6 +52,7 @@ pub fn user(u: &api::User) -> model::User {
         avatar,
         bot: u.bot || u.system,
         tag: u.primary_guild.as_ref().and_then(|p| Some((p.shown_tag()?.to_owned().into(), p.badge_url().map(Into::into)))),
+        nameplate: u.nameplate().map(|(url, pal)| (url.into(), pal.as_deref().and_then(crate::ui::nameplate::palette_dark))),
     }
 }
 
@@ -999,11 +1000,14 @@ pub fn self_activities(r: &phoenix_api::gateway::events::Ready) -> Option<AppEve
     let from_proto = proto.as_deref().and_then(|b| {
         let st = super::nav::fields(b).into_iter().find(|f| f.0 == 11 && f.1 == 2)?.2;
         let cs = super::nav::fields(st).into_iter().find(|f| f.0 == 2 && f.1 == 2)?.2;
-        let text = super::nav::fields(cs).into_iter().find(|f| f.0 == 1 && f.1 == 2)?.2;
-        std::str::from_utf8(text).ok().filter(|t| !t.is_empty()).map(str::to_owned)
+        let f = super::nav::fields(cs);
+        let get = |n| f.iter().find(|x| x.0 == n && x.1 == 2).and_then(|x| std::str::from_utf8(x.2).ok()).filter(|t| !t.is_empty()).map(str::to_owned);
+        // CustomStatus: text (1), emoji_id (2), emoji_name (3).
+        let (text, emoji) = (get(1), get(3));
+        (text.is_some() || emoji.is_some()).then_some((text, emoji))
     });
-    if let Some(text) = from_proto {
-        let a = serde_json::json!({"type": 4, "name": "Custom Status", "state": text});
+    if let Some((text, emoji)) = from_proto {
+        let a = serde_json::json!({"type": 4, "name": "Custom Status", "state": text, "emoji": emoji.map(|e| serde_json::json!({"name": e}))});
         return Some(AppEvent::Activities { user: id(r.user.id), activities: crate::presence::parse_activities(&[a]) });
     }
     let sessions = r.sessions.as_ref()?.as_array()?;

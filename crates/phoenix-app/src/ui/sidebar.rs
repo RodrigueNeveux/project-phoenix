@@ -314,10 +314,10 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .pl(z(20.))
                 .pr(z(6.))
                 .h(z(40.))
+                .w_full()
                 .flex()
                 .items_center()
                 .justify_between()
-                .w_full()
                 .cursor_pointer()
                 .text_color(t(idx::CHANNELS_DEFAULT))
                 .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
@@ -423,8 +423,8 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         })
         .child(nav("nitro", Icon::Nitro, crate::t!("dm.nitro"), None, 0))
         .child(nav("shop", Icon::Gift, crate::t!("dm.shop"), None, 0))
-        // Quests (`/quest-home`); its glyph isn't in the icon name map yet, Compass stands in.
-        .child(nav("quests", Icon::Compass, crate::t!("dm.quests"), None, 0))
+        // Quests (`/quest-home`): QuestsIcon (vanilla-friends-online #653).
+        .child(nav("quests", Icon::Quests, crate::t!("dm.quests"), None, 0))
         // `sectionDivider_u88IQl` (#648): 1px, margin 12/8, `--border-subtle`.
         .child(div().mx(z(8.)).my(z(12.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
         .child(
@@ -557,9 +557,6 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             })
             .child(icon(Icon::Close, 16., t(idx::INTERACTIVE_TEXT_DEFAULT)))
     });
-    let invite_hover = (!is_dm && !matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage)).then(|| {
-        div()
-            .opacity(0.)
     // `children_TNyK-N` (vanilla-guild-text #691): margin -4 -4 -4 0, then 24px
     // `iconItem_Wx6SnQ` boxes (padding 4, 16px `actionIcon`): "Invite" and, with
     // Manage Channels, "Edit Channel". Shown on hover and on the selected row.
@@ -573,12 +570,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             None => icon(i, 16., col).into_any_element(),
         })
     };
-            .group_hover(group.clone(), |s| s.opacity(1.))
-            .when(selected, |d| d.opacity(1.))
+    let invite_hover = (!is_dm && !matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage)).then(|| {
+        div()
             .flex()
             .flex_none()
             .my(z(-4.))
             .mr(z(-4.))
+            .opacity(0.)
+            .group_hover(group.clone(), |s| s.opacity(1.))
+            .when(selected, |d| d.opacity(1.))
             .child(action(Icon::Members, Some("invite")))
             .when(can_edit, |d| d.child(action(Icon::Gear, None)))
     });
@@ -627,6 +627,16 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
                     crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(id), ev.position, w)
                 })
+                // DM `interactive_zln_tS` > `container_AFi54G` (vanilla-home-friends #661):
+                // nameplate of the 1:1 recipient behind the row, `.channel` opacity.
+                .relative()
+                .when_some(
+                    (is_dm && !is_group)
+                        .then(|| ch.voice_users.first().and_then(|u| app.users.get(u)))
+                        .flatten()
+                        .and_then(|u| crate::ui::nameplate::layer(u, 48., crate::ui::nameplate::Place::Channel, false, selected)),
+                    |d, l| d.child(l),
+                )
                 .child(lead)
                 .child(
                     div()
@@ -813,15 +823,18 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .text_ellipsis()
                                 .child(
                                     // vanilla-guild-text user panel: the custom status replaces "Online".
-                                    app.people
-                                        .custom_status
-                                        .clone()
-                                        .or_else(|| {
-                                            app.people.activities.get(&app.me.id)?.iter().find_map(|a| {
-                                                matches!(a.kind, crate::presence::ActivityKind::Custom).then(|| a.state.clone()).flatten()
-                                            })
-                                        })
-                                        .unwrap_or(status),
+                                    // Emoji + text from the own custom-status activity while it matches.
+                                    {
+                                        let act = app.people.activities.get(&app.me.id).and_then(|v| {
+                                            v.iter().find(|a| a.kind == crate::presence::ActivityKind::Custom)
+                                        });
+                                        match (&app.people.custom_status, act) {
+                                            (Some(c), Some(a)) if a.state.as_ref() == Some(c) => a.headline(),
+                                            (Some(c), _) => c.clone(),
+                                            (None, Some(a)) if app.people.custom_status.is_none() && a.state.is_none() => a.headline(),
+                                            _ => status,
+                                        }
+                                    },
                                 ),
                         ),
                 ),

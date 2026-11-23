@@ -181,6 +181,8 @@ pub fn sync_self_state(app: &crate::app::PhoenixApp) {
     // The real backend applies controls synchronously; the future is a no-op.
     drop(app.backend.voice_control(VoiceControl::SetMute(app.mic_muted || app.deafened)));
     drop(app.backend.voice_control(VoiceControl::SetDeaf(app.deafened)));
+    let (m, d) = (app.mic_muted, app.deafened);
+    prefs::update(|p| (p.self_mute, p.self_deaf) = (m, d), true);
 }
 
 #[cfg(test)]

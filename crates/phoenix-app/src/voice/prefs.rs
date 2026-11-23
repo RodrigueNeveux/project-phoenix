@@ -55,6 +55,9 @@ pub struct VoicePrefs {
     pub attenuate_self: bool,
     pub attenuate_others: bool,
     pub users: HashMap<u64, UserAudio>,
+    /// User panel mute/deafen: the account doesn't store them, so they stay local.
+    pub self_mute: bool,
+    pub self_deaf: bool,
 }
 
 impl Default for VoicePrefs {
@@ -76,6 +79,8 @@ impl Default for VoicePrefs {
             attenuate_self: false,
             attenuate_others: true,
             users: HashMap::new(),
+            self_mute: false,
+            self_deaf: false,
         }
     }
 }
@@ -124,6 +129,8 @@ impl VoicePrefs {
             attenuate_self: b("attenuate_self", d.attenuate_self),
             attenuate_others: b("attenuate_others", d.attenuate_others),
             users,
+            self_mute: b("self_mute", false),
+            self_deaf: b("self_deaf", false),
         }
     }
 
@@ -151,6 +158,8 @@ impl VoicePrefs {
             "attenuate_self": self.attenuate_self,
             "attenuate_others": self.attenuate_others,
             "users": users,
+            "self_mute": self.self_mute,
+            "self_deaf": self.self_deaf,
         })
     }
 

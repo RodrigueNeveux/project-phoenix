@@ -35,6 +35,9 @@ pub struct User {
     pub bot: bool,
     /// Server tag shown next to the name (`primary_guild.tag`) and its badge.
     pub tag: Option<(SharedString, Option<SharedString>)>,
+    /// Nameplate behind the name in the DM / member list: static image URL and
+    /// the palette's `darkBackground` (0xRRGGBB) for its gradient.
+    pub nameplate: Option<(SharedString, Option<u32>)>,
 }
 
 #[derive(Clone, Debug)]

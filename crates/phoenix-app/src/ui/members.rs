@@ -395,6 +395,15 @@ fn member_row(
         .cursor_pointer()
         .when(offline, |d| d.opacity(0.3))
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).opacity(1.))
+        // `nameplated_J1Adu_`: nameplate layer behind the row content.
+        .relative()
+        .when_some(
+            user.and_then(|u| {
+                let sel = app.people.popout.as_ref().is_some_and(|p| p.user == uid);
+                crate::ui::nameplate::layer(u, m::MEMBER_ROW_H - 2., crate::ui::nameplate::Place::Member, false, sel)
+            }),
+            |d, l| d.child(l),
+        )
         .when(app.people.popout.as_ref().is_some_and(|p| p.user == uid), |d| {
             d.bg(c(Palette::BG_MOD_SELECTED)).opacity(1.)
         })

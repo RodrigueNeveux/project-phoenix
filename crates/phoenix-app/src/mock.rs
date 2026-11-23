@@ -114,6 +114,7 @@ fn user(i: usize) -> User {
         avatar: ImageRef::Default((i % 5) as u8),
         bot: n.ends_with("bot") || n == "clyde",
         tag: ["GLAD", "RUST", "PNX"].get(i % 4).map(|t| ((*t).into(), None)),
+        nameplate: None,
     }
 }
 

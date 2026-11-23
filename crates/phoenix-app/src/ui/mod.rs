@@ -12,6 +12,7 @@ pub mod image_viewer;
 pub mod login;
 pub mod settings;
 pub mod members;
+pub mod nameplate;
 pub mod modal;
 pub mod pickers;
 pub mod modals;
