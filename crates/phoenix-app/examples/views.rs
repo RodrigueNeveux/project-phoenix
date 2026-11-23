@@ -1,6 +1,6 @@
 //! Offscreen render of one non-chat view in a given theme.
 //! `cargo run -p phoenix-app --example views -- out.png [dark|light|ash|onyx] <scene>`
-//! Scenes: profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum.
+//! Scenes: profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum, dm-menu, dm-submenu.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -82,6 +82,28 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
+                    "members" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                    }
+                    "dm-profile" => {
+                        app.select_guild(None, cx);
+                        let dm = app.channels.values().filter(|c| c.guild.is_none() && c.voice_users.len() == 1).map(|c| c.id).min_by_key(|i| i.0);
+                        if let Some(id) = dm {
+                            app.select_channel(id, cx);
+                        }
+                    }
+                    // DM row context menu, at the spot of the live dump (x 232, y 88).
+                    "dm-menu" | "dm-submenu" => {
+                        app.select_guild(None, cx);
+                        let dm = app.channels.values().filter(|c| c.guild.is_none() && !c.voice_users.is_empty()).map(|c| c.id).min_by_key(|i| i.0);
+                        if let Some(id) = dm {
+                            phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Channel(id), gpui::point(px(232.), px(88.)), window);
+                            if scene == "dm-submenu" {
+                                phoenix_app::ui::context_menu::debug_open_submenu(3);
+                            }
+                        }
+                    }
                     "profile" | "profile-modal" => {
                         let g = app.guilds.first().map(|g| g.id);
                         app.select_guild(g, cx);

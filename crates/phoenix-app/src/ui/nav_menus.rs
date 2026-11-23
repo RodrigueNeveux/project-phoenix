@@ -3,7 +3,9 @@
 //! Item order observed in the official client:
 //! - text channel: Mark As Read | Invite People, Copy Link | Mute Channel >,
 //!   Notification Settings > | Copy Channel ID (developer mode)
-//! - DM: Mark As Read | Profile, Close DM | Mute @user > | Copy Channel ID
+//! - DM (live 2026 dump): Mark As Read | Pin, Favorite > | Profile, Call,
+//!   Add Note, Add Friend Nickname, Close DM | Apps >, Invite to Server >,
+//!   Remove Friend, Ignore, Block | Mute @user > | Copy Channel ID
 //! - guild: Mark As Read | Invite People | Mute Server >, Notification
 //!   Settings >, Hide Muted Channels | Privacy Settings | Leave Server |
 //!   Copy Server ID
@@ -160,12 +162,56 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(mute_item(&e, mute, unmute, muted, guild, Some(id)));
                 items.push(notify_item(app, &e, guild, Some(id)));
             } else {
+                // Live DM row menu (dump "user-context", 2026 client):
+                // Mark As Read | Pin, Favorite > | Profile, Call, Add Note
+                // (subtext), Add Friend Nickname, Close DM | Apps >,
+                // Invite to Server >, Remove Friend, Ignore, Block |
+                // Mute @user > | Copy Channel ID (developer mode).
                 let peer = ch.voice_users.first().copied();
                 let is_group = app.nav.extras.get(&id).is_some_and(|x| x.recipients > 1);
+                let stub = |key: &'static str| act(&e, crate::t!(key), move |a, _, cx| a.stub(&crate::t!(key), cx));
+                let mut pin = stub("menu.pin_dm");
+                if let MenuItem::Action { icon, .. } = &mut pin {
+                    *icon = Some("pin".into());
+                }
+                items.push(pin);
+                items.push(MenuItem::submenu_with_icon(crate::t!("menu.favorite"), "star", vec![stub("menu.favorites")]));
+                items.push(MenuItem::Separator);
                 if let Some(u) = peer.filter(|_| !is_group) {
                     items.push(act(&e, crate::t!("menu.profile"), move |a, _, cx| a.open_profile_modal(u, cx)));
+                    items.push(act(&e, crate::t!("menu.call"), move |a, _, cx| a.join_voice(Some(id), cx)));
+                    items.push(act(&e, crate::t!("menu.add_note"), move |a, _, cx| a.open_profile_modal(u, cx)).with_subtext(crate::t!("menu.note_subtext")));
+                    items.push(stub("menu.friend_nickname"));
                 }
                 items.push(act(&e, if is_group { crate::t!("menu.leave_group") } else { crate::t!("menu.close_dm") }, move |a, _, cx| a.close_dm(id, cx)));
+                if let Some(u) = peer.filter(|_| !is_group) {
+                    items.push(MenuItem::Separator);
+                    items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![stub("menu.apps_none")]));
+                    let invites: Vec<MenuItem> = app
+                        .guilds
+                        .iter()
+                        .map(|x| {
+                            let gid = x.id;
+                            act(&e, x.name.clone(), move |a, _, cx| a.open_invite_people(gid, cx))
+                        })
+                        .collect();
+                    if !invites.is_empty() {
+                        items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
+                    }
+                    let rel = |action: fn() -> crate::ui::home::data::RelAction| {
+                        move |a: &mut PhoenixApp, _: &mut Window, cx: &mut Context<PhoenixApp>| {
+                            a.nav_request(NavRequest::Relationship { user: u, action: action() }, cx, |_, _, _| {});
+                            cx.notify();
+                        }
+                    };
+                    if app.nav.relationship(u).is_some() {
+                        items.push(act(&e, crate::t!("menu.remove_friend"), rel(|| crate::ui::home::data::RelAction::Remove)));
+                    }
+                    items.push(stub("menu.ignore"));
+                    let block = rel(|| crate::ui::home::data::RelAction::Block);
+                    let eb = e.clone();
+                    items.push(MenuItem::danger(crate::t!("menu.block"), None, move |_, w, cx: &mut App| eb.update(cx, |a, cx| block(a, w, cx))));
+                }
                 items.push(MenuItem::Separator);
                 let who = if is_group { ch.name.to_string() } else { format!("@{}", ch.name) };
                 items.push(mute_item(&e, crate::t!("menu.mute_who", who = who), crate::t!("menu.unmute_who", who = who), muted, None, Some(id)));

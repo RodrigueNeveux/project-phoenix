@@ -66,3 +66,86 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | confirm footer | `actionBarTrailing_dvN-MP` | gap / buttons | --space-8 / md secondary + primary/critical | ui/modal.rs confirm | ✅ (was "Cancel" link) |
 | modal backdrop | --background-scrim | bg | scrim token | ui/modal.rs frame, ui/profile.rs | ✅ (was #000000B3) |
 | settings, switcher, pickers, inbox, home rows, status picker | — | — | — | — | ❌ not audited yet |
+
+## Live DOM dump pass (Nov 2026 client, CDP dumps)
+
+Dumps: `/mnt/windata/project-phoenix/dumps/-channels-N-N+.json` (guild, member list),
+`-channels-me+.json` (Friends page), CDP walk of `.outer_P1YEjQ` on a DM (profile side panel).
+Node refs are the dump `i` index. Colours are the computed values (midnight theme).
+The member counts widget (`vc-membercount-*`) and platform/speaker indicators (`vc-*`) are
+client-mod additions, not Discord: kept as our counts row but not treated as reference.
+
+| element | dump node | property | value | our code | status |
+|---|---|---|---|---|---|
+| group header | N-N #1598 `membersGroup_86es0b` | padding / height | 24px 4px 4px 20px / 46px | ui/members.rs header | ✅ (was 20/16) |
+| Activity header | N-N #1503 `headerContainer_HxSvbL` | label + 24px settings button (12px gear) + spacer + 24x18 chevron, margin -3px 0 | — | ui/members.rs activity_section | ✅ |
+| Activity card | N-N #1512 `container_g7esM5 usesCardRows_` | padding / margin / gap / radius | 8 / 8 0 0 8 / 8 / 12px | ui/members.rs activity_section | ✅ (was 12 / 8px radius) |
+| Activity card | N-N #1512 | bg / border | #0a0a0c / 0.67px #97979f@16% | BG_TERTIARY / DIVIDER | ✅ |
+| Activity user line | N-N #1515–1522 | 16px face pile, margin-right 6, name 14/18 500, margin-bottom 2 | — | ui/members.rs | ✅ |
+| Activity title | N-N #1527 `heading-xs/medium` | 14/18 500 #d4d5d8 | --text-default | ui/members.rs | ✅ (was 16 semibold) |
+| Activity badges | N-N #1528 `badgesContainer_CTWncy` | gap 0 8, 12px icon + 12/16 #96979e | elapsed + state | ui/members.rs | ✅ ("Nouveau joueur" needs content-inventory data) |
+| Activity thumbnail | N-N #1537/1538 | 48x48, radius 4 | — | ui/members.rs | ✅ (was 72) |
+| member row | N-N #1643 `member_Iy0c7A` | margin-left 8, padding 1px 0, radius 8, 44px | — | ui/members.rs member_row | ✅ (was py 4 → 50px, radius 4) |
+| member row inner | N-N #1644/1645 | padding 0 8 0 10; inner padding 4 0, 42px | — | ui/members.rs member_row | ✅ |
+| server tag | N-N #1657 `chipletContainerInner_k8jyN7` | margin 1 0 1 4, padding 0 4, radius 4, rgba(151,151,159,.24); 14px badge + 12/16 600 #d4d5d8 | — | ui/members.rs server_tag | ✅ (badge image ❌: tag model has no badge URL here) |
+| member subtext | N-N #1668–1681 `subText_J1Adu_` | margin-top -2; gap 4: 12px voice icon, "•", 12/16 500 status | — | ui/members.rs member_row | ✅ (voice icon new) |
+| Friends header | me #1066 `container_ybUK7Z` | padding 8 8 8 20, 49px; 32px icon box / 20px icon; title 16/20 500 #dcdcdf margin-right 8; 4px dot margin 0 4 | — | ui/home/friends.rs header | ✅ (was divider bar) |
+| Friends tabs | me #1075–1079 `item_6zZYhF` | padding 4 12, margin 0 8, radius 8, 32px, 16/20 400; selected rgba(151,151,159,.24) #dcdcdf; idle #96979e | — | ui/home/friends.rs header | ✅ (was 24px / radius 4) |
+| Add Friend pill | me #1079 `addFriend_zrUwGA` | rgb(88,101,242) / white | --background-brand | ui/home/friends.rs | ✅ (was green) |
+| Blocked tab | me #1074 | not present in the 2026 tab bar | — | ui/home/friends.rs | ✅ removed from the bar |
+| New group DM button | me #1081/1082 | 32px box, 20px icon, padding-left 10, right 8 | — | ui/home/friends.rs | ✅ |
+| Friends search | me #1086–1093 `searchBar_wVFOQW` | margin 12 16 8 24, 40px, radius 8, 1px rgba(151,151,159,.24), 30px icon box | — | ui/home/friends.rs list | ✅ (new, filters) |
+| section title | me #1098/1099 | 50px; h2 margin 16 20 16 24, 14/18 500 #d4d5d8, not uppercased | — | ui/home/friends.rs list | ✅ (was 12px uppercase) |
+| row divider | me #1100 `divider_y75PxA` | 1px, margin 0 20 0 30 | --border-subtle | ui/home/friends.rs list | ✅ |
+| friend row | me #1101 `peopleListItem_y75PxA` | padding 16 10, margin 0 10 0 14, radius 8, 61px | — | ui/home/friends.rs friend_row | ✅ |
+| friend name | me #1111/1112/1117 | 16/20 600 #dcdcdf; tag margin-left 4; username margin-left 5, 14/16 500 (hover) | — | ui/home/friends.rs | ✅ |
+| friend subtext | me #1119 | 14/17.5 500 #81828a | --text-muted | ui/home/friends.rs | ✅ |
+| row actions | me #1120–1124 `actionButton_5GqXgh` | gap 10, 36px circle, 20px icon #96979e: Message, More | — | ui/home/friends.rs | ✅ (Remove moved to the More menu) |
+| Active Now column | me #1539–1543 | 360px, scroller padding 6 8 16, h2 20/24 600 margin 8 0 9 | — | ui/home/friends.rs active_now | ✅ |
+| Active Now card | me #1577 `itemCard_-7KzVR` | margin-top 12, radius 16, 1px #97979f/.2, shadow 0 1 4 .14 | — | ui/home/friends.rs | ✅ (shadow ❌) |
+| Active Now header | me #1579 `headerFull_o3hXTo` | padding 16, gap 12, rgba(151,151,159,.08); 32px avatar, 16/20 600, 14/18 #81828a, 24px icon r4 | — | ui/home/friends.rs | ✅ |
+| Active Now game | me #1590–1600 `gameSection_o3hXTo` | padding 16, gap 12; 32px icon, 14/18 600 title, 12/16 sub, 24px party avatar | — | ui/home/friends.rs | ✅ |
+| DM list Nitro/Shop/Quests | me (sidebar) | "Ton Nitro", "Boutique", "Quêtes" rows under Friends; no Message Requests row | — | sidebar (other owner) | — |
+| DM profile panel | CDP `aside_HbUF2J` | 320px, padding 8 | — | ui/dm_profile_panel.rs | ✅ (new) |
+| DM profile card | CDP `outer_P1YEjQ` / `inner_P1YEjQ` | padding 2 radius 8 / radius 6 | theme gradient → --border-subtle | ui/dm_profile_panel.rs | ✅ |
+| DM banner | CDP `banner_vNEdYY` | 300x105; banner buttons 32px circles rgba(0,0,0,.56), top/right 8, gap 8 | — | ui/dm_profile_panel.rs | ✅ |
+| DM avatar | CDP `avatar_WRLIGC` | 80px at (14, 55) | — | ui/dm_profile_panel.rs | ✅ |
+| DM body | CDP `body_A7qlid` / `info_A7qlid` | margin 0 16, gap 20 / gap 8; name 20/24 600 | — | ui/dm_profile_panel.rs | ✅ |
+| DM mutuals | CDP `mutuals_PXYMZ1` | padding 4 0, 12/16; 16px avatars -3 overlap | — | ui/dm_profile_panel.rs | ✅ servers (mutual friends ❌ no data) |
+| DM bio | CDP `section_NcvRRg`, `viewFullBio_BcddaK` | 14/18 clamp; button margin-top 8, 12/16 | — | ui/dm_profile_panel.rs | ✅ |
+| DM member since | CDP `headings_NcvRRg` | 12/16 600; value 14/18; gap 8 | — | ui/dm_profile_panel.rs | ✅ |
+| DM widgets ("Collection de jeux") | CDP `overlay_P1YEjQ` breadcrumb | padding 8 radius 8, 24px icons gap 4 | — | — | ❌ no widget data |
+| DM footer | CDP `redesignFooter_YBm90d` / `button_F7qvhY` | padding 16; 39px, radius 8, 16/20 500 "View Full Profile" | — | ui/dm_profile_panel.rs | ✅ |
+
+## Context menus, tooltip, modal — live CDP dumps (2026-11-23)
+
+Captured from the running client (read-only extracts in /tmp, private, not committed):
+`user-context` (DM row menu), `message` (message menu), `guild-context`, `channel-context`,
+submenu of `user-context-favorite-channel`, guild icon tooltip, settings `[role=dialog]`.
+The `-channels-me-N+menumenu*.json` / `+dialog*.json` dumps in /mnt/windata/project-phoenix/dumps
+do NOT contain the layer (it closed before the DOM snapshot); only their .png shows the menu.
+
+| element | dump node | property | live value | our code | status |
+|---|---|---|---|---|---|
+| menu | `#user-context.menu_M3qk4j.flexible_M3qk4j` | width | content, 262 (DM) / 247 (msg) / 240 (guild); min 188 max 320 | context_menu.rs panel_at | ✅ (was fixed 220) |
+| menu | same | border / radius / bg | 1px --border-subtle / 8 / --background-surface-higher | panel_at | ✅ |
+| menu | same | shadow | --shadow-high 0 12 24 rgb(0 0 0/.24) | panel_at | ✅ (was shadow_lg) |
+| menu | same | max-height | viewport − 2×16 (604 at 700), scrolls | panel_at VIEW_H | ✅ |
+| scroller | `scroller_M3qk4j scrollerWithScrollbar_` | padding | 8 8 8 8 (end 0 with scrollbar) | panel_at | ✅ |
+| item | `#user-context-user-profile.item_ labelContainer_` | padding / min-h / box | 8 / 32 / 245×34 | context_menu.rs row | ✅ (was fixed h 32) |
+| item | same | radius / focused radius | 2 / 4 | row | ✅ |
+| label | `label_M3qk4j > container_cmkR8z > span body-sm/medium` | font | 14/18 500 --text-strong | row | ✅ |
+| item w/ icon | `#user-context-pin-dm` | height | 36 (20px icon + 16) | row_h | ✅ |
+| left icon | `iconContainerLeft_M3qk4j` | size / margin | 20×20, margin-inline-end 8, --interactive-text-default | Action icon | ✅ (was on the right) |
+| subtext | `#user-context-note .defaultColor_ body-xs/normal` | font / margin / color | 12/16 400, mt 2, --text-muted; row 52 | Action subtext | ✅ (new) |
+| caret | `svg.caret_M3qk4j` | size / color | 20, margin-start 8, --text-muted | Submenu | ✅ (was --text-header) |
+| separator | `div.separator_M3qk4j` | margin / border | 8px 0 / 1px --border-subtle | panel_at | ✅ (was 8 all, divider color) |
+| danger | `#user-context-block` | color | --text-feedback-critical | row | ✅ |
+| checkbox | `#guild-context-hide-muted-channels .checkboxIndicator_vTUVyc` | size / radius / border / bg | 20 / 4 / 1px checkbox-border-default / checkbox-background-default | Check | ✅ (was 18, blurple border) |
+| submenu | 2nd `[role=menu]` while hovering `#user-context-favorite-channel` | x / y / w | parent right − 4 / row top − 9 / 188 | panel_at sub_panel | ✅ (was menu_w − 8, −6) |
+| DM menu order | `#user-context` groups | items | Mark As Read ‖ Pin, Add to Favorites > ‖ Profile, Call, Add Note (subtext), Add Friend Nickname, Close DM ‖ Apps >, Invite to Server >, Remove Friend, Ignore, Block ‖ Mute @user > | nav_menus.rs | ✅ (Pin/Favorite/Nickname/Apps/Ignore are stubs) |
+| message menu | `#message` | items | reaction strip (44px buttons, radius 8, gap 4) ‖ Add Reaction > ‖ Edit, Reply, Forward ‖ Copy Text, Pin, Bookmark, Remind Me >, Apps >, Mark Unread, Copy Link, Speak ‖ Delete ‖ Copy ID — all with LEFT icons | chat/panels.rs (not mine) | ❌ order/icons to align by chat owner |
+| tooltip | `.tooltip_ZDdyhE` | padding / radius / bg / shadow | 8 12 / 8 / --background-surface-high / inset 1px --border-subtle + --shadow-high | tooltip.rs | ✅ (was legacy palette) |
+| tooltip text | `.tooltip_ZDdyhE` | color | --text-default | tooltip.rs | ✅ |
+| modal (settings) | `.container_dvN-MP.modal__F9ieB` | box / radius / border / shadow | 1200×620 at 40,40 / 12 / 1px --border-subtle / --shadow-high | modal.rs (radius/border ✅) | — settings owned elsewhere |
+| modal close | `button[aria-label=Fermer].icon-only_F7qvhY.sm_` | size / radius / pos | 32 / 8 / top 8 right 8 | modal.rs close | ❌ top is 16 (no confirm-dialog dump yet) |

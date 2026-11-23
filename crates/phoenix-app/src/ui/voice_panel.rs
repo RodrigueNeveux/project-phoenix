@@ -234,6 +234,7 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
         MenuItem::Submenu {
             label: if kind == Audio::Mic { crate::t!("voice.input_device_menu") } else { crate::t!("voice.output_device_menu") },
             items: list,
+            icon: None,
         },
         MenuItem::Separator,
         MenuItem::action(crate::t!("voice.voice_settings"), None, move |_, _, cx| {

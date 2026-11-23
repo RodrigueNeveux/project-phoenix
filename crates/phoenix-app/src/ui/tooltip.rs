@@ -9,7 +9,7 @@
 use crate::theme::z;
 use gpui::{AnyView, App, AppContext, FontWeight, IntoElement, ParentElement, Render, SharedString, Styled, Window, div, px};
 
-use crate::theme::{Palette, c};
+use crate::theme::{c, generated::idx, tok};
 
 struct Tip(SharedString);
 
@@ -17,7 +17,7 @@ impl Render for Tip {
     fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
         let mut pointer = div().flex().flex_col().items_center();
         for i in 0..5 {
-            pointer = pointer.child(div().w(px(1. + 2. * i as f32)).h(z(1.)).bg(c(Palette::BG_FLOATING)));
+            pointer = pointer.child(div().w(px(1. + 2. * i as f32)).h(z(1.)).bg(c(tok(idx::BACKGROUND_SURFACE_HIGH))));
         }
         div()
             .flex()
@@ -31,14 +31,21 @@ impl Render for Tip {
                     .px(z(12.))
                     .py(z(8.))
                     .rounded(z(8.))
-                    .bg(c(Palette::BG_FLOATING))
+                    .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+                    // live tooltip_ZDdyhE: inset 0 0 0 1px --border-subtle, then --shadow-high
                     .border_1()
-                    .border_color(c(Palette::PANEL_BORDER))
-                    .shadow_lg()
+                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    .shadow(vec![gpui::BoxShadow {
+                        color: gpui::hsla(0., 0., 0., 0.24),
+                        offset: gpui::point(z(0.), z(12.)),
+                        blur_radius: z(24.),
+                        spread_radius: z(0.),
+                        inset: false,
+                    }])
                     .text_size(z(14.))
-                    .line_height(z(16.))
+                    .line_height(z(18.)) // body-sm/medium
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(Palette::TEXT_NORMAL))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
                     .child(self.0.clone()),
             )
     }
