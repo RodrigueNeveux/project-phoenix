@@ -30,6 +30,25 @@ def cdp(*args):
     return subprocess.run(["node", str(CDP), *args], capture_output=True, text=True, check=True).stdout
 
 
+def take_lock(wait_s):
+    """Hold the CDP driver lock for the whole live capture (`hover body` acquires it).
+    Waits up to `wait_s` seconds while another agent holds it, then fails."""
+    env = dict(os.environ, CDP_DRIVER=os.environ.get("CDP_DRIVER") or "compare.py")
+    t0 = time.time()
+    while True:
+        r = subprocess.run(["node", str(CDP), "hover", "body"], capture_output=True, text=True, env=env)
+        if r.returncode == 0:
+            return env
+        if r.returncode != 3 or time.time() - t0 > wait_s:
+            sys.exit(f"CDP driver lock not acquired: {(r.stderr or r.stdout).strip()}")
+        print(f"waiting for the CDP lock: {r.stderr.strip()}", flush=True)
+        time.sleep(10)
+
+
+def release_lock(env):
+    subprocess.run(["node", str(CDP), "release"], capture_output=True, text=True, env=env)
+
+
 def regions_from(b):
     W, H = b["vw"], b["vh"]
     g = b.get("guilds") or [0, 32, 72, H - 32]
@@ -62,7 +81,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--discord"); ap.add_argument("--phoenix"); ap.add_argument("--regions")
     ap.add_argument("--out")
+    ap.add_argument("--lock-wait", type=float, default=300, help="seconds to wait for the CDP lock")
     a = ap.parse_args()
+    live = not (a.regions and a.discord and a.phoenix)
+    env = take_lock(a.lock_wait) if live else None
+    try:
+        return run(a)
+    finally:
+        if env:
+            release_lock(env)
+
+
+def run(a):
     out = Path(a.out) if a.out else OUT_ROOT / time.strftime("%Y%m%d-%H%M%S")
     out.mkdir(parents=True, exist_ok=True)
     if a.regions:
