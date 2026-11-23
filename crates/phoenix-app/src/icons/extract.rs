@@ -111,7 +111,13 @@ fn attr_ok(k: &str) -> bool {
 }
 
 /// Builds an SVG for component `name` from the bundle text, if registered there.
+/// A `#secondary` suffix keeps only the shapes filled with `secondaryColor`
+/// (the second tone of two-tone icons such as the Discovery guild badge).
 pub fn icon_svg(js: &str, name: &str) -> Option<String> {
+    let (name, second) = match name.strip_suffix("#secondary") {
+        Some(n) => (n, true),
+        None => (name, false),
+    };
     let needle = format!("{name}:function(");
     let mut from = 0;
     while let Some(pos) = js[from..].find(&needle) {
@@ -123,14 +129,14 @@ pub fn icon_svg(js: &str, name: &str) -> Option<String> {
         }
         let open = at + js[at..].find('{')?;
         let close = close_brace(js.as_bytes(), open)?;
-        if let Some(svg) = build(&js[open..=close]) {
+        if let Some(svg) = build(&js[open..=close], second) {
             return Some(svg);
         }
     }
     None
 }
 
-fn build(body: &str) -> Option<String> {
+fn build(body: &str, second: bool) -> Option<String> {
     if body.contains("\"mask\"") || body.contains("\"defs\"") {
         return None; // two-tone / masked icons: not representable as a mask tint
     }
@@ -156,12 +162,13 @@ fn build(body: &str) -> Option<String> {
         while let Some(p) = root[f..].find(&pat) {
             let o = f + p + pat.len() - 1;
             let c = close_brace(root.as_bytes(), o)?;
-            if let Some(sv) = secondary.as_deref().filter(|v| !v.is_empty()) {
+            let is_second = secondary.as_deref().filter(|v| !v.is_empty()).is_some_and(|sv| {
                 let obj = &root[o + 1..c];
-                if obj.contains(&format!("typeof {sv}?")) || obj.contains(&format!("fill:{sv},")) || obj.contains(&format!("fill:{sv}}}")) {
-                    f = c;
-                    continue;
-                }
+                obj.contains(&format!("typeof {sv}?")) || obj.contains(&format!("fill:{sv},")) || obj.contains(&format!("fill:{sv}}}"))
+            });
+            if is_second != second {
+                f = c;
+                continue;
             }
             let attrs: Vec<_> = literal_attrs(&root[o + 1..c]).into_iter().filter(|(k, _)| attr_ok(k)).collect();
             if !attrs.is_empty() {

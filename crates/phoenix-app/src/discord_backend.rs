@@ -447,6 +447,11 @@ impl Backend for DiscordBackend {
         Some((g.properties.premium_subscription_count.unwrap_or(0), g.properties.premium_progress_bar_enabled.unwrap_or(false)))
     }
 
+    fn channel_user_limit(&self, channel: Id) -> Option<u32> {
+        let s = self.inner.session().ok()?;
+        s.cache.channel(sf(channel))?.user_limit.filter(|n| *n > 0)
+    }
+
     fn guild_permissions(&self, guild: Id) -> u64 {
         let Ok(s) = self.inner.session() else { return 0 };
         // Base permissions are the same in every channel for the bits we use.

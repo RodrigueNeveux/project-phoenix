@@ -47,6 +47,11 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("nitro", &["NitroWheelIcon"]),
     ("refresh", &["RefreshIcon"]),
     ("lock", &["LockIcon"]),
+    ("voice-lock", &["VoiceLockIcon"]),
+    // Discovery guild badge (`GuildBadge` DISCOVERABLE → ExperimentalWebBadgeIcon):
+    // background tone --badge-inverted-background, inner tone --badge-inverted-text.
+    ("discovery-badge", &["ExperimentalWebBadgeIcon"]),
+    ("discovery-badge-fg", &["ExperimentalWebBadgeIcon#secondary"]),
     ("pen", &["PencilIcon"]),
     ("id", &["IdIcon"]),
     ("reply", &["ArrowAngleLeftUpIcon"]),

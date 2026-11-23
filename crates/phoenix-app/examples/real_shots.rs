@@ -134,6 +134,9 @@ impl Backend for ReadOnly {
     fn guild_boosts(&self, g: Id) -> Option<(u32, bool)> {
         self.0.guild_boosts(g)
     }
+    fn channel_user_limit(&self, c: Id) -> Option<u32> {
+        self.0.channel_user_limit(c)
+    }
     fn guild_features(&self, g: Id) -> Vec<String> {
         self.0.guild_features(g)
     }

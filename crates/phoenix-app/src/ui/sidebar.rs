@@ -255,8 +255,26 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                         .gap(z(10.))
                                         .when(g.discoverable, |d| {
                                             d.child(
+                                                // GuildBadge DISCOVERABLE → ExperimentalWebBadgeIcon 18px,
+                                                // two tones: --badge-inverted-background / --badge-inverted-text.
                                                 div().w(z(20.)).flex_none().flex().justify_center().child(
-                                                    gpui::svg().path(crate::icons::path("compass")).size(z(18.)).text_color(fg),
+                                                    div()
+                                                        .relative()
+                                                        .size(z(18.))
+                                                        .child(
+                                                            gpui::svg()
+                                                                .path(crate::icons::path("discovery-badge"))
+                                                                .absolute()
+                                                                .size(z(18.))
+                                                                .text_color(t(idx::BADGE_INVERTED_BACKGROUND)),
+                                                        )
+                                                        .child(
+                                                            gpui::svg()
+                                                                .path(crate::icons::path("discovery-badge-fg"))
+                                                                .absolute()
+                                                                .size(z(18.))
+                                                                .text_color(t(idx::BADGE_INVERTED_TEXT)),
+                                                        ),
                                                 ),
                                             )
                                         })
@@ -485,8 +503,16 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
         .relative()
         .size(z(20.))
         .flex_none()
-        .child(icon(channel_icon(kind), 20., color))
-        .when(locked || nsfw, |d| {
+        // Locked voice channels use the dedicated VoiceLockIcon (live #icon_TNyK-N,
+        // aria "Voix (Limité)") instead of a corner badge.
+        .map(|d| {
+            if locked && kind == ChannelKind::Voice {
+                d.child(gpui::svg().path(crate::icons::path("voice-lock")).size(z(20.)).flex_none().text_color(color))
+            } else {
+                d.child(icon(channel_icon(kind), 20., color))
+            }
+        })
+        .when((locked && kind != ChannelKind::Voice) || nsfw, |d| {
             d.child(
                 div()
                     .absolute()
@@ -504,6 +530,69 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
                     }),
             )
         })
+        .into_any_element()
+}
+
+/// "00 │ 06" user-limit pill of a limited voice channel (`wrapper_QQRrAh`).
+fn user_limit_pill(users: u32, limit: u32) -> AnyElement {
+    let cell = |txt: String| {
+        div()
+            .h_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_size(z(12.))
+            .line_height(z(16.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
+            .child(txt)
+    };
+    let slant = gpui::canvas(
+        |_, _, _| {},
+        |b, _, window, _| {
+            // total_:after: border-top 20px transparent + border-inline-end 6px
+            // --background-mod-strong → a right triangle left of `total_`.
+            let (x, y, h) = (f32::from(b.origin.x), f32::from(b.origin.y), f32::from(b.size.height));
+            let w = f32::from(b.size.width);
+            let mut pb = gpui::PathBuilder::fill();
+            pb.move_to(gpui::point(gpui::px(x + w), gpui::px(y)));
+            pb.line_to(gpui::point(gpui::px(x + w), gpui::px(y + h)));
+            pb.line_to(gpui::point(gpui::px(x), gpui::px(y + h)));
+            pb.close();
+            if let Ok(p) = pb.build() {
+                window.paint_path(p, t(idx::BACKGROUND_MOD_STRONG));
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left(z(-6.))
+    .w(z(6.))
+    .h_full();
+    div()
+        .flex_none()
+        .ml(z(12.))
+        .pr(z(4.))
+        .child(
+            div()
+                .h(z(20.))
+                .flex()
+                .overflow_hidden()
+                .rounded(z(crate::theme::generated::global::RADIUS_MD))
+                .border_1()
+                .border_color(t(idx::BORDER_NORMAL))
+                .bg(t(idx::BACKGROUND_BASE_LOW))
+                .child(cell(format!("{users:02}")).w(z(28.)).px(z(4.)))
+                .child(
+                    cell(format!("{limit:02}"))
+                        .relative()
+                        .min_w(z(20.))
+                        .pl(z(2.))
+                        .pr(z(4.))
+                        .bg(t(idx::BACKGROUND_MOD_STRONG))
+                        .child(slant),
+                ),
+        )
         .into_any_element()
 }
 
@@ -549,7 +638,11 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         avatar_with_status(u, 32., p, c(Palette::BG_SECONDARY)).into_any_element()
     } else {
         // `icon_TNyK-N` `--channel-icon`; muted `--icon-muted`; unread `--icon-subtle`.
-        let col = t(if ch.muted {
+        // `iconLive_Wx6SnQ`: the channel we're connected to tints its icon
+        // --text-feedback-positive (live: oklab(.633 -.114 .059), same as the timer).
+        let col = t(if app.voice_channel == Some(id) {
+            idx::TEXT_FEEDBACK_POSITIVE
+        } else if ch.muted {
             idx::ICON_MUTED
         } else if unread && !selected {
             idx::ICON_SUBTLE
@@ -622,6 +715,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .text_color(t(idx::TEXT_FEEDBACK_POSITIVE))
                 .child(crate::voice::start_time::format(crate::voice::start_time::now_s() - st))
         });
+    // `wrapper_QQRrAh` user-limit pill (live "Travaux Groupe #1": "00 │ 06"), shown on
+    // limited voice channels in place of the timer: h 20, 1px --border-normal,
+    // --radius-md, --background-base-low; `users_` 28px padding 0 --space-4,
+    // `total_` 20px padding-inline 2 4 --background-mod-strong with a 6px slanted
+    // left edge (`total_:after` border triangle); body-xs/medium 12/16 tabular.
+    let limit_pill = (timer.is_none() && ch.kind == ChannelKind::Voice)
+        .then(|| app.backend.channel_user_limit(id))
+        .flatten()
+        .map(|limit| user_limit_pill(ch.voice_users.len() as u32, limit));
     div()
         .id(("ch", id.0))
         .relative()
@@ -705,6 +807,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
                 .when(ch.mentions == 0, |d| d.children(invite_hover))
                 .children(timer)
+                .children(limit_pill)
                 .children(close),
         )
         .into_any_element()

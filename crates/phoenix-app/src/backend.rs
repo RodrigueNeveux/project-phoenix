@@ -298,6 +298,10 @@ pub trait Backend: Send + Sync + 'static {
     fn guild_boosts(&self, _guild: Id) -> Option<(u32, bool)> {
         None
     }
+    /// Voice channel `user_limit` (0 / None = unlimited).
+    fn channel_user_limit(&self, _channel: Id) -> Option<u32> {
+        None
+    }
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })
