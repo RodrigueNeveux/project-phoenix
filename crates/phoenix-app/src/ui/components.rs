@@ -330,7 +330,7 @@ fn select(
         .unwrap_or_else(|| options.iter().filter(|o| o.default).map(|o| o.value.clone()).collect());
     let shown: Vec<&SelectOption> = options.iter().filter(|o| picked.contains(&o.value)).collect();
     let label: SharedString = if shown.is_empty() {
-        placeholder.unwrap_or("Make a selection").to_owned().into()
+        placeholder.map(SharedString::from).unwrap_or_else(|| crate::t!("select.placeholder"))
     } else {
         shown.iter().map(|o| o.label.as_str()).collect::<Vec<_>>().join(", ").into()
     };
@@ -377,7 +377,7 @@ fn select(
             .border_color(c(Palette::BG_TERTIARY))
             .py(px(4.));
         if options.is_empty() {
-            menu = menu.child(div().p(px(12.)).text_color(c(Palette::TEXT_MUTED)).child("No options"));
+            menu = menu.child(div().p(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("select.none")));
         }
         for (i, o) in options.into_iter().enumerate() {
             let on = picked.contains(&o.value);
@@ -483,10 +483,10 @@ fn gallery(items: &[Media], msg: Id, ix: usize) -> AnyElement {
 
 fn time_left(secs: i64) -> String {
     match secs {
-        s if s >= 86_400 => format!("{}d left", s / 86_400),
-        s if s >= 3_600 => format!("{}h left", s / 3_600),
-        s if s >= 60 => format!("{}m left", s / 60),
-        _ => "Less than a minute left".into(),
+        s if s >= 86_400 => crate::t!("poll.days_left", n = s / 86_400).to_string(),
+        s if s >= 3_600 => crate::t!("poll.hours_left", n = s / 3_600).to_string(),
+        s if s >= 60 => crate::t!("poll.minutes_left", n = s / 60).to_string(),
+        _ => crate::t!("poll.lt_minute").to_string(),
     }
 }
 
@@ -565,7 +565,7 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
                                     .text_size(px(12.))
                                     .font_weight(FontWeight::NORMAL)
                                     .text_color(c(Palette::TEXT_MUTED))
-                                    .child(format!("{} vote{}", a.count, if a.count == 1 { "" } else { "s" })),
+                                    .child(if a.count == 1 { crate::t!("poll.vote_one").to_string() } else { crate::t!("poll.votes", n = a.count).to_string() }),
                             ),
                     )
                 })
@@ -574,10 +574,10 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
         answers = answers.child(row);
     }
 
-    let mut footer_text = format!("{total} vote{}", if total == 1 { "" } else { "s" });
+    let mut footer_text = if total == 1 { crate::t!("poll.vote_one").to_string() } else { crate::t!("poll.votes", n = total).to_string() };
     footer_text.push_str(" • ");
     footer_text.push_str(&if ended {
-        "Poll closed".to_owned()
+        crate::t!("poll.closed").to_string()
     } else {
         poll.expiry.map(|e| time_left(e - now)).unwrap_or_default()
     });
@@ -587,13 +587,13 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
         None
     } else if voted {
         Some(
-            pill_button("poll-remove", "Remove Vote", false, true)
+            pill_button("poll-remove", crate::t!("poll.remove_vote"), false, true)
                 .on_click(move |_, _, cx: &mut App| e.update(cx, |a, cx| a.vote_poll(ch, id, Vec::new(), cx)))
                 .into_any_element(),
         )
     } else {
         Some(
-            pill_button("poll-vote", "Vote", true, can_vote)
+            pill_button("poll-vote", crate::t!("poll.vote"), true, can_vote)
                 .when(can_vote, |b| {
                     b.on_click(move |_, _, cx: &mut App| {
                         e.update(cx, |a, cx| {
@@ -628,9 +628,9 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
                     .child(SharedString::from(poll.question.clone())),
             )
             .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(if poll.multi {
-                "Select one or more answers"
+                crate::t!("poll.multi")
             } else {
-                "Select one answer"
+                crate::t!("poll.single")
             }))
             .child(answers)
             .child(
@@ -646,7 +646,7 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
     )
 }
 
-fn pill_button(id: &'static str, label: &'static str, primary: bool, enabled: bool) -> gpui::Stateful<gpui::Div> {
+fn pill_button(id: &'static str, label: SharedString, primary: bool, enabled: bool) -> gpui::Stateful<gpui::Div> {
     let (bg, hover) = if primary { (0x5865F2, 0x4752C4) } else { (0x4E5058, 0x6D6F78) };
     div()
         .id(id)
@@ -685,7 +685,7 @@ impl PhoenixApp {
             a.parity.pending.remove(&key);
             a.refresh_message(ch, msg);
             if let Err(e) = res {
-                a.parity_toast(format!("Interaction failed: {}", e.0), cx);
+                a.parity_toast(crate::t!("interaction.failed", e = e.0).to_string(), cx);
             }
         });
     }
@@ -748,7 +748,7 @@ impl PhoenixApp {
                     store::update_poll(msg, |p| *p = old);
                 }
                 a.refresh_message(channel, msg);
-                a.parity_toast(format!("Couldn't vote: {}", e.0), cx);
+                a.parity_toast(crate::t!("poll.vote_failed", e = e.0).to_string(), cx);
             }
         });
         cx.notify();
@@ -809,7 +809,7 @@ impl PhoenixApp {
         for (spec, f) in m.spec.inputs.iter().zip(&m.inputs) {
             let v = f.value(cx);
             if spec.required && v.trim().is_empty() {
-                m.error = Some(format!("{} is required.", spec.label).into());
+                m.error = Some(crate::t!("form.required", label = spec.label));
                 cx.notify();
                 return;
             }
@@ -817,7 +817,7 @@ impl PhoenixApp {
                 && !v.is_empty()
                 && (v.chars().count() as u32) < min
             {
-                m.error = Some(format!("{} must be at least {min} characters.", spec.label).into());
+                m.error = Some(crate::t!("form.min_chars", label = spec.label, min = min));
                 cx.notify();
                 return;
             }
@@ -825,7 +825,7 @@ impl PhoenixApp {
         }
         let target = m.spec.channel.map(|c| (m.spec.guild, c)).or(self.parity.last_target);
         let Some((guild, channel)) = target else {
-            m.error = Some("No channel for this form.".into());
+            m.error = Some(crate::t!("form.no_channel").into());
             cx.notify();
             return;
         };
@@ -950,10 +950,10 @@ fn modal_el(app: &PhoenixApp, cx: &mut gpui::Context<PhoenixApp>) -> Option<AnyE
                         .text_color(c(Palette::TEXT_NORMAL))
                         .hover(|s| s.underline())
                         .on_click(move |_, w, cx| close2(w, cx))
-                        .child("Cancel"),
+                        .child(crate::t!("common.cancel")),
                 )
                 .child(
-                    pill_button("modal-submit", if m.sending { "Submitting…" } else { "Submit" }, true, !m.sending)
+                    pill_button("modal-submit", if m.sending { crate::t!("form.submitting") } else { crate::t!("form.submit") }, true, !m.sending)
                         .on_click(move |_, _, cx: &mut App| e.update(cx, |a, cx| a.submit_modal(cx))),
                 ),
         );

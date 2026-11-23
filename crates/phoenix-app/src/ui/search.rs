@@ -74,7 +74,7 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
         ..Default::default()
     };
     if req.guild.is_none() && req.channel.is_none() {
-        return Err("Open a server or a conversation to search it.".into());
+        return Err(crate::t!("search.need_scope").into());
     }
     let find_user = |name: &str| -> Result<Id, String> {
         let n = name.to_lowercase();
@@ -87,7 +87,7 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
                 }
             }
         }
-        best.map(|(_, id)| id).ok_or_else(|| format!("No user named “{name}”."))
+        best.map(|(_, id)| id).ok_or_else(|| crate::t!("search.no_user", name = name).to_string())
     };
     for f in &p.from {
         req.authors.push(find_user(f)?);
@@ -104,10 +104,10 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
             .flatten()
             .filter_map(|id| app.channels.get(id))
             .find(|c| c.kind != ChannelKind::Category && c.name.to_lowercase() == n)
-            .ok_or_else(|| format!("No channel named #{name}."))?;
+            .ok_or_else(|| crate::t!("search.no_channel", name = name).to_string())?;
         req.channels.push(ch.id);
     }
-    let day = |d: &str| date_to_snowflake(d).map(|s| s.0).ok_or_else(|| format!("“{d}” is not a date (YYYY-MM-DD)."));
+    let day = |d: &str| date_to_snowflake(d).map(|s| s.0).ok_or_else(|| crate::t!("search.bad_date", d = d).to_string());
     if let Some(d) = &p.before {
         req.max_id = Some(Id(day(d)?));
     }
@@ -150,7 +150,7 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         cx.notify();
         return;
     }
-    let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search"));
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("search.placeholder")));
     let sub = cx.subscribe_in(&input, window, |app, _, ev: &InputEvent, _, cx| {
         if let InputEvent::PressEnter { .. } = ev {
             submit(app, cx);
@@ -250,19 +250,19 @@ fn add_filter(prefix: &'static str, window: &mut Window, cx: &mut Context<Phoeni
 }
 
 const FILTERS: [(&str, &str); 7] = [
-    ("from:", "user"),
-    ("mentions:", "user"),
-    ("has:", "link, embed, file, video, image, sound, sticker or poll"),
-    ("in:", "channel"),
-    ("before:", "YYYY-MM-DD"),
-    ("after:", "YYYY-MM-DD"),
-    ("pinned:", "true or false"),
+    ("from:", "search.hint.user"),
+    ("mentions:", "search.hint.user"),
+    ("has:", "search.hint.has"),
+    ("in:", "search.hint.channel"),
+    ("before:", "search.hint.date"),
+    ("after:", "search.hint.date"),
+    ("pinned:", "search.hint.bool"),
 ];
 
 fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let author = app.users.get(&m.author);
     let ch = app.channels.get(&m.channel);
-    let ch_name: SharedString = ch.map(|c| c.name.clone()).unwrap_or_else(|| "unknown".into());
+    let ch_name: SharedString = ch.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
     let channel = m.channel;
     let mut content: String = m.content.chars().take(400).collect();
     if content.is_empty() && !m.attachments.is_empty() {
@@ -313,7 +313,7 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
                                         .text_size(z(15.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(c(app.author_color(m.author).unwrap_or(Palette::TEXT_HEADER)))
-                                        .child(author.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into())),
+                                        .child(author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
                                 )
                                 .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(format_time_full(m.timestamp))),
                         )
@@ -343,7 +343,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         }
         if page.messages.is_empty() {
             list = list.child(
-                div().py(z(40.)).flex().justify_center().text_color(c(Palette::TEXT_MUTED)).child("No results found."),
+                div().py(z(40.)).flex().justify_center().text_color(c(Palette::TEXT_MUTED)).child(crate::t!("search.no_results")),
             );
         }
         let pager = div()
@@ -353,12 +353,12 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .gap(z(16.))
             .pb(z(16.))
             .when(offset > 0, |d| {
-                d.child(pager_button("search-prev", "Back", cx.listener(move |a, _, _, cx| {
+                d.child(pager_button("search-prev", crate::t!("common.back"), cx.listener(move |a, _, _, cx| {
                     rerun(a, |r| r.offset = r.offset.saturating_sub(PAGE), cx)
                 })))
             })
             .when(offset + PAGE < total, |d| {
-                d.child(pager_button("search-next", "Next", cx.listener(move |a, _, _, cx| rerun(a, |r| r.offset += PAGE, cx))))
+                d.child(pager_button("search-next", crate::t!("common.next"), cx.listener(move |a, _, _, cx| rerun(a, |r| r.offset += PAGE, cx))))
             });
         div()
             .flex()
@@ -376,16 +376,16 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .text_size(z(16.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(Palette::TEXT_HEADER))
-                            .child(SharedString::from(format!("{total} Result{}", if total == 1 { "" } else { "s" }))),
+                            .child(if total == 1 { crate::t!("search.result_one") } else { crate::t!("search.results", n = total) }),
                     )
                     .child(
                         div()
                             .flex()
                             .gap(z(4.))
-                            .child(sort_button("sort-new", "Newest", !oldest, cx.listener(|a, _, _, cx| {
+                            .child(sort_button("sort-new", crate::t!("search.newest"), !oldest, cx.listener(|a, _, _, cx| {
                                 rerun(a, |r| { r.oldest_first = false; r.offset = 0 }, cx)
                             })))
-                            .child(sort_button("sort-old", "Oldest", oldest, cx.listener(|a, _, _, cx| {
+                            .child(sort_button("sort-old", crate::t!("search.oldest"), oldest, cx.listener(|a, _, _, cx| {
                                 rerun(a, |r| { r.oldest_first = true; r.offset = 0 }, cx)
                             }))),
                     ),
@@ -400,7 +400,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .text_size(z(12.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("SEARCH OPTIONS"),
+                .child(crate::t!("search.options")),
         );
         for (i, (k, hint)) in FILTERS.iter().enumerate() {
             let k: &'static str = k;
@@ -417,7 +417,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                     .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
                     .child(div().text_size(z(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(k))
-                    .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(*hint)),
+                    .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!(hint))),
             );
         }
         help.into_any_element()
@@ -466,7 +466,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::RED)).child(e))
             })
             .when(loading, |d| {
-                d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Searching…"))
+                d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("search.searching")))
             })
             .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
             .into_any_element(),
@@ -475,7 +475,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
 
 fn pager_button(
     id: &'static str,
-    label: &'static str,
+    label: SharedString,
     f: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     div()
@@ -495,7 +495,7 @@ fn pager_button(
 
 fn sort_button(
     id: &'static str,
-    label: &'static str,
+    label: SharedString,
     active: bool,
     f: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
