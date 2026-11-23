@@ -589,6 +589,8 @@ fn user_limit_pill(users: u32, limit: u32) -> AnyElement {
                         .min_w(z(20.))
                         .pl(z(2.))
                         .pr(z(4.))
+                        // GPUI's overflow_hidden doesn't clip to the parent's radius.
+                        .rounded_r(z(crate::theme::generated::global::RADIUS_MD - 1.))
                         .bg(t(idx::BACKGROUND_MOD_STRONG))
                         .child(slant),
                 ),
