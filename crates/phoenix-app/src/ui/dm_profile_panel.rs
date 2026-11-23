@@ -45,6 +45,91 @@ fn ensure_profile(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) {
     .detach();
 }
 
+/// One bio segment: plain text, a link, or a custom emoji (`<a?:name:id>`).
+enum Seg<'a> {
+    Text(&'a str),
+    Link(&'a str),
+    Emoji(&'a str),
+}
+
+fn segments(line: &str) -> Vec<Seg<'_>> {
+    let mut out = Vec::new();
+    let mut rest = line;
+    while !rest.is_empty() {
+        let emoji = rest.find('<').filter(|&i| {
+            let t = &rest[i..];
+            t.find('>').is_some_and(|j| crate::media::emoji::parse_custom(&t[..=j]).is_some())
+        });
+        let link = rest.find("https://").into_iter().chain(rest.find("http://")).min();
+        let next = match (emoji, link) {
+            (Some(e), Some(l)) => e.min(l),
+            (Some(e), None) => e,
+            (None, Some(l)) => l,
+            (None, None) => {
+                out.push(Seg::Text(rest));
+                break;
+            }
+        };
+        if next > 0 {
+            out.push(Seg::Text(&rest[..next]));
+            rest = &rest[next..];
+            continue;
+        }
+        if emoji == Some(0) {
+            let j = rest.find('>').unwrap_or(rest.len() - 1);
+            out.push(Seg::Emoji(&rest[..=j]));
+            rest = &rest[j + 1..];
+        } else {
+            let j = rest.find(char::is_whitespace).unwrap_or(rest.len());
+            out.push(Seg::Link(&rest[..j]));
+            rest = &rest[j..];
+        }
+    }
+    out
+}
+
+/// `descriptionClamp_BcddaK` (-webkit-line-clamp 3) > `bioText_qjJ3Wv` body-sm/normal
+/// 14/18 in --text-strong; custom emoji are `img.emoji` 1.375em (19.25px) inline,
+/// links `anchor_R6ReNl` in --text-link. Each source line is one clamped line
+/// (vanilla DM panel: emoji + text per line, "…" on the third when more follow).
+fn bio_lines(bio: &str) -> gpui::Div {
+    let lines: Vec<&str> = bio.lines().filter(|l| !l.trim().is_empty()).collect();
+    let more = lines.len() > 3;
+    let mut col = div().flex().flex_col().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG)));
+    if lines.len() == 1 {
+        return col.child(div().line_clamp(3).child(lines[0].to_owned()));
+    }
+    for (n, line) in lines.iter().take(3).enumerate() {
+        let segs = segments(line);
+        let has_emoji = segs.iter().any(|s| matches!(s, Seg::Emoji(_)));
+        let mut row = div()
+            .flex()
+            .items_end()
+            .min_w_0()
+            .overflow_hidden()
+            .whitespace_nowrap()
+            .h(z(if has_emoji { 19.25 } else { 18. }));
+        let last = segs.len().saturating_sub(1);
+        for (k, s) in segs.into_iter().enumerate() {
+            let tail = if more && n == 2 && k == last { "…" } else { "" };
+            row = match s {
+                // `img.emoji` src …/emojis/{id}.webp?size=80, margin 0 .05em 0 .1em
+                Seg::Emoji(t) => row.child(
+                    div().flex_none().size(z(19.25)).ml(z(1.4)).mr(z(0.7)).overflow_hidden().children(
+                        crate::media::emoji::parse_custom(t).map(|e| gpui::img(e.url(80)).size(z(19.25))),
+                    ),
+                ),
+                Seg::Link(t) => row.child(
+                    div().min_w_0().text_ellipsis().overflow_hidden().text_color(c(tok(idx::TEXT_LINK))).child(format!("{t}{tail}")),
+                ),
+                Seg::Text(t) => row.child(div().min_w_0().text_ellipsis().overflow_hidden().child(format!("{t}{tail}"))),
+            };
+        }
+        col = col.child(row);
+    }
+    col
+}
+
 /// The panel, or None outside a 1:1 DM / when toggled off.
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if !app.show_members {
@@ -105,14 +190,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             div()
                 .flex()
                 .flex_col()
-                .child(
-                    div()
-                        .text_size(z(14.))
-                        .line_height(z(18.))
-                        .text_color(c(tok(idx::TEXT_DEFAULT)))
-                        .line_clamp(3)
-                        .child(b),
-                )
+                .child(bio_lines(&b))
                 .child(
                     div()
                         .id("dm-panel-full-bio")
