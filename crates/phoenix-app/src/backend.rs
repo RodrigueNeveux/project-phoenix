@@ -211,6 +211,11 @@ pub trait Backend: Send + Sync + 'static {
         None
     }
     fn cancel_remote_auth(&self) {}
+    /// The account's per-guild notification levels and mutes (READY
+    /// `user_guild_settings`, kept current by updates).
+    fn notify_prefs(&self) -> Option<crate::notifications::NotifyPrefs> {
+        None
+    }
     /// Synced user settings (settings-proto, JSON fallback).
     fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
         Box::pin(async { Ok(Default::default()) })

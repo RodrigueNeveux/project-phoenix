@@ -13,7 +13,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     rc::Rc,
 };
 
@@ -40,7 +40,7 @@ thread_local! {
     static OPEN: RefCell<Option<(Target, Point<Pixels>)>> = const { RefCell::new(None) };
     /// Mutes and levels set from these menus this session (the READY copy
     /// lives in the backend), so radios and labels reflect the last choice.
-    static MUTED_GUILDS: RefCell<HashSet<Id>> = RefCell::new(HashSet::new());
+    static MUTED_GUILDS: RefCell<HashMap<Id, bool>> = RefCell::new(HashMap::new());
     static LEVELS: RefCell<HashMap<Scope, u8>> = RefCell::new(HashMap::new());
 }
 
@@ -87,9 +87,38 @@ fn mute_item(e: &Ent, label: String, muted: bool, guild: Option<Id>, channel: Op
     MenuItem::submenu(label, items)
 }
 
-fn notify_item(e: &Ent, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
+fn level_code(l: crate::notifications::Level) -> u8 {
+    use crate::notifications::Level::*;
+    match l {
+        All => 0,
+        Mentions => 1,
+        Nothing => 2,
+        Inherit => 3,
+    }
+}
+
+/// The account's stored level for this scope (`user_guild_settings`).
+fn stored_level(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> Option<u8> {
+    let p = app.backend.notify_prefs()?;
+    let g = p.guilds.get(&guild.map_or(0, |g| g.0))?;
+    Some(match channel {
+        Some(ch) => g.channels.get(&ch.0).map_or(3, |c| level_code(c.level)),
+        None => level_code(g.level),
+    })
+}
+
+fn guild_muted(app: &PhoenixApp, g: Id) -> bool {
+    MUTED_GUILDS.with(|m| m.borrow().get(&g).copied()).unwrap_or_else(|| {
+        app.backend.notify_prefs().and_then(|p| p.guilds.get(&g.0).map(|x| x.muted)).unwrap_or(false)
+    })
+}
+
+fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
     let default = if channel.is_some() { 3 } else { 1 };
-    let cur = LEVELS.with(|l| l.borrow().get(&(guild, channel)).copied()).unwrap_or(default);
+    let cur = LEVELS
+        .with(|l| l.borrow().get(&(guild, channel)).copied())
+        .or_else(|| stored_level(app, guild, channel))
+        .unwrap_or(default);
     let mut opts: Vec<(&str, u8)> = vec![("All Messages", 0), ("Only @mentions", 1), ("Nothing", 2)];
     if channel.is_some() {
         opts.insert(0, ("Use Server Default", 3));
@@ -124,7 +153,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(MenuItem::Separator);
                 let noun = if ch.kind == ChannelKind::Category { "Category" } else { "Channel" };
                 items.push(mute_item(&e, format!("Mute {noun}"), muted, guild, Some(id)));
-                items.push(notify_item(&e, guild, Some(id)));
+                items.push(notify_item(app, &e, guild, Some(id)));
             } else {
                 let peer = ch.voice_users.first().copied();
                 let is_group = app.nav.extras.get(&id).is_some_and(|x| x.recipients > 1);
@@ -142,14 +171,14 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             }
         }
         Target::Guild(g) => {
-            let muted = MUTED_GUILDS.with(|m| m.borrow().contains(&g));
+            let muted = guild_muted(app, g);
             let hide = app.nav.hide_muted.contains(&g);
             items.push(act(&e, "Mark As Read", move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
             items.push(MenuItem::Separator);
             items.push(act(&e, "Invite People", move |a, _, cx| a.open_invite_people(g, cx)));
             items.push(MenuItem::Separator);
             items.push(mute_item(&e, "Mute Server".into(), muted, Some(g), None));
-            items.push(notify_item(&e, Some(g), None));
+            items.push(notify_item(app, &e, Some(g), None));
             items.push(MenuItem::check("Hide Muted Channels", hide, {
                 let e = e.clone();
                 move |_, _, cx: &mut App| {
@@ -221,14 +250,7 @@ impl PhoenixApp {
             }
             None => {
                 if let Some(g) = guild {
-                    MUTED_GUILDS.with(|m| {
-                        let mut m = m.borrow_mut();
-                        if muted {
-                            m.insert(g);
-                        } else {
-                            m.remove(&g);
-                        }
-                    });
+                    MUTED_GUILDS.with(|m| m.borrow_mut().insert(g, muted));
                 }
             }
         }

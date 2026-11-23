@@ -313,6 +313,10 @@ fn schedule_ack(s: &Arc<Session>, channel: api::Snowflake, msg: api::Snowflake) 
 }
 
 impl Backend for DiscordBackend {
+    fn notify_prefs(&self) -> Option<crate::notifications::NotifyPrefs> {
+        Some(self.inner.session.lock().as_ref()?.notify.lock().clone())
+    }
+
     fn set_event_sink(&self, sink: EventSink) {
         *self.inner.sink.lock() = Some(sink);
     }
