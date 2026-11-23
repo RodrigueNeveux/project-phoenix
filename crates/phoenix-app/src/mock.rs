@@ -233,9 +233,9 @@ impl MockBackend {
                 }
             }
             let role_list = vec![
-                Role { id: Id(gid.0 * 10 + 1), name: "Admin".into(), color: Some(0xE74C3C), position: 3, hoist: true },
-                Role { id: Id(gid.0 * 10 + 2), name: "Moderator".into(), color: Some(0x3498DB), position: 2, hoist: true },
-                Role { id: Id(gid.0 * 10 + 3), name: "Contributor".into(), color: Some(0x2ECC71), position: 1, hoist: true },
+                Role { id: Id(gid.0 * 10 + 1), name: "Admin".into(), color: Some(0xE74C3C), position: 3, hoist: true, icon: None },
+                Role { id: Id(gid.0 * 10 + 2), name: "Moderator".into(), color: Some(0x3498DB), position: 2, hoist: true, icon: None },
+                Role { id: Id(gid.0 * 10 + 3), name: "Contributor".into(), color: Some(0x2ECC71), position: 1, hoist: true, icon: None },
             ];
             let mut ms = Vec::new();
             for u in &users {

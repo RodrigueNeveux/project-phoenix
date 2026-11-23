@@ -1112,6 +1112,13 @@ impl PhoenixApp {
         self.member_color(g, m)
     }
 
+    /// Icon of the highest role of `user` that has one, in the selected guild.
+    pub fn author_role_icon(&self, user: Id) -> Option<SharedString> {
+        let g = self.selected_guild?;
+        let m = self.members.get(&g)?.iter().find(|m| m.user == user)?;
+        self.roles.get(&g)?.iter().filter(|r| m.roles.contains(&r.id) && r.icon.is_some()).max_by_key(|r| r.position)?.icon.clone()
+    }
+
     pub fn presence_of(&self, user: Id) -> Presence {
         if user == self.me.id {
             return self.presence;

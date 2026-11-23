@@ -599,6 +599,13 @@ fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -
         .child(tag.0.clone())
 }
 
+/// roleIcon_2i8Bfm: 1rem + 4px square, margin-inline-start .25rem, top 1px (centred in the
+/// 22px header row); after the
+/// server tag (vanilla-inbox-1 headerText_ hasRoleIcon_).
+fn role_icon(url: SharedString) -> gpui::Img {
+    img(url).flex_none().size(z(20.)).ml(z(4.)).object_fit(gpui::ObjectFit::Contain)
+}
+
 /// Discord's "APP" tag next to bot authors (vanilla-guild-text-groups botTagCozy_ /
 /// botTagVerified_ / botText_: 15px tall, 46px wide for a verified "APP").
 fn bot_tag(verified: bool) -> gpui::Div {
@@ -659,7 +666,10 @@ fn message(
     if compact && !matches!(r.blocks.first(), Some(RBlock::Text(_))) {
         content = content.child(div().flex_none().h(fz(22.)));
     }
-    for (bi, b) in r.blocks.iter().enumerate() {
+    // A message that is only a gifv link (Tenor/Giphy) shows just the gif: the link
+    // text is hidden (vanilla #discussion, real compare 20261123-161135).
+    let gif_only = matches!(msg.embeds.as_slice(), [e] if e.kind.as_deref() == Some("gifv") && e.url.as_deref() == Some(msg.content.trim()));
+    for (bi, b) in r.blocks.iter().enumerate().filter(|_| !gif_only) {
         let edited_here = msg.edited && last_text == Some(bi) && bi + 1 == n_blocks;
         match b {
             RBlock::Text(t) if compact && bi == 0 => {
@@ -842,6 +852,7 @@ fn message(
                     )
                     .child(author_name)
                     .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
+                    .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
                     .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot)))),
             )
             .child(content)
@@ -885,6 +896,7 @@ fn message(
                         .h(fz(22.))
                         .child(author_name)
                         .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
+                        .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
                         .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot))))
                         .child(
                             // .cozy_ .timestamp_: .75rem, --chat-text-muted, medium;
@@ -1173,9 +1185,11 @@ fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, o
     if let Some(cache) = media::lru::chat() {
         im = im.image_cache(&cache);
     }
+    // visualMediaItemContainer_ width 100% / max-width 550px: media shrinks with the message column, keeping its ratio.
     im.id(gpui::ElementId::Name(src))
         .w(z(w))
-        .h(z(h))
+        .max_w_full()
+        .aspect_ratio(w / h.max(1.))
         .rounded(z(8.))
         .object_fit(gpui::ObjectFit::Cover)
         .cursor_pointer()
@@ -1401,10 +1415,14 @@ fn embed_markdown(src: &str, size: f32) -> AnyElement {
 
 fn embed(e: &Embed) -> AnyElement {
     let has_text = e.title.is_some() || e.description.is_some() || e.author.is_some() || !e.fields.is_empty();
-    let media_only = matches!(e.kind.as_deref(), Some("image" | "gifv")) && !has_text;
+    // gifv embeds always render as bare media, even with a provider/title (Tenor).
+    let media_only = e.kind.as_deref() == Some("gifv") || (e.kind.as_deref() == Some("image") && !has_text);
     // Image-only embeds (links to pictures/gifs) render bare, like attachments.
     if media_only && let Some(m) = e.thumbnail.as_ref().or(e.image.as_ref()) {
-        let size = media::fit(m.width, m.height, media::MAX_W, media::MAX_H);
+        // gifv embeds (embedVideo_) are capped at 300px tall: the Tenor gif renders
+        // 372x300 in vanilla #discussion (live CDP box); image links keep the 550x350 box.
+        let max_h = if e.kind.as_deref() == Some("gifv") { 300. } else { media::MAX_H };
+        let size = media::fit(m.width, m.height, media::MAX_W, max_h);
         let original = e.url.clone().unwrap_or_else(|| m.url.clone());
         return div()
             .mt(z(4.))

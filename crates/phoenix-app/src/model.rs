@@ -240,6 +240,8 @@ pub struct Role {
     pub position: i32,
     /// Hoisted roles get their own section in the member list.
     pub hoist: bool,
+    /// Role icon image URL (`role.icon`, else the `unicode_emoji` twemoji), shown after the author name in messages.
+    pub icon: Option<SharedString>,
 }
 
 #[derive(Clone, Debug)]

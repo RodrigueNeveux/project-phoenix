@@ -635,6 +635,11 @@ pub fn roles(g: &api::Guild) -> Vec<model::Role> {
             color: (r.color != 0).then_some(r.color),
             position: r.position,
             hoist: r.hoist,
+            icon: r
+                .icon
+                .as_ref()
+                .map(|h| format!("https://cdn.discordapp.com/role-icons/{}/{h}.webp?size=40&quality=lossless", r.id).into())
+                .or_else(|| r.unicode_emoji.as_deref().and_then(crate::media::emoji::twemoji_url)),
         })
         .collect()
 }
