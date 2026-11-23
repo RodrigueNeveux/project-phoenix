@@ -121,10 +121,11 @@ pub fn find_build_number(js: &[u8]) -> Option<u64> {
         while let Some(i) = find(js, needle, from) {
             let start = i + needle.len();
             let digits: Vec<u8> = js[start..].iter().take_while(|b| b.is_ascii_digit()).copied().collect();
-            if (5..=8).contains(&digits.len()) && js.get(start + digits.len()) == Some(&b'"') {
-                if let Ok(n) = std::str::from_utf8(&digits).unwrap_or("").parse() {
-                    return Some(n);
-                }
+            if (5..=8).contains(&digits.len())
+                && js.get(start + digits.len()) == Some(&b'"')
+                && let Ok(n) = std::str::from_utf8(&digits).unwrap_or("").parse()
+            {
+                return Some(n);
             }
             from = start;
         }
@@ -201,7 +202,7 @@ fn newest_build_number(cache: &Path) -> Option<u64> {
             if m.is_file() && m.len() > 4096 { Some((m.modified().ok()?, e.path())) } else { None }
         })
         .collect();
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.0));
     entries.into_iter().find_map(|(_, p)| {
         // Only Discord's own JS assets (the cache key URL is in the header).
         let mut head = [0u8; 512];
