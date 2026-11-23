@@ -8,6 +8,7 @@
 mod art;
 mod pages;
 pub(crate) mod profile_editor;
+pub mod collectible_picker;
 pub mod collectibles;
 pub mod profile_widgets;
 mod view;

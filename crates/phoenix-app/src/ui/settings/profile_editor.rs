@@ -115,6 +115,12 @@ pub struct EditorState {
     pub generation: u32,
     /// Board tab application widgets (`profile_widgets`).
     pub widgets: Vec<super::profile_widgets::AppWidget>,
+    /// Open collectible picker (decoration / effect / frame / nameplate).
+    pub picker: Option<super::collectible_picker::PickerState>,
+    /// Owned collectibles, loaded when a picker first opens.
+    pub collectibles: Option<Vec<super::collectibles::Collectible>>,
+    /// Picker choices (editor preview only, never sent).
+    pub equipped: super::collectible_picker::Equipped,
 }
 
 impl EditorState {
@@ -138,6 +144,9 @@ impl EditorState {
             rebuild: true,
             generation: 0,
             widgets: Vec::new(),
+            picker: None,
+            collectibles: None,
+            equipped: Default::default(),
         }
     }
 
@@ -162,8 +171,9 @@ impl EditorState {
 /// Esc inside the editor: close the switcher / palette, else leave the editor.
 pub fn on_escape(s: &mut super::SettingsState) {
     if let Some(e) = s.profile.as_mut()
-        && (e.switcher_open || e.palette.is_some())
+        && (e.switcher_open || e.palette.is_some() || e.picker.is_some())
     {
+        e.picker = None;
         e.switcher_open = false;
         e.palette = None;
         return;
@@ -573,14 +583,14 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
         .flex_col()
         .gap(z(24.))
         .p(z(16.))
-        .child(group(group_label("sp.pf.nameplate", false), tile("nameplate", 208., 42., locked).child(nameplate.child(plus_icon(20.))).into_any_element()))
+        .child(group(group_label("sp.pf.nameplate", false), tile("nameplate", 208., 42., locked).child(nameplate.child(plus_icon(20.))).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Nameplate, cx))).into_any_element()))
         .child(group(
             group_label("sp.pf.avatar", false),
             div()
                 .flex()
                 .gap(z(8.))
                 .child(tile("avatar", 100., 100., false).child(avatar_preview).on_click(cx.listener(|_, _, _, cx| pick_image(false, cx))))
-                .child(tile("decoration", 100., 100., locked).child(plus_icon(24.)))
+                .child(tile("decoration", 100., 100., locked).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Decoration, cx))))
                 .into_any_element(),
         ))
         .child(group(
@@ -610,8 +620,8 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
             div()
                 .flex()
                 .gap(z(8.))
-                .child(tile("effect", 100., 100., locked).child(plus_icon(24.)))
-                .child(tile("frame", 100., 100., locked).child(plus_icon(24.)))
+                .child(tile("effect", 100., 100., locked).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Effect, cx))))
+                .child(tile("frame", 100., 100., locked).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Frame, cx))))
                 .into_any_element(),
         ));
     let mut aside = div()
@@ -1117,6 +1127,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
                 .child(right)
                 .child(close),
         )
+        .children(super::collectible_picker::render(app, e, cx))
         .into_any_element()
 }
 

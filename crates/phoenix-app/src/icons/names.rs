@@ -116,6 +116,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("bell-slash", &["BellSlashIcon"]),
     ("camera", &["CameraIcon"]),
     ("deny", &["DenyIcon"]),
+    ("shop", &["ShopIcon"]),
     ("blur", &["BlurBackgroundIcon"]),
     ("play", &["PlayIcon"]),
     ("image-plus", &["ImagePlusIcon", "ImageIcon"]),

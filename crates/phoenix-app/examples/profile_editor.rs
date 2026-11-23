@@ -276,6 +276,18 @@ fn main() -> anyhow::Result<()> {
                 if let Some(e) = app.settings.as_mut().and_then(|s| s.profile.as_mut()) {
                     e.tab = tab;
                 }
+                use phoenix_app::ui::settings::collectibles::Kind;
+                // `PHX_PICKER=decoration|effect|frame|nameplate` opens that picker.
+                let kind = match std::env::var("PHX_PICKER").as_deref() {
+                    Ok("decoration") => Some(Kind::Decoration),
+                    Ok("effect") => Some(Kind::Effect),
+                    Ok("frame") => Some(Kind::Frame),
+                    Ok("nameplate") => Some(Kind::Nameplate),
+                    _ => None,
+                };
+                if let Some(k) = kind {
+                    phoenix_app::ui::settings::collectible_picker::open(app, k, cx);
+                }
                 cx.notify();
             });
         })?;
