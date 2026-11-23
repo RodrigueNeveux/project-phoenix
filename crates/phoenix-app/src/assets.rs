@@ -126,6 +126,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/chat/forwarded.svg" => s!(r#"<path d="M20 8h-7a8 8 0 0 0-8 8v4M15 3l5 5-5 5"/>"#),
         "icons/nav/forward.svg" => s!(r#"<path d="M4 12h15m-6-7 7 7-7 7"/>"#),
         "icons/calendar.svg" => s!(r#"<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4m8-4v4"/>"#),
+        "icons/channel-browse.svg" => s!(r#"<path d="M4 6h12M4 12h7M4 18h5"/><circle cx="17" cy="16" r="3"/><path d="m19.5 18.5 2 2"/>"#),
         "icons/boost.svg" => s!(r#"<path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/><path d="m12 7-3 5h6l-3 5"/>"#),
         "icons/chevron-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
         "icons/discord-logo.svg" => f!(r#"<path d="M19.7 5.4a17 17 0 0 0-4.3-1.3l-.5 1.1a15.7 15.7 0 0 0-4.8 0l-.5-1.1a17 17 0 0 0-4.3 1.3C2.6 9.5 1.9 13.5 2.2 17.4a17.2 17.2 0 0 0 5.3 2.7l1.1-1.8a11 11 0 0 1-1.7-.8l.4-.3a12.3 12.3 0 0 0 10.4 0l.4.3a11 11 0 0 1-1.7.8l1.1 1.8a17.1 17.1 0 0 0 5.3-2.7c.4-4.5-.8-8.5-3.1-12zM8.7 15c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1zm6.6 0c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z"/>"#),

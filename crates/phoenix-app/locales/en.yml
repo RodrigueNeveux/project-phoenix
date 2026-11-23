@@ -1154,6 +1154,8 @@ sp.rg.igdb: "Some game information (like genre or cover art) is provided by IGDB
 sp.rg.related_d: "Control who sees information about the games and connected apps you use."
 sp.billing.web: "Phoenix doesn't handle payments: find this page in the official client or on discord.com."
 guild.top.events: "Events"
+guild.top.channels_roles: "Channels & Roles"
+guild.top.browse: "Browse Channels"
 guild.top.members: "Members"
 guild.boost_goal.title: "Boost Goal"
 guild.boost_goal.count: "{n}/{max} Boosts"

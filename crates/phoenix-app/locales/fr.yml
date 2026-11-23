@@ -1154,6 +1154,8 @@ sp.rg.igdb: "Certaines informations sur les jeux (telles que le genre ou l'illus
 sp.rg.related_d: "Contrôle qui voit les informations concernant les jeux et applications connectés que j'utilise."
 sp.billing.web: "Phoenix ne gère pas les paiements : retrouve cette page dans le client officiel ou sur discord.com."
 guild.top.events: "Événements"
+guild.top.channels_roles: "Salons et rôles"
+guild.top.browse: "Parcourir les salons"
 guild.top.members: "Membres"
 guild.boost_goal.title: "Objectif de Boost"
 guild.boost_goal.count: "{n}/{max} Boosts"

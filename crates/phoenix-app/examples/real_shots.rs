@@ -349,6 +349,16 @@ fn main() -> anyhow::Result<()> {
     }
     let scroll = read_scroll();
     println!("scroll {scroll:?}");
+    // Open guild folders are client-side state in Discord: read the rail's
+    // `aria-expanded` folder buttons (`data-list-item-id=guildsnav___<folder id>`).
+    let open_folders: Vec<u64> = env_or_cdp(
+        "PHX_FOLDERS",
+        "[...document.querySelectorAll('nav[class*=guilds_] [aria-expanded=true][data-list-item-id^=guildsnav___]')].map(e=>e.getAttribute('data-list-item-id').slice(12)).join(',')",
+    )
+    .unwrap_or_default()
+    .split(',')
+    .filter_map(|s| s.trim().parse().ok())
+    .collect();
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
     println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} mute={self_mute} deaf={self_deaf}");
 
@@ -442,6 +452,8 @@ fn main() -> anyhow::Result<()> {
             // In-memory only: the read-only capture never writes voice.json.
             app.mic_muted = self_mute || self_deaf;
             app.deafened = self_deaf;
+            app.nav.expanded_folders.clear();
+            app.nav.expanded_folders.extend(open_folders.iter().copied());
             if let Some(c) = channel {
                 let g = guild.or_else(|| app.channels.get(&c).and_then(|ch| ch.guild));
                 app.select_guild(g, cx);
