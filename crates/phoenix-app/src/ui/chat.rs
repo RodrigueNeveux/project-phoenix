@@ -686,7 +686,11 @@ fn message(
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);
         let (ru, preview, rnick) = match found {
-            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author))),
+            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author)).or_else(|| {
+                // referenced_message has no `member`: reuse the nick from any loaded message by that author.
+                let a = entry.msgs[p].author;
+                entry.msgs.iter().rev().filter(|m| m.author == a).find_map(|m| m.author_nick.clone())
+            })),
             None => (None, crate::t!("chat.reply_deleted"), None),
         };
         // repliedMessage_: 14px, line-height --custom-message-reply-message-preview-line-height
@@ -695,7 +699,7 @@ fn message(
         // --custom-message-reply-indent (.625rem).
         div()
             .relative()
-            .h(z(20.)) // #1185 repliedMessage_ height 20px (trailing 20px icon row)
+            .h(z(if compact { 20. } else { 18. })) // cozy: vanilla-guild-text-groups #2624 repliedMessage_ 18px (line-height 1.125rem); compact #1185 20px
             .when(!compact, |d| d.mb(z(4.)))
             .when(compact, |d| d.ml(z(-24.)).pl(z(10.)))
             .flex()
@@ -834,8 +838,8 @@ fn message(
                         // margin-top 4px - cozy vertical padding (so 4px below the row top,
                         // after the reply line when there is one).
                         .left(z(space::md())) // #1200 left 20px
-                        // #1200: 2px row padding + 20px reply + 4px --reply-spacing + 2px margin-top.
-                        .top(z(if msg.reply_to.is_some() { 28. } else { 4. }))
+                        // #1200: 2px row padding + 18px reply + 4px --reply-spacing + 2px margin-top.
+                        .top(z(if msg.reply_to.is_some() { 26. } else { 4. })) // #2640: 2 + 18 reply + 4 + 2
                         .id(("msg-avatar", id.0))
                         .cursor_pointer()
                         .on_click(message_ext::open_author(entity, msg))
@@ -852,7 +856,7 @@ fn message(
                             .absolute()
                             .size(z(s))
                             .left(z(space::md() - off))
-                            .top(z(if msg.reply_to.is_some() { 28. } else { 4. } - off + 1.)),
+                            .top(z(if msg.reply_to.is_some() { 26. } else { 4. } - off)), // #2641 avatarDecoration_ 4px above the avatar
                     )
                 })
                 .child(
