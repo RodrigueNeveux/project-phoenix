@@ -40,7 +40,8 @@ fn message_create_maps() {
     let out = a.map(&cache, &e);
     let m = out.iter().find_map(|x| match x { AppEvent::MessageCreate(m) => Some(m), _ => None }).unwrap();
     assert_eq!(m.id, Id(700000000000000051));
-    assert!(m.attachments[0].is_image && m.attachments[0].url.contains("width="));
+    // Sizing (?width=assert!(m.attachments[0].is_image && m.attachments[0].url.contains("width="));height=) is now applied at render time by `media`, so the stored URL is the raw proxy URL.
+    assert!(m.attachments[0].is_image && !m.attachments[0].url.is_empty());
     assert!(out.iter().any(|x| matches!(x, AppEvent::Users(u) if u.iter().any(|u| u.name.as_ref() == "bob"))));
 }
 
