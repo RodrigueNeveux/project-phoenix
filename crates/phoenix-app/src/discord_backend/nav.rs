@@ -173,9 +173,25 @@ fn thread(c: &api::Channel) -> Option<model::Channel> {
 }
 
 fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
+    // Vanilla client rule (channel-icon picker → "is private channel" helper):
+    // a guild channel is locked when @everyone, after its own overwrite, lacks
+    // CONNECT (voice/stage), or when the @everyone overwrite denies VIEW_CHANNEL.
     let everyone_denied = |ch: &api::Channel| {
         ch.guild_id.is_some_and(|g| {
-            ch.permission_overwrites.iter().any(|o| o.id == g && o.deny.contains(api::Permissions::VIEW_CHANNEL))
+            let ow = ch.permission_overwrites.iter().find(|o| o.id == g);
+            if ch.kind.is_voice() {
+                let mut p = cache
+                    .guild(g)
+                    .and_then(|gd| gd.roles.iter().find(|r| r.id == g).map(|r| r.permissions))
+                    .unwrap_or_default();
+                if let Some(o) = ow {
+                    p = (p - o.deny) | o.allow;
+                }
+                if !p.contains(api::Permissions::CONNECT) {
+                    return true;
+                }
+            }
+            ow.is_some_and(|o| o.deny.contains(api::Permissions::VIEW_CHANNEL))
         })
     };
     let group = c.kind == ChannelType::GroupDm;

@@ -496,6 +496,18 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         )
 }
 
+/// Icon-provider name of the *LockIcon variant for `kind`.
+fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
+    Some(match kind {
+        ChannelKind::Text => "text-lock",
+        ChannelKind::Voice => "voice-lock",
+        ChannelKind::Announcement => "announcement-lock",
+        ChannelKind::Forum => "forum-lock",
+        ChannelKind::Stage => "stage-lock",
+        ChannelKind::Category => return None,
+    })
+}
+
 /// Channel glyph with Discord's small corner badges (lock for private
 /// channels, "!" for age-restricted ones).
 fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool, bg: gpui::Hsla) -> AnyElement {
@@ -503,16 +515,13 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
         .relative()
         .size(z(20.))
         .flex_none()
-        // Locked voice channels use the dedicated VoiceLockIcon (live #icon_TNyK-N,
-        // aria "Voix (Limité)") instead of a corner badge.
-        .map(|d| {
-            if locked && kind == ChannelKind::Voice {
-                d.child(gpui::svg().path(crate::icons::path("voice-lock")).size(z(20.)).flex_none().text_color(color))
-            } else {
-                d.child(icon(channel_icon(kind), 20., color))
-            }
+        // Vanilla icon picker: NSFW wins over lock; locked channels swap to the
+        // dedicated *LockIcon glyph (live aria "Salon privé (verrouillé)").
+        .map(|d| match lock_icon_name(kind).filter(|_| locked && !nsfw) {
+            Some(name) => d.child(gpui::svg().path(crate::icons::path(name)).size(z(20.)).flex_none().text_color(color)),
+            None => d.child(icon(channel_icon(kind), 20., color)),
         })
-        .when((locked && kind != ChannelKind::Voice) || nsfw, |d| {
+        .when(nsfw, |d| {
             d.child(
                 div()
                     .absolute()
@@ -524,10 +533,10 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
                     .flex()
                     .items_center()
                     .justify_center()
-                    .when(locked, |d| d.child(icon(Icon::Lock, 9., color)))
-                    .when(!locked, |d| {
-                        d.text_size(z(9.)).font_weight(FontWeight::BOLD).text_color(color).child("!")
-                    }),
+                    .text_size(z(9.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(color)
+                    .child("!"),
             )
         })
         .into_any_element()

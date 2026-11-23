@@ -48,6 +48,10 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("refresh", &["RefreshIcon"]),
     ("lock", &["LockIcon"]),
     ("voice-lock", &["VoiceLockIcon"]),
+    ("text-lock", &["TextLockIcon"]),
+    ("forum-lock", &["ForumLockIcon"]),
+    ("announcement-lock", &["AnnouncementsLockIcon"]),
+    ("stage-lock", &["StageLockIcon"]),
     // Discovery guild badge (`GuildBadge` DISCOVERABLE → ExperimentalWebBadgeIcon):
     // background tone --badge-inverted-background, inner tone --badge-inverted-text.
     ("discovery-badge", &["ExperimentalWebBadgeIcon"]),
