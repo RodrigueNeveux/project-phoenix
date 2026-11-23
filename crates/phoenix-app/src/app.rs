@@ -1166,7 +1166,7 @@ impl Render for PhoenixApp {
             }))
             .size_full()
             .relative()
-            .font_family(FONT_UI)
+            .font_family(FONT_UI())
             .text_color(c(Palette::TEXT_NORMAL))
             .bg(c(Palette::BG_TERTIARY))
             .child(body)

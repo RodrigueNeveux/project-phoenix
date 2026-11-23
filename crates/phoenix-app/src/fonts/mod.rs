@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Families used by display name styles (from the client's @font-face rules).
 pub const NAME_STYLE_FAMILIES: &[&str] = &[
@@ -59,8 +60,16 @@ fn is_font(b: &[u8]) -> bool {
     b.starts_with(b"wOF2") || b.starts_with(b"wOFF") || b.starts_with(&[0, 1, 0, 0]) || b.starts_with(b"OTTO")
 }
 
+/// UI fonts of the client: `--font-primary` / `--font-code` first families.
+pub const UI_FAMILIES: &[&str] = &["gg sans", "gg mono"];
+
 /// Parses `@font-face` rules: `(family, weight, asset file name)`.
 pub fn parse_font_faces(css: &str) -> Vec<(String, u16, String)> {
+    parse_font_faces_styled(css).into_iter().map(|(f, w, _, a)| (f, w, a)).collect()
+}
+
+/// Like [`parse_font_faces`], plus whether the face is `font-style:italic`.
+pub fn parse_font_faces_styled(css: &str) -> Vec<(String, u16, bool, String)> {
     let mut out = Vec::new();
     for rule in css.split("@font-face{").skip(1) {
         let rule = rule.split('}').next().unwrap_or("");
@@ -73,7 +82,8 @@ pub fn parse_font_faces(css: &str) -> Vec<(String, u16, String)> {
         let Some(url) = src.split("/assets/").nth(1).and_then(|s| s.split(['"', ')', '\'']).next()) else {
             continue;
         };
-        out.push((family.to_owned(), weight, url.to_owned()));
+        let italic = prop("font-style:") == Some("italic");
+        out.push((family.to_owned(), weight, italic, url.to_owned()));
     }
     out
 }
@@ -96,18 +106,20 @@ pub fn extract(cache: &Path, dir: &Path) -> Vec<PathBuf> {
             && let Some(b) = body(p)
             && let Ok(css) = String::from_utf8(b)
         {
-            faces.extend(parse_font_faces(&css));
+            faces.extend(parse_font_faces_styled(&css));
         }
     }
     let mut written = Vec::new();
     let _ = std::fs::create_dir_all(dir);
-    for (family, weight, asset) in faces {
-        if !NAME_STYLE_FAMILIES.contains(&family.as_str()) {
+    faces.sort();
+    faces.dedup();
+    for (family, weight, italic, asset) in faces {
+        if !NAME_STYLE_FAMILIES.contains(&family.as_str()) && !UI_FAMILIES.contains(&family.as_str()) {
             continue;
         }
         let Some(b) = entries.get(&asset).and_then(|p| body(p)).filter(|b| is_font(b)) else { continue };
         let ext = asset.rsplit('.').next().unwrap_or("woff2");
-        let out = dir.join(format!("{}-{weight}.{ext}", family.replace(' ', "_")));
+        let out = dir.join(format!("{}-{weight}{}.{ext}", family.replace(' ', "_"), if italic { "i" } else { "" }));
         if std::fs::write(&out, &b).is_ok() {
             written.push(out);
         }
@@ -172,30 +184,95 @@ pub fn ttf_family(ttf: &[u8]) -> Option<String> {
     })
 }
 
-/// Extracts + decodes the fonts off the UI thread, then registers them with GPUI.
-pub fn register(cx: &mut gpui::App) {
-    let task = cx.background_executor().spawn(async move {
-        let mut fonts = Vec::new();
-        for p in init() {
-            let css = p.file_stem().and_then(|s| s.to_str()).and_then(|s| s.rsplit_once('-')).map(|(f, _)| f.replace('_', " "));
-            let (Some(css), Ok(b)) = (css, std::fs::read(&p)) else { continue };
-            let Some(ttf) = to_ttf(&b) else { continue };
-            let Some(fam) = ttf_family(&ttf) else { continue };
-            fonts.push((css, fam, ttf));
+static GG_SANS: AtomicBool = AtomicBool::new(false);
+static GG_MONO: AtomicBool = AtomicBool::new(false);
+/// Real family inside the gg mono TTF ("gg sans mono").
+static GG_MONO_NAME: parking_lot::RwLock<&'static str> = parking_lot::RwLock::new("gg mono");
+
+/// UI font family: `--font-primary` = "gg sans", ..., "Noto Sans", ... GPUI on
+/// Linux has no per-font fallback list, so we pick the first family of the
+/// chain that is actually available: gg sans when extracted, else Noto Sans.
+pub fn ui_family() -> &'static str {
+    if GG_SANS.load(Ordering::Relaxed) { "gg sans" } else { "Noto Sans" }
+}
+
+/// Code font family: `--font-code` = "gg mono", ..., "DejaVu Sans Mono", ...
+pub fn mono_family() -> &'static str {
+    if GG_MONO.load(Ordering::Relaxed) { *GG_MONO_NAME.read() } else { "DejaVu Sans Mono" }
+}
+
+/// `(css family, real family, ttf)` of decoded fonts cached as `.ttf` in `dir`.
+fn load_decoded(dir: &Path) -> Vec<(String, String, Vec<u8>)> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let p = e.path();
+        if p.extension().is_none_or(|x| x != "ttf") {
+            continue;
         }
+        let css = p.file_stem().and_then(|s| s.to_str()).and_then(|s| s.rsplit_once('-')).map(|(f, _)| f.replace('_', " "));
+        let (Some(css), Ok(ttf)) = (css, std::fs::read(&p)) else { continue };
+        let Some(fam) = ttf_family(&ttf) else { continue };
+        out.push((css, fam, ttf));
+    }
+    out
+}
+
+/// Extracts from the Discord cache and decodes every WOFF2 next to it as `.ttf`.
+fn extract_and_decode() -> Vec<(String, String, Vec<u8>)> {
+    let Some(dir) = out_dir() else { return Vec::new() };
+    for p in init() {
+        let ttf_path = p.with_extension("ttf");
+        if p.extension().is_some_and(|x| x == "ttf") || ttf_path.exists() {
+            continue;
+        }
+        if let Some(ttf) = std::fs::read(&p).ok().and_then(|b| to_ttf(&b)) {
+            let _ = std::fs::write(&ttf_path, ttf);
+        }
+    }
+    load_decoded(&dir)
+}
+
+fn install(fonts: Vec<(String, String, Vec<u8>)>, cx: &mut gpui::App) -> bool {
+    // `PHX_NO_GG_FONTS=1`: keep the Noto Sans fallback (before/after compares).
+    let fonts: Vec<_> = if std::env::var_os("PHX_NO_GG_FONTS").is_some() {
+        fonts.into_iter().filter(|(css, ..)| !UI_FAMILIES.contains(&css.as_str())).collect()
+    } else {
         fonts
-    });
+    };
+    if fonts.is_empty() {
+        return false;
+    }
+    let mut map = HashMap::new();
+    let mut blobs = Vec::new();
+    for (css, fam, ttf) in fonts {
+        map.insert(css, gpui::SharedString::from(fam));
+        blobs.push(std::borrow::Cow::Owned(ttf));
+    }
+    if cx.text_system().add_fonts(blobs).is_err() {
+        return false;
+    }
+    GG_SANS.store(map.get("gg sans").is_some_and(|f| f == "gg sans"), Ordering::Relaxed);
+    if let Some(m) = map.get("gg mono") {
+        *GG_MONO_NAME.write() = Box::leak(m.to_string().into_boxed_str());
+        GG_MONO.store(true, Ordering::Relaxed);
+    }
+    *FAMILIES.write() = Some(map);
+    true
+}
+
+/// Registers the fonts with GPUI: the already decoded ones synchronously (so
+/// the first frame, and offscreen shots, use gg sans), then a background
+/// re-extraction from the Discord cache when nothing was cached yet.
+pub fn register(cx: &mut gpui::App) {
+    let cached = out_dir().map(|d| load_decoded(&d)).unwrap_or_default();
+    if install(cached, cx) && GG_SANS.load(Ordering::Relaxed) {
+        return;
+    }
+    let task = cx.background_executor().spawn(async move { extract_and_decode() });
     cx.spawn(async move |cx| {
         let fonts = task.await;
         cx.update(|cx| {
-            let mut map = HashMap::new();
-            let mut blobs = Vec::new();
-            for (css, fam, ttf) in fonts {
-                map.insert(css, gpui::SharedString::from(fam));
-                blobs.push(std::borrow::Cow::Owned(ttf));
-            }
-            if cx.text_system().add_fonts(blobs).is_ok() {
-                *FAMILIES.write() = Some(map);
+            if install(fonts, cx) {
                 cx.refresh_windows();
             }
         });
@@ -228,6 +305,8 @@ mod tests {
     fn parses_font_face() {
         let css = r#"@font-face{font-display:swap;font-family:Sakura;font-weight:400;src:url("/assets/ab12.woff2") format("woff2")}"#;
         assert_eq!(parse_font_faces(css), vec![("Sakura".into(), 400, "ab12.woff2".into())]);
+        let css = r#"@font-face{font-display:swap;font-family:gg sans;font-style:italic;font-weight:600;src:url(/assets/cd.woff2) format("woff2")}"#;
+        assert_eq!(parse_font_faces_styled(css), vec![("gg sans".into(), 600, true, "cd.woff2".into())]);
     }
 
     /// Manual: `cargo test -p phoenix-app --lib fonts::tests::extract_local -- --ignored --nocapture`

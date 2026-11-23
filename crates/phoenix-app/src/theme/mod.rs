@@ -34,8 +34,16 @@ pub fn c_for(hex: u32, theme: AppTheme) -> Hsla {
     }
 }
 
-pub const FONT_UI: &str = "Noto Sans";
-pub const FONT_MONO: &str = "DejaVu Sans Mono";
+/// `--font-primary` ("gg sans" from the local Discord cache, else Noto Sans).
+#[allow(non_snake_case)]
+pub fn FONT_UI() -> &'static str {
+    crate::fonts::ui_family()
+}
+/// `--font-code` ("gg mono" from the local Discord cache, else DejaVu Sans Mono).
+#[allow(non_snake_case)]
+pub fn FONT_MONO() -> &'static str {
+    crate::fonts::mono_family()
+}
 
 /// Tag a generated token index (see [`generated::idx`]) as a palette value.
 pub const fn tok(i: usize) -> u32 {

@@ -841,7 +841,7 @@ fn privacy_body(v: &crate::voice::VoiceUi) -> AnyElement {
                         .py(z(4.))
                         .rounded(z(4.))
                         .bg(c(Palette::BG_TERTIARY))
-                        .font_family(crate::theme::FONT_MONO)
+                        .font_family(crate::theme::FONT_MONO())
                         .text_size(z(16.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(g)

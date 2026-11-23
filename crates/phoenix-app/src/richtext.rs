@@ -60,7 +60,7 @@ pub fn code_runs(code: &str, lang: Option<&str>) -> Vec<TextRun> {
         .into_iter()
         .map(|(r, t)| TextRun {
             len: r.len(),
-            font: font(FONT_MONO),
+            font: font(FONT_MONO()),
             color: c(t.color()),
             background_color: None,
             underline: None,
@@ -70,11 +70,11 @@ pub fn code_runs(code: &str, lang: Option<&str>) -> Vec<TextRun> {
 }
 
 pub fn ui_font() -> Font {
-    font(FONT_UI)
+    font(FONT_UI())
 }
 
 fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
-    let mut f = if style.has(Style::CODE) { font(FONT_MONO) } else { ui_font() };
+    let mut f = if style.has(Style::CODE) { font(FONT_MONO()) } else { ui_font() };
     if style.has(Style::BOLD) {
         f.weight = FontWeight::BOLD;
     }

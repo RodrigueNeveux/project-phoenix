@@ -379,7 +379,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
             .px(px(2.))
             .rounded(px(4.))
             .bg(tk(idx::BACKGROUND_BASE_LOWEST))
-            .font_family(crate::theme::FONT_MONO)
+            .font_family(crate::theme::FONT_MONO())
             .child(s)
     };
     // protip_a1DYes: padding-top 10px; pro_xW8MJW 12px semibold --text-feedback-positive,

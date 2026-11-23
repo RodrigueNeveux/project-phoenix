@@ -69,7 +69,7 @@ pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
                 .bg(c(Palette::CODE_BG))
                 .border_1()
                 .border_color(c(Palette::CODE_BORDER))
-                .font_family(crate::theme::FONT_MONO)
+                .font_family(crate::theme::FONT_MONO())
                 .text_size(px(14.))
                 .child(code)
                 .into_any_element(),

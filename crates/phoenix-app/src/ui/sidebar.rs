@@ -616,7 +616,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .flex_none()
                 .ml(z(12.))
                 .pr(z(4.))
-                .font_family(crate::theme::FONT_MONO)
+                .font_family(crate::theme::FONT_MONO())
                 .text_size(z(12.))
                 .line_height(z(16.))
                 .text_color(t(idx::TEXT_FEEDBACK_POSITIVE))
