@@ -194,6 +194,9 @@ pub struct Message {
     pub edited: bool,
     pub content: SharedString,
     pub reply_to: Option<Id>,
+    /// The reply pinged the replied-to author (`message.mentions` holds the referenced
+    /// author): the client then prefixes the replied username with "@".
+    pub reply_mentions_author: bool,
     pub embeds: Vec<Embed>,
     pub attachments: Vec<Attachment>,
     pub reactions: Vec<Reaction>,

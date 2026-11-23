@@ -318,6 +318,7 @@ impl MockBackend {
             };
             if i > 3 && rng.next().is_multiple_of(11) {
                 m.reply_to = Some(out[i - 2 - (rng.next() as usize % 2)].id);
+                m.reply_mentions_author = rng.next().is_multiple_of(2);
             }
             if rng.next().is_multiple_of(9) {
                 m.reactions.push(Reaction { emoji: "👍".into(), count: 1 + (rng.next() % 5) as u32, me: rng.next().is_multiple_of(2), emoji_id: None });

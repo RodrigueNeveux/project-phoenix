@@ -19,6 +19,7 @@ use crate::{
 pub mod composer;
 pub mod icons;
 pub mod message_ext;
+pub mod mosaic;
 pub mod panels;
 pub mod state;
 pub mod slash;
@@ -487,8 +488,17 @@ fn message(
     if msg.edited && !last_text.is_some_and(|l| l + 1 == n_blocks) {
         content = content.child(edited_marker(ts));
     }
-    for a in &msg.attachments {
-        content = content.child(attachment(a, cx));
+    // Two or more images/videos share one mosaic; files follow (nonVisualMediaItem_ margin-top 8px).
+    let visual: Vec<&Attachment> = msg.attachments.iter().filter(|a| mosaic::is_visual(a)).collect();
+    if visual.len() >= 2 {
+        content = content.child(mosaic::render(&visual, cx));
+        for a in msg.attachments.iter().filter(|a| !mosaic::is_visual(a)) {
+            content = content.child(div().mt(z(4.)).child(attachment(a, cx)));
+        }
+    } else {
+        for a in &msg.attachments {
+            content = content.child(attachment(a, cx));
+        }
     }
     for e in &msg.embeds {
         content = content.child(embed(e));
@@ -552,7 +562,8 @@ fn message(
                     .text_color(ru.and_then(|u| app.author_color(u.id)).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
                     .opacity(0.64)
                     .child(SharedString::from(format!(
-                        "@{}",
+                        "{}{}",
+                        if msg.reply_mentions_author { "@" } else { "" }, // repliedMessage_ username: "@" only when the reply pinged
                         ru.map(|u| u.display_name.to_string()).unwrap_or_else(|| crate::t!("common.unknown").to_string())
                     ))),
             )
@@ -783,8 +794,9 @@ fn indent_rich(t: &RichText, width: f32, cx: &App) -> RichText {
 fn edited_marker(ts: i64) -> impl IntoElement {
     div()
         .id(("edited", ts as u64))
-        .text_size(z(10.))
-        .line_height(z(16.))
+        .text_size(z(10.)) // edited_ font-size .625rem
+        .line_height(z(10.)) // edited_ line-height 1
+        .font_weight(FontWeight::NORMAL) // edited_ --font-weight-normal
         .text_color(c(Palette::TEXT_MUTED))
         .child(crate::t!("chat.edited"))
 }
@@ -811,9 +823,22 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
     if !t.emoji.is_empty() {
         let el = message_ext::rich_with_emoji(entity, msg, bi, t);
         if edited {
-            return div().flex().flex_wrap().items_end().child(el).child(div().ml(z(4.)).child(edited_marker(msg.0 as i64))).into_any_element();
+            return div().flex().flex_wrap().items_end().child(el).child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(msg.0 as i64))).into_any_element();
         }
         return el;
+    }
+    // StyledText runs cannot change size, so a short one-line message gets the real 10px
+    // `edited_` span next to it (baseline-aligned: 22px line, 16px text); longer text keeps the
+    // inline suffix so it follows the last wrapped line.
+    if edited && t.click_ranges.is_empty() && !t.text.contains('\n') && t.text.chars().count() <= 60 {
+        let plain = div().line_height(gpui::relative(1.375)).child(StyledText::new(t.text.clone()).with_runs(t.runs.clone()));
+        return div()
+            .flex()
+            .flex_wrap()
+            .items_end()
+            .child(plain)
+            .child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(msg.0 as i64))) // " " text node + baseline
+            .into_any_element();
     }
     let (text, runs) = if edited { with_edited(t) } else { (t.text.clone(), t.runs.clone()) };
     let styled = StyledText::new(text).with_runs(runs);

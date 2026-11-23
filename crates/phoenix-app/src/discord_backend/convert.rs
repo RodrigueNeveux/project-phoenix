@@ -105,6 +105,10 @@ pub fn message(m: &api::Message) -> model::Message {
         edited: m.edited_timestamp.is_some(),
         content: m.content.clone().into(),
         reply_to,
+        reply_mentions_author: m
+            .referenced_message
+            .as_ref()
+            .is_some_and(|r| m.mentions.iter().any(|u| u.user.id == r.author.id)),
         embeds: m
             .embeds
             .iter()
