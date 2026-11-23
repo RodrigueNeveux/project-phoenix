@@ -518,7 +518,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
 }
 
 /// Icon-provider name of the *LockIcon variant for `kind`.
-fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
+pub(crate) fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
     Some(match kind {
         ChannelKind::Text => "text-lock",
         ChannelKind::Voice => "voice-lock",

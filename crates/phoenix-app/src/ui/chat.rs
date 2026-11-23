@@ -172,7 +172,9 @@ fn discovery_arrow() -> impl IntoElement {
 fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
     let gid = app.selected_guild?;
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c))?;
-    if ch.guild.is_none() || !guild_discoverable(app) || NOTICE_CLOSED.lock().ok()?.contains(&gid.0) {
+    // It points at the header label, which locked channels don't show.
+    let locked = app.nav.extras.get(&ch.id).is_some_and(|e| e.locked);
+    if ch.guild.is_none() || locked || !guild_discoverable(app) || NOTICE_CLOSED.lock().ok()?.contains(&gid.0) {
         return None;
     }
     Some(
@@ -273,7 +275,10 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     // Thread: breadcrumb parent › thread, the icon is the parent's (vanilla-thread-channel #1190).
     let thread_parent = ch.and_then(|c| app.nav.thread_parent(c.id)).and_then(|p| app.channels.get(&p));
     let kind = thread_parent.or(ch).map(|c| c.kind).unwrap_or(ChannelKind::Text);
-    let discoverable = !is_dm && guild_discoverable(app);
+    // A private (locked) channel gets the *LockIcon glyph and no "Mode Découverte" label
+    // (real compare 20261123-170026: locked #général shows hash-lock + dot, no label).
+    let locked = ch.is_some_and(|c| app.nav.extras.get(&c.id).is_some_and(|e| e.locked));
+    let discoverable = !is_dm && !locked && guild_discoverable(app);
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
     let on = tk(idx::ICON_STRONG);
@@ -320,7 +325,10 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .h(z(32.))
                         .flex()
                         .items_center()
-                        .child(icon(channel_icon(kind), 20. * crate::theme::zoom(), tk(idx::CHANNEL_ICON)))
+                        .map(|d| match crate::ui::sidebar::lock_icon_name(kind).filter(|_| locked && thread_parent.is_none()) {
+                            Some(n) => d.child(gpui::svg().path(crate::icons::path(n)).size(z(20.)).flex_none().text_color(tk(idx::CHANNEL_ICON))),
+                            None => d.child(icon(channel_icon(kind), 20. * crate::theme::zoom(), tk(idx::CHANNEL_ICON))),
+                        })
                         .into_any_element()
                 })
                 .when_some(thread_parent.map(|p| (p.id, p.name.clone())), |d, (pid, pname)| {
