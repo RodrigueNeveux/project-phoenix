@@ -55,7 +55,7 @@ fn eid(s: impl Into<String>) -> ElementId {
     ElementId::Name(SharedString::from(s.into()))
 }
 
-fn h1(t: &'static str) -> Div {
+fn h1(t: SharedString) -> Div {
     div()
         .mb(z(20.))
         .text_size(z(20.))
@@ -99,8 +99,8 @@ fn knob(on: bool, disabled: bool) -> Div {
 
 fn switch_row(
     id: &'static str,
-    title: &'static str,
-    desc: &'static str,
+    title: SharedString,
+    desc: SharedString,
     on: bool,
     disabled: bool,
     f: impl Fn(&mut VoicePrefs) + 'static,
@@ -269,7 +269,7 @@ fn select(
     cx: &mut Cx,
 ) -> Div {
     let open = OPEN_SELECT.with(Cell::get) == Some(id);
-    let label: SharedString = current.clone().unwrap_or_else(|| "Default".into()).into();
+    let label: SharedString = current.clone().unwrap_or_else(|| crate::t!("voice.default").into()).into();
     let f = Rc::new(f);
     let mut list = div()
         .id(eid(format!("{id}-list")))
@@ -291,7 +291,7 @@ fn select(
     entries.extend(options.into_iter().map(Some));
     for (ix, opt) in entries.into_iter().enumerate() {
         let selected = opt == current;
-        let text: SharedString = opt.clone().unwrap_or_else(|| "Default".into()).into();
+        let text: SharedString = opt.clone().unwrap_or_else(|| crate::t!("voice.default").into()).into();
         let f = f.clone();
         list = list.child(
             div()
@@ -350,7 +350,7 @@ fn select(
         .when(open, |d| d.child(deferred(list).with_priority(2)))
 }
 
-fn button(id: &'static str, label: &'static str, bg: u32, hover: u32) -> gpui::Stateful<Div> {
+fn button(id: &'static str, label: SharedString, bg: u32, hover: u32) -> gpui::Stateful<Div> {
     div()
         .id(id)
         .h(z(32.))
@@ -491,7 +491,7 @@ fn column(children: impl IntoIterator<Item = AnyElement>) -> Div {
 }
 
 fn input_mode(p: &VoicePrefs, cx: &mut Cx) -> Div {
-    let radio = |id: &'static str, label: &'static str, mode: InputMode, cx: &mut Cx| {
+    let radio = |id: &'static str, label: SharedString, mode: InputMode, cx: &mut Cx| {
         let selected = p.input_mode == mode;
         div()
             .id(id)
@@ -530,31 +530,31 @@ fn input_mode(p: &VoicePrefs, cx: &mut Cx) -> Div {
     div()
         .flex()
         .flex_col()
-        .child(h5("INPUT MODE"))
-        .child(radio("vs-mode-vad", "Voice Activity", InputMode::VoiceActivity, cx))
-        .child(radio("vs-mode-ptt", "Push to Talk", InputMode::PushToTalk, cx))
+        .child(h5(crate::t!("voice.input_mode")))
+        .child(radio("vs-mode-vad", crate::t!("voice.vad"), InputMode::VoiceActivity, cx))
+        .child(radio("vs-mode-ptt", crate::t!("voice.ptt"), InputMode::PushToTalk, cx))
 }
 
 fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
     let recording = ptt::is_recording();
     let label: SharedString = match (&p.ptt_key, recording) {
-        (_, true) => "Press a key…".into(),
+        (_, true) => crate::t!("voice.press_key").into(),
         (Some(k), false) => ptt::label(k).into(),
-        (None, false) => "No Keybind Set".into(),
+        (None, false) => crate::t!("voice.no_keybind").into(),
     };
     let portal: Option<(SharedString, u32)> = match portal_state().lock().clone() {
         PortalState::Off => None,
-        PortalState::Pending => Some(("Registering the global shortcut with your desktop…".into(), Palette::TEXT_MUTED)),
-        PortalState::Bound(d) if d.is_empty() => Some(("Works everywhere, even when Phoenix is in the background.".into(), Palette::TEXT_MUTED)),
-        PortalState::Bound(d) => Some((format!("Global shortcut active: {d}").into(), Palette::TEXT_MUTED)),
-        PortalState::Unavailable(_) => Some(("Your desktop did not grant a global shortcut: push to talk only works while Phoenix is focused.".into(), Palette::YELLOW)),
+        PortalState::Pending => Some((crate::t!("voice.portal_pending").into(), Palette::TEXT_MUTED)),
+        PortalState::Bound(d) if d.is_empty() => Some((crate::t!("voice.portal_bound").into(), Palette::TEXT_MUTED)),
+        PortalState::Bound(d) => Some((crate::t!("voice.portal_active", d = d), Palette::TEXT_MUTED)),
+        PortalState::Unavailable(_) => Some((crate::t!("voice.portal_unavailable").into(), Palette::YELLOW)),
     };
     let delay = p.ptt_delay_ms;
     div()
         .flex()
         .gap(z(16.))
         .child(column([
-            h5("SHORTCUT").into_any_element(),
+            h5(crate::t!("voice.shortcut")).into_any_element(),
             div()
                 .h(z(40.))
                 .pl(z(10.))
@@ -576,7 +576,7 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
                 .child(
                     button(
                         "vs-record",
-                        if recording { "Stop Recording" } else if p.ptt_key.is_some() { "Edit Keybind" } else { "Record Keybind" },
+                        if recording { crate::t!("voice.stop_recording") } else if p.ptt_key.is_some() { crate::t!("voice.edit_keybind") } else { crate::t!("voice.record_keybind") },
                         if recording { 0xDA373C } else { 0x4E5058 },
                         if recording { 0xA12D2F } else { 0x6D6F78 },
                     )
@@ -590,7 +590,7 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
             div().when_some(portal, |d, (t, col)| d.mt(z(8.)).text_size(z(12.)).text_color(c(col)).child(t)).into_any_element(),
         ]))
         .child(column([
-            h5("PUSH TO TALK RELEASE DELAY").into_any_element(),
+            h5(crate::t!("voice.ptt_delay")).into_any_element(),
             slider(
                 "ptt-delay",
                 delay as f32 / 2000.,
@@ -659,7 +659,7 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
     div()
         .flex()
         .flex_col()
-        .child(h5("INPUT SENSITIVITY"))
+        .child(h5(crate::t!("voice.sensitivity")))
         .child(
             div()
                 .id("vs-auto-sens")
@@ -673,7 +673,7 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
                         .text_size(z(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(Palette::TEXT_NORMAL))
-                        .child("Automatically determine input sensitivity"),
+                        .child(crate::t!("voice.auto_sensitivity")),
                 )
                 .child(knob(auto, false))
                 .on_click(cx.listener(move |_, _, _, cx| {
@@ -683,7 +683,7 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
         )
         .child(bar)
         .when(auto && level.is_none(), |d| {
-            d.child(div().mt(z(8.)).child(note("Start a mic test or join a voice channel to see your input level.")))
+            d.child(div().mt(z(8.)).child(note(crate::t!("voice.level_hint"))))
         })
 }
 
@@ -695,8 +695,8 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
     div()
         .flex()
         .flex_col()
-        .child(h5("MIC TEST"))
-        .child(note("Having mic issues? Start a test and say something fun—we'll play your voice back to you.").mb(z(16.)))
+        .child(h5(crate::t!("voice.mic_test")))
+        .child(note(crate::t!("voice.mic_test_note")).mb(z(16.)))
         .child(
             div()
                 .flex()
@@ -705,7 +705,7 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 .child(
                     button(
                         "vs-mic-test",
-                        if testing { "Stop Testing" } else { "Let's Check" },
+                        if testing { crate::t!("voice.stop_testing") } else { crate::t!("voice.lets_check") },
                         if testing { 0x4E5058 } else { Palette::BLURPLE },
                         if testing { 0x6D6F78 } else { 0x4752C4 },
                     )
@@ -735,17 +735,17 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 cx.notify();
             }
         }))
-        .child(h1("Voice Settings"))
+        .child(h1(crate::t!("voice.voice_settings")))
         .child(
             div()
                 .flex()
                 .gap(z(16.))
                 .child(column([
-                    h5("INPUT DEVICE").into_any_element(),
+                    h5(crate::t!("voice.input_device")).into_any_element(),
                     select("input", p.input_device.clone(), inputs, |p, v| p.input_device = v, cx).into_any_element(),
                 ]))
                 .child(column([
-                    h5("OUTPUT DEVICE").into_any_element(),
+                    h5(crate::t!("voice.output_device")).into_any_element(),
                     select("output", p.output_device.clone(), outputs, |p, v| p.output_device = v, cx).into_any_element(),
                 ])),
         )
@@ -755,11 +755,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 .flex()
                 .gap(z(16.))
                 .child(column([
-                    h5("INPUT VOLUME").into_any_element(),
+                    h5(crate::t!("voice.input_volume")).into_any_element(),
                     pct_slider("input-volume", p.input_volume, 100, |p, v| p.input_volume = v, cx).into_any_element(),
                 ]))
                 .child(column([
-                    h5("OUTPUT VOLUME").into_any_element(),
+                    h5(crate::t!("voice.output_volume")).into_any_element(),
                     pct_slider("output-volume", p.output_volume, 200, |p, v| p.output_volume = v, cx).into_any_element(),
                 ])),
         )
@@ -769,11 +769,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .child(div().mt(z(20.)).child(if p.input_mode == InputMode::PushToTalk { keybind(&p, cx) } else { sensitivity(&p, cx) }))
         .when(p.input_mode == InputMode::PushToTalk, |d| d.child(div().mt(z(20.)).child(sensitivity(&p, cx))))
         .child(divider())
-        .child(h5("VOICE PROCESSING"))
+        .child(h5(crate::t!("voice.processing")))
         .child(switch_row(
             "echo",
-            "Echo Cancellation",
-            "Not available in Phoenix yet: use headphones to avoid echo.",
+            crate::t!("voice.echo"),
+            crate::t!("voice.echo_note"),
             false,
             true,
             |_| {},
@@ -781,8 +781,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         ))
         .child(switch_row(
             "noise",
-            "Noise Suppression",
-            "Suppress background noise from your mic.",
+            crate::t!("voice.noise"),
+            crate::t!("voice.noise_note"),
             p.noise_suppression,
             false,
             |p| p.noise_suppression = !p.noise_suppression,
@@ -790,29 +790,29 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         ))
         .child(switch_row(
             "agc",
-            "Automatic Gain Control",
-            "Keep your voice at a consistent volume.",
+            crate::t!("voice.agc"),
+            crate::t!("voice.agc_note"),
             p.agc,
             false,
             |p| p.agc = !p.agc,
             cx,
         ))
         .child(divider())
-        .child(h5("ATTENUATION"))
-        .child(note("Lower the volume of other applications by this percent when someone is speaking. Set to 0% to completely disable attenuation.").mb(z(16.)))
+        .child(h5(crate::t!("voice.attenuation")))
+        .child(note(crate::t!("voice.attenuation_note")).mb(z(16.)))
         .child(pct_slider("attenuation", p.attenuation, 100, |p, v| p.attenuation = v, cx).mb(z(20.)))
-        .child(switch_row("att-self", "When I speak", "", p.attenuate_self, false, |p| p.attenuate_self = !p.attenuate_self, cx))
+        .child(switch_row("att-self", crate::t!("voice.when_i_speak"), "".into(), p.attenuate_self, false, |p| p.attenuate_self = !p.attenuate_self, cx))
         .child(switch_row(
             "att-others",
-            "When others speak",
-            "",
+            crate::t!("voice.when_others_speak"),
+            "".into(),
             p.attenuate_others,
             false,
             |p| p.attenuate_others = !p.attenuate_others,
             cx,
         ))
         .child(divider())
-        .child(h1("Video Settings"))
+        .child(h1(crate::t!("voice.video_settings")))
         .child(
             div()
                 .h(z(200.))
@@ -823,9 +823,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 .items_center()
                 .justify_center()
                 .gap(z(8.))
-                .child(note("No video devices found")),
+                .child(note(crate::t!("voice.no_video_found"))),
         )
-        .child(div().mt(z(20.)).child(h5("CAMERA")))
+        .child(div().mt(z(20.)).child(h5(crate::t!("voice.camera"))))
         .child(
             div()
                 .h(z(40.))
@@ -836,6 +836,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 .items_center()
                 .text_size(z(16.))
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("No video devices"),
+                .child(crate::t!("voice.no_video")),
         )
 }
