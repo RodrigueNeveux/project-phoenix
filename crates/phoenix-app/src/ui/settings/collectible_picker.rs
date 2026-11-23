@@ -12,7 +12,7 @@
 //!   gap 4 to the grid) + modalPreview_ (margin-top 24, gap 12).
 //! - decorationGridItem_: 75x80 (effect/frame 83x80), radius 4, 12 apart,
 //!   selected = 2px inset --brand-500 ring; "Aucun"/"Boutique" = 24px icon
-//!   + body-xs 12/16 label; preset images 64px. Nameplate: 2 tiles 105x80,
+//!   and a body-xs 12/16 label; preset images 64px. Nameplate: 2 tiles 105x80,
 //!   then 224x48 rows.
 //! - decorationPreview_ 208x208 r4 with the 120px avatar centred; small
 //!   previews column 56 wide (40/32/40/32 avatars, 16 apart).

@@ -121,6 +121,8 @@ pub struct EditorState {
     pub collectibles: Option<Vec<super::collectibles::Collectible>>,
     /// Picker choices (editor preview only, never sent).
     pub equipped: super::collectible_picker::Equipped,
+    /// Activity tab: recent played games.
+    pub recent: Vec<super::profile_activity::RecentGame>,
 }
 
 impl EditorState {
@@ -147,6 +149,7 @@ impl EditorState {
             picker: None,
             collectibles: None,
             equipped: Default::default(),
+            recent: Vec::new(),
         }
     }
 
@@ -204,6 +207,19 @@ fn fetch(app: &mut PhoenixApp, cx: &mut Cx) {
     let (scope, generation) = (e.scope, e.generation);
     let fut = app.backend.user_profile(app.me.id, scope);
     let wfut = app.backend.profile_widgets(app.me.id);
+    let afut = app.backend.recent_activity(app.me.id);
+    cx.spawn(async move |this, cx| {
+        let Ok(r) = afut.await else { return };
+        let _ = this.update(cx, |this, cx| {
+            if let Some(e) = ed(this)
+                && e.generation == generation
+            {
+                e.recent = r;
+                cx.notify();
+            }
+        });
+    })
+    .detach();
     cx.spawn(async move |this, cx| {
         let Ok(w) = wfut.await else { return };
         let _ = this.update(cx, |this, cx| {
@@ -952,6 +968,10 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
             .justify_between()
             .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(dim).child(crate::t!("pe.widgets")))
             .child(controls::button_icon("pe-add-widget", "plus", crate::t!("pe.add_widget"), BtnKind::Secondary).h(z(31.)).min_w(z(0.)).px(z(11.)).text_size(z(14.)).line_height(z(18.))),
+        1 if !e.recent.is_empty() => super::profile_activity::render(
+            &e.recent,
+            &super::profile_activity::Colors { strong, muted: dim, card: wcol.card, link: c(tok(idx::TEXT_LINK)) },
+        ),
         1 => div().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("pe.no_activity")),
         _ => div().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("pe.empty_wishlist")),
     };

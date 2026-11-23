@@ -137,6 +137,9 @@ impl Backend for ReadOnly {
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
+    fn recent_activity(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_activity::RecentGame>> {
+        self.0.recent_activity(u)
+    }
     fn owned_collectibles(&self) -> BoxFuture<Vec<phoenix_app::ui::settings::collectibles::Collectible>> {
         self.0.owned_collectibles()
     }

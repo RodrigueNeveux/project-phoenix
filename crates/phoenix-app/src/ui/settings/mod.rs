@@ -10,6 +10,7 @@ mod pages;
 pub(crate) mod profile_editor;
 pub mod collectible_picker;
 pub mod collectibles;
+pub mod profile_activity;
 pub mod profile_widgets;
 mod view;
 pub(crate) mod voice;

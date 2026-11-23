@@ -266,6 +266,10 @@ pub trait Backend: Send + Sync + 'static {
     fn profile_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Recent played games (`GET /content-inventory/users/{id}/outbox`).
+    fn recent_activity(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_activity::RecentGame>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     /// Owned collectibles (`GET /users/@me/collectibles-purchases`) for the
     /// profile editor pickers.
     fn owned_collectibles(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {
