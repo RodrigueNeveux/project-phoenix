@@ -1,6 +1,6 @@
 //! Offscreen render of one non-chat view in a given theme.
 //! `cargo run -p phoenix-app --example views -- out.png [dark|light|ash|onyx] <scene>`
-//! Scenes: appearance, account, status, switcher, emoji, gif, sticker, friends, forum.
+//! Scenes: profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -82,6 +82,36 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
+                    "profile" | "profile-modal" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        let uid = g.and_then(|g| app.members.get(&g)).and_then(|m| m.iter().map(|m| m.user).find(|u| *u != app.me.id));
+                        if let Some(uid) = uid {
+                            app.open_profile(uid, g, gpui::point(px(1000.), px(200.)), window, cx);
+                            let roles = g.and_then(|g| app.roles.get(&g)).map(|r| r.iter().take(3).map(|r| r.id).collect()).unwrap_or_default();
+                            app.people.profiles.insert(
+                                uid,
+                                phoenix_app::presence::Profile {
+                                    user: uid,
+                                    banner: None,
+                                    accent: Some(0x5865F2),
+                                    decoration: None,
+                                    pronouns: "they/them".into(),
+                                    bio: "Building native clients in Rust. Coffee first.".into(),
+                                    roles,
+                                    nick: None,
+                                    created: 1_500_000_000,
+                                    joined: Some(1_650_000_000),
+                                    note: "".into(),
+                                    mutual_guilds: 3,
+                                    badges: Vec::new(),
+                                },
+                            );
+                            if scene == "profile-modal" {
+                                app.open_profile_modal(uid, cx);
+                            }
+                        }
+                    }
                     "forum" => {
                         let id = app.channels.values().find(|c| c.kind == phoenix_app::model::ChannelKind::Forum).map(|c| c.id);
                         if let Some(id) = id {

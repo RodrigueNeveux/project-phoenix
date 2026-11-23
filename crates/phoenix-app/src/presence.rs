@@ -225,6 +225,8 @@ pub struct Profile {
     pub joined: Option<i64>,
     pub note: SharedString,
     pub mutual_guilds: usize,
+    /// Profile badges: (description, icon URL).
+    pub badges: Vec<(SharedString, SharedString)>,
 }
 
 pub fn snowflake_time(id: u64) -> i64 {
@@ -272,6 +274,15 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
         joined: gm.and_then(|m| m.joined_at.as_deref()).and_then(iso_to_unix),
         note: note.into(),
         mutual_guilds: p.mutual_guilds.len(),
+        badges: p
+            .badges
+            .iter()
+            .filter_map(|b| {
+                let icon = b.get("icon")?.as_str()?;
+                let desc = b.get("description").and_then(Value::as_str).unwrap_or_default();
+                Some((desc.to_owned().into(), format!("https://cdn.discordapp.com/badge-icons/{icon}.png").into()))
+            })
+            .collect(),
     }
 }
 

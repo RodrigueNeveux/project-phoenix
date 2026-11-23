@@ -1,4 +1,4 @@
-//! "Voice Connected" panel above the user panel, and the speaking ring used
+//! crate::t!("voice.connected") panel above the user panel, and the speaking ring used
 //! on voice channel member avatars.
 
 use std::cell::{Cell, RefCell};
@@ -33,7 +33,7 @@ enum Tab {
 thread_local! {
     /// Right-click menu on a voice channel member.
     static USER_MENU: Cell<Option<(Id, Point<Pixels>)>> = const { Cell::new(None) };
-    /// "Voice Connected" popout.
+    /// crate::t!("voice.connected") popout.
     static POPOUT: Cell<Option<Tab>> = const { Cell::new(None) };
     /// Mic / deafen chevron menu: which one, where, and the device names
     /// (enumerated once when it opens).
@@ -192,8 +192,8 @@ pub fn audio_button(
                     t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE }),
                 ))
                 .tooltip(crate::ui::tooltip::tip(match kind {
-                    Audio::Mic => "Input Options",
-                    Audio::Deafen => "Output Options",
+                    Audio::Mic => crate::t!("voice.input_options"),
+                    Audio::Deafen => crate::t!("voice.output_options"),
                 }))
                 .on_click(cx.listener(move |_, ev: &gpui::ClickEvent, _, cx| {
                     let now = AUDIO_MENU.with(|m| m.borrow().as_ref().map(|(k, _, _)| *k));
@@ -218,7 +218,7 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
         let p = prefs().lock();
         if kind == Audio::Mic { p.input_device.clone() } else { p.output_device.clone() }
     };
-    let mut list = vec![MenuItem::radio("Default", current.is_none(), move |_, _, _| {
+    let mut list = vec![MenuItem::radio(crate::t!("voice.default"), current.is_none(), move |_, _, _| {
         update(move |p| if kind == Audio::Mic { p.input_device = None } else { p.output_device = None }, true)
     })];
     for d in devices {
@@ -232,11 +232,11 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
     let e = cx.entity();
     let items = vec![
         MenuItem::Submenu {
-            label: if kind == Audio::Mic { "Input Device".into() } else { "Output Device".into() },
+            label: if kind == Audio::Mic { crate::t!("voice.input_device_menu") } else { crate::t!("voice.output_device_menu") },
             items: list,
         },
         MenuItem::Separator,
-        MenuItem::action("Voice Settings", None, move |_, _, cx| {
+        MenuItem::action(crate::t!("voice.voice_settings"), None, move |_, _, cx| {
             AUDIO_MENU.with(|m| *m.borrow_mut() = None);
             e.update(cx, |a, cx| {
                 crate::ui::settings::open(a, cx);
@@ -254,7 +254,7 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
 /// grid cell, `--space-32` high, `--radius-sm`, 1px `--border-muted`,
 /// `--control-secondary-background-default` (hover `-hover`), glyph in
 /// `--control-secondary-text-default`.
-fn action_button(id: &'static str, path: &'static str, label: &'static str, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+fn action_button(id: &'static str, path: &'static str, label: SharedString, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     div()
         .id(id)
         .flex_1()
@@ -270,8 +270,8 @@ fn action_button(id: &'static str, path: &'static str, label: &'static str, cx: 
         .items_center()
         .justify_center()
         .child(asset_icon(path, 20. * crate::theme::zoom(), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
-        .tooltip(crate::ui::tooltip::tip(label))
-        .on_click(cx.listener(move |a, _, _, cx| a.stub(label, cx)))
+        .tooltip(crate::ui::tooltip::tip(label.clone()))
+        .on_click(cx.listener(move |a, _, _, cx| a.stub(&label, cx)))
 }
 
 /// Connection glyph in `ping_4LJE6I.largePing_4LJE6I`: 18px icon, 7px padding,
@@ -334,22 +334,22 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
     // `rtcConnectionQualityFine/Average/Bad_4LJE6I .largePing` backgrounds.
     let (title, (fg, bg)) = match v.status {
         VoiceStatus::Connected | VoiceStatus::Idle => (
-            "Voice Connected",
+            crate::t!("voice.connected"),
             match v.quality() {
                 Quality::Fair => WARN,
                 Quality::Bad => BAD,
                 _ => OK,
             },
         ),
-        VoiceStatus::Connecting => ("RTC Connecting", WARN),
-        VoiceStatus::Reconnecting => ("Reconnecting", WARN),
-        VoiceStatus::Failed => ("No Route", BAD),
+        VoiceStatus::Connecting => (crate::t!("voice.rtc_connecting"), WARN),
+        VoiceStatus::Reconnecting => (crate::t!("voice.reconnecting"), WARN),
+        VoiceStatus::Failed => (crate::t!("voice.no_route"), BAD),
     };
     let color = t(fg);
     let ping: SharedString = match (v.ping_ms, &v.last_error) {
         (_, Some(e)) if v.status == VoiceStatus::Failed => e.clone().into(),
-        (Some(p), _) => format!("Ping: {p} ms{}", if v.e2ee { " · End-to-end encrypted" } else { "" }).into(),
-        (None, _) => "Waiting for the voice server".into(),
+        (Some(p), _) => if v.e2ee { crate::t!("voice.ping_e2ee", p = p) } else { crate::t!("voice.ping", p = p) },
+        (None, _) => crate::t!("voice.waiting_server"),
     };
     let noise = prefs().lock().noise_suppression;
     // `container_9U6LUN`: padding `--custom-guild-list-padding -
@@ -413,7 +413,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                                     .cursor_pointer()
                                                     .child(asset_icon(SHIELD, 12., t(idx::TEXT_FEEDBACK_POSITIVE)))
                                                     .tooltip(|window, cx| {
-                                                        gpui_component::tooltip::Tooltip::new("End-to-end encrypted")
+                                                        gpui_component::tooltip::Tooltip::new(crate::t!("voice.e2ee"))
                                                             .build(window, cx)
                                                     })
                                                     .on_click(cx.listener(|_, _, _, cx| {
@@ -448,9 +448,9 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             )
                             .when(noise, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
                             .tooltip(crate::ui::tooltip::tip(if noise {
-                                "Disable Noise Suppression"
+                                crate::t!("voice.noise_off")
                             } else {
-                                "Enable Noise Suppression"
+                                crate::t!("voice.noise_on")
                             }))
                             .on_click(cx.listener(|_, _, _, cx| {
                                 update(|p| p.noise_suppression = !p.noise_suppression, true);
@@ -459,7 +459,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                         )
                         .child(
                             panel_button("hangup", panel_glyph(Icon::PhoneHangup, false), false)
-                                .tooltip(crate::ui::tooltip::tip("Disconnect"))
+                                .tooltip(crate::ui::tooltip::tip(crate::t!("voice.disconnect")))
                                 .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
                         ),
                 ),
@@ -469,10 +469,10 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
             div()
                 .flex()
                 .gap(z(8.))
-                .child(action_button("voice-camera", CAMERA, "Turn On Camera", cx))
-                .child(action_button("voice-screen", SCREEN, "Share Your Screen", cx))
-                .child(action_button("voice-activity", ACTIVITY, "Start An Activity", cx))
-                .child(action_button("voice-soundboard", SOUNDBOARD, "Open Soundboard", cx)),
+                .child(action_button("voice-camera", CAMERA, crate::t!("voice.camera_on"), cx))
+                .child(action_button("voice-screen", SCREEN, crate::t!("voice.share_screen"), cx))
+                .child(action_button("voice-activity", ACTIVITY, crate::t!("voice.start_activity"), cx))
+                .child(action_button("voice-soundboard", SOUNDBOARD, crate::t!("voice.soundboard"), cx)),
         )
 }
 
@@ -569,7 +569,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                             .text_size(z(11.))
                             .font_weight(FontWeight::BOLD)
                             .text_color(gpui::white())
-                            .child("LIVE"),
+                            .child(crate::t!("voice.live")),
                     )
                 })
                 .when(f.video, |d| d.child(asset_icon(VIDEO, 16., state)))
@@ -592,7 +592,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
 
 fn check_row(
     id: &'static str,
-    label: &'static str,
+    label: SharedString,
     on: bool,
     f: impl Fn(&mut PhoenixApp) + 'static,
     cx: &mut Context<PhoenixApp>,
@@ -632,14 +632,14 @@ fn check_row(
 }
 
 /// Voice items of a user's context menu while in a call (Discord: "User
-/// Volume" slider and local "Mute" for others; Mute / Deafen for yourself).
+/// Volume" slider and local crate::t!("voice.mute") for others; Mute / Deafen for yourself).
 /// Other menus (member list, user menu) can append these.
 pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> Vec<MenuItem> {
     let mut items = Vec::new();
     if user == app.me.id {
         items.push(MenuItem::Custom(check_row(
             "vm-self-mute",
-            "Mute",
+            crate::t!("voice.mute"),
             app.mic_muted,
             |a| {
                 a.mic_muted = !a.mic_muted;
@@ -649,7 +649,7 @@ pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>)
         )));
         items.push(MenuItem::Custom(check_row(
             "vm-self-deafen",
-            "Deafen",
+            crate::t!("voice.deafen"),
             app.deafened,
             |a| {
                 a.deafened = !a.deafened;
@@ -659,7 +659,7 @@ pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>)
         )));
         let e = cx.entity();
         items.push(MenuItem::Separator);
-        items.push(MenuItem::action("Voice Settings", None, move |_, _, cx| {
+        items.push(MenuItem::action(crate::t!("voice.voice_settings"), None, move |_, _, cx| {
             e.update(cx, |a, cx| {
                 crate::ui::settings::open(a, cx);
                 if let Some(s) = a.settings.as_mut() {
@@ -678,7 +678,7 @@ pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>)
             .flex()
             .flex_col()
             .gap(z(8.))
-            .child(div().text_size(z(14.)).font_weight(FontWeight::MEDIUM).text_color(c(Palette::INTERACTIVE)).child("User Volume"))
+            .child(div().text_size(z(14.)).font_weight(FontWeight::MEDIUM).text_color(c(Palette::INTERACTIVE)).child(crate::t!("voice.user_volume")))
             .child(crate::ui::settings::voice::slider(
                 "user-volume",
                 vol as f32 / 200.,
@@ -695,7 +695,7 @@ pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>)
     items.push(MenuItem::Separator);
     items.push(MenuItem::Custom(check_row(
         "vm-user-mute",
-        "Mute",
+        crate::t!("voice.mute"),
         ua.muted,
         move |_| {
             update(
@@ -745,7 +745,7 @@ fn ping_graph(history: &[u32]) -> impl IntoElement {
         }))
 }
 
-fn stat(label: &'static str, value: String) -> impl IntoElement {
+fn stat(label: SharedString, value: String) -> impl IntoElement {
     div()
         .flex()
         .justify_between()
@@ -777,16 +777,16 @@ fn privacy_body(v: &crate::voice::VoiceUi) -> AnyElement {
                         .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
-                        .child(if v.e2ee { "End-to-end encrypted" } else { "Not end-to-end encrypted" }),
+                        .child(if v.e2ee { crate::t!("voice.e2ee") } else { crate::t!("voice.not_e2ee") }),
                 ),
         )
         .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(Palette::TEXT_MUTED)).child(if v.e2ee {
-            "Audio and video in this call are end-to-end encrypted. Compare the voice privacy code with the other participants: when it matches, nobody else can listen in."
+            crate::t!("voice.e2ee_note")
         } else {
-            "This call is protected by transport encryption only."
+            crate::t!("voice.transport_only")
         }))
         .when(!groups.is_empty(), |d| {
-            d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("VOICE PRIVACY CODE"))
+            d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("voice.privacy_code")))
                 .child(div().flex().flex_wrap().gap(z(8.)).children(groups.into_iter().map(|g| {
                     div()
                         .px(z(8.))
@@ -802,7 +802,7 @@ fn privacy_body(v: &crate::voice::VoiceUi) -> AnyElement {
                     div()
                         .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("The code changes whenever someone joins or leaves the call."),
+                        .child(crate::t!("voice.code_changes")),
                 )
         })
         .into_any_element()
@@ -815,19 +815,19 @@ fn connection_body(v: &crate::voice::VoiceUi) -> AnyElement {
         .flex_col()
         .gap(z(8.))
         .child(ping_graph(&history))
-        .child(stat("Average ping", dash(v.average_ping().map(|p| format!("{p} ms")))))
-        .child(stat("Last ping", dash(v.ping_ms.map(|p| format!("{p} ms")))))
-        .child(stat("Outbound packet loss rate", dash(v.stats.outbound_loss_pct.map(|l| format!("{l:.1}%")))))
-        .child(stat("Inbound packet loss rate", format!("{:.1}%", v.inbound_loss_pct())))
-        .child(stat("Packets sent / received", format!("{} / {}", v.stats.packets_sent, v.stats.packets_received)))
+        .child(stat(crate::t!("voice.avg_ping"), dash(v.average_ping().map(|p| format!("{p} ms")))))
+        .child(stat(crate::t!("voice.last_ping"), dash(v.ping_ms.map(|p| format!("{p} ms")))))
+        .child(stat(crate::t!("voice.out_loss"), dash(v.stats.outbound_loss_pct.map(|l| format!("{l:.1}%")))))
+        .child(stat(crate::t!("voice.in_loss"), format!("{:.1}%", v.inbound_loss_pct())))
+        .child(stat(crate::t!("voice.packets"), format!("{} / {}", v.stats.packets_sent, v.stats.packets_received)))
         .child(div().h(z(1.)).my(z(4.)).bg(c(Palette::DIVIDER)))
-        .child(stat("Server", dash(v.endpoint.clone())))
-        .child(stat("Encryption", dash(v.mode.clone())))
+        .child(stat(crate::t!("voice.server"), dash(v.endpoint.clone())))
+        .child(stat(crate::t!("voice.encryption"), dash(v.mode.clone())))
         .into_any_element()
 }
 
 fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let tab_button = |id: &'static str, label: &'static str, t: Tab, cx: &mut Context<PhoenixApp>| {
+    let tab_button = |id: &'static str, label: SharedString, t: Tab, cx: &mut Context<PhoenixApp>| {
         let sel = t == tab;
         div()
             .id(id)
@@ -885,8 +885,8 @@ fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElemen
                             .gap(z(16.))
                             .border_b_1()
                             .border_color(c(Palette::DIVIDER))
-                            .child(tab_button("vp-tab-conn", "Connection", Tab::Connection, cx))
-                            .child(tab_button("vp-tab-privacy", "Privacy", Tab::Privacy, cx)),
+                            .child(tab_button("vp-tab-conn", crate::t!("voice.connection"), Tab::Connection, cx))
+                            .child(tab_button("vp-tab-privacy", crate::t!("voice.privacy"), Tab::Privacy, cx)),
                     )
                     .child(body),
             ),
