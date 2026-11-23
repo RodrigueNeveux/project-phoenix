@@ -789,11 +789,13 @@ pub struct Adapter {
     pub me: api::Snowflake,
     pub prefs: Prefs,
     lists: HashMap<u64, MemberList>,
+    /// Members fetched by op 8 (authors / reply targets outside the synced list range).
+    chunked: HashMap<u64, Vec<api::Snowflake>>,
 }
 
 impl Adapter {
     pub fn new(me: api::Snowflake, prefs: Prefs) -> Self {
-        Self { me, prefs, lists: HashMap::new() }
+        Self { me, prefs, lists: HashMap::new(), chunked: HashMap::new() }
     }
 
     /// Mark a channel read up to `msg` (local state; the REST ack is separate).
@@ -836,25 +838,35 @@ impl Adapter {
         if total > 0 {
             list.items.resize(total, None);
         }
-        let (mut members, users) = list.members();
-        // Own member (READY merged_members / GUILD_MEMBER_UPDATE) so my server nick resolves
-        // in reply previews even when I'm outside the synced list range.
-        if !members.iter().any(|m| m.user == id(self.me))
-            && let Some(me) = cache.member(l.guild_id, self.me)
-        {
-            members.push(model::Member {
-                user: id(self.me),
-                roles: me.roles.iter().copied().map(id).collect(),
-                presence: model::Presence::Online,
-                activity: None,
-                nick: me.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
-            });
-        }
-        out.push(AppEvent::Users(users));
-        out.push(AppEvent::GuildMembers { guild: id(l.guild_id), members });
         let (rows, acts) = crate::presence::list_rows(list.items.iter());
+        self.emit_members(cache, l.guild_id, out);
         out.extend(acts.into_iter().map(|(user, activities)| AppEvent::Activities { user, activities }));
         out.push(AppEvent::MemberListRows { guild: id(l.guild_id), rows });
+    }
+
+    /// Synced list members + my own member + op-8 chunked members, as one `GuildMembers`.
+    fn emit_members(&self, cache: &Cache, guild: api::GuildId, out: &mut Vec<AppEvent>) {
+        let (mut members, users) = self.lists.get(&guild.0).map(|l| l.members()).unwrap_or_default();
+        // Own member (READY merged_members / GUILD_MEMBER_UPDATE) and members requested
+        // with op 8 so server nicks resolve in headers and reply previews even when the
+        // author is outside the synced list range.
+        let extra = std::iter::once(self.me).chain(self.chunked.get(&guild.0).into_iter().flatten().copied());
+        for u in extra {
+            if members.iter().any(|m| m.user == id(u)) {
+                continue;
+            }
+            if let Some(m) = cache.member(guild, u) {
+                members.push(model::Member {
+                    user: id(u),
+                    roles: m.roles.iter().copied().map(id).collect(),
+                    presence: if u == self.me { model::Presence::Online } else { model::Presence::Offline },
+                    activity: None,
+                    nick: m.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
+                });
+            }
+        }
+        out.push(AppEvent::Users(users));
+        out.push(AppEvent::GuildMembers { guild: id(guild), members });
     }
 
     pub fn map(&mut self, cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
@@ -958,6 +970,13 @@ impl Adapter {
             GatewayEvent::GuildMemberListUpdate(l) => self.list_update(cache, l, &mut out),
             GatewayEvent::GuildMembersChunk(c) => {
                 out.push(AppEvent::Users(c.members.iter().filter_map(|m| m.user.as_ref()).map(user).collect()));
+                let ids = self.chunked.entry(c.guild_id.0).or_default();
+                for u in c.members.iter().filter_map(|m| m.user_id()) {
+                    if !ids.contains(&u) {
+                        ids.push(u);
+                    }
+                }
+                self.emit_members(cache, c.guild_id, &mut out);
             }
             GatewayEvent::UserUpdate(u) => out.push(AppEvent::Users(vec![user(u)])),
             GatewayEvent::GuildCreate(g) => {

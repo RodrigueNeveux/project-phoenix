@@ -294,6 +294,38 @@ fn main() -> anyhow::Result<()> {
         });
     })?;
     pump(&mut cx, wait * 1000);
+    // Server nicks of authors outside the synced member-list range come from op 8
+    // (GUILD_MEMBERS_CHUNK): wait until every author of the page has a guild member
+    // (members who left the guild never get one, hence the timeout).
+    let missing = |cx: &mut HeadlessAppContext| {
+        cx.update(|cx| {
+            let app = v.read(cx);
+            let (Some(g), Some(c)) = (app.selected_guild, app.selected_channel) else { return 0 };
+            let members = app.members.get(&g);
+            let mut authors: Vec<Id> = app.messages.get(&c).map(|m| m.msgs.iter().map(|m| m.author).collect()).unwrap_or_default();
+            authors.sort_unstable_by_key(|a| a.0);
+            authors.dedup();
+            authors.iter().filter(|a| !members.is_some_and(|ms| ms.iter().any(|m| m.user == **a))).count()
+        })
+    };
+    for _ in 0..20 {
+        if missing(&mut cx) == 0 {
+            break;
+        }
+        pump(&mut cx, 500);
+    }
+    println!("authors without guild member: {}", missing(&mut cx));
+    if std::env::var("PHX_DEBUG_NICKS").is_ok() {
+        cx.update(|cx| {
+            let app = v.read(cx);
+            if let Some(c) = app.selected_channel.and_then(|c| app.messages.get(&c)) {
+                for m in c.msgs.iter().rev().take(12) {
+                    let u = app.users.get(&m.author);
+                    println!("msg {} author {} dn={:?} author_nick={:?} member_nick={:?} reply_to={:?}", m.id.0, m.author.0, u.map(|u| u.display_name.clone()), m.author_nick, app.member_nick(m.author), m.reply_to.map(|r| r.0));
+                }
+            }
+        });
+    }
     let mut img = None;
     for _ in 0..2 {
         cx.update_window(win.into(), |_, window, _| window.refresh())?;

@@ -552,6 +552,27 @@ impl Backend for DiscordBackend {
             }
             // Delivered before the page so author names resolve on first render.
             inner.emit(AppEvent::Users(users));
+            // Like the official client: op 8 for authors / reply targets whose guild member
+            // (server nick, roles) we don't have yet; GUILD_MEMBERS_CHUNK fills the cache.
+            if let Some(g) = s.cache.channel(sf(channel)).and_then(|c| c.guild_id) {
+                let mut ids: Vec<phoenix_api::models::Snowflake> = Vec::new();
+                for m in &msgs {
+                    let refd = m.referenced_message.as_deref().map(|r| r.author.id);
+                    for u in std::iter::once(m.author.id).chain(refd) {
+                        if !ids.contains(&u) && s.cache.member(g, u).is_none() {
+                            ids.push(u);
+                        }
+                    }
+                }
+                if !ids.is_empty() {
+                    ids.truncate(100);
+                    let _ = s.gateway.request_guild_members(phoenix_api::gateway::RequestGuildMembers {
+                        guild_id: vec![g],
+                        user_ids: Some(ids),
+                        ..Default::default()
+                    });
+                }
+            }
             let out = msgs.iter().map(convert::message).collect();
             s.cache.insert_messages(sf(channel), msgs);
             Ok(out)
