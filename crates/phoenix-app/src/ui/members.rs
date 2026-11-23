@@ -278,9 +278,12 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
 
 /// Server tag chiplet: chipletContainerInner_k8jyN7 (--background-mod-strong,
 /// 4px radius, 0 4px padding, 16px line height).
-pub fn server_tag(tag: SharedString) -> gpui::Div {
+/// Badge: vanilla-members #1696 `badge_k8jyN7` 14×14, margin-right 2.
+pub fn server_tag(tag: &(SharedString, Option<SharedString>)) -> gpui::Div {
     div()
         .flex_none()
+        .flex()
+        .items_center()
         .px(z(4.))
         .rounded(z(4.))
         .bg(c(tok(idx::BACKGROUND_MOD_STRONG))) // --background-mod-strong
@@ -288,7 +291,8 @@ pub fn server_tag(tag: SharedString) -> gpui::Div {
         .line_height(z(16.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_NORMAL))
-        .child(tag)
+        .when_some(tag.1.clone(), |d, url| d.child(gpui::img(url).size(z(14.)).mr(z(2.)).flex_none()))
+        .child(tag.0.clone())
 }
 
 fn header(t: SharedString) -> AnyElement {
@@ -452,7 +456,7 @@ fn member_row(
                                 .text_ellipsis()
                                 .child(name),
                         )
-                        .when_some(tag, |d, t| d.child(server_tag(t.0).my(z(1.)))) // chipletContainerInner_k8jyN7 margin 1px 0 1px 4px
+                        .when_some(tag, |d, t| d.child(server_tag(&t).my(z(1.)))) // chipletContainerInner_k8jyN7 margin 1px 0 1px 4px
                         .when(user.is_some_and(|u| u.bot), |d| d.child(app_tag())) // botTag_Iy0c7A margin-inline-start 4px
                         .when(owner, |d| {
                             // ownerIcon_Iy0c7A: 14px (icon_Iy0c7A), --text-feedback-warning

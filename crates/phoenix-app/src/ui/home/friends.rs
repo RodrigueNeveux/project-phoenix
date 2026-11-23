@@ -417,7 +417,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                                 .child(name),
                         )
                         // guildTag_PTA1Mz margin-left 4
-                        .when_some(tag, |d, t| d.child(crate::ui::members::server_tag(t.0).ml(z(4.))))
+                        .when_some(tag, |d, t| d.child(crate::ui::members::server_tag(&t).ml(z(4.))))
                         .when(!pending, |d| d.child(
                             // discriminator_jPuNMC margin-left 5, 14/16 500, shown on hover
                             div()

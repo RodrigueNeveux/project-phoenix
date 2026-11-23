@@ -202,14 +202,8 @@ fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool, mentions: u32) -> An
                     h.scroll_to_item(ix);
                     w.refresh();
                 })
-                .child(
-                    if mentions > 0 {
-                        crate::t!("rail.unread_mentions", count = mentions)
-                    } else {
-                        crate::t!("rail.unread_new")
-                    }
-                    .to_uppercase(),
-                ),
+                // vanilla-dm #590/#591: the red mentions bar still reads "nouveau".
+                .child(crate::t!("rail.unread_new").to_uppercase()),
         )
         .into_any_element()
 }
