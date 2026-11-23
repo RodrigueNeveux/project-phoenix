@@ -88,7 +88,10 @@ impl SyncedSettings {
             SettingsPatch::Theme(t) => self.theme = *t,
             SettingsPatch::Compact(v) => self.compact = *v,
             SettingsPatch::DeveloperMode(v) => self.developer_mode = *v,
-            SettingsPatch::Locale(l) => self.locale = l.clone(),
+            SettingsPatch::Locale(l) => {
+                crate::i18n::set_locale(l);
+                self.locale = l.clone()
+            }
             SettingsPatch::AllowServerDms(v) => self.allow_server_dms = *v,
         }
     }
@@ -279,6 +282,7 @@ pub fn on_ready(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         let res = fut.await;
         let _ = this.update(cx, |this, cx| {
             if let Ok(s) = res {
+                crate::i18n::set_locale(&s.locale);
                 this.prefs.synced = s;
                 cx.notify();
             }
@@ -297,8 +301,12 @@ pub fn save(app: &mut PhoenixApp, patch: SettingsPatch, cx: &mut Context<Phoenix
         let res = fut.await;
         let _ = this.update(cx, |this, cx| {
             match res {
-                Ok(s) => this.prefs.synced = s,
+                Ok(s) => {
+                    crate::i18n::set_locale(&s.locale);
+                    this.prefs.synced = s
+                }
                 Err(e) => {
+                    crate::i18n::set_locale(&before.locale);
                     this.prefs.synced = before;
                     if let Some(st) = this.settings.as_mut() {
                         st.error = Some(e.0.into());

@@ -7,6 +7,7 @@ pub mod backend;
 pub mod commands;
 pub mod discord_backend;
 pub mod grouping;
+pub mod i18n;
 pub mod markdown;
 pub mod media;
 pub mod mock;

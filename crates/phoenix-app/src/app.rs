@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chrono::{Datelike, Local, TimeZone};
+use chrono::{Local, TimeZone};
 use futures::StreamExt;
 use gpui::{
     App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, KeyBinding,
@@ -158,23 +158,14 @@ impl MentionResolver for Resolver<'_> {
 
 pub fn format_time_full(ts: i64) -> SharedString {
     let Some(dt) = Local.timestamp_opt(ts, 0).single() else { return "".into() };
-    let today = Local::now().date_naive();
-    let d = dt.date_naive();
-    let t = dt.format("%-I:%M %p");
-    if d == today {
-        format!("Today at {t}").into()
-    } else if today.pred_opt() == Some(d) {
-        format!("Yesterday at {t}").into()
-    } else {
-        format!("{:02}/{:02}/{} {t}", d.month(), d.day(), d.year()).into()
-    }
+    crate::i18n::calendar(dt, Local::now())
 }
 
 fn format_time_short(ts: i64) -> SharedString {
     Local
         .timestamp_opt(ts, 0)
         .single()
-        .map(|d| d.format("%-I:%M %p").to_string().into())
+        .map(|d| crate::i18n::clock(d).into())
         .unwrap_or_default()
 }
 
@@ -182,7 +173,7 @@ fn format_day(ts: i64) -> SharedString {
     Local
         .timestamp_opt(ts, 0)
         .single()
-        .map(|d| d.format("%B %-d, %Y").to_string().into())
+        .map(|d| crate::i18n::long_date(d.date_naive()).into())
         .unwrap_or_default()
 }
 
@@ -873,10 +864,10 @@ impl PhoenixApp {
             .unwrap_or_default();
         self.typing_label = match names.as_slice() {
             [] => None,
-            [a] => Some(format!("{a} is typing...").into()),
-            [a, b] => Some(format!("{a} and {b} are typing...").into()),
-            [a, b, c] => Some(format!("{a}, {b}, and {c} are typing...").into()),
-            _ => Some("Several people are typing...".into()),
+            [a] => Some(crate::t!("chat.typing_one", a = a)),
+            [a, b] => Some(crate::t!("chat.typing_two", a = a, b = b)),
+            [a, b, c] => Some(crate::t!("chat.typing_three", a = a, b = b, c = c)),
+            _ => Some(crate::t!("chat.typing_many")),
         };
     }
 
