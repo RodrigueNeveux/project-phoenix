@@ -11,7 +11,7 @@ use crate::{
     media,
     model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message},
     richtext::{ClickTarget, RBlock, RenderedMessage, RichText},
-    theme::{FONT_MONO, Palette, c, ca, fz, generated::idx, m, tok, z},
+    theme::{FONT_MONO, Palette, c, ca, fz, generated::idx, m, space, tok, z},
     ui::{avatar, icon, icon_button, members, sidebar::channel_icon},
 };
 
@@ -93,14 +93,11 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 /// `--chat-input-icon-size` glyph in a 32px toolbar button.
 const HDR_ICON: f32 = 20.;
 
-/// Spacing scale of the user's client (`html.density-cozy`: --space-xs 10px,
-/// --space-md 20px, --space-xl 30px). Dump: -channels-N-N+ #1184 padding
-/// `2px 30px 2px 80px`, #1200 avatar left 20px.
-pub(crate) const SPACE_XS: f32 = 10.;
-pub(crate) const SPACE_MD: f32 = 20.;
-pub(crate) const SPACE_XL: f32 = 30.;
-/// --custom-message-margin-left-content-cozy = avatar + 2 × --space-md.
-pub(crate) const MSG_LEFT: f32 = m::AVATAR + 2. * SPACE_MD;
+/// --custom-message-margin-left-content-cozy = avatar + 2 × --space-md
+/// (density-aware; cozy: dump -channels-N-N+ #1184 padding-left 80px).
+pub(crate) fn msg_left() -> f32 {
+    m::AVATAR + 2. * space::md()
+}
 
 fn hdr_button(id: &'static str, i: Icon, color: gpui::Hsla, size: f32) -> gpui::Stateful<gpui::Div> {
     icon_button(id, i, color, size * crate::theme::zoom()).size(z(32.)).rounded(z(8.))
@@ -589,7 +586,7 @@ fn message(
         .group("msg")
         .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
         .relative()
-        .pr(z(SPACE_XL)) // message_ padding-inline-end --space-xl (#1184)
+        .pr(z(space::xl())) // message_ padding-inline-end --space-xl (#1184)
         .map(|d| {
             // message_:hover / .selected_ --message-background-hover; .mentioned_ and
             // .replying_ have their own backgrounds, hover shades and a 2px bar
@@ -645,7 +642,7 @@ fn message(
             )
             .child(content)
     } else {
-        base.pl(z(MSG_LEFT)) // --custom-message-margin-left-content-cozy (#1184 80px)
+        base.pl(z(msg_left())) // --custom-message-margin-left-content-cozy (#1184 80px)
             .py(z(2.))
             .when_some(reply, |d, reply| d.child(reply))
             .when(r.group_start, |d| {
@@ -655,7 +652,7 @@ fn message(
                         // avatar_: inset-inline-start --custom-message-margin-horizontal,
                         // margin-top 4px - cozy vertical padding (so 4px below the row top,
                         // after the reply line when there is one).
-                        .left(z(SPACE_MD)) // #1200 left 20px
+                        .left(z(space::md())) // #1200 left 20px
                         // #1200: 2px row padding + 20px reply + 4px --reply-spacing + 2px margin-top.
                         .top(z(if msg.reply_to.is_some() { 28. } else { 4. }))
                         .id(("msg-avatar", id.0))

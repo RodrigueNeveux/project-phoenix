@@ -255,7 +255,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         .child(
             // form_ padding-inline --space-xs; channelTextArea_ --chat-background-default,
             // 1px --border-muted, radius --radius-sm, margin-bottom --custom-chat-input-margin-bottom.
-            div().px(z(super::SPACE_XS)).mb(z(if typing_active { 24. } else { super::SPACE_XS })).child( // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom
+            div().px(z(crate::theme::space::xs())).mb(z(if typing_active { 24. } else { crate::theme::space::xs() })).child( // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom
                 div()
                     .flex()
                     .flex_col()

@@ -153,6 +153,62 @@ fn is_token(hex: u32) -> bool {
 static THEME: AtomicU8 = AtomicU8::new(0);
 static ZOOM: AtomicU32 = AtomicU32::new(100);
 static FONT_PX: AtomicU32 = AtomicU32::new(16);
+static DENSITY: AtomicU8 = AtomicU8::new(Density::Cozy as u8);
+
+/// UI density (`html.density-compact|default|cozy`). Each one rebinds the
+/// semantic `--space-*` tokens to a different step of the raw scale.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Density {
+    Compact = 0,
+    Default = 1,
+    /// What the user's client uses (`htmlClass` in the live dumps).
+    #[default]
+    Cozy = 2,
+}
+
+impl Density {
+    pub const ALL: [Density; 3] = [Density::Compact, Density::Default, Density::Cozy];
+    pub fn key(self) -> &'static str {
+        match self {
+            Density::Compact => "compact",
+            Density::Default => "default",
+            Density::Cozy => "cozy",
+        }
+    }
+    pub fn from_key(k: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|d| d.key() == k)
+    }
+    /// `[--space-xxs, xs, sm, md, lg, xl, xxl]` in px for this density
+    /// (`.density-compact` / `.density-default` / `.density-cozy` rules).
+    pub const fn scale(self) -> [f32; 7] {
+        match self {
+            Density::Compact => [4., 6., 10., 12., 16., 20., 26.],
+            Density::Default => [4., 8., 12., 16., 20., 24., 32.],
+            Density::Cozy => [4., 10., 16., 20., 24., 30., 40.],
+        }
+    }
+}
+
+/// The active density, as last synced from `app.prefs`.
+pub fn density() -> Density {
+    match DENSITY.load(Ordering::Relaxed) {
+        0 => Density::Compact,
+        1 => Density::Default,
+        _ => Density::Cozy,
+    }
+}
+
+/// Density-aware `--space-*` tokens in px (unzoomed; wrap in [`z`]).
+pub mod space {
+    use super::density;
+    pub fn xxs() -> f32 { density().scale()[0] }
+    pub fn xs() -> f32 { density().scale()[1] }
+    pub fn sm() -> f32 { density().scale()[2] }
+    pub fn md() -> f32 { density().scale()[3] }
+    pub fn lg() -> f32 { density().scale()[4] }
+    pub fn xl() -> f32 { density().scale()[5] }
+    pub fn xxl() -> f32 { density().scale()[6] }
+}
 /// Bumped whenever theme, zoom or font size change, so views that cache
 /// resolved colours or measured heights know to rebuild them.
 static STYLE_GEN: AtomicU32 = AtomicU32::new(0);
@@ -211,7 +267,8 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
     let prev = THEME.swap(t, Ordering::Relaxed);
     let pz = ZOOM.swap(prefs.local.zoom.clamp(50, 200), Ordering::Relaxed);
     let pf = FONT_PX.swap(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
-    if prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) {
+    let pd = DENSITY.swap(prefs.local.density as u8, Ordering::Relaxed);
+    if prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) || pd != prefs.local.density as u8 {
         STYLE_GEN.fetch_add(1, Ordering::Relaxed);
     }
     let rem = px(16. * zoom());
@@ -274,7 +331,9 @@ pub fn to_rgba(h: Hsla) -> Rgba {
 /// Layout metrics in px.
 pub mod m {
     use super::generated::global as g;
-    pub const SERVER_BAR_W: f32 = 72.;
+    /// `--custom-guild-list-width` = avatar 40 + 2 × `--custom-guild-list-padding`
+    /// (`--space-md`, 20px under `.density-cozy`). Dump -channels-N-N+ #50 `nav.guilds_` 80px.
+    pub const SERVER_BAR_W: f32 = 80.;
     /// `--guildbar-avatar-size` (default density).
     pub const GUILD_ICON: f32 = g::GUILDBAR_AVATAR_SIZE;
     /// `--custom-guild-sidebar-width`.
@@ -317,5 +376,23 @@ mod tests {
         assert_eq!(shadow::SHADOW_HIGH[0][0].blur, 24.0);
         assert_eq!(resolve_for(Palette::BG_TERTIARY, AppTheme::Dark), 0x121214FF);
         assert_eq!(resolve_for(Palette::BLURPLE, AppTheme::Light), 0x5865F2FF);
+    }
+}
+
+#[cfg(test)]
+mod density_tests {
+    use super::Density;
+
+    #[test]
+    fn density_scales_match_css() {
+        // .density-cozy: --space-xs 10, --space-md 20, --space-xl 30.
+        let c = Density::Cozy.scale();
+        assert_eq!((c[1], c[3], c[5]), (10., 20., 30.));
+        assert_eq!(Density::Default.scale()[3], 16.);
+        assert_eq!(Density::Compact.scale()[6], 26.);
+        assert_eq!(Density::default(), Density::Cozy);
+        for d in Density::ALL {
+            assert_eq!(Density::from_key(d.key()), Some(d));
+        }
     }
 }

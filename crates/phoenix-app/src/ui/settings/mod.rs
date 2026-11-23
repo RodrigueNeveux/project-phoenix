@@ -108,6 +108,8 @@ pub struct LocalPrefs {
     pub notification_sounds: bool,
     pub reduced_motion: bool,
     pub saturation: u32,
+    /// UI density (`--space-*` scale), default cozy like the user's client.
+    pub density: crate::theme::Density,
 }
 
 impl Default for LocalPrefs {
@@ -119,6 +121,7 @@ impl Default for LocalPrefs {
             notification_sounds: true,
             reduced_motion: false,
             saturation: 100,
+            density: crate::theme::Density::default(),
         }
     }
 }
@@ -142,6 +145,7 @@ impl LocalPrefs {
             notification_sounds: b("notification_sounds", d.notification_sounds),
             reduced_motion: b("reduced_motion", d.reduced_motion),
             saturation: f("saturation").map(|x| (x as u32).min(100)).unwrap_or(d.saturation),
+            density: v.get("density").and_then(Value::as_str).and_then(crate::theme::Density::from_key).unwrap_or(d.density),
         }
     }
     pub fn to_json(&self) -> Value {
@@ -152,6 +156,7 @@ impl LocalPrefs {
             "notification_sounds": self.notification_sounds,
             "reduced_motion": self.reduced_motion,
             "saturation": self.saturation,
+            "density": self.density.key(),
         })
     }
     pub fn load() -> Self {
