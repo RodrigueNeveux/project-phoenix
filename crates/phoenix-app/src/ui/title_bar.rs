@@ -115,9 +115,10 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
         )
         .child(
             // `trailing_3zSH5d` (dump #24): gap 12, 24px `clickable_fErCLM` buttons.
+            // With client-side decorations the window buttons end flush right (#46: 1163..1280).
             div()
                 .relative()
-                .pr(z(12.))
+                .when(!matches!(window.window_decorations(), gpui::Decorations::Client { .. }), |d| d.pr(z(12.)))
                 .flex()
                 .items_center()
                 .gap(z(12.))

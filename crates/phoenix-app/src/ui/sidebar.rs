@@ -413,7 +413,11 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                 .text_color(t(if selected { idx::TEXT_DEFAULT } else { idx::TEXT_MUTED }))
                 .when(selected, |d| d.bg(t(idx::BACKGROUND_MOD_STRONG)))
                 .when(!selected, |d| {
-                    d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                    // Quests row `withGradient_hjotnx.withQuestHomeHeroContent_hjotnx:hover a`:
+                    // `--text-strong` (vanilla-friends-online #646). Its hero image
+                    // (#657 `questHomeHeroBackgroundImage_`) is opacity 0 at rest.
+                    let hover_fg = if id == "quests" { idx::TEXT_STRONG } else { idx::INTERACTIVE_TEXT_HOVER };
+                    d.hover(move |s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(hover_fg)))
                 })
                 .on_click(move |_, _, cx| {
                     e.update(cx, |a, cx| match view {
@@ -917,6 +921,128 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         )
 }
 
+/// `maxBoostCount` of `GuildPowerupsProgressBarUI`: `M2T[TIER_3]` plus the price of
+/// every power-up not included in a level. Read from the live client's props
+/// (tier-2 `TIERLESS_BOOSTING` guild, vanilla-guild-text #661 "18/36 Boosts"): 36.
+const BOOST_GOAL_MAX: u32 = 36;
+
+/// Boost goal bar (`GUILD_PREMIUM_PROGRESS_BAR` action row, vanilla-guild-text
+/// #653..#662), shown when `premiumProgressBarEnabled && premiumSubscriberCount > 0`.
+fn boost_goal(count: u32, enabled: bool) -> Option<gpui::AnyElement> {
+    if !enabled || count == 0 {
+        return None;
+    }
+    let max = BOOST_GOAL_MAX;
+    let pct = (count as f32 / max as f32).min(1.);
+    let pink = t(idx::GUILD_BOOSTING_PINK_REFRESH);
+    let text = |s: SharedString| {
+        // `text_BFMMcK` `body-xs/semibold` 12/16 600 `--text-default`, ellipsis.
+        div()
+            .text_size(z(12.))
+            .line_height(z(16.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(t(idx::TEXT_DEFAULT))
+            .text_ellipsis()
+            .child(s)
+    };
+    let count_text: SharedString = if count >= max {
+        crate::t!("guild.boost_goal.count_done", n = count)
+    } else {
+        crate::t!("guild.boost_goal.count", n = count, max = max)
+    };
+    Some(
+        // `container_BFMMcK` + `containerWithMargin_`: margin 0 0 12 8, padding
+        // --space-xxs --space-xxs --space-sm (4 4 16), border-bottom 1px --border-subtle.
+        div().w_full().pl(z(8.)).mb(z(12.)).child(
+        div()
+            .id("boost-goal")
+            .group("boost-goal")
+            .w_full()
+            .pt(z(4.))
+            .px(z(4.))
+            .pb(z(16.))
+            .border_b_1()
+            .border_color(t(idx::BORDER_SUBTLE))
+            .cursor_pointer()
+            .child(
+                // `contentContainer_` > `progressContainer_`: 26px, --radius-round,
+                // `--background-gradient-highest, --background-base-low`.
+                div()
+                    .relative()
+                    .h(z(26.))
+                    .rounded_full()
+                    .bg(t(idx::BACKGROUND_BASE_LOW))
+                    .child(
+                        // `progress_BFMMcK`: absolute inset 2px, width `calc(d% - 4px)`,
+                        // linear-gradient(270deg, pink 40% → pink 10%), --shadow-low +
+                        // inset 0 0 4.6px pink 20%.
+                        div().absolute().top_0().bottom_0().left_0().w(gpui::relative(pct)).p(z(2.)).child(
+                        div()
+                            .size_full()
+                            .rounded_full()
+                            .bg(gpui::linear_gradient(
+                                270.,
+                                gpui::linear_color_stop(pink.opacity(0.4), 0.),
+                                gpui::linear_color_stop(pink.opacity(0.1), 1.),
+                            ))
+                            .group_hover("boost-goal", |s| {
+                                // `container_:hover .progress_`: 70 % → 25 %.
+                                s.bg(gpui::linear_gradient(
+                                    270.,
+                                    gpui::linear_color_stop(pink.opacity(0.7), 0.),
+                                    gpui::linear_color_stop(pink.opacity(0.25), 1.),
+                                ))
+                            })
+                            .shadow(crate::ui::inbox::low_shadow()),
+                        ),
+                    )
+                    .child(
+                        // `textContainer_`: absolute, inset 0 --space-8, row,
+                        // space-between, gap --space-8; `textContentContainer_` gap 2.
+                        div()
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .left(z(8.))
+                            .right(z(8.))
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(z(8.))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(z(2.))
+                                    .min_w_0()
+                                    .child(text(crate::t!("guild.boost_goal.title")))
+                                    .when(count >= max, |d| d.child(text("\u{1F389}".into()))),
+                            )
+                            .child(
+                                // `boostCountText_`: opacity .7, 1 on container hover.
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(z(2.))
+                                    .flex_none()
+                                    .opacity(0.7)
+                                    .group_hover("boost-goal", |s| s.opacity(1.))
+                                    .child(text(count_text))
+                                    .child(
+                                        gpui::svg()
+                                            .path(crate::icons::path("chevron-right"))
+                                            .size(z(12.))
+                                            .flex_none()
+                                            .text_color(t(idx::TEXT_DEFAULT)),
+                                    ),
+                            ),
+                    ),
+            ),
+        )
+        .into_any_element(),
+    )
+}
+
 /// Rows above the first channel of a guild (vanilla-guild-text #663..#680): the
 /// same `wrapper_TNyK-N`/`link_TNyK-N` rows as channels (36px, padding 4 10, gap 10,
 /// 20px `icon_TNyK-N`, 16/28 medium `--channels-default`) for "Events", "Members"
@@ -952,9 +1078,11 @@ fn guild_top(app: &PhoenixApp) -> impl IntoElement {
         )
     };
     div()
+        .w_full()
         .pt(z(8.))
         .flex()
         .flex_col()
+        .children(app.selected_guild.and_then(|g| app.backend.guild_boosts(g)).and_then(|(n, on)| boost_goal(n, on)))
         .child(item("g-events", "calendar", crate::t!("guild.top.events")))
         .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"))))
         .child(item("g-boosts", "boost", crate::t!("guild.top.boosts")))

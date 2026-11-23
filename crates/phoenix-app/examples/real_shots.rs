@@ -131,6 +131,12 @@ impl Backend for ReadOnly {
     fn subscribe_member_ranges(&self, g: Id, c: Id, r: Vec<[u32; 2]>) -> BoxFuture<()> {
         self.0.subscribe_member_ranges(g, c, r)
     }
+    fn guild_boosts(&self, g: Id) -> Option<(u32, bool)> {
+        self.0.guild_boosts(g)
+    }
+    fn guild_features(&self, g: Id) -> Vec<String> {
+        self.0.guild_features(g)
+    }
     fn guild_permissions(&self, g: Id) -> u64 {
         self.0.guild_permissions(g)
     }

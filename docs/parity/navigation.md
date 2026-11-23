@@ -23,7 +23,7 @@ Dumps: `vanilla-guild-text` (guild text channel, open folder in the rail), `vani
 | "nouveau" bar | #57 `unreadMentionsBar_5dqHTG` | top bar | 64×25 at y -6 (scrolled-off unread) | — | ❌ not implemented |
 | channel list | #610 `sidebarList_pog62O` | border / radius | 1px left `#97979f33`, 12 top-left (width 336 = user resize) | sidebar.rs `render` | ✅ |
 | guild header | #613..#635 | height / padding / dropdown / invite | 49 / 10 / 32 r8 gap 2 / 32 r8 20px glyph; Discovery badge 18px before the name | sidebar.rs `header` | ✅ (Discovery badge ❌) |
-| boost goal | #653..#662 `container_BFMMcK` | bar | 311×26 pill, margin 0 0 12 8, padding 4 4 16, border-bottom `#97979f33`, 12px semibold text | — | ❌ not implemented (no premium progress data) |
+| boost goal | #653..#662 `container_BFMMcK` | bar | 311×26 pill, margin 0 0 12 8, padding 4 4 16, border-bottom `#97979f33`, 12px semibold text | sidebar.rs `boost_goal` | ✅ shown when `premium_progress_bar_enabled` && boosts > 0 (client `GUILD_PREMIUM_PROGRESS_BAR` rule); progress `calc(n/max% - 4px)`, pink-refresh gradient 40→10 %, count text opacity .7; max 36 = live `GuildPowerupsProgressBarUI.maxBoostCount` for a TIERLESS_BOOSTING guild. real_shots side by side on 1369382919948210248: same text, pill and layout (compare 20261123-143926, channel list 33.1 % before the width fix) |
 | top rows | #663..#678 | rows | Events / Members / Server Boosts, same `wrapper_TNyK-N` rows as channels | sidebar.rs `guild_top` | ✅ (new) |
 | top divider | #679 `sectionDivider_ysO7Gy` | line | 296×1 at x+20, then 12px gap | sidebar.rs `guild_top` | ✅ (new) |
 | channel row | #664/#665 | wrapper / link | margin-left 10, padding 1 0 / 36, padding 4 10, r 8, gap 10 | sidebar.rs `channel_row` | ✅ |
@@ -31,13 +31,13 @@ Dumps: `vanilla-guild-text` (guild text channel, open folder in the rail), `vani
 | row actions | #691..#696 `children_TNyK-N` | layout | margin -4 -4 -4 0; 24px items (padding 4, 16px): Invite, Edit Channel (manage rights) | sidebar.rs `invite_hover` | ✅ (gear was missing) |
 | category | #716 | row | 24, padding 0 6 0 20 | sidebar.rs `row` | ✅ |
 | category add | #722 | position | 24px, right edge of the row (x 377 of 407) | sidebar.rs `row` (`.w_full()`) | ✅ (was next to the chevron) |
-| voice channel | voice-sidebar | row / users / timer | same 36px row; connected users 24px avatar rows; elapsed timer `47:50:07` monospace on the right | voice_panel.rs `voice_user_row` | ✅ rows / ❌ timer |
+| voice channel | voice-sidebar | row / users / timer | same 36px row; connected users 24px avatar rows; elapsed timer `47:50:07` monospace on the right | voice_panel.rs `voice_user_row`, sidebar.rs `channel_row` timer | ✅ rows; ✅ timer: `channelInfo_Wx6SnQ` ml 12 pr 4, 12/16 mono `--text-feedback-positive`, `H:MM:SS` from `voice_start_time` (gateway op 43 REQUEST_CHANNEL_INFO → CHANNEL_INFO / VOICE_CHANNEL_START_TIME_UPDATE, voice/start_time.rs) |
 | guild menu | guild-menu | items | Boost, Server Tag (chip), Invite, Settings, Insights, Create Channel / Category / Event, Active Threads, App Directory, Show All Channels (checkbox), Notification Settings, Privacy Settings, Edit Per-server Profile, Hide Muted Channels (checkbox) | guild_menu.rs (other owner) | see popouts.md |
 | panels card | #987 | box | x 10, 396 wide (spans under the guild rail), r 8, 1px `#97979f29` | sidebar.rs `panels` | ✅ |
 | user panel | #990/#991 | container / account | 56, padding 14, gap 10 / 36, padding 5 6, margin-left -6, r 4 | sidebar.rs `user_panel` | ✅ |
 | user subtext | panel | text | custom status text instead of "Online" | sidebar.rs `user_panel` + convert.rs `self_activities` (settings proto / READY sessions) | ✅ |
-| self mute / deaf | panel | state | red slashed mic + headset | voice_panel.rs `audio_button` | ❌ real_shots doesn't know the local mute state (Discord keeps it client-side) |
-| DM nav | dm #604..#644 | rows | Amis / Ton Nitro / Boutique / Quêtes, 40px rows; promo card under Quêtes | sidebar.rs `dm_top` | ✅ (promo card ❌) |
+| self mute / deaf | panel | state | red slashed mic + headset | voice_panel.rs `audio_button` | ✅ state persisted in voice.json; real_shots reads the live panel switches (`audioButtonWithMenu_` aria-checked, or `PHX_AUDIO`): red slashed mic + headset on both sides (compare 20261123-143403) |
+| DM nav | dm #604..#644 | rows | Amis / Ton Nitro / Boutique / Quêtes, 40px rows; promo card under Quêtes | sidebar.rs `dm_top` | ✅ the "promo" is `questHomeHeroBackgroundImage_hjotnx` at opacity 0 at rest (#657), shown on hover only; hover text `--text-strong` done. Hero image itself needs quest data (not wired) |
 | DM rows | dm #661.. | li | 50 tall | sidebar.rs `channel_row` | ✅ |
 
 ## Dump-verified (density-cozy, with Vencord — superseded)
@@ -47,7 +47,7 @@ Dumps: `vanilla-guild-text` (guild text channel, open folder in the rail), `vani
 | title bar | N-N #13 `bar_3zSH5d` | height / background | 32 / none (app bg) | title_bar.rs `render` | ✅ |
 | back / forward | N-N #19..#23 `backForwardButtons_nS9Yqn` | box / padding / radius / glyph | 80px leading, 26×24, `0 2 0 6`/`0 6 0 2`, 6px outer, 18px `--interactive-icon-default` | title_bar.rs `nav_arrow` | ✅ (history not wired) |
 | title | N-N #15..#17 `title_LnjVAX` | gap / icon / text | 8 / 16px guild icon r4 / 14/500 `--text-strong` | title_bar.rs | ✅ |
-| trailing | N-N #24..#38 | gap / button / glyph | 12 / 24 r6 / 18 `--icon-muted` | title_bar.rs `bar_button` | ✅ (Quests, window buttons: ❌ not implemented) |
+| trailing | N-N #24..#38 | gap / button / glyph | 12 / 24 r6 / 18 `--icon-muted` | title_bar.rs `bar_button`, `win_buttons` | ✅ vanilla has no Quests button (Inbox, Help, then `winButtonsWithDivider_` 3×32px, 12px glyph, flush right); trailing pr 12 only without client decorations |
 | guild list | N-N #50 `nav.guilds_` | width | 80 (40 + 2×20, `--space-md` cozy) | `m::SERVER_BAR_W` | ✅ |
 | guild list | N-N #55 `scroller_5dqHTG` | gap / padding | 10 / `0 0 26` (linux) | server_bar.rs `GAP`, `PAD_*` | ✅ |
 | guild icon | N-N #160..#163 | size / mask | 40 / squircle | server_bar.rs `ICON` | ✅ |

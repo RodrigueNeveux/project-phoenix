@@ -106,7 +106,7 @@ client-mod additions, not Discord: kept as our counts row but not treated as ref
 | friend subtext | me #1119 | 14/17.5 500 #81828a | --text-muted | ui/home/friends.rs | ✅ |
 | row actions | me #1120–1124 `actionButton_5GqXgh` | gap 10, 36px circle, 20px icon #96979e: Message, More | — | ui/home/friends.rs | ✅ (Remove moved to the More menu) |
 | Active Now column | me #1539–1543 | 360px, scroller padding 6 8 16, h2 20/24 600 margin 8 0 9 | — | ui/home/friends.rs active_now | ✅ |
-| Active Now card | me #1577 `itemCard_-7KzVR` | margin-top 12, radius 16, 1px #97979f/.2, shadow 0 1 4 .14 | — | ui/home/friends.rs | ✅ (shadow ❌) |
+| Active Now card | me #1577 `itemCard_-7KzVR` | margin-top 12, radius 16, 1px #97979f/.2, shadow 0 1 4 .14 | — | ui/home/friends.rs | ✅ shadow `--shadow-low` (0 1 4 rgba(0,0,0,.14), matches the dump's computed box-shadow) |
 | Active Now header | me #1579 `headerFull_o3hXTo` | padding 16, gap 12, rgba(151,151,159,.08); 32px avatar, 16/20 600, 14/18 #81828a, 24px icon r4 | — | ui/home/friends.rs | ✅ |
 | Active Now game | me #1590–1600 `gameSection_o3hXTo` | padding 16, gap 12; 32px icon, 14/18 600 title, 12/16 sub, 24px party avatar | — | ui/home/friends.rs | ✅ |
 | DM list Nitro/Shop/Quests | vanilla-friends-online (sidebar links /store, /shop, /quest-home) | Friends, Ton Nitro, Boutique, Quêtes; Message Requests only while requests are pending | — | ui/sidebar.rs dm_top | ✅ (QuestsIcon from the local client, vanilla-friends-online #653; hand-drawn fallback) |

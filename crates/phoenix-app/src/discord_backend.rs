@@ -437,6 +437,12 @@ impl Backend for DiscordBackend {
         s.cache.guild(sf(guild)).map(|g| g.properties.features.clone()).unwrap_or_default()
     }
 
+    fn guild_boosts(&self, guild: Id) -> Option<(u32, bool)> {
+        let s = self.inner.session().ok()?;
+        let g = s.cache.guild(sf(guild))?;
+        Some((g.properties.premium_subscription_count.unwrap_or(0), g.properties.premium_progress_bar_enabled.unwrap_or(false)))
+    }
+
     fn guild_permissions(&self, guild: Id) -> u64 {
         let Ok(s) = self.inner.session() else { return 0 };
         // Base permissions are the same in every channel for the bits we use.

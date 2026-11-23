@@ -1139,6 +1139,9 @@ sp.rg.related_d: "Contrôle qui voit les informations concernant les jeux et app
 sp.billing.web: "Phoenix ne gère pas les paiements : retrouve cette page dans le client officiel ou sur discord.com."
 guild.top.events: "Événements"
 guild.top.members: "Membres"
+guild.boost_goal.title: "Objectif de Boost"
+guild.boost_goal.count: "{n}/{max} Boosts"
+guild.boost_goal.count_done: "{n} Boosts"
 guild.top.boosts: "Boosts de serveur"
 # Context menu actions (crate::actions, ui::modals)
 common.save: "Enregistrer"

@@ -73,6 +73,8 @@ pub struct GuildProperties {
     #[serde(default)]
     pub premium_subscription_count: Option<u32>,
     #[serde(default)]
+    pub premium_progress_bar_enabled: Option<bool>,
+    #[serde(default)]
     pub vanity_url_code: Option<String>,
     #[serde(default)]
     pub max_members: Option<u32>,

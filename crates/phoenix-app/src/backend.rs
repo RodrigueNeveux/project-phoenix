@@ -284,6 +284,10 @@ pub trait Backend: Send + Sync + 'static {
     fn guild_features(&self, _guild: Id) -> Vec<String> {
         Vec::new()
     }
+    /// Boost count (`premium_subscription_count`) and `premium_progress_bar_enabled`.
+    fn guild_boosts(&self, _guild: Id) -> Option<(u32, bool)> {
+        None
+    }
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })

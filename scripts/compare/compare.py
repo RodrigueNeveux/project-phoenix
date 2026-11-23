@@ -14,7 +14,7 @@ HOME = Path.home()
 CDP = HOME / "discord-phoenix-ref" / "cdp.mjs"
 REPO = Path(__file__).resolve().parents[2]
 OUT_ROOT = Path("/mnt/windata/project-phoenix/compare")
-BIN = Path("/mnt/windata/project-phoenix/target/debug/examples/real_shots")
+BIN = Path(os.environ.get("PHX_REAL_SHOTS", "/mnt/windata/project-phoenix/target/debug/examples/real_shots"))
 
 # Discord DOM boxes (CSS px) used to define the regions; read live through CDP.
 BOXES_JS = r"""(()=>{const q=s=>{const e=document.querySelector(s);if(!e)return null;const b=e.getBoundingClientRect();
