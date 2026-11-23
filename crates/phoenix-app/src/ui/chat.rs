@@ -677,7 +677,7 @@ fn message(
             )
     });
 
-    let author_name = div()
+    let author_name = crate::fonts::styled_name(div(), author, false)
         .flex_none()
         .text_size(fz(16.))
         .line_height(fz(22.))

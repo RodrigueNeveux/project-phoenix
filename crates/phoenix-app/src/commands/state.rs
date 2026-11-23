@@ -141,6 +141,8 @@ pub struct InboxState {
     pub tab: InboxTab,
     pub mentions: Vec<Message>,
     pub saved: Vec<Message>,
+    /// Inbox > Scheduled (`GET /users/@me/scheduled-messages`), sorted by send time.
+    pub scheduled: Vec<Message>,
     pub loading: bool,
     pub reached_end: bool,
     pub filter_menu: bool,

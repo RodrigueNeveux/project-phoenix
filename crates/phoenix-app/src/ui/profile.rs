@@ -410,11 +410,11 @@ pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> D
                 .items_center()
                 .gap(z(4.)) // displayNameRow gap --space-4
                 .child(
-                    div()
+                    crate::fonts::styled_name(div(), i.user, true)
                         .text_size(z(if big { 24. } else { 20. }))
                         .line_height(z(if big { 32. } else { 24. }))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .when(i.user.is_none_or(|u| u.name_style.as_ref().is_none_or(|s| s.2.is_empty())), |d| d.text_color(c(tok(idx::TEXT_STRONG))))
                         .text_ellipsis()
                         .child(i.display.clone()),
                 )

@@ -295,6 +295,7 @@ impl PhoenixApp {
                 bot: false,
                 tag: None,
                 nameplate: None,
+                name_style: None,
             },
             users: HashMap::new(),
             guilds: Vec::new(),

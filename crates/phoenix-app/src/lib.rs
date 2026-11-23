@@ -58,6 +58,7 @@ pub fn init(cx: &mut App) {
     Theme::change(ThemeMode::Dark, None, cx);
     app::bind_keys(cx);
     media::lru::init(cx);
+    fonts::register(cx);
 }
 
 pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {

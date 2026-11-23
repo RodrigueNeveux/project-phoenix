@@ -35,6 +35,9 @@ pub struct User {
     /// Profile collectibles (`{"nameplate": {"asset", "palette", ...}}`).
     #[serde(default)]
     pub collectibles: Option<Box<serde_json::Value>>,
+    /// Display name style (font, effect, colors) chosen by the user.
+    #[serde(default)]
+    pub display_name_styles: Option<DisplayNameStyles>,
     // Current-user only:
     #[serde(default)]
     pub email: Option<String>,
@@ -64,6 +67,19 @@ impl User {
         let palette = n.get("palette").and_then(|p| p.as_str()).map(str::to_owned);
         Some((format!("https://cdn.discordapp.com/assets/collectibles/{asset}{sep}static.png"), palette))
     }
+}
+
+/// `user.display_name_styles`: `font_id` (`DisplayNameFont`), `effect_id`
+/// (`DisplayNameEffect`: 1 solid, 2 gradient, 3 neon, 4 toon, 5 pop, 6 glow,
+/// 7 prism, 8 gummy) and up to two 0xRRGGBB colors.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct DisplayNameStyles {
+    #[serde(default)]
+    pub font_id: u32,
+    #[serde(default)]
+    pub effect_id: u32,
+    #[serde(default, deserialize_with = "null_default")]
+    pub colors: Vec<u32>,
 }
 
 /// `user.primary_guild`: the server tag shown next to a user's name.

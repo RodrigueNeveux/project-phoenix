@@ -3,7 +3,8 @@
 //! local Discord web cache (Chromium simple cache, like `icons::cache`), parse
 //! the cached CSS bundles' `@font-face` rules to map family -> `/assets/*.woff2`,
 //! and copy the matching cached font bodies to ~/.cache/discord-phoenix/fonts/.
-//! WOFF2 -> TTF decoding and registration with GPUI's text system come next.
+//! The WOFF2 files are decoded to TTF (pure Rust `wuff` crate) and registered
+//! with GPUI's text system at startup (`register`).
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -120,6 +121,105 @@ pub fn init() -> Vec<PathBuf> {
     crate::icons::discord_caches().iter().flat_map(|c| extract(c, &dir)).collect()
 }
 
+/// `display_name_styles.font_id` (protobuf enum `DisplayNameFont`) -> CSS
+/// family and `letter-spacing` in em (from the `dnsFont_` font classes:
+/// `.cherryBomb_ {font-family:Sakura; letter-spacing:.04em}` ...).
+/// Bangers / BioRhyme / Compagnon / Ribes / Default have no class -> gg sans.
+pub fn font_for_id(font_id: u32) -> Option<(&'static str, f32)> {
+    Some(match font_id {
+        3 => ("Sakura", 0.04),     // CHERRY_BOMB  .cherryBomb_
+        4 => ("Jellybean", 0.),    // CHICLE       .chicle_
+        6 => ("Modern", 0.01),     // MUSEO_MODERNO .museoModerno_
+        7 => ("Medieval", 0.02),   // NEO_CASTEL   .neoCastel_
+        8 => ("8Bit", 0.02),       // PIXELIFY     .pixelify_
+        10 => ("Vampyre", 0.01),   // SINISTRE     .sinistre_
+        12 => ("Tempo", 0.03),     // ZILLA_SLAB   .zillaSlab_
+        13 => ("Monkey Bars", 0.), // PLAYPEN_SANS .playpenSans_
+        14 => ("Mainframe", 0.03), // ORBITRON     .orbitron_
+        15 => ("Headbang", 0.),    // NEW_ROCKER   .newRocker_
+        16 => ("Journal", 0.),     // KALAM        .kalam_
+        17 => ("Pricedown", 0.),   // HEXAGON      .pricedown_
+        _ => return None,
+    })
+}
+
+/// CSS family -> real family name inside the registered TTF (what GPUI matches on).
+static FAMILIES: parking_lot::RwLock<Option<HashMap<String, gpui::SharedString>>> = parking_lot::RwLock::new(None);
+
+/// GPUI family to use for a display name style font id, once its font is registered.
+pub fn family_for_id(font_id: u32) -> Option<gpui::SharedString> {
+    let (css, _) = font_for_id(font_id)?;
+    FAMILIES.read().as_ref()?.get(css).cloned()
+}
+
+/// Decodes a WOFF2 font to TTF (TTF/OTF pass through).
+pub fn to_ttf(b: &[u8]) -> Option<Vec<u8>> {
+    if b.starts_with(b"wOF2") {
+        wuff::decompress_woff2(b).ok()
+    } else if b.starts_with(&[0, 1, 0, 0]) || b.starts_with(b"OTTO") {
+        Some(b.to_vec())
+    } else {
+        None
+    }
+}
+
+/// Typographic family name (name id 16, else 1) of a TTF.
+pub fn ttf_family(ttf: &[u8]) -> Option<String> {
+    let face = ttf_parser::Face::parse(ttf, 0).ok()?;
+    let names = face.names();
+    [16u16, 1].iter().find_map(|&id| {
+        names.into_iter().filter(|n| n.name_id == id && n.is_unicode()).find_map(|n| n.to_string())
+    })
+}
+
+/// Extracts + decodes the fonts off the UI thread, then registers them with GPUI.
+pub fn register(cx: &mut gpui::App) {
+    let task = cx.background_executor().spawn(async move {
+        let mut fonts = Vec::new();
+        for p in init() {
+            let css = p.file_stem().and_then(|s| s.to_str()).and_then(|s| s.rsplit_once('-')).map(|(f, _)| f.replace('_', " "));
+            let (Some(css), Ok(b)) = (css, std::fs::read(&p)) else { continue };
+            let Some(ttf) = to_ttf(&b) else { continue };
+            let Some(fam) = ttf_family(&ttf) else { continue };
+            fonts.push((css, fam, ttf));
+        }
+        fonts
+    });
+    cx.spawn(async move |cx| {
+        let fonts = task.await;
+        let _ = cx.update(|cx| {
+            let mut map = HashMap::new();
+            let mut blobs = Vec::new();
+            for (css, fam, ttf) in fonts {
+                map.insert(css, gpui::SharedString::from(fam));
+                blobs.push(std::borrow::Cow::Owned(ttf));
+            }
+            if cx.text_system().add_fonts(blobs).is_ok() {
+                *FAMILIES.write() = Some(map);
+                cx.refresh_windows();
+            }
+        });
+    })
+    .detach();
+}
+
+/// Applies a user's display name style to a name element. Message headers and
+/// the member list only switch the font (`dnsFont_` + font class, color stays
+/// the role color); the profile (`inProfile_ showEffect_`) also paints the
+/// style's first color (GPUI text has no gradient fill, so gradient/neon/
+/// toon/pop/glow fall back to their first stop).
+pub fn styled_name<E: gpui::Styled>(el: E, user: Option<&crate::model::User>, in_profile: bool) -> E {
+    let Some((font, _effect, colors)) = user.and_then(|u| u.name_style.as_ref()) else { return el };
+    let el = match family_for_id(*font) {
+        Some(f) => el.font_family(f),
+        None => el,
+    };
+    match colors.first() {
+        Some(&rgb) if in_profile => el.text_color(gpui::rgb(rgb)),
+        _ => el,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,7 +234,21 @@ mod tests {
     #[test]
     #[ignore]
     fn extract_local() {
-        println!("{:#?}", init());
+        for p in init() {
+            let ttf = to_ttf(&std::fs::read(&p).unwrap());
+            println!("{p:?} -> {:?}", ttf.as_deref().and_then(ttf_family));
+        }
+    }
+
+    #[test]
+    fn font_ids() {
+        assert_eq!(font_for_id(17).map(|f| f.0), Some("Pricedown"));
+        assert!(font_for_id(11).is_none());
+        for id in 1..=17 {
+            if let Some((f, _)) = font_for_id(id) {
+                assert!(NAME_STYLE_FAMILIES.contains(&f), "{f}");
+            }
+        }
     }
 
     /// Extracted Discord fonts must never end up in the repository.

@@ -108,7 +108,8 @@ impl PhoenixApp {
             }
             InboxTab::Saved => ParityRequest::SavedMessages,
             InboxTab::Reminders => return self.load_reminders_tab(cx),
-            InboxTab::Unreads | InboxTab::Scheduled => return,
+            InboxTab::Scheduled => ParityRequest::ScheduledMessages,
+            InboxTab::Unreads => return,
         };
         i.loading = true;
         let tab = i.tab;
@@ -124,6 +125,10 @@ impl PhoenixApp {
                         // The endpoint flags are applied locally too (cheap, and
                         // the toggles act at once on what is loaded).
                         i.mentions.extend(msgs.into_iter().filter(|m| keep_mention(m, me, everyone, roles)));
+                    }
+                    InboxTab::Scheduled => {
+                        i.scheduled = msgs.into_iter().map(|m| Message { author: me, ..m }).collect();
+                        i.scheduled.sort_by_key(|m| m.timestamp);
                     }
                     _ => i.saved = msgs,
                 },
@@ -958,6 +963,17 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                 bold_middle(crate::t!("inbox.reminders_body_a"), crate::t!("inbox.reminders_body_b"), crate::t!("inbox.reminders_body_c")),
                 wumpus_demo(true),
             ));
+        }
+        InboxTab::Scheduled if !i.scheduled.is_empty() => {
+            // Read-only: the list the client shows; cancelling is not wired.
+            list = scroller(list);
+            for m in &i.scheduled {
+                list = list.child(
+                    inbox_box()
+                        .child(channel_head(app, m.channel, Vec::new()))
+                        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2.))),
+                );
+            }
         }
         InboxTab::Scheduled => {
             list = list.child(upsell(

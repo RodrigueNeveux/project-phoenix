@@ -133,6 +133,28 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             emit_users(&emit, &msgs);
             ParityReply::Messages(msgs.into_iter().map(message).collect())
         }
+        ParityRequest::ScheduledMessages => {
+            let list = rest.get_scheduled_messages().await.map_err(e)?;
+            ParityReply::Messages(
+                list.iter()
+                    .map(|s| crate::model::Message {
+                        id: id(s.id),
+                        channel: id(s.channel_id),
+                        timestamp: chrono::DateTime::parse_from_rfc3339(&s.scheduled_timestamp).map_or(0, |t| t.timestamp()),
+                        content: s.content.clone().into(),
+                        ..Default::default()
+                    })
+                    .collect(),
+            )
+        }
+        ParityRequest::ContentInventory => {
+            let list = rest.get_content_inventory().await.map_err(e)?;
+            ParityReply::Inventory(
+                list.into_iter()
+                    .map(|x| (crate::model::Id(x.author_id), x.application_id.map(crate::model::Id), x.game_name, x.first_time, x.resurrected))
+                    .collect(),
+            )
+        }
         ParityRequest::SetSaved { channel, message: m, saved } => {
             if saved {
                 rest.save_message(sf(channel), sf(m)).await

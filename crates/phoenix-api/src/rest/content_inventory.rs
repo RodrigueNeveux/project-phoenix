@@ -1,0 +1,103 @@
+//! Read-only feeds of the live client: scheduled messages
+//! (`GET /users/@me/scheduled-messages`, Inbox > Scheduled) and the content
+//! inventory (`GET /content-inventory/users/@me`, member list Activity cards
+//! with their "New player" / "Resurrection" traits).
+
+use reqwest::Method;
+use serde::Deserialize;
+use serde_json::Value;
+
+use super::{Body, RestClient};
+use crate::error::Result;
+use crate::models::{ChannelId, Snowflake, null_default};
+
+/// One entry of `GET /users/@me/scheduled-messages`.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ScheduledMessage {
+    pub id: Snowflake,
+    pub channel_id: ChannelId,
+    #[serde(default, deserialize_with = "null_default")]
+    pub content: String,
+    /// ISO 8601 send time.
+    #[serde(default, deserialize_with = "null_default")]
+    pub scheduled_timestamp: String,
+}
+
+/// Content inventory trait types (`TraitType` enum of the client).
+pub const TRAIT_FIRST_TIME: u64 = 1;
+pub const TRAIT_RESURRECTED: u64 = 5;
+
+/// What the activity card badges need from one content inventory entry.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct InventoryEntry {
+    pub author_id: u64,
+    pub application_id: Option<u64>,
+    pub game_name: Option<String>,
+    /// `traits[type=1].first_time` -> "New player".
+    pub first_time: bool,
+    /// `traits[type=5].resurrected_last_played` -> "Resurrection".
+    pub resurrected: bool,
+}
+
+fn id_of(v: &Value) -> Option<u64> {
+    v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_u64())
+}
+
+/// Parses `{ "entries": [{ author_id, extra: { application_id, game_name }, traits: [...] }] }`.
+pub fn parse_inventory(v: &Value) -> Vec<InventoryEntry> {
+    let Some(entries) = v.get("entries").and_then(Value::as_array) else { return Vec::new() };
+    entries
+        .iter()
+        .filter_map(|e| {
+            let author_id = id_of(e.get("author_id")?)?;
+            let extra = e.get("extra");
+            let traits = e.get("traits").and_then(Value::as_array).cloned().unwrap_or_default();
+            let tr = |t: u64| traits.iter().find(|x| x.get("type").and_then(Value::as_u64) == Some(t)).cloned();
+            Some(InventoryEntry {
+                author_id,
+                application_id: extra.and_then(|x| x.get("application_id")).and_then(id_of),
+                game_name: extra.and_then(|x| x.get("game_name")).and_then(Value::as_str).map(str::to_owned),
+                first_time: tr(TRAIT_FIRST_TIME).and_then(|t| t.get("first_time")?.as_bool()).unwrap_or(false),
+                resurrected: tr(TRAIT_RESURRECTED).is_some_and(|t| t.get("resurrected_last_played").is_some_and(|x| !x.is_null())),
+            })
+        })
+        .collect()
+}
+
+impl RestClient {
+    pub async fn get_scheduled_messages(&self) -> Result<Vec<ScheduledMessage>> {
+        self.call(Method::GET, "/users/@me/scheduled-messages", Body::None).await
+    }
+
+    /// The global activity feed (`MY_CONTENT_INVENTORY`), parsed.
+    pub async fn get_content_inventory(&self) -> Result<Vec<InventoryEntry>> {
+        let v: Value = self.call(Method::GET, "/content-inventory/users/@me", Body::None).await?;
+        Ok(parse_inventory(&v))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_traits() {
+        let v = serde_json::json!({"entries": [
+            {"author_id": "42", "extra": {"application_id": "7", "game_name": "Hades"},
+             "traits": [{"type": 1, "first_time": true}]},
+            {"author_id": "43", "traits": [{"type": 5, "resurrected_last_played": "2025-01-01T00:00:00Z"}]},
+            {"traits": []}
+        ]});
+        let e = parse_inventory(&v);
+        assert_eq!(e.len(), 2);
+        assert!(e[0].first_time && !e[0].resurrected);
+        assert_eq!(e[0].application_id, Some(7));
+        assert!(e[1].resurrected && !e[1].first_time);
+    }
+
+    #[test]
+    fn parses_scheduled() {
+        let s: Vec<ScheduledMessage> = serde_json::from_str(r#"[{"id":"1","channel_id":"2","content":"hi","scheduled_timestamp":"2026-11-24T09:00:00+00:00"}]"#).unwrap();
+        assert_eq!(s[0].content, "hi");
+    }
+}

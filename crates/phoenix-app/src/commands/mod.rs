@@ -111,6 +111,10 @@ pub enum ParityRequest {
     Mentions { before: Option<Id>, guild: Option<Id> },
     DismissMention(Id),
     SavedMessages,
+    /// `GET /users/@me/scheduled-messages` (Inbox > Scheduled), read-only.
+    ScheduledMessages,
+    /// `GET /content-inventory/users/@me`: activity card traits.
+    ContentInventory,
     SetSaved { channel: Id, message: Id, saved: bool },
     VotePoll { channel: Id, message: Id, answers: Vec<u32> },
     /// `by_creation` sorts by post date instead of recent activity.
@@ -132,6 +136,8 @@ pub enum ParityReply {
     Messages(Vec<Message>),
     ForumPosts { posts: Vec<ForumPost>, has_more: bool },
     Channel(Id),
+    /// Content inventory entries: (author, application, game name, first time, resurrected).
+    Inventory(Vec<(Id, Option<Id>, Option<String>, bool, bool)>),
 }
 
 /// Fresh READY after a non-resumable reconnect (carried by `AppEvent::Resync`).

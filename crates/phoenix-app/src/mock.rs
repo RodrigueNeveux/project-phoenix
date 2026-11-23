@@ -115,6 +115,7 @@ fn user(i: usize) -> User {
         bot: n.ends_with("bot") || n == "clyde",
         tag: ["GLAD", "RUST", "PNX"].get(i % 4).map(|t| ((*t).into(), None)),
         nameplate: None,
+        name_style: (i % 5 == 1).then(|| (17, 1, Vec::new())),
     }
 }
 

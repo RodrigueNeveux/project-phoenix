@@ -170,6 +170,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
         let color = mem.and_then(|m| app.member_color(g, m));
         let name = user.map(|u| u.display_name.clone()).unwrap_or_default();
         let e = entity.clone();
+        let (first_time, resurrected) = crate::ui::activity_traits::traits(uid, &a.name);
         let art = match a.image.clone() {
             Some(url) => gpui::img(url).size_full().into_any_element(),
             None => div()
@@ -254,6 +255,9 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 .flex()
                                 .gap(z(8.))
                                 .overflow_hidden()
+                                // contentInventory traits: FIRST_TIME "New player", RESURRECTED "Resurrection"
+                                .when(first_time, |d| d.child(badge("icons/sparkle.svg", crate::t!("members.new_player"))))
+                                .when(resurrected, |d| d.child(badge("icons/refresh.svg", crate::t!("members.resurrection"))))
                                 .when_some(a.start, |d, st| d.child(badge("icons/controller.svg", elapsed(st, now).into())))
                                 .when_some(a.state.clone().or(a.details.clone()), |d, t| d.child(badge("icons/refresh.svg", t))),
                         ),
@@ -340,6 +344,10 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     // total / voice counts row was Vencord's MemberCount plugin, not vanilla.)
     let Some(ix) = ix.checked_sub(1) else {
         let entity = entity.clone();
+        if crate::ui::activity_traits::stale() {
+            let e = entity.clone();
+            cx.defer(move |cx| e.update(cx, crate::ui::activity_traits::ensure));
+        }
         return div().flex().flex_col().child(activity_section(app, &entity, g)).into_any_element();
     };
     if let Some(rows) = app.people.lists.get(&g) {
@@ -428,7 +436,7 @@ fn member_row(
                         .items_center()
                         .gap(z(4.))
                         .child(
-                            div()
+                            crate::fonts::styled_name(div(), user, false)
                                 .text_size(z(16.))
                                 .line_height(z(20.))
                                 .font_weight(FontWeight::MEDIUM)

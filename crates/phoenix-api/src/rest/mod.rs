@@ -15,6 +15,7 @@ pub mod guild_admin;
 pub mod reporting;
 pub mod guild_manage;
 pub mod threads;
+pub mod content_inventory;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

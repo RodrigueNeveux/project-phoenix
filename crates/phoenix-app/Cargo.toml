@@ -35,6 +35,8 @@ notify-rust = "4.19"
 qrcode = { version = "0.14", default-features = false }
 brotli-decompressor = "4"
 flate2 = "1"
+wuff = "0.2"
+ttf-parser = "0.25"
 
 [dev-dependencies]
 gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
