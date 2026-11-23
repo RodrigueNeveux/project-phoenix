@@ -33,7 +33,7 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
     let rid = app.replying_to?;
     let e = app.messages.get(&app.selected_channel?)?;
     let m = e.msgs.iter().find(|m| m.id == rid)?;
-    let name = app.users.get(&m.author).map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into());
+    let name = app.users.get(&m.author).map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"));
     let own = m.author == app.me.id;
     let mention = app.chat.reply_mention;
     Some(
@@ -48,7 +48,7 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
             .items_center()
             .text_size(z(14.))
             .text_color(c(Palette::TEXT_MUTED))
-            .child(div().child("Replying to "))
+            .child(div().child(crate::t!("chat.replying_to")))
             .child(
                 div()
                     .ml(z(4.))
@@ -70,7 +70,7 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
                         .font_weight(FontWeight::BOLD)
                         .text_color(c(if mention { Palette::TEXT_LINK } else { Palette::TEXT_MUTED }))
                         .child("@")
-                        .child(if mention { "ON" } else { "OFF" })
+                        .child(if mention { crate::t!("chat.on") } else { crate::t!("chat.off") })
                         .on_click(cx.listener(|a, _, _, cx| {
                             a.chat.reply_mention = !a.chat.reply_mention;
                             cx.notify();
@@ -232,8 +232,8 @@ fn sending(app: &PhoenixApp) -> impl IntoElement {
 pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let placeholder: SharedString = match ch {
-        Some(c) if c.guild.is_none() => format!("Message @{}", c.name).into(),
-        Some(c) => format!("Message #{}", c.name).into(),
+        Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = c.name),
+        Some(c) => crate::t!("chat.placeholder_channel", name = c.name),
         None => "".into(),
     };
     let ic = c(Palette::INTERACTIVE);
@@ -359,18 +359,18 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
     let mut line = div().flex().items_center().gap(z(0.)).min_w_0();
     match names.as_slice() {
         [] => {}
-        [a] => line = line.child(bold(a.clone())).child(" is typing…"),
-        [a, b] => line = line.child(bold(a.clone())).child(" and ").child(bold(b.clone())).child(" are typing…"),
+        [a] => line = line.child(bold(a.clone())).child(crate::t!("chat.typing_suffix_one")),
+        [a, b] => line = line.child(bold(a.clone())).child(crate::t!("chat.typing_and")).child(bold(b.clone())).child(crate::t!("chat.typing_suffix_many")),
         [a, b, c3] => {
             line = line
                 .child(bold(a.clone()))
                 .child(", ")
                 .child(bold(b.clone()))
-                .child(", and ")
+                .child(crate::t!("chat.typing_comma_and"))
                 .child(bold(c3.clone()))
-                .child(" are typing…")
+                .child(crate::t!("chat.typing_suffix_many"))
         }
-        _ => line = line.child("Several people are typing…"),
+        _ => line = line.child(crate::t!("chat.typing_many_ellipsis")),
     }
     let active = !names.is_empty();
     let dot = |i: usize| {

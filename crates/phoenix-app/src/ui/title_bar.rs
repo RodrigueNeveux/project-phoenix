@@ -17,12 +17,12 @@ fn title(app: &PhoenixApp) -> (Icon, SharedString) {
     }
     if app.nav.home == HomeView::Dm {
         let name = app.selected_channel.and_then(|c| app.channels.get(&c)).map(|c| c.name.clone());
-        return (Icon::Members, name.unwrap_or_else(|| "Direct Messages".into()));
+        return (Icon::Members, name.unwrap_or_else(|| crate::t!("dm.title")));
     }
-    (Icon::Members, "Friends".into())
+    (Icon::Members, crate::t!("friends.title"))
 }
 
-fn bar_button(id: &'static str, i: Icon, active: bool, tip: &'static str) -> gpui::Stateful<gpui::Div> {
+fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .size(z(24.))
@@ -74,9 +74,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .items_center()
                 .gap(z(12.))
                 .child(
-                    bar_button("title-inbox", Icon::Inbox, app.parity.inbox.open, "Inbox")
+                    bar_button("title-inbox", Icon::Inbox, app.parity.inbox.open, crate::t!("inbox.title"))
                         .on_click(cx.listener(|a, _, _, cx| a.toggle_inbox(cx))),
                 )
-                .child(bar_button("title-help", Icon::Help, false, "Help")),
+                .child(bar_button("title-help", Icon::Help, false, crate::t!("title.help"))),
         )
 }

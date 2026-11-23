@@ -84,13 +84,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     col = col
         .child(separator())
         .child(
-            action(&entity, "add-server", Icon::Plus, "Add a Server")
+            action(&entity, "add-server", Icon::Plus, crate::t!("rail.add_server"))
                 .on_click(move |_, w, cx| e.update(cx, |a, cx| a.open_join_server(w, cx))),
         )
         .child({
             let e = entity.clone();
-            action(&entity, "discover", Icon::Compass, "Discover")
-                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub("Discover", cx)))
+            action(&entity, "discover", Icon::Compass, crate::t!("rail.discover"))
+                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub(&crate::t!("rail.discover"), cx)))
         });
     div().w(z(m::SERVER_BAR_W)).flex_none().h_full().bg(c(Palette::BG_TERTIARY)).child(col)
 }
@@ -272,7 +272,7 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
                 )
                 .when(unread_dms + pending > 0, |d| d.child(mention_badge(unread_dms + pending))),
         )
-        .when(hover, |d| d.child(right_tooltip("Direct Messages".into(), ICON)))
+        .when(hover, |d| d.child(right_tooltip(crate::t!("dm.title"), ICON)))
         .into_any_element()
 }
 
@@ -516,7 +516,7 @@ fn separator() -> AnyElement {
 
 /// Add a Server / Discover tiles (`circleIconButton_g8YUxD`): `--background-mod-subtle`
 /// tile, `--text-default` glyph, `--background-brand` background on hover.
-fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: &'static str) -> gpui::Stateful<gpui::Div> {
+fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedString) -> gpui::Stateful<gpui::Div> {
     let key = if id == "add-server" { ADD_KEY } else { DISCOVER_KEY };
     let hover = hovered(key);
     row(id, key, entity)

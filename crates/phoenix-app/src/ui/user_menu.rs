@@ -40,17 +40,17 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let o = OPEN.with(|o| *o.borrow())?;
     let e = cx.entity();
     let me = o.user == app.me.id;
-    let act = |label: &'static str, f: Act| {
+    let act = |label: gpui::SharedString, f: Act| {
         let e = e.clone();
         MenuItem::action(label, None, move |ev, w, cx: &mut App| e.update(cx, |a, cx| f(a, ev, w, cx)))
     };
     let (u, g) = (o.user, o.guild);
     let mut items = vec![
-        act("Profile", Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))),
+        act(crate::t!("menu.profile"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))),
     ];
     if app.selected_channel.is_some() {
         items.push(act(
-            "Mention",
+            crate::t!("menu.mention"),
             Rc::new(move |a, _, w, cx| {
                 a.composer.update(cx, |s, cx| {
                     let v = s.value().to_string();
@@ -62,10 +62,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         ));
     }
     if !me {
-        items.push(act("Message", Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
+        items.push(act(crate::t!("profile.message"), Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
     }
     items.push(MenuItem::Separator);
-    items.push(act("Add Note", Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))));
+    items.push(act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))));
     let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
     if in_call {
         items.push(MenuItem::Separator);
@@ -83,14 +83,14 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .collect();
         if !invites.is_empty() {
             items.push(MenuItem::Separator);
-            items.push(MenuItem::submenu("Invite to Server", invites));
+            items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
         }
         items.push(MenuItem::Separator);
         if app.nav.relationship(u).is_none() {
-            items.push(act("Add Friend", Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
+            items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
             items.push(MenuItem::Separator);
         }
-        items.push(MenuItem::danger("Block", None, {
+        items.push(MenuItem::danger(crate::t!("menu.block"), None, {
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.relationship_action(u, RelAction::Block, cx))
         }));
@@ -98,7 +98,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     items.extend(crate::ui::inbox::moderation_items(app, u, g, &e));
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
-        items.push(MenuItem::action("Copy User ID", None, move |_, _, cx: &mut App| {
+        items.push(MenuItem::action(crate::t!("common.copy_user_id"), None, move |_, _, cx: &mut App| {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.0.to_string()))
         }));
     }

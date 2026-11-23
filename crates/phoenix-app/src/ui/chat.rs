@@ -184,7 +184,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .justify_between()
                 .text_size(z(14.))
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("Search")
+                .child(crate::t!("search.placeholder"))
                 .child(icon(Icon::Search, 16., c(Palette::TEXT_MUTED))),
         )
 }
@@ -214,7 +214,7 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
             .justify_center()
             .text_size(z(14.))
             .text_color(c(Palette::TEXT_MUTED))
-            .child(if loading { "Loading messages…" } else { "" });
+            .child(if loading { crate::t!("chat.loading_messages") } else { "".into() });
     }
     if let Some(chan) = channel.filter(|c| c.guild.is_none()) {
         let peer = chan.voice_users.first().and_then(|u| app.users.get(u));
@@ -236,9 +236,7 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
                 div()
                     .text_size(z(16.))
                     .text_color(tk(idx::TEXT_DEFAULT)) // container_ .description_ color
-                    .child(SharedString::from(format!(
-                        "This is the beginning of your direct message history with {name}."
-                    ))),
+                    .child(crate::t!("chat.dm_start", name = name)),
             );
     }
     // container_ (welcome) margin: --custom-message-margin-horizontal; header_ margin 8px 0.
@@ -264,13 +262,13 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
                 .line_height(z(40.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child(SharedString::from(format!("Welcome to #{name}!"))),
+                .child(crate::t!("chat.welcome", name = name)),
         )
         .child(
             div()
                 .text_size(z(16.))
                 .text_color(tk(idx::TEXT_DEFAULT)) // description_ color
-                .child(SharedString::from(format!("This is the start of the #{name} channel."))),
+                .child(crate::t!("chat.channel_start", name = name)),
         )
 }
 
@@ -309,7 +307,7 @@ pub fn format_time_tooltip(ts: i64) -> SharedString {
     Local
         .timestamp_opt(ts, 0)
         .single()
-        .map(|d| d.format("%A, %B %-d, %Y at %-I:%M %p").to_string().into())
+        .map(|d| crate::i18n::full_datetime(d).into())
         .unwrap_or_default()
 }
 
@@ -353,7 +351,7 @@ fn bot_tag() -> impl IntoElement {
         .line_height(z(15.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(gpui::white())
-        .child("APP")
+        .child(crate::t!("common.app"))
 }
 
 fn message(
@@ -365,7 +363,7 @@ fn message(
     cx: &App,
 ) -> AnyElement {
     let author = app.users.get(&msg.author);
-    let name = author.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into());
+    let name = author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"));
     // username_ color: role colour, else --text-strong.
     let color = app.author_color(msg.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG));
     let id = msg.id;
@@ -422,7 +420,7 @@ fn message(
         let found = entry.msgs.iter().position(|m| m.id == rid);
         let (ru, preview) = match found {
             Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone()),
-            None => (None, SharedString::from("Original message was deleted")),
+            None => (None, crate::t!("chat.reply_deleted")),
         };
         // repliedMessage_: 14px, line-height --custom-message-reply-message-preview-line-height
         // (1.125rem), cozy margin-bottom --reply-spacing (4px). Compact: margin-inline-start
@@ -464,7 +462,7 @@ fn message(
                     .opacity(0.64)
                     .child(SharedString::from(format!(
                         "@{}",
-                        ru.map(|u| u.display_name.as_ref()).unwrap_or("Unknown")
+                        ru.map(|u| u.display_name.to_string()).unwrap_or_else(|| crate::t!("common.unknown").to_string())
                     ))),
             )
             .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))
@@ -696,18 +694,18 @@ fn edited_marker(ts: i64) -> impl IntoElement {
         .text_size(z(10.))
         .line_height(z(16.))
         .text_color(c(Palette::TEXT_MUTED))
-        .child("(edited)")
+        .child(crate::t!("chat.edited"))
 }
 
 /// Append Discord's small muted " (edited)" after the last line of text.
 fn with_edited(t: &RichText) -> (SharedString, Vec<gpui::TextRun>) {
     let mut text = t.text.to_string();
-    text.push_str(" (edited)");
+    text.push_str(&crate::t!("chat.edited_suffix"));
     let mut runs = t.runs.clone();
     let mut f = crate::richtext::ui_font();
     f.weight = FontWeight::NORMAL;
     runs.push(gpui::TextRun {
-        len: " (edited)".len(),
+        len: crate::t!("chat.edited_suffix").len(),
         font: f,
         color: c(Palette::TEXT_MUTED),
         background_color: None,
@@ -886,7 +884,7 @@ fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> 
                         .text_size(z(15.))
                         .font_weight(FontWeight::BOLD)
                         .text_color(gpui::white())
-                        .child("SPOILER"),
+                        .child(crate::t!("chat.spoiler")),
                 ),
             )
             .on_click(move |_, _, cx| media::reveal(key.clone(), cx))
@@ -1004,7 +1002,7 @@ fn sticker_name(name: SharedString) -> AnyElement {
         .bg(c(Palette::BG_SECONDARY))
         .text_size(z(14.))
         .text_color(c(Palette::TEXT_MUTED))
-        .child(SharedString::from(format!("Sticker: {name}")))
+        .child(crate::t!("chat.sticker", name = name))
         .into_any_element()
 }
 

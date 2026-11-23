@@ -20,7 +20,7 @@ impl PhoenixApp {
         self.people.close_overlays();
         if open {
             let cur = self.people.custom_status.clone().unwrap_or_default();
-            let input = cx.new(|cx| InputState::new(window, cx).placeholder("Set a custom status").default_value(cur));
+            let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("status.custom_placeholder")).default_value(cur));
             let sub = cx.subscribe_in(&input, window, |this, input, ev: &InputEvent, _, cx| {
                 if let InputEvent::PressEnter { .. } = ev {
                     let t = input.read(cx).value().trim().to_owned();
@@ -53,8 +53,8 @@ impl PhoenixApp {
 const ITEMS: [(Presence, Option<&str>); 4] = [
     (Presence::Online, None),
     (Presence::Idle, None),
-    (Presence::Dnd, Some("You will not receive any desktop notifications.")),
-    (Presence::Offline, Some("You will not appear online, but will have full access to all of Discord.")),
+    (Presence::Dnd, Some("status.dnd_desc")),
+    (Presence::Offline, Some("status.invisible_desc")),
 ];
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -101,7 +101,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                     a.set_custom_status(None, cx);
                                     a.people.close_overlays();
                                 }))
-                                .child("Clear"),
+                                .child(crate::t!("common.clear")),
                         )
                     }),
             )
@@ -135,7 +135,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                 .child(status_label(p)),
                         )
                         .when_some(desc, |d, t| {
-                            d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(t))
+                            d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!(t)))
                         }),
                 ),
         );

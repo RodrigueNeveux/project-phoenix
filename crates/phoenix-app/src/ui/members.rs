@@ -157,10 +157,10 @@ fn counts_row(app: &PhoenixApp, g: Id) -> AnyElement {
 pub fn elapsed(start_ms: i64, now_s: i64) -> String {
     let s = (now_s - start_ms / 1000).max(0);
     match s {
-        0..60 => "now".into(),
-        60..3600 => format!("{}m ago", s / 60),
-        3600..86_400 => format!("{}h ago", s / 3600),
-        _ => format!("{}d ago", s / 86_400),
+        0..60 => crate::t!("time.now").to_string(),
+        60..3600 => crate::t!("time.minutes_ago_short", n = s / 60).to_string(),
+        3600..86_400 => crate::t!("time.hours_ago_short", n = s / 3600).to_string(),
+        _ => crate::t!("time.days_ago_short", n = s / 86_400).to_string(),
     }
 }
 
@@ -196,7 +196,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
             .flex()
             .items_center()
             .pr(z(8.))
-            .child(div().flex_1().min_w_0().child(header(format!("Activity — {}", acts.len()).into())))
+            .child(div().flex_1().min_w_0().child(header(crate::t!("members.activity", n = acts.len()))))
             .child(gpui::svg().path("icons/chevron-right.svg").size(z(16.)).flex_none().mt(z(16.)).text_color(c(Palette::INTERACTIVE))),
     );
     for (uid, a) in acts.into_iter().take(3) {
@@ -330,13 +330,13 @@ fn header(t: SharedString) -> AnyElement {
 
 fn group_title(app: &PhoenixApp, g: Id, id: &str, count: u32) -> SharedString {
     let name = match id {
-        "online" => "Online".to_owned(),
-        "offline" => "Offline".to_owned(),
+        "online" => crate::t!("status.online").to_string(),
+        "offline" => crate::t!("status.offline").to_string(),
         _ => id
             .parse::<u64>()
             .ok()
             .and_then(|r| app.roles.get(&g)?.iter().find(|x| x.id == Id(r)).map(|x| x.name.to_string()))
-            .unwrap_or_else(|| "Members".to_owned()),
+            .unwrap_or_else(|| crate::t!("members.members").to_string()),
     };
     format!("{name} — {count}").into()
 }
@@ -472,5 +472,5 @@ pub fn app_tag() -> gpui::Div {
         .text_size(z(10.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(gpui::white())
-        .child("APP")
+        .child(crate::t!("common.app"))
 }

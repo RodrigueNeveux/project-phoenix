@@ -23,16 +23,16 @@ enum Item {
 }
 
 impl Item {
-    fn label(self) -> &'static str {
+    fn label(self) -> gpui::SharedString {
         match self {
-            Item::Invite => "Invite People",
-            Item::Settings => "Server Settings",
-            Item::CreateChannel => "Create Channel",
-            Item::CreateCategory => "Create Category",
-            Item::Notifications => "Notification Settings",
-            Item::Privacy => "Privacy Settings",
-            Item::HideMuted => "Hide Muted Channels",
-            Item::Leave => "Leave Server",
+            Item::Invite => crate::t!("menu.invite"),
+            Item::Settings => crate::t!("menu.server_settings"),
+            Item::CreateChannel => crate::t!("menu.create_channel"),
+            Item::CreateCategory => crate::t!("menu.create_category"),
+            Item::Notifications => crate::t!("menu.notify_settings"),
+            Item::Privacy => crate::t!("menu.privacy_settings"),
+            Item::HideMuted => crate::t!("menu.hide_muted"),
+            Item::Leave => crate::t!("menu.leave_server"),
         }
     }
 }
@@ -49,7 +49,7 @@ fn run(a: &mut PhoenixApp, guild: Id, item: Item, cx: &mut Context<PhoenixApp>) 
             a.save_nav_prefs();
         }
         Item::Leave => a.show_overlay(Overlay::LeaveGuild(guild), cx),
-        other => a.stub(other.label(), cx),
+        other => a.stub(&other.label(), cx),
     }
     cx.notify();
 }
