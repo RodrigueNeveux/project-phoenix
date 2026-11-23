@@ -37,7 +37,7 @@ pub struct User {
     pub collectibles: Option<Box<serde_json::Value>>,
     /// Display name style (font, effect, colors) chosen by the user.
     #[serde(default)]
-    pub display_name_styles: Option<DisplayNameStyles>,
+    pub display_name_styles: Option<Box<DisplayNameStyles>>,
     // Current-user only:
     #[serde(default)]
     pub email: Option<String>,

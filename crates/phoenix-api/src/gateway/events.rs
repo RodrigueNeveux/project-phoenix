@@ -257,7 +257,7 @@ pub enum GatewayEvent {
     GuildDelete(UnavailableGuild),
     GuildMemberAdd(Box<Member>),
     GuildMemberUpdate(Box<Member>),
-    GuildMemberRemove(GuildMemberRemove),
+    GuildMemberRemove(Box<GuildMemberRemove>),
     GuildMembersChunk(Box<GuildMembersChunk>),
     GuildMemberListUpdate(Box<GuildMemberListUpdate>),
     GuildRoleCreate(GuildRoleEvent),

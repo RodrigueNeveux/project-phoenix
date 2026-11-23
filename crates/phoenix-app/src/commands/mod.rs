@@ -129,6 +129,9 @@ pub enum ParityRequest {
     ArchivedThreads { channel: Id },
 }
 
+/// (author, application, game name, first time, resurrected).
+pub type InventoryEntry = (Id, Option<Id>, Option<String>, bool, bool);
+
 #[derive(Clone, Debug)]
 pub enum ParityReply {
     Done,
@@ -137,7 +140,7 @@ pub enum ParityReply {
     ForumPosts { posts: Vec<ForumPost>, has_more: bool },
     Channel(Id),
     /// Content inventory entries: (author, application, game name, first time, resurrected).
-    Inventory(Vec<(Id, Option<Id>, Option<String>, bool, bool)>),
+    Inventory(Vec<InventoryEntry>),
 }
 
 /// Fresh READY after a non-resumable reconnect (carried by `AppEvent::Resync`).

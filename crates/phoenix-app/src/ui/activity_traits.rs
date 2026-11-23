@@ -10,7 +10,7 @@ use gpui::Context;
 
 use crate::{app::PhoenixApp, commands::{ParityReply, ParityRequest}, model::Id};
 
-type Entry = (Id, Option<Id>, Option<String>, bool, bool);
+type Entry = crate::commands::InventoryEntry;
 
 thread_local! {
     static FEED: RefCell<(Option<Instant>, Vec<Entry>)> = const { RefCell::new((None, Vec::new())) };

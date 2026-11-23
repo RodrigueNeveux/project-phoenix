@@ -344,11 +344,11 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     // total / voice counts row was Vencord's MemberCount plugin, not vanilla.)
     let Some(ix) = ix.checked_sub(1) else {
         let entity = entity.clone();
+        let el = div().flex().flex_col().child(activity_section(app, &entity, g)).into_any_element();
         if crate::ui::activity_traits::stale() {
-            let e = entity.clone();
-            cx.defer(move |cx| e.update(cx, crate::ui::activity_traits::ensure));
+            cx.defer(move |cx| entity.update(cx, crate::ui::activity_traits::ensure));
         }
-        return div().flex().flex_col().child(activity_section(app, &entity, g)).into_any_element();
+        return el;
     };
     if let Some(rows) = app.people.lists.get(&g) {
         return match rows.get(ix) {

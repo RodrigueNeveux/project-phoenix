@@ -187,7 +187,7 @@ pub fn register(cx: &mut gpui::App) {
     });
     cx.spawn(async move |cx| {
         let fonts = task.await;
-        let _ = cx.update(|cx| {
+        cx.update(|cx| {
             let mut map = HashMap::new();
             let mut blobs = Vec::new();
             for (css, fam, ttf) in fonts {
