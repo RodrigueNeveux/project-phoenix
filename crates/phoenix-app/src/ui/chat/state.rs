@@ -674,6 +674,9 @@ impl PhoenixApp {
     /// mention toggle) + attachments. True when handled.
     pub fn chat_submit(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(ch) = self.selected_channel else { return true };
+        if super::slash::submit(self, window, cx) {
+            return true;
+        }
         let text = self.composer.read(cx).value().trim().to_string();
         if text.is_empty() && self.chat.uploads.is_empty() {
             return true;

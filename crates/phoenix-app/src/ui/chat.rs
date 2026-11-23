@@ -21,6 +21,7 @@ pub mod icons;
 pub mod message_ext;
 pub mod panels;
 pub mod state;
+pub mod slash;
 pub mod system;
 pub use state::ChatState;
 

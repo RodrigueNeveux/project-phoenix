@@ -248,6 +248,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         .flex_col()
         .gap(px(8.))
         .child(sending(app))
+        .children(super::slash::render(app, cx))
         .child(
             div().px(px(16.)).child(
                 div()
@@ -278,6 +279,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .items_center()
                             .capture_key_down(cx.listener(|a, ev: &KeyDownEvent, w, cx| {
                                 let k = &ev.keystroke;
+                                if k.modifiers.number_of_modifiers() == 0 && super::slash::on_key(a, &k.key, w, cx) {
+                                    cx.stop_propagation();
+                                    return;
+                                }
                                 let edit = k.key == "up" && k.modifiers.number_of_modifiers() == 0;
                                 let paste = k.key == "v" && (k.modifiers.control || k.modifiers.platform);
                                 if (edit && a.edit_last(w, cx)) || (paste && a.paste_image(cx)) {
@@ -319,8 +324,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                     .flex()
                                     .items_center()
                                     .child(icon_button("gift", Icon::Gift, ic, 24.))
-                                    .child(icon_button("gif", Icon::Gif, ic, 24.))
-                                    .child(icon_button("sticker", Icon::Sticker, ic, 24.))
+                                    .child(icon_button("gif", Icon::Gif, ic, 24.).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(icon_button("sticker", Icon::Sticker, ic, 24.).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
                                     .child(icon_button("emoji", Icon::Emoji, ic, 24.).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
                                     ))),
