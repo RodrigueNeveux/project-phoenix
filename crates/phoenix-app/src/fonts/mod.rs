@@ -264,6 +264,7 @@ fn install(fonts: Vec<(String, String, Vec<u8>)>, cx: &mut gpui::App) -> bool {
 /// the first frame, and offscreen shots, use gg sans), then a background
 /// re-extraction from the Discord cache when nothing was cached yet.
 pub fn register(cx: &mut gpui::App) {
+    fallback::register(cx);
     let cached = out_dir().map(|d| load_decoded(&d)).unwrap_or_default();
     if install(cached, cx) && GG_SANS.load(Ordering::Relaxed) {
         return;
@@ -296,6 +297,9 @@ pub fn styled_name<E: gpui::Styled>(el: E, user: Option<&crate::model::User>, in
         _ => el,
     }
 }
+
+pub mod fallback;
+pub use fallback::ui_fallbacks;
 
 #[cfg(test)]
 mod tests {
@@ -351,3 +355,4 @@ mod tests {
         assert!(bad.is_empty(), "font files must not be committed (extracted at runtime): {bad:?}");
     }
 }
+

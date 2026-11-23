@@ -1257,6 +1257,11 @@ impl Render for PhoenixApp {
             .size_full()
             .relative()
             .font_family(FONT_UI())
+            .map(|mut el| {
+                // Per-glyph fallback for characters missing from gg sans (see fonts::ui_fallbacks).
+                el.text_style().font_fallbacks = Some(crate::fonts::ui_fallbacks());
+                el
+            })
             .text_color(c(Palette::TEXT_NORMAL))
             .bg(c(Palette::BG_TERTIARY))
             .child(body)
