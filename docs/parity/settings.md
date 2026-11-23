@@ -77,6 +77,7 @@ Real-data mode (`PHX_REAL=1 --example profile_editor`, user's own account read-o
 | real data, before fixes | 14.3% | 79.7% | 99.5% | 94.1% | 70.2% | 55.0% |
 | + themed card/backdrop, tab geometry, app widget | 14.3% | 12.2% | 8.9% | 18.0% | 12.5% | 12.7% |
 | + hero asset size fix, status dot, custom status bubble | 13.4% | 8.9% | 8.0% | 9.2% | 9.2% | 10.0% |
+| + name style font, tag select, badges, bio links/offset, note, button colour, banner crop (9565842) | 7.6% | 8.4% | 7.0% | — | 5.4% | 8.8% |
 
 Added rows:
 
@@ -85,6 +86,9 @@ Added rows:
 | themed card | #3330 `profile_s3DB6Y` + `:before` | background | gradient primary→140px→secondary, overlay black/.6 | `card` `card_layers` | ✅ |
 | themed backdrop | #3324-#3328 `outer_P1YEjQ`/`inner_`/`backgroundImage_s3DB6Y` | layers | modal colour, black .48→.12 @300, banner .3 masked 280 | `render` `backdrop` | ✅ (no 15px blur) |
 | tabs | #3476-#3485 | position | x+32, y+20; item lh 14 pb 16; panel +20 | `tabs` | ✅ 8.9% |
-| Activity tab | `vanilla-settings-profile-editor-activity` #4567-#4665 `card_Bu4Al8`, `badgesContainer_CTWncy` | layout | sections gap 24, cards p12 r12 gap 8, 60px image r8, name heading-xs/semibold, badges 12px icon + body-xs | `profile_activity.rs` (`GET /content-inventory/users/{id}/outbox` + `/applications/public`) | ✅ recent activity (12.9% overall), ❌ "current activity" voice card, ❌ new-player badge glyph (MedalIcon guess not in cache) |
+| Activity tab | `vanilla-settings-profile-editor-activity` #4567-#4665 `card_Bu4Al8`, `badgesContainer_CTWncy` | layout | sections gap 24, cards p12 r12 gap 8, 60px image r8, name heading-xs/semibold, badges 12px icon + body-xs | `profile_activity.rs` (`GET /content-inventory/users/{id}/outbox` + `/applications/public`) | ✅ recent activity (12.9% overall), ✅ time rule = client `aJ` (entry snowflake; <12h hours, <9d rounded days, weeks, 30-day months), ✅ NewUserSimpleIcon / FlashIcon, ❌ "current activity" voice card |
 | collectible pickers | `vanilla-profile-picker-{decoration,effect,frame,nameplate}` `modal_UlS6S9`, `decorationGridItem_hxzEt-`, `decorationPreview_lCPrts` | layout | 603/666 wide r12, tiles 75x80 / 83x80 / nameplate 105x80 + 224x48 rows, 12 apart, 2px brand ring, preview 208 + small column, footer Apply/Cancel | `collectible_picker.rs` (owned items from `GET /users/@me/collectibles-purchases`) | ✅ decoration 5.0%, effect 21.9% (preview card simplified), ❌ "Nitro exclusive"/shop sections (shop catalogue not loaded); Apply = preview only, never saved |
 | app widget | #3498-#3539 `widgetContainer_zEJODa` | layout | r16, header 24, content p32 0, hero 204x148 fade, 2x2 items 48px gap 16 | `profile_widgets.rs` | ✅ structure, ❌ hero image fade exact |
+| card name/tag/badges | #3387 `dnsFont_`, #3408 `selectButtonPill_C3qxaU`, #3412 `container_IqWmhA` | font, layout | name style font; pill 24h p0 6 0 8 r8 + chevron; badges p1 3 gap 2 | `card`, `tag_select`, `badges_row` | ✅ |
+| card bio / note | #3443-#3447, #3462-#3475 | links, offset | --text-link, editable at heading bottom +5; note -4 -7 | `bio_markup`, `card` | ✅ |
+| Send message colour | #3421 | background | --profile-gradient-button-color = primary walked in Lab to contrast 7-10 vs white (module 498596 `OB`) | `gradient_button_color` (test: #00A7FF → #004D9A ±1) | ✅ |
