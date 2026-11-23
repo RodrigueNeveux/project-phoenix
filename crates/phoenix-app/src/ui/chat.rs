@@ -129,7 +129,9 @@ fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
                 div()
                     .flex_1()
                     .min_w_0()
+                    .overflow_hidden()
                     .flex()
+                    .flex_wrap()
                     .text_size(z(14.))
                     .line_height(z(18.))
                     .text_color(tk(idx::TEXT_DEFAULT))
@@ -139,21 +141,26 @@ fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
             .child(
                 div()
                     .id("discovery-notice-close")
+                    .group("discovery-notice-close")
                     .flex_none()
                     .size(z(32.))
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .text_color(tk(idx::ICON_MUTED))
-                    .hover(|s| s.text_color(tk(idx::ICON_DEFAULT)))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         if let Ok(mut v) = NOTICE_CLOSED.lock() {
                             v.push(gid.0);
                         }
                         cx.notify();
                     }))
-                    .child(gpui::svg().path(crate::icons::path("close")).size(z(18.))),
+                    .child(
+                        gpui::svg()
+                            .path(crate::icons::path("close"))
+                            .size(z(18.))
+                            .text_color(tk(idx::ICON_MUTED))
+                            .group_hover("discovery-notice-close", |s| s.text_color(tk(idx::ICON_DEFAULT))),
+                    ),
             )
             .into_any_element(),
     )

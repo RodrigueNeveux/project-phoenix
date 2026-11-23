@@ -51,7 +51,7 @@ CSS under ~/discord-phoenix-ref/current-client/css. Tokens are from `theme::gene
 | typing | 56501 base_U9Tvvz | font/color | 12px/16px 500, --text-subtle, h 24, gap 4, dots gap 2 | composer.rs typing | ✅ |
 | welcome | 274698 container_/emptyChannelIcon_/description_ | margin/icon/color | 16px; 68px mt16 --background-mod-muted; --text-default | chat.rs intro | ✅ |
 
-| server tag (message, reply) | 738015 clanTagChiplet_, chipletContainerInner_ | chip | --background-mod-strong, r 4, 0 4px, .72rem, ml 6px (reply 2px, opacity .64), lh 16 | chat.rs server_tag_chip | ✅ |
+| server tag (message, reply) | vanilla-dm #1270 / #1424 clanTagChiplet_ chipletContainerInner_ | chip | --background-mod-strong, r 4, 0 4px, .72rem, h 15, margin -2 0 0 6 (reply -2 4 0 2, opacity .64) | chat.rs server_tag_chip | ✅ (reply mr 4 + h 15 added) |
 
 Still to check: polls, selects, stickers, the slowmode and char counter details.
 
@@ -98,10 +98,10 @@ Dump `vanilla-guild-text` (guild text channel with embed, reactions, reply). No 
 | element | dump node | values | our code | status |
 |---|---|---|---|---|
 | reply order | #1280..#1291 | avatar 16 (mr 4), then APP tag (`botTagCompact_`, mr 4), then username 14/500, then preview | chat.rs `reply` | ✅ (tag was after the name) |
-| reply "@" | #1287 | no "@" when the reply didn't ping | chat.rs `reply` | ❌ model has no reply-mention flag yet |
+| reply "@" | #1287 | no "@" when the reply didn't ping | chat.rs `reply` (`msg.reply_mentions_author`, set in convert.rs from `mentions` ∋ replied author) | ✅ |
 | reply placeholder | #1291 `repliedTextPlaceholder_` | "Clique pour voir le message", italic, when the replied message has no text | chat.rs `reply` | ✅ (new) |
 | edited marker | #1211 `edited_2i8Bfm` | 10px/10 400 `#73747d`, own line after an embed | chat.rs `edited_marker` | ✅ |
 | reactions | #1275 `reactionBtn_ forceShow_` | add button always visible: padding 5 7, r 8, 1px transparent, `--reaction-background-default`, 18px icon | message_ext.rs `reactions` | ✅ (was hover-only, 20px) |
 | reaction pill | `reaction_` | r 8, padding 2 6, emoji 20, count 14 semibold | message_ext.rs | ✅ |
-| discovery notice | channel notice "Le contenu des messages de ce salon peut être affiché sur des pages web" | banner under the header | — | ❌ not implemented |
-| header topic | header | "Mode Découverte" text before the topic | chat.rs `header` | ❌ |
+| discovery notice | vanilla-guild-text #1101 `bar_8PBDGr` / #1103 text / #1105 close | --background-feedback-mod-info, 1px --inlinenotice-border-info, padding 4 8 4 16, gap 8, 14/18 --text-default, underlined "En savoir plus", 32px close 18px glyph | chat.rs `discovery_notice` | ✅ (compare honeypot (Discovery guild) 23.0→22.1 % overall, messages 25.5→22.7; anchor arrow `arrow_8PBDGr` ❌) |
+| header topic | vanilla-guild-text #1060 dot_GxzgQj (ml 4 mr 12), #1062 label 14/18 500 --text-muted, #1068 leadingBar_ 1×16 --border-subtle ml 8 | "Mode Découverte" before the topic | chat.rs `header` | ✅ (side-by-side match on honeypot; header region 10.6 % unchanged, dominated by other glyphs) |

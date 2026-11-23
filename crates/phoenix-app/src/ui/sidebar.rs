@@ -266,6 +266,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                         .line_height(z(20.))
                                         .font_weight(FontWeight::SEMIBOLD)
                                         .text_color(fg)
+                                        .whitespace_nowrap()
+                                        .overflow_hidden()
                                         .text_ellipsis()
                                         .child(g.name.clone()),
                                         ),
