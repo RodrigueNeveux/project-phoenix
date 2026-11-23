@@ -192,6 +192,26 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             rest.patch_settings_json(folders_json(&folders)).await.map_err(e)?;
             ParityReply::Done
         }
+        ParityRequest::ArchivedThreads { channel } => {
+            use phoenix_api::rest::threads::{ArchiveKind, merge_archived};
+            let public = rest.archived_threads(sf(channel), ArchiveKind::Public, None).await.map_err(e)?;
+            // Missing permission on private threads is not an error for the browser.
+            let private = rest.archived_threads(sf(channel), ArchiveKind::JoinedPrivate, None).await.unwrap_or_default();
+            let has_more = public.has_more || private.has_more;
+            let posts = merge_archived(public.threads, private.threads)
+                .iter()
+                .map(|t| ForumPost {
+                    thread: id(t.id),
+                    title: t.name.clone().unwrap_or_default(),
+                    tags: vec![],
+                    message_count: t.message_count.unwrap_or(0),
+                    first_message: None,
+                    owner: t.owner_id.map(id),
+                    last_message: t.last_message_id.map(id),
+                })
+                .collect();
+            ParityReply::ForumPosts { posts, has_more }
+        }
     })
 }
 

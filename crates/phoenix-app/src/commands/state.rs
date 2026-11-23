@@ -209,6 +209,8 @@ pub struct GroupDmPicker {
 pub struct ParityUi {
     pub inbox: InboxState,
     pub threads_open: bool,
+    /// Archived threads per channel for the threads browser ("older threads").
+    pub archived_threads: HashMap<Id, Vec<ForumPost>>,
     pub forums: HashMap<Id, ForumView>,
     /// "New Post" clicked: build the composer on the next frame.
     pub forum_compose_request: Option<Id>,

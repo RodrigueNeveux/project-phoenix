@@ -121,6 +121,8 @@ pub enum ParityRequest {
     CreateGroupDm(Vec<Id>),
     /// Save the guild rail order and folders (`guild_folders`).
     GuildFolders(Vec<FolderSync>),
+    /// Archived public + joined private threads of a text channel (threads browser).
+    ArchivedThreads { channel: Id },
 }
 
 #[derive(Clone, Debug)]

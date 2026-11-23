@@ -68,6 +68,15 @@ impl PhoenixApp {
     pub fn toggle_threads_popout(&mut self, cx: &mut Context<Self>) {
         self.parity.threads_open = !self.parity.threads_open;
         self.parity.inbox.open = false;
+        if self.parity.threads_open
+            && let Some(ch) = self.selected_channel
+        {
+            self.parity_request(ParityRequest::ArchivedThreads { channel: ch }, cx, move |a, r, _| {
+                if let Ok(ParityReply::ForumPosts { posts, .. }) = r {
+                    a.parity.archived_threads.insert(ch, posts);
+                }
+            });
+        }
         cx.notify();
     }
 
@@ -1031,6 +1040,12 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
     }
     let ch = app.selected_channel?;
     let list_src = app.nav.threads.get(&ch).cloned().unwrap_or_default();
+    let archived: Vec<_> = app
+        .parity
+        .archived_threads
+        .get(&ch)
+        .map(|v| v.iter().filter(|p| !list_src.iter().any(|t| t.id == p.thread)).cloned().collect())
+        .unwrap_or_default();
     let header = div()
         .flex_none()
         .h(z(48.))
@@ -1064,7 +1079,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
         .child(div().ml(z(8.)).child(sm_text_button("threads-create", crate::t!("threads.create"), true)));
     // list_6_wQXw: padding 0 16.
     let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).flex().flex_col();
-    if list_src.is_empty() {
+    if list_src.is_empty() && archived.is_empty() {
         // container_0FCMV2: min-height 400, padding 32, centred; 256×144
         // illustration mb 12; heading-xl/semibold 24/32 --text-strong mb 8;
         // body-md/normal 16/20 --text-default; cta margin-top 24 (md primary).
@@ -1086,7 +1101,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                     ),
                 ),
         );
-    } else {
+    } else if !list_src.is_empty() {
         // sectionHeader_6_wQXw (threads-lrer #1432): 24px, margin 8 0, 14/18.67
         // 500 --text-default, no uppercase: "N fils rejoints" (the gateway's
         // active threads are the joined ones; "anciens fils" needs the archive).
@@ -1147,6 +1162,13 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                     })))
                 }),
         );
+    }
+    if !archived.is_empty() {
+        // threads-lrer #1442: same sectionHeader_6_wQXw as the joined group.
+        list = list.child(section_header(crate::t!("threads.older").to_string()));
+    }
+    for p in archived {
+        list = list.child(archived_row(app, p, cx));
     }
     Some(
         gpui::deferred(
@@ -1588,6 +1610,76 @@ pub fn dialogs(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement
     out.extend(group_dm(app, cx));
     out.extend(crate::ui::forum::compose_modal(app, cx));
     out
+}
+
+/// sectionHeader_6_wQXw (threads-lrer #1432/#1442): 24px, margin 8 0,
+/// 14/18.67 500 --text-default, no text-transform.
+fn section_header(label: String) -> gpui::Div {
+    div()
+        .flex_none()
+        .h(z(24.))
+        .my(z(8.))
+        .flex()
+        .items_center()
+        .text_size(z(14.))
+        .line_height(z(18.67))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .child(label)
+}
+
+/// Archived thread row (threads-lrer #1443): container_yRVHqK 72px like the
+/// joined rows; subtext_yRVHqK = 16px avatar_yRVHqK (margin-end 8) +
+/// "Started by" + startedByName_ (margin-start 4) + bullet_yRVHqK (20px box)
+/// + "Last activity: <long date>".
+fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let r = crate::model::ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
+    let last = p.last_message.unwrap_or(p.thread);
+    let secs = ((last.0 >> 22) / 1000 + 1_420_070_400) as i64;
+    let date = chrono::DateTime::from_timestamp(secs, 0).map(|d| crate::i18n::long_date(d.with_timezone(&chrono::Local).date_naive())).unwrap_or_default();
+    let owner = p.owner.and_then(|o| app.users.get(&o));
+    let owner_name = owner.map(|u| if u.display_name.is_empty() { u.name.clone() } else { u.display_name.clone() }).unwrap_or_default();
+    div()
+        .id(("archived-thread-row", p.thread.0))
+        .flex_none()
+        .h(z(72.))
+        .mb(z(8.))
+        .p(z(15.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGHEST)).border_color(tk(idx::BORDER_NORMAL)))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .on_click(cx.listener(move |a, _, w, cx| {
+            a.parity.threads_open = false;
+            a.open_thread(r.clone(), w, cx);
+        }))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(p.title.clone()))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(tk(idx::TEXT_DEFAULT))
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .child(div().mr(z(8.)).child(avatar(owner, 16.)))
+                        .child(crate::t!("threads.started_by"))
+                        .child(div().ml(z(4.)).child(owner_name))
+                        .child(div().w(z(20.)).flex().justify_center().child("•"))
+                        .child(crate::t!("threads.last_activity", date = date)),
+                ),
+        )
 }
 
 #[cfg(test)]
