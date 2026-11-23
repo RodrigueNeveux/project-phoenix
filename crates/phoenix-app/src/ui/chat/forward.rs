@@ -48,7 +48,8 @@ pub fn wrap(app: &PhoenixApp, f: &Forward, body: gpui::Div) -> AnyElement {
                         .text_size(z(14.))
                         .line_height(z(18.))
                         .text_color(tk(idx::TEXT_MUTED))
-                        .child(div().w(z(16.)).flex().justify_center().child("\u{21B1}"))
+                        // headerIcon_: 16x16 ArrowAngleRightUpIcon, --text-muted
+                        .child(gpui::svg().path(crate::icons::path("chat/forwarded")).size(z(16.)).flex_none().text_color(tk(idx::TEXT_MUTED)))
                         .child(div().font_weight(FontWeight::SEMIBOLD).italic().child(crate::t!("chat.forwarded"))),
                 )
                 .child(body)

@@ -29,6 +29,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("help", &["CircleQuestionIcon"]),
     ("nav/back", &["ArrowLargeLeftIcon"]),
     ("nav/forward", &["ArrowLargeRightIcon"]),
+    ("chat/forwarded", &["ArrowAngleRightUpIcon"]),
     ("invite", &["UserPlusIcon"]),
     ("gift", &["GiftIcon"]),
     ("gif", &["GifIcon"]),
