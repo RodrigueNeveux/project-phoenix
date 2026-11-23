@@ -224,6 +224,7 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         tracing_warn(&format!("could not save token to the keyring: {e}"));
     }
 
+    crate::commands::set_session_id(&ready.session_id);
     let prefs = Prefs::from_ready(&ready);
     let data = convert::build_ready(&cache, &ready, &prefs);
     let adapter = Arc::new(Mutex::new(Adapter::new(ready.user.id, prefs)));
@@ -262,6 +263,16 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             crate::voice::call::manager().on_gateway(&emit, s.adapter.lock().me.0, &ev);
         }
         account::on_gateway(&s, &ev);
+        if let GatewayEvent::Ready(r) = &ev {
+            // Reconnected without RESUME: the cache was rebuilt, rebuild the UI too.
+            crate::commands::set_session_id(&r.session_id);
+            let prefs = Prefs::from_ready(r);
+            let data = convert::build_ready(&s.cache, r, &prefs);
+            *s.adapter.lock() = Adapter::new(r.user.id, prefs);
+            inner.emit(AppEvent::Resync(crate::commands::Resync(data)));
+            nav::snapshot(&s.cache, r).into_iter().for_each(|e| inner.emit(e));
+            continue;
+        }
         nav::on_gateway(&s.cache, &ev).into_iter().for_each(|e| inner.emit(e));
         let events = s.adapter.lock().map(&s.cache, &ev);
         if let GatewayEvent::MessageCreate(m) = &ev
@@ -384,6 +395,10 @@ impl Backend for DiscordBackend {
 
     fn needs_mfa(&self) -> bool {
         self.inner.mfa_ticket.lock().is_some()
+    }
+
+    fn parity(&self, req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
+        self.with_session(move |_, s| crate::commands::exec::request(s.rest.clone(), req))
     }
 
     fn nav(&self, req: crate::ui::home::data::NavRequest) -> BoxFuture<crate::ui::home::data::NavReply> {

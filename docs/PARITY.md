@@ -25,14 +25,14 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 
 ## /channels
 - [ ] `/channels/1000000000000000000/messages`
-- [ ] `/channels/{id}/application-command-index`
+- [x] `/channels/{id}/application-command-index`
 - [ ] `/channels/{id}/application-commands/search`
 - [ ] `/channels/{id}/explicit-media`
 - [x] `/channels/{id}/messages/#mid/ack`
 - [ ] `/channels/{id}/messages/search`
-- [ ] `/channels/{id}/polls/#pid/answers/@me`
+- [x] `/channels/{id}/polls/#pid/answers/@me`
 - [ ] `/channels/{id}/post-data`
-- [ ] `/channels/{id}/threads/search`
+- [x] `/channels/{id}/threads/search`
 
 ## /checkpoint
 - [ ] `/checkpoint`
@@ -86,7 +86,7 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 ## /guilds
 - [ ] `/guilds/{id}/admin-server-eligibility`
 - [ ] `/guilds/{id}/analytics/member-insights`
-- [ ] `/guilds/{id}/application-command-index`
+- [x] `/guilds/{id}/application-command-index`
 - [ ] `/guilds/{id}/applications`
 - [ ] `/guilds/{id}/entitlements`
 - [ ] `/guilds/{id}/members/@me`
@@ -165,7 +165,7 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 - [ ] `/users/@me/activities/statistics/applications`
 - [ ] `/users/@me/affinities/guilds`
 - [ ] `/users/@me/affinities/users`
-- [ ] `/users/@me/application-command-index`
+- [x] `/users/@me/application-command-index`
 - [ ] `/users/@me/applications/{id}/entitlements`
 - [ ] `/users/@me/avatars`
 - [ ] `/users/@me/billing/campaign-context`
@@ -194,7 +194,7 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 - [ ] `/users/@me/inventory`
 - [ ] `/users/@me/library`
 - [ ] `/users/@me/meaningfully-online`
-- [ ] `/users/@me/mentions`
+- [x] `/users/@me/mentions`
 - [ ] `/users/@me/mfa/webauthn/credentials`
 - [ ] `/users/@me/notification-center/items`
 - [ ] `/users/@me/outbound-promotions/codes`
@@ -204,7 +204,7 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 - [ ] `/users/@me/referrals/eligible-users`
 - [ ] `/users/@me/referrals/{id}/preview`
 - [x] `/users/@me/relationships`
-- [ ] `/users/@me/saved-messages`
+- [x] `/users/@me/saved-messages`
 - [x] `/users/@me/settings-proto`
 - [ ] `/users/@me/survey`
 - [ ] `/users/@me/unclaimed-games`

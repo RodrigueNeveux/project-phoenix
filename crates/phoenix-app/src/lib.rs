@@ -4,6 +4,7 @@ pub mod app;
 pub mod assets;
 pub mod auth;
 pub mod backend;
+pub mod commands;
 pub mod discord_backend;
 pub mod grouping;
 pub mod markdown;

@@ -87,6 +87,8 @@ pub enum AppEvent {
     Activities { user: Id, activities: Vec<crate::presence::Activity> },
     /// QR code login progress (see [`Backend::remote_auth`]).
     RemoteAuth(crate::auth::RemoteAuthUpdate),
+    /// Fresh READY after a reconnect that could not resume.
+    Resync(crate::commands::Resync),
 }
 
 /// A file to attach to an outgoing message.
@@ -240,6 +242,10 @@ pub trait Backend: Send + Sync + 'static {
     /// Own status (op 3 + settings). `custom` = custom status text.
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
+    }
+    /// Slash commands, interactions, inbox, moderation, forums, polls (`crate::commands`).
+    fn parity(&self, _req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
+        Box::pin(async { Err(BackendError("Not available offline.".into())) })
     }
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {

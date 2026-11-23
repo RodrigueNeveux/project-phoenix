@@ -801,6 +801,7 @@ impl PhoenixApp {
             AppEvent::Nav(e) => self.on_nav_event(e, cx),
             ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => ui::members::on_event(self, ev, cx),
             AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
+            AppEvent::Resync(r) => crate::commands::on_resync(self, r, cx),
             AppEvent::Disconnected(reason) => {
                 self.clear_session();
                 self.login_error = Some(reason.into());
