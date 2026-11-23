@@ -246,18 +246,19 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     items.push(if cat { move_to(&e, false) } else { crate::actions::channel::move_to_item(app, &e, g, id) });
                     items.push(MenuItem::Separator);
                     if cat {
-                        items.push(stub(&e, "menu.edit_category"));
+                        items.push(act(&e, crate::t!("menu.edit_category"), move |a, _, cx| a.open_channel_settings(id, cx)));
                         items.push(MenuItem::danger(crate::t!("menu.delete_category"), None, {
                             let e = e.clone();
-                            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!("menu.delete_category"), cx))
+                            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_delete_channel(id, cx))
                         }));
                     } else {
-                        items.push(stub(&e, "menu.edit_channel"));
+                        items.push(act(&e, crate::t!("menu.edit_channel"), move |a, _, cx| a.open_channel_settings(id, cx)));
                         items.push(act(&e, crate::t!("menu.clone_channel"), move |a, _, cx| a.open_clone_channel(g, id, cx)));
-                        items.push(stub(&e, "menu.create_text_channel"));
+                        let parent = app.channels.get(&id).and_then(|c| c.parent);
+                        items.push(act(&e, crate::t!("menu.create_text_channel"), move |a, _, cx| a.open_create_channel(g, parent, crate::model::ChannelKind::Text, cx)));
                         items.push(MenuItem::danger(crate::t!("menu.delete_channel"), None, {
                             let e = e.clone();
-                            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!("menu.delete_channel"), cx))
+                            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_delete_channel(id, cx))
                         }));
                     }
                 }
@@ -376,13 +377,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             if manage_guild {
                 items.push(crate::actions::channel::server_settings_item(&e, g));
             }
-            items.push(stub(&e, "menu.privacy_settings"));
+            items.push(act(&e, crate::t!("menu.privacy_settings"), move |a, _, cx| a.open_privacy_settings(g, cx)));
             items.push(act(&e, crate::t!("menu.edit_server_profile"), move |a, _, cx| a.open_server_profile(g, cx)));
             if manage_channels || events {
                 items.push(MenuItem::Separator);
                 if manage_channels {
-                    items.push(stub(&e, "menu.create_channel"));
-                    items.push(stub(&e, "menu.create_category"));
+                    items.push(act(&e, crate::t!("menu.create_channel"), move |a, _, cx| a.open_create_channel(g, None, crate::model::ChannelKind::Text, cx)));
+                    items.push(act(&e, crate::t!("menu.create_category"), move |a, _, cx| a.open_create_channel(g, None, crate::model::ChannelKind::Category, cx)));
                 }
                 if events {
                     items.push(act(&e, crate::t!("menu.create_event"), move |a, _, cx| a.open_create_event(g, cx)));
@@ -394,7 +395,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             if manage_guild {
                 items.push(MenuItem::danger(crate::t!("menu.security_actions"), None, {
                     let e = e.clone();
-                    move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!("menu.security_actions"), cx))
+                    move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
                 }));
             }
             if !owner {
