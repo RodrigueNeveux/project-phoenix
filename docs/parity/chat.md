@@ -51,4 +51,6 @@ CSS under ~/discord-phoenix-ref/current-client/css. Tokens are from `theme::gene
 | typing | 56501 base_U9Tvvz | font/color | 12px/16px 500, --text-subtle, h 24, gap 4, dots gap 2 | composer.rs typing | ✅ |
 | welcome | 274698 container_/emptyChannelIcon_/description_ | margin/icon/color | 16px; 68px mt16 --background-mod-muted; --text-default | chat.rs intro | ✅ |
 
-Still to check: server tag badge inside message headers, polls, selects, stickers, the slowmode and char counter details.
+| server tag (message, reply) | 738015 clanTagChiplet_, chipletContainerInner_ | chip | --background-mod-strong, r 4, 0 4px, .72rem, ml 6px (reply 2px, opacity .64), lh 16 | chat.rs server_tag_chip | ✅ |
+
+Still to check: polls, selects, stickers, the slowmode and char counter details.

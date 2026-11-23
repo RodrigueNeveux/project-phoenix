@@ -317,6 +317,27 @@ fn time_tooltip(ts: i64) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 's
     crate::ui::tooltip::tip(format_time_tooltip(ts))
 }
 
+/// Server tag chiplet after a username: clanTagChiplet_ (--background-mod-strong, radius 4px,
+/// padding 0 4px, .72rem, margin-inline-start 6px; 2px in reply lines) holding
+/// chipletContainerInner_ (line-height 16px) with the guild badge and tag text.
+fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -> gpui::Div {
+    div()
+        .flex_none()
+        .ml(z(if in_reply { 2. } else { 6. }))
+        .px(z(4.))
+        .rounded(z(4.))
+        .bg(tk(idx::BACKGROUND_MOD_STRONG))
+        .flex()
+        .items_center()
+        .gap(z(2.))
+        .text_size(fz(11.52))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .when_some(tag.1.clone(), |d, u| d.child(img(u).size(z(12.)).flex_none()))
+        .child(tag.0.clone())
+}
+
 /// Discord's "APP" tag next to bot authors.
 fn bot_tag() -> impl IntoElement {
     div()
@@ -363,7 +384,7 @@ fn message(
     // Compact: the absolute "[time] Name" header overlaps the first line by
     // `overflow` px; pad the first text line with thin spaces to clear it.
     let is_bot = author.is_some_and(|a| a.bot);
-    let overflow = if compact { compact_header_overflow(&r.time_short, &name, is_bot, cx) } else { 0. };
+    let overflow = if compact { compact_header_overflow(&r.time_short, &name, is_bot, author.and_then(|u| u.tag.as_ref()).map(|t| t.0.as_ref()), cx) } else { 0. };
     if compact && !matches!(r.blocks.first(), Some(RBlock::Text(_))) {
         content = content.child(div().flex_none().h(fz(22.)));
     }
@@ -446,6 +467,7 @@ fn message(
                         ru.map(|u| u.display_name.as_ref()).unwrap_or("Unknown")
                     ))),
             )
+            .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))
             .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag()))
             .child(
                 div()
@@ -528,6 +550,7 @@ fn message(
                             .child(r.time_short.clone()),
                     )
                     .child(author_name)
+                    .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
                     .when(is_bot, |d| d.child(bot_tag())),
             )
             .child(content)
@@ -555,6 +578,7 @@ fn message(
                         .items_center()
                         .h(fz(22.))
                         .child(author_name)
+                        .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
                         .when(is_bot, |d| d.child(bot_tag()))
                         .child(
                             // .cozy_ .timestamp_: .75rem, --chat-text-muted, medium;
@@ -621,7 +645,7 @@ fn text_width(cx: &App, font: &gpui::Font, size: gpui::Pixels, s: &str) -> f32 {
 
 /// How far the compact "[time] Name " header runs past the 80 px content
 /// indent, i.e. the first-line text indent.
-fn compact_header_overflow(time: &str, name: &str, bot: bool, cx: &App) -> f32 {
+fn compact_header_overflow(time: &str, name: &str, bot: bool, tag: Option<&str>, cx: &App) -> f32 {
     let mut name_font = crate::richtext::ui_font();
     name_font.weight = FontWeight::MEDIUM;
     let mut w = text_width(cx, &crate::richtext::ui_font(), z(11.), time) + f32::from(z(4.));
@@ -630,6 +654,11 @@ fn compact_header_overflow(time: &str, name: &str, bot: bool, cx: &App) -> f32 {
         let mut f = name_font.clone();
         f.weight = FontWeight::SEMIBOLD;
         w += text_width(cx, &f, z(10.), "APP") + f32::from(z(12.));
+    }
+    if let Some(tg) = tag {
+        let mut f = name_font.clone();
+        f.weight = FontWeight::SEMIBOLD;
+        w += text_width(cx, &f, fz(11.52), tg) + f32::from(z(14.)); // ml 6 + px 4*2
     }
     w += f32::from(z(4.));
     (f32::from(z(16.)) + w - f32::from(z(80.))).max(0.)
