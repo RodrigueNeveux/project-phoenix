@@ -75,6 +75,8 @@ pub enum EmojiTarget {
 }
 
 pub struct ChatState {
+    /// `theme::style_generation()` the cached rich text was built under.
+    pub style_gen: u32,
     pub edit: Option<EditState>,
     /// Reply pings the author (the "@ ON" toggle in the reply bar).
     pub reply_mention: bool,
@@ -99,6 +101,7 @@ pub struct ChatState {
 impl Default for ChatState {
     fn default() -> Self {
         Self {
+            style_gen: 0,
             edit: None,
             reply_mention: true,
             menu: None,
@@ -179,6 +182,26 @@ pub fn pending_file(name: String, bytes: Vec<u8>) -> PendingFile {
 }
 
 impl PhoenixApp {
+    /// Cached rich text holds colours resolved for the theme it was built
+    /// under, and the list caches row heights: rebuild both after a theme,
+    /// zoom or font size change.
+    pub fn chat_sync_style(&mut self) {
+        let g = crate::theme::style_generation();
+        if self.chat.style_gen == g {
+            return;
+        }
+        self.chat.style_gen = g;
+        let ids: Vec<Id> = self.messages.keys().copied().collect();
+        for ch in ids {
+            let Some(mut entry) = self.messages.remove(&ch) else { continue };
+            entry.rendered = (0..entry.msgs.len())
+                .map(|i| self.render_msg(&entry.msgs[i], i.checked_sub(1).map(|p| &entry.msgs[p])))
+                .collect();
+            self.messages.insert(ch, entry);
+        }
+        self.message_list.remeasure();
+    }
+
     fn find_msg(&self, channel: Id, id: Id) -> Option<&Message> {
         self.messages.get(&channel)?.msgs.iter().find(|m| m.id == id)
     }

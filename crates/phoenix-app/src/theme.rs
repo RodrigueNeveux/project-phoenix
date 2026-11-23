@@ -118,6 +118,14 @@ static TABLE: [[u32; 4]; TOKEN_COUNT] = [
 static THEME: AtomicU8 = AtomicU8::new(0);
 static ZOOM: AtomicU32 = AtomicU32::new(100);
 static FONT_PX: AtomicU32 = AtomicU32::new(16);
+/// Bumped whenever theme, zoom or font size change, so views that cache
+/// resolved colours or measured heights know to rebuild them.
+static STYLE_GEN: AtomicU32 = AtomicU32::new(0);
+
+/// Current style generation (see [`STYLE_GEN`]).
+pub fn style_generation() -> u32 {
+    STYLE_GEN.load(Ordering::Relaxed)
+}
 
 fn theme_index(t: AppTheme) -> u8 {
     match t {
@@ -132,6 +140,16 @@ fn theme_index(t: AppTheme) -> u8 {
 pub fn resolve(hex: u32) -> u32 {
     if hex & 0xFF00_0000 == TOKEN && ((hex & 0xFFFF) as usize) < TOKEN_COUNT {
         TABLE[(hex & 0xFFFF) as usize][THEME.load(Ordering::Relaxed) as usize]
+    } else {
+        hex
+    }
+}
+
+/// Resolve a palette value for a given theme instead of the active one (theme
+/// preview cards).
+pub fn resolve_for(hex: u32, theme: AppTheme) -> u32 {
+    if hex & 0xFF00_0000 == TOKEN && ((hex & 0xFFFF) as usize) < TOKEN_COUNT {
+        TABLE[(hex & 0xFFFF) as usize][theme_index(theme) as usize]
     } else {
         hex
     }
@@ -156,8 +174,11 @@ pub fn is_light() -> bool {
 pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut App) {
     let t = theme_index(prefs.synced.theme);
     let prev = THEME.swap(t, Ordering::Relaxed);
-    ZOOM.store(prefs.local.zoom.clamp(50, 200), Ordering::Relaxed);
-    FONT_PX.store(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
+    let pz = ZOOM.swap(prefs.local.zoom.clamp(50, 200), Ordering::Relaxed);
+    let pf = FONT_PX.swap(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
+    if prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) {
+        STYLE_GEN.fetch_add(1, Ordering::Relaxed);
+    }
     let rem = px(16. * zoom());
     if window.rem_size() != rem {
         window.set_rem_size(rem);
@@ -166,6 +187,10 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
         let mode = if t == 1 { ThemeMode::Light } else { ThemeMode::Dark };
         Theme::change(mode, Some(window), cx);
     }
+}
+
+fn zoom_raw() -> u32 {
+    ZOOM.load(Ordering::Relaxed)
 }
 
 /// UI zoom factor (Settings > Appearance > Zoom level), 1.0 = 100 %.

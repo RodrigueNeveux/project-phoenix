@@ -541,7 +541,7 @@ impl PhoenixApp {
         Resolver { users: &self.users, channels: &self.channels }
     }
 
-    fn render_msg(&self, m: &Message, prev: Option<&Message>) -> RenderedMessage {
+    pub(crate) fn render_msg(&self, m: &Message, prev: Option<&Message>) -> RenderedMessage {
         let revealed = |i: usize| self.revealed.contains(&(m.id, i));
         let (parsed, blocks, mentions_me, preview) =
             richtext::build(&m.content, &self.resolver(), self.me.id, &revealed);
@@ -1099,6 +1099,7 @@ impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
+        self.chat_sync_style();
         let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),
             Screen::Main => div()
