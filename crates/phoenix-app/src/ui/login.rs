@@ -2,13 +2,14 @@
 //! on the left, QR code panel on the right.
 
 use gpui::{
-    Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div,
+    AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div,
     img, prelude::*, px,
 };
 use gpui_component::input::{Input, InputState};
 
 use crate::{
     app::PhoenixApp,
+    auth::{MfaMethod, QrState},
     theme::{Palette, c},
 };
 
@@ -84,13 +85,41 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                         .child("Your token is stored only in your system keyring and never shared."),
                 )
             } else if app.login_mfa_step {
-                d.child(label("TWO-FACTOR CODE", err)).child(field(&app.login_mfa)).child(
-                    div()
-                        .mt(px(8.))
-                        .text_size(px(12.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child("Open your authenticator app and enter the 6-digit code."),
-                )
+                let opts = app.backend.mfa_options();
+                let method = app.login_ui.mfa_method;
+                let (title, hint): (&'static str, SharedString) = match method {
+                    MfaMethod::Totp => ("TWO-FACTOR CODE", "Open your authenticator app and enter the 6-digit code.".into()),
+                    MfaMethod::Backup => ("BACKUP CODE", "Enter one of your 8-character backup codes.".into()),
+                    MfaMethod::Sms => (
+                        "SMS CODE",
+                        match &app.login_ui.sms_phone {
+                            Some(p) => format!("We sent a code to {p}.").into(),
+                            None => "Sending a code to your phone…".into(),
+                        },
+                    ),
+                };
+                let methods: Vec<MfaMethod> = [
+                    (opts.totp, MfaMethod::Totp),
+                    (opts.sms, MfaMethod::Sms),
+                    (opts.backup || opts.totp, MfaMethod::Backup),
+                ]
+                .into_iter()
+                .filter_map(|(on, m)| on.then_some(m))
+                .collect();
+                d.child(label(title, err))
+                    .child(field(&app.login_mfa))
+                    .child(div().mt(px(8.)).text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(hint))
+                    .child(div().mt(px(12.)).flex().gap(px(12.)).children(methods.into_iter().filter(|m| *m != method).map(
+                        |m| {
+                            div()
+                                .id(SharedString::from(format!("mfa-{}", m.label())))
+                                .text_size(px(14.))
+                                .text_color(c(Palette::TEXT_LINK))
+                                .cursor_pointer()
+                                .on_click(cx.listener(move |a, _, _, cx| crate::auth::choose_mfa(a, m, cx)))
+                                .child(SharedString::from(format!("Use {}", m.label().to_lowercase())))
+                        },
+                    )))
             } else {
                 d.child(label("EMAIL OR PHONE NUMBER", err))
                     .child(field(&app.login_email))
@@ -151,6 +180,35 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .child(if app.login_with_token { "Log in with email instead" } else { "Log in with a token" }),
         );
 
+    let (qr_box, qr_title, qr_text): (AnyElement, &'static str, SharedString) = match &app.login_ui.qr {
+        QrState::Code { modules, size, .. } => (
+            qr_code(modules, *size),
+            "Log in with QR Code",
+            "Scan this with the Discord mobile app to log in instantly.".into(),
+        ),
+        QrState::Scanned(name) => (
+            div().text_size(px(48.)).child("✓").into_any_element(),
+            "Check your phone!",
+            format!("Logging in as {name}. Confirm on the Discord mobile app.").into(),
+        ),
+        QrState::Unavailable(e) => (
+            div()
+                .id("qr-retry")
+                .cursor_pointer()
+                .text_color(c(Palette::BLURPLE))
+                .text_size(px(14.))
+                .on_click(cx.listener(|a, _, _, cx| crate::auth::retry_qr(a, cx)))
+                .child("Retry")
+                .into_any_element(),
+            "QR code unavailable",
+            e.clone().into(),
+        ),
+        _ => (
+            div().text_color(gpui::black()).text_size(px(14.)).child("Generating…").into_any_element(),
+            "Log in with QR Code",
+            "Scan this with the Discord mobile app to log in instantly.".into(),
+        ),
+    };
     let qr = div()
         .w(px(240.))
         .flex_none()
@@ -166,7 +224,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(qr_pattern()),
+                .child(qr_box),
         )
         .child(
             div()
@@ -174,7 +232,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .text_size(px(24.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child("Log in with QR Code"),
+                .child(qr_title),
         )
         .child(
             div()
@@ -182,7 +240,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .text_size(px(16.))
                 .text_color(c(Palette::INTERACTIVE))
                 .text_center()
-                .child("Scan this with the Discord mobile app to log in instantly."),
+                .child(qr_text),
         );
 
     div()
@@ -211,37 +269,27 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         )
 }
 
-/// Decorative fake QR pattern (no real code: QR login needs the remote-auth
-/// gateway, which lives in phoenix-api).
-fn qr_pattern() -> impl IntoElement {
-    const N: usize = 21;
+/// Real QR code (remote-auth URL) drawn as module squares, with the app
+/// icon in the middle (error correction absorbs the covered modules).
+fn qr_code(modules: &[bool], n: usize) -> AnyElement {
+    let cell = (160. / n as f32).floor().max(1.);
     let mut col = div().flex().flex_col();
-    for y in 0..N {
+    for y in 0..n {
         let mut row = div().flex();
-        for x in 0..N {
-            let finder = |cx: usize, cy: usize| {
-                let (dx, dy) = (x.abs_diff(cx), y.abs_diff(cy));
-                let d = dx.max(dy);
-                d <= 3 && d != 2
-            };
-            let in_finder = (x < 7 && y < 7) || (x >= N - 7 && y < 7) || (x < 7 && y >= N - 7);
-            let on = if in_finder {
-                finder(3, 3) || finder(N - 4, 3) || finder(3, N - 4)
-            } else {
-                (x * 7 + y * 13 + x * y) % 5 < 2
-            };
-            row = row.child(div().size(px(7.6)).when(on, |d| d.bg(gpui::black())));
+        for x in 0..n {
+            row = row.child(div().size(px(cell)).when(modules[y * n + x], |d| d.bg(gpui::black())));
         }
         col = col.child(row);
     }
+    let side = cell * n as f32;
     div()
         .relative()
         .child(col)
         .child(
             div()
                 .absolute()
-                .top(px(64.))
-                .left(px(64.))
+                .top(px(side / 2. - 16.))
+                .left(px(side / 2. - 16.))
                 .size(px(32.))
                 .rounded(px(6.))
                 .bg(gpui::white())
@@ -250,4 +298,5 @@ fn qr_pattern() -> impl IntoElement {
                 .justify_center()
                 .child(img("icon.png").size(px(28.))),
         )
+        .into_any_element()
 }

@@ -7,6 +7,7 @@
 //! [`convert::Adapter`].
 
 pub mod convert;
+mod account;
 pub mod http;
 pub mod store;
 
@@ -46,7 +47,7 @@ fn err(s: impl Into<String>) -> BackendError {
 fn api_err(e: ApiError) -> BackendError {
     match &e {
         ApiError::CaptchaRequired { .. } => {
-            err("Discord asked for a captcha, which Phoenix can't show yet. Log in with a token instead.")
+            err("Discord wants a captcha for this login, which Phoenix can't show. Scan the QR code with the mobile app or log in with a token instead.")
         }
         ApiError::Api { body, .. } if e.is_unauthorized() || body.code == 50035 => {
             err(if body.message.is_empty() { "Login or password is invalid.".to_owned() } else { body.message.clone() })
@@ -71,6 +72,8 @@ struct Session {
     subscribed: Mutex<HashSet<(u64, u64)>>,
     /// Last typing notification (channel, when): Discord shows it for ~10s.
     last_typing: Mutex<Option<(u64, Instant)>>,
+    /// Notification levels / mutes for desktop notifications.
+    notify: Mutex<crate::notifications::NotifyPrefs>,
 }
 
 struct Inner {
@@ -78,6 +81,8 @@ struct Inner {
     sink: Mutex<Option<EventSink>>,
     session: Mutex<Option<Arc<Session>>>,
     mfa_ticket: Mutex<Option<Secret>>,
+    mfa_opts: Mutex<crate::auth::MfaOptions>,
+    remote_auth: Mutex<Option<tokio::task::AbortHandle>>,
     store: Arc<dyn TokenStore>,
     props: ClientProperties,
 }
@@ -123,6 +128,8 @@ impl DiscordBackend {
                 sink: Mutex::new(None),
                 session: Mutex::new(None),
                 mfa_ticket: Mutex::new(None),
+                mfa_opts: Mutex::new(Default::default()),
+                remote_auth: Mutex::new(None),
                 store,
                 props: ClientProperties::linux_desktop(),
             }),
@@ -226,6 +233,7 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         pending_acks: Mutex::new(HashSet::new()),
         subscribed: Mutex::new(HashSet::new()),
         last_typing: Mutex::new(None),
+        notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready(ready.user_guild_settings.as_ref())),
     });
     *inner.session.lock() = Some(session.clone());
     tokio::spawn(pump(inner.clone(), session, rx));
@@ -244,6 +252,7 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             return;
         }
         s.cache.apply(&ev);
+        account::on_gateway(&s, &ev);
         let events = s.adapter.lock().map(&s.cache, &ev);
         if let GatewayEvent::MessageCreate(m) = &ev
             && *s.selected_channel.lock() == Some(m.channel_id)
@@ -301,14 +310,8 @@ impl Backend for DiscordBackend {
                     let rest = RestClient::unauthenticated(inner.props.clone());
                     match rest.login(login.trim(), &password).await.map_err(api_err)? {
                         LoginResponse::Token { token, .. } => connect(inner, Secret::new(token), true).await,
-                        LoginResponse::MfaRequired { ticket, totp, .. } => {
-                            if !totp {
-                                return Err(err(
-                                    "This account uses SMS or a security key for 2FA, which isn't supported yet. Log in with a token instead.",
-                                ));
-                            }
-                            *inner.mfa_ticket.lock() = Some(Secret::new(ticket));
-                            Err(err("Enter the 6-digit code from your authenticator app."))
+                        LoginResponse::MfaRequired { ticket, totp, sms, backup, .. } => {
+                            account::mfa_required(&inner, ticket, totp, sms, backup)
                         }
                     }
                 }
@@ -339,6 +342,34 @@ impl Backend for DiscordBackend {
             }
             res
         }))
+    }
+
+    fn mfa_options(&self) -> crate::auth::MfaOptions {
+        self.mfa_options_impl()
+    }
+
+    fn login_mfa(&self, method: crate::auth::MfaMethod, code: String) -> BoxFuture<ReadyData> {
+        self.login_mfa_impl(method, code)
+    }
+
+    fn send_mfa_sms(&self) -> BoxFuture<String> {
+        self.send_mfa_sms_impl()
+    }
+
+    fn remote_auth(&self) -> Option<BoxFuture<ReadyData>> {
+        Some(self.remote_auth_impl())
+    }
+
+    fn cancel_remote_auth(&self) {
+        self.cancel_remote_auth_impl()
+    }
+
+    fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
+        self.load_settings_impl()
+    }
+
+    fn save_settings(&self, patch: crate::ui::settings::SettingsPatch) -> BoxFuture<crate::ui::settings::SyncedSettings> {
+        self.save_settings_impl(patch)
     }
 
     fn needs_mfa(&self) -> bool {

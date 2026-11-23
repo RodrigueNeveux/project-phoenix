@@ -32,6 +32,7 @@ pub const CONTEXT: &str = "PhoenixApp";
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("ctrl-k", QuickSwitcher, Some(CONTEXT)),
+        KeyBinding::new("ctrl-,", ui::settings::OpenSettings, Some(CONTEXT)),
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("ctrl-u", ToggleMembers, Some(CONTEXT)),
     ]);
@@ -131,6 +132,9 @@ pub struct PhoenixApp {
     pub show_members: bool,
 
     pub switcher: Option<Switcher>,
+    pub settings: Option<ui::settings::SettingsState>,
+    pub prefs: ui::settings::Prefs,
+    pub login_ui: crate::auth::LoginUi,
     pub revealed: HashSet<(Id, usize)>,
     pub utc_offset: i64,
     _subs: Vec<Subscription>,
@@ -309,6 +313,9 @@ impl PhoenixApp {
             switcher: None,
             revealed: HashSet::new(),
             utc_offset,
+            settings: None,
+            prefs: ui::settings::Prefs::load(),
+            login_ui: Default::default(),
             _subs: subs,
         }
     }
@@ -318,6 +325,9 @@ impl PhoenixApp {
     pub fn submit_login(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         if self.logging_in {
             return;
+        }
+        if self.login_mfa_step && !self.login_with_token {
+            return crate::auth::submit_mfa(self, cx);
         }
         let creds = if self.login_mfa_step && !self.login_with_token {
             Credentials::Mfa { code: self.login_mfa.read(cx).value().to_string() }
@@ -394,7 +404,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
+    pub fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
         self.clear_session();
         self.presences = r.presences.into_iter().collect();
         self.me = r.me;
@@ -421,6 +431,7 @@ impl PhoenixApp {
         self.screen = Screen::Main;
         let first = self.guilds.first().map(|g| g.id);
         self.select_guild(first, cx);
+        ui::settings::on_ready(self, cx);
     }
 
     // ----------------------------------------------------------- selection
@@ -769,6 +780,7 @@ impl PhoenixApp {
                     self.rebuild_sidebar();
                 }
             }
+            AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
             AppEvent::Disconnected(reason) => {
                 self.clear_session();
                 self.login_error = Some(reason.into());
@@ -1090,6 +1102,9 @@ impl PhoenixApp {
     }
 
     fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        if ui::settings::on_escape(self, cx) {
+            return;
+        }
         if self.switcher.is_some() {
             self.close_switcher(window, cx);
         } else if self.editing.take().is_some() {
@@ -1122,6 +1137,7 @@ impl Focusable for PhoenixApp {
 
 impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::auth::ensure_qr(self, cx);
         let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),
             Screen::Main => div()
@@ -1139,6 +1155,7 @@ impl Render for PhoenixApp {
             .track_focus(&self.focus)
             .on_action(cx.listener(|this, _: &QuickSwitcher, w, cx| this.open_switcher(w, cx)))
             .on_action(cx.listener(Self::on_escape))
+            .on_action(cx.listener(ui::settings::open_action))
             .on_action(cx.listener(|this, _: &ToggleMembers, _, cx| {
                 this.show_members = !this.show_members;
                 cx.notify();
@@ -1149,6 +1166,7 @@ impl Render for PhoenixApp {
             .text_color(c(Palette::TEXT_NORMAL))
             .bg(c(Palette::BG_TERTIARY))
             .child(body)
+            .children(ui::settings::render(self, window, cx))
             .when_some(self.switcher.as_ref(), |d, sw| d.child(ui::switcher::render(self, sw, cx)))
     }
 }

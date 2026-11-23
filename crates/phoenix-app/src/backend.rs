@@ -77,6 +77,8 @@ pub enum AppEvent {
     DmUpsert(Channel),
     DmDelete(Id),
     Disconnected(String),
+    /// QR code login progress (see [`Backend::remote_auth`]).
+    RemoteAuth(crate::auth::RemoteAuthUpdate),
 }
 
 pub type EventSink = Arc<dyn Fn(AppEvent) + Send + Sync>;
@@ -103,6 +105,35 @@ pub trait Backend: Send + Sync + 'static {
     /// True after a password login asked for a TOTP code.
     fn needs_mfa(&self) -> bool {
         false
+    }
+    /// Second-factor methods offered by the pending password login.
+    fn mfa_options(&self) -> crate::auth::MfaOptions {
+        crate::auth::MfaOptions { totp: true, ..Default::default() }
+    }
+    /// Finish a password login with a TOTP, SMS or backup code.
+    fn login_mfa(&self, _method: crate::auth::MfaMethod, code: String) -> BoxFuture<ReadyData> {
+        self.login(Credentials::Mfa { code })
+    }
+    /// Text an MFA code; resolves to the redacted phone number.
+    fn send_mfa_sms(&self) -> BoxFuture<String> {
+        Box::pin(async { Err(BackendError("SMS isn't available.".into())) })
+    }
+    /// Start a QR code login. Progress arrives as [`AppEvent::RemoteAuth`];
+    /// resolves once the phone confirmed (empty error when cancelled/expired).
+    fn remote_auth(&self) -> Option<BoxFuture<ReadyData>> {
+        None
+    }
+    fn cancel_remote_auth(&self) {}
+    /// Synced user settings (settings-proto, JSON fallback).
+    fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
+        Box::pin(async { Ok(Default::default()) })
+    }
+    fn save_settings(&self, patch: crate::ui::settings::SettingsPatch) -> BoxFuture<crate::ui::settings::SyncedSettings> {
+        Box::pin(async move {
+            let mut s = crate::ui::settings::SyncedSettings::default();
+            s.apply(&patch);
+            Ok(s)
+        })
     }
     /// Close the session and forget stored credentials.
     fn logout(&self) -> BoxFuture<()> {

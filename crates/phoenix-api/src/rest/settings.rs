@@ -193,6 +193,71 @@ impl PreloadedUserSettings {
     }
 }
 
+/// One change, encoded with explicit field values (so `false` / `0` are
+/// really sent, which prost's proto3 encoding would omit).
+#[derive(Clone, Debug, PartialEq)]
+pub enum SettingChange {
+    Theme(Theme),
+    DeveloperMode(bool),
+    Compact(bool),
+    Locale(String),
+    DefaultGuildsRestricted(bool),
+}
+
+fn varint(mut v: u64, out: &mut Vec<u8>) {
+    while v >= 0x80 {
+        out.push((v as u8) | 0x80);
+        v >>= 7;
+    }
+    out.push(v as u8);
+}
+
+fn field_varint(tag: u32, v: u64, out: &mut Vec<u8>) {
+    varint((tag as u64) << 3, out);
+    varint(v, out);
+}
+
+fn field_bytes(tag: u32, data: &[u8], out: &mut Vec<u8>) {
+    varint(((tag as u64) << 3) | 2, out);
+    varint(data.len() as u64, out);
+    out.extend_from_slice(data);
+}
+
+impl SettingChange {
+    /// Top-level `PreloadedUserSettings` bytes carrying only this change.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut inner = Vec::new();
+        let mut out = Vec::new();
+        match self {
+            Self::Theme(t) => {
+                field_varint(1, t.to_proto() as u64, &mut inner);
+                field_bytes(13, &inner, &mut out);
+            }
+            Self::DeveloperMode(b) => {
+                field_varint(2, *b as u64, &mut inner);
+                field_bytes(13, &inner, &mut out);
+            }
+            Self::Compact(b) => {
+                let mut w = Vec::new();
+                field_varint(1, *b as u64, &mut w);
+                field_bytes(17, &w, &mut inner);
+                field_bytes(6, &inner, &mut out);
+            }
+            Self::Locale(l) => {
+                let mut w = Vec::new();
+                field_bytes(1, l.as_bytes(), &mut w);
+                field_bytes(1, &w, &mut inner);
+                field_bytes(12, &inner, &mut out);
+            }
+            Self::DefaultGuildsRestricted(b) => {
+                field_varint(4, *b as u64, &mut inner);
+                field_bytes(8, &inner, &mut out);
+            }
+        }
+        out
+    }
+}
+
 #[derive(Deserialize)]
 struct ProtoBody {
     settings: String,
@@ -214,6 +279,19 @@ impl RestClient {
                 "/users/@me/settings-proto/1",
                 Body::Json(json!({ "settings": patch.encode_base64() })),
             )
+            .await?;
+        PreloadedUserSettings::decode_base64(&b.settings)
+    }
+
+    /// Apply one change. The full current blob is sent back with the change
+    /// appended: protobuf merge semantics make the appended fields win while
+    /// every field Phoenix doesn't model is preserved.
+    pub async fn patch_setting(&self, change: &SettingChange) -> Result<PreloadedUserSettings> {
+        let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/1", Body::None).await?;
+        let mut raw = STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))?;
+        raw.extend(change.encode());
+        let b: ProtoBody = self
+            .call(Method::PATCH, "/users/@me/settings-proto/1", Body::Json(json!({ "settings": STANDARD.encode(raw) })))
             .await?;
         PreloadedUserSettings::decode_base64(&b.settings)
     }
@@ -273,6 +351,25 @@ mod tests {
         let d = PreloadedUserSettings::decode_base64(&STANDARD.encode(bytes)).unwrap();
         assert_eq!(d.theme(), Theme::Light);
         assert!(!d.compact());
+    }
+
+    #[test]
+    fn appended_changes_override_including_false() {
+        let base = PreloadedUserSettings::patch_appearance(Theme::Light, true);
+        let mut raw = prost::Message::encode_to_vec(&base);
+        raw.extend(SettingChange::DeveloperMode(false).encode());
+        raw.extend(SettingChange::Compact(true).encode());
+        raw.extend(SettingChange::Locale("fr".into()).encode());
+        raw.extend(SettingChange::DefaultGuildsRestricted(true).encode());
+        let d = PreloadedUserSettings::decode_base64(&STANDARD.encode(&raw)).unwrap();
+        assert_eq!(d.theme(), Theme::Light, "untouched field kept");
+        assert!(!d.developer_mode());
+        assert!(d.compact());
+        assert_eq!(d.locale(), Some("fr"));
+        assert!(d.default_guilds_restricted());
+        raw.extend(SettingChange::Theme(Theme::Ash).encode());
+        let d = PreloadedUserSettings::decode_base64(&STANDARD.encode(&raw)).unwrap();
+        assert_eq!(d.theme(), Theme::Ash);
     }
 
     #[test]

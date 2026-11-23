@@ -2,12 +2,14 @@
 
 pub mod app;
 pub mod assets;
+pub mod auth;
 pub mod backend;
 pub mod discord_backend;
 pub mod grouping;
 pub mod markdown;
 pub mod mock;
 pub mod model;
+pub mod notifications;
 pub mod richtext;
 pub mod theme;
 pub mod ui;

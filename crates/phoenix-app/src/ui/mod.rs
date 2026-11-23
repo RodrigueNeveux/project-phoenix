@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod login;
+pub mod settings;
 pub mod members;
 pub mod server_bar;
 pub mod sidebar;
