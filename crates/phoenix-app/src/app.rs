@@ -44,7 +44,7 @@ pub enum Screen {
     Main,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SidebarRow {
     Category(Id),
     Channel(Id),
@@ -122,6 +122,8 @@ pub struct PhoenixApp {
 
     // Derived rows (rebuilt on change, not per frame)
     pub sidebar_rows: Vec<SidebarRow>,
+    /// Guild the current `sidebar_rows` were built for (scroll anchoring).
+    pub sidebar_rows_guild: Option<Id>,
     pub member_rows: Vec<MemberRow>,
 
     // Virtualized list states
@@ -323,6 +325,7 @@ impl PhoenixApp {
             collapsed: HashSet::new(),
             nav: Default::default(),
             sidebar_rows: Vec::new(),
+            sidebar_rows_guild: None,
             member_rows: Vec::new(),
             guild_list: ListState::new(0, ListAlignment::Top, px(200.)),
             sidebar_list: ListState::new(0, ListAlignment::Top, px(300.)),

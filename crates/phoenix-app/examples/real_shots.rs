@@ -308,6 +308,7 @@ fn apply_scroll(
             None => app.message_list.scroll_to_end(),
         }
     });
+    eprintln!("channel anchor {:?} -> {ch_anchor:?}", sc.top_channel);
     if anchor.is_none() && !at_bottom {
         eprintln!("top message not in loaded history, using distance from bottom");
     }

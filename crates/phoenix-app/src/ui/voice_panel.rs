@@ -623,13 +623,14 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                     )
                 })
                 .when(f.video, |d| d.child(asset_icon(VIDEO, 16., state)))
+                // Live `iconGroup_YUoOxm`: "Muet" then "En sourdine"; a deafened user shows both.
                 .when(local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
-                .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
-                .when(f.server_mute && !f.server_deaf, |d| d.child(icon(Icon::MicOff, 16., red)))
-                .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state)))
-                .when(f.self_mute && !f.self_deaf && !f.server_mute && !local_muted, |d| {
+                .when(f.server_mute && !local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
+                .when((f.self_mute || f.self_deaf) && !f.server_mute && !local_muted, |d| {
                     d.child(icon(Icon::MicOff, 16., state))
-                }),
+                })
+                .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
+                .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state))),
         )
         .when(in_call, |d| {
             d.on_mouse_down(MouseButton::Right, move |ev, _, cx| {

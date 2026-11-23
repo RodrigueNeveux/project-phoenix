@@ -37,6 +37,12 @@ pub fn channel_icon(kind: ChannelKind) -> Icon {
 /// with collapsed categories (persisted), hidden muted channels, threads
 /// under their parent and live voice members.
 pub fn build_rows(app: &mut PhoenixApp) {
+    // Keep the scroll position anchored on the same row across rebuilds (unread,
+    // voice or typing updates), like the live client; item 0 is the banner/spacer.
+    let anchor = app.sidebar_list.logical_scroll_top();
+    let anchor_row = anchor.item_ix.checked_sub(1).and_then(|i| app.sidebar_rows.get(i).copied());
+    let old_guild = app.sidebar_rows_guild;
+    app.sidebar_rows_guild = app.selected_guild;
     app.sidebar_rows.clear();
     match app.selected_guild {
         None => {
@@ -105,6 +111,15 @@ pub fn build_rows(app: &mut PhoenixApp) {
         }
     }
     app.sidebar_list.reset(app.sidebar_rows.len() + 1);
+    if old_guild == app.selected_guild {
+        let new_ix = match anchor_row {
+            Some(r) => app.sidebar_rows.iter().position(|x| *x == r).map(|i| i + 1),
+            None => Some(0),
+        };
+        if let Some(item_ix) = new_ix {
+            app.sidebar_list.scroll_to(gpui::ListOffset { item_ix, offset_in_item: anchor.offset_in_item });
+        }
+    }
 }
 
 /// Name a voice user row shows: guild nick, else display name.
@@ -116,6 +131,13 @@ pub fn voice_user_name(app: &PhoenixApp, user: Id) -> SharedString {
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
+    // Re-render while the top of the list is in view so the banner follows the scroll.
+    let weak = entity.downgrade();
+    app.sidebar_list.set_scroll_handler(move |ev: &gpui::ListScrollEvent, _w, cx: &mut App| {
+        if ev.visible_range.start <= 1 {
+            let _ = weak.update(cx, |_, cx| cx.notify());
+        }
+    });
     div()
         .w(z(crate::ui::sidebar_resize::width()))
         .flex_none()
@@ -179,7 +201,16 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
         Some(g) => {
             let hash = app.nav.banners.get(&g.id).cloned();
             // The refreshed client only shows a banner when the guild has one.
-            let banner = hash.as_ref().map(|_| g.banner_color.unwrap_or(Palette::BG_SECONDARY));
+            let full_h = (crate::ui::sidebar_resize::width() * 9. / 21.).round();
+            // Live client (`animatedContainer_XH4OpX`, 2026-11-23): the banner scrolls up with
+            // the list and is gone (opacity 0) once only the header bar is left.
+            let top = app.sidebar_list.logical_scroll_top();
+            let scrolled = if top.item_ix > 0 { f32::MAX } else { f32::from(top.offset_in_item) };
+            let banner_h = full_h - scrolled.min(full_h);
+            let banner = hash
+                .as_ref()
+                .filter(|_| banner_h > m::HEADER_H)
+                .map(|_| g.banner_color.unwrap_or(Palette::BG_SECONDARY));
             let menu_open = app.nav.guild_menu;
             let gid = g.id.0;
             div()
@@ -188,8 +219,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .flex_none()
                 .relative()
                 .when_some(banner, |d, col| {
-                    let h = (crate::ui::sidebar_resize::width() * 9. / 21.).round();
-                    d.h(px(h))
+                    d.h(px(banner_h))
                         .bg(c(col))
                         .overflow_hidden()
                         .when_some(hash.clone(), |d, hash| {
@@ -197,7 +227,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                 format!("https://cdn.discordapp.com/banners/{gid}/{hash}.{ext}?size=480").into()
                             };
                             let animated = hash.starts_with("a_");
-                            d.child(gpui::img(url("png")).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover))
+                            d.child(gpui::img(url("png")).absolute().bottom_0().left_0().right_0().h(px(full_h)).object_fit(gpui::ObjectFit::Cover))
                                 .when(animated, |d| {
                                     d.child(
                                         div()
@@ -420,7 +450,8 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
             // a channel's last voice user.
             let last = !matches!(app.sidebar_rows.get(ix), Some(SidebarRow::VoiceUser { .. }));
             let row = crate::ui::voice_panel::voice_user_row(app, entity, user);
-            if last { div().pb(z(10.)).child(row).into_any_element() } else { row }
+            // Stretch the row so its mute/deafen icons sit at the right edge (`icons_YUoOxm`).
+            div().w_full().flex().flex_col().when(last, |d| d.pb(z(10.))).child(row).into_any_element()
         }
     }
 }
@@ -641,7 +672,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     // or unread, `--interactive-muted` when muted.
     // `name_TNyK-N`: `--channels-default`; `modeSelected`/`modeUnreadImportant`:
     // `--interactive-text-active`; `modeMuted`: `--text-muted` at 50 % opacity.
-    let fg = if selected || (ch.unread && !ch.muted) {
+    // `modeConnected_TNyK-N .name_`: `--interactive-text-active` too.
+    let fg = if selected || connected || (ch.unread && !ch.muted) {
         tok(idx::INTERACTIVE_TEXT_ACTIVE)
     } else if ch.muted {
         tok(idx::TEXT_MUTED)
@@ -740,9 +772,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             .flex_none()
             .my(z(-4.))
             .mr(z(-4.))
-            .opacity(0.)
-            .group_hover(group.clone(), |s| s.opacity(1.))
-            .when(selected, |d| d.opacity(1.))
+            // Hidden icons take no room (live: the voice timer / name keep the full width).
+            .when(!selected, |d| d.hidden().group_hover(group.clone(), |s| s.flex()))
             .when(is_voice, |d| {
                 d.child(
                     div()
@@ -840,7 +871,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .and_then(|u| crate::ui::nameplate::layer(u, 48., crate::ui::nameplate::Place::Channel, false, selected)),
                     |d, l| d.child(l),
                 )
-                .child(lead)
+                .child(top_line(lead, connected))
                 .child(
                     div()
                         .flex_1()
@@ -902,12 +933,22 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         }),
                 )
                 .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
-                .when(ch.mentions == 0, |d| d.children(invite_hover))
-                .children(timer)
+                .when(ch.mentions == 0, |d| d.children(invite_hover.map(|h| top_line(h, connected))))
+                .children(timer.map(|t| top_line(t, connected)))
                 .children(limit_pill)
                 .children(close),
         )
         .into_any_element()
+}
+
+/// Connected voice row: `linkTop_TNyK-N` (28px, 4px below the link's top) holds the
+/// icon, name, hover actions and timer, with the status line under it.
+fn top_line(e: impl IntoElement, connected: bool) -> AnyElement {
+    if connected {
+        div().self_start().mt(z(4.)).h(z(28.)).flex().items_center().flex_none().child(e).into_any_element()
+    } else {
+        e.into_any_element()
+    }
 }
 
 /// Thread sub-row: curved connector from the parent channel, then the name.
