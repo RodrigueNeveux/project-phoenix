@@ -265,6 +265,8 @@ impl MockBackend {
                     presence: if u.id == ME { Presence::Online } else { presence },
                     activity,
                     nick: None,
+                    avatar: None,
+                    decoration: None,
                 });
             }
             members.insert(gid, ms);

@@ -1084,6 +1084,26 @@ impl PhoenixApp {
         self.members.get(&g)?.iter().find(|m| m.user == user)?.nick.clone()
     }
 
+    /// `user` as shown in guild `g`: the per-guild avatar and decoration of its
+    /// member replace the global ones (client `getGuildMemberAvatarURL`).
+    pub fn member_user(&self, g: Option<Id>, user: Id) -> Option<std::borrow::Cow<'_, crate::model::User>> {
+        let u = self.users.get(&user)?;
+        let m = g.and_then(|g| self.members.get(&g)).and_then(|ms| ms.iter().find(|m| m.user == user));
+        match m {
+            Some(m) if m.avatar.is_some() || m.decoration.is_some() => {
+                let mut u = u.clone();
+                if let Some(a) = &m.avatar {
+                    u.avatar = crate::model::ImageRef::Url(a.clone());
+                }
+                if m.decoration.is_some() {
+                    u.decoration = m.decoration.clone();
+                }
+                Some(std::borrow::Cow::Owned(u))
+            }
+            _ => Some(std::borrow::Cow::Borrowed(u)),
+        }
+    }
+
     pub fn author_color(&self, user: Id) -> Option<u32> {
         let g = self.selected_guild?;
         let m = self.members.get(&g)?.iter().find(|m| m.user == user)?;

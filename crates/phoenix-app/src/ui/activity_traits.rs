@@ -37,6 +37,22 @@ pub fn ensure(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     });
 }
 
+/// Authors of the feed entries, `None` until the feed was fetched.
+/// The client builds the member list Activity rows from this feed only
+/// (GLOBAL_FEED entries whose author is a guild member who can view the channel).
+pub fn feed_authors() -> Option<Vec<Id>> {
+    FEED.with(|f| {
+        let f = f.borrow();
+        f.0?;
+        Some(f.1.iter().map(|e| e.0).collect())
+    })
+}
+
+/// True once the feed answered and `user` authored an entry.
+pub fn in_feed(user: Id) -> bool {
+    FEED.with(|f| f.borrow().1.iter().any(|e| e.0 == user))
+}
+
 /// (first time, resurrected) for `user` playing `game`.
 pub fn traits(user: Id, game: &str) -> (bool, bool) {
     FEED.with(|f| {

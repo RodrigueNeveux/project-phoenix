@@ -66,6 +66,19 @@ pub fn decoration_url(u: &api::User) -> Option<SharedString> {
     Some(format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false").into())
 }
 
+/// Per-guild avatar (`member.avatar`): CDN `guilds/{g}/users/{u}/avatars/{hash}`.
+pub fn member_avatar_url(g: api::GuildId, u: api::UserId, m: &api::Member) -> Option<SharedString> {
+    let h = m.avatar.as_deref().filter(|h| !h.is_empty())?;
+    let ext = if h.starts_with("a_") { "gif" } else { "png" };
+    Some(format!("https://cdn.discordapp.com/guilds/{}/users/{}/avatars/{h}.{ext}?size={AVATAR_SIZE}", g.0, u.0).into())
+}
+
+/// Per-guild avatar decoration (`member.avatar_decoration_data.asset`).
+pub fn member_decoration_url(m: &api::Member) -> Option<SharedString> {
+    let a = m.avatar_decoration_data.as_ref()?.get("asset")?.as_str().filter(|a| !a.is_empty())?;
+    Some(format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false").into())
+}
+
 pub fn presence(status: &str) -> model::Presence {
     match status {
         "online" => model::Presence::Online,
@@ -758,7 +771,7 @@ impl MemberList {
             }
         }
     }
-    fn members(&self) -> (Vec<model::Member>, Vec<model::User>) {
+    fn members(&self, guild: api::GuildId) -> (Vec<model::Member>, Vec<model::User>) {
         let mut seen = HashSet::new();
         let (mut ms, mut us) = (Vec::new(), Vec::new());
         for it in self.items.iter().flatten() {
@@ -778,6 +791,8 @@ impl MemberList {
                     .and_then(Value::as_array)
                     .and_then(|a| activity(a)),
                 nick: m.member.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
+                avatar: member_avatar_url(guild, u.id, &m.member),
+                decoration: member_decoration_url(&m.member),
             });
         }
         (ms, us)
@@ -847,7 +862,7 @@ impl Adapter {
 
     /// Synced list members + my own member + op-8 chunked members, as one `GuildMembers`.
     fn emit_members(&self, cache: &Cache, guild: api::GuildId, out: &mut Vec<AppEvent>) {
-        let (mut members, users) = self.lists.get(&guild.0).map(|l| l.members()).unwrap_or_default();
+        let (mut members, users) = self.lists.get(&guild.0).map(|l| l.members(guild)).unwrap_or_default();
         // Own member (READY merged_members / GUILD_MEMBER_UPDATE) and members requested
         // with op 8 so server nicks resolve in headers and reply previews even when the
         // author is outside the synced list range.
@@ -863,6 +878,8 @@ impl Adapter {
                     presence: if u == self.me { model::Presence::Online } else { model::Presence::Offline },
                     activity: None,
                     nick: m.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
+                    avatar: member_avatar_url(guild, u, &m),
+                    decoration: member_decoration_url(&m),
                 });
             }
         }

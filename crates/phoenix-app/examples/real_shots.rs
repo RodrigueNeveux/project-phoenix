@@ -149,7 +149,7 @@ impl Backend for ReadOnly {
     fn forum_tags(&self, f: Id) -> Vec<phoenix_app::commands::ForumTag> {
         self.0.forum_tags(f)
     }
-    /// Only the forum post listing (a read-only thread search) goes through.
+    /// Only the forum post listing and the content inventory (read-only GETs) go through.
     fn parity(&self, req: phoenix_app::commands::ParityRequest) -> BoxFuture<phoenix_app::commands::ParityReply> {
         match req {
             phoenix_app::commands::ParityRequest::ForumPosts { .. } => {
@@ -163,6 +163,8 @@ impl Backend for ReadOnly {
                     r
                 })
             }
+            // GET /content-inventory/users/@me (member list Activity feed).
+            phoenix_app::commands::ParityRequest::ContentInventory => self.0.parity(req),
             _ => denied(),
         }
     }
@@ -482,6 +484,14 @@ fn main() -> anyhow::Result<()> {
             for ch in app.channels.values().filter(|c| !c.voice_users.is_empty() && c.guild == app.selected_guild) {
                 let names: Vec<_> = ch.voice_users.iter().map(|u| app.users.get(u).map(|u| u.display_name.clone())).collect();
                 println!("voice {} {:?}", ch.name, names);
+                for u in &ch.voice_users {
+                    let m = app.selected_guild.and_then(|g| app.members.get(&g)).and_then(|ms| ms.iter().find(|m| m.user == *u));
+                    println!("  vu {} member={:?}", u.0, m.map(|m| (m.nick.clone(), m.presence, m.activity.clone())));
+                }
+            }
+            println!("feed {:?}", phoenix_app::ui::activity_traits::feed_authors().map(|v| v.len()));
+            for a in phoenix_app::ui::activity_traits::feed_authors().unwrap_or_default() {
+                println!("feed author {} {:?}", a.0, app.users.get(&a).map(|u| u.display_name.clone()));
             }
             if let Some(c) = app.selected_channel.and_then(|c| app.messages.get(&c)) {
                 for m in c.msgs.iter().rev().take(12) {

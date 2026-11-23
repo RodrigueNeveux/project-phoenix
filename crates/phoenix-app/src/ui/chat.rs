@@ -631,7 +631,8 @@ fn message(
     entry: &crate::app::ChannelMessages,
     cx: &App,
 ) -> AnyElement {
-    let author = app.users.get(&msg.author);
+    let author_cow = app.member_user(app.selected_guild, msg.author);
+    let author = author_cow.as_deref();
     let name = msg.author_nick.clone().or_else(|| app.member_nick(msg.author)).or_else(|| author.map(|u| u.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown"));
     // username_ color: role colour, else --text-strong.
     let color = app.author_color(msg.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG));
@@ -704,7 +705,7 @@ fn message(
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);
         let (ru, preview, rnick) = match found {
-            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author)).or_else(|| {
+            Some(p) => (app.member_user(app.selected_guild, entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author)).or_else(|| {
                 // referenced_message has no `member`: reuse the nick from any loaded message by that author.
                 let a = entry.msgs[p].author;
                 entry.msgs.iter().rev().filter(|m| m.author == a).find_map(|m| m.author_nick.clone())
@@ -742,19 +743,19 @@ fn message(
                     .rounded_tl(z(6.))
                     .border_color(tk(idx::SPINE_DEFAULT)),
             )
-            .when(!compact, |d| d.child(avatar(ru, 16.)))
+            .when(!compact, |d| d.child(avatar(ru.as_deref(), 16.)))
             // vanilla-guild-text #1283: `botTagCompact_` sits before the replied username.
-            .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag(ru.is_some_and(|u| u.verified_bot)).ml_0()))
+            .when(ru.as_deref().is_some_and(|u| u.bot), |d| d.child(bot_tag(ru.as_deref().is_some_and(|u| u.verified_bot)).ml_0()))
             .child(
                 div()
                     .flex_none()
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(ru.and_then(|u| app.author_color(u.id)).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
+                    .text_color(ru.as_deref().and_then(|u| app.author_color(u.id)).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
                     .opacity(0.64)
                     .child(SharedString::from(format!(
                         "{}{}",
                         if msg.reply_mentions_author { "@" } else { "" }, // repliedMessage_ username: "@" only when the reply pinged
-                        rnick.map(|n| n.to_string()).or_else(|| ru.map(|u| u.display_name.to_string())).unwrap_or_else(|| crate::t!("common.unknown").to_string())
+                        rnick.map(|n| n.to_string()).or_else(|| ru.as_deref().map(|u| u.display_name.to_string())).unwrap_or_else(|| crate::t!("common.unknown").to_string())
                     ))),
             )
             .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))

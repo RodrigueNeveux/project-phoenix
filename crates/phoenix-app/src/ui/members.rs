@@ -116,6 +116,10 @@ fn playing(app: &PhoenixApp, g: Id) -> Vec<(Id, &Activity)> {
         .activities
         .iter()
         .filter(|(u, _)| in_guild(u))
+        // Client member list groups hook: rows come only from the content inventory
+        // GLOBAL_FEED (`entries.filter(author is member && can VIEW_CHANNEL)`), never
+        // from live presences alone, so a game with no feed entry shows no card.
+        .filter(|(u, _)| crate::ui::activity_traits::in_feed(**u))
         .filter_map(|(u, acts)| Some((*u, acts.iter().find(|a| a.kind == ActivityKind::Playing)?)))
         .collect();
     v.sort_by_key(|(u, a)| (std::cmp::Reverse(a.start.unwrap_or(0)), u.0));
@@ -176,7 +180,8 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
             ),
     );
     for (uid, a) in acts.into_iter().take(3) {
-        let user = app.users.get(&uid);
+        let user_cow = app.member_user(Some(g), uid);
+        let user = user_cow.as_deref();
         let mem = app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == uid));
         let color = mem.and_then(|m| app.member_color(g, m));
         let name = user.map(|u| u.display_name.clone()).unwrap_or_default();
@@ -398,7 +403,8 @@ fn member_row(
     mem: &Member,
     nick: Option<&SharedString>,
 ) -> AnyElement {
-    let user = app.users.get(&mem.user);
+    let user_cow = app.member_user(Some(g), mem.user);
+    let user = user_cow.as_deref();
     let offline = mem.presence == Presence::Offline;
     let name = nick.cloned().or_else(|| user.map(|u| u.display_name.clone())).unwrap_or_default();
     let uid = mem.user;
@@ -497,7 +503,9 @@ fn member_row(
                             .text_size(z(12.))
                             .line_height(z(16.))
                             .text_color(c(Palette::TEXT_MUTED))
-                            .when(in_voice, |d| d.child(gpui::svg().path(crate::icons::path("speaker")).size(z(12.)).flex_none().text_color(c(Palette::TEXT_MUTED))))
+                            // Voice icon is green like the online dot: both sample #45a366 in the
+                            // vanilla 20261123-155512 capture = --status-online after colour management.
+                            .when(in_voice, |d| d.child(gpui::svg().path(crate::icons::path("speaker")).size(z(12.)).flex_none().text_color(c(tok(idx::STATUS_ONLINE)))))
                             .when(in_voice && mem.activity.is_some(), |d| d.child(div().flex_none().text_color(c(Palette::TEXT_NORMAL)).child("•")))
                             .when_some(mem.activity.clone(), |d, a| {
                                 d.child(div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(a))

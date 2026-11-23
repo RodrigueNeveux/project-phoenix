@@ -271,7 +271,8 @@ fn section_heading(t: SharedString) -> Div {
 
 /// Everything both layouts need about one user.
 pub(crate) struct Info<'a> {
-    pub(crate) user: Option<&'a crate::model::User>,
+    /// Per-guild avatar/decoration applied (`PhoenixApp::member_user`).
+    pub(crate) user: Option<std::borrow::Cow<'a, crate::model::User>>,
     pub(crate) prof: Option<&'a Profile>,
     pub(crate) presence: crate::model::Presence,
     pub(crate) acts: &'a [Activity],
@@ -283,7 +284,8 @@ pub(crate) struct Info<'a> {
 }
 
 pub(crate) fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<'a> {
-    let user = app.users.get(&uid);
+    let user_cow = app.member_user(guild, uid);
+    let user = user_cow.as_deref();
     let prof: Option<&Profile> = app.people.profiles.get(&uid);
     let presence = app.presence_of(uid);
     let acts = app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or_default();
@@ -318,7 +320,7 @@ pub(crate) fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<
         role_ids.sort_by_key(|r| -gr.iter().find(|x| x.id == *r).map(|x| x.position).unwrap_or(0));
     }
     let roles = role_ids.iter().filter_map(|r| guild_roles?.iter().find(|x| x.id == *r).cloned()).collect();
-    Info { user, prof, presence, acts, custom, display, username, accent, roles }
+    Info { user: user_cow, prof, presence, acts, custom, display, username, accent, roles }
 }
 
 /// Banner: 58495 `banner_s9bWOi` (radius --radius-sm/--radius-lg top, 1px
@@ -343,7 +345,7 @@ pub(crate) fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> D
         .p(z(ring))
         .rounded_full()
         .bg(c(ring_color))
-        .child(avatar_with_status(i.user, size, i.presence, c(ring_color)))
+        .child(avatar_with_status(i.user.as_deref(), size, i.presence, c(ring_color)))
         .when_some(i.prof.and_then(|p| p.decoration.clone()), |d, deco| {
             // Avatar decorations are drawn at 1.2x the avatar, centred.
             let s = size * 1.2;
@@ -372,7 +374,7 @@ fn badges(i: &Info) -> Option<Div> {
             .border_color(c(tok(idx::BORDER_MUTED)))
             .children({
                 // UserProfileBadgeListRows: first 6 + overflowSlot "+N" (ui::profile_bio).
-                let (shown, hidden) = crate::ui::profile_bio::split_badges(b, i.user.is_some_and(|u| u.bot));
+                let (shown, hidden) = crate::ui::profile_bio::split_badges(b, i.user.as_deref().is_some_and(|u| u.bot));
                 shown
                     .iter()
                     .map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none().into_any_element())
@@ -405,9 +407,9 @@ fn status_bubble(t: SharedString) -> Div {
 /// display name heading-lg/semibold 20/24 (modal heading-xl/semibold 24/32),
 /// then username, pronouns, server tag and badges (gap 2px 6px).
 pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> Div {
-    let tag = i.user.and_then(|u| u.tag.clone());
+    let tag = i.user.as_deref().and_then(|u| u.tag.clone());
     let pronouns = i.prof.map(|p| p.pronouns.clone()).filter(|p| !p.is_empty());
-    let bot = i.user.is_some_and(|u| u.bot);
+    let bot = i.user.as_deref().is_some_and(|u| u.bot);
     div()
         .flex()
         .flex_col()
@@ -418,11 +420,11 @@ pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> D
                 .items_center()
                 .gap(z(4.)) // displayNameRow gap --space-4
                 .child(
-                    crate::fonts::styled_name(div(), i.user, true)
+                    crate::fonts::styled_name(div(), i.user.as_deref(), true)
                         .text_size(z(if big { 24. } else { 20. }))
                         .line_height(z(if big { 32. } else { 24. }))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .when(i.user.is_none_or(|u| u.name_style.as_ref().is_none_or(|s| s.2.is_empty())), |d| d.text_color(c(tok(idx::TEXT_STRONG))))
+                        .when(i.user.as_deref().is_none_or(|u| u.name_style.as_ref().is_none_or(|s| s.2.is_empty())), |d| d.text_color(c(tok(idx::TEXT_STRONG))))
                         .text_ellipsis()
                         .child(i.display.clone()),
                 )

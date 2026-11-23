@@ -250,6 +250,10 @@ pub struct Member {
     pub activity: Option<SharedString>,
     /// Guild nickname (`member.nick`), shown instead of the display name.
     pub nick: Option<SharedString>,
+    /// Per-guild avatar URL (`member.avatar`), shown instead of the user's.
+    pub avatar: Option<SharedString>,
+    /// Per-guild avatar decoration URL (`member.avatar_decoration_data`).
+    pub decoration: Option<SharedString>,
 }
 
 pub fn acronym(name: &str) -> SharedString {

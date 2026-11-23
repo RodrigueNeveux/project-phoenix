@@ -185,6 +185,8 @@ pub fn list_rows<'a>(items: impl Iterator<Item = &'a Option<MemberListItem>>) ->
                     presence: crate::discord_backend::convert::presence(status),
                     activity: summary(&a),
                     nick: None,
+                    avatar: None,
+                    decoration: None,
                 }, m.member.nick.clone().filter(|n| !n.is_empty()).map(Into::into)));
                 acts.push((uid, a));
             }

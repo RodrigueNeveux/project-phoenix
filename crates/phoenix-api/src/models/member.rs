@@ -16,6 +16,12 @@ pub struct Member {
     pub nick: Option<String>,
     #[serde(default)]
     pub avatar: Option<String>,
+    /// Per-guild profile banner hash.
+    #[serde(default)]
+    pub banner: Option<String>,
+    /// Per-guild avatar decoration (`{asset, sku_id}`), overrides the user's.
+    #[serde(default)]
+    pub avatar_decoration_data: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "null_default")]
     pub roles: Vec<RoleId>,
     #[serde(default)]
