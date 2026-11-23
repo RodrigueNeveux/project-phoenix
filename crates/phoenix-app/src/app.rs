@@ -66,11 +66,7 @@ pub struct ChannelMessages {
     pub reached_start: bool,
 }
 
-pub struct Switcher {
-    pub input: Entity<InputState>,
-    pub results: Vec<Id>,
-    pub _sub: Subscription,
-}
+pub use crate::ui::switcher::Switcher;
 
 pub struct PhoenixApp {
     pub backend: Arc<dyn Backend>,
@@ -194,6 +190,7 @@ impl PhoenixApp {
         let composer = cx.new(|cx| InputState::new(window, cx));
 
         let mut subs = Vec::new();
+        subs.extend(ui::pickers::install(&composer, window, cx));
         subs.push(cx.subscribe_in(&composer, window, |this, _, ev: &InputEvent, window, cx| {
             match ev {
                 InputEvent::PressEnter { shift: false, .. } => this.submit_composer(window, cx),
@@ -1061,55 +1058,7 @@ impl PhoenixApp {
     // ------------------------------------------------------ quick switcher
 
     pub fn open_switcher(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.screen != Screen::Main {
-            return;
-        }
-        let input = cx.new(|cx| {
-            InputState::new(window, cx).placeholder("Where would you like to go?")
-        });
-        let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| match ev {
-            InputEvent::Change => this.update_switcher(cx),
-            InputEvent::PressEnter { .. } => {
-                if let Some(first) = this.switcher.as_ref().and_then(|s| s.results.first().copied()) {
-                    this.close_switcher(window, cx);
-                    this.select_channel(first, cx);
-                }
-            }
-            _ => {}
-        });
-        input.update(cx, |s, cx| s.focus(window, cx));
-        self.switcher = Some(Switcher { input, results: Vec::new(), _sub: sub });
-        self.update_switcher(cx);
-    }
-
-    fn update_switcher(&mut self, cx: &mut Context<Self>) {
-        let Some(sw) = &self.switcher else { return };
-        let q = sw.input.read(cx).value().to_lowercase();
-        let q = q.trim_start_matches(['#', '@', '!', '*']);
-        let mut res: Vec<(i32, Id)> = self
-            .channels
-            .values()
-            .filter(|c| c.kind != ChannelKind::Category)
-            .filter_map(|c| {
-                let name = c.name.to_lowercase();
-                let score = if q.is_empty() {
-                    if c.unread { 0 } else { 2 }
-                } else if name.starts_with(q) {
-                    0
-                } else if name.contains(q) {
-                    1
-                } else {
-                    return None;
-                };
-                Some((score, c.id))
-            })
-            .collect();
-        res.sort_by_key(|(s, id)| (*s, self.channels[id].name.clone()));
-        res.truncate(12);
-        if let Some(sw) = &mut self.switcher {
-            sw.results = res.into_iter().map(|(_, id)| id).collect();
-        }
-        cx.notify();
+        ui::switcher::open(self, window, cx);
     }
 
     pub fn close_switcher(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1193,6 +1142,7 @@ impl Render for PhoenixApp {
             .children(ui::settings::render(self, window, cx))
             .when_some(self.switcher.as_ref(), |d, sw| d.child(ui::switcher::render(self, sw, cx)))
             .children(ui::image_viewer::render(window, cx))
+            .children(ui::pickers::render_overlays(self, window, cx))
             .children(ui::profile::overlays(self, window, cx))
     }
 }

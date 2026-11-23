@@ -7,6 +7,7 @@
 //! [`convert::Adapter`].
 
 pub mod convert;
+mod expressions;
 mod account;
 pub mod http;
 mod people;
@@ -518,6 +519,31 @@ impl Backend for DiscordBackend {
             s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             Ok(convert::message(&m))
         })
+    }
+
+    fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
+        self.inner.session().map(|s| expressions::guild_emojis(&s, guild)).unwrap_or_default()
+    }
+    fn guild_stickers(&self, guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
+        self.inner.session().map(|s| expressions::guild_stickers(&s, guild)).unwrap_or_default()
+    }
+    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
+        self.with_session(|_, s| expressions::sticker_packs(s))
+    }
+    fn send_sticker(&self, channel: Id, sticker: Id) -> BoxFuture<()> {
+        self.with_session(move |_, s| expressions::send_sticker(s, channel, sticker))
+    }
+    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
+        self.with_session(|_, s| expressions::gif_trending(s))
+    }
+    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        self.with_session(|_, s| expressions::gif_trending_gifs(s))
+    }
+    fn gif_search(&self, query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        self.with_session(move |_, s| expressions::gif_search(s, query))
+    }
+    fn search_messages(&self, req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
+        self.with_session(move |inner, s| expressions::search(inner, s, req))
     }
 
     fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
