@@ -5,6 +5,7 @@
 //! * [`LocalPrefs`]: client-only settings (font scale, zoom, notifications),
 //!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
 
+mod art;
 mod pages;
 pub(crate) mod profile_editor;
 mod view;
@@ -286,6 +287,8 @@ pub struct SettingsState {
     pub search_sub: Option<gpui::Subscription>,
     /// Full-screen profile editor (Page::Profiles).
     pub profile: Option<profile_editor::EditorState>,
+    /// Content panel scroll (lets offscreen shots match scrolled dumps).
+    pub scroll: gpui::ScrollHandle,
 }
 
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {

@@ -633,7 +633,106 @@ fn current_game(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
 }
 
 // Billing pages: Phoenix doesn't handle payments, each page points to the web.
-static NITRO: &[B] = &[B::Title("settings.page.nitro"), B::Lead("sp.billing.web")];
+static NITRO: &[B] = &[B::Custom("sp.ni.title", nitro_page)];
+
+/// Nitro page as the 2026 client lays it out (vanilla-settings-05b, page
+/// fully loaded): `tierCard_20JRSQ` 696x378, radius 16, 95.07deg gradient
+/// rgb(133,71,198) → rgb(184,69,193) 50% → rgb(171,93,138); `tierInfo_` at
+/// 40/40, 327 wide: nitro-md 32px bold title, five 24px-icon perks 32px apart
+/// (body-md 16/20 white, 8px gap), then (padding-top 16, gap 8) 39px
+/// `overlay-primary` white and `overlay-secondary` rgba(0,0,0,0.56) buttons;
+/// `tierImage_` 313x328 art on the right. Then the 40px-padded `giftCard_`
+/// (radius 16, 41px under): 147x146 gift art, heading-xl/semibold 24/32
+/// title, body-sm text and the "Offrir Nitro" button. Art loads at runtime.
+fn nitro_page(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let perk = |icon: &'static str, t: &'static str| {
+        div()
+            .h(z(24.))
+            .flex()
+            .items_center()
+            .gap(z(8.))
+            .child(gpui::svg().path(crate::icons::path(icon)).size(z(24.)).text_color(gpui::white()))
+            .child(div().text_size(z(16.)).line_height(z(20.)).text_color(gpui::white()).child(tr(t)))
+    };
+    let overlay_btn = |id: &'static str, t: &'static str, primary: bool| {
+        div()
+            .id(id)
+            .h(z(39.))
+            .rounded(z(8.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .bg(if primary { gpui::white().into() } else { gpui::rgba(0x0000008f) })
+            .text_size(z(16.))
+            .line_height(z(20.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(if primary { gpui::black() } else { gpui::white() })
+            .child(tr(t))
+    };
+    // gpui gradients take two stops: one per half around the 50% stop.
+    let half = |l: bool, a: u32, b: u32| {
+        let d = div().absolute().top_0().h_full().w_1_2().bg(gpui::linear_gradient(95.07, gpui::linear_color_stop(gpui::rgb(a), 0.), gpui::linear_color_stop(gpui::rgb(b), 1.)));
+        if l { d.left_0().rounded_l(z(16.)) } else { d.right_0().rounded_r(z(16.)) }
+    };
+    let tier = div()
+        .relative()
+        .mt(z(11.))
+        .h(z(378.))
+        .rounded(z(16.))
+        .child(half(true, 0x8547c6, 0xb845c1))
+        .child(half(false, 0xb845c1, 0xab5d8a))
+        .child(gpui::img(SharedString::from(super::art::nitro_tier())).absolute().top(z(25.)).left(z(384.)).w(z(313.)).h(z(328.)))
+        .child(
+            div()
+                .absolute()
+                .top(z(40.))
+                .left(z(40.))
+                .w(z(327.))
+                .flex()
+                .flex_col()
+                .child(div().h(z(36.)).text_size(z(32.)).line_height(z(24.)).font_weight(FontWeight::EXTRA_BOLD).italic().text_color(gpui::white()).child(tr("sp.ni.title")))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(z(8.))
+                        .child(perk("chat/upload", "sp.ni.p1"))
+                        .child(perk("chat/add-reaction", "sp.ni.p2"))
+                        .child(perk("emoji", "sp.ni.p3"))
+                        .child(perk("voice/screen", "sp.ni.p4"))
+                        .child(perk("user-profile", "sp.ni.p5")),
+                )
+                .child(
+                    div()
+                        .pt(z(24.)) // tierInfo_ gap 8 + stack_ padding-top 16
+                        .flex()
+                        .flex_col()
+                        .gap(z(8.))
+                        .child(overlay_btn("nitro-more", "sp.ni.more", true))
+                        .child(overlay_btn("nitro-manage", "sp.ni.manage", false)),
+                ),
+        );
+    let gift = div()
+        .mt(z(41.))
+        .p(z(40.))
+        .rounded(z(16.))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+        .flex()
+        .items_center()
+        .gap(z(80.))
+        .child(div().pl(z(41.)).child(gpui::img(SharedString::from(super::art::nitro_gift())).w(z(147.)).h(z(146.))))
+        .child(
+            div()
+                .w(z(307.))
+                .flex()
+                .flex_col()
+                .child(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(tr("sp.ni.gift")))
+                .child(div().pt(z(16.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr("sp.ni.gift_d")))
+                .child(div().pt(z(16.)).child(controls::button_icon(eid("nitro-gift"), "gift", tr("sp.ni.gift_btn"), BtnKind::Secondary))),
+        );
+    div().flex().flex_col().child(tier).child(gift).into_any_element()
+}
 static BOOST: &[B] = &[B::Title("settings.page.server_boost"), B::Lead("sp.billing.web")];
 static SUBSCRIPTIONS: &[B] = &[B::Title("settings.page.subscriptions"), B::Lead("sp.billing.web")];
 static GIFTS: &[B] = &[B::Title("settings.page.gift_inventory"), B::Lead("sp.billing.web")];
@@ -771,12 +870,126 @@ fn theme_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .pt(z(8.))
+        .pt(z(16.))
         // vanilla-settings-08 #2721 heading-sm/semibold 16/20, swatches 24px under it.
         .child(title_text(tr("sp.ap.defaults")).font_weight(FontWeight::SEMIBOLD).pb(z(24.)))
-        .child(div().flex().gap(z(8.)).children(AppTheme::ALL.map(|t| {
-            super::view::theme_card(t, t == theme).on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx)))
-        })))
+        .child(
+            div()
+                .flex()
+                .gap(z(8.))
+                .children(AppTheme::ALL.map(|t| {
+                    super::view::theme_card(t, t == theme).on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx)))
+                }))
+                // 5th `defaultThemeSelection_` "Synchroniser avec l'ordinateur"
+                // (vanilla-settings-08b): the current theme's background with
+                // the 24px RefreshIcon in `iconWrapper_IhyaN_`.
+                .child(
+                    div()
+                        .id("theme-sync-os")
+                        .size(z(48.))
+                        .flex_none()
+                        .rounded(z(8.))
+                        .bg(c(theme.swatch()))
+                        .border_1()
+                        .border_color(c(tok(idx::BORDER_SUBTLE)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .child(gpui::svg().path(crate::icons::path("refresh")).size(z(24.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
+                ),
+        )
+        .into_any_element()
+}
+
+/// "Donne à ton Discord le style que tu veux" (`container_yH_g_W
+/// displayContainer_`, vanilla-settings-08b): 104px black card, radius 8,
+/// padding 16 25; 117x69 banner art, 16px gap, heading-lg/semibold 20/24 +
+/// body-sm 14/18 text (378px), primary md "Vas-y, essaie" button.
+fn theme_banner(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    div()
+        .mt(z(29.))
+        .flex()
+        .items_center()
+        .gap(z(16.))
+        .py(z(16.))
+        .px(z(25.))
+        .rounded(z(8.))
+        .bg(gpui::black()) // displayContainer_ background oklab(0 0 0)
+        .child(gpui::img(SharedString::from(super::art::theme_banner())).w(z(117.)).h(z(69.)).flex_none())
+        .child(
+            div()
+                .w(z(378.)) // textContent_yH_g_W width
+                .flex_none()
+                .flex()
+                .flex_col()
+                .gap(z(4.))
+                .child(div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(tr("sp.ap.banner")))
+                .child(desc_text(tr("sp.ap.banner_d")).text_color(c(tok(idx::TEXT_DEFAULT)))),
+        )
+        .child(controls::button(eid("theme-banner-try"), tr("sp.ap.banner_try"), BtnKind::Primary))
+        .into_any_element()
+}
+
+/// "Thème de couleur à durée limitée" (vanilla-settings-08b): heading-sm
+/// semibold + round `body-xs/semibold` uppercase countdown pill
+/// (rgba(151,151,159,0.2), padding 0 8, 12px clock), body-sm 14/18
+/// --text-muted note with "En savoir plus" link, then the 48px Vice City
+/// swatch (135deg gradient under the `darkOverlay_` 0.2 black layer).
+fn limited_theme(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    div()
+        .mt(z(39.))
+        .flex()
+        .flex_col()
+        .gap(z(4.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(title_text(tr("sp.ap.limited")).font_weight(FontWeight::SEMIBOLD))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .px(z(8.))
+                        .h(z(16.))
+                        .rounded_full()
+                        .bg(c(tok(idx::BACKGROUND_MOD_STRONG)))
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                        .child(gpui::svg().path(crate::icons::path("picker/clock")).size(z(12.)).text_color(c(tok(idx::TEXT_DEFAULT))))
+                        .child(tr("sp.ap.limited_left")),
+                ),
+        )
+        .child(
+            div()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .text_color(c(tok(idx::TEXT_MUTED)))
+                .child(tr("sp.ap.limited_d"))
+                .child(div().text_color(c(tok(idx::TEXT_LINK))).child(tr("sp.ap.limited_more"))),
+        )
+        .child(
+            div().pt(z(20.)).child(
+                div()
+                    .id("theme-vice-city")
+                    .size(z(48.))
+                    .rounded(z(8.))
+                    .cursor_pointer()
+                    .bg(gpui::linear_gradient(135., gpui::linear_color_stop(gpui::rgb(0x4645ff), 0.), gpui::linear_color_stop(gpui::rgb(0xf89a03), 1.)))
+                    .child(
+                        div()
+                            .size_full()
+                            .rounded(z(8.))
+                            .bg(gpui::linear_gradient(135., gpui::linear_color_stop(gpui::rgba(0xaf01f380), 0.33), gpui::linear_color_stop(gpui::rgba(0xff669880), 0.67)))
+                            .child(div().size_full().rounded(z(8.)).bg(gpui::rgba(0x00000033))),
+                    ),
+            ),
+        )
         .into_any_element()
 }
 
@@ -784,10 +997,15 @@ static APPEARANCE: &[B] = &[
     B::Custom("sp.ap.t1", theme_title),
     B::Switch("theme-sync", "sp.ap.sync", "sp.ap.sync_d", Bind::Ui(false)),
     B::Custom("sp.ap.defaults", theme_row),
+    B::Custom("sp.ap.banner", theme_banner),
+    B::Custom("sp.ap.limited", limited_theme),
     B::Custom("sp.ap.colors", nitro_themes),
     B::Switch("theme-devices", "sp.ap.sync_devices", "", Bind::Ui(true)),
     B::Switch("theme-profiles", "sp.ap.apply_profiles", "", Bind::Ui(true)),
     B::Related("help", "settings.page.accessibility", "sp.ap.a11y_d", Page::Accessibility),
+    // vanilla-settings-08b: "Icône de l'appli" follows the theme category.
+    B::Divider,
+    B::Custom("sp.ap.icon", nitro_app_icon),
     B::Divider,
     B::Title("sp.ap.t2"),
     B::Legend("sp.ap.media"),
@@ -819,8 +1037,6 @@ static APPEARANCE: &[B] = &[
     B::Switch("st-invites", "sp.ap.hide_invites", "", Bind::Ui(true)),
     B::Switch("st-sounds", "sp.ap.no_sounds", "", Bind::Ui(true)),
     B::Switch("st-notifs", "sp.ap.no_notifs", "", Bind::Ui(true)),
-    B::Divider,
-    B::Custom("sp.ap.icon", nitro_app_icon),
 ];
 
 fn slider_row(title: &'static str, desc: &'static str, s: Div) -> AnyElement {
@@ -1058,32 +1274,31 @@ static ACTIVITY: &[B] = &[
 ];
 
 fn connection_tiles(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyElement {
-    let tile = |name: &'static str| {
+    // vanilla-settings-14b `accountButtonInner_yX-kzH`: 44px tile, radius 8,
+    // rgba(151,151,159,0.12) (--background-mod-subtle), 8px apart (52px
+    // pitch), rows 53px apart; the logo is the client's art loaded at runtime
+    // (`applicationIcon_jn4e52` app icons are 28px).
+    let tile = |(name, url, app): (&'static str, String, bool)| {
+        let logo = if app { 28. } else { 32. };
         div()
-            .h(z(40.))
-            .px(z(12.))
+            .id(eid(format!("conn-{name}")))
+            .size(z(44.))
             .rounded(z(8.))
-            .border_1()
-            .border_color(c(tok(idx::BORDER_SUBTLE)))
             .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
             .flex()
             .items_center()
-            .text_size(z(14.))
-            .line_height(z(18.))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(c(tok(idx::TEXT_DEFAULT)))
-            .child(name)
+            .justify_center()
+            .cursor_pointer()
+            .hover(|d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+            .child(gpui::img(SharedString::from(url)).size(z(logo)).rounded(z(if app { 6. } else { 0. })).object_fit(gpui::ObjectFit::Contain))
     };
     div()
         .flex()
         .flex_col()
-        .py(z(12.))
-        .gap(z(12.))
+        .pt(z(12.))
+        .gap(z(16.))
         .child(title_text(tr("sp.cn.add")))
-        .child(div().flex().flex_wrap().gap(z(8.)).children(
-            ["Battle.net", "Bluesky", "Crunchyroll", "Epic Games", "GitHub", "PlayStation", "Reddit", "Riot Games", "Spotify", "Steam", "Twitch", "X", "Xbox", "YouTube"]
-                .map(tile),
-        ))
+        .child(div().flex().flex_wrap().gap_x(z(8.)).gap_y(z(9.)).children(super::art::connections().into_iter().map(tile)))
         .into_any_element()
 }
 
@@ -1456,19 +1671,28 @@ fn nitro_app_icon(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .child(div().flex().flex_col().gap(z(4.)).child(controls::section_title(tr("sp.ap.app_icon"))).child(desc_text(tr("sp.ap.app_icon_d"))))
                 .child(controls::button(eid("icon-preview"), tr("sp.ap.icon_preview"), BtnKind::Secondary)),
         )
-        .child(div().pt(z(20.)).flex().flex_wrap().gap(z(8.)).children((0..23).map(|i| {
-            div()
-                .id(eid(format!("nitro-icon-{i}")))
-                .size(z(48.))
-                .rounded(z(8.))
-                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-                .shadow(vec![gpui::BoxShadow {
-                    color: c(tok(idx::INTERACTIVE_TEXT_DEFAULT)),
-                    offset: gpui::point(gpui::px(0.), gpui::px(0.)),
-                    blur_radius: gpui::px(2.),
-                    spread_radius: gpui::px(0.),
-                    inset: false,
-                }])
-        })))
+        .child(div().pt(z(20.)).flex().flex_wrap().gap(z(8.)).children(super::art::app_icons().into_iter().enumerate().map(|(i, u)| app_icon_tile(i, u))))
+        // "Icône d'application à durée limitée" (body-md/medium) + the Vice City icon
+        .child(div().pt(z(30.)).child(title_text(tr("sp.ap.limited_icon"))))
+        .child(div().pt(z(72.)).child(app_icon_tile(99, super::art::limited_app_icon())))
         .into_any_element()
+}
+
+/// 48px `appIconSelection_jWcVMn` tile (radius 8, box-shadow 0 0 2px
+/// --interactive-text-default) with the client's icon art loaded at runtime.
+fn app_icon_tile(i: usize, url: String) -> gpui::Stateful<Div> {
+    div()
+        .id(eid(format!("nitro-icon-{i}")))
+        .size(z(48.))
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+        .shadow(vec![gpui::BoxShadow {
+            color: c(tok(idx::INTERACTIVE_TEXT_DEFAULT)),
+            offset: gpui::point(gpui::px(0.), gpui::px(0.)),
+            blur_radius: gpui::px(2.),
+            spread_radius: gpui::px(0.),
+            inset: false,
+        }])
+        .child(gpui::img(SharedString::from(url)).size_full().rounded(z(8.)))
 }

@@ -747,7 +747,7 @@ static LOWER: &[B] = &[
             B::Switch("vo-qos", "sp.vo.qos", "sp.vo.qos_d", Bind::Ui(false)),
         ],
     ),
-    B::Divider,
+    B::Custom("", adv_divider),
     B::Title("sp.vo.t2"),
     B::Custom("sp.vo.test_video", camera_preview),
     B::Switch("vo-always-preview", "sp.vo.always_preview", "sp.vo.always_preview_d", Bind::Ui(false)),
@@ -764,13 +764,19 @@ static LOWER: &[B] = &[
     ),
 ];
 
+/// Divider closing the untitled voice category: #2859 sits 40px under the
+/// advanced expander (the shared divider margin is 50).
+fn adv_divider(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    div().mt(z(40.)).mb(z(50.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element()
+}
+
 /// "Profil d'entrée audio" (#2786–#2806): label, then a radioGroup whose
 /// options are 42px (title 16/20 + body-sm description 4px under) 16px
 /// apart, text at 32px. "Personnalisés" reveals the manual controls.
 fn profile_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     let p = prefs().lock().clone();
     let opts: [(&str, &str); 3] = [("sp.vo.iso", "sp.vo.iso_d"), ("sp.vo.studio", "sp.vo.studio_d"), ("sp.vo.custom", "sp.vo.custom_d")];
-    let group = div().pt(z(8.)).flex().flex_col().gap(z(16.)).children(opts.iter().enumerate().map(|(i, (t, d))| {
+    let group = div().pt(z(17.)).flex().flex_col().gap(z(16.)).children(opts.iter().enumerate().map(|(i, (t, d))| {
         let sel = p.audio_profile == i as u32;
         div()
             .id(eid(format!("vo-profile-{i}")))
@@ -804,7 +810,7 @@ fn profile_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
                     .child(note(crate::t!(*d))),
             )
     }));
-    let mut col = div().py(z(10.)).flex().flex_col().child(h5(crate::t!("sp.vo.profile")).pb_0()).child(group);
+    let mut col = div().pt(z(19.)).pb(z(15.)).flex().flex_col().child(h5(crate::t!("sp.vo.profile")).pb_0()).child(group);
     if p.audio_profile == 2 {
         col = col
             .child(div().mt(z(24.)).child(sensitivity(&p, cx)))
@@ -821,6 +827,7 @@ fn ptt_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     let p = prefs().lock().clone();
     let on = p.input_mode == InputMode::PushToTalk;
     div()
+        .pb(z(3.))
         .flex()
         .flex_col()
         .child(switch_row(

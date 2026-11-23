@@ -12,7 +12,12 @@ const ALLOWED_HOSTS: &[&str] = &["cdn.discordapp.com", "media.discordapp.net", "
 
 pub fn host_allowed(url: &str) -> bool {
     Url::parse(url).ok().is_some_and(|u| {
-        u.scheme() == "https" && u.host_str().is_some_and(|h| ALLOWED_HOSTS.contains(&h))
+        u.scheme() == "https"
+            && u.host_str().is_some_and(|h| {
+                ALLOWED_HOSTS.contains(&h)
+                    // the client's static art (settings logos, Nitro art), loaded at runtime
+                    || (h == "discord.com" && u.path().starts_with("/assets/"))
+            })
     })
 }
 

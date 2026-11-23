@@ -45,6 +45,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("threads", &["ThreadIcon"]),
     ("friends", &["FriendsIcon"]),
     ("nitro", &["NitroWheelIcon"]),
+    ("refresh", &["RefreshIcon"]),
     ("lock", &["LockIcon"]),
     ("pen", &["PencilIcon"]),
     ("id", &["IdIcon"]),

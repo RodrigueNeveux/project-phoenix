@@ -30,6 +30,12 @@ fn main() -> anyhow::Result<()> {
     .iter()
     .filter_map(|p| std::fs::read(p).ok().map(Into::into))
     .collect();
+    // PHOENIX_SHOT_NET=1 loads remote art (Discord media hosts only) like the app.
+    let _rt = std::env::var_os("PHOENIX_SHOT_NET").map(|_| tokio::runtime::Runtime::new().expect("runtime"));
+    if let Some(rt) = &_rt {
+        let http = phoenix_app::discord_backend::http::CdnHttpClient::new(rt.handle().clone(), "Mozilla/5.0");
+        cx.update(|cx| cx.set_http_client(std::sync::Arc::new(phoenix_app::media::cache::CachingHttpClient::new(std::sync::Arc::new(http)))));
+    }
     cx.update(|cx| {
         let _ = cx.text_system().add_fonts(fonts);
         phoenix_app::init(cx);
@@ -126,9 +132,23 @@ fn main() -> anyhow::Result<()> {
             })?;
             pump(&mut cx, 6);
         }
+        // PHOENIX_SHOT_SCROLL=<px> scrolls the settings content like a scrolled dump.
+        if let Some(y) = std::env::var("PHOENIX_SHOT_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
+            cx.update_window(win.into(), |_, window, cx| {
+                window.refresh();
+                v.update(cx, |app, _| {
+                    if let Some(s) = app.settings.as_ref() {
+                        s.scroll.set_offset(gpui::point(px(0.), px(-y)));
+                    }
+                });
+            })?;
+            pump(&mut cx, 4);
+        }
     }
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
-    pump(&mut cx, 8);
+    pump(&mut cx, if _rt.is_some() { 80 } else { 8 });
+    cx.update_window(win.into(), |_, window, _| window.refresh())?;
+    pump(&mut cx, 4);
     let _ = cx.capture_screenshot(win.into())?;
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     pump(&mut cx, 2);

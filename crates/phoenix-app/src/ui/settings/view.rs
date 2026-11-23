@@ -708,6 +708,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .track_scroll(&s.scroll)
         .child(
             // panel_nNq2Vb: margin-block 64 auto, max-width 696, padding 0 16
             div()
