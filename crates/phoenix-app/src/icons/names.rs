@@ -11,6 +11,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("chevron", &["ChevronSmallDownIcon"]),
     ("chevron-right", &["ChevronSmallRightIcon"]),
     ("crown", &["CrownIcon"]),
+    ("new-user", &["NewUserIcon"]),
     ("check", &["CheckmarkLargeIcon", "CheckmarkLargeBoldIcon"]),
     ("plus", &["PlusLargeIcon"]),
     ("palette", &["PaintPaletteIcon"]),

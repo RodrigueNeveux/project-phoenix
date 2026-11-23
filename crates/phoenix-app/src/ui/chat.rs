@@ -612,6 +612,21 @@ fn role_icon(url: SharedString) -> gpui::Img {
     img(url).flex_none().size(z(20.)).ml(z(4.)).object_fit(gpui::ObjectFit::Contain)
 }
 
+/// "New member" clover after the author name: newMemberBadge_ (calc(1rem + 4px) square,
+/// margin-inline-start .25rem, top 1px, color --text-feedback-positive) holding the
+/// NewUserIcon at 20px; tooltip "New member" (client module HU decides who gets it).
+fn new_member_badge(id: Id) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(("new-member", id.0))
+        .flex_none()
+        .size(z(20.))
+        .ml(z(4.))
+        .mt(z(1.))
+        .cursor_pointer()
+        .child(gpui::svg().path(crate::icons::path("new-user")).size_full().text_color(tk(idx::TEXT_FEEDBACK_POSITIVE)))
+        .tooltip(crate::ui::tooltip::tip(crate::t!("chat.new_member")))
+}
+
 /// Discord's "APP" tag next to bot authors (vanilla-guild-text-groups botTagCozy_ /
 /// botTagVerified_ / botText_: 15px tall, 46px wide for a verified "APP").
 fn bot_tag(verified: bool) -> gpui::Div {
@@ -859,6 +874,7 @@ fn message(
                     .child(author_name)
                     .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
                     .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
+                    .when(app.is_new_member(msg.author), |d| d.child(new_member_badge(msg.id)))
                     .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot)))),
             )
             .child(content)
@@ -903,6 +919,7 @@ fn message(
                         .child(author_name)
                         .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
                         .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
+                    .when(app.is_new_member(msg.author), |d| d.child(new_member_badge(msg.id)))
                         .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot))))
                         .child(
                             // .cozy_ .timestamp_: .75rem, --chat-text-muted, medium;

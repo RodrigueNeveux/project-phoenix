@@ -88,6 +88,8 @@ pub fn members_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
             nick: None,
             avatar: None,
             decoration: None,
+            joined_at: None,
+            rejoined: false,
         };
         crate::ui::members::member_row_in(app, &entity, None, &mem, None, ex.owner == Some(*u))
     });

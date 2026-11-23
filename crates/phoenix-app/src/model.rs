@@ -256,6 +256,10 @@ pub struct Member {
     pub avatar: Option<SharedString>,
     /// Per-guild avatar decoration URL (`member.avatar_decoration_data`).
     pub decoration: Option<SharedString>,
+    /// `member.joined_at` as unix seconds (drives the "New member" badge).
+    pub joined_at: Option<i64>,
+    /// `member.flags` DID_REJOIN (bit 0): rejoining members never get the badge.
+    pub rejoined: bool,
 }
 
 pub fn acronym(name: &str) -> SharedString {

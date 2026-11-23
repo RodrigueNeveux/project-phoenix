@@ -1119,6 +1119,19 @@ impl PhoenixApp {
         self.roles.get(&g)?.iter().filter(|r| m.roles.contains(&r.id) && r.icon.is_some()).max_by_key(|r| r.position)?.icon.clone()
     }
 
+    /// Client rule for the "New member" badge (module `HU`, maxDaysOld 7): the
+    /// member joined under 7 days ago, did not rejoin, is not a bot, and the
+    /// guild itself is older than 7 days.
+    pub fn is_new_member(&self, user: Id) -> bool {
+        const WEEK_MS: i64 = 7 * 86_400_000;
+        let Some(g) = self.selected_guild else { return false };
+        let Some(m) = self.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == user)) else { return false };
+        let now = chrono::Utc::now().timestamp_millis();
+        let guild_ms = (g.0 >> 22) as i64 + 1_420_070_400_000;
+        let bot = self.users.get(&user).is_some_and(|u| u.bot);
+        !m.rejoined && !bot && now - guild_ms >= WEEK_MS && m.joined_at.is_some_and(|j| (0..=WEEK_MS).contains(&(now - j * 1000)))
+    }
+
     pub fn presence_of(&self, user: Id) -> Presence {
         if user == self.me.id {
             return self.presence;

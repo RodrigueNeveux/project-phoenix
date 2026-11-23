@@ -798,6 +798,8 @@ impl MemberList {
                 nick: m.member.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
                 avatar: member_avatar_url(guild, u.id, &m.member),
                 decoration: member_decoration_url(&m.member),
+                joined_at: joined_unix(&m.member),
+                rejoined: m.member.flags & 1 != 0,
             });
         }
         (ms, us)
@@ -896,6 +898,8 @@ impl Adapter {
                     nick: m.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
                     avatar: member_avatar_url(guild, u, &m),
                     decoration: member_decoration_url(&m),
+                    joined_at: joined_unix(&m),
+                    rejoined: m.flags & 1 != 0,
                 });
             }
         }
@@ -1155,4 +1159,9 @@ pub fn self_activities(r: &phoenix_api::gateway::events::Ready) -> Option<AppEve
     let s = sessions.iter().find(|s| s.get("session_id").and_then(Value::as_str) == Some("all")).or_else(|| sessions.first())?;
     let acts = s.get("activities").and_then(Value::as_array)?;
     Some(AppEvent::Activities { user: id(r.user.id), activities: crate::presence::parse_activities(acts) })
+}
+
+/// `member.joined_at` (ISO 8601) as unix seconds.
+fn joined_unix(m: &api::Member) -> Option<i64> {
+    m.joined_at.as_deref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.timestamp())
 }
