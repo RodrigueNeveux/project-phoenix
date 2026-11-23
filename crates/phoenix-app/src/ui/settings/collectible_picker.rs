@@ -14,6 +14,8 @@
 //!   selected = 2px inset --brand-500 ring; "Aucun"/"Boutique" = 24px icon
 //!   and a body-xs 12/16 label; preset images 64px. Nameplate: 2 tiles 105x80,
 //!   then 224x48 rows.
+//! - effect/frame: preview = the full profile card (`profile_card`), tiles
+//!   composed over a skeleton mini profile (`sample_profile`).
 //! - decorationPreview_ 208x208 r4 with the 120px avatar centred; small
 //!   previews column 56 wide (40/32/40/32 avatars, 16 apart).
 //! - sections "Exclusivité Nitro" (catalogue `premium_type` 2) and "Va jeter
@@ -160,11 +162,173 @@ fn icon_tile(id: &str, size: (f32, f32), icon: &str, label: SharedString, select
         .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_STRONG))).child(label))
 }
 
-fn preview(app: &PhoenixApp, kind: Kind, item: Option<&Collectible>) -> Div {
+/// Skeleton mini profile drawn under effect thumbnails and frames (the
+/// client's static `presetEffectBackground_` image, which we may not ship):
+/// grey banner, avatar with ring and status cut-out, four text bars. Geometry
+/// and colours measured on the 83x80 tiles of `vanilla-profile-picker-effect`
+/// (#4845), scaled to `(w, h)`.
+fn sample_profile(w: f32, h: f32) -> Div {
+    let (sx, sy) = (w / 83., h / 80.);
+    let bar = |x: f32, y: f32, bw: f32| div().absolute().left(z(x * sx)).top(z(y * sy)).w(z(bw * sx)).h(z(3.5 * sy)).rounded_full().bg(c(0x232326));
+    div()
+        .absolute()
+        .inset_0()
+        .rounded(z(4.))
+        .overflow_hidden()
+        .bg(c(0x0B0B0C))
+        .child(div().absolute().top_0().left_0().right_0().h(z(29. * sy)).bg(c(0x242428)))
+        .child(div().absolute().left(z(4. * sx)).top(z(15. * sy)).size(z(26. * sx)).rounded_full().bg(c(0x0B0B0C)))
+        .child(div().absolute().left(z(6. * sx)).top(z(17. * sy)).size(z(22. * sx)).rounded_full().bg(c(0x3A3A3E)))
+        .child(div().absolute().left(z(22. * sx)).top(z(33. * sy)).size(z(7. * sx)).rounded_full().bg(c(0x0B0B0C)))
+        .child(bar(6., 48., 26.))
+        .child(bar(6., 55.5, 47.))
+        .child(bar(6., 68., 16.))
+        .child(bar(6., 75., 61.))
+}
+
+/// Picker preview card (previewContainer_-JS7Po, dumps
+/// `vanilla-profile-picker-{effect,frame}` #4980-#5021): 304x333 at +10 in the
+/// preview column. outer_P1YEjQ: padding 2, r8, linear-gradient(primary 105px,
+/// secondary), shadow 0 0 0 1 white/.08 + 0 12 24 black/.24; inner_ r6 with
+/// the --profile-gradient-overlay-color (black/.6), padding-bottom 4, gap 8.
+/// header_ 140: banner_ 105 + avatar_ 80 at (14, 59); body_NOlkhE padding
+/// 4 8 8 16 gap 12: name heading-lg/semibold 20/24, username body-sm 14/18 +
+/// tag chiplet 24 (padding 0 8, body-xs) + badges, bio body-sm 3 lines;
+/// footer_ padding 0 16 12: sm primary "Example button" 268x31.
+fn profile_card(app: &PhoenixApp, e: &super::profile_editor::EditorState, overlay: Option<SharedString>) -> Div {
+    use super::profile_editor::{badges_row, bio_markup, gradient_button_color, hex, mix, white};
+    let me = &app.me;
+    let theme = e.theme;
+    let banner_col = theme.map(|t| t.0).or(e.profile.as_ref().and_then(|p| p.accent)).unwrap_or(0x5865F2);
+    let banner: AnyElement = match (&e.banner, e.profile.as_ref().and_then(|p| p.banner.clone())) {
+        (Some(p), _) => img(p.clone()).w_full().h(z(105.)).object_fit(gpui::ObjectFit::Cover).into_any_element(),
+        (None, Some(url)) => img(url).w_full().h(z(105.)).object_fit(gpui::ObjectFit::Cover).into_any_element(),
+        _ => div().w_full().h(z(105.)).bg(hex(banner_col)).into_any_element(),
+    };
+    let ring = match theme {
+        Some(t) => hex(mix(t.0, 0, 0.6)),
+        None => c(tok(idx::BACKGROUND_SURFACE_HIGH)),
+    };
+    let (strong, outer): (gpui::Hsla, gpui::Background) = match theme {
+        Some(t) => (white(0.96), gpui::linear_gradient(180., gpui::linear_color_stop(hex(t.0), 105. / 333.), gpui::linear_color_stop(hex(t.1), 1.))),
+        None => (c(tok(idx::TEXT_STRONG)), c(tok(idx::BACKGROUND_SURFACE_HIGH)).into()),
+    };
+    let bio: SharedString = e.original.bio.clone().into();
+    let tag = me.tag.clone().map(|(t, badge)| {
+        // chipletContainerInner_k8jyN7: 24 high, padding 0 8, r8, 1px border;
+        // badge_ 14, tagText_ body-xs 12/16, gap 2.
+        div()
+            .flex_none()
+            .h(z(24.))
+            .px(z(8.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+            .flex()
+            .items_center()
+            .gap(z(2.))
+            .text_size(z(12.))
+            .line_height(z(16.))
+            .text_color(strong)
+            .when_some(badge, |d, b| d.child(img(b).size(z(14.)).flex_none()))
+            .child(t)
+    });
+    let body = div()
+        .flex()
+        .flex_col()
+        .gap(z(12.))
+        .pt(z(4.))
+        .pr(z(8.))
+        .pb(z(8.))
+        .pl(z(16.))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .child(crate::fonts::styled_name(div().h(z(24.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong), Some(me), true).child(me.display_name.clone()))
+                .child(
+                    div()
+                        .h(z(24.))
+                        .flex()
+                        .items_center()
+                        .gap(z(9.))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(strong)
+                        .child(me.name.clone())
+                        .children(tag)
+                        .children(badges_row(e.profile.as_ref())),
+                ),
+        )
+        .child(div().h(z(54.)).overflow_hidden().text_size(z(14.)).line_height(z(18.)).text_color(strong).child(bio_markup(bio)));
+    let button_bg = theme.map(|t| hex(gradient_button_color(t.0)));
+    div()
+        .relative()
+        .mt(z(6.)) // previewContainer_w__gu5 at content + 14 (padding-top 8 already applied)
+        .ml(z(10.))
+        .w(z(304.))
+        .h(z(333.))
+        .flex_none()
+        .p(z(2.))
+        .rounded(z(8.))
+        .bg(outer)
+        .shadow(vec![
+            gpui::BoxShadow { color: gpui::hsla(0., 0., 1., 0.08), offset: gpui::point(z(0.), z(0.)), blur_radius: z(0.), spread_radius: z(1.), inset: false },
+            gpui::BoxShadow { color: gpui::hsla(0., 0., 0., 0.24), offset: gpui::point(z(0.), z(12.)), blur_radius: z(24.), spread_radius: z(0.), inset: false },
+        ])
+        .child(
+            div()
+                .relative()
+                .size_full()
+                .rounded(z(6.))
+                .overflow_hidden()
+                .bg(gpui::hsla(0., 0., 0., if theme.is_some() { 0.6 } else { 0. }))
+                .flex()
+                .flex_col()
+                .gap(z(8.))
+                .pb(z(4.))
+                .child(
+                    div()
+                        .relative()
+                        .h(z(140.))
+                        .flex_none()
+                        .child(banner)
+                        .child(
+                            div()
+                                .absolute()
+                                .left(z(8.))
+                                .top(z(53.))
+                                .size(z(92.))
+                                .rounded_full()
+                                .bg(ring)
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(crate::ui::avatar_with_status(Some(me), 80., app.presence_of(me.id), ring)),
+                        ),
+                )
+                .child(div().flex_1().min_h_0().child(body))
+                .child(
+                    div().px(z(16.)).pb(z(12.)).child(
+                        controls::button("pk-card-btn", crate::t!("pk.example_button"), BtnKind::Primary)
+                            .w_full()
+                            .h(z(31.))
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .when_some(button_bg, |b, bg| b.bg(bg)),
+                    ),
+                )
+                .children(overlay.map(|u| img(u).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover))),
+        )
+}
+
+fn preview(app: &PhoenixApp, e: &super::profile_editor::EditorState, kind: Kind, item: Option<&Collectible>) -> Div {
     let av = crate::ui::avatar(Some(&app.me), 120.);
     let overlay = item.and_then(|i| i.preview.clone());
     match kind {
-        Kind::Decoration | Kind::Frame => div()
+        Kind::Effect | Kind::Frame => profile_card(app, e, item.filter(|_| kind == Kind::Effect).and_then(|i| i.full.clone().or(i.preview.clone()))),
+        Kind::Decoration => div()
             .flex()
             .gap(z(12.))
             .child(
@@ -201,14 +365,6 @@ fn preview(app: &PhoenixApp, kind: Kind, item: Option<&Collectible>) -> Div {
                         })),
                 )
             }),
-        Kind::Effect => div()
-            .w(z(300.))
-            .h(z(330.))
-            .rounded(z(8.))
-            .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
-            .overflow_hidden()
-            .relative()
-            .children(overlay.map(|u| img(u).size_full())),
         Kind::Nameplate => div()
             .w(z(276.))
             .h(z(190.))
@@ -249,7 +405,10 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
     let nitro = of_kind(shop.map(|s| &s.nitro), kind, &owned);
     let store = of_kind(shop.map(|s| &s.shop), kind, &owned);
     let chosen = owned.iter().chain(&nitro).chain(&store).copied().find(|c| Some(c.sku) == p.sel);
-    let owns_sel = p.sel.is_none_or(|s| owned.iter().any(|o| o.sku == s));
+    // Nitro members can use the "Nitro exclusive" items (no lock badge,
+    // client `canUsePremiumCollectibles`).
+    let premium = app.backend.has_premium();
+    let owns_sel = p.sel.is_none_or(|s| owned.iter().any(|o| o.sku == s) || (premium && nitro.iter().any(|o| o.sku == s)));
     let changed = e.equipped.get(kind).flatten() != p.sel && owns_sel;
     let pick = |sel: Option<u64>| move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _: &mut gpui::Window, cx: &mut Cx| {
         with_picker(a, |e| {
@@ -269,7 +428,31 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
                 let full = row || matches!(kind, Kind::Effect | Kind::Frame);
                 tile(SharedString::from(format!("pk-item-{}", it.sku)), sz, p.sel == Some(it.sku))
                     .relative()
-                    .children(it.preview.clone().map(|u| if full { img(u).size_full().rounded(z(4.)).into_any_element() } else { img(u).size(z(64.)).into_any_element() }))
+                    // Effect tiles (#4844): presetEffectBackground_ + presetEffectImg_,
+                    // both absolute 83x80 cover r4. Frame tiles (#4847,
+                    // framePresetItem_ padding 6 14): sampleProfile_ small 52x56
+                    // (1px --border-strong) under the frame layer (55 wide).
+                    .when(kind == Kind::Effect, |d| d.child(sample_profile(sz.0 - 4., sz.1 - 4.)))
+                    .when(kind == Kind::Frame, |d| {
+                        d.child(div().absolute().left(z(13.)).top(z(10.)).w(z(52.)).h(z(56.)).rounded(z(4.)).border_1().border_color(c(tok(idx::BORDER_STRONG))).child(sample_profile(50., 54.)))
+                    })
+                    .children(it.preview.clone().map(|u| match kind {
+                        // The 100x195 thumbnail fills the tile width from the top
+                        // (what the dump shows for presetEffectImg_).
+                        Kind::Effect => {
+                            let (w, h) = (sz.0 - 4., (sz.0 - 4.) * 1.95);
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .rounded(z(4.))
+                                .overflow_hidden()
+                                .child(img(u).absolute().left_0().top_0().w(z(w)).h(z(h)))
+                                .into_any_element()
+                        }
+                        Kind::Frame => img(u).absolute().left(z(12.)).top(z(10.)).w(z(55.)).h(z(56.)).object_fit(gpui::ObjectFit::Contain).into_any_element(),
+                        _ if full => img(u).size_full().rounded(z(4.)).into_any_element(),
+                        _ => img(u).size(z(64.)).into_any_element(),
+                    }))
                     .when(locked, |d| {
                         // iconBadge_: 20x20 circle, black, 12px white lock, top -6 right -4.
                         d.child(
@@ -300,7 +483,7 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
         grid.extend(owned_tiles);
         Vec::new()
     };
-    let nitro_tiles = item_tiles(&nitro, true, cx);
+    let nitro_tiles = item_tiles(&nitro, !premium, cx);
     let store_tiles = item_tiles(&store, true, cx);
     // Section heading: h2 heading-sm/semibold 16/20 (nameplate: body-md/medium),
     // grid 4px below (effect/frame 8px: tiles at top 28 in section_cR4ic2), 12px gaps.
@@ -377,7 +560,7 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
                         .on_click(cx.listener(close)),
                 ),
         )
-        .child(div().flex_1().min_h_0().pt(z(8.)).px(z(24.)).flex().gap(z(12.)).child(list).child(div().mt(z(24.)).child(preview(app, kind, chosen))))
+        .child(div().flex_1().min_h_0().pt(z(8.)).px(z(24.)).flex().gap(z(12.)).child(list).child(if matches!(kind, Kind::Effect | Kind::Frame) { preview(app, e, kind, chosen) } else { div().mt(z(24.)).child(preview(app, e, kind, chosen)) }))
         .child(
             div()
                 .p(z(16.))

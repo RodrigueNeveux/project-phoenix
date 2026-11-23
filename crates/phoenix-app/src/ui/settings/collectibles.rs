@@ -35,13 +35,24 @@ pub struct Collectible {
     pub kind: Kind,
     pub name: SharedString,
     pub preview: Option<SharedString>,
+    /// Profile effects: the full-card still (`reducedMotionSrc`) drawn over
+    /// the picker's preview card.
+    pub full: Option<SharedString>,
+}
+
+fn full(kind: Kind, item: &Value) -> Option<SharedString> {
+    (kind == Kind::Effect).then(|| item.get("reducedMotionSrc").and_then(Value::as_str).map(|s| s.to_owned().into())).flatten()
 }
 
 fn preview(kind: Kind, item: &Value) -> Option<SharedString> {
     let s = |k: &str| item.get(k).and_then(Value::as_str);
     let url = match kind {
         Kind::Decoration => format!("https://cdn.discordapp.com/avatar-decoration-presets/{}.png?size=96&passthrough=false", s("asset")?),
-        Kind::Effect => s("thumbnailPreviewSrc").or(s("staticFrameSrc"))?.to_owned(),
+        // Tiles load the thumbnail at `?width=100&height=195` (client `Rc`).
+        Kind::Effect => match s("thumbnailPreviewSrc") {
+            Some(t) => format!("{t}?width=100&height=195"),
+            None => s("staticFrameSrc")?.to_owned(),
+        },
         Kind::Nameplate => format!("https://cdn.discordapp.com/assets/collectibles/{}static.png", s("asset")?),
         Kind::Frame => s("asset")
             .map(|a| format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false"))
@@ -88,6 +99,7 @@ pub fn parse_shop(v: &Value) -> ShopCatalog {
             kind,
             name: p.get("name").and_then(Value::as_str).unwrap_or_default().to_owned().into(),
             preview: preview(kind, it),
+            full: full(kind, it),
         };
         if p.get("premium_type").and_then(Value::as_u64) == Some(phoenix_api::rest::collectibles::PREMIUM_TYPE_NITRO) {
             out.nitro.push(c);
@@ -96,6 +108,19 @@ pub fn parse_shop(v: &Value) -> ShopCatalog {
         }
     }
     out
+}
+
+/// Moves the items whose SKU is in `rec` to the front, in `rec` order; the
+/// rest keep their catalogue order.
+pub fn promote(items: &mut Vec<Collectible>, rec: &[u64]) {
+    let mut front = Vec::new();
+    for sku in rec {
+        if let Some(i) = items.iter().position(|c| c.sku == *sku) {
+            front.push(items.remove(i));
+        }
+    }
+    front.append(items);
+    *items = front;
 }
 
 pub fn parse_purchases(v: &Value) -> Vec<Collectible> {
@@ -111,6 +136,7 @@ pub fn parse_purchases(v: &Value) -> Vec<Collectible> {
                     kind,
                     name: name.clone().into(),
                     preview: preview(kind, &it),
+                    full: full(kind, &it),
                 })
             })
         })
@@ -134,7 +160,7 @@ mod tests {
         assert_eq!(c.len(), 3);
         assert_eq!(c[0].kind, Kind::Decoration);
         assert!(c[0].preview.as_deref().unwrap().contains("avatar-decoration-presets/a_x.png"));
-        assert_eq!(c[1].preview.as_deref(), Some("https://t"));
+        assert_eq!(c[1].preview.as_deref(), Some("https://t?width=100&height=195"));
         assert_eq!(c[2].preview.as_deref(), Some("https://cdn.discordapp.com/assets/collectibles/nameplates/x/static.png"));
     }
 
@@ -152,6 +178,9 @@ mod tests {
         assert_eq!(s.nitro.len(), 1);
         assert_eq!(s.nitro[0].kind, Kind::Decoration);
         assert_eq!(s.shop.len(), 2);
+        let mut v = s.shop.clone();
+        promote(&mut v, &[3, 99]);
+        assert_eq!(v.iter().map(|c| c.sku).collect::<Vec<_>>(), vec![3, 2]);
         assert_eq!(s.shop[1].preview.as_deref(), Some("https://cdn.discordapp.com/media/v1/collectibles-shop/3/8/static"));
     }
 }

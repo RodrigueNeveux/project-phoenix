@@ -380,14 +380,14 @@ fn ensure_inputs(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) {
 }
 
 /// sRGB channel mix `a*(1-t) + b*t`.
-fn mix(a: u32, b: u32, t: f32) -> u32 {
+pub(super) fn mix(a: u32, b: u32, t: f32) -> u32 {
     let ch = |v: u32, s: u32| ((v >> s) & 0xFF) as f32;
     [16, 8, 0].iter().fold(0, |acc, &s| acc | ((ch(a, s) * (1. - t) + ch(b, s) * t).round() as u32) << s)
 }
 
 /// White at an alpha: the custom-theme text colours (`rgba(255,255,255,.96)`
 /// strong, `.88` headings/tabs, `.76` add-connection; dump #3386/#3439/#3459).
-fn white(a: f32) -> gpui::Hsla {
+pub(super) fn white(a: f32) -> gpui::Hsla {
     gpui::hsla(0., 0., 1., a)
 }
 
@@ -398,7 +398,7 @@ fn modal_bg((a, b): (u32, u32)) -> u32 {
     mix(mix(a, b, 0.5), 0, 0.8)
 }
 
-fn hex(v: u32) -> gpui::Hsla {
+pub(super) fn hex(v: u32) -> gpui::Hsla {
     c(v & 0xFFFFFF)
 }
 
@@ -986,7 +986,7 @@ fn decoration_url(e: &EditorState) -> Option<SharedString> {
 }
 
 /// Bio rendered like the client's preview: bare http(s) links in --text-link.
-fn bio_markup(t: SharedString) -> gpui::StyledText {
+pub(super) fn bio_markup(t: SharedString) -> gpui::StyledText {
     let link = gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() };
     let mut hl = Vec::new();
     let mut i = 0;
@@ -1036,7 +1036,7 @@ fn tag_select((t, badge): (SharedString, Option<SharedString>), color: gpui::Hsl
 
 /// Profile badges (container_IqWmhA managed_ customizable_, dump #3412):
 /// padding 1 3, margin 1 0, gap 2, r8, 20px badges.
-fn badges_row(p: Option<&Profile>) -> Option<Div> {
+pub(super) fn badges_row(p: Option<&Profile>) -> Option<Div> {
     let b = p.map(|p| p.badges.as_slice()).unwrap_or_default();
     (!b.is_empty()).then(|| {
         div()
@@ -1092,7 +1092,7 @@ fn lab_shift(rgb: u32, d: f32) -> u32 {
 /// --profile-gradient-button-color: the client walks the primary colour in Lab
 /// steps until its contrast with white is in [7, 10] (HighContrastText 7,
 /// tolerance 3, at most 100 steps).
-fn gradient_button_color(primary: u32) -> u32 {
+pub(super) fn gradient_button_color(primary: u32) -> u32 {
     let contrast = |c: u32| 1.05 / (luminance(c) + 0.05);
     let mut c = primary;
     for _ in 0..100 {

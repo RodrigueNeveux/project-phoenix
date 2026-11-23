@@ -16,6 +16,11 @@ pub const CATEGORIES_V2: &str = "/collectibles-categories/v2?include_bundles=tru
 /// `COLLECTIBLES_PURCHASES`.
 pub const PURCHASES: &str = "/users/@me/collectibles-purchases?variants_return_style=2";
 
+/// Collectibles shop application (client constant `FYj`).
+pub const COLLECTIBLES_APPLICATION_ID: &str = "1096190356233670716";
+/// Picker recommendations, as the profile editor preloads them.
+pub const RECOMMENDED_ITEMS: &str = "/storefront/recommended-items?application_ids=1096190356233670716&limit=100";
+
 /// Product `premium_type` of the "Nitro exclusive" picker section.
 pub const PREMIUM_TYPE_NITRO: u64 = 2;
 
@@ -29,10 +34,27 @@ pub fn products(v: &Value) -> impl Iterator<Item = &Value> {
         .flatten()
 }
 
+/// `recommended_items[].sku_id` of a `/storefront/recommended-items` reply.
+pub fn recommended_skus(v: &Value) -> Vec<u64> {
+    v.get("recommended_items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|i| i.get("sku_id")?.as_str()?.parse().ok())
+        .collect()
+}
+
 impl RestClient {
     /// The shop catalogue (raw JSON; CDN asset URLs are read at runtime).
     pub async fn get_collectibles_categories(&self) -> Result<Value> {
         self.call(Method::GET, CATEGORIES_V2, Body::None).await
+    }
+
+    /// Recommended shop SKUs, best first (`recommended_items[].sku_id`). The
+    /// pickers list these first in their "Shop" section.
+    pub async fn get_recommended_collectibles(&self) -> Result<Vec<u64>> {
+        let v: Value = self.call(Method::GET, RECOMMENDED_ITEMS, Body::None).await?;
+        Ok(recommended_skus(&v))
     }
 
     /// Owned collectibles (raw JSON array of purchases).
@@ -51,5 +73,11 @@ mod tests {
         let v = json!({"categories": [{"products": [{"sku_id": "1"}, {"sku_id": "2"}]}, {"products": []}, {}]});
         assert_eq!(products(&v).count(), 2);
         assert_eq!(products(&json!({})).count(), 0);
+    }
+
+    #[test]
+    fn reads_recommendations() {
+        let v = json!({"recommended_items": [{"sku_id": "5"}, {"sku_id": "x"}, {"sku_id": "3"}]});
+        assert_eq!(recommended_skus(&v), vec![5, 3]);
     }
 }
