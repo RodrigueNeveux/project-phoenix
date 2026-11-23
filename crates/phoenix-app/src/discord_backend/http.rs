@@ -8,7 +8,7 @@
 use futures::{AsyncReadExt, FutureExt, future::BoxFuture};
 use gpui::http_client::{self, AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
-const ALLOWED_HOSTS: &[&str] = &["cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net"];
+const ALLOWED_HOSTS: &[&str] = &["cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net", "cdn.jsdelivr.net"];
 
 pub fn host_allowed(url: &str) -> bool {
     Url::parse(url).ok().is_some_and(|u| {

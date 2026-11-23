@@ -318,6 +318,7 @@ impl MockBackend {
                     title: Some("zed-industries/zed".into()),
                     description: Some("Code at the speed of thought – Zed is a high-performance, multiplayer code editor.".into()),
                     url: Some("https://github.com/zed-industries/zed".into()),
+                    ..Default::default()
                 });
             }
             if rng.next().is_multiple_of(23) {
@@ -329,6 +330,7 @@ impl MockBackend {
                     height: 720,
                     is_image: true,
                     size: 345_678,
+                    ..Default::default()
                 });
             } else if rng.next().is_multiple_of(41) {
                 m.attachments.push(Attachment {
@@ -338,6 +340,7 @@ impl MockBackend {
                     height: 0,
                     is_image: false,
                     size: 4_213_337,
+                    ..Default::default()
                 });
             }
             out.push(m);

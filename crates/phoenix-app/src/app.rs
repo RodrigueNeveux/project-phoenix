@@ -1113,6 +1113,9 @@ impl PhoenixApp {
         if ui::settings::on_escape(self, cx) {
             return;
         }
+        if crate::media::close_viewer(cx) {
+            return;
+        }
         if self.people.any_overlay() {
             self.people.close_overlays();
         } else if self.switcher.is_some() {
@@ -1178,6 +1181,7 @@ impl Render for PhoenixApp {
             .child(body)
             .children(ui::settings::render(self, window, cx))
             .when_some(self.switcher.as_ref(), |d, sw| d.child(ui::switcher::render(self, sw, cx)))
+            .children(ui::image_viewer::render(window, cx))
             .children(ui::profile::overlays(self, window, cx))
     }
 }

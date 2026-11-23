@@ -23,9 +23,6 @@ use crate::{
 pub const AVATAR_SIZE: u32 = 128;
 /// Guild icons are drawn at 48px.
 pub const ICON_SIZE: u32 = 96;
-/// Attachment previews are capped at 400x300 by the chat view.
-const PREVIEW_W: u32 = 400;
-const PREVIEW_H: u32 = 300;
 
 pub fn id(s: api::Snowflake) -> Id {
     Id(s.0)
@@ -85,19 +82,10 @@ pub fn activity(activities: &[Value]) -> Option<SharedString> {
 
 // --------------------------------------------------------------- messages
 
-/// Discord media proxy resizing for image previews.
-fn preview_url(a: &api::Attachment) -> String {
-    let (w, h) = (a.width.unwrap_or(0), a.height.unwrap_or(0));
-    let base = if a.proxy_url.starts_with("https://") { &a.proxy_url } else { &a.url };
-    if w == 0 || h == 0 {
-        return base.clone();
-    }
-    let scale = (PREVIEW_W as f32 / w as f32).min(PREVIEW_H as f32 / h as f32).min(1.0);
-    // Ask for 2x the drawn size (HiDPI), never more than the original.
-    let tw = ((w as f32 * scale * 2.0) as u32).clamp(1, w);
-    let th = ((h as f32 * scale * 2.0) as u32).clamp(1, h);
-    let sep = if base.contains('?') { '&' } else { '?' };
-    format!("{base}{sep}width={tw}&height={th}")
+fn embed_media(m: &Option<api::EmbedMedia>) -> Option<model::EmbedMedia> {
+    let m = m.as_ref()?;
+    let url = m.proxy_url.clone().filter(|u| u.starts_with("https://")).or_else(|| m.url.clone())?;
+    Some(model::EmbedMedia { url: url.into(), width: m.width.unwrap_or(0), height: m.height.unwrap_or(0) })
 }
 
 pub fn message(m: &api::Message) -> model::Message {
@@ -118,36 +106,70 @@ pub fn message(m: &api::Message) -> model::Message {
         embeds: m
             .embeds
             .iter()
-            .filter(|e| e.title.is_some() || e.description.is_some())
+            .filter(|e| e.title.is_some() || e.description.is_some() || e.image.is_some() || e.thumbnail.is_some())
             .map(|e| model::Embed {
                 color: e.color,
                 provider: e.provider.as_ref().and_then(|p| p.name.clone()).map(Into::into),
                 title: e.title.clone().map(Into::into),
                 description: e.description.clone().map(Into::into),
                 url: e.url.clone().map(Into::into),
+                kind: e.kind.clone().map(Into::into),
+                thumbnail: embed_media(&e.thumbnail),
+                image: embed_media(&e.image),
+                video: embed_media(&e.video),
             })
             .collect(),
         attachments: m
             .attachments
             .iter()
             .map(|a| {
-                let is_image = a.is_image() && a.width.is_some() && a.height.is_some();
+                let ct = a.content_type.as_deref().unwrap_or("");
+                let sized = a.width.is_some() && a.height.is_some();
+                let kind = if ct.starts_with("image/") && sized {
+                    model::AttachmentKind::Image
+                } else if ct.starts_with("video/") && sized {
+                    model::AttachmentKind::Video
+                } else {
+                    model::AttachmentKind::File
+                };
+                let proxy = if a.proxy_url.starts_with("https://") { &a.proxy_url } else { &a.url };
                 model::Attachment {
                     filename: a.filename.clone().into(),
-                    url: if is_image { preview_url(a) } else { a.url.clone() }.into(),
+                    url: if kind == model::AttachmentKind::File { a.url.clone() } else { proxy.clone() }.into(),
                     width: a.width.unwrap_or(0),
                     height: a.height.unwrap_or(0),
-                    is_image,
+                    is_image: kind == model::AttachmentKind::Image,
                     size: a.size,
+                    kind,
+                    original: a.url.clone().into(),
                 }
             })
+            .chain(m.sticker_items.iter().map(|st| {
+                use crate::media::StickerFormat as F;
+                let format = match st.format_type {
+                    api::StickerFormat::Apng => F::Apng,
+                    api::StickerFormat::Lottie => F::Lottie,
+                    api::StickerFormat::Gif => F::Gif,
+                    _ => F::Png,
+                };
+                model::Attachment {
+                    filename: st.name.clone().into(),
+                    url: crate::media::sticker_url(st.id.0, format).unwrap_or_default(),
+                    width: 160,
+                    height: 160,
+                    kind: model::AttachmentKind::Sticker(format),
+                    ..Default::default()
+                }
+            }))
             .collect(),
         reactions: m
             .reactions
             .iter()
             .map(|r| model::Reaction {
                 emoji: match (&r.emoji.id, &r.emoji.name) {
-                    (Some(_), Some(n)) => format!(":{n}:").into(),
+                    (Some(eid), Some(n)) => {
+                        format!("<{}:{n}:{}>", if r.emoji.animated { "a" } else { "" }, eid.0).into()
+                    }
                     (_, Some(n)) => n.clone().into(),
                     _ => "?".into(),
                 },
