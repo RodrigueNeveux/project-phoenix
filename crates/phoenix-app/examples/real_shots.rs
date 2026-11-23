@@ -258,7 +258,13 @@ fn apply_scroll(
     use gpui::ListOffset;
     let top = ListOffset { item_ix: 0, offset_in_item: px(0.) };
     // Message list: anchor on the same message, else same distance from the bottom.
+    // When Discord sits at the bottom, stick to the bottom too: a top anchor would
+    // carry every height difference of the messages above into the visible rows.
+    let at_bottom = sc.from_bottom < 2.;
     let anchor = cx.update(|cx| {
+        if at_bottom {
+            return None;
+        }
         let app = v.read(cx);
         let (id, off) = sc.top_message?;
         let ix = app.messages.get(&app.selected_channel?)?.index_of(id)?;
@@ -283,10 +289,10 @@ fn apply_scroll(
             None => app.message_list.scroll_to_end(),
         }
     });
-    if anchor.is_none() {
+    if anchor.is_none() && !at_bottom {
         eprintln!("top message not in loaded history, using distance from bottom");
     }
-    let mut left = [if ch_anchor.is_none() { sc.channels } else { 0. }, sc.members, if anchor.is_none() { sc.from_bottom } else { 0. }];
+    let mut left = [if ch_anchor.is_none() { sc.channels } else { 0. }, sc.members, if anchor.is_none() && !at_bottom { sc.from_bottom } else { 0. }];
     while left.iter().any(|l| *l > 0.5) {
         cx.update_window(win, |_, window, _| window.refresh())?;
         pump(cx, 100);

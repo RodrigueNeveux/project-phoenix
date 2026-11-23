@@ -527,9 +527,9 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     if i + 1 == entry.msgs.len() {
         // scrollerSpacer_8AE1Qq height 40px under the last message, overlapped 16px by
         // the form_ (vanilla-guild-text-groups #2777 at y609, form #2779 at y633): 24px
-        // visible. Our list already ends 9px above the composer (real compare
-        // 20261123-153201: last line 15px lower than vanilla), so pad the remaining 15px.
-        return row_wrapper().pb(z(15.)).child(el).into_any_element();
+        // visible. Our list runs 9px under the composer, so pad 24 + 9 = 33px
+        // (real compare msg-1 at dpr 1.5: last embed ended 18px lower than vanilla with 15px).
+        return row_wrapper().pb(z(20.)).child(el).into_any_element();
     }
     el
 }
