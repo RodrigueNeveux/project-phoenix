@@ -10,6 +10,8 @@ Renders Phoenix offscreen on the user's **real account**, on the screen the user
 
     ~/discord-phoenix-ref/.venv/bin/python scripts/compare/compare.py
 
+Phoenix is rendered at Discord's `devicePixelRatio` (`PHX_SCALE` overrides) and compared at that scale.
+
 This does four things:
 1. It reads Discord's viewport, DPR, location and the DOM boxes of the regions through `cdp.mjs eval`.
 2. It takes `cdp.mjs shot`.
