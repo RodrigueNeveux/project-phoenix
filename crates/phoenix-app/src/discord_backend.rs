@@ -469,6 +469,17 @@ impl Backend for DiscordBackend {
         s.cache.channel(sf(channel)).is_some_and(|c| c.kind == api::ChannelType::GuildMedia)
     }
 
+    fn activity_feed_enabled(&self, guild: Id) -> bool {
+        let Ok(s) = self.inner.session() else { return false };
+        let Some(g) = s.cache.guild(sf(guild)) else { return false };
+        let has = |f: &str| g.properties.features.iter().any(|x| x == f);
+        let (on, off) = (has("ACTIVITY_FEED_ENABLED_BY_USER"), has("ACTIVITY_FEED_DISABLED_BY_USER"));
+        if on || off {
+            return on;
+        }
+        g.member_count.is_some_and(|n| n < 10_000)
+    }
+
     fn forum_tags(&self, forum: Id) -> Vec<crate::commands::ForumTag> {
         let Ok(s) = self.inner.session() else { return Vec::new() };
         s.cache.channel(sf(forum)).map(|c| convert::forum_tags(&c)).unwrap_or_default()

@@ -226,6 +226,12 @@ pub trait Backend: Send + Sync + 'static {
     fn is_media_channel(&self, _channel: Id) -> bool {
         false
     }
+    /// Whether the member list shows the "Activity" (content inventory) section
+    /// for this guild: guild feature ACTIVITY_FEED_ENABLED_BY_USER /
+    /// _DISABLED_BY_USER wins, else total member count < 10 000.
+    fn activity_feed_enabled(&self, _guild: Id) -> bool {
+        true
+    }
     /// Synced user settings (settings-proto, JSON fallback).
     fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
         Box::pin(async { Ok(Default::default()) })

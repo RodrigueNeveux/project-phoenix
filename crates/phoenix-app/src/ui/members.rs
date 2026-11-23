@@ -127,7 +127,15 @@ fn playing(app: &PhoenixApp, g: Id) -> Vec<(Id, &Activity)> {
 /// 1512 (card `container_g7esM5 usesCardRows_g7esM5`).
 fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> AnyElement {
     let acts = playing(app, g);
-    if acts.is_empty() {
+    // Member list content feed gate (client bundle, member list groups hook):
+    // shown when the guild allows it (`activity_feed_enabled`) AND the open
+    // channel is not a forum (`isForumChannel()` = GUILD_FORUM only; media
+    // channels keep it).
+    let forum = app
+        .selected_channel
+        .and_then(|id| app.channels.get(&id))
+        .is_some_and(|ch| ch.kind == crate::model::ChannelKind::Forum && !app.backend.is_media_channel(ch.id));
+    if acts.is_empty() || forum || !app.backend.activity_feed_enabled(g) {
         return div().into_any_element();
     }
     let now = crate::mock::now();
@@ -161,7 +169,10 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                             .child(gpui::svg().path(crate::icons::path("gear")).size(z(12.)).text_color(muted)),
                     )
                     .child(div().flex_1())
-                    .child(gpui::svg().path(crate::icons::path("chevron")).w(z(24.)).h(z(18.)).text_color(c(Palette::INTERACTIVE))),
+                    // toggleExpandIcon only when expandedCount > 3 (or hidden).
+                    .when(acts.len() > 3, |d| {
+                        d.child(gpui::svg().path(crate::icons::path("chevron")).w(z(24.)).h(z(18.)).text_color(c(Palette::INTERACTIVE)))
+                    }),
             ),
     );
     for (uid, a) in acts.into_iter().take(3) {
