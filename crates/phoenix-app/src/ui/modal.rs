@@ -129,7 +129,7 @@ pub fn confirm(m: Confirm) -> AnyElement {
                     let cancel = m.on_cancel.clone();
                     move |_, w, cx| cancel(w, cx)
                 })
-                .child(gpui::svg().path("icons/close.svg").size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
+                .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         )
         // footer section padding 16px 24px 8px; actionBarTrailing gap --space-8; md buttons.
         .child(

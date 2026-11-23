@@ -66,43 +66,48 @@ pub enum Icon {
 
 impl Icon {
     pub fn path(self) -> SharedString {
-        SharedString::new_static(match self {
-            Icon::Hash => "icons/hash.svg",
-            Icon::Speaker => "icons/speaker.svg",
-            Icon::Megaphone => "icons/megaphone.svg",
-            Icon::Forum => "icons/forum.svg",
-            Icon::Stage => "icons/stage.svg",
-            Icon::Chevron => "icons/chevron.svg",
-            Icon::Plus => "icons/plus.svg",
-            Icon::Mic => "icons/mic.svg",
-            Icon::MicOff => "icons/mic-off.svg",
-            Icon::Headphones => "icons/headphones.svg",
-            Icon::HeadphonesOff => "icons/headphones-off.svg",
-            Icon::Gear => "icons/gear.svg",
-            Icon::Bell => "icons/bell.svg",
-            Icon::Pin => "icons/pin.svg",
-            Icon::Members => "icons/members.svg",
-            Icon::Search => "icons/search.svg",
-            Icon::Inbox => "icons/inbox.svg",
-            Icon::Help => "icons/help.svg",
-            Icon::Gift => "icons/gift.svg",
-            Icon::Gif => "icons/gif.svg",
-            Icon::Sticker => "icons/sticker.svg",
-            Icon::Emoji => "icons/emoji.svg",
-            Icon::PlusCircle => "icons/plus-circle.svg",
-            Icon::Compass => "icons/compass.svg",
-            Icon::Download => "icons/download.svg",
-            Icon::Close => "icons/close.svg",
-            Icon::Threads => "icons/threads.svg",
-            Icon::Friends => "icons/friends.svg",
-            Icon::Nitro => "icons/nitro.svg",
-            Icon::Lock => "icons/lock.svg",
-            Icon::Reply => "icons/reply.svg",
-            Icon::File => "icons/file.svg",
-            Icon::Image => "icons/image.svg",
-            Icon::PhoneHangup => "icons/phone-hangup.svg",
+        crate::icons::path(match self {
+            Icon::Hash => "hash",
+            Icon::Speaker => "speaker",
+            Icon::Megaphone => "megaphone",
+            Icon::Forum => "forum",
+            Icon::Stage => "stage",
+            Icon::Chevron => "chevron",
+            Icon::Plus => "plus",
+            Icon::Mic => "mic",
+            Icon::MicOff => "mic-off",
+            Icon::Headphones => "headphones",
+            Icon::HeadphonesOff => "headphones-off",
+            Icon::Gear => "gear",
+            Icon::Bell => "bell",
+            Icon::Pin => "pin",
+            Icon::Members => "members",
+            Icon::Search => "search",
+            Icon::Inbox => "inbox",
+            Icon::Help => "help",
+            Icon::Gift => "gift",
+            Icon::Gif => "gif",
+            Icon::Sticker => "sticker",
+            Icon::Emoji => "emoji",
+            Icon::PlusCircle => "plus-circle",
+            Icon::Compass => "compass",
+            Icon::Download => "download",
+            Icon::Close => "close",
+            Icon::Threads => "threads",
+            Icon::Friends => "friends",
+            Icon::Nitro => "nitro",
+            Icon::Lock => "lock",
+            Icon::Reply => "reply",
+            Icon::File => "file",
+            Icon::Image => "image",
+            Icon::PhoneHangup => "phone-hangup",
         })
     }
+}
+
+/// Our own hand-drawn icon for `path` (used when no real icon was extracted).
+pub fn fallback_svg(path: &str) -> Option<&'static str> {
+    svg_for(path)
 }
 
 fn svg_for(path: &str) -> Option<&'static str> {
@@ -113,7 +118,11 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/forum.svg" => s!(r#"<path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4 3V5a1 1 0 0 1 1-1zM20 8h0a1 1 0 0 1 1 1v11l-3-2.5H10a1 1 0 0 1-1-1V17"/>"#),
         "icons/stage.svg" => s!(r#"<circle cx="12" cy="9" r="3"/><path d="M5.6 15.5A8 8 0 1 1 18.4 15.5M8 21l1-5h6l1 5"/>"#),
         "icons/chevron.svg" => s!(r#"<path d="m6 9 6 6 6-6"/>"#),
+        "icons/invite.svg" => s!(r#"<circle cx="10" cy="8" r="4"/><path d="M3 20a7 7 0 0 1 12-4.9M19 14v6m-3-3h6"/>"#),
+        "icons/nav/back.svg" => s!(r#"<path d="M20 12H5m6-7-7 7 7 7"/>"#),
+        "icons/nav/forward.svg" => s!(r#"<path d="M4 12h15m-6-7 7 7-7 7"/>"#),
         "icons/chevron-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
+        "icons/star.svg" => f!(r#"<path d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.3 1.3-6.5-4.9-4.5 6.6-.8z"/>"#),
         "icons/crown.svg" => f!(r#"<path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/>"#),
         "icons/check.svg" => s!(r#"<path d="m5 12.5 4.5 4.5L19 7.5"/>"#),
         "icons/plus.svg" => s!(r#"<path d="M12 5v14M5 12h14"/>"#),
@@ -162,6 +171,12 @@ impl AssetSource for Assets {
     fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
         if path == "icon.png" {
             return Ok(Some(Cow::Borrowed(APP_ICON_PNG)));
+        }
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(crate::icons::init);
+        // Real icons extracted from the local Discord install win over ours.
+        if let Some(b) = crate::icons::lookup(path) {
+            return Ok(Some(Cow::Owned(b.to_vec())));
         }
         Ok(svg_for(path).map(|s| Cow::Borrowed(s.as_bytes())))
     }
