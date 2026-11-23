@@ -168,9 +168,9 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             rest.vote_poll(sf(channel), sf(m), &answers).await.map_err(e)?;
             ParityReply::Done
         }
-        ParityRequest::ForumPosts { forum, tags, offset, by_creation } => {
+        ParityRequest::ForumPosts { forum, tags, offset, by_creation, archived } => {
             let sort = if by_creation { ThreadSort::Created } else { ThreadSort::LastMessage };
-            let r = rest.search_threads(sf(forum), sort, &ids(&tags), offset, false).await.map_err(e)?;
+            let r = rest.search_threads(sf(forum), sort, &ids(&tags), offset, archived).await.map_err(e)?;
             emit_users(&emit, &r.first_messages.iter().collect::<Vec<_>>());
             let posts = r
                 .threads
@@ -185,6 +185,8 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     last_message: t.last_message_id.map(id),
                     member_ids_preview: t.member_ids_preview.iter().copied().map(id).collect(),
                     member_count: t.member_count.unwrap_or(0),
+                    pinned: t.flags & 2 != 0,
+                    archived,
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more: r.has_more }
@@ -234,6 +236,8 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     last_message: t.last_message_id.map(id),
                     member_ids_preview: t.member_ids_preview.iter().copied().map(id).collect(),
                     member_count: t.member_count.unwrap_or(0),
+                    pinned: false,
+                    archived: true,
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more }

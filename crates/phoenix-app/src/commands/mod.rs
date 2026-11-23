@@ -61,6 +61,10 @@ pub struct ForumPost {
     /// Thread `member_ids_preview` / `member_count` (threads browser facepile).
     pub member_ids_preview: Vec<Id>,
     pub member_count: u32,
+    /// Thread flag PINNED (1 << 1): pinned post shown first with a pin badge.
+    pub pinned: bool,
+    /// Came from the archived search (forum "Older posts" section).
+    pub archived: bool,
 }
 
 /// Tag of a forum / media channel (`available_tags`).
@@ -121,7 +125,7 @@ pub enum ParityRequest {
     SetSaved { channel: Id, message: Id, saved: bool },
     VotePoll { channel: Id, message: Id, answers: Vec<u32> },
     /// `by_creation` sorts by post date instead of recent activity.
-    ForumPosts { forum: Id, tags: Vec<Id>, offset: u32, by_creation: bool },
+    ForumPosts { forum: Id, tags: Vec<Id>, offset: u32, by_creation: bool, archived: bool },
     CreatePost { forum: Id, title: String, content: String, tags: Vec<Id> },
     Moderate { guild: Id, user: Id, action: ModAction },
     BulkDelete { channel: Id, messages: Vec<Id> },

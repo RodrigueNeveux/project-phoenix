@@ -170,6 +170,11 @@ pub struct ForumCompose {
 #[derive(Default)]
 pub struct ForumView {
     pub posts: Vec<ForumPost>,
+    /// "Older posts": archived search pages, loaded after the active list.
+    pub archived: Vec<ForumPost>,
+    pub archived_more: bool,
+    pub archived_loading: bool,
+    pub archived_loaded: bool,
     pub has_more: bool,
     pub loading: bool,
     pub loaded: bool,

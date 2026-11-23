@@ -22,13 +22,17 @@ use crate::{
         state::{ForumCompose, ForumSort},
     },
     model::{AttachmentKind, ChannelKind, Id, ThreadRef},
-    theme::{Palette, c},
+    theme::{Palette, c, generated::idx, tok},
     ui::icon,
 };
 
 thread_local! {
     /// The "Search or create a post" input, per open forum.
     static SEARCH: std::cell::RefCell<Option<(Id, gpui::Entity<InputState>)>> = const { std::cell::RefCell::new(None) };
+}
+
+thread_local! {
+    static LIST_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
 fn search_input(forum: Id) -> Option<gpui::Entity<InputState>> {
@@ -61,6 +65,9 @@ pub fn ago(now: i64, ts: i64) -> String {
 }
 
 impl PhoenixApp {
+    /// Active posts (`threads/search?archived=false`), every page, then the
+    /// first page of archived ones for the "Older posts" section, as the
+    /// client does.
     fn load_forum(&mut self, forum: Id, fresh: bool, cx: &mut Context<Self>) {
         let v = self.parity.forums.entry(forum).or_default();
         if v.loading {
@@ -69,12 +76,16 @@ impl PhoenixApp {
         v.loading = true;
         if fresh {
             v.posts.clear();
+            v.archived.clear();
+            v.archived_more = false;
+            v.archived_loaded = false;
         }
         let req = ParityRequest::ForumPosts {
             forum,
             tags: v.tags.clone(),
             offset: v.posts.len() as u32,
             by_creation: v.sort == ForumSort::Created,
+            archived: false,
         };
         self.parity_request(req, cx, move |a, res, cx| {
             let v = a.parity.forums.entry(forum).or_default();
@@ -82,12 +93,44 @@ impl PhoenixApp {
             v.loaded = true;
             match res {
                 Ok(ParityReply::ForumPosts { posts, has_more }) => {
+                    let got = !posts.is_empty();
                     v.posts.extend(posts);
                     v.has_more = has_more;
+                    if has_more && got {
+                        a.load_forum(forum, false, cx);
+                    } else {
+                        a.load_archived(forum, cx);
+                    }
                 }
                 Ok(_) => {}
                 Err(e) => a.parity_toast(crate::t!("forum.load_failed", e = e.0).to_string(), cx),
             }
+        });
+    }
+
+    /// Next page of archived posts (`threads/search?archived=true`).
+    fn load_archived(&mut self, forum: Id, cx: &mut Context<Self>) {
+        let v = self.parity.forums.entry(forum).or_default();
+        if v.archived_loading || (v.archived_loaded && !v.archived_more) {
+            return;
+        }
+        v.archived_loading = true;
+        let req = ParityRequest::ForumPosts {
+            forum,
+            tags: v.tags.clone(),
+            offset: v.archived.len() as u32,
+            by_creation: v.sort == ForumSort::Created,
+            archived: true,
+        };
+        self.parity_request(req, cx, move |a, res, cx| {
+            let v = a.parity.forums.entry(forum).or_default();
+            v.archived_loading = false;
+            v.archived_loaded = true;
+            if let Ok(ParityReply::ForumPosts { posts, has_more }) = res {
+                v.archived_more = has_more && !posts.is_empty();
+                v.archived.extend(posts);
+            }
+            cx.notify();
         });
     }
 
@@ -167,6 +210,12 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
     if !v.loaded && !v.loading {
         app.load_forum(forum, true, cx);
     }
+    // Paging: the next archived page once the list is scrolled near its end.
+    let (off, max) = LIST_SCROLL.with(|h| (h.offset().y, h.max_offset().y));
+    let v = app.parity.forums.entry(forum).or_default();
+    if v.archived_more && !v.archived_loading && max > px(0.) && -off > max - px(600.) {
+        app.load_archived(forum, cx);
+    }
     if app.parity.forum_compose_request == Some(forum) {
         app.parity.forum_compose_request = None;
         let title = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("forum.post_title")));
@@ -183,97 +232,223 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
     }
 }
 
+// Values below come from the vanilla dump `vanilla-forum` (midnight theme,
+// visual refresh) and the matching rules in current-client/css.
+
+/// Header tag filter chip: `pill_snX-u4` (h 32, padding 0 12, radius 20,
+/// --control-secondary-background-default, 1px --border-subtle, 14px
+/// semibold --control-secondary-text-default).
 fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
+    div()
+        .h(z(32.))
+        .px(z(12.))
+        .rounded(z(20.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(z(4.))
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .bg(if on { c(Palette::BLURPLE) } else { c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)) })
+        .text_color(if on { gpui::white() } else { c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)) })
+        .when_some(t.emoji.clone(), |d, e| d.child(crate::media::emoji::emoji_element(&e, 16.)))
+        .child(t.name.clone())
+}
+
+/// Tag shown on a card (`tags_nLtnFF` row, 24px high).
+fn card_tag(t: &ForumTag) -> gpui::Div {
     div()
         .h(z(24.))
         .px(z(8.))
         .rounded(z(12.))
         .flex()
+        .flex_none()
         .items_center()
         .gap(z(4.))
+        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
         .text_size(z(12.))
         .font_weight(FontWeight::SEMIBOLD)
-        .bg(if on { c(Palette::BLURPLE) } else { c(Palette::BG_MOD_HOVER) })
-        .text_color(if on { gpui::white() } else { c(Palette::TEXT_NORMAL) })
+        .text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
         .when_some(t.emoji.clone(), |d, e| d.child(crate::media::emoji::emoji_element(&e, 14.)))
         .child(t.name.clone())
 }
 
+fn is_unread(app: &PhoenixApp, p: &ForumPost) -> bool {
+    match (app.backend.last_read(p.thread), p.last_message) {
+        (Some(r), Some(l)) => l.0 > r.0,
+        _ => false,
+    }
+}
+
+/// Footer time: the date for a pinned post, else relative, capped at
+/// "More than 30d ago" like the client.
+fn footer_time(now: i64, p: &ForumPost) -> String {
+    if p.pinned {
+        let ts = snowflake_time(p.thread);
+        return chrono::DateTime::from_timestamp(ts, 0)
+            .map(|d| crate::i18n::long_date(d.with_timezone(&chrono::Local).date_naive()))
+            .unwrap_or_default();
+    }
+    let ts = snowflake_time(p.last_message.unwrap_or(p.thread));
+    if now - ts > 30 * 86_400 { crate::t!("forum.over_30d").to_string() } else { ago(now, ts) }
+}
+
 fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let first = p.first_message.as_ref();
-    let author = p.owner.or(first.map(|m| m.author)).and_then(|u| app.users.get(&u));
+    let author_id = p.owner.or(first.map(|m| m.author));
+    let author = author_id.and_then(|u| app.users.get(&u));
+    let guild = app.channels.get(&p.thread).and_then(|ch| ch.guild).or(app.selected_guild);
+    let author_color = guild
+        .zip(author_id)
+        .and_then(|(g, u)| app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == u)).and_then(|m| app.member_color(g, m)));
     let preview: SharedString = first.map(|m| m.content.replace('\n', " ")).unwrap_or_default().into();
     let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
-    let activity = snowflake_time(p.last_message.unwrap_or(p.thread));
+    let reaction = first.and_then(|m| m.reactions.iter().max_by_key(|r| r.count)).cloned();
     let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
-    let replies = p.message_count;
-    div()
-        .id(("forum-post", p.thread.0))
-        .p(z(16.))
-        .rounded(z(8.))
-        .bg(c(Palette::BG_SECONDARY))
-        .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .flex()
-        .gap(z(16.))
-        .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .flex()
-                .flex_col()
-                .gap(z(6.))
-                .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap(z(4.))
-                        .children(p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).map(|t| tag_pill(t, false))),
-                )
-                .child(
-                    div()
-                        .text_size(z(16.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::TEXT_HEADER))
-                        .child(SharedString::from(p.title.clone())),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .gap(z(4.))
-                        .text_size(z(14.))
-                        .line_height(z(18.))
-                        .min_w_0()
-                        .child(
+    let unread = is_unread(app, p);
+    // Read posts dim the title and preview to --text-muted (lineClamp2Plus h3).
+    let title_color = if unread { c(Palette::TEXT_HEADER) } else { c(Palette::TEXT_MUTED) };
+    let preview_color = if unread { c(Palette::TEXT_NORMAL) } else { c(Palette::TEXT_MUTED) };
+    let post_tags: Vec<&ForumTag> = p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).collect();
+    // card_BkGrJJ li: padding-bottom 16.
+    div().pb(z(16.)).child(
+        div()
+            .id(("forum-post", p.thread.0))
+            // container_SOY5H6: padding var(--space-12) calc(var(--space-8) + 2px)
+            .py(z(12.))
+            .px(z(10.))
+            // mainCard_BkGrJJ: --background-base-low, 1px --border-subtle, --radius-md
+            .rounded(z(12.))
+            .bg(c(Palette::BG_BASE_LOW))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .cursor_pointer()
+            // container_SOY5H6:hover: --background-surface-high, --border-strong
+            .hover(|s| s.bg(c(tok(idx::BACKGROUND_SURFACE_HIGH))).border_color(c(tok(idx::BORDER_STRONG))))
+            .flex()
+            .items_start()
+            .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
+            .child(
+                // body_SOY5H6: padding-bottom 8
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .when(p.pinned || !post_tags.is_empty(), |d| {
+                        // tags_nLtnFF: h 24, gap 8, margin-bottom 8
+                        d.child(
                             div()
-                                .flex_none()
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(c(Palette::TEXT_NORMAL))
-                                .child(author.map(|u| format!("{}:", u.display_name)).unwrap_or_default()),
-                        )
-                        .child(div().min_w_0().text_ellipsis().text_color(c(Palette::TEXT_MUTED)).child(preview)),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(z(12.))
-                        .text_size(z(14.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(
-                            div()
+                                .h(z(24.))
+                                .mb(z(8.))
                                 .flex()
                                 .items_center()
-                                .gap(z(4.))
-                                .child(icon(Icon::Threads, 16., c(Palette::INTERACTIVE)))
-                                .child(replies.to_string()),
+                                .gap(z(8.))
+                                .overflow_hidden()
+                                .when(p.pinned, |d| {
+                                    // pinIcon_nLtnFF: 22px circle, --brand-500, 16px icon
+                                    d.child(
+                                        div()
+                                            .size(z(22.))
+                                            .flex_none()
+                                            .rounded_full()
+                                            .bg(c(Palette::BLURPLE))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .child(icon(Icon::Pin, 14., gpui::white())),
+                                    )
+                                })
+                                .children(post_tags.iter().map(|t| card_tag(t))),
                         )
-                        .child(ago(now, activity)),
-                ),
-        )
-        .when_some(thumb, |d, u| d.child(img(u).size(z(72.)).flex_none().rounded(z(8.)).object_fit(gpui::ObjectFit::Cover)))
-        .into_any_element()
+                    })
+                    .child(
+                        // header_SOY5H6 padding-bottom 6; h3 heading-lg/semibold 20/24, 2 lines
+                        div()
+                            .pb(z(6.))
+                            .text_size(z(20.))
+                            .line_height(z(24.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(title_color)
+                            .line_clamp(2)
+                            .child(SharedString::from(p.title.clone())),
+                    )
+                    .child(
+                        // message_SOY5H6: body-sm 14/18; author semibold, content medium + ml 4
+                        div()
+                            .flex()
+                            .h(z(18.))
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .min_w_0()
+                            .overflow_hidden()
+                            .child(
+                                div()
+                                    .flex_none()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(author_color.map(c).unwrap_or(c(Palette::TEXT_HEADER)))
+                                    .child(author.map(|u| u.display_name.to_string()).unwrap_or_default()),
+                            )
+                            .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_NORMAL)).child(":"))
+                            .child(
+                                div()
+                                    .ml(z(4.))
+                                    .min_w_0()
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_ellipsis()
+                                    .whitespace_nowrap()
+                                    .overflow_hidden()
+                                    .text_color(preview_color)
+                                    .child(preview),
+                            ),
+                    )
+                    .child(
+                        // footer_SOY5H6: margin-top = body padding 8, h 20, gap 8
+                        div()
+                            .mt(z(8.))
+                            .h(z(20.))
+                            .flex()
+                            .items_center()
+                            .gap(z(8.))
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .text_color(c(Palette::TEXT_NORMAL))
+                            .when_some(reaction, |d, re| {
+                                d.child(
+                                    div()
+                                        .h(z(20.))
+                                        .px(z(6.))
+                                        .rounded(z(8.))
+                                        .flex()
+                                        .items_center()
+                                        .gap(z(4.))
+                                        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+                                        .font_weight(FontWeight::MEDIUM)
+                                        .child(crate::media::emoji::emoji_element(&re.emoji, 14.))
+                                        .child(re.count.to_string()),
+                                )
+                            })
+                            .child(
+                                // messageCountBox: icon 14 + margin-right 4, count 14/14 medium
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(z(4.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(icon(Icon::Threads, 14., c(Palette::TEXT_NORMAL)))
+                                    .child(p.message_count.to_string()),
+                            )
+                            .child(div().size(z(4.)).rounded_full().bg(c(Palette::TEXT_MUTED)))
+                            .child(footer_time(now, p)),
+                    ),
+            )
+            // bodyMedia_SOY5H6: 72x72, radius 8, margin-left 12
+            .when_some(thumb, |d, u| d.child(img(u).ml(z(12.)).size(z(72.)).flex_none().rounded(z(8.)).object_fit(gpui::ObjectFit::Cover))),
+    )
+    .into_any_element()
 }
 
 /// Media channel tile: a 16:9 cover (first image, else a placeholder icon),
@@ -347,39 +522,63 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let v = app.parity.forums.get(&forum).unwrap_or(&empty);
     let now = chrono::Utc::now().timestamp();
 
-    let top = div()
+    // headerContainer_BkGrJJ (margin-top 24) > mainCard header_BkGrJJ: h 48,
+    // --input-background-default, 1px --border-subtle with
+    // --input-border-default at the bottom, --radius-md.
+    let search_bar = div()
+        .mt(z(24.))
+        .h(z(48.))
+        .rounded(z(12.))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .border_b_1()
         .flex()
-        .gap(z(8.))
+        .items_center()
+        .child(div().w(z(46.)).flex_none().flex().justify_center().child(icon(Icon::Search, 24., c(Palette::INTERACTIVE))))
         .child(
+            // title_owUmX8: heading-lg/semibold 20/24
             div()
                 .flex_1()
-                .h(z(40.))
-                .px(z(12.))
-                .rounded(z(8.))
-                .bg(c(Palette::INPUT_BG))
-                .flex()
-                .items_center()
-                .gap(z(8.))
-                .text_size(z(16.))
-                .text_color(c(Palette::TEXT_NORMAL))
-                .child(icon(Icon::Search, 18., c(Palette::TEXT_MUTED)))
-                .when_some(search_input(forum), |d, i| {
-                    d.child(div().flex_1().min_w_0().child(Input::new(&i).appearance(false).bordered(false)))
-                }),
+                .min_w_0()
+                .text_size(z(20.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(Palette::TEXT_HEADER))
+                .when_some(search_input(forum), |d, i| d.child(Input::new(&i).appearance(false).bordered(false))),
         )
         .child(
+            // button_F7qvhY sm secondary: 32x32, radius 8
+            div()
+                .id("forum-guide")
+                .size(z(32.))
+                .flex_none()
+                .rounded(z(8.))
+                .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+                .border_1()
+                .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon(Icon::File, 16., c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))),
+        )
+        .child(
+            // button_F7qvhY sm primary: h 32, padding 3 11, radius 8, body-sm/medium
             div()
                 .id("forum-new-post")
-                .h(z(40.))
-                .px(z(16.))
+                .ml(z(9.))
+                .mr(z(8.))
+                .h(z(32.))
+                .px(z(12.))
+                .flex_none()
                 .rounded(z(8.))
                 .bg(c(Palette::BLURPLE))
                 .cursor_pointer()
                 .hover(|s| s.opacity(0.9))
                 .flex()
                 .items_center()
-                .gap(z(6.))
+                .gap(z(4.))
                 .text_size(z(14.))
+                .line_height(z(18.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(gpui::white())
                 .on_click(cx.listener(move |a, _, _, cx| {
@@ -390,55 +589,88 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .child(crate::t!("forum.new_post")),
         );
 
-    let mut filters = div().flex().flex_wrap().items_center().gap(z(6.));
-    let sort_label = match v.sort {
-        ForumSort::Recent => crate::t!("forum.recent"),
-        ForumSort::Created => crate::t!("forum.created"),
-    };
-    filters = filters.child(
+    // tagsContainer_BkGrJJ: padding 16 0 4
+    let mut filters = div().pt(z(16.)).pb(z(4.)).flex().items_center().overflow_hidden().child(
+        // sortDropdown_BkGrJJ: h 32, padding 8 8 8 12, --radius-xl, gap 4
         div()
             .id("forum-sort")
-            .h(z(24.))
-            .px(z(8.))
-            .rounded(z(12.))
-            .bg(c(Palette::BG_MOD_HOVER))
+            .h(z(32.))
+            .pl(z(12.))
+            .pr(z(8.))
+            .flex_none()
+            .rounded(z(24.))
+            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
             .cursor_pointer()
             .flex()
             .items_center()
-            .text_size(z(12.))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(c(Palette::TEXT_NORMAL))
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(c(Palette::INTERACTIVE))
             .on_click(cx.listener(move |a, _, _, cx| {
                 let v = a.parity.forums.entry(forum).or_default();
                 v.sort_menu = !v.sort_menu;
                 cx.notify();
             }))
-            .child(crate::t!("forum.sort", sort = sort_label)),
+            .child(icon(Icon::Threads, 16., c(Palette::INTERACTIVE)))
+            // sortDropdownText_BkGrJJ: margin 0 4 0 8
+            .child(div().ml(z(8.)).mr(z(4.)).child(crate::t!("forum.sort_view")))
+            .child(icon(Icon::Chevron, 16., c(Palette::INTERACTIVE))),
     );
     if !tags.is_empty() {
-        filters = filters.child(div().w(z(1.)).h(z(16.)).mx(z(4.)).bg(c(Palette::DIVIDER)));
-    }
-    for t in &tags {
-        let on = v.tags.contains(&t.id);
-        let id = t.id;
-        filters = filters.child(
+        // divider_BkGrJJ: 2x24, margin 0 16, --border-subtle, --radius-xs
+        filters = filters.child(div().w(z(2.)).h(z(24.)).mx(z(16.)).flex_none().rounded(z(4.)).bg(c(tok(idx::BORDER_SUBTLE))));
+        // tagListInner_BkGrJJ: gap 8
+        let mut list = div().flex().gap(z(8.)).min_w_0().overflow_hidden();
+        for t in &tags {
+            let on = v.tags.contains(&t.id);
+            let id = t.id;
+            list = list.child(
+                div()
+                    .id(("forum-tag", id.0))
+                    .cursor_pointer()
+                    .on_click(cx.listener(move |a, _, _, cx| a.toggle_forum_tag(forum, id, cx)))
+                    .child(tag_pill(t, on)),
+            );
+        }
+        filters = filters.child(list).child(
+            // tagsButton_BkGrJJ: h 32, padding 0 4, radius 20, margin-left 8; inner padding-left 8, gap 4
             div()
-                .id(("forum-tag", id.0))
-                .cursor_pointer()
-                .on_click(cx.listener(move |a, _, _, cx| a.toggle_forum_tag(forum, id, cx)))
-                .child(tag_pill(t, on)),
+                .ml(z(8.))
+                .h(z(32.))
+                .px(z(4.))
+                .flex_none()
+                .rounded(z(20.))
+                .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .pl(z(12.))
+                .text_size(z(14.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(Palette::INTERACTIVE))
+                .child(crate::t!("forum.all_tags"))
+                .child(icon(Icon::Chevron, 16., c(Palette::INTERACTIVE))),
         );
     }
 
+    // list_BkGrJJ: cards at 16px from the left, scrollbar gutter on the right.
     let mut col = div()
         .id("forum-list")
-        .flex_1()
-        .min_h_0()
+        .track_scroll(&LIST_SCROLL.with(|h| h.clone()))
+        .size_full()
         .overflow_y_scroll()
+        .pl(z(16.))
+        .pr(z(32.))
         .flex()
         .flex_col()
-        .gap(z(8.));
-    if v.loaded && v.posts.is_empty() && !v.loading {
+        // headerRow_BkGrJJ: padding-bottom 16
+        .child(div().pb(z(16.)).child(search_bar).child(filters));
+    if v.loaded && v.posts.is_empty() && v.archived.is_empty() && !v.loading && !v.archived_loading {
         col = col.child(
             div()
                 .p(z(48.))
@@ -452,8 +684,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         );
     }
     let query = search_input(forum).map(|i| i.read(cx).value().trim().to_lowercase()).unwrap_or_default();
-    let shown: Vec<&ForumPost> = v.posts.iter().filter(|p| post_matches(p, &tags, &query)).collect();
-    if !query.is_empty() && shown.is_empty() && !v.posts.is_empty() {
+    let mut active: Vec<&ForumPost> = v.posts.iter().filter(|p| post_matches(p, &tags, &query)).collect();
+    // Pinned posts stay on top.
+    active.sort_by_key(|p| !p.pinned);
+    let older: Vec<&ForumPost> = v.archived.iter().filter(|p| post_matches(p, &tags, &query)).collect();
+    if !query.is_empty() && active.is_empty() && older.is_empty() && !(v.posts.is_empty() && v.archived.is_empty()) {
         col = col.child(
             div()
                 .p(z(32.))
@@ -464,19 +699,39 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .child(crate::t!("forum.no_match")),
         );
     }
+    // archivedDividerRow_BkGrJJ: padding 16 0 8; h2 body-sm/medium --text-muted.
+    let older_header = || {
+        div()
+            .pt(z(16.))
+            .pb(z(8.))
+            .text_size(z(14.))
+            .line_height(z(16.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(c(Palette::TEXT_MUTED))
+            .child(crate::t!("forum.older"))
+    };
     if app.backend.is_media_channel(forum) {
         // Media channels: a wrapping grid of thumbnail tiles.
-        col = col.child(
-            div().flex().flex_wrap().gap(z(16.)).children(shown.iter().map(|p| media_tile(app, p, &tags, now, cx))),
-        );
+        col = col.child(div().flex().flex_wrap().gap(z(16.)).children(active.iter().map(|p| media_tile(app, p, &tags, now, cx))));
+        if !older.is_empty() {
+            col = col
+                .child(older_header())
+                .child(div().flex().flex_wrap().gap(z(16.)).children(older.iter().map(|p| media_tile(app, p, &tags, now, cx))));
+        }
     } else {
-        for p in shown {
+        for p in active {
             col = col.child(post_card(app, p, &tags, now, cx));
         }
+        if !older.is_empty() {
+            col = col.child(older_header());
+            for p in older {
+                col = col.child(post_card(app, p, &tags, now, cx));
+            }
+        }
     }
-    if v.loading {
+    if v.loading || v.archived_loading {
         col = col.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
-    } else if v.has_more {
+    } else if v.archived_more {
         col = col.child(
             div()
                 .id("forum-more")
@@ -485,7 +740,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .justify_center()
                 .cursor_pointer()
                 .text_color(c(Palette::TEXT_LINK))
-                .on_click(cx.listener(move |a, _, _, cx| a.load_forum(forum, false, cx)))
+                .on_click(cx.listener(move |a, _, _, cx| a.load_archived(forum, cx)))
                 .child(crate::t!("forum.load_more")),
         );
     }
@@ -509,7 +764,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         };
         div()
             .absolute()
-            .top(z(96.))
+            .top(z(128.))
             .left(z(16.))
             .w(z(220.))
             .p(z(8.))
@@ -531,12 +786,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .size_full()
             .occlude()
             .bg(c(Palette::BG_PRIMARY))
-            .p(z(16.))
-            .flex()
-            .flex_col()
-            .gap(z(12.))
-            .child(top)
-            .child(filters)
             .child(col)
             .children(sort_menu)
             .into_any_element(),

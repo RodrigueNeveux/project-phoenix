@@ -76,6 +76,8 @@ fn main() -> anyhow::Result<()> {
                         // vanilla-threads-lrer #1392: 3 preview avatars; second row none.
                         member_ids_preview: if id == 1_250_000_000_000_000_000 { app.users.keys().take(3).copied().collect() } else { vec![] },
                         member_count: if id == 1_250_000_000_000_000_000 { 3 } else { 0 },
+                        pinned: false,
+                        archived: true,
                     };
                     app.parity.archived_threads.insert(ch, vec![post(1_250_000_000_000_000_000, "Weekend plans"), post(1_200_000_000_000_000_000, "Old bug report")]);
                     app.parity.threads_open = true;
