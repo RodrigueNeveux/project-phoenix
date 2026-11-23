@@ -71,15 +71,26 @@ pub fn apply_icons(games: &mut [RecentGame], apps: &Value) {
     }
 }
 
-/// "Il y a 1j" style relative age (days, else hours, else minutes).
-fn ago(ended: i64, now: i64) -> SharedString {
-    let s = (now - ended).max(0);
-    let (n, key) = if s >= 86_400 {
-        (s / 86_400, "time.days_ago_short")
-    } else if s >= 3600 {
-        (s / 3600, "time.hours_ago_short")
+/// "Il y a 1j" style relative age, the client's content-inventory formatter
+/// (module 583846 `aJ`, short format set): measured from the entry id's
+/// snowflake time, < 1 min seconds, < 1 h rounded minutes, < 12 h rounded
+/// hours, < 9 days rounded days, < 4 weeks rounded weeks, else 30-day months.
+fn ago(created: i64, now: i64) -> SharedString {
+    let d = now - created;
+    let a = d.abs();
+    let r = |unit: i64| (d as f64 / unit as f64).round() as i64;
+    let (n, key) = if a < 60 {
+        (d, "time.seconds_ago_short")
+    } else if a < 3600 {
+        (r(60), "time.minutes_ago_short")
+    } else if a < 12 * 3600 {
+        (r(3600), "time.hours_ago_short")
+    } else if a < 9 * 86_400 {
+        (r(86_400), "time.days_ago_short")
+    } else if a < 28 * 86_400 {
+        (r(7 * 86_400), "time.weeks_ago_short")
     } else {
-        ((s / 60).max(1), "time.minutes_ago_short")
+        (r(30 * 86_400), "time.months_ago_short")
     };
     crate::t!(key, n = n)
 }
@@ -101,7 +112,7 @@ fn badge(icon: &str, label: SharedString, col: &Colors) -> Div {
 }
 
 fn card(g: &RecentGame, now: i64, col: &Colors) -> Div {
-    let mut badges = vec![badge("game-controller", ago(g.ended_at, now), col)];
+    let mut badges = vec![badge("game-controller", ago(g.created, now), col)];
     if g.first_time {
         badges.push(badge("medal", crate::t!("pa.new_player"), col));
     }
@@ -187,5 +198,9 @@ mod tests {
         apply_icons(&mut g, &json!([{"id": "5", "icon": "abc"}]));
         assert_eq!(g[0].icon.as_deref(), Some("https://cdn.discordapp.com/app-icons/5/abc.png?size=128"));
         assert_eq!(ago(0, 2 * 86_400 + 5), crate::t!("time.days_ago_short", n = 2));
+        // 19 h is past the 12 h hour limit: rounds to 1 day ("Il y a 1j").
+        assert_eq!(ago(0, 19 * 3600), crate::t!("time.days_ago_short", n = 1));
+        assert_eq!(ago(0, 11 * 3600 + 1900), crate::t!("time.hours_ago_short", n = 12));
+        assert_eq!(ago(0, 10 * 86_400), crate::t!("time.weeks_ago_short", n = 1));
     }
 }

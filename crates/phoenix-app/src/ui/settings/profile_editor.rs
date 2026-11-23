@@ -1076,11 +1076,11 @@ fn lab_shift(rgb: u32, d: f32) -> u32 {
     let x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047;
     let y = 0.2126729 * r + 0.7151522 * g + 0.072175 * b;
     let zz = (0.0193339 * r + 0.119192 * g + 0.9503041 * b) / 1.08883;
-    let f = |t: f32| if t > 0.008856452 { t.cbrt() } else { t / 0.12841855 + 0.137931034 };
+    let f = |t: f32| if t > 0.008856452 { t.cbrt() } else { t / 0.12841855 + 0.137_931_03 };
     let (fx, fy, fz) = (f(x), f(y), f(zz));
     let (l, a, bb) = (116. * fy - 16. + d, 500. * (fx - fy), 200. * (fy - fz));
     let fy = (l + 16.) / 116.;
-    let inv = |t: f32| if t > 0.206896552 { t * t * t } else { 0.12841855 * (t - 0.137931034) };
+    let inv = |t: f32| if t > 0.206_896_55 { t * t * t } else { 0.12841855 * (t - 0.137_931_03) };
     let (x, y, zz) = (0.95047 * inv(fy + a / 500.), inv(fy), 1.08883 * inv(fy - bb / 200.));
     let r = 3.2404542 * x - 1.5371385 * y - 0.4985314 * zz;
     let g = -0.969266 * x + 1.8760108 * y + 0.041556 * zz;
@@ -1345,7 +1345,7 @@ mod tests {
         // chroma.js rounds Lab slightly differently: allow 1/255 per channel.
         let got = gradient_button_color(0x00A7FF);
         for sh in [16, 8, 0] {
-            assert!((((got >> sh) & 0xff) as i32 - ((0x004D9A >> sh) & 0xff) as i32).abs() <= 1, "{got:06x}");
+            assert!((((got >> sh) & 0xff) as i32 - ((0x004D9A >> sh) & 0xff)).abs() <= 1, "{got:06x}");
         }
     }
 
