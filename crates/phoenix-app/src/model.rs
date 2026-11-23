@@ -40,6 +40,8 @@ pub struct User {
     pub nameplate: Option<(SharedString, Option<u32>)>,
     /// Display name style: (`font_id`, `effect_id`, colors 0xRRGGBB).
     pub name_style: Option<(u32, u32, Vec<u32>)>,
+    /// Static avatar decoration image URL (`avatar_decoration_data.asset`).
+    pub decoration: Option<SharedString>,
 }
 
 #[derive(Clone, Debug)]

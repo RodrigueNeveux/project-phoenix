@@ -841,6 +841,20 @@ fn message(
                         .on_click(message_ext::open_author(entity, msg))
                         .child(avatar(author, m::AVATAR)),
                 )
+                .when_some(author.and_then(|u| u.decoration.clone()), |d, deco| {
+                    // avatarDecoration_2i8Bfm: --custom-message-avatar-decoration-size = avatar × 1.2
+                    // (--decoration-to-avatar-ratio), inset-inline-start margin-horizontal − (deco−avatar)/2,
+                    // margin-top 4px − 2px − (deco−avatar)/2, translateY(1px), z-index 1, no pointer events.
+                    let s = m::AVATAR * 1.2;
+                    let off = (s - m::AVATAR) / 2.;
+                    d.child(
+                        gpui::img(deco)
+                            .absolute()
+                            .size(z(s))
+                            .left(z(space::md() - off))
+                            .top(z(if msg.reply_to.is_some() { 28. } else { 4. } - off + 1.)),
+                    )
+                })
                 .child(
                     div()
                         .flex()

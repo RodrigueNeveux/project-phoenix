@@ -435,7 +435,17 @@ fn member_row(
             cx.stop_propagation();
             crate::ui::user_menu::open(uid, Some(g), ev.position, window);
         })
-        .child(avatar_with_status(user, 32., mem.presence, c(Palette::BG_SECONDARY)))
+        .child(
+            div()
+                .relative()
+                .flex_none()
+                .child(avatar_with_status(user, 32., mem.presence, c(Palette::BG_SECONDARY)))
+                .when_some(user.and_then(|u| u.decoration.clone()), |d, deco| {
+                    // avatarDecorationContainer_: inset/top --custom-avatar-avatar-decoration-border-position
+                    // = (1 − 1.2)/2 × 100%, size 120% of the 32px avatar.
+                    d.child(gpui::img(deco).absolute().size(z(32. * 1.2)).left(z(-3.2)).top(z(-3.2)))
+                }),
+        )
         .child(
             div()
                 .flex_1()
@@ -480,6 +490,10 @@ fn member_row(
                             .when(in_voice && mem.activity.is_some(), |d| d.child(div().flex_none().text_color(c(Palette::TEXT_NORMAL)).child("•")))
                             .when_some(mem.activity.clone(), |d, a| {
                                 d.child(div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(a))
+                            })
+                            // vanilla dump node 3441: textWithIconContainer_HigqCD > body-xs/medium "Dans un salon vocal"
+                            .when(in_voice && mem.activity.is_none(), |d| {
+                                d.child(div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(crate::t!("members.in_voice")))
                             }),
                     )
                 }),

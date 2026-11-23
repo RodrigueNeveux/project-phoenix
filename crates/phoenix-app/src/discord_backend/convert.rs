@@ -54,7 +54,15 @@ pub fn user(u: &api::User) -> model::User {
         tag: u.primary_guild.as_ref().and_then(|p| Some((p.shown_tag()?.to_owned().into(), p.badge_url().map(Into::into)))),
         nameplate: u.nameplate().map(|(url, pal)| (url.into(), pal.as_deref().and_then(crate::ui::nameplate::palette_dark))),
         name_style: u.display_name_styles.as_ref().map(|s| (s.font_id, s.effect_id, s.colors.clone())),
+        decoration: decoration_url(u),
     }
+}
+
+/// `avatar_decoration_data.asset` → static CDN preset (the client animates it only on hover).
+/// size=96 covers the 48px message and 38px member-list decoration at 2x.
+pub fn decoration_url(u: &api::User) -> Option<SharedString> {
+    let a = u.avatar_decoration_data.as_ref()?.get("asset")?.as_str().filter(|a| !a.is_empty())?;
+    Some(format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false").into())
 }
 
 pub fn presence(status: &str) -> model::Presence {
@@ -805,7 +813,7 @@ impl Adapter {
         out.push(AppEvent::GuildChannels { guild: id(g), channels: chs });
     }
 
-    fn list_update(&mut self, l: &GuildMemberListUpdate, out: &mut Vec<AppEvent>) {
+    fn list_update(&mut self, cache: &Cache, l: &GuildMemberListUpdate, out: &mut Vec<AppEvent>) {
         let has_full_sync = l.ops.iter().any(|o| matches!(o, MemberListOp::Sync { range, .. } if range[0] == 0));
         let list = self.lists.entry(l.guild_id.0).or_default();
         if list.id != l.id {
@@ -828,7 +836,20 @@ impl Adapter {
         if total > 0 {
             list.items.resize(total, None);
         }
-        let (members, users) = list.members();
+        let (mut members, users) = list.members();
+        // Own member (READY merged_members / GUILD_MEMBER_UPDATE) so my server nick resolves
+        // in reply previews even when I'm outside the synced list range.
+        if !members.iter().any(|m| m.user == id(self.me))
+            && let Some(me) = cache.member(l.guild_id, self.me)
+        {
+            members.push(model::Member {
+                user: id(self.me),
+                roles: me.roles.iter().copied().map(id).collect(),
+                presence: model::Presence::Online,
+                activity: None,
+                nick: me.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
+            });
+        }
         out.push(AppEvent::Users(users));
         out.push(AppEvent::GuildMembers { guild: id(l.guild_id), members });
         let (rows, acts) = crate::presence::list_rows(list.items.iter());
@@ -934,7 +955,7 @@ impl Adapter {
                     }
                 }
             }
-            GatewayEvent::GuildMemberListUpdate(l) => self.list_update(l, &mut out),
+            GatewayEvent::GuildMemberListUpdate(l) => self.list_update(cache, l, &mut out),
             GatewayEvent::GuildMembersChunk(c) => {
                 out.push(AppEvent::Users(c.members.iter().filter_map(|m| m.user.as_ref()).map(user).collect()));
             }
