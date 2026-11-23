@@ -5,6 +5,7 @@
 //! Endpoints (DiscordBotClient route list + Discord API docs) live in
 //! `phoenix_api::rest::{message_actions, members, guild_admin, reporting}`.
 
+pub mod admin;
 pub mod channel;
 pub mod exec;
 pub mod message;
@@ -54,6 +55,8 @@ pub enum ActionRequest {
     /// (channel, position, new parent: Some(None) = no category).
     MoveChannels { guild: Id, entries: Vec<(Id, i32, Option<Option<Id>>)> },
     CreateEvent { guild: Id, name: String, description: String, start_unix: u64, end_unix: Option<u64>, place: EventPlace },
+    /// Channel / server administration call (`phoenix_api::rest::guild_manage`).
+    Admin(phoenix_api::rest::guild_manage::AdminCall),
 }
 
 #[derive(Clone, Debug)]
@@ -63,6 +66,7 @@ pub enum ActionReply {
     Users(Vec<User>),
     Messages(Vec<Message>),
     ReportMenu(Box<ReportMenu>),
+    Json(serde_json::Value),
 }
 
 /// The modal currently opened from a menu (one at a time, like the client).

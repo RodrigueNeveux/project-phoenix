@@ -32,6 +32,7 @@ pub fn event_place(p: &EventPlace) -> guild_admin::EventPlace {
 pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> Result<ActionReply, BackendError> {
     use ActionRequest as R;
     Ok(match req {
+        R::Admin(c) => ActionReply::Json(rest.admin(&c).await.map_err(e)?),
         R::Forward { from, msg, guild, to, comment } => {
             for ch in to {
                 rest.forward_message(sf(ch), sf(from), sf(msg), guild.map(sf)).await.map_err(e)?;

@@ -2,11 +2,15 @@
 //! reactions, report flow, text forms (thread name, nicknames, reminders,
 //! events), mod view, DM call card and the server settings overlay.
 
+pub mod channel_settings;
+pub mod create_channel;
 pub mod forward;
 pub mod member;
+pub mod privacy;
 pub mod reactions;
 pub mod report;
 pub mod server_settings;
+pub mod settings_layout;
 
 use std::rc::Rc;
 
@@ -57,6 +61,10 @@ pub enum Modal {
     /// DM call card: shown only, no call is started from it.
     Call { channel: Id, user: Id },
     ServerSettings { guild: Id, section: usize },
+    CreateChannel(create_channel::State),
+    ChannelSettings(channel_settings::State),
+    Privacy(privacy::Privacy),
+    Security(privacy::Security),
 }
 
 /// Create the inputs that need a `Window`.
@@ -88,6 +96,8 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
                 f.comment = Some(mk(crate::t!("fwd.comment"), "", false));
             }
         }
+        Some(Modal::CreateChannel(s)) => create_channel::prepare(s, &mut mk),
+        Some(Modal::ChannelSettings(s)) => channel_settings::prepare(s, &mut mk),
         _ => {}
     });
 }
@@ -102,6 +112,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::ModView { guild, user } => member::mod_view(app, *guild, *user, cx),
             Modal::Call { channel, user } => member::call_card(app, *channel, *user, cx),
             Modal::ServerSettings { guild, section } => server_settings::render(app, *guild, *section, cx),
+            Modal::CreateChannel(s) => create_channel::render(app, s, cx),
+            Modal::ChannelSettings(s) => channel_settings::render(app, s, cx),
+            Modal::Privacy(p) => privacy::render_privacy(app, p, cx),
+            Modal::Security(s) => privacy::render_security(s, cx),
         })
     })
 }

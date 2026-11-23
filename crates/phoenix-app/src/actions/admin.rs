@@ -1,0 +1,302 @@
+//! Channel and server administration actions of the official client: Edit
+//! Channel (channel settings overlay), Create Channel / Category, Delete
+//! Channel / Category, Privacy Settings and Security Actions of a server.
+//! REST builders: `phoenix_api::rest::guild_manage`.
+
+use std::rc::Rc;
+
+use gpui::Context;
+use phoenix_api::{models::Snowflake, rest::guild_manage::{AdminCall, NewChannelKind}};
+use serde_json::{Value, json};
+
+use super::{ActionReply, ActionRequest, open_modal};
+use crate::{
+    app::PhoenixApp,
+    model::{Channel, ChannelKind, Id},
+    ui::modals::{Form, Modal, channel_settings, create_channel, privacy},
+};
+
+pub fn sf(id: Id) -> Snowflake {
+    Snowflake(id.0)
+}
+
+pub fn new_kind(k: ChannelKind) -> NewChannelKind {
+    match k {
+        ChannelKind::Text => NewChannelKind::Text,
+        ChannelKind::Voice => NewChannelKind::Voice,
+        ChannelKind::Announcement => NewChannelKind::Announcement,
+        ChannelKind::Forum => NewChannelKind::Forum,
+        ChannelKind::Stage => NewChannelKind::Stage,
+        ChannelKind::Category => NewChannelKind::Category,
+    }
+}
+
+/// Channel names of text-like channels are lowercased with dashes, like the
+/// client does while typing (voice / stage / category names are kept).
+pub fn channel_name(kind: ChannelKind, raw: &str) -> String {
+    let t = raw.trim();
+    match kind {
+        ChannelKind::Text | ChannelKind::Announcement | ChannelKind::Forum => {
+            let mut out = String::new();
+            for ch in t.chars().flat_map(char::to_lowercase) {
+                if ch.is_whitespace() || ch == '-' {
+                    if !out.ends_with('-') && !out.is_empty() {
+                        out.push('-');
+                    }
+                } else {
+                    out.push(ch);
+                }
+            }
+            out.trim_end_matches('-').to_owned()
+        }
+        _ => t.to_owned(),
+    }
+}
+
+fn id_of(v: &Value) -> Option<Id> {
+    v.get("id")?.as_str()?.parse().ok().map(Id)
+}
+
+/// Offline replies (mock backend): plausible lists, nothing leaves the machine.
+pub fn mock_reply(c: &AdminCall) -> Value {
+    use AdminCall as C;
+    let user = |id: u64, name: &str| json!({ "id": id.to_string(), "username": name, "global_name": name, "avatar": null });
+    match c {
+        C::CreateChannel { name, kind, .. } => json!({ "id": (crate::actions::now_unix() * 1000 + 7).to_string(), "name": name, "type": *kind as u8 }),
+        C::Channel { channel } => json!({ "id": channel, "permission_overwrites": [
+            { "id": "1", "type": 0, "allow": "0", "deny": "2048" }
+        ]}),
+        C::ChannelInvites { .. } | C::GuildInvites { .. } => json!([
+            { "code": "phoenix", "uses": 3, "max_uses": 0, "max_age": 604800, "created_at": "2026-11-20T10:00:00Z",
+              "inviter": user(2, "ferris"), "channel": { "id": "10", "name": "general" } }
+        ]),
+        C::Integrations { .. } => json!([{ "id": "5", "name": "Phoenix Bot", "type": "discord", "enabled": true, "account": { "name": "Phoenix Bot" } }]),
+        C::Roles { .. } => json!([]),
+        C::Emojis { .. } => json!([{ "id": "11", "name": "ferris", "animated": false, "user": user(2, "ferris") }]),
+        C::Stickers { .. } => json!([{ "id": "12", "name": "wave", "format_type": 1, "tags": "wave", "user": user(2, "ferris") }]),
+        C::SearchMembers { .. } => json!({ "members": [
+            { "member": { "user": user(2, "ferris"), "roles": [], "joined_at": "2025-01-02T03:04:05Z", "nick": null }, "join_source_type": 1 },
+            { "member": { "user": user(3, "crab"), "roles": [], "joined_at": "2026-06-01T12:00:00Z", "nick": "Crabby" }, "join_source_type": 1 }
+        ], "total_result_count": 2 }),
+        C::Bans { .. } => json!([{ "user": user(4, "spammer"), "reason": "Spam" }]),
+        C::AuditLog { .. } => json!({ "audit_log_entries": [
+            { "id": "20", "user_id": "2", "action_type": 10, "target_id": "10", "changes": [] },
+            { "id": "21", "user_id": "2", "action_type": 22, "target_id": "4", "reason": "Spam" }
+        ], "users": [user(2, "ferris"), user(4, "spammer")] }),
+        C::UserSettings => json!({ "restricted_guilds": [], "message_request_restricted_guild_ids": [] }),
+        _ => Value::Null,
+    }
+}
+
+impl PhoenixApp {
+    /// Run an admin call, handing back the JSON reply (or the error text).
+    pub fn admin(&mut self, call: AdminCall, cx: &mut Context<Self>, done: impl FnOnce(&mut Self, Result<Value, String>, &mut Context<Self>) + 'static) {
+        self.action(ActionRequest::Admin(call), cx, move |a, r, cx| {
+            done(
+                a,
+                match r {
+                    Ok(ActionReply::Json(v)) => Ok(v),
+                    Ok(_) => Ok(Value::Null),
+                    Err(e) => Err(e.0),
+                },
+                cx,
+            )
+        });
+    }
+
+    /// Fire an admin call and toast the error, if any.
+    pub fn admin_toast(&mut self, call: AdminCall, ok: Option<gpui::SharedString>, cx: &mut Context<Self>) {
+        self.admin(call, cx, move |a, r, cx| match r {
+            Ok(_) => {
+                if let Some(ok) = ok {
+                    a.parity_toast(ok, cx)
+                }
+            }
+            Err(e) => a.parity_toast(e, cx),
+        });
+    }
+
+    fn put_channel_local(&mut self, ch: Channel) {
+        let Some(g) = ch.guild else { return };
+        let list = self.guild_channels.entry(g).or_default();
+        if !list.contains(&ch.id) {
+            list.push(ch.id);
+        }
+        self.channels.insert(ch.id, ch);
+        self.rebuild_sidebar();
+    }
+
+    fn drop_channel_local(&mut self, channel: Id) {
+        if let Some(ch) = self.channels.remove(&channel)
+            && let Some(list) = ch.guild.and_then(|g| self.guild_channels.get_mut(&g))
+        {
+            list.retain(|c| *c != channel);
+        }
+        // Children of a deleted category fall back to no category.
+        for c in self.channels.values_mut() {
+            if c.parent == Some(channel) {
+                c.parent = None;
+            }
+        }
+        if self.selected_channel == Some(channel) {
+            self.selected_channel = None;
+        }
+        self.rebuild_sidebar();
+    }
+
+    // ---- create -------------------------------------------------------------
+
+    pub fn open_create_channel(&mut self, guild: Id, parent: Option<Id>, kind: ChannelKind, cx: &mut Context<Self>) {
+        open_modal(Modal::CreateChannel(create_channel::State::new(guild, parent, kind)), None);
+        cx.notify();
+    }
+
+    pub fn create_channel(&mut self, guild: Id, parent: Option<Id>, kind: ChannelKind, name: String, private: bool, cx: &mut Context<Self>) {
+        let name = channel_name(kind, &name);
+        if name.is_empty() {
+            return;
+        }
+        let me = self.me.id;
+        let call = AdminCall::CreateChannel { guild: sf(guild), name: name.clone(), kind: new_kind(kind), parent: parent.map(sf), private, me: sf(me) };
+        self.admin(call, cx, move |a, r, cx| match r {
+            Ok(v) => {
+                if let Some(id) = id_of(&v) {
+                    let position = a.guild_channels.get(&guild).map_or(0, |l| l.len() as i32);
+                    let parent = if kind == ChannelKind::Category { None } else { parent };
+                    a.put_channel_local(Channel {
+                        id,
+                        guild: Some(guild),
+                        parent,
+                        name: name.into(),
+                        topic: None,
+                        kind,
+                        position,
+                        unread: false,
+                        muted: false,
+                        mentions: 0,
+                        voice_users: Vec::new(),
+                    });
+                    if kind != ChannelKind::Category && kind != ChannelKind::Voice && kind != ChannelKind::Stage {
+                        a.selected_channel = Some(id);
+                    }
+                }
+                cx.notify();
+            }
+            Err(e) => a.parity_toast(e, cx),
+        });
+    }
+
+    // ---- delete -------------------------------------------------------------
+
+    /// "Delete Channel" / "Delete Category" confirm (critical button).
+    pub fn confirm_delete_channel(&mut self, channel: Id, cx: &mut Context<Self>) {
+        let Some(ch) = self.channels.get(&channel) else { return };
+        let cat = ch.kind == ChannelKind::Category;
+        let name = ch.name.to_string();
+        open_modal(
+            Modal::Form(Form {
+                title: crate::t!(if cat { "admin.delete_category_title" } else { "admin.delete_channel_title" }),
+                subtitle: Some(crate::t!(if cat { "admin.delete_category_body" } else { "admin.delete_channel_body" }, name = name)),
+                fields: Vec::new(),
+                choices: Vec::new(),
+                choice: None,
+                submit: crate::t!(if cat { "menu.delete_category" } else { "menu.delete_channel" }),
+                danger: true,
+                on_submit: Rc::new(move |a, _, _, cx| a.delete_channel(channel, cx)),
+            }),
+            None,
+        );
+        cx.notify();
+    }
+
+    pub fn delete_channel(&mut self, channel: Id, cx: &mut Context<Self>) {
+        self.admin(AdminCall::DeleteChannel { channel: sf(channel) }, cx, move |a, r, cx| match r {
+            Ok(_) => {
+                if matches!(crate::actions::with_modal(|m| matches!(m, Some(Modal::ChannelSettings(s)) if s.channel == channel)), true) {
+                    crate::actions::close_modal();
+                }
+                a.drop_channel_local(channel);
+                cx.notify();
+            }
+            Err(e) => a.parity_toast(e, cx),
+        });
+    }
+
+    // ---- edit ---------------------------------------------------------------
+
+    pub fn open_channel_settings(&mut self, channel: Id, cx: &mut Context<Self>) {
+        let Some(ch) = self.channels.get(&channel) else { return };
+        open_modal(Modal::ChannelSettings(channel_settings::State::new(ch)), None);
+        self.admin(AdminCall::Channel { channel: sf(channel) }, cx, move |_, r, cx| {
+            if let Ok(v) = r {
+                crate::actions::with_modal(|m| {
+                    if let Some(Modal::ChannelSettings(s)) = m
+                        && s.channel == channel
+                    {
+                        s.load_channel(&v);
+                    }
+                });
+            }
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// Apply a saved overview locally (the gateway confirms it later).
+    pub fn apply_channel_overview(&mut self, channel: Id, name: &str, topic: &str) {
+        if let Some(c) = self.channels.get_mut(&channel) {
+            c.name = name.to_owned().into();
+            c.topic = (!topic.is_empty()).then(|| topic.to_owned().into());
+        }
+        self.rebuild_sidebar();
+    }
+
+    // ---- privacy / security -------------------------------------------------
+
+    pub fn open_privacy_settings(&mut self, guild: Id, cx: &mut Context<Self>) {
+        open_modal(Modal::Privacy(privacy::Privacy::new(guild)), None);
+        self.admin(AdminCall::UserSettings, cx, move |a, r, cx| {
+            match r {
+                Ok(v) => crate::actions::with_modal(|m| {
+                    if let Some(Modal::Privacy(p)) = m {
+                        p.load(&v);
+                    }
+                }),
+                Err(e) => a.parity_toast(e, cx),
+            }
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// Toggle one privacy list (`restricted_guilds` or
+    /// `message_request_restricted_guild_ids`) for `guild`.
+    pub fn set_guild_privacy(&mut self, guild: Id, key: &'static str, restricted: bool, current: Value, cx: &mut Context<Self>) {
+        let list = phoenix_api::rest::guild_manage::toggle_list(&current, sf(guild), restricted);
+        self.admin_toast(AdminCall::PatchUserSettings { patch: json!({ key: list }) }, None, cx);
+    }
+
+    pub fn open_security_actions(&mut self, guild: Id, cx: &mut Context<Self>) {
+        open_modal(Modal::Security(privacy::Security::new(guild)), None);
+        cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names() {
+        assert_eq!(channel_name(ChannelKind::Text, "  Hello  World -x "), "hello-world-x");
+        assert_eq!(channel_name(ChannelKind::Voice, " Hello World "), "Hello World");
+        assert_eq!(channel_name(ChannelKind::Forum, "A"), "a");
+    }
+
+    #[test]
+    fn mock_lists() {
+        assert!(mock_reply(&AdminCall::Bans { guild: Snowflake(1) }).as_array().is_some_and(|a| !a.is_empty()));
+        let v = mock_reply(&AdminCall::CreateChannel { guild: Snowflake(1), name: "x".into(), kind: NewChannelKind::Text, parent: None, private: false, me: Snowflake(2) });
+        assert!(id_of(&v).is_some());
+    }
+}
