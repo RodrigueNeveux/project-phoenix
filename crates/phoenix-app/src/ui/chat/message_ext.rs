@@ -123,7 +123,9 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
     let _ = app;
     let (ch, id) = (msg.channel, msg.id);
     // reactions_: padding-top .125rem; reaction_ margin-inline-end / margin-bottom 4px.
-    let mut row = div().pt(z(2.)).flex().flex_wrap().gap(z(4.));
+    // reactions_ padding-bottom .375rem + the last row's 4px reaction_ margin-bottom,
+    // margin-bottom -.5rem.
+    let mut row = div().pt(z(2.)).pb(z(10.)).mb(z(-8.)).flex().flex_wrap().gap(z(4.)).items_center();
     for (ix, r) in msg.reactions.iter().enumerate() {
         let e = entity.clone();
         let rc = r.clone();
@@ -133,7 +135,7 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
             // reaction_: radius 8px, 1px transparent border, --reaction-background-default;
             // :hover --reaction-background-hover / --reaction-border-hover; .reactionMe_
             // --reaction-background-reacted-default / --reaction-border-reacted-default.
-            // reactionInner_ padding 2px 6px. reactionCount_ 14px semibold --text-subtle
+            // reactionInner_ padding 2px 6px. reactionCount_ semibold --text-subtle
             // (reacted: --reaction-text-reacted-default), margin-inline-start 6px.
             div()
                 .id(("reaction", ix))
@@ -157,7 +159,10 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                 .child(emoji_el)
                 .child(
                     div()
-                        .text_size(z(14.))
+                        // reactionCount_ has no font-size: inherits 16px / line-height 16px
+                        // (vanilla-guild-chat-busy #1160: "156" box 36x16, weight 600).
+                        .text_size(z(16.))
+                        .line_height(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(tk(if r.me { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::TEXT_SUBTLE }))
                         .child(SharedString::from(r.count.to_string())),
@@ -294,36 +299,43 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef)
         .into_any_element()
 }
 
-/// Red "NEW" line drawn above the first unread message.
-pub fn new_divider() -> impl IntoElement {
-    // divider_ margin-inline 1rem .875rem; .isUnread_ border --background-feedback-notification;
-    // endCap_ 13px tall, 10px bold, line-height 9px, padding 0 4px 0 1px, radius 0 4px 4px 0,
-    // top -7px at the right edge, white.
+/// Red "NEW" line drawn above the first unread message (divider_ .isUnread_, no content).
+/// .group-spacing-16: before a group start (`beforeGroup_`) it takes no room (margin-top 0,
+/// margin-bottom -1px, `top: .5rem`, so it sits in the group gap); else margin 4px top/bottom.
+pub fn new_divider(before_group: bool) -> AnyElement {
+    // divider_ margin-inline 1rem .875rem; .isUnread_ border --divider-color
+    // (--background-feedback-notification), border-top thin.
+    let line = div().ml(z(16.)).mr(z(14.)).h(z(1.)).bg(tk(idx::BACKGROUND_FEEDBACK_NOTIFICATION)).relative().child(unread_end_cap());
+    if before_group {
+        div().h_0().relative().child(line.absolute().left_0().right_0().top(z(8.))).into_any_element()
+    } else {
+        line.my(z(4.)).into_any_element()
+    }
+}
+
+/// endCap_ .unreadPill_: 13px tall, 10px bold uppercase, line-height 9px, padding-inline
+/// 1px 4px, radius 0 4px 4px 0, top -7px, inset-inline-end 0, white on --divider-color;
+/// unreadPillCap_ 13px tall at inset-inline-start -8px.
+pub fn unread_end_cap() -> gpui::Div {
+    let red = tk(idx::BACKGROUND_FEEDBACK_NOTIFICATION);
     div()
-        .ml(z(16.))
-        .mr(z(14.))
-        .mt(z(8.))
-        .h(z(1.))
-        .bg(tk(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
-        .relative()
-        .child(
-            div()
-                .absolute()
-                .right_0()
-                .top(z(-7.))
-                .h(z(13.))
-                .pl(z(1.))
-                .pr(z(4.))
-                .rounded_r(z(4.))
-                .bg(tk(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
-                .text_size(z(10.))
-                .line_height(z(9.))
-                .font_weight(FontWeight::BOLD)
-                .text_color(gpui::white())
-                .flex()
-                .items_center()
-                .child(crate::t!("chat.new")),
-        )
+        .absolute()
+        .right_0()
+        .top(z(-7.))
+        .h(z(13.))
+        .pl(z(1.))
+        .pr(z(4.))
+        .rounded_r(z(4.))
+        .bg(red)
+        .text_size(z(10.))
+        .line_height(z(9.))
+        .font_weight(FontWeight::BOLD)
+        .text_color(tk(idx::WHITE))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(gpui::svg().path(crate::icons::path("chat/unread-cap")).absolute().left(z(-8.)).top_0().w(z(8.)).h(z(13.)).text_color(red))
+        .child(crate::t!("chat.new").to_uppercase())
 }
 
 /// Click on an author's avatar or name: open the profile popout there.

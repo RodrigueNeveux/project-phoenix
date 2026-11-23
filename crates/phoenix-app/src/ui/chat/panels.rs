@@ -388,42 +388,80 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
 }
 
 /// Blurple "N new messages since ..." bar at the top of the list.
+/// newMessagesBar_ barBase_: absolute, top 0, inset-inline --space-8 --space-16, height 32px,
+/// padding-inline --space-16, --brand-500, radius 0 0 8px 8px, --elevation-low, white,
+/// 1px --border-subtle border. barButtonMain_ (body-sm/medium 14px, ellipsis, flex 1) jumps
+/// to the first unread; barButtonAlt_ (semibold, padding --space-4 --space-8, --radius-sm,
+/// hover --control-secondary-background-hover) "Mark As Read" + ChatCheckIcon (barButtonIcon_
+/// 16px, margin-inline-start 8px, top -1px).
 pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    use crate::{theme::generated::idx, ui::chat::tk};
+    use gpui::px;
     let (n, ts) = app.chat.new_messages?;
     if app.chat.at_bottom {
         return None;
     }
     let since = format_time_full(ts);
+    let text = if n == 1 { crate::t!("chat.new_since_one", since = since) } else { crate::t!("chat.new_since_many", n = n, since = since) };
     Some(
         div()
             .id("new-messages-bar")
             .absolute()
             .top_0()
-            .left(z(16.))
+            .left(z(8.))
             .right(z(16.))
-            .h(z(24.))
-            .px(z(12.))
+            .h(z(32.))
+            .px(z(16.))
             .rounded_b(z(8.))
-            .bg(c(Palette::BLURPLE))
+            .border_1()
+            .border_color(tk(idx::BORDER_SUBTLE))
+            .bg(tk(idx::BRAND_500))
+            .shadow(vec![gpui::BoxShadow {
+                // --elevation-low: 0 1px 0 --opacity-black-20 (+ two 4% layers, too faint to draw).
+                color: gpui::hsla(0., 0., 0., 0.2), // --opacity-black-20 (dark)
+                offset: gpui::point(px(0.), px(1.)),
+                blur_radius: px(0.),
+                spread_radius: px(0.),
+                inset: false,
+            }])
             .flex()
             .items_center()
-            .justify_between()
-            .cursor_pointer()
             .text_size(z(14.))
             .font_weight(FontWeight::MEDIUM)
-            .text_color(gpui::white())
-            .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
-            .child(if n == 1 { crate::t!("chat.new_since_one", since = since) } else { crate::t!("chat.new_since_many", n = n, since = since) })
+            .text_color(tk(idx::WHITE))
+            .child(
+                div()
+                    .id("new-messages-jump")
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .flex()
+                    .items_center()
+                    .pl(z(4.))
+                    .pr(z(12.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
+                    .child(div().truncate().child(text)),
+            )
             .child(
                 div()
                     .id("mark-read")
-                    .font_weight(FontWeight::BOLD)
-                    .hover(|s| s.underline())
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .py(z(4.))
+                    .pl(z(4.))
+                    .pr(z(8.))
+                    .rounded(z(8.)) // --radius-sm (:root 8px)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .cursor_pointer()
+                    .hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
                     .on_click(cx.listener(|a, _, _, cx| {
                         cx.stop_propagation();
                         a.mark_channel_read(cx)
                     }))
-                    .child(crate::t!("menu.mark_read")),
+                    .child(crate::t!("menu.mark_read"))
+                    .child(gpui::svg().path(crate::icons::path("chat-check")).flex_none().size(z(16.)).ml(z(8.)).mt(z(-1.)).text_color(tk(idx::WHITE))),
             )
             .into_any_element(),
     )

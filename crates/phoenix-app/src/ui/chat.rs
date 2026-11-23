@@ -538,7 +538,15 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
         )
 }
 
-fn day_divider(label: SharedString) -> impl IntoElement {
+fn day_divider(label: SharedString) -> gpui::Div {
+    dated_divider(label, false)
+}
+
+/// Date divider; `unread` is the merged `.isUnread_` form (first unread message is the
+/// first of its day): line and date in --divider-color (--background-feedback-notification)
+/// plus the "NEW" end cap.
+fn dated_divider(label: SharedString, unread: bool) -> gpui::Div {
+    let line = if unread { idx::BACKGROUND_FEEDBACK_NOTIFICATION } else { idx::BORDER_SUBTLE };
     // divider_ (message list) margin-inline 1rem .875rem; .group-spacing-16
     // .divider_.hasContent_ margin 1.5rem top / .5rem bottom; divider_ border-top
     // --border-subtle; content_ 12px semibold, line-height 13px, padding 2px 4px,
@@ -549,10 +557,12 @@ fn day_divider(label: SharedString) -> impl IntoElement {
         .mt(z(24.))
         .mb(z(8.))
         .h(z(1.))
-        .bg(tk(idx::BORDER_SUBTLE))
+        .bg(tk(line))
+        .relative()
         .flex()
         .justify_center()
         .items_center()
+        .when(unread, |d| d.child(message_ext::unread_end_cap()))
         .child(
             div()
                 .bg(tk(idx::BACKGROUND_BASE_LOWER))
@@ -562,7 +572,7 @@ fn day_divider(label: SharedString) -> impl IntoElement {
                 .text_size(z(12.))
                 .line_height(z(13.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(tk(idx::TEXT_MUTED))
+                .text_color(tk(if unread { idx::BACKGROUND_FEEDBACK_NOTIFICATION } else { idx::TEXT_MUTED }))
                 .child(label),
         )
 }
@@ -964,8 +974,8 @@ fn message(
     // get painted over each other.
     let gap = if !r.group_start { 0. } else if compact { 4. } else { 17. };
     row_wrapper()
-        .when_some(r.day_divider.clone(), |d, label| d.child(day_divider(label)))
-        .when(new_marker, |d| d.child(message_ext::new_divider()))
+        .when_some(r.day_divider.clone(), |d, label| d.child(dated_divider(label, new_marker)))
+        .when(new_marker && r.day_divider.is_none(), |d| d.child(message_ext::new_divider(r.group_start)))
         .child(div().pt(z(gap)).child(body))
         .into_any_element()
 }
