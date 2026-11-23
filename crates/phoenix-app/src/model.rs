@@ -33,6 +33,8 @@ pub struct User {
     pub display_name: SharedString,
     pub avatar: ImageRef,
     pub bot: bool,
+    /// `public_flags` VERIFIED_BOT (1 << 16) or a system user: the APP tag gets its check.
+    pub verified_bot: bool,
     /// Server tag shown next to the name (`primary_guild.tag`) and its badge.
     pub tag: Option<(SharedString, Option<SharedString>)>,
     /// Nameplate behind the name in the DM / member list: static image URL and

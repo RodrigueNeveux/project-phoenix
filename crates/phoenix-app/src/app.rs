@@ -301,6 +301,7 @@ impl PhoenixApp {
                 display_name: "".into(),
                 avatar: ImageRef::Default(0),
                 bot: false,
+                verified_bot: false,
                 tag: None,
                 nameplate: None,
                 name_style: None,

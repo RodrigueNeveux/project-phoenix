@@ -75,6 +75,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                 .flex_1()
                                 .min_h_0()
                                 .relative()
+                                // scroller_ scrollbarGutterStable_: messageListItem_ is 579px in a
+                                // 595px chat (vanilla-guild-text-groups), 16px reserved for the bar.
+                                .pr(z(16.))
                                 .child(
                                     list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                                         .size_full(),
@@ -595,21 +598,27 @@ fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -
         .child(tag.0.clone())
 }
 
-/// Discord's "APP" tag next to bot authors.
-fn bot_tag() -> gpui::Div {
+/// Discord's "APP" tag next to bot authors (vanilla-guild-text-groups botTagCozy_ /
+/// botTagVerified_ / botText_: 15px tall, 46px wide for a verified "APP").
+fn bot_tag(verified: bool) -> gpui::Div {
     div()
         .flex_none()
         .ml(z(4.)) // botTagCozy_ margin-inline-start .25rem
+        .mt(z(1.6)) // botTagCozy_ position relative, top .1rem
         .px(z(4.4)) // .rem_.botTag_ padding 0 .275rem
         .h(z(15.)) // .rem_.botTag_ height .9375rem
         .rounded(z(4.)) // .rem_.botTag_ border-radius 4px
         .bg(tk(idx::BACKGROUND_BRAND)) // botTagRegular_
         .flex()
         .items_center()
-        .text_size(z(10.))
+        .text_size(z(12.8)) // botText_ font-size .8rem
         .line_height(z(15.))
-        .font_weight(FontWeight::SEMIBOLD)
+        .font_weight(FontWeight::SEMIBOLD) // botText_ 600
         .text_color(gpui::white())
+        .when(verified, |d| {
+            // botTagVerified_ 16px, margin-inline-start -.2rem, fill --white
+            d.child(gpui::svg().path(crate::icons::path("check")).flex_none().size(z(16.)).ml(z(-3.2)).text_color(gpui::white()))
+        })
         .child(crate::t!("common.app"))
 }
 
@@ -734,7 +743,7 @@ fn message(
             )
             .when(!compact, |d| d.child(avatar(ru, 16.)))
             // vanilla-guild-text #1283: `botTagCompact_` sits before the replied username.
-            .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag().ml_0()))
+            .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag(ru.is_some_and(|u| u.verified_bot)).ml_0()))
             .child(
                 div()
                     .flex_none()
@@ -831,7 +840,7 @@ fn message(
                     )
                     .child(author_name)
                     .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
-                    .when(is_bot, |d| d.child(bot_tag())),
+                    .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot)))),
             )
             .child(content)
     } else {
@@ -874,7 +883,7 @@ fn message(
                         .h(fz(22.))
                         .child(author_name)
                         .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
-                        .when(is_bot, |d| d.child(bot_tag()))
+                        .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot))))
                         .child(
                             // .cozy_ .timestamp_: .75rem, --chat-text-muted, medium;
                             // timestampInline_ margin-inline-start .25rem.
@@ -948,7 +957,7 @@ fn compact_header_overflow(time: &str, name: &str, bot: bool, tag: Option<&str>,
     if bot {
         let mut f = name_font.clone();
         f.weight = FontWeight::SEMIBOLD;
-        w += text_width(cx, &f, z(10.), "APP") + f32::from(z(12.));
+        w += text_width(cx, &f, z(12.8), "APP") + f32::from(z(12.8));
     }
     if let Some(tg) = tag {
         let mut f = name_font.clone();
