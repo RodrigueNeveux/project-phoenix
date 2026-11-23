@@ -532,6 +532,8 @@ impl PhoenixApp {
         let Some(ch) = self.channels.get(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
             self.join_voice(Some(id), cx);
+            self.open_channel_chat(id, cx);
+            crate::ui::call_view::show(id);
             return;
         }
         self.open_channel_chat(id, cx);

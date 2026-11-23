@@ -1,4 +1,5 @@
 pub mod autocomplete;
+pub mod call_view;
 pub mod chat;
 pub mod components;
 pub mod forum;

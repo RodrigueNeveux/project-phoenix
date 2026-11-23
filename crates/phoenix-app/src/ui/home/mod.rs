@@ -18,6 +18,9 @@ use crate::{
 /// The pane right of the sidebar: chat, or the Friends / Message Requests
 /// page when Home is open without a DM.
 pub fn main_pane(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    if let Some(call) = crate::ui::call_view::render(app, window, cx) {
+        return call;
+    }
     if app.selected_guild.is_none() && app.nav.home != HomeView::Dm {
         friends::render(app, window, cx).into_any_element()
     } else {

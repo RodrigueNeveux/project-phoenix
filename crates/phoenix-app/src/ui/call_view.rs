@@ -1,0 +1,602 @@
+//! Voice call view: what the main pane shows once you click the voice channel
+//! you are connected to (2026 visual-refresh client).
+//!
+//! Structure and values come from the live vanilla dump
+//! `dumps/vanilla-call-view.json` (wrapper_hbKzX7 > callContainer_hbKzX7 >
+//! upperContainer / tiles / bottomControls) and the CSS bundles in
+//! `current-client/css` (classes `_hbKzX7`, `_K9Xq13`, `_p87Rny`, `_7NOr2f`).
+//! Box sizes in comments are the dump's CSS px.
+
+use std::cell::Cell;
+
+use gpui::{AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*, svg};
+
+use crate::app::PhoenixApp;
+use crate::model::{ChannelKind, Id};
+use crate::theme::{DEFAULT_AVATAR, c, generated::idx, tok, z};
+use crate::ui::avatar;
+
+fn t(i: usize) -> Hsla {
+    c(tok(i))
+}
+
+thread_local! {
+    /// Voice channel whose call view is shown (set when you click the channel).
+    static SHOWN: Cell<Option<Id>> = const { Cell::new(None) };
+    /// Side chat panel ("Afficher la discussion", chatIcon_Fy2P0m) open.
+    static CHAT_OPEN: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Show the call view for `ch` (hooked from `select_channel` on a voice channel).
+pub fn show(ch: Id) {
+    SHOWN.with(|s| s.set(Some(ch)));
+}
+
+pub fn set_chat_open(open: bool) {
+    CHAT_OPEN.with(|c| c.set(open));
+}
+
+pub fn chat_open() -> bool {
+    CHAT_OPEN.with(|c| c.get())
+}
+
+/// Whether the main pane should be the call view right now.
+pub fn active(app: &PhoenixApp) -> bool {
+    let Some(ch) = SHOWN.with(|s| s.get()) else { return false };
+    app.selected_channel == Some(ch)
+        && app.voice_channel == Some(ch)
+        && app.channels.get(&ch).is_some_and(|c| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage))
+}
+
+const POPOUT: &str = "icons/call/popout.svg";
+const FULLSCREEN: &str = "icons/call/fullscreen.svg";
+const CAMERA_OFF: &str = "icons/call/camera-off.svg";
+
+/// Our own hand-drawn glyphs for buttons the icon provider has no name for.
+pub fn svg_asset(path: &str) -> Option<&'static str> {
+    Some(match path {
+        POPOUT => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">"#,
+            r#"<path d="M14 4h6v6M20 4l-8 8M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/>"#,
+            "</svg>"
+        ),
+        FULLSCREEN => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">"#,
+            r#"<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>"#,
+            "</svg>"
+        ),
+        CAMERA_OFF => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
+            r#"<path d="M4 5h11a2 2 0 0 1 2 2v2.4l3.6-2.6A1 1 0 0 1 22 7.6v8.8a1 1 0 0 1-1.4.8L17 14.6V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>"#,
+            r#"<path d="M3 3l18 18" stroke="black" stroke-width="2.4" stroke-linecap="round"/>"#,
+            "</svg>"
+        ),
+        _ => return None,
+    })
+}
+
+fn glyph(path: impl Into<SharedString>, size: f32, color: Hsla) -> gpui::Svg {
+    svg().path(path.into()).size(z(size)).flex_none().text_color(color)
+}
+
+fn named(name: &str, size: f32, color: Hsla) -> gpui::Svg {
+    glyph(crate::icons::path(name), size, color)
+}
+
+/// One participant tile in the grid.
+struct Tile {
+    user: Id,
+    stream: bool,
+}
+
+/// Grid layout: the column count that gives the biggest 16:9 tiles in
+/// `w` x `h` with an 8px gap (tileSizer spacing: 567 - 424 - 135 = 8).
+pub fn grid(n: usize, w: f32, h: f32, gap: f32) -> (usize, f32) {
+    let n = n.max(1);
+    let mut best = (1, 0.0f32);
+    for cols in 1..=n {
+        let rows = n.div_ceil(cols);
+        let tw = ((w - gap * (cols - 1) as f32) / cols as f32)
+            .min((h - gap * (rows - 1) as f32) / rows as f32 * 16. / 9.);
+        if tw > best.1 {
+            best = (cols, tw);
+        }
+    }
+    best
+}
+
+pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if !active(app) {
+        return None;
+    }
+    let ch_id = app.voice_channel?;
+    let ch = app.channels.get(&ch_id)?;
+    let zoom = crate::theme::zoom();
+
+    let mut tiles = Vec::new();
+    for &u in &ch.voice_users {
+        let f = crate::ui::voice_panel::flags(u);
+        // A Go Live stream gets its own tile before the user's tile
+        // (emptyPreviewContainer_ until you watch it).
+        if f.stream {
+            tiles.push(Tile { user: u, stream: true });
+        }
+        tiles.push(Tile { user: u, stream: false });
+    }
+
+    // Available area: viewport minus guild bar (--guildbar-avatar-size + 2*16
+    // gutter = 72) and the channel sidebar; tiles get 8px side padding
+    // (424 - 416), the top bar 33px + 8, the bottom controls 49 + 19 + 12.
+    let vp = window.viewport_size();
+    let side = if chat_open() { CHAT_W } else { 0. };
+    let w = f32::from(vp.width) / zoom - 72. - crate::ui::sidebar_resize::width() - side - 16.;
+    let h = f32::from(vp.height) / zoom - 32. - 33. - 8. - 80. - 8.;
+    let (_cols, tw) = grid(tiles.len(), w.max(100.), h.max(60.), 8.);
+    let th = tw * 9. / 16.;
+
+    let tiles_el = div()
+        .flex_1()
+        .min_h_0()
+        .px(z(8.))
+        .flex()
+        .flex_wrap()
+        .content_center()
+        .justify_center()
+        .gap(z(8.))
+        .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th)));
+
+    let call = div()
+        // callContainer_hbKzX7: --black, border-top 1px --app-frame-border.
+        .id("call-view")
+        .flex_1()
+        .min_w_0()
+        .h_full()
+        .flex()
+        .flex_col()
+        .bg(t(idx::BLACK))
+        .border_t_1()
+        .border_color(t(idx::APP_FRAME_BORDER))
+        .child(top_bar(app, ch.name.clone(), cx))
+        .child(div().h(z(8.)))
+        .child(tiles_el)
+        .child(bottom_controls(app, cx));
+
+    let root = div().size_full().flex().flex_row().bg(t(idx::BACKGROUND_BASE_LOWEST)).child(call);
+    Some(if chat_open() {
+        root.child(
+            // channelChatWrapper_hbKzX7: --background-base-lowest, flex.
+            div()
+                .w(z(CHAT_W))
+                .flex_none()
+                .h_full()
+                .flex()
+                .bg(t(idx::BACKGROUND_BASE_LOWEST))
+                .border_l_1()
+                .border_color(t(idx::APP_FRAME_BORDER))
+                .child(crate::ui::chat::render(app, window, cx)),
+        )
+        .into_any_element()
+    } else {
+        root.into_any_element()
+    })
+}
+
+/// Side chat width. Not in the vanilla dump (chat closed: channelChatWrapper
+/// width 0); the panel is user-resizable in Discord.
+const CHAT_W: f32 = 400.;
+
+/// upperContainer_: 33px row, 24px inline padding (440 - 416), channel icon
+/// 20px (--channel-icon), title body-md/medium 16/500 (--text-strong), right
+/// toolbar gap 20 with the 24px chat icon.
+fn top_bar(_app: &PhoenixApp, name: SharedString, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let open = chat_open();
+    div()
+        .h(z(33.))
+        .flex_none()
+        .px(z(24.))
+        .flex()
+        .items_center()
+        .gap(z(10.))
+        .child(named("speaker", 20., t(idx::CHANNEL_ICON)))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t(idx::TEXT_STRONG))
+                .text_ellipsis()
+                .child(name),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(20.))
+                .child(
+                    div()
+                        .id("call-chat")
+                        .size(z(24.))
+                        .rounded(z(8.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .tooltip(crate::ui::tooltip::tip(if open {
+                            crate::t!("call.hide_chat")
+                        } else {
+                            crate::t!("call.show_chat")
+                        }))
+                        .child(named(
+                            "chat",
+                            24.,
+                            t(if open { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT }),
+                        ))
+                        .on_click(cx.listener(|_, _, _, cx| {
+                            set_chat_open(!chat_open());
+                            cx.notify();
+                        })),
+                ),
+        )
+}
+
+fn tile_color(app: &PhoenixApp, user: Id) -> Hsla {
+    // background_: the avatar's dominant colour (computed on load), default
+    // avatar colour until then.
+    match app.users.get(&user).map(|u| &u.avatar) {
+        Some(crate::model::ImageRef::Url(url)) => crate::ui::avatar_color::get(url).map(c).unwrap_or(t(idx::BACKGROUND_BASE_LOWER)),
+        Some(crate::model::ImageRef::Default(ix)) => c(DEFAULT_AVATAR[*ix as usize % DEFAULT_AVATAR.len()]),
+        None => t(idx::BACKGROUND_BASE_LOWER),
+    }
+}
+
+fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32) -> AnyElement {
+    let u = app.users.get(&tile.user);
+    let me = tile.user == app.me.id;
+    let mut f = crate::ui::voice_panel::flags(tile.user);
+    if me {
+        f.self_mute = app.mic_muted;
+        f.self_deaf = app.deafened;
+    }
+    let speaking = !tile.stream && app.voice.is_speaking(tile.user);
+    let name = crate::ui::sidebar::voice_user_name(app, tile.user);
+    // tile_p87Rny: --radius-sm (8px), overflow hidden.
+    let base = div()
+        .relative()
+        .w(z(w))
+        .h(z(h))
+        .flex_none()
+        .rounded(z(8.))
+        .overflow_hidden()
+        .cursor_pointer();
+
+    // experimentOverlayTitle_7NOr2f: --control-overlay-secondary-background-default,
+    // --custom-base-tile-border-radius (8), padding 6 8, gap --space-4, 14/18.
+    let pill = |icon: Option<AnyElement>, label: Option<SharedString>| {
+        div()
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .min_w_0()
+            .px(z(8.))
+            .py(z(6.))
+            .rounded(z(8.))
+            .bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT))
+            .text_color(t(idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT))
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .children(icon)
+            .children(label.map(|l| div().min_w_0().text_ellipsis().child(l)))
+    };
+    let white = t(idx::WHITE);
+
+    let inner = if tile.stream {
+        // emptyPreviewContainer_: --background-base-lower, screen glyph, and the
+        // liveIndicator_ pill top-right (inset 8, 12/600, radius 4, --status-danger).
+        base.bg(t(idx::BACKGROUND_BASE_LOWER))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(glyph("icons/voice/screen.svg", 40., white))
+            .child(
+                div()
+                    .absolute()
+                    .top(z(8.))
+                    .right(z(8.))
+                    .px(z(8.))
+                    .rounded(z(4.))
+                    .bg(t(idx::STATUS_DANGER))
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(white)
+                    .child(crate::t!("voice.live")),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(z(4.))
+                    .bottom(z(4.))
+                    .child(pill(Some(glyph("icons/voice/screen.svg", 16., white).into_any_element()), Some(name))),
+            )
+    } else {
+        let state_icon = if f.self_deaf || f.server_deaf {
+            Some(crate::ui::icon(crate::assets::Icon::HeadphonesOff, 16. * crate::theme::zoom(), white).into_any_element())
+        } else if f.self_mute || f.server_mute {
+            Some(crate::ui::icon(crate::assets::Icon::MicOff, 16. * crate::theme::zoom(), white).into_any_element())
+        } else {
+            None
+        };
+        base.bg(tile_color(app, tile.user))
+            .flex()
+            .items_center()
+            .justify_center()
+            // avatarWrapper_: 80px circle centred in the tile.
+            .child(avatar(u, 80. * crate::theme::zoom()))
+            .child(
+                // overlayContainer_ inset 4, overlayBottom_ gap 4.
+                div()
+                    .absolute()
+                    .left(z(4.))
+                    .bottom(z(4.))
+                    .right(z(4.))
+                    .flex()
+                    .child(pill(state_icon, Some(name))),
+            )
+            .when(speaking, |d| {
+                // border_p87Rny when speaking: box-shadow inset 2px
+                // --status-positive, then inset 3px --black (1px gap).
+                d.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .rounded(z(8.))
+                        .border(z(2.))
+                        .border_color(t(idx::STATUS_POSITIVE))
+                        .child(div().size_full().rounded(z(6.)).border(z(1.)).border_color(t(idx::BLACK))),
+                )
+            })
+    };
+    inner.into_any_element()
+}
+
+/// centerButton_K9Xq13: 40x40, padding 10, radius 8 (attached: 8 0 0 8),
+/// 20px --interactive-text-default glyph; primaryDark hover --background-mod-muted;
+/// redGlow --opacity-red-12 / --red-400; greenGlow --opacity-green-12 / --green-300.
+#[derive(Clone, Copy, PartialEq)]
+enum Look {
+    Dark,
+    Red,
+    Green,
+}
+
+fn center_button(
+    id: &'static str,
+    icon: gpui::Svg,
+    look: Look,
+    caret: bool,
+    tip: SharedString,
+    on_click: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static,
+    cx: &mut Context<PhoenixApp>,
+) -> AnyElement {
+    let (bg, hover) = match look {
+        Look::Dark => (gpui::transparent_black(), t(idx::BACKGROUND_MOD_MUTED)),
+        Look::Red => (t(idx::OPACITY_RED_12), t(idx::OPACITY_RED_16)),
+        Look::Green => (t(idx::OPACITY_GREEN_12), t(idx::OPACITY_GREEN_24)),
+    };
+    let group: SharedString = format!("{id}-grp").into();
+    let btn = div()
+        .id(id)
+        .size(z(40.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(bg)
+        .group_hover(group.clone(), |s| s.bg(hover))
+        .when(caret, |d| d.rounded_l(z(8.)))
+        .when(!caret, |d| d.rounded(z(8.)))
+        .cursor_pointer()
+        .tooltip(crate::ui::tooltip::tip(tip))
+        .child(icon)
+        .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx)));
+    let mut wrap = div().group(group.clone()).flex().items_center().child(btn);
+    if caret {
+        // contextMenuNub_.attachedCaret_: 20x40, radius 0 8 8 0, 1px start margin.
+        wrap = wrap.child(
+            div()
+                .w(z(20.))
+                .h(z(40.))
+                .ml(z(1.))
+                .rounded_r(z(8.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(bg)
+                .group_hover(group, |s| s.bg(hover))
+                .cursor_pointer()
+                .child(crate::ui::icon(crate::assets::Icon::Chevron, 16. * crate::theme::zoom(), t(idx::WHITE))),
+        );
+    }
+    wrap.into_any_element()
+}
+
+/// buttonSection_9bvEB0: --background-surface-high, 1px --border-muted,
+/// radius 12, gap 8, padding 4.
+fn section() -> gpui::Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .p(z(4.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(t(idx::BORDER_MUTED))
+        .bg(t(idx::BACKGROUND_SURFACE_HIGH))
+}
+
+fn tray_icon(id: &'static str, icon: gpui::Svg, tip: SharedString) -> AnyElement {
+    // leftTrayIcon_/rightTrayIcon_: 24px blank buttons, radius 8.
+    div()
+        .id(id)
+        .size(z(24.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .tooltip(crate::ui::tooltip::tip(tip))
+        .child(icon)
+        .into_any_element()
+}
+
+/// bottomControls_: 49px row, 20px inline padding (436 - 416), edgeControls
+/// 160px wide with a 24px gap, centerControls wrapper gap 12, 12px bottom margin.
+fn bottom_controls(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let white = t(idx::WHITE);
+    let tray = t(idx::INTERACTIVE_TEXT_DEFAULT);
+    let muted = app.mic_muted || app.deafened;
+    let me = crate::ui::voice_panel::flags(app.me.id);
+    let (mic_i, mic_look) = if muted { (crate::assets::Icon::MicOff, Look::Red) } else { (crate::assets::Icon::Mic, Look::Dark) };
+    let icon_color = |l: Look| match l {
+        Look::Red => t(idx::RED_400),
+        Look::Green => t(idx::GREEN_300),
+        Look::Dark => white,
+    };
+    let screen_look = if me.stream { Look::Green } else { Look::Dark };
+    let cam_look = if me.video { Look::Green } else { Look::Dark };
+    div()
+        .h(z(49.))
+        .mt(z(19.))
+        .mb(z(12.))
+        .px(z(20.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .child(
+            div()
+                .w(z(160.))
+                .flex()
+                .gap(z(24.))
+                .child(tray_icon("call-invite", named("invite", 24., tray), crate::t!("call.invite"))),
+        )
+        .child(
+            div()
+                .flex_1()
+                .flex()
+                .justify_center()
+                .gap(z(12.))
+                .child(
+                    section()
+                        .child(center_button(
+                            "call-mic",
+                            crate::ui::icon(mic_i, 20. * crate::theme::zoom(), icon_color(mic_look)),
+                            mic_look,
+                            true,
+                            if muted { crate::t!("voice.unmute") } else { crate::t!("voice.mute") },
+                            |a, cx| {
+                                a.mic_muted = !a.mic_muted;
+                                crate::voice::sync_self_state(a);
+                                cx.notify();
+                            },
+                            cx,
+                        ))
+                        .child(center_button(
+                            "call-camera",
+                            glyph(if me.video { "icons/voice/camera.svg" } else { CAMERA_OFF }, 20., icon_color(cam_look)),
+                            cam_look,
+                            true,
+                            crate::t!("voice.camera_on"),
+                            |_, _| {},
+                            cx,
+                        )),
+                )
+                .child(
+                    section()
+                        .child(center_button(
+                            "call-screen",
+                            glyph("icons/voice/screen.svg", 20., icon_color(screen_look)),
+                            screen_look,
+                            true,
+                            crate::t!("voice.share_screen"),
+                            |_, _| {},
+                            cx,
+                        ))
+                        .child(center_button(
+                            "call-activity",
+                            glyph("icons/voice/activity.svg", 20., white),
+                            Look::Dark,
+                            false,
+                            crate::t!("voice.start_activity"),
+                            |_, _| {},
+                            cx,
+                        ))
+                        .child(center_button(
+                            "call-soundboard",
+                            glyph("icons/voice/soundboard.svg", 20., white),
+                            Look::Dark,
+                            false,
+                            crate::t!("voice.soundboard"),
+                            |_, _| {},
+                            cx,
+                        ))
+                        .child(center_button(
+                            "call-more",
+                            named("more-horizontal", 20., white),
+                            Look::Dark,
+                            false,
+                            crate::t!("call.more"),
+                            |_, _| {},
+                            cx,
+                        )),
+                )
+                .child(
+                    // disconnect_K9Xq13.fullRegionButton_: 65x49, radius 12,
+                    // --control-critical-primary-background-default; glyph box
+                    // 44x28 (padding 4 12), --control-critical-primary-text-default.
+                    div()
+                        .id("call-disconnect")
+                        .w(z(65.))
+                        .h(z(49.))
+                        .rounded(z(12.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT))
+                        .hover(|s| s.bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER)))
+                        .cursor_pointer()
+                        .tooltip(crate::ui::tooltip::tip(crate::t!("voice.disconnect")))
+                        .child(crate::ui::icon(
+                            crate::assets::Icon::PhoneHangup,
+                            20. * crate::theme::zoom(),
+                            t(idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT),
+                        ))
+                        .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
+                ),
+        )
+        .child(
+            div()
+                .w(z(160.))
+                .flex()
+                .justify_end()
+                .gap(z(24.))
+                .child(tray_icon("call-popout", glyph(POPOUT, 24., tray), crate::t!("call.popout")))
+                .child(tray_icon("call-fullscreen", glyph(FULLSCREEN, 24., tray), crate::t!("call.fullscreen"))),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::grid;
+
+    #[test]
+    fn grid_prefers_biggest_tiles() {
+        // Wide area: 6 tiles fit best in 3 columns x 2 rows.
+        assert_eq!(grid(6, 1600., 600., 8.).0, 3);
+        // One tile fills the width or height limit.
+        let (cols, w) = grid(1, 800., 300., 8.);
+        assert_eq!(cols, 1);
+        assert!((w - 300. * 16. / 9.).abs() < 0.01);
+    }
+}
