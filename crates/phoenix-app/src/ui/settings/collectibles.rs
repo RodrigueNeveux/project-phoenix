@@ -42,6 +42,12 @@ pub struct Collectible {
     pub effects: Vec<EffectLayer>,
     /// Profile frames: layers and geometry.
     pub frame: Option<FrameSpec>,
+    /// Profile effects: `animationType == ANIMATION_TYPE_PERSISTENT` (1).
+    pub persistent: bool,
+    /// Profile effects: `staticFrameSrc`, shown in place of the first layer of
+    /// a persistent effect while it is not ticking (before the intro, after
+    /// the play-through).
+    pub static_frame: Option<SharedString>,
 }
 
 /// One `effects[]` layer of a profile effect: an APNG drawn over the whole
@@ -55,6 +61,9 @@ pub struct EffectLayer {
     pub duration: u64,
     pub loop_delay: u64,
     pub z: i64,
+    /// `position {x, y}` in CSS px: the layer's `left` / `top`.
+    pub x: f32,
+    pub y: f32,
 }
 
 /// Where a frame layer sits on the card (`layers[].type` / `anchor`).
@@ -82,6 +91,7 @@ fn effects(kind: Kind, item: &Value) -> Vec<EffectLayer> {
         return Vec::new();
     }
     let n = |l: &Value, k: &str| l.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let pos = |l: &Value, k: &str| l.get("position").and_then(|p| p.get(k)).and_then(Value::as_f64).unwrap_or(0.) as f32;
     let mut v: Vec<EffectLayer> = item
         .get("effects")
         .and_then(Value::as_array)
@@ -95,6 +105,8 @@ fn effects(kind: Kind, item: &Value) -> Vec<EffectLayer> {
                 duration: n(l, "duration"),
                 loop_delay: n(l, "loopDelay"),
                 z: l.get("zIndex").and_then(Value::as_i64).unwrap_or(0),
+                x: pos(l, "x"),
+                y: pos(l, "y"),
             })
         })
         .collect();
@@ -133,7 +145,9 @@ fn frame(kind: Kind, item: &Value) -> Option<FrameSpec> {
 }
 
 fn item(kind: Kind, sku: u64, name: SharedString, it: &Value) -> Collectible {
-    Collectible { sku, kind, name, preview: preview(kind, it), full: full(kind, it), effects: effects(kind, it), frame: frame(kind, it) }
+    Collectible { sku, kind, name, preview: preview(kind, it), full: full(kind, it), effects: effects(kind, it), frame: frame(kind, it),
+        persistent: kind == Kind::Effect && it.get("animationType").and_then(Value::as_u64) == Some(1),
+        static_frame: (kind == Kind::Effect).then(|| it.get("staticFrameSrc").and_then(Value::as_str).map(|s| s.to_owned().into())).flatten() }
 }
 
 /// A `GET /collectibles-products/{sku}` reply: its first item.
@@ -289,12 +303,14 @@ mod tests {
     #[test]
     fn parses_product_effects_and_applied() {
         let v = json!({"name": "Fx", "type": 1, "items": [{"type": 1, "sku_id": "7", "effects": [
-            {"src": "https://b", "loop": true, "duration": 4000, "start": 7500, "loopDelay": 4500, "zIndex": 101},
-            {"src": "https://a", "loop": false, "duration": 5810, "start": 0, "zIndex": 100}]}]});
+            {"src": "https://b", "loop": true, "duration": 4000, "start": 7500, "loopDelay": 4500, "zIndex": 101, "position": {"x": 12, "y": -8}},
+            {"src": "https://a", "loop": false, "duration": 5810, "start": 0, "zIndex": 100}], "animationType": 1, "staticFrameSrc": "https://s"}]});
         let c = parse_product(&v).unwrap();
         assert_eq!(c.effects.len(), 2);
         assert_eq!(c.effects[0].src.as_ref(), "https://a");
         assert!(c.effects[1].looping && c.effects[1].loop_delay == 4500);
+        assert_eq!((c.effects[1].x, c.effects[1].y), (12., -8.));
+        assert!(c.persistent && c.static_frame.as_deref() == Some("https://s"));
         let a = applied_skus(&[json!({"type": 3, "sku_id": "5"}), json!({"type": 1, "sku_id": "7"})]);
         assert_eq!(a, (Some(7), Some(5)));
     }

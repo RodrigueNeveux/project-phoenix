@@ -298,6 +298,28 @@ pub fn styled_name<E: gpui::Styled>(el: E, user: Option<&crate::model::User>, in
     }
 }
 
+/// The name text of a styled display name. GPUI text has no `letter-spacing`,
+/// so a style with one (`.cherryBomb_ letter-spacing:.04em`, ...) lays the
+/// characters out one by one with `spacing * size` px after each, like the
+/// browser adds the tracking after every glyph. `size`: the font size in px.
+pub fn name_text(text: gpui::SharedString, user: Option<&crate::model::User>, size: f32) -> gpui::AnyElement {
+    use gpui::{IntoElement, ParentElement, Styled};
+    let ls = user
+        .and_then(|u| u.name_style.as_ref())
+        .filter(|s| family_for_id(s.0).is_some())
+        .and_then(|s| font_for_id(s.0))
+        .map_or(0., |(_, ls)| ls);
+    if ls <= 0. {
+        return text.into_any_element();
+    }
+    let gap = crate::theme::z(ls * size);
+    gpui::div()
+        .flex()
+        .flex_none()
+        .children(text.chars().map(|ch| gpui::div().flex_none().mr(gap).child(gpui::SharedString::from(ch.to_string()))))
+        .into_any_element()
+}
+
 pub mod fallback;
 pub use fallback::ui_fallbacks;
 

@@ -246,7 +246,7 @@ fn profile_card(app: &PhoenixApp, e: &super::profile_editor::EditorState, overla
             div()
                 .flex()
                 .flex_col()
-                .child(crate::fonts::styled_name(div().h(z(24.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong), Some(me), true).child(me.display_name.clone()))
+                .child(crate::fonts::styled_name(div().h(z(24.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(strong), Some(me), true).child(crate::fonts::name_text(me.display_name.clone(), Some(me), 20.)))
                 .child(
                     div()
                         .h(z(24.))

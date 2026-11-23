@@ -157,15 +157,25 @@ fn clock(sku: u64, cx: &mut App) -> Duration {
 
 /// The effect overlay: put last inside a `relative` card of width `w`.
 pub fn effect(c: &Collectible, w: f32, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    effect_adjusted(c, w, 0., cx)
+}
+
+/// [`effect`] with the client's `bannerAdjustment` (px the card's banner is
+/// shorter than the one the effect was drawn for): every layer sits at
+/// `top: position.y - bannerAdjustment`, `left: position.x`; the reduced
+/// motion still at `top: -bannerAdjustment`. The persistent effect's
+/// `staticFrameSrc` keeps the client's `position.y ?? 0 - bannerAdjustment`.
+pub fn effect_adjusted(c: &Collectible, w: f32, banner_adj: f32, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let sku = c.sku;
+    let z = crate::theme::z;
     // `img.effect_` is `width: 100%` with the height from the image's aspect
     // ratio; GPUI's `img` with only a width keeps the natural height and
     // letterboxes (object-fit contain), pushing the art down. Size it from
     // the decoded frame instead.
-    let layer = |a: Arc<RenderImage>, id: Option<SharedString>| {
+    let layer = |a: Arc<RenderImage>, id: Option<SharedString>, left: f32, top: f32| {
         let sz = a.size(0);
         let h = if sz.width.0 > 0 { w * sz.height.0 as f32 / sz.width.0 as f32 } else { w };
-        let el = img(ImageSource::Render(a)).absolute().top_0().left_0().w(crate::theme::z(w)).h(crate::theme::z(h));
+        let el = img(ImageSource::Render(a)).absolute().top(z(top)).left(z(left)).w(z(w)).h(z(h));
         match id {
             Some(id) => el.id(id).into_any_element(),
             None => el.into_any_element(),
@@ -173,18 +183,45 @@ pub fn effect(c: &Collectible, w: f32, cx: &mut Context<PhoenixApp>) -> Option<A
     };
     let mut layers: Vec<AnyElement> = Vec::new();
     if c.effects.is_empty() || cx.reduce_motion() {
-        // Reduced motion: one `img` with `reducedMotionSrc` at `top: 0`.
-        if let Some(src) = c.full.clone().or(c.preview.clone())
+        // A persistent effect at rest (not ticking) is its `staticFrameSrc` at
+        // the first layer's position; that is what the live client shows once
+        // it stops, so stills match it (the `reducedMotionSrc` of persistent
+        // effects is often only the faint sparkle layer).
+        let rest = c.persistent.then(|| c.static_frame.clone().zip(c.effects.first())).flatten();
+        if let Some((src, l0)) = rest {
+            if let Some(a) = anim(&src, true, cx) {
+                layers.push(layer(a, None, l0.x, if l0.y != 0. { l0.y } else { -banner_adj }));
+            }
+        // Reduced motion: one `img` with `reducedMotionSrc` at `top: 0 - bannerAdjustment`.
+        } else if let Some(src) = c.full.clone().or(c.preview.clone())
             && let Some(a) = anim(&src, true, cx)
         {
-            layers.push(layer(a, None));
+            layers.push(layer(a, None, 0., -banner_adj));
         }
     } else {
         // The client starts its clock at -500 ms (`delayIntro`).
-        let t = (clock(sku, cx).as_millis() as u64).saturating_sub(INTRO_MS);
+        let el = clock(sku, cx).as_millis() as u64;
+        let t = el.saturating_sub(INTRO_MS);
+        // Play-through end (`loopEnd`: latest start + duration); a persistent
+        // effect without looping layers stops there.
+        let loop_end = c.effects.iter().map(|l| l.start + l.duration).max().unwrap_or(0);
+        let stopped = !c.effects.iter().any(|l| l.looping) && t >= loop_end;
         for (i, l) in c.effects.iter().enumerate() {
+            // Not ticking yet (intro) or stopped: a persistent effect's first
+            // layer is its `staticFrameSrc`.
+            if i == 0
+                && c.persistent
+                && (el < INTRO_MS || stopped)
+                && let Some(src) = &c.static_frame
+            {
+                if let Some(a) = anim(src, true, cx) {
+                    // `top: e.position?.y ?? 0 - t` (`??` binds looser than `-`).
+                    layers.push(layer(a, None, l.x, if l.y != 0. { l.y } else { -banner_adj }));
+                }
+                continue;
+            }
             let Some(a) = anim(&l.src, false, cx) else { continue };
-            if t < l.start || l.duration == 0 {
+            if el < INTRO_MS || t < l.start || l.duration == 0 {
                 continue;
             }
             let since = t - l.start;
@@ -198,7 +235,7 @@ pub fn effect(c: &Collectible, w: f32, cx: &mut Context<PhoenixApp>) -> Option<A
                 continue;
             }
             // A fresh id per cycle restarts the APNG from its first frame.
-            layers.push(layer(a, Some(SharedString::from(format!("pfx-{sku}-{i}-{cycle}")))));
+            layers.push(layer(a, Some(SharedString::from(format!("pfx-{sku}-{i}-{cycle}"))), l.x, l.y - banner_adj));
         }
     }
     Some(

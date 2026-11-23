@@ -616,7 +616,7 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
             group_label("sp.pf.name_style", true),
             tile("name-style", 208., 42., locked)
                 // displayNamePreview_ewY9mf (#3265): dnsFont_ + the style's font.
-                .child(crate::fonts::styled_name(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))), Some(me), true).child(me.display_name.clone()))
+                .child(crate::fonts::styled_name(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))), Some(me), true).child(crate::fonts::name_text(me.display_name.clone(), Some(me), 24.)))
                 .into_any_element(),
         ))
         .child(group(
