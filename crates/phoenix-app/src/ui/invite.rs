@@ -2,6 +2,7 @@
 //! "Invite People" link dialog, leave-server confirmation and placeholder
 //! dialogs for screens that don't exist yet.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, Context, FontWeight, ImageSource, IntoElement, ParentElement, SharedString, Styled, Window, div,
     img, prelude::*, px,
@@ -136,8 +137,8 @@ fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> An
         .child(
             div()
                 .id("modal-card")
-                .w(px(440.))
-                .rounded(px(8.))
+                .w(z(440.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_PRIMARY))
                 .shadow_lg()
                 .overflow_hidden()
@@ -149,7 +150,7 @@ fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> An
 
 fn title(t: impl Into<SharedString>) -> gpui::Div {
     div()
-        .text_size(px(24.))
+        .text_size(z(24.))
         .font_weight(FontWeight::BOLD)
         .text_color(c(Palette::TEXT_HEADER))
         .text_center()
@@ -159,12 +160,12 @@ fn title(t: impl Into<SharedString>) -> gpui::Div {
 fn button(id: &'static str, label: impl Into<SharedString>, bg: u32) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .h(px(38.))
-        .px(px(16.))
-        .rounded(px(4.))
+        .h(z(38.))
+        .px(z(16.))
+        .rounded(z(4.))
         .bg(c(bg))
         .text_color(gpui::white())
-        .text_size(px(14.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .flex()
         .items_center()
@@ -175,7 +176,7 @@ fn button(id: &'static str, label: impl Into<SharedString>, bg: u32) -> gpui::St
 }
 
 fn footer() -> gpui::Div {
-    div().p(px(16.)).bg(c(Palette::BG_SECONDARY)).flex().justify_end().items_center().gap(px(8.))
+    div().p(z(16.)).bg(c(Palette::BG_SECONDARY)).flex().justify_end().items_center().gap(z(8.))
 }
 
 pub fn guild_icon(icon: Option<&ImageRef>, name: &str, size: f32) -> AnyElement {
@@ -197,15 +198,15 @@ pub fn guild_icon(icon: Option<&ImageRef>, name: &str, size: f32) -> AnyElement 
 }
 
 fn preview_card(p: &InvitePreview) -> gpui::Div {
-    let dot = |col: u32| div().size(px(8.)).rounded_full().bg(c(col));
+    let dot = |col: u32| div().size(z(8.)).rounded_full().bg(c(col));
     div()
-        .mt(px(12.))
-        .p(px(16.))
-        .rounded(px(8.))
+        .mt(z(12.))
+        .p(z(16.))
+        .rounded(z(8.))
         .bg(c(Palette::BG_SECONDARY))
         .flex()
         .items_center()
-        .gap(px(16.))
+        .gap(z(16.))
         .child(guild_icon(p.guild_icon.as_ref(), &p.guild_name, 50.))
         .child(
             div()
@@ -213,18 +214,18 @@ fn preview_card(p: &InvitePreview) -> gpui::Div {
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(2.))
+                .gap(z(2.))
                 .when_some(p.inviter.clone(), |d, i| {
                     d.child(
                         div()
-                            .text_size(px(12.))
+                            .text_size(z(12.))
                             .text_color(c(Palette::TEXT_MUTED))
                             .child(SharedString::from(format!("{i} invited you to join"))),
                     )
                 })
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .text_ellipsis()
@@ -234,12 +235,12 @@ fn preview_card(p: &InvitePreview) -> gpui::Div {
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(4.))
-                        .text_size(px(12.))
+                        .gap(z(4.))
+                        .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child(dot(Palette::GREEN))
                         .child(SharedString::from(format!("{} Online", p.online)))
-                        .child(div().w(px(8.)))
+                        .child(div().w(z(8.)))
                         .child(dot(Palette::GREY))
                         .child(SharedString::from(format!("{} Members", p.members))),
                 ),
@@ -252,47 +253,47 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
             let preview = app.nav.invite_preview.clone();
             let busy = app.nav.busy;
             let mut body = div()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
                 .child(title("Join a Server"))
                 .child(
                     div()
-                        .mt(px(8.))
-                        .text_size(px(14.))
+                        .mt(z(8.))
+                        .text_size(z(14.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .text_center()
                         .child("Enter an invite below to join an existing server"),
                 )
                 .child(
                     div()
-                        .mt(px(16.))
-                        .text_size(px(12.))
+                        .mt(z(16.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::BOLD)
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("INVITE LINK"),
                 )
                 .child(
                     div()
-                        .mt(px(8.))
-                        .h(px(40.))
-                        .px(px(10.))
-                        .rounded(px(4.))
+                        .mt(z(8.))
+                        .h(z(40.))
+                        .px(z(10.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BG_TERTIARY))
                         .flex()
                         .items_center()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .when_some(app.nav.invite_input.clone(), |d, i| {
                             d.child(Input::new(&i).appearance(false).bordered(false))
                         }),
                 );
             body = match preview {
                 Some(Ok(p)) => body.child(preview_card(&p)),
-                Some(Err(e)) => body.child(div().mt(px(8.)).text_size(px(12.)).text_color(c(Palette::RED)).child(e)),
+                Some(Err(e)) => body.child(div().mt(z(8.)).text_size(z(12.)).text_color(c(Palette::RED)).child(e)),
                 None => body.child(
                     div()
-                        .mt(px(12.))
-                        .text_size(px(12.))
+                        .mt(z(12.))
+                        .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("Invites should look like hTKzmak, https://discord.gg/hTKzmak or https://discord.gg/cool-people"),
                 ),
@@ -315,29 +316,29 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
             let link = link.clone();
             let shown: SharedString = link.clone().unwrap_or_else(|| "Creating invite...".into());
             let inner = div()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
-                .gap(px(12.))
+                .gap(z(12.))
                 .child(title(format!("Invite friends to {name}")))
                 .child(
                     div()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::BOLD)
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("OR, SEND A SERVER INVITE LINK TO A FRIEND"),
                 )
                 .child(
                     div()
-                        .h(px(44.))
-                        .pl(px(10.))
-                        .pr(px(4.))
-                        .rounded(px(4.))
+                        .h(z(44.))
+                        .pl(z(10.))
+                        .pr(z(4.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BG_TERTIARY))
                         .flex()
                         .items_center()
-                        .child(div().flex_1().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(shown))
-                        .child(button("copy-invite", "Copy", Palette::BLURPLE).h(px(32.)).on_click(cx.listener(
+                        .child(div().flex_1().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(shown))
+                        .child(button("copy-invite", "Copy", Palette::BLURPLE).h(z(32.)).on_click(cx.listener(
                             move |_, _, _, cx| {
                                 if let Some(l) = &link {
                                     cx.write_to_clipboard(gpui::ClipboardItem::new_string(l.to_string()));
@@ -347,7 +348,7 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                 )
                 .child(
                     div()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("Your invite link expires in 7 days."),
                 );
@@ -361,18 +362,18 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                 .flex_col()
                 .child(
                     div()
-                        .p(px(16.))
+                        .p(z(16.))
                         .flex()
                         .flex_col()
-                        .gap(px(12.))
+                        .gap(z(12.))
                         .child(
                             div()
-                                .text_size(px(20.))
+                                .text_size(z(20.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .child(SharedString::from(format!("Leave '{name}'"))),
                         )
-                        .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(
+                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(
                             format!("Are you sure you want to leave {name}? You won't be able to rejoin this server unless you are re-invited."),
                         ))),
                 )
@@ -395,14 +396,14 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                 .flex_col()
                 .child(
                     div()
-                        .p(px(16.))
+                        .p(z(16.))
                         .flex()
                         .flex_col()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .child(title(what.clone()))
                         .child(
                             div()
-                                .text_size(px(14.))
+                                .text_size(z(14.))
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .text_center()
                                 .child("This screen isn't available in Phoenix yet."),

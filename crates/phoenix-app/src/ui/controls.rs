@@ -4,11 +4,12 @@
 //! `#5865F2`, round white 16px grabber with a subtle border, marker labels
 //! 12px/500 above the bar (default marker brighter), 48px tall with marks.
 
+use crate::theme::z;
 use std::rc::Rc;
 
 use gpui::{
     App, Div, ElementId, FontWeight, InteractiveElement, MouseButton, ParentElement, SharedString,
-    Styled, Window, div, prelude::*, px, relative,
+    Styled, Window, div, prelude::*, relative,
 };
 
 use crate::theme::{Palette, c, ca};
@@ -43,21 +44,21 @@ pub fn marker_slider(
                 .absolute()
                 .top_0()
                 .left(relative(pos(i)))
-                .w(px(0.))
+                .w(z(0.))
                 .flex()
                 .flex_col()
                 .items_center()
                 .child(
                     div()
                         .whitespace_nowrap()
-                        .text_size(px(12.))
-                        .line_height(px(16.))
+                        .text_size(z(12.))
+                        .line_height(z(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(if is_def { Palette::TEXT_NORMAL } else { MARK_LABEL }))
                         .child(l.clone()),
                 )
                 // marker dash crossing the bar
-                .child(div().mt(px(8.)).w(px(2.)).h(px(24.)).rounded(px(12.)).bg(c(TRACK))),
+                .child(div().mt(z(8.)).w(z(2.)).h(z(24.)).rounded(z(12.)).bg(c(TRACK))),
         );
     }
 
@@ -84,28 +85,28 @@ pub fn marker_slider(
     div()
         .relative()
         .w_full()
-        .h(px(48.))
-        .mx(px(8.))
-        .mb(px(20.))
+        .h(z(48.))
+        .mx(z(8.))
+        .mb(z(20.))
         .child(marks)
         // bar
         .child(
             div()
                 .absolute()
-                .top(px(32.))
+                .top(z(32.))
                 .left_0()
                 .w_full()
-                .h(px(4.))
-                .rounded(px(2.))
+                .h(z(4.))
+                .rounded(z(2.))
                 .bg(c(TRACK))
-                .child(div().h_full().w(relative(frac)).rounded(px(2.)).bg(c(Palette::BLURPLE))),
+                .child(div().h_full().w(relative(frac)).rounded(z(2.)).bg(c(Palette::BLURPLE))),
         )
         // grabber
         .child(
-            div().absolute().top(px(26.)).left(relative(frac)).w(px(0.)).flex().justify_center().child(
+            div().absolute().top(z(26.)).left(relative(frac)).w(z(0.)).flex().justify_center().child(
                 div()
                     .flex_none()
-                    .size(px(16.))
+                    .size(z(16.))
                     .rounded_full()
                     .bg(gpui::white())
                     .border_1()
@@ -129,15 +130,15 @@ pub fn nearest(values: &[f32], value: f32) -> usize {
 /// Discord switch: 40x24 pill, green when on, white 18px knob.
 pub fn switch(on: bool) -> Div {
     div()
-        .w(px(40.))
-        .h(px(24.))
+        .w(z(40.))
+        .h(z(24.))
         .flex_none()
-        .rounded(px(12.))
+        .rounded(z(12.))
         .bg(c(if on { Palette::GREEN } else { 0x80848E }))
-        .p(px(3.))
+        .p(z(3.))
         .flex()
         .when(on, |d| d.justify_end())
-        .child(div().size(px(18.)).rounded_full().bg(gpui::white()))
+        .child(div().size(z(18.)).rounded_full().bg(gpui::white()))
 }
 
 #[cfg(test)]

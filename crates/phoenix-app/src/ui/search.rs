@@ -1,6 +1,7 @@
 //! Message search popout (Ctrl+F): `from:`, `mentions:`, `in:`, `has:`,
 //! `before:`, `after:`, `during:` and `pinned:` filters, paged results.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, ParentElement, SharedString, Styled, Subscription,
     Window, div, prelude::*, px,
@@ -270,13 +271,13 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
     div()
         .flex()
         .flex_col()
-        .gap(px(4.))
+        .gap(z(4.))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(4.))
-                .text_size(px(12.))
+                .gap(z(4.))
+                .text_size(z(12.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(icon(Icon::Hash, 14., c(Palette::CHANNEL_ICON)))
@@ -285,13 +286,13 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
         .child(
             div()
                 .id(("search-hit", ix))
-                .p(px(8.))
-                .rounded(px(8.))
+                .p(z(8.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_PRIMARY))
                 .border_1()
                 .border_color(c(Palette::BG_TERTIARY))
                 .flex()
-                .gap(px(12.))
+                .gap(z(12.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
                 .on_click(cx.listener(move |a, _, _, cx| a.select_channel(channel, cx)))
@@ -306,17 +307,17 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(6.))
+                                .gap(z(6.))
                                 .child(
                                     div()
-                                        .text_size(px(15.))
+                                        .text_size(z(15.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(c(app.author_color(m.author).unwrap_or(Palette::TEXT_HEADER)))
                                         .child(author.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into())),
                                 )
-                                .child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(format_time_full(m.timestamp))),
+                                .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(format_time_full(m.timestamp))),
                         )
-                        .child(div().text_size(px(15.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(content))),
+                        .child(div().text_size(z(15.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(content))),
                 ),
         )
         .into_any_element()
@@ -336,21 +337,21 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         let offset = req.offset;
         let total = page.total;
         let oldest = req.oldest_first;
-        let mut list = div().flex().flex_col().gap(px(16.)).p(px(16.));
+        let mut list = div().flex().flex_col().gap(z(16.)).p(z(16.));
         for (i, m) in page.messages.iter().enumerate() {
             list = list.child(result_card(app, i, m, cx));
         }
         if page.messages.is_empty() {
             list = list.child(
-                div().py(px(40.)).flex().justify_center().text_color(c(Palette::TEXT_MUTED)).child("No results found."),
+                div().py(z(40.)).flex().justify_center().text_color(c(Palette::TEXT_MUTED)).child("No results found."),
             );
         }
         let pager = div()
             .flex()
             .items_center()
             .justify_center()
-            .gap(px(16.))
-            .pb(px(16.))
+            .gap(z(16.))
+            .pb(z(16.))
             .when(offset > 0, |d| {
                 d.child(pager_button("search-prev", "Back", cx.listener(move |a, _, _, cx| {
                     rerun(a, |r| r.offset = r.offset.saturating_sub(PAGE), cx)
@@ -364,15 +365,15 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .flex_col()
             .child(
                 div()
-                    .h(px(48.))
-                    .px(px(16.))
+                    .h(z(48.))
+                    .px(z(16.))
                     .flex()
                     .items_center()
                     .justify_between()
                     .bg(c(Palette::BG_SECONDARY_ALT))
                     .child(
                         div()
-                            .text_size(px(16.))
+                            .text_size(z(16.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(Palette::TEXT_HEADER))
                             .child(SharedString::from(format!("{total} Result{}", if total == 1 { "" } else { "s" }))),
@@ -380,7 +381,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                     .child(
                         div()
                             .flex()
-                            .gap(px(4.))
+                            .gap(z(4.))
                             .child(sort_button("sort-new", "Newest", !oldest, cx.listener(|a, _, _, cx| {
                                 rerun(a, |r| { r.oldest_first = false; r.offset = 0 }, cx)
                             })))
@@ -393,10 +394,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .child(pager)
             .into_any_element()
     } else {
-        let mut help = div().flex().flex_col().p(px(16.)).gap(px(2.)).child(
+        let mut help = div().flex().flex_col().p(z(16.)).gap(z(2.)).child(
             div()
-                .pb(px(8.))
-                .text_size(px(12.))
+                .pb(z(8.))
+                .text_size(z(12.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_MUTED))
                 .child("SEARCH OPTIONS"),
@@ -406,17 +407,17 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             help = help.child(
                 div()
                     .id(("search-filter", i))
-                    .h(px(32.))
-                    .px(px(8.))
-                    .rounded(px(4.))
+                    .h(z(32.))
+                    .px(z(8.))
+                    .rounded(z(4.))
                     .flex()
                     .items_center()
-                    .gap(px(6.))
+                    .gap(z(6.))
                     .cursor_pointer()
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                     .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
-                    .child(div().text_size(px(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(k))
-                    .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(*hint)),
+                    .child(div().text_size(z(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(k))
+                    .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(*hint)),
             );
         }
         help.into_any_element()
@@ -439,20 +440,20 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .child(
                 div()
                     .flex_none()
-                    .p(px(12.))
+                    .p(z(12.))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(z(8.))
                     .child(
                         div()
                             .flex_1()
-                            .h(px(32.))
-                            .px(px(8.))
-                            .rounded(px(4.))
+                            .h(z(32.))
+                            .px(z(8.))
+                            .rounded(z(4.))
                             .bg(c(Palette::BG_TERTIARY))
                             .flex()
                             .items_center()
-                            .text_size(px(14.))
+                            .text_size(z(14.))
                             .child(div().flex_1().child(Input::new(&input).appearance(false).bordered(false)))
                             .child(icon(Icon::Search, 16., c(Palette::INTERACTIVE))),
                     )
@@ -462,10 +463,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                     ),
             )
             .when_some(error, |d, e| {
-                d.child(div().px(px(16.)).pb(px(8.)).text_size(px(14.)).text_color(c(Palette::RED)).child(e))
+                d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::RED)).child(e))
             })
             .when(loading, |d| {
-                d.child(div().px(px(16.)).pb(px(8.)).text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child("Searching…"))
+                d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Searching…"))
             })
             .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
             .into_any_element(),
@@ -479,11 +480,11 @@ fn pager_button(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .px(px(16.))
-        .py(px(6.))
-        .rounded(px(4.))
+        .px(z(16.))
+        .py(z(6.))
+        .rounded(z(4.))
         .bg(c(Palette::BG_MOD_SELECTED))
-        .text_size(px(14.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(Palette::TEXT_HEADER))
         .cursor_pointer()
@@ -500,10 +501,10 @@ fn sort_button(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .px(px(8.))
-        .py(px(2.))
-        .rounded(px(4.))
-        .text_size(px(14.))
+        .px(z(8.))
+        .py(z(2.))
+        .rounded(z(4.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .cursor_pointer()
         .text_color(c(if active { Palette::TEXT_HEADER } else { Palette::INTERACTIVE }))

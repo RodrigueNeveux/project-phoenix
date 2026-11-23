@@ -207,7 +207,7 @@ fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
                 .overflow_hidden()
                 .bg(c(Palette::EMBED_BG))
                 .border_1()
-                .border_color(ca(0xFFFFFF0F))
+                .border_color(c(Palette::PANEL_BORDER))
                 .when_some(*accent, |d, a| d.child(div().w(px(4.)).flex_none().bg(c(a))))
                 .child(inner);
             if *spoiler {

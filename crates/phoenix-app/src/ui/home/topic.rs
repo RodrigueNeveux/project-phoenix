@@ -1,6 +1,7 @@
 //! Channel topic popout (click the topic in the chat header).
 
-use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*, px};
+use crate::theme::z;
+use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*};
 
 use crate::{
     app::PhoenixApp,
@@ -23,19 +24,19 @@ pub fn render(app: &PhoenixApp, ch: Id, cx: &mut Context<PhoenixApp>) -> AnyElem
         .child(
             div()
                 .id("topic-popout")
-                .w(px(490.))
-                .max_h(px(560.))
-                .rounded(px(8.))
+                .w(z(490.))
+                .max_h(z(560.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_PRIMARY))
                 .shadow_lg()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
-                .gap(px(12.))
+                .gap(z(12.))
                 .on_click(|_, _, cx| cx.stop_propagation())
                 .child(
                     div()
-                        .text_size(px(20.))
+                        .text_size(z(20.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child(channel.name.clone()),
@@ -44,8 +45,8 @@ pub fn render(app: &PhoenixApp, ch: Id, cx: &mut Context<PhoenixApp>) -> AnyElem
                     div()
                         .id("topic-text")
                         .overflow_y_scroll()
-                        .text_size(px(16.))
-                        .line_height(px(22.))
+                        .text_size(z(16.))
+                        .line_height(z(22.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(topic),
                 ),

@@ -1,6 +1,7 @@
 //! Full-window image viewer opened by clicking an attachment or embed image.
 //! Click the backdrop (or press Escape via `media::close_viewer`) to close.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, App, FontWeight, ParentElement, SharedString, Styled, Window, div, img, prelude::*, px,
 };
@@ -26,7 +27,7 @@ pub fn render(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
             .flex_col()
             .items_center()
             .justify_center()
-            .gap(px(8.))
+            .gap(z(8.))
             .occlude()
             .on_click(|_, _, cx| {
                 media::close_viewer(cx);
@@ -41,7 +42,7 @@ pub fn render(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
             .child(
                 div()
                     .id("image-viewer-open")
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(Palette::TEXT_NORMAL))
                     .opacity(0.8)

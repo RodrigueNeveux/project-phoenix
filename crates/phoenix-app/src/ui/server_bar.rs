@@ -160,7 +160,7 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
         pointer = pointer.child(div().w(z(w)).h(z(1.)).bg(c(Palette::BG_FLOATING)));
     }
     let tip = deferred(
-        anchored().position_mode(AnchoredPositionMode::Local).position(point(z(m::SERVER_BAR_W), px(0.))).child(
+        anchored().position_mode(AnchoredPositionMode::Local).position(point(z(m::SERVER_BAR_W), z(0.))).child(
             div()
                 .h(z(item_h))
                 .flex()
@@ -295,11 +295,11 @@ impl Render for DraggedGuild {
     fn render(&mut self, _w: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         let inner: AnyElement = match &self.icon {
             ImageRef::Url(u) => img(u.clone()).size_full().into_any_element(),
-            _ => div().text_size(px(16.)).child(self.acronym.clone()).into_any_element(),
+            _ => div().text_size(z(16.)).child(self.acronym.clone()).into_any_element(),
         };
         div()
             .size(px(m::GUILD_ICON))
-            .rounded(px(16.))
+            .rounded(z(16.))
             .overflow_hidden()
             .bg(c(Palette::BLURPLE))
             .text_color(gpui::white())

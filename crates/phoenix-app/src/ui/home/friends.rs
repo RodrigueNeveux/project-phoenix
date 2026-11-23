@@ -1,6 +1,7 @@
 //! Friends page (Online / All / Pending / Blocked / Add Friend) with the
 //! "Active Now" column, and the Message Requests page.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div,
     prelude::*, px,
@@ -88,15 +89,15 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         let sel = app.nav.friends_tab == t;
         div()
             .id(id)
-            .mx(px(8.))
-            .px(px(8.))
-            .h(px(24.))
-            .rounded(px(4.))
+            .mx(z(8.))
+            .px(z(8.))
+            .h(z(24.))
+            .rounded(z(4.))
             .flex()
             .items_center()
-            .gap(px(6.))
+            .gap(z(6.))
             .cursor_pointer()
-            .text_size(px(16.))
+            .text_size(z(16.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(c(if sel { Palette::TEXT_HEADER } else { Palette::INTERACTIVE }))
             .when(sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
@@ -112,7 +113,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     div()
         .h(px(m::HEADER_H))
         .flex_none()
-        .px(px(16.))
+        .px(z(16.))
         .flex()
         .items_center()
         .border_b_1()
@@ -120,13 +121,13 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .child(icon(Icon::Friends, 24., c(Palette::CHANNEL_ICON)))
         .child(
             div()
-                .ml(px(8.))
-                .text_size(px(16.))
+                .ml(z(8.))
+                .text_size(z(16.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child("Friends"),
         )
-        .child(div().mx(px(8.)).w(px(1.)).h(px(24.)).bg(c(Palette::DIVIDER)))
+        .child(div().mx(z(8.)).w(z(1.)).h(z(24.)).bg(c(Palette::DIVIDER)))
         .child(tab("tab-online", "Online", FriendsTab::Online, cx))
         .child(tab("tab-all", "All", FriendsTab::All, cx))
         .child(tab("tab-pending", "Pending", FriendsTab::Pending, cx))
@@ -134,14 +135,14 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .child(
             div()
                 .id("tab-add")
-                .mx(px(8.))
-                .px(px(8.))
-                .h(px(24.))
-                .rounded(px(4.))
+                .mx(z(8.))
+                .px(z(8.))
+                .h(z(24.))
+                .rounded(z(4.))
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .font_weight(FontWeight::MEDIUM)
                 .when(add_sel, |d| d.text_color(c(Palette::GREEN)))
                 .when(!add_sel, |d| d.bg(c(Palette::GREEN)).text_color(gpui::white()))
@@ -187,8 +188,8 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
         .id("friends-list")
         .size_full()
         .overflow_y_scroll()
-        .pt(px(16.))
-        .px(px(20.))
+        .pt(z(16.))
+        .px(z(20.))
         .flex()
         .flex_col();
     if rows.is_empty() {
@@ -202,10 +203,10 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
             .child(
                 div()
                     .flex_1()
-                    .pt(px(160.))
+                    .pt(z(160.))
                     .flex()
                     .justify_center()
-                    .text_size(px(16.))
+                    .text_size(z(16.))
                     .text_color(c(Palette::TEXT_MUTED))
                     .child(msg),
             )
@@ -213,8 +214,8 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
     }
     col = col.child(
         div()
-            .pb(px(16.))
-            .text_size(px(12.))
+            .pb(z(16.))
+            .text_size(z(12.))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(c(Palette::TEXT_MUTED))
             .child(SharedString::from(format!("{label} — {}", rows.len()))),
@@ -228,7 +229,7 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
 fn round_button(id: (&'static str, u64), glyph: AnyElement, hover: Hsla) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .size(px(36.))
+        .size(z(36.))
         .rounded_full()
         .bg(c(Palette::BG_SECONDARY))
         .flex()
@@ -264,7 +265,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         }),
     };
     let username = u.map(|u| u.name.clone()).unwrap_or_default();
-    let mut actions = div().flex().gap(px(10.));
+    let mut actions = div().flex().gap(z(10.));
     let act = |action: RelAction| {
         cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
             // Optimistic: the gateway confirms with RELATIONSHIP_ADD/REMOVE.
@@ -281,7 +282,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
             cx.notify();
         })
     };
-    let check = || div().text_size(px(18.)).child("✓").into_any_element();
+    let check = || div().text_size(z(18.)).child("✓").into_any_element();
     let cross = || icon(Icon::Close, 20., c(Palette::INTERACTIVE)).into_any_element();
     match r.kind {
         RelationshipKind::Friend => {
@@ -310,16 +311,16 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
     div()
         .id(("friend", user.0))
         .group("friend-row")
-        .h(px(62.))
+        .h(z(62.))
         .flex_none()
         .border_t_1()
         .border_color(c(Palette::DIVIDER))
-        .px(px(10.))
-        .mx(px(-10.))
-        .rounded(px(8.))
+        .px(z(10.))
+        .mx(z(-10.))
+        .rounded(z(8.))
         .flex()
         .items_center()
-        .gap(px(12.))
+        .gap(z(12.))
         .cursor_pointer()
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
@@ -333,25 +334,25 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                 .child(
                     div()
                         .flex()
-                        .gap(px(6.))
+                        .gap(z(6.))
                         .items_baseline()
                         .child(
                             div()
-                                .text_size(px(16.))
+                                .text_size(z(16.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .child(name),
                         )
                         .child(
                             div()
-                                .text_size(px(14.))
+                                .text_size(z(14.))
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .opacity(0.)
                                 .group_hover("friend-row", |s| s.opacity(1.))
                                 .child(username),
                         ),
                 )
-                .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(sub)),
+                .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(sub)),
         )
         .child(actions)
 }
@@ -365,53 +366,53 @@ fn add_friend(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         None => Palette::BG_TERTIARY,
     };
     div()
-        .px(px(30.))
-        .py(px(20.))
+        .px(z(30.))
+        .py(z(20.))
         .flex()
         .flex_col()
         .border_b_1()
         .border_color(c(Palette::DIVIDER))
         .child(
             div()
-                .text_size(px(16.))
+                .text_size(z(16.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child("ADD FRIEND"),
         )
         .child(
             div()
-                .mt(px(8.))
-                .text_size(px(14.))
+                .mt(z(8.))
+                .text_size(z(14.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child("You can add friends with their Discord username."),
         )
         .child(
             div()
-                .mt(px(16.))
-                .h(px(52.))
-                .px(px(12.))
-                .rounded(px(8.))
+                .mt(z(16.))
+                .h(z(52.))
+                .px(z(12.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_TERTIARY))
                 .border_1()
                 .border_color(c(border))
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(z(12.))
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .when_some(input, |d, i| d.child(Input::new(&i).appearance(false).bordered(false))),
                 )
                 .child(
                     div()
                         .id("send-fr")
-                        .h(px(32.))
-                        .px(px(16.))
-                        .rounded(px(4.))
+                        .h(z(32.))
+                        .px(z(16.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BLURPLE))
                         .text_color(gpui::white())
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .font_weight(FontWeight::MEDIUM)
                         .flex()
                         .items_center()
@@ -425,7 +426,7 @@ fn add_friend(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 Ok(t) => (Palette::GREEN, t),
                 Err(t) => (Palette::RED, t),
             };
-            d.child(div().mt(px(8.)).text_size(px(14.)).text_color(c(col)).child(text))
+            d.child(div().mt(z(8.)).text_size(z(14.)).text_color(c(col)).child(text))
         })
 }
 
@@ -441,20 +442,20 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     active.sort_by_key(|(u, _)| u.0);
     let mut col = div()
         .id("active-now")
-        .w(px(360.))
+        .w(z(360.))
         .flex_none()
         .h_full()
         .border_l_1()
         .border_color(c(Palette::DIVIDER))
-        .px(px(16.))
-        .py(px(16.))
+        .px(z(16.))
+        .py(z(16.))
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(px(16.))
+        .gap(z(16.))
         .child(
             div()
-                .text_size(px(20.))
+                .text_size(z(20.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child("Active Now"),
@@ -462,21 +463,21 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     if active.is_empty() {
         return col.child(
             div()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(4.))
+                .gap(z(4.))
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child("It's quiet for now..."),
                 )
                 .child(
                     div()
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .text_center()
                         .child("When a friend starts an activity—like playing a game or hanging out on voice—we'll show it here!"),
@@ -488,14 +489,14 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         col = col.child(
             div()
                 .id(("active", user.0))
-                .p(px(16.))
-                .rounded(px(8.))
+                .p(z(16.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
                 .border_1()
                 .border_color(c(Palette::DIVIDER))
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(z(12.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
@@ -506,12 +507,12 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .min_w_0()
                         .child(
                             div()
-                                .text_size(px(16.))
+                                .text_size(z(16.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
                         )
-                        .child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(activity)),
+                        .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(activity)),
                 ),
         );
     }
@@ -520,14 +521,14 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 
 fn message_requests(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let reqs: Vec<Id> = app.nav.message_requests.iter().copied().filter(|c| app.channels.contains_key(c)).collect();
-    let mut body = div().id("msg-requests").flex_1().overflow_y_scroll().p(px(20.)).flex().flex_col();
+    let mut body = div().id("msg-requests").flex_1().overflow_y_scroll().p(z(20.)).flex().flex_col();
     if reqs.is_empty() {
         body = body.child(
             div()
-                .pt(px(160.))
+                .pt(z(160.))
                 .flex()
                 .justify_center()
-                .text_size(px(16.))
+                .text_size(z(16.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child("There are no pending message requests."),
         );
@@ -538,17 +539,17 @@ fn message_requests(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl Into
         body = body.child(
             div()
                 .id(("req", id.0))
-                .h(px(62.))
+                .h(z(62.))
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(z(12.))
                 .border_t_1()
                 .border_color(c(Palette::DIVIDER))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .on_click(cx.listener(move |a, _, _, cx| a.select_channel(id, cx)))
                 .child(avatar_with_status(u, 32., Presence::Offline, c(Palette::BG_PRIMARY)))
-                .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_HEADER)).child(ch.name.clone())),
+                .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_HEADER)).child(ch.name.clone())),
         );
     }
     div()
@@ -562,16 +563,16 @@ fn message_requests(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl Into
             div()
                 .h(px(m::HEADER_H))
                 .flex_none()
-                .px(px(16.))
+                .px(z(16.))
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .border_b_1()
                 .border_color(c(Palette::HEADER_SHADOW))
                 .child(icon(Icon::Inbox, 24., c(Palette::CHANNEL_ICON)))
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child("Message Requests"),

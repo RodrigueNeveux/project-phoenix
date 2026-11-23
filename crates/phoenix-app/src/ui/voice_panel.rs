@@ -78,10 +78,10 @@ fn signal_bars(color: Hsla) -> impl IntoElement {
     div()
         .flex()
         .items_end()
-        .gap(px(2.))
-        .h(px(14.))
+        .gap(z(2.))
+        .h(z(14.))
         .flex_none()
-        .children([6., 10., 14.].map(|h| div().w(px(3.)).h(px(h)).rounded(px(1.)).bg(color)))
+        .children([6., 10., 14.].map(|h| div().w(z(3.)).h(px(h)).rounded(z(1.)).bg(color)))
 }
 
 /// Wrap an avatar in the green speaking ring (Discord: 2px ring with a gap).
@@ -158,7 +158,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
             div()
                 .flex()
                 .items_center()
-                .gap(px(4.))
+                .gap(z(4.))
                 .child(
                     div()
                         .id("voice-status")
@@ -175,7 +175,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(6.))
+                                .gap(z(6.))
                                 .child(signal_bars(c(color)))
                                 .child(
                                     div()
@@ -238,20 +238,20 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
     let speaking = app.voice.is_speaking(user) && !local_muted;
     let e = entity.clone();
     div()
-        .ml(px(36.))
-        .mr(px(8.))
-        .h(px(32.))
-        .px(px(8.))
-        .rounded(px(4.))
+        .ml(z(36.))
+        .mr(z(8.))
+        .h(z(32.))
+        .px(z(8.))
+        .rounded(z(4.))
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap(z(8.))
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .child(speaking_ring(avatar(u, 24.), 24., speaking))
         .child(
             div()
                 .flex_1()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .text_color(c(if speaking { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
                 .text_ellipsis()
                 .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
@@ -277,30 +277,30 @@ fn check_row(
 ) -> AnyElement {
     div()
         .id(id)
-        .h(px(32.))
-        .px(px(8.))
-        .my(px(2.))
-        .rounded(px(2.))
+        .h(z(32.))
+        .px(z(8.))
+        .my(z(2.))
+        .rounded(z(2.))
         .flex()
         .items_center()
         .justify_between()
         .cursor_pointer()
-        .text_size(px(14.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(c(0xB5BAC1))
-        .hover(|s| s.bg(c(0x4752C4)).text_color(gpui::white()))
+        .text_color(c(Palette::INTERACTIVE))
+        .hover(|s| s.bg(c(Palette::BLURPLE)).text_color(gpui::white()))
         .child(label)
         .child(
             div()
-                .size(px(18.))
-                .rounded(px(4.))
+                .size(z(18.))
+                .rounded(z(4.))
                 .border_1()
                 .border_color(c(if on { Palette::BLURPLE } else { 0xB5BAC1 }))
                 .when(on, |d| d.bg(c(Palette::BLURPLE)))
                 .flex()
                 .items_center()
                 .justify_center()
-                .when(on, |d| d.child(div().size(px(8.)).rounded(px(1.)).bg(gpui::white()))),
+                .when(on, |d| d.child(div().size(z(8.)).rounded(z(1.)).bg(gpui::white()))),
         )
         .on_click(cx.listener(move |a, _, _, cx| {
             f(a);
@@ -351,12 +351,12 @@ pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>)
     let vol = ua.volume;
     items.push(MenuItem::Custom(
         div()
-            .px(px(8.))
-            .py(px(6.))
+            .px(z(8.))
+            .py(z(6.))
             .flex()
             .flex_col()
-            .gap(px(8.))
-            .child(div().text_size(px(14.)).font_weight(FontWeight::MEDIUM).text_color(c(0xB5BAC1)).child("User Volume"))
+            .gap(z(8.))
+            .child(div().text_size(z(14.)).font_weight(FontWeight::MEDIUM).text_color(c(Palette::INTERACTIVE)).child("User Volume"))
             .child(crate::ui::settings::voice::slider(
                 "user-volume",
                 vol as f32 / 200.,
@@ -403,13 +403,13 @@ fn ping_graph(history: &[u32]) -> impl IntoElement {
     let max = history.iter().copied().max().unwrap_or(0).max(100) as f32;
     let off = n - history.len().min(n);
     div()
-        .h(px(80.))
-        .p(px(8.))
-        .rounded(px(4.))
+        .h(z(80.))
+        .p(z(8.))
+        .rounded(z(4.))
         .bg(c(Palette::BG_TERTIARY))
         .flex()
         .items_end()
-        .gap(px(2.))
+        .gap(z(2.))
         .children((0..n).map(|i| {
             let p = i.checked_sub(off).and_then(|j| history.get(j)).copied();
             let col = match p {
@@ -419,7 +419,7 @@ fn ping_graph(history: &[u32]) -> impl IntoElement {
                 None => Palette::BG_MOD_HOVER,
             };
             let h = p.map(|p| (p as f32 / max * 64.).max(2.)).unwrap_or(2.);
-            div().flex_1().h(px(h)).rounded(px(1.)).bg(c(col))
+            div().flex_1().h(px(h)).rounded(z(1.)).bg(c(col))
         }))
 }
 
@@ -427,9 +427,9 @@ fn stat(label: &'static str, value: String) -> impl IntoElement {
     div()
         .flex()
         .justify_between()
-        .gap(px(8.))
-        .text_size(px(14.))
-        .line_height(px(20.))
+        .gap(z(8.))
+        .text_size(z(14.))
+        .line_height(z(20.))
         .child(div().flex_none().text_color(c(Palette::TEXT_MUTED)).child(label))
         .child(div().min_w_0().text_ellipsis().font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_NORMAL)).child(value))
 }
@@ -443,42 +443,42 @@ fn privacy_body(v: &crate::voice::VoiceUi) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(z(12.))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .child(asset_icon(SHIELD, 20., c(if v.e2ee { Palette::GREEN } else { Palette::TEXT_MUTED })))
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child(if v.e2ee { "End-to-end encrypted" } else { "Not end-to-end encrypted" }),
                 ),
         )
-        .child(div().text_size(px(14.)).line_height(px(18.)).text_color(c(Palette::TEXT_MUTED)).child(if v.e2ee {
+        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(Palette::TEXT_MUTED)).child(if v.e2ee {
             "Audio and video in this call are end-to-end encrypted. Compare the voice privacy code with the other participants: when it matches, nobody else can listen in."
         } else {
             "This call is protected by transport encryption only."
         }))
         .when(!groups.is_empty(), |d| {
-            d.child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("VOICE PRIVACY CODE"))
-                .child(div().flex().flex_wrap().gap(px(8.)).children(groups.into_iter().map(|g| {
+            d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("VOICE PRIVACY CODE"))
+                .child(div().flex().flex_wrap().gap(z(8.)).children(groups.into_iter().map(|g| {
                     div()
-                        .px(px(8.))
-                        .py(px(4.))
-                        .rounded(px(4.))
+                        .px(z(8.))
+                        .py(z(4.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BG_TERTIARY))
                         .font_family(crate::theme::FONT_MONO)
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(g)
                 })))
                 .child(
                     div()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("The code changes whenever someone joins or leaves the call."),
                 )
@@ -491,14 +491,14 @@ fn connection_body(v: &crate::voice::VoiceUi) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .gap(px(8.))
+        .gap(z(8.))
         .child(ping_graph(&history))
         .child(stat("Average ping", dash(v.average_ping().map(|p| format!("{p} ms")))))
         .child(stat("Last ping", dash(v.ping_ms.map(|p| format!("{p} ms")))))
         .child(stat("Outbound packet loss rate", dash(v.stats.outbound_loss_pct.map(|l| format!("{l:.1}%")))))
         .child(stat("Inbound packet loss rate", format!("{:.1}%", v.inbound_loss_pct())))
         .child(stat("Packets sent / received", format!("{} / {}", v.stats.packets_sent, v.stats.packets_received)))
-        .child(div().h(px(1.)).my(px(4.)).bg(c(Palette::DIVIDER)))
+        .child(div().h(z(1.)).my(z(4.)).bg(c(Palette::DIVIDER)))
         .child(stat("Server", dash(v.endpoint.clone())))
         .child(stat("Encryption", dash(v.mode.clone())))
         .into_any_element()
@@ -509,11 +509,11 @@ fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElemen
         let sel = t == tab;
         div()
             .id(id)
-            .pb(px(6.))
+            .pb(z(6.))
             .border_b_2()
             .border_color(if sel { c(Palette::BLURPLE) } else { gpui::transparent_black() })
             .cursor_pointer()
-            .text_size(px(14.))
+            .text_size(z(14.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(c(if sel { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
             .hover(|s| s.text_color(c(Palette::TEXT_NORMAL)))
@@ -543,11 +543,11 @@ fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElemen
                 div()
                     .id("voice-popout")
                     .absolute()
-                    .left(px(80.))
-                    .bottom(px(150.))
-                    .w(px(320.))
-                    .p(px(16.))
-                    .rounded(px(8.))
+                    .left(z(80.))
+                    .bottom(z(150.))
+                    .w(z(320.))
+                    .p(z(16.))
+                    .rounded(z(8.))
                     .bg(c(Palette::BG_FLOATING))
                     .border_1()
                     .border_color(c(Palette::DIVIDER))
@@ -556,11 +556,11 @@ fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElemen
                     .on_click(|_, _, cx| cx.stop_propagation())
                     .flex()
                     .flex_col()
-                    .gap(px(12.))
+                    .gap(z(12.))
                     .child(
                         div()
                             .flex()
-                            .gap(px(16.))
+                            .gap(z(16.))
                             .border_b_1()
                             .border_color(c(Palette::DIVIDER))
                             .child(tab_button("vp-tab-conn", "Connection", Tab::Connection, cx))

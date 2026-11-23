@@ -1,6 +1,7 @@
 //! Sticker tab: guild stickers then Discord's standard packs, searchable by
 //! name and tags. Clicking one sends it to the open channel.
 
+use crate::theme::z;
 use gpui::{AnyElement, Context, ParentElement, SharedString, Styled, div, img, prelude::*, px};
 
 use super::{Pickers, close, empty_state, section_title, types::StickerData, with_app};
@@ -53,7 +54,7 @@ fn cell(s: &StickerData) -> AnyElement {
             .flex()
             .items_center()
             .justify_center()
-            .text_size(px(12.))
+            .text_size(z(12.))
             .text_color(c(Palette::TEXT_MUTED))
             .child(s.name.clone())
             .into_any_element(),
@@ -65,7 +66,7 @@ fn cell(s: &StickerData) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(4.))
+        .rounded(z(4.))
         .cursor_pointer()
         .hover(|st| st.bg(c(Palette::BG_MOD_HOVER)))
         .on_click(move |_, w, cx| with_app(cx, w, move |a, w, cx| send(a, id, w, cx)))
@@ -96,7 +97,7 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     if sections.is_empty() {
         return empty_state(if p.stickers.loading { "Loading stickers…" } else { "No stickers found." });
     }
-    let mut body = div().id("sticker-scroll").size_full().overflow_y_scroll().px(px(8.)).pb(px(8.));
+    let mut body = div().id("sticker-scroll").size_full().overflow_y_scroll().px(z(8.)).pb(z(8.));
     for (title, st) in sections {
         body = body.child(section_title(title)).child(div().flex().flex_wrap().children(st.iter().map(cell)));
     }

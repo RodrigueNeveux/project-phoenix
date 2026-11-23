@@ -5,6 +5,7 @@
 //! dismisses on any click outside the panel). Keyboard: Up/Down move the
 //! highlight, Enter/Space activate, Right/Left open/close a submenu, Esc closes.
 
+use crate::theme::z;
 use std::rc::Rc;
 
 use gpui::{
@@ -102,7 +103,7 @@ fn step(ok: &[bool], cur: Option<usize>, dir: isize) -> Option<usize> {
 fn keyboard_click(pos: Point<Pixels>) -> ClickEvent {
     ClickEvent::Keyboard(gpui::KeyboardClickEvent {
         button: gpui::KeyboardButton::Enter,
-        bounds: gpui::Bounds::new(pos, gpui::size(px(0.), px(0.))),
+        bounds: gpui::Bounds::new(pos, gpui::size(z(0.), z(0.))),
     })
 }
 
@@ -221,7 +222,7 @@ impl MenuItem {
 // border; items 32px min, padding 6px 8px, margin 2px 0, radius 2,
 // 14px/500 with 18px line height; hover brand-560.
 pub const MENU_W: f32 = 220.;
-const MENU_BG: u32 = 0x111214;
+const MENU_BG: u32 = Palette::BG_FLOATING;
 const MENU_BORDER: u32 = 0x97979F1F;
 const HOVER_BG: u32 = 0x4752C4;
 const CHEVRON: &str = "icons/chevron-right.svg";
@@ -237,9 +238,9 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
     let mut list = div()
         .id(id)
         .w(px(MENU_W))
-        .py(px(6.))
-        .px(px(8.))
-        .rounded(px(4.))
+        .py(z(6.))
+        .px(z(8.))
+        .rounded(z(4.))
         .border_1()
         .border_color(crate::theme::ca(MENU_BORDER))
         .bg(c(MENU_BG))
@@ -251,23 +252,23 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
         .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation());
     for (ix, item) in items.into_iter().enumerate() {
         list = list.child(match item {
-            MenuItem::Separator => div().mx(px(4.)).my(px(4.)).h(px(1.)).bg(c(0x2E2F34)).into_any_element(),
+            MenuItem::Separator => div().mx(z(4.)).my(z(4.)).h(z(1.)).bg(c(Palette::DIVIDER)).into_any_element(),
             MenuItem::Custom(el) => el,
             MenuItem::Submenu { label, items } => {
                 let open = OPEN_SUB.with(|c| c.get()) == Some(ix);
                 div()
                     .id(("menu-sub", ix))
                     .relative()
-                    .h(px(32.))
-                    .px(px(8.))
-                    .my(px(2.))
-                    .rounded(px(2.))
+                    .h(z(32.))
+                    .px(z(8.))
+                    .my(z(2.))
+                    .rounded(z(2.))
                     .flex()
                     .items_center()
                     .justify_between()
                     .cursor_pointer()
-                    .text_size(px(14.))
-                    .line_height(px(18.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(if open { 0xFFFFFF } else { 0xB5BAC1 }))
                     .when(open, |d| d.bg(c(HOVER_BG)))
@@ -279,12 +280,12 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         }
                     })
                     .child(label)
-                    .child(svg().path(CHEVRON).size(px(18.)).flex_none().text_color(c(if open { 0xFFFFFF } else { 0xB5BAC1 })))
+                    .child(svg().path(CHEVRON).size(z(18.)).flex_none().text_color(c(if open { 0xFFFFFF } else { 0xB5BAC1 })))
                     .when(open, |d| {
                         d.child(
                             div()
                                 .absolute()
-                                .top(px(-6.))
+                                .top(z(-6.))
                                 .left(px(MENU_W - 8.))
                                 .child(panel_at("context-submenu", 1, items, dismiss.clone())),
                         )
@@ -296,43 +297,43 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                 let lit = hl == Some(ix);
                 let mark = if radio {
                     div()
-                        .size(px(18.))
+                        .size(z(18.))
                         .flex_none()
                         .rounded_full()
                         .border_2()
-                        .border_color(if lit { gpui::white() } else { c(0xB5BAC1) })
+                        .border_color(if lit { gpui::white() } else { c(Palette::INTERACTIVE) })
                         .flex()
                         .items_center()
                         .justify_center()
                         .when(checked, |d| {
-                            d.child(div().size(px(8.)).rounded_full().bg(if lit { gpui::white() } else { c(Palette::BLURPLE) }))
+                            d.child(div().size(z(8.)).rounded_full().bg(if lit { gpui::white() } else { c(Palette::BLURPLE) }))
                         })
                 } else {
                     div()
-                        .size(px(18.))
+                        .size(z(18.))
                         .flex_none()
-                        .rounded(px(4.))
+                        .rounded(z(4.))
                         .border_1()
-                        .border_color(if checked { c(Palette::BLURPLE) } else if lit { gpui::white() } else { c(0xB5BAC1) })
-                        .when(checked, |d| d.bg(c(Palette::BLURPLE)).child(svg().path(CHECK).size(px(14.)).text_color(gpui::white())))
+                        .border_color(if checked { c(Palette::BLURPLE) } else if lit { gpui::white() } else { c(Palette::INTERACTIVE) })
+                        .when(checked, |d| d.bg(c(Palette::BLURPLE)).child(svg().path(CHECK).size(z(14.)).text_color(gpui::white())))
                         .flex()
                         .items_center()
                         .justify_center()
                 };
                 div()
                     .id(("menu-check", ix))
-                    .h(px(32.))
-                    .px(px(8.))
-                    .my(px(2.))
-                    .rounded(px(2.))
+                    .h(z(32.))
+                    .px(z(8.))
+                    .my(z(2.))
+                    .rounded(z(2.))
                     .flex()
                     .items_center()
                     .justify_between()
                     .cursor_pointer()
-                    .text_size(px(14.))
-                    .line_height(px(18.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(0xB5BAC1))
+                    .text_color(c(Palette::INTERACTIVE))
                     .on_hover(move |h, w, _| {
                         if *h {
                             if depth == 0 {
@@ -361,16 +362,16 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                 div()
                     .id(("menu-item", ix))
                     .group("menu-item")
-                    .h(px(32.))
-                    .px(px(8.))
-                    .my(px(2.))
-                    .rounded(px(2.))
+                    .h(z(32.))
+                    .px(z(8.))
+                    .my(z(2.))
+                    .rounded(z(2.))
                     .flex()
                     .items_center()
                     .justify_between()
                     .cursor_pointer()
-                    .text_size(px(14.))
-                    .line_height(px(18.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(fg))
                     .on_hover(move |h, w, _| {
@@ -392,7 +393,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         d.child(
                             svg()
                                 .path(path)
-                                .size(px(18.))
+                                .size(z(18.))
                                 .flex_none()
                                 .text_color(if hl == Some(ix) { gpui::white() } else { c(fg) })
                                 .group_hover("menu-item", |s| s.text_color(gpui::white())),
@@ -449,7 +450,7 @@ pub fn render(pos: Point<Pixels>, items: Vec<MenuItem>, dismiss: Dismiss) -> Any
             .child(
                 anchored()
                     .position(pos)
-                    .snap_to_window_with_margin(px(8.))
+                    .snap_to_window_with_margin(z(8.))
                     .child(panel("context-menu", items, dismiss)),
             ),
     )

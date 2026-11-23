@@ -25,6 +25,7 @@ pub mod tooltip;
 pub mod user_menu;
 pub mod voice_panel;
 
+use crate::theme::z;
 use gpui::{
     AnyElement, Div, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div,
     prelude::*, px, svg,
@@ -102,7 +103,7 @@ pub fn status_dot(p: Presence, size: f32, ring: Hsla) -> Div {
                 .bg(ring),
         ),
         Presence::Dnd => base.flex().items_center().justify_center().child(
-            div().w(px(size * 0.6)).h(px((size * 0.2).max(2.))).rounded(px(1.)).bg(ring),
+            div().w(px(size * 0.6)).h(px((size * 0.2).max(2.))).rounded(z(1.)).bg(ring),
         ),
         Presence::Idle => base.child(
             div()
@@ -121,13 +122,13 @@ pub fn status_dot(p: Presence, size: f32, ring: Hsla) -> Div {
 pub fn badge(n: u32) -> Div {
     let label: SharedString = if n > 99 { "99+".into() } else { n.to_string().into() };
     div()
-        .h(px(16.))
-        .min_w(px(16.))
-        .px(px(4.))
-        .rounded(px(8.))
+        .h(z(16.))
+        .min_w(z(16.))
+        .px(z(4.))
+        .rounded(z(8.))
         .bg(c(Palette::RED))
         .text_color(gpui::white())
-        .text_size(px(12.))
+        .text_size(z(12.))
         .font_weight(FontWeight::BOLD)
         .flex()
         .items_center()
@@ -144,8 +145,8 @@ pub fn icon_button(id: &'static str, i: Icon, color: Hsla, size: f32) -> gpui::S
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(4.))
+        .rounded(z(4.))
         .cursor_pointer()
-        .hover(|s| s.bg(c(0x3D3E45)))
+        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .child(icon(i, size, color))
 }

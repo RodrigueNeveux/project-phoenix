@@ -1,6 +1,7 @@
 //! GIF tab: Tenor categories / trending home, search, masonry results.
 //! Clicking a GIF sends its URL to the open channel (Discord embeds it).
 
+use crate::theme::z;
 use gpui::{
     AnyElement, Context, FontWeight, ObjectFit, ParentElement, SharedString, Styled, StyledImage,
     div, img, prelude::*, px,
@@ -98,8 +99,8 @@ fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedStr
         .id(id)
         .relative()
         .w(px(w))
-        .h(px(110.))
-        .rounded(px(4.))
+        .h(z(110.))
+        .rounded(z(4.))
         .overflow_hidden()
         .bg(c(Palette::BG_TERTIARY))
         .cursor_pointer()
@@ -113,7 +114,7 @@ fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedStr
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(16.))
+                .text_size(z(16.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(gpui::white())
                 .child(name),
@@ -172,7 +173,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                     .id(("gif", i))
                     .w(px(col_w))
                     .h(px(h))
-                    .rounded(px(4.))
+                    .rounded(z(4.))
                     .overflow_hidden()
                     .bg(c(Palette::BG_TERTIARY))
                     .cursor_pointer()

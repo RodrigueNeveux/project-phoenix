@@ -1,6 +1,7 @@
 //! Emoji tab: sectioned grid (frequently used, guild emoji, unicode
 //! categories), category sidebar, skin tone selector and preview bar.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, App, Context, FontWeight, ListOffset, ParentElement, SharedString, Styled, div,
     img, list, prelude::*, px,
@@ -177,11 +178,11 @@ fn render_row(ix: usize, cx: &mut App) -> AnyElement {
     match op.grid.rows.get(ix).copied() {
         Some(Row::Header(si)) => {
             let title = op.grid.sections[si].title.clone();
-            super::section_title(title).pt(px(4.)).into_any_element()
+            super::section_title(title).pt(z(4.)).into_any_element()
         }
         Some(Row::Cells { start, end }) => {
             let selected = op.selected;
-            let mut row = div().flex().px(px(8.));
+            let mut row = div().flex().px(z(8.));
             for i in start..end {
                 let item = op.grid.items[i].clone();
                 let is_sel = i == selected;
@@ -193,7 +194,7 @@ fn render_row(ix: usize, cx: &mut App) -> AnyElement {
                         .flex()
                         .items_center()
                         .justify_center()
-                        .rounded(px(4.))
+                        .rounded(z(4.))
                         .cursor_pointer()
                         .when(is_sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
                         .hover(|s| s.bg(c(Palette::BG_MOD_SELECTED)))
@@ -242,7 +243,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
 
     let mut sidebar = div()
         .id("emoji-sidebar")
-        .w(px(48.))
+        .w(z(48.))
         .flex_none()
         .h_full()
         .bg(c(Palette::BG_SECONDARY_ALT))
@@ -250,8 +251,8 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
         .flex()
         .flex_col()
         .items_center()
-        .py(px(4.))
-        .gap(px(4.));
+        .py(z(4.))
+        .gap(z(4.));
     if !searching {
         for (si, s) in op.grid.sections.iter().enumerate() {
             let first = s.first_row;
@@ -259,30 +260,30 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
             let content: AnyElement = match &s.icon {
                 SectionIcon::Frequent => emoji_element("🕒", 20.),
                 SectionIcon::Category(cat) => emoji_element(emoji::CATEGORY_ICON[*cat], 20.),
-                SectionIcon::Guild(ImageRef::Url(u), _) => img(u.clone()).size(px(24.)).rounded_full().into_any_element(),
+                SectionIcon::Guild(ImageRef::Url(u), _) => img(u.clone()).size(z(24.)).rounded_full().into_any_element(),
                 SectionIcon::Guild(_, acr) => div()
-                    .size(px(24.))
+                    .size(z(24.))
                     .rounded_full()
                     .bg(c(Palette::BG_PRIMARY))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(9.))
+                    .text_size(z(9.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .child(acr.clone())
                     .into_any_element(),
             };
             let sep = matches!(s.icon, SectionIcon::Category(0)) && si > 0;
             if sep {
-                sidebar = sidebar.child(div().w(px(24.)).h(px(1.)).bg(c(Palette::DIVIDER)));
+                sidebar = sidebar.child(div().w(z(24.)).h(z(1.)).bg(c(Palette::DIVIDER)));
             }
             let ls = list_state.clone();
             sidebar = sidebar.child(
                 div()
                     .id(("emoji-section", si))
-                    .size(px(32.))
+                    .size(z(32.))
                     .flex_none()
-                    .rounded(px(4.))
+                    .rounded(z(4.))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -291,7 +292,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                     .when(is_active, |d| d.bg(c(Palette::BG_MOD_HOVER)))
                     .hover(|s| s.opacity(1.).bg(c(Palette::BG_MOD_HOVER)))
                     .on_click(move |_, w, cx| {
-                        ls.scroll_to(ListOffset { item_ix: first, offset_in_item: px(0.) });
+                        ls.scroll_to(ListOffset { item_ix: first, offset_in_item: z(0.) });
                         with_app(cx, w, |_, _, cx| cx.notify());
                     })
                     .child(content),
@@ -306,24 +307,24 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     };
 
     let footer = div()
-        .h(px(48.))
+        .h(z(48.))
         .flex_none()
-        .px(px(16.))
+        .px(z(16.))
         .bg(c(Palette::BG_SECONDARY_ALT))
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap(z(8.))
         .when_some(preview, |d, item| {
             d.child(item_element(&item, tone, 28.))
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child(SharedString::from(format!(":{}:", item.name()))),
                 )
                 .when_some(preview_from, |d, g| {
-                    d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(SharedString::from(format!("from {g}"))))
+                    d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(SharedString::from(format!("from {g}"))))
                 })
         });
 
@@ -351,16 +352,16 @@ pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {
     let open = p.open.as_ref().is_some_and(|o| o.tone_open);
     let mut el = div()
         .relative()
-        .size(px(30.))
+        .size(z(30.))
         .flex_none()
         .child(
             div()
                 .id("tone-button")
-                .size(px(30.))
+                .size(z(30.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(4.))
+                .rounded(z(4.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .on_click(cx.listener(|_, _, _, cx| {
@@ -374,10 +375,10 @@ pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {
     if open {
         let mut menu = div()
             .absolute()
-            .top(px(0.))
-            .left(px(0.))
-            .w(px(30.))
-            .rounded(px(4.))
+            .top(z(0.))
+            .left(z(0.))
+            .w(z(30.))
+            .rounded(z(4.))
             .bg(c(Palette::BG_FLOATING))
             .flex()
             .flex_col();
@@ -385,11 +386,11 @@ pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {
             menu = menu.child(
                 div()
                     .id(("tone", t as usize))
-                    .size(px(30.))
+                    .size(z(30.))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded(px(4.))
+                    .rounded(z(4.))
                     .cursor_pointer()
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                     .on_click(cx.listener(move |_, _, _, cx| {

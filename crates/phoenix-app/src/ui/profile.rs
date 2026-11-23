@@ -1,6 +1,7 @@
 //! User profile popout (click on a member / author), full profile modal and
 //! the overlay host that also shows the status picker.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, Context, Div, FontWeight, IntoElement, ParentElement, Pixels, Point, SharedString, Styled,
     Window, div, img, prelude::*, px,
@@ -107,8 +108,8 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
     );
     let vp = window.viewport_size();
     if let Some(p) = &app.people.popout {
-        let x = (p.at.x - px(POPOUT_W + 16.)).max(px(8.));
-        let y = (p.at.y - px(60.)).min(vp.height - px(POPOUT_H + 8.)).max(px(8.));
+        let x = (p.at.x - px(POPOUT_W + 16.)).max(z(8.));
+        let y = (p.at.y - z(60.)).min(vp.height - px(POPOUT_H + 8.)).max(z(8.));
         out.push(
             div()
                 .id("profile-popout")
@@ -122,13 +123,13 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
         );
     }
     if let Some(u) = app.people.modal {
-        let x = ((vp.width - px(MODAL_W)) / 2.).max(px(8.));
+        let x = ((vp.width - px(MODAL_W)) / 2.).max(z(8.));
         out.push(
             div()
                 .id("profile-modal")
                 .absolute()
                 .left(x)
-                .top(px(64.))
+                .top(z(64.))
                 .w(px(MODAL_W))
                 .occlude()
                 .child(card(app, u, app.selected_guild, None, true, cx))
@@ -143,10 +144,10 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
 
 fn section_title(t: &'static str) -> Div {
     div()
-        .text_size(px(12.))
+        .text_size(z(12.))
         .font_weight(FontWeight::BOLD)
         .text_color(c(Palette::TEXT_HEADER))
-        .mb(px(6.))
+        .mb(z(6.))
         .child(t)
 }
 
@@ -175,18 +176,18 @@ fn activity_block(a: &Activity) -> Option<AnyElement> {
         lines.push(if mins >= 60 { format!("for {}h {}m", mins / 60, mins % 60) } else { format!("for {mins}m") }.into());
     }
     let art: AnyElement = match &a.image {
-        Some(u) => img(u.clone()).size(px(60.)).rounded(px(8.)).flex_none().into_any_element(),
-        None => div().size(px(60.)).rounded(px(8.)).flex_none().bg(c(Palette::BG_MOD_SELECTED)).into_any_element(),
+        Some(u) => img(u.clone()).size(z(60.)).rounded(z(8.)).flex_none().into_any_element(),
+        None => div().size(z(60.)).rounded(z(8.)).flex_none().bg(c(Palette::BG_MOD_SELECTED)).into_any_element(),
     };
     Some(
         div()
             .flex()
             .flex_col()
-            .child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_HEADER)).mb(px(8.)).child(title))
+            .child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_HEADER)).mb(z(8.)).child(title))
             .child(
                 div()
                     .flex()
-                    .gap(px(10.))
+                    .gap(z(10.))
                     .items_center()
                     .child(art)
                     .child(
@@ -194,12 +195,12 @@ fn activity_block(a: &Activity) -> Option<AnyElement> {
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .text_size(px(14.))
+                            .text_size(z(14.))
                             .text_color(c(Palette::TEXT_NORMAL))
                             .when_some(line1, |d, l| {
                                 d.child(div().font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).text_ellipsis().child(l))
                             })
-                            .children(lines.into_iter().map(|l| div().text_size(px(12.)).text_ellipsis().child(l))),
+                            .children(lines.into_iter().map(|l| div().text_size(z(12.)).text_ellipsis().child(l))),
                     ),
             )
             .into_any_element(),
@@ -253,13 +254,13 @@ fn card(
         .h(px(banner_h))
         .w_full()
         .bg(c(accent))
-        .rounded_t(px(8.))
+        .rounded_t(z(8.))
         .overflow_hidden()
         .when_some(prof.and_then(|p| p.banner.clone()), |d, b| d.child(img(b).w_full().h(px(banner_h))));
 
     let avatar = div()
         .absolute()
-        .left(px(16.))
+        .left(z(16.))
         .top(px(banner_h - av / 2.))
         .p(px(if full { 7. } else { 6. }))
         .rounded_full()
@@ -272,12 +273,12 @@ fn card(
 
     let e = cx.entity();
     let mut body = div()
-        .px(px(16.))
+        .px(z(16.))
         .pt(px(av / 2. + 16.))
-        .pb(px(16.))
+        .pb(z(16.))
         .flex()
         .flex_col()
-        .gap(px(12.))
+        .gap(z(12.))
         .child(
             div()
                 .flex()
@@ -286,11 +287,11 @@ fn card(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(6.))
+                        .gap(z(6.))
                         .child(
                             div()
-                                .text_size(px(20.))
-                                .line_height(px(24.))
+                                .text_size(z(20.))
+                                .line_height(z(24.))
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .text_ellipsis()
@@ -301,8 +302,8 @@ fn card(
                 .child(
                     div()
                         .flex()
-                        .gap(px(4.))
-                        .text_size(px(14.))
+                        .gap(z(4.))
+                        .text_size(z(14.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(username)
                         .when_some(prof.map(|p| p.pronouns.clone()).filter(|p| !p.is_empty()), |d, p| {
@@ -310,49 +311,49 @@ fn card(
                         }),
                 )
                 .when(uid == app.me.id, |d| {
-                    d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(status_label(presence)))
+                    d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(status_label(presence)))
                 }),
         )
         .when_some(custom, |d, t| {
             d.child(
                 div()
-                    .px(px(10.))
-                    .py(px(6.))
-                    .rounded(px(8.))
+                    .px(z(10.))
+                    .py(z(6.))
+                    .rounded(z(8.))
                     .bg(c(Palette::BG_SECONDARY))
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .text_color(c(Palette::TEXT_NORMAL))
                     .child(t),
             )
         });
 
-    let mut inner = div().p(px(12.)).rounded(px(8.)).bg(c(Palette::BG_SECONDARY)).flex().flex_col().gap(px(14.));
+    let mut inner = div().p(z(12.)).rounded(z(8.)).bg(c(Palette::BG_SECONDARY)).flex().flex_col().gap(z(14.));
     match prof {
         None => {
-            inner = inner.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child("Loading profile…"));
+            inner = inner.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child("Loading profile…"));
         }
         Some(p) => {
             if !p.bio.is_empty() {
                 inner = inner.child(
                     div()
                         .child(section_title("About Me"))
-                        .child(div().text_size(px(14.)).line_height(px(18.)).text_color(c(Palette::TEXT_NORMAL)).child(p.bio.clone())),
+                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(Palette::TEXT_NORMAL)).child(p.bio.clone())),
                 );
             }
             let since = div()
                 .flex()
                 .items_center()
-                .gap(px(8.))
-                .text_size(px(14.))
+                .gap(z(8.))
+                .text_size(z(14.))
                 .text_color(c(Palette::TEXT_NORMAL))
                 .child(format_date(p.created))
                 .when_some(p.joined, |d, j| {
-                    d.child(div().size(px(4.)).rounded_full().bg(c(Palette::INTERACTIVE_MUTED))).child(format_date(j))
+                    d.child(div().size(z(4.)).rounded_full().bg(c(Palette::INTERACTIVE_MUTED))).child(format_date(j))
                 });
             inner = inner.child(div().child(section_title("Member Since")).child(since));
             if full && p.mutual_guilds > 0 {
                 inner = inner.child(
-                    div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(format!("{} Mutual Servers", p.mutual_guilds)),
+                    div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(format!("{} Mutual Servers", p.mutual_guilds)),
                 );
             }
         }
@@ -366,20 +367,20 @@ fn card(
         let label = if roles.len() == 1 { "Role" } else { "Roles" };
         inner = inner.child(
             div()
-                .child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_HEADER)).mb(px(6.)).child(label))
-                .child(div().flex().flex_wrap().gap(px(4.)).children(roles.into_iter().map(|r| {
+                .child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_HEADER)).mb(z(6.)).child(label))
+                .child(div().flex().flex_wrap().gap(z(4.)).children(roles.into_iter().map(|r| {
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(4.))
-                        .h(px(24.))
-                        .px(px(6.))
-                        .rounded(px(4.))
+                        .gap(z(4.))
+                        .h(z(24.))
+                        .px(z(6.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BG_TERTIARY))
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(Palette::TEXT_NORMAL))
-                        .child(div().size(px(12.)).rounded_full().bg(role_color(r.color.or(Some(0x99AAB5)))))
+                        .child(div().size(z(12.)).rounded_full().bg(role_color(r.color.or(Some(0x99AAB5)))))
                         .child(r.name.clone())
                 }))),
         );
@@ -388,7 +389,7 @@ fn card(
         inner = inner.child(
             div()
                 .child(section_title("Note"))
-                .child(div().text_size(px(12.)).child(Input::new(n).appearance(false).bordered(false))),
+                .child(div().text_size(z(12.)).child(Input::new(n).appearance(false).bordered(false))),
         );
     }
     body = body.child(inner);
@@ -398,16 +399,16 @@ fn card(
         body = body.child(
             div()
                 .id(("profile-message", uid.0))
-                .h(px(40.))
-                .px(px(12.))
-                .rounded(px(8.))
+                .h(z(40.))
+                .px(z(12.))
+                .rounded(z(8.))
                 .flex()
                 .items_center()
                 .cursor_pointer()
                 .bg(c(if full { Palette::BLURPLE } else { Palette::BG_SECONDARY }))
                 .border_1()
                 .border_color(c(Palette::DIVIDER))
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .text_color(c(if full { 0xFFFFFF } else { Palette::TEXT_MUTED }))
                 .hover(|s| s.border_color(c(Palette::INTERACTIVE_MUTED)))
                 .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx)))
@@ -418,7 +419,7 @@ fn card(
         body = body.child(
             div()
                 .id(("profile-full", uid.0))
-                .text_size(px(12.))
+                .text_size(z(12.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .cursor_pointer()
                 .hover(|s| s.text_color(c(Palette::TEXT_NORMAL)))
@@ -430,11 +431,11 @@ fn card(
     div()
         .relative()
         .w_full()
-        .rounded(px(8.))
+        .rounded(z(8.))
         .bg(c(bg))
         .shadow_lg()
         .border_1()
-        .border_color(ca(0xFFFFFF14))
+        .border_color(c(Palette::PANEL_BORDER))
         .child(banner)
         .child(avatar)
         .child(body)

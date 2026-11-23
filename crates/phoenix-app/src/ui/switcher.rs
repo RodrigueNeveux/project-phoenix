@@ -2,9 +2,10 @@
 //! ranking. Prefixes narrow the search: `@` users/DMs, `#` text channels,
 //! `!` voice channels, `*` servers.
 
+use crate::theme::z;
 use gpui::{
     Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, Subscription, Window,
-    div, prelude::*, px,
+    div, prelude::*,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
@@ -217,14 +218,14 @@ pub fn on_key(app: &mut PhoenixApp, key: &str, _window: &mut Window, cx: &mut Co
 }
 
 pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let mut results = div().mt(px(8.)).flex().flex_col().max_h(px(400.)).overflow_hidden();
+    let mut results = div().mt(z(8.)).flex().flex_col().max_h(z(400.)).overflow_hidden();
     if sw.results.is_empty() {
         results = results.child(
             div()
-                .py(px(24.))
+                .py(z(24.))
                 .flex()
                 .justify_center()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child("Can't find what you're looking for?"),
         );
@@ -256,15 +257,15 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
             Target::Guild(id) => {
                 let Some(g) = app.guilds.iter().find(|g| g.id == id) else { continue };
                 let lead = match &g.icon {
-                    crate::model::ImageRef::Url(u) => gpui::img(u.clone()).size(px(20.)).rounded(px(6.)).into_any_element(),
+                    crate::model::ImageRef::Url(u) => gpui::img(u.clone()).size(z(20.)).rounded(z(6.)).into_any_element(),
                     _ => div()
-                        .size(px(20.))
-                        .rounded(px(6.))
+                        .size(z(20.))
+                        .rounded(z(6.))
                         .bg(c(Palette::BG_PRIMARY))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(px(8.))
+                        .text_size(z(8.))
                         .child(g.acronym.clone())
                         .into_any_element(),
                 };
@@ -275,12 +276,12 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
         results = results.child(
             div()
                 .id(("sw", i))
-                .h(px(34.))
-                .px(px(8.))
-                .rounded(px(4.))
+                .h(z(34.))
+                .px(z(8.))
+                .rounded(z(4.))
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .cursor_pointer()
                 .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
@@ -288,7 +289,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
                 .child(lead)
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_NORMAL }))
                         .child(name),
@@ -296,7 +297,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
                 .child(div().flex_1())
                 .child(
                     div()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_MUTED))
                         .child(hint),
@@ -310,35 +311,35 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
         .bg(ca(0x000000B3))
         .flex()
         .justify_center()
-        .pt(px(120.))
+        .pt(z(120.))
         .on_click(cx.listener(|a, _, w, cx| a.close_switcher(w, cx)))
         .child(
             div()
                 .id("switcher")
-                .w(px(570.))
+                .w(z(570.))
                 .h_auto()
-                .p(px(16.))
-                .rounded(px(8.))
+                .p(z(16.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
                 .shadow_lg()
                 .on_click(|_, _, cx| cx.stop_propagation())
                 .child(
                     div()
-                        .h(px(70.))
-                        .px(px(16.))
-                        .rounded(px(4.))
+                        .h(z(70.))
+                        .px(z(16.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BG_TERTIARY))
                         .flex()
                         .items_center()
-                        .text_size(px(20.))
+                        .text_size(z(20.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(Input::new(&sw.input).appearance(false).bordered(false)),
                 )
                 .child(results)
                 .child(
                     div()
-                        .mt(px(12.))
-                        .text_size(px(12.))
+                        .mt(z(12.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("PROTIP: Start searches with @, #, !, * to narrow down results."),

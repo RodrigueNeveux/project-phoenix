@@ -6,6 +6,7 @@
 //! for the ranges in view (op 37). Without it (mock), `PhoenixApp::member_rows`
 //! groups locally.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, div,
     list, prelude::*, px,
@@ -84,11 +85,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 
 fn header(t: SharedString) -> AnyElement {
     div()
-        .pt(px(24.))
-        .pl(px(16.))
-        .pr(px(8.))
-        .h(px(40.))
-        .text_size(px(12.))
+        .pt(z(24.))
+        .pl(z(16.))
+        .pr(z(8.))
+        .h(z(40.))
+        .text_size(z(12.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_MUTED))
         .text_ellipsis()
@@ -113,13 +114,13 @@ fn placeholder(ix: usize) -> AnyElement {
     // Deterministic widths so the skeleton doesn't flicker.
     let w = 60. + ((ix * 37) % 80) as f32;
     div()
-        .ml(px(16.))
+        .ml(z(16.))
         .h(px(m::MEMBER_ROW_H))
         .flex()
         .items_center()
-        .gap(px(12.))
-        .child(div().size(px(32.)).rounded_full().bg(c(Palette::BG_MOD_HOVER)))
-        .child(div().w(px(w)).h(px(12.)).rounded(px(6.)).bg(c(Palette::BG_MOD_HOVER)))
+        .gap(z(12.))
+        .child(div().size(z(32.)).rounded_full().bg(c(Palette::BG_MOD_HOVER)))
+        .child(div().w(px(w)).h(z(12.)).rounded(z(6.)).bg(c(Palette::BG_MOD_HOVER)))
         .into_any_element()
 }
 
@@ -158,14 +159,14 @@ fn member_row(
     let e = entity.clone();
     div()
         .id(("member", mem.user.0))
-        .ml(px(8.))
-        .mr(px(8.))
+        .ml(z(8.))
+        .mr(z(8.))
         .h(px(m::MEMBER_ROW_H))
-        .px(px(8.))
-        .rounded(px(4.))
+        .px(z(8.))
+        .rounded(z(4.))
         .flex()
         .items_center()
-        .gap(px(12.))
+        .gap(z(12.))
         .cursor_pointer()
         .when(offline, |d| d.opacity(0.3))
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).opacity(1.))
@@ -191,11 +192,11 @@ fn member_row(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(4.))
+                        .gap(z(4.))
                         .child(
                             div()
-                                .text_size(px(16.))
-                                .line_height(px(20.))
+                                .text_size(z(16.))
+                                .line_height(z(20.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(role_color(app.member_color(g, mem)))
                                 .text_ellipsis()
@@ -206,8 +207,8 @@ fn member_row(
                 .when_some(mem.activity.clone().filter(|_| !offline), |d, a| {
                     d.child(
                         div()
-                            .text_size(px(12.))
-                            .line_height(px(16.))
+                            .text_size(z(12.))
+                            .line_height(z(16.))
                             .text_color(c(Palette::TEXT_MUTED))
                             .text_ellipsis()
                             .child(a),
@@ -219,10 +220,10 @@ fn member_row(
 
 pub fn app_tag() -> gpui::Div {
     div()
-        .px(px(4.))
-        .rounded(px(3.))
+        .px(z(4.))
+        .rounded(z(3.))
         .bg(c(Palette::BLURPLE))
-        .text_size(px(10.))
+        .text_size(z(10.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(gpui::white())
         .child("APP")

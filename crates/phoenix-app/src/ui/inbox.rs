@@ -9,7 +9,8 @@
 //! Popouts are 480-600px floating cards under the header (8px radius,
 //! tertiary background, 48px title bar), like the official client.
 
-use gpui::{AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Window, div, prelude::*, px};
+use crate::theme::z;
+use gpui::{AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Window, div, prelude::*};
 use gpui_component::input::{Input, InputState};
 
 use crate::{
@@ -303,11 +304,11 @@ fn popout_frame(id: &'static str, title: &'static str, ic: Icon, header_extra: O
         div()
             .id(id)
             .absolute()
-            .top(px(52.))
-            .right(px(16.))
-            .w(px(600.))
-            .max_h(px(640.))
-            .rounded(px(8.))
+            .top(z(52.))
+            .right(z(16.))
+            .w(z(600.))
+            .max_h(z(640.))
+            .rounded(z(8.))
             .bg(c(Palette::BG_TERTIARY))
             .shadow_lg()
             .occlude()
@@ -316,22 +317,22 @@ fn popout_frame(id: &'static str, title: &'static str, ic: Icon, header_extra: O
             .overflow_hidden()
             .child(
                 div()
-                    .px(px(16.))
-                    .pt(px(12.))
-                    .pb(px(8.))
+                    .px(z(16.))
+                    .pt(z(12.))
+                    .pb(z(8.))
                     .flex()
                     .flex_col()
-                    .gap(px(8.))
+                    .gap(z(8.))
                     .child(
                         div()
                             .flex()
                             .items_center()
-                            .gap(px(8.))
+                            .gap(z(8.))
                             .child(icon(ic, 24., c(Palette::INTERACTIVE)))
                             .child(
                                 div()
                                     .flex_1()
-                                    .text_size(px(20.))
+                                    .text_size(z(20.))
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(c(Palette::TEXT_HEADER))
                                     .child(title),
@@ -348,11 +349,11 @@ fn popout_frame(id: &'static str, title: &'static str, ic: Icon, header_extra: O
 fn tab(id: &'static str, label: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .px(px(8.))
-        .py(px(2.))
-        .rounded(px(4.))
+        .px(z(8.))
+        .py(z(2.))
+        .rounded(z(4.))
         .cursor_pointer()
-        .text_size(px(14.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .when(on, |d| d.bg(c(Palette::BG_MOD_SELECTED)).text_color(c(Palette::TEXT_HEADER)))
         .when(!on, |d| d.text_color(c(Palette::INTERACTIVE)).hover(|s| s.bg(c(Palette::BG_MOD_HOVER))))
@@ -361,14 +362,14 @@ fn tab(id: &'static str, label: &'static str, on: bool) -> gpui::Stateful<gpui::
 
 fn empty(text: &'static str, sub: &'static str) -> AnyElement {
     div()
-        .p(px(32.))
+        .p(z(32.))
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(8.))
+        .gap(z(8.))
         .child(icon(Icon::Inbox, 48., c(Palette::INTERACTIVE_MUTED)))
-        .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(text))
-        .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(sub))
+        .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(text))
+        .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(sub))
         .into_any_element()
 }
 
@@ -391,24 +392,24 @@ fn message_entry(
     div()
         .flex()
         .flex_col()
-        .gap(px(4.))
+        .gap(z(4.))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(6.))
-                .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(name))
-                .when_some(guild, |d, g| d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(g)))
+                .gap(z(6.))
+                .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(name))
+                .when_some(guild, |d, g| d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(g)))
                 .child(div().flex_1())
                 .child(
                     div()
                         .id(("inbox-jump", id.0))
-                        .px(px(8.))
-                        .py(px(2.))
-                        .rounded(px(4.))
+                        .px(z(8.))
+                        .py(z(2.))
+                        .rounded(z(4.))
                         .bg(c(Palette::BG_MOD_HOVER))
                         .cursor_pointer()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(Palette::TEXT_NORMAL))
                         .hover(|s| s.bg(c(Palette::BG_MOD_SELECTED)))
@@ -423,11 +424,11 @@ fn message_entry(
         )
         .child(
             div()
-                .p(px(12.))
-                .rounded(px(8.))
+                .p(z(12.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_PRIMARY))
                 .flex()
-                .gap(px(12.))
+                .gap(z(12.))
                 .child(avatar(u, 40.))
                 .child(
                     div()
@@ -439,17 +440,17 @@ fn message_entry(
                             div()
                                 .flex()
                                 .items_baseline()
-                                .gap(px(8.))
+                                .gap(z(8.))
                                 .child(
                                     div()
-                                        .text_size(px(16.))
+                                        .text_size(z(16.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(crate::theme::role_color(app.author_color(m.author)))
                                         .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into())),
                                 )
                                 .child(
                                     div()
-                                        .text_size(px(12.))
+                                        .text_size(z(12.))
                                         .text_color(c(Palette::TEXT_MUTED))
                                         .child(crate::app::format_time_full(m.timestamp)),
                                 ),
@@ -463,30 +464,30 @@ fn message_entry(
 fn check_row(id: &'static str, label: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .px(px(8.))
-        .py(px(6.))
-        .rounded(px(2.))
+        .px(z(8.))
+        .py(z(6.))
+        .rounded(z(2.))
         .cursor_pointer()
         .hover(|s| s.bg(c(Palette::BLURPLE)))
         .flex()
         .items_center()
         .justify_between()
-        .gap(px(12.))
-        .text_size(px(14.))
+        .gap(z(12.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(Palette::TEXT_NORMAL))
         .child(label)
         .child(
             div()
-                .size(px(18.))
-                .rounded(px(4.))
+                .size(z(18.))
+                .rounded(z(4.))
                 .border_1()
                 .border_color(c(Palette::INTERACTIVE))
                 .when(on, |d| d.bg(c(Palette::BLURPLE)).border_color(c(Palette::BLURPLE)))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(12.))
+                .text_size(z(12.))
                 .text_color(gpui::white())
                 .when(on, |d| d.child("✓")),
         )
@@ -500,7 +501,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let tabs = div()
         .flex()
         .items_center()
-        .gap(px(4.))
+        .gap(z(4.))
         .child(tab("inbox-mentions", "Mentions", i.tab == InboxTab::Mentions).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Mentions, cx))))
         .child(tab("inbox-unreads", "Unreads", i.tab == InboxTab::Unreads).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Unreads, cx))))
         .child(tab("inbox-saved", "Saved", i.tab == InboxTab::Saved).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Saved, cx))))
@@ -509,11 +510,11 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             d.child(
                 div()
                     .id("inbox-filter")
-                    .px(px(8.))
-                    .py(px(2.))
-                    .rounded(px(4.))
+                    .px(z(8.))
+                    .py(z(2.))
+                    .rounded(z(4.))
                     .cursor_pointer()
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .text_color(c(Palette::INTERACTIVE))
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                     .on_click(cx.listener(|a, _, _, cx| {
@@ -523,7 +524,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                     .child("Filter ▾"),
             )
         });
-    let mut header = div().flex().flex_col().gap(px(4.)).child(tabs);
+    let mut header = div().flex().flex_col().gap(z(4.)).child(tabs);
     if i.filter_menu && i.tab == InboxTab::Mentions {
         let toggle = |f: fn(&mut crate::commands::state::InboxState)| {
             cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<PhoenixApp>| {
@@ -534,8 +535,8 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         };
         header = header.child(
             div()
-                .p(px(8.))
-                .rounded(px(4.))
+                .p(z(8.))
+                .rounded(z(4.))
                 .bg(c(Palette::BG_FLOATING))
                 .flex()
                 .flex_col()
@@ -545,7 +546,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         );
     }
 
-    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().px(px(16.)).pb(px(16.)).flex().flex_col().gap(px(16.));
+    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).pb(z(16.)).flex().flex_col().gap(z(16.));
     match i.tab {
         InboxTab::Mentions => {
             if i.mentions.is_empty() && !i.loading {
@@ -559,7 +560,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                 list = list.child(
                     div()
                         .id("inbox-more")
-                        .py(px(8.))
+                        .py(z(8.))
                         .flex()
                         .justify_center()
                         .cursor_pointer()
@@ -590,20 +591,20 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                 list = list.child(
                     div()
                         .id(("inbox-unread", id.0))
-                        .p(px(12.))
-                        .rounded(px(8.))
+                        .p(z(12.))
+                        .rounded(z(8.))
                         .bg(c(Palette::BG_PRIMARY))
                         .cursor_pointer()
                         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                         .flex()
                         .items_center()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .on_click(cx.listener(move |a, _, _, cx| {
                             a.parity.inbox.open = false;
                             a.select_channel(id, cx);
                         }))
-                        .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(name))
-                        .when_some(guild, |d, g| d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(g)))
+                        .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(name))
+                        .when_some(guild, |d, g| d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(g)))
                         .child(div().flex_1())
                         .when(ch.mentions > 0, |d| d.child(crate::ui::badge(ch.mentions))),
                 );
@@ -611,7 +612,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         }
     }
     if i.loading {
-        list = list.child(div().p(px(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
     }
     Some(popout_frame("inbox-popout", "Inbox", Icon::Inbox, Some(header.into_any_element()), list.into_any_element()))
 }
@@ -622,13 +623,13 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
     }
     let ch = app.selected_channel?;
     let list_src = app.nav.threads.get(&ch).cloned().unwrap_or_default();
-    let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(px(16.)).pb(px(16.)).flex().flex_col().gap(px(8.));
+    let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).pb(z(16.)).flex().flex_col().gap(z(8.));
     if list_src.is_empty() {
         list = list.child(empty("There are no threads.", "Stay focused on a conversation with a thread."));
     } else {
         list = list.child(
             div()
-                .text_size(px(12.))
+                .text_size(z(12.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(format!("{} ACTIVE THREAD{}", list_src.len(), if list_src.len() == 1 { "" } else { "S" })),
@@ -639,20 +640,20 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
         list = list.child(
             div()
                 .id(("thread-row", t.id.0))
-                .p(px(12.))
-                .rounded(px(8.))
+                .p(z(12.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .flex()
                 .items_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .on_click(cx.listener(move |a, _, w, cx| {
                     a.parity.threads_open = false;
                     a.open_thread(r.clone(), w, cx);
                 }))
                 .child(icon(Icon::Threads, 20., c(Palette::CHANNEL_ICON)))
-                .child(div().text_size(px(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(t.name.clone())),
+                .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(t.name.clone())),
         );
     }
     Some(popout_frame("threads-popout", "Threads", Icon::Threads, None, list.into_any_element()))
@@ -679,27 +680,27 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
 fn radio_row(id: (&'static str, u64), label: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .px(px(12.))
-        .py(px(10.))
-        .rounded(px(4.))
+        .px(z(12.))
+        .py(z(10.))
+        .rounded(z(4.))
         .cursor_pointer()
         .bg(if on { c(Palette::BG_MOD_SELECTED) } else { c(Palette::BG_SECONDARY) })
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .flex()
         .items_center()
-        .gap(px(10.))
+        .gap(z(10.))
         .child(
             div()
-                .size(px(20.))
+                .size(z(20.))
                 .rounded_full()
                 .border_2()
                 .border_color(if on { c(Palette::BLURPLE) } else { c(Palette::INTERACTIVE) })
                 .flex()
                 .items_center()
                 .justify_center()
-                .when(on, |d| d.child(div().size(px(10.)).rounded_full().bg(c(Palette::BLURPLE)))),
+                .when(on, |d| d.child(div().size(z(10.)).rounded_full().bg(c(Palette::BLURPLE)))),
         )
-        .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(label))
+        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(label))
 }
 
 fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -725,8 +726,8 @@ fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
             vec![div().text_color(c(Palette::TEXT_NORMAL)).child(format!("{name} will be able to talk again.")).into_any_element()],
         ),
         ModKind::Timeout(secs) => {
-            let mut col = div().flex().flex_col().gap(px(4.)).child(
-                div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("DURATION"),
+            let mut col = div().flex().flex_col().gap(z(4.)).child(
+                div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("DURATION"),
             );
             for (i, (label, s)) in TIMEOUTS.iter().enumerate() {
                 col = col.child(radio_row(("timeout-opt", i as u64), label, secs == *s).on_click(set(ModKind::Timeout(*s))));
@@ -754,8 +755,8 @@ fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
             ],
         ),
         ModKind::Ban(del) => {
-            let mut col = div().flex().flex_col().gap(px(4.)).child(
-                div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("DELETE MESSAGE HISTORY"),
+            let mut col = div().flex().flex_col().gap(z(4.)).child(
+                div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("DELETE MESSAGE HISTORY"),
             );
             for (i, (label, s)) in BAN_HISTORY.iter().enumerate() {
                 col = col.child(radio_row(("ban-opt", i as u64), label, del == *s).on_click(set(ModKind::Ban(*s))));
@@ -807,9 +808,9 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
         })
         .collect();
     let left = GROUP_DM_MAX.saturating_sub(p.picked.len());
-    let mut list = div().id("gdm-list").h(px(240.)).overflow_y_scroll().flex().flex_col();
+    let mut list = div().id("gdm-list").h(z(240.)).overflow_y_scroll().flex().flex_col();
     if friends.is_empty() {
-        list = list.child(div().p(px(16.)).text_color(c(Palette::TEXT_MUTED)).child("No friends found that are not already in this DM."));
+        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("No friends found that are not already in this DM."));
     }
     for u in friends {
         let on = p.picked.contains(&u);
@@ -817,14 +818,14 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
         list = list.child(
             div()
                 .id(("gdm-friend", u.0))
-                .px(px(8.))
-                .py(px(6.))
-                .rounded(px(4.))
+                .px(z(8.))
+                .py(z(6.))
+                .rounded(z(4.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(z(12.))
                 .on_click(cx.listener(move |a, _, _, cx| {
                     if let Some(p) = a.parity.group_dm.as_mut() {
                         if let Some(i) = p.picked.iter().position(|x| *x == u) {
@@ -840,15 +841,15 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                     div()
                         .flex_1()
                         .flex()
-                        .gap(px(6.))
+                        .gap(z(6.))
                         .items_baseline()
-                        .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(user.map(|u| u.display_name.clone()).unwrap_or_default()))
-                        .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(user.map(|u| u.name.clone()).unwrap_or_default())),
+                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(user.map(|u| u.display_name.clone()).unwrap_or_default()))
+                        .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(user.map(|u| u.name.clone()).unwrap_or_default())),
                 )
                 .child(
                     div()
-                        .size(px(22.))
-                        .rounded(px(4.))
+                        .size(z(22.))
+                        .rounded(z(4.))
                         .border_1()
                         .border_color(c(Palette::INTERACTIVE_MUTED))
                         .when(on, |d| d.bg(c(Palette::BLURPLE)).border_color(c(Palette::BLURPLE)))
@@ -870,8 +871,8 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
         })
     });
     let card = div()
-        .w(px(440.))
-        .rounded(px(8.))
+        .w(z(440.))
+        .rounded(z(8.))
         .overflow_hidden()
         .bg(c(Palette::BG_PRIMARY))
         .shadow_lg()
@@ -879,37 +880,37 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
         .flex_col()
         .child(
             div()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
-                .gap(px(4.))
-                .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("Select Friends"))
-                .child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(format!("You can add {left} more friend{}.", if left == 1 { "" } else { "s" })))
+                .gap(z(4.))
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("Select Friends"))
+                .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(format!("You can add {left} more friend{}.", if left == 1 { "" } else { "s" })))
                 .child(
                     div()
-                        .mt(px(12.))
-                        .h(px(40.))
-                        .px(px(8.))
-                        .rounded(px(4.))
+                        .mt(z(12.))
+                        .h(z(40.))
+                        .px(z(8.))
+                        .rounded(z(4.))
                         .bg(c(Palette::INPUT_BG))
                         .flex()
                         .items_center()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .when_some(p.search.clone(), |d, s| d.child(Input::new(&s).appearance(false).bordered(false))),
                 ),
         )
-        .child(div().px(px(8.)).child(list))
+        .child(div().px(z(8.)).child(list))
         .child(
-            div().p(px(16.)).border_t_1().border_color(c(Palette::DIVIDER)).child(
+            div().p(z(16.)).border_t_1().border_color(c(Palette::DIVIDER)).child(
                 div()
                     .id("gdm-create")
-                    .h(px(38.))
-                    .rounded(px(8.))
+                    .h(z(38.))
+                    .rounded(z(8.))
                     .bg(c(Palette::BLURPLE))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(gpui::white())
                     .when(can, |d| d.cursor_pointer().on_click(cx.listener(|a, _, _, cx| a.create_group_dm(cx))))

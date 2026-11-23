@@ -1,6 +1,7 @@
 //! Centered modal dialog over a dimmed backdrop (Discord's confirm dialogs:
 //! title, body, grey footer with "Cancel" link + coloured primary button).
 
+use crate::theme::z;
 use std::rc::Rc;
 
 use gpui::{
@@ -69,8 +70,8 @@ pub fn confirm(m: Confirm) -> AnyElement {
     let ok = m.on_confirm.clone();
     let card = div()
         .relative()
-        .w(px(440.))
-        .rounded(px(8.))
+        .w(z(440.))
+        .rounded(z(8.))
         .overflow_hidden()
         .bg(c(Palette::BG_PRIMARY))
         .shadow_lg()
@@ -78,13 +79,13 @@ pub fn confirm(m: Confirm) -> AnyElement {
         .flex_col()
         .child(
             div()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
-                .gap(px(12.))
+                .gap(z(12.))
                 .child(
                     div()
-                        .text_size(px(20.))
+                        .text_size(z(20.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child(m.title),
@@ -95,10 +96,10 @@ pub fn confirm(m: Confirm) -> AnyElement {
             div()
                 .id("modal-close")
                 .absolute()
-                .top(px(12.))
-                .right(px(12.))
-                .size(px(24.))
-                .rounded(px(4.))
+                .top(z(12.))
+                .right(z(12.))
+                .size(z(24.))
+                .rounded(z(4.))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -109,24 +110,24 @@ pub fn confirm(m: Confirm) -> AnyElement {
                     let cancel = m.on_cancel.clone();
                     move |_, w, cx| cancel(w, cx)
                 })
-                .child(gpui::svg().path("icons/close.svg").size(px(24.)).text_color(c(Palette::INTERACTIVE))),
+                .child(gpui::svg().path("icons/close.svg").size(z(24.)).text_color(c(Palette::INTERACTIVE))),
         )
         .child(
             div()
-                .p(px(16.))
+                .p(z(16.))
                 .bg(c(Palette::BG_SECONDARY))
                 .flex()
                 .justify_end()
-                .gap(px(8.))
+                .gap(z(8.))
                 .child(
                     div()
                         .id("modal-cancel")
-                        .h(px(38.))
-                        .px(px(16.))
+                        .h(z(38.))
+                        .px(z(16.))
                         .flex()
                         .items_center()
                         .cursor_pointer()
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(gpui::white())
                         .hover(|s| s.underline())
@@ -136,17 +137,17 @@ pub fn confirm(m: Confirm) -> AnyElement {
                 .child(
                     div()
                         .id("modal-confirm")
-                        .h(px(38.))
-                        .min_w(px(96.))
-                        .px(px(16.))
-                        .rounded(px(4.))
+                        .h(z(38.))
+                        .min_w(z(96.))
+                        .px(z(16.))
+                        .rounded(z(4.))
                         .flex()
                         .items_center()
                         .justify_center()
                         .cursor_pointer()
                         .bg(c(if m.danger { 0xDA373C } else { Palette::BLURPLE }))
                         .hover(move |s| s.bg(c(if m.danger { 0xA12828 } else { 0x4752C4 })))
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(gpui::white())
                         .on_click(move |_, w, cx| ok(w, cx))

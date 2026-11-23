@@ -1,8 +1,9 @@
 //! Rendering of the User Settings overlay.
 
+use crate::theme::z;
 use gpui::{
     AnyElement, Context, Div, ElementId, FontWeight, IntoElement, ParentElement, SharedString, Stateful, Styled,
-    Window, div, prelude::*, px,
+    Window, div, prelude::*,
 };
 
 use super::{AppTheme, NAV, Page, SettingsPatch, SettingsState, save, update_local};
@@ -24,8 +25,8 @@ fn st(app: &mut PhoenixApp) -> Option<&mut SettingsState> {
 
 fn h1(t: &'static str) -> Div {
     div()
-        .mb(px(20.))
-        .text_size(px(20.))
+        .mb(z(20.))
+        .text_size(z(20.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_HEADER))
         .child(t)
@@ -33,35 +34,35 @@ fn h1(t: &'static str) -> Div {
 
 fn h5(t: impl Into<SharedString>) -> Div {
     div()
-        .mb(px(8.))
-        .text_size(px(12.))
+        .mb(z(8.))
+        .text_size(z(12.))
         .font_weight(FontWeight::BOLD)
         .text_color(c(Palette::TEXT_MUTED))
         .child(t.into())
 }
 
 fn note(t: impl Into<SharedString>) -> Div {
-    div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(t.into())
+    div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(t.into())
 }
 
 fn divider() -> Div {
-    div().my(px(24.)).h(px(1.)).bg(c(Palette::DIVIDER))
+    div().my(z(24.)).h(z(1.)).bg(c(Palette::DIVIDER))
 }
 
 fn button(id: impl Into<String>, label: impl Into<SharedString>, bg: u32, hover: u32) -> Stateful<Div> {
     div()
         .id(eid(id))
-        .h(px(32.))
-        .px(px(16.))
+        .h(z(32.))
+        .px(z(16.))
         .flex_none()
-        .rounded(px(3.))
+        .rounded(z(3.))
         .bg(c(bg))
         .hover(move |s| s.bg(c(hover)))
         .cursor_pointer()
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(14.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(gpui::white())
         .child(label.into())
@@ -87,7 +88,7 @@ fn switch_row(
     div()
         .flex()
         .flex_col()
-        .mb(px(20.))
+        .mb(z(20.))
         .child(
             div()
                 .id(eid(format!("switch-{id}")))
@@ -98,44 +99,44 @@ fn switch_row(
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(title),
                 )
                 .child(toggle_knob(on)),
         )
-        .when(!desc.is_empty(), |d| d.child(div().mt(px(8.)).child(note(desc))))
-        .child(div().mt(px(20.)).h(px(1.)).bg(c(Palette::DIVIDER)))
+        .when(!desc.is_empty(), |d| d.child(div().mt(z(8.)).child(note(desc))))
+        .child(div().mt(z(20.)).h(z(1.)).bg(c(Palette::DIVIDER)))
         .into_any_element()
 }
 
 fn radio(id: impl Into<String>, label: impl Into<SharedString>, selected: bool) -> Stateful<Div> {
     div()
         .id(eid(id))
-        .mb(px(8.))
-        .p(px(10.))
-        .rounded(px(4.))
+        .mb(z(8.))
+        .p(z(10.))
+        .rounded(z(4.))
         .bg(c(if selected { Palette::BG_MOD_SELECTED } else { Palette::BG_SECONDARY }))
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .cursor_pointer()
         .flex()
         .items_center()
-        .gap(px(12.))
+        .gap(z(12.))
         .child(
             div()
-                .size(px(20.))
+                .size(z(20.))
                 .rounded_full()
                 .border_2()
                 .border_color(c(if selected { 0xFFFFFF } else { Palette::INTERACTIVE }))
                 .flex()
                 .items_center()
                 .justify_center()
-                .when(selected, |d| d.child(div().size(px(10.)).rounded_full().bg(gpui::white()))),
+                .when(selected, |d| d.child(div().size(z(10.)).rounded_full().bg(gpui::white()))),
         )
         .child(
             div()
-                .text_size(px(16.))
+                .text_size(z(16.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(Palette::TEXT_NORMAL))
                 .child(label.into()),
@@ -170,7 +171,7 @@ fn slider(
 
 fn field_row(label: &'static str, value: SharedString, action: Option<AnyElement>) -> Div {
     div()
-        .mb(px(24.))
+        .mb(z(24.))
         .flex()
         .items_center()
         .child(
@@ -178,8 +179,8 @@ fn field_row(label: &'static str, value: SharedString, action: Option<AnyElement
                 .flex_1()
                 .flex()
                 .flex_col()
-                .child(h5(label).mb(px(4.)))
-                .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(value)),
+                .child(h5(label).mb(z(4.)))
+                .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(value)),
         )
         .children(action)
 }
@@ -189,40 +190,40 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let reveal = app.settings.as_ref().is_some_and(|s| s.reveal_email);
     let email: SharedString = if reveal { "Not shared with Phoenix".into() } else { "**********@*****.com".into() };
     let card = div()
-        .rounded(px(8.))
+        .rounded(z(8.))
         .bg(c(Palette::BG_TERTIARY))
         .overflow_hidden()
-        .child(div().h(px(100.)).bg(c(Palette::BLURPLE)))
+        .child(div().h(z(100.)).bg(c(Palette::BLURPLE)))
         .child(
             div()
                 .relative()
-                .h(px(72.))
-                .px(px(16.))
+                .h(z(72.))
+                .px(z(16.))
                 .flex()
                 .items_start()
                 .child(
                     div()
                         .absolute()
-                        .left(px(16.))
-                        .top(px(-38.))
-                        .p(px(7.))
+                        .left(z(16.))
+                        .top(z(-38.))
+                        .p(z(7.))
                         .rounded_full()
                         .bg(c(Palette::BG_TERTIARY))
                         .child(avatar(Some(me), 80.)),
                 )
                 .child(
                     div()
-                        .ml(px(104.))
-                        .mt(px(14.))
+                        .ml(z(104.))
+                        .mt(z(14.))
                         .flex_1()
-                        .text_size(px(20.))
+                        .text_size(z(20.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child(me.display_name.clone()),
                 )
                 .child(
                     button("edit-profile", "Edit User Profile", Palette::BLURPLE, 0x4752C4)
-                        .mt(px(16.))
+                        .mt(z(16.))
                         .on_click(cx.listener(|a, _, _, cx| {
                             if let Some(s) = st(a) {
                                 s.page = Page::Profiles;
@@ -233,10 +234,10 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
         )
         .child(
             div()
-                .m(px(16.))
+                .m(z(16.))
                 .mt_0()
-                .p(px(16.))
-                .rounded(px(8.))
+                .p(z(16.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
                 .child(field_row("DISPLAY NAME", me.display_name.clone(), Some(secondary("edit-dn", "Edit").into_any_element())))
                 .child(field_row("USERNAME", me.name.clone(), Some(secondary("edit-un", "Edit").into_any_element())))
@@ -246,8 +247,8 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     Some(
                         div()
                             .id("reveal-email")
-                            .mr(px(16.))
-                            .text_size(px(14.))
+                            .mr(z(16.))
+                            .text_size(z(14.))
                             .text_color(c(Palette::TEXT_LINK))
                             .cursor_pointer()
                             .on_click(cx.listener(|a, _, _, cx| {
@@ -267,8 +268,8 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .child(card)
         .child(divider())
         .child(h1("Password and Authentication"))
-        .child(secondary("change-pw", "Change Password").w(px(160.)))
-        .child(div().mt(px(20.)).child(h5("AUTHENTICATOR APP")))
+        .child(secondary("change-pw", "Change Password").w(z(160.)))
+        .child(div().mt(z(20.)).child(h5("AUTHENTICATOR APP")))
         .child(note("Protect your account with an extra layer of security. Manage two-factor authentication from the official client."))
         .child(divider())
         .child(h5("ACCOUNT REMOVAL"))
@@ -281,10 +282,10 @@ fn profiles(app: &PhoenixApp) -> Div {
         .child(h5("DISPLAY NAME"))
         .child(
             div()
-                .mb(px(20.))
-                .h(px(40.))
-                .px(px(10.))
-                .rounded(px(3.))
+                .mb(z(20.))
+                .h(z(40.))
+                .px(z(10.))
+                .rounded(z(3.))
                 .bg(c(Palette::BG_TERTIARY))
                 .flex()
                 .items_center()
@@ -294,18 +295,18 @@ fn profiles(app: &PhoenixApp) -> Div {
         .child(h5("PREVIEW"))
         .child(
             div()
-                .w(px(300.))
-                .rounded(px(8.))
+                .w(z(300.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_FLOATING))
                 .overflow_hidden()
-                .child(div().h(px(60.)).bg(c(Palette::BLURPLE)))
-                .child(div().p(px(16.)).flex().gap(px(12.)).items_center().child(avatar(Some(&app.me), 48.)).child(
+                .child(div().h(z(60.)).bg(c(Palette::BLURPLE)))
+                .child(div().p(z(16.)).flex().gap(z(12.)).items_center().child(avatar(Some(&app.me), 48.)).child(
                     div()
                         .flex()
                         .flex_col()
                         .child(
                             div()
-                                .text_size(px(18.))
+                                .text_size(z(18.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .child(app.me.display_name.clone()),
@@ -336,15 +337,15 @@ fn devices() -> Div {
     div()
         .child(h1("Devices"))
         .child(note("Here are all the devices that are currently logged in with your Discord account."))
-        .child(div().mt(px(20.)).child(h5("CURRENT DEVICE")))
+        .child(div().mt(z(20.)).child(h5("CURRENT DEVICE")))
         .child(
             div()
-                .p(px(16.))
-                .rounded(px(8.))
+                .p(z(16.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child("LINUX · DISCORD PHOENIX"),
@@ -356,13 +357,13 @@ fn devices() -> Div {
 fn connections() -> Div {
     let tile = |name: &'static str| {
         div()
-            .size(px(48.))
-            .rounded(px(8.))
+            .size(z(48.))
+            .rounded(z(8.))
             .bg(c(Palette::BG_TERTIARY))
             .flex()
             .items_center()
             .justify_center()
-            .text_size(px(11.))
+            .text_size(z(11.))
             .text_color(c(Palette::INTERACTIVE))
             .child(name)
     };
@@ -370,17 +371,17 @@ fn connections() -> Div {
         .child(h1("Connections"))
         .child(
             div()
-                .p(px(16.))
-                .rounded(px(8.))
+                .p(z(16.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
                 .child(h5("ADD ACCOUNTS TO YOUR PROFILE"))
                 .child(note("Connecting accounts needs the official client's browser flow."))
                 .child(
                     div()
-                        .mt(px(16.))
+                        .mt(z(16.))
                         .flex()
                         .flex_wrap()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .children(["GitHub", "Steam", "Spotify", "Twitch", "YouTube", "Xbox", "Reddit"].map(tile)),
                 ),
         )
@@ -412,20 +413,20 @@ fn notifications(app: &PhoenixApp, cx: &mut Cx) -> Div {
 fn keybinds() -> Div {
     let row = |action: &'static str, keys: &'static str| {
         div()
-            .mb(px(8.))
-            .p(px(16.))
-            .rounded(px(8.))
+            .mb(z(8.))
+            .p(z(16.))
+            .rounded(z(8.))
             .bg(c(Palette::BG_SECONDARY))
             .flex()
             .items_center()
-            .child(div().flex_1().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(action))
+            .child(div().flex_1().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(action))
             .child(
                 div()
-                    .px(px(8.))
-                    .py(px(2.))
-                    .rounded(px(4.))
+                    .px(z(8.))
+                    .py(z(2.))
+                    .rounded(z(4.))
                     .bg(c(Palette::BG_TERTIARY))
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .font_weight(FontWeight::BOLD)
                     .text_color(c(Palette::INTERACTIVE))
                     .child(keys),
@@ -472,16 +473,16 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let theme = s.theme;
     let compact = s.compact;
     let l = &app.prefs.local;
-    let swatches = div().mb(px(24.)).flex().gap(px(16.)).children(AppTheme::ALL.map(|t| {
+    let swatches = div().mb(z(24.)).flex().gap(z(16.)).children(AppTheme::ALL.map(|t| {
         div()
             .flex()
             .flex_col()
             .items_center()
-            .gap(px(6.))
+            .gap(z(6.))
             .child(
                 div()
                     .id(eid(format!("theme-{}", t.label())))
-                    .size(px(60.))
+                    .size(z(60.))
                     .rounded_full()
                     .bg(c(t.swatch()))
                     .border_2()
@@ -494,9 +495,9 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
                         d.child(
                             div()
                                 .absolute()
-                                .top(px(-4.))
-                                .right(px(-4.))
-                                .size(px(22.))
+                                .top(z(-4.))
+                                .right(z(-4.))
+                                .size(z(22.))
                                 .rounded_full()
                                 .bg(c(Palette::BLURPLE))
                                 .border_2()
@@ -504,7 +505,7 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
                                 .flex()
                                 .items_center()
                                 .justify_center()
-                                .child(gpui::svg().path("icons/check.svg").size(px(14.)).text_color(gpui::white())),
+                                .child(gpui::svg().path("icons/check.svg").size(z(14.)).text_color(gpui::white())),
                         )
                     })
                     .on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx))),
@@ -593,8 +594,8 @@ fn advanced(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(12.))
-                    .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(my_id.clone()))
+                    .gap(z(12.))
+                    .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(my_id.clone()))
                     .child(secondary("copy-my-id", "Copy User ID").on_click(cx.listener(move |_, _, _, cx| {
                         cx.write_to_clipboard(gpui::ClipboardItem::new_string(my_id.clone()));
                     }))),
@@ -622,14 +623,14 @@ fn page(app: &PhoenixApp, cx: &mut Cx) -> Div {
 fn nav_item(id: impl Into<String>, label: &'static str, selected: bool, color: u32) -> Stateful<Div> {
     div()
         .id(eid(id))
-        .mb(px(2.))
-        .h(px(32.))
-        .px(px(10.))
-        .rounded(px(4.))
+        .mb(z(2.))
+        .h(z(32.))
+        .px(z(10.))
+        .rounded(z(4.))
         .flex()
         .items_center()
         .cursor_pointer()
-        .text_size(px(16.))
+        .text_size(z(16.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(if selected { Palette::TEXT_HEADER } else { color }))
         .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
@@ -639,12 +640,12 @@ fn nav_item(id: impl Into<String>, label: &'static str, selected: bool, color: u
 
 fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let cur = app.settings.as_ref().map(|s| s.page).unwrap_or_default();
-    let mut col = div().w(px(218.)).pt(px(60.)).pb(px(20.)).pr(px(6.)).pl(px(20.)).flex().flex_col();
+    let mut col = div().w(z(218.)).pt(z(60.)).pb(z(20.)).pr(z(6.)).pl(z(20.)).flex().flex_col();
     for (ix, (title, pages)) in NAV.iter().enumerate() {
         if ix > 0 {
-            col = col.child(div().mx(px(10.)).my(px(8.)).h(px(1.)).bg(c(Palette::DIVIDER)));
+            col = col.child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)));
         }
-        col = col.child(div().px(px(10.)).pb(px(6.)).child(h5(*title).mb_0()));
+        col = col.child(div().px(z(10.)).pb(z(6.)).child(h5(*title).mb_0()));
         for p in pages.iter().copied() {
             col = col.child(nav_item(format!("nav-{}", p.label()), p.label(), p == cur, Palette::INTERACTIVE).on_click(
                 cx.listener(move |a, _, _, cx| {
@@ -657,15 +658,15 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
             ));
         }
     }
-    col.child(div().mx(px(10.)).my(px(8.)).h(px(1.)).bg(c(Palette::DIVIDER)))
+    col.child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)))
         .child(nav_item("nav-logout", "Log Out", false, 0xF23F43).on_click(cx.listener(|a, _, _, cx| {
             if let Some(s) = st(a) {
                 s.confirm_logout = true;
             }
             cx.notify();
         })))
-        .child(div().mx(px(10.)).my(px(8.)).h(px(1.)).bg(c(Palette::DIVIDER)))
-        .child(div().px(px(10.)).text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(concat!(
+        .child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)))
+        .child(div().px(z(10.)).text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(concat!(
             "Discord Phoenix ",
             env!("CARGO_PKG_VERSION"),
             " (Linux)"
@@ -674,16 +675,16 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
 
 fn close_button(cx: &mut Cx) -> Div {
     div()
-        .ml(px(20.))
-        .pt(px(60.))
+        .ml(z(20.))
+        .pt(z(60.))
         .flex()
         .flex_col()
         .items_center()
-        .gap(px(8.))
+        .gap(z(8.))
         .child(
             div()
                 .id("settings-close")
-                .size(px(36.))
+                .size(z(36.))
                 .rounded_full()
                 .border_2()
                 .border_color(c(Palette::INTERACTIVE))
@@ -692,7 +693,7 @@ fn close_button(cx: &mut Cx) -> Div {
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(18.))
+                .text_size(z(18.))
                 .text_color(c(Palette::INTERACTIVE))
                 .on_click(cx.listener(|a, _, _, cx| {
                     a.settings = None;
@@ -700,7 +701,7 @@ fn close_button(cx: &mut Cx) -> Div {
                 }))
                 .child("✕"),
         )
-        .child(div().text_size(px(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::INTERACTIVE)).child("ESC"))
+        .child(div().text_size(z(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::INTERACTIVE)).child("ESC"))
 }
 
 fn logout_modal(cx: &mut Cx) -> Div {
@@ -714,40 +715,40 @@ fn logout_modal(cx: &mut Cx) -> Div {
         .child(
             div()
                 .id("logout-modal")
-                .w(px(440.))
-                .rounded(px(8.))
+                .w(z(440.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_PRIMARY))
                 .overflow_hidden()
                 .on_click(|_, _, cx| cx.stop_propagation())
                 .child(
                     div()
-                        .p(px(16.))
+                        .p(z(16.))
                         .child(
                             div()
-                                .mb(px(12.))
-                                .text_size(px(20.))
+                                .mb(z(12.))
+                                .text_size(z(20.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .child("Log Out"),
                         )
-                        .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child("Are you sure you want to logout?")),
+                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child("Are you sure you want to logout?")),
                 )
                 .child(
                     div()
-                        .p(px(16.))
+                        .p(z(16.))
                         .bg(c(Palette::BG_SECONDARY))
                         .flex()
                         .justify_end()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .child(
                             div()
                                 .id("logout-cancel")
-                                .h(px(38.))
-                                .px(px(16.))
+                                .h(z(38.))
+                                .px(z(16.))
                                 .flex()
                                 .items_center()
                                 .cursor_pointer()
-                                .text_size(px(14.))
+                                .text_size(z(14.))
                                 .text_color(c(Palette::TEXT_NORMAL))
                                 .hover(|s| s.underline())
                                 .on_click(cx.listener(|a, _, _, cx| {
@@ -758,7 +759,7 @@ fn logout_modal(cx: &mut Cx) -> Div {
                                 }))
                                 .child("Cancel"),
                         )
-                        .child(button("logout-confirm", "Log Out", Palette::RED, 0xDA373C).h(px(38.)).on_click(
+                        .child(button("logout-confirm", "Log Out", Palette::RED, 0xDA373C).h(z(38.)).on_click(
                             cx.listener(|a, _, _, cx| {
                                 a.settings = None;
                                 a.logout(cx);
@@ -785,7 +786,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Cx) -> Option<Any
                 div()
                     .id("settings-nav")
                     .flex_1()
-                    .min_w(px(218.))
+                    .min_w(z(218.))
                     .bg(c(Palette::BG_SECONDARY))
                     .flex()
                     .justify_end()
@@ -796,27 +797,27 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Cx) -> Option<Any
                 div()
                     .id("settings-content")
                     .flex_1()
-                    .min_w(px(460.))
+                    .min_w(z(460.))
                     .flex()
                     .overflow_y_scroll()
                     .child(
                         div()
-                            .w(px(740.))
-                            .min_w(px(460.))
-                            .pt(px(60.))
-                            .px(px(40.))
-                            .pb(px(80.))
+                            .w(z(740.))
+                            .min_w(z(460.))
+                            .pt(z(60.))
+                            .px(z(40.))
+                            .pb(z(80.))
                             .flex()
                             .flex_col()
                             .when_some(error, |d, e| {
                                 d.child(
                                     div()
-                                        .mb(px(16.))
-                                        .p(px(10.))
-                                        .rounded(px(4.))
+                                        .mb(z(16.))
+                                        .p(z(10.))
+                                        .rounded(z(4.))
                                         .bg(gpui::rgba(0xF23F4333))
                                         .text_color(c(Palette::TEXT_NORMAL))
-                                        .text_size(px(14.))
+                                        .text_size(z(14.))
                                         .child(e),
                                 )
                             })

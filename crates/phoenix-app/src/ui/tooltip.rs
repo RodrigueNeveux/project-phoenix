@@ -5,6 +5,7 @@
 //!
 //! Use: `.tooltip(tooltip::tip("Mute"))`.
 
+use crate::theme::z;
 use gpui::{AnyView, App, AppContext, FontWeight, IntoElement, ParentElement, Render, SharedString, Styled, Window, div, px};
 
 use crate::theme::{Palette, c};
@@ -15,26 +16,26 @@ impl Render for Tip {
     fn render(&mut self, _: &mut Window, _: &mut gpui::Context<Self>) -> impl IntoElement {
         let mut pointer = div().flex().flex_col().items_center();
         for i in 0..5 {
-            pointer = pointer.child(div().w(px(1. + 2. * i as f32)).h(px(1.)).bg(c(Palette::BG_FLOATING)));
+            pointer = pointer.child(div().w(px(1. + 2. * i as f32)).h(z(1.)).bg(c(Palette::BG_FLOATING)));
         }
         div()
             .flex()
             .flex_col()
             .items_center()
-            .pt(px(4.))
+            .pt(z(4.))
             .child(pointer)
             .child(
                 div()
-                    .max_w(px(190.))
-                    .px(px(12.))
-                    .py(px(8.))
-                    .rounded(px(8.))
+                    .max_w(z(190.))
+                    .px(z(12.))
+                    .py(z(8.))
+                    .rounded(z(8.))
                     .bg(c(Palette::BG_FLOATING))
                     .border_1()
                     .border_color(c(Palette::PANEL_BORDER))
                     .shadow_lg()
-                    .text_size(px(14.))
-                    .line_height(px(16.))
+                    .text_size(z(14.))
+                    .line_height(z(16.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(Palette::TEXT_NORMAL))
                     .child(self.0.clone()),

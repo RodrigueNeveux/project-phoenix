@@ -1,5 +1,6 @@
 //! Dropdown under the guild header (click the server name).
 
+use crate::theme::z;
 use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, Styled, div, prelude::*, px};
 
 use crate::{
@@ -55,18 +56,18 @@ fn run(a: &mut PhoenixApp, guild: Id, item: Item, cx: &mut Context<PhoenixApp>) 
 
 pub fn render(app: &PhoenixApp, guild: Id, top: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let hide_muted = app.nav.hide_muted.contains(&guild);
-    let sep = || div().mx(px(8.)).my(px(4.)).h(px(1.)).bg(c(Palette::DIVIDER));
+    let sep = || div().mx(z(8.)).my(z(4.)).h(z(1.)).bg(c(Palette::DIVIDER));
     let row = |item: Item, color: u32, hover_bg: u32, cx: &mut Context<PhoenixApp>| {
         div()
             .id(item.label())
-            .h(px(32.))
-            .px(px(8.))
-            .rounded(px(2.))
+            .h(z(32.))
+            .px(z(8.))
+            .rounded(z(2.))
             .flex()
             .items_center()
             .justify_between()
             .cursor_pointer()
-            .text_size(px(14.))
+            .text_size(z(14.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(c(color))
             .hover(move |s| s.bg(c(hover_bg)).text_color(gpui::white()))
@@ -87,10 +88,10 @@ pub fn render(app: &PhoenixApp, guild: Id, top: f32, cx: &mut Context<PhoenixApp
                 .id("guild-menu")
                 .absolute()
                 .top(px(top))
-                .left(px(10.))
-                .w(px(220.))
-                .p(px(6.))
-                .rounded(px(4.))
+                .left(z(10.))
+                .w(z(220.))
+                .p(z(6.))
+                .rounded(z(4.))
                 .bg(c(Palette::BG_FLOATING))
                 .shadow_lg()
                 .flex()
@@ -107,15 +108,15 @@ pub fn render(app: &PhoenixApp, guild: Id, top: f32, cx: &mut Context<PhoenixApp
                 .child(sep())
                 .child(row(Item::HideMuted, normal, Palette::BLURPLE, cx).child(
                     div()
-                        .size(px(18.))
-                        .rounded(px(3.))
+                        .size(z(18.))
+                        .rounded(z(3.))
                         .border_1()
                         .border_color(c(Palette::INTERACTIVE))
                         .when(hide_muted, |d| d.bg(c(Palette::BLURPLE)).border_color(c(Palette::BLURPLE)))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .text_color(gpui::white())
                         .when(hide_muted, |d| d.child("✓")),
                 ))

@@ -4,6 +4,7 @@
 //!
 //! Also hosts the continuous [`slider`] used by the voice context menu.
 
+use crate::theme::z;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -12,7 +13,7 @@ use std::time::Duration;
 
 use gpui::{
     AnyElement, Bounds, Context, DispatchPhase, Div, ElementId, FontWeight, IntoElement, MouseButton, MouseDownEvent,
-    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, SharedString, Stateful, Styled, canvas, deferred, div, prelude::*, px,
+    MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, SharedString, Stateful, Styled, canvas, deferred, div, prelude::*,
     relative,
 };
 use phoenix_voice::audio::device::MicTest;
@@ -56,9 +57,9 @@ fn eid(s: impl Into<String>) -> ElementId {
 
 fn h1(t: &'static str) -> Div {
     div()
-        .mb(px(20.))
-        .text_size(px(20.))
-        .line_height(px(24.))
+        .mb(z(20.))
+        .text_size(z(20.))
+        .line_height(z(24.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_HEADER))
         .child(t)
@@ -66,34 +67,34 @@ fn h1(t: &'static str) -> Div {
 
 fn h5(t: impl Into<SharedString>) -> Div {
     div()
-        .mb(px(8.))
-        .text_size(px(12.))
-        .line_height(px(16.))
+        .mb(z(8.))
+        .text_size(z(12.))
+        .line_height(z(16.))
         .font_weight(FontWeight::BOLD)
         .text_color(c(Palette::TEXT_MUTED))
         .child(t.into())
 }
 
 fn note(t: impl Into<SharedString>) -> Div {
-    div().text_size(px(14.)).line_height(px(20.)).text_color(c(Palette::TEXT_MUTED)).child(t.into())
+    div().text_size(z(14.)).line_height(z(20.)).text_color(c(Palette::TEXT_MUTED)).child(t.into())
 }
 
 fn divider() -> Div {
-    div().my(px(40.)).h(px(1.)).bg(c(Palette::DIVIDER))
+    div().my(z(40.)).h(z(1.)).bg(c(Palette::DIVIDER))
 }
 
 fn knob(on: bool, disabled: bool) -> Div {
     div()
-        .w(px(40.))
-        .h(px(24.))
+        .w(z(40.))
+        .h(z(24.))
         .flex_none()
-        .rounded(px(12.))
+        .rounded(z(12.))
         .bg(c(if on { Palette::GREEN } else { 0x80848E }))
         .when(disabled, |d| d.opacity(0.5))
-        .p(px(3.))
+        .p(z(3.))
         .flex()
         .when(on, |d| d.justify_end())
-        .child(div().size(px(18.)).rounded_full().bg(gpui::white()))
+        .child(div().size(z(18.)).rounded_full().bg(gpui::white()))
 }
 
 fn switch_row(
@@ -106,7 +107,7 @@ fn switch_row(
     cx: &mut Cx,
 ) -> Div {
     div()
-        .mb(px(20.))
+        .mb(z(20.))
         .flex()
         .flex_col()
         .child(
@@ -123,16 +124,16 @@ fn switch_row(
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(16.))
-                        .line_height(px(24.))
+                        .text_size(z(16.))
+                        .line_height(z(24.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(if disabled { Palette::TEXT_MUTED } else { Palette::TEXT_NORMAL }))
                         .child(title),
                 )
                 .child(knob(on, disabled)),
         )
-        .when(!desc.is_empty(), |d| d.child(div().mt(px(8.)).child(note(desc))))
-        .child(div().mt(px(20.)).h(px(1.)).bg(c(Palette::DIVIDER)))
+        .when(!desc.is_empty(), |d| d.child(div().mt(z(8.)).child(note(desc))))
+        .child(div().mt(z(20.)).h(z(1.)).bg(c(Palette::DIVIDER)))
 }
 
 fn frac_at(id: &'static str, x: Pixels) -> Option<f32> {
@@ -203,43 +204,43 @@ pub(crate) fn slider(
         .id(eid(format!("slider-{id}")))
         .relative()
         .w_full()
-        .h(px(24.))
+        .h(z(24.))
         .cursor_pointer()
         .child(probe)
         .child(
             div()
                 .absolute()
-                .top(px(8.))
+                .top(z(8.))
                 .left_0()
                 .w_full()
-                .h(px(8.))
-                .rounded(px(4.))
+                .h(z(8.))
+                .rounded(z(4.))
                 .bg(c(hi))
-                .child(div().h_full().w(relative(frac)).rounded(px(4.)).bg(c(lo))),
+                .child(div().h_full().w(relative(frac)).rounded(z(4.)).bg(c(lo))),
         )
         .child(
-            div().absolute().top_0().left(relative(frac)).w(px(0.)).flex().justify_center().child(
+            div().absolute().top_0().left(relative(frac)).w(z(0.)).flex().justify_center().child(
                 div()
                     .relative()
                     .flex_none()
-                    .w(px(10.))
-                    .h(px(24.))
-                    .rounded(px(3.))
+                    .w(z(10.))
+                    .h(z(24.))
+                    .rounded(z(3.))
                     .bg(gpui::white())
                     .border_1()
                     .border_color(c(0xDBDEE1))
                     .shadow_sm()
                     .when(dragging, |d| {
                         d.child(
-                            div().absolute().bottom(px(30.)).left(px(-27.)).w(px(64.)).flex().justify_center().child(
+                            div().absolute().bottom(z(30.)).left(z(-27.)).w(z(64.)).flex().justify_center().child(
                                 div()
-                                    .px(px(8.))
-                                    .py(px(4.))
-                                    .rounded(px(4.))
-                                    .bg(c(0x111214))
-                                    .text_size(px(14.))
+                                    .px(z(8.))
+                                    .py(z(4.))
+                                    .rounded(z(4.))
+                                    .bg(c(Palette::BG_FLOATING))
+                                    .text_size(z(14.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(0xDBDEE1))
+                                    .text_color(c(Palette::TEXT_NORMAL))
                                     .whitespace_nowrap()
                                     .child(bubble),
                             ),
@@ -273,15 +274,15 @@ fn select(
     let mut list = div()
         .id(eid(format!("{id}-list")))
         .absolute()
-        .top(px(44.))
+        .top(z(44.))
         .left_0()
         .w_full()
-        .max_h(px(300.))
+        .max_h(z(300.))
         .overflow_y_scroll()
-        .rounded(px(4.))
+        .rounded(z(4.))
         .border_1()
-        .border_color(c(0x1E1F22))
-        .bg(c(0x2B2D31))
+        .border_color(c(Palette::DIVIDER))
+        .bg(c(Palette::BG_FLOATING))
         .shadow_lg()
         .occlude()
         .flex()
@@ -295,13 +296,13 @@ fn select(
         list = list.child(
             div()
                 .id(eid(format!("{id}-opt-{ix}")))
-                .px(px(12.))
-                .py(px(10.))
+                .px(z(12.))
+                .py(z(10.))
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .text_size(px(16.))
-                .line_height(px(20.))
+                .text_size(z(16.))
+                .line_height(z(20.))
                 .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_NORMAL }))
                 .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
@@ -321,10 +322,10 @@ fn select(
         .child(
             div()
                 .id(eid(format!("{id}-box")))
-                .h(px(40.))
-                .pl(px(12.))
-                .pr(px(8.))
-                .rounded(px(4.))
+                .h(z(40.))
+                .pl(z(12.))
+                .pr(z(8.))
+                .rounded(z(4.))
                 .bg(c(SELECT_BG))
                 .border_1()
                 .border_color(c(if open { 0x00A8FC } else { SELECT_BG }))
@@ -336,7 +337,7 @@ fn select(
                         .flex_1()
                         .min_w_0()
                         .text_ellipsis()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(label),
                 )
@@ -352,18 +353,18 @@ fn select(
 fn button(id: &'static str, label: &'static str, bg: u32, hover: u32) -> gpui::Stateful<Div> {
     div()
         .id(id)
-        .h(px(32.))
-        .min_w(px(96.))
-        .px(px(16.))
+        .h(z(32.))
+        .min_w(z(96.))
+        .px(z(16.))
         .flex_none()
-        .rounded(px(4.))
+        .rounded(z(4.))
         .bg(c(bg))
         .hover(move |s| s.bg(c(hover)))
         .cursor_pointer()
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(14.))
+        .text_size(z(14.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(gpui::white())
         .child(label)
@@ -373,9 +374,9 @@ fn button(id: &'static str, label: &'static str, bg: u32, hover: u32) -> gpui::S
 fn meter(level_db: f32, active: bool) -> Div {
     let frac = ((level_db - DB_MIN) / -DB_MIN).clamp(0., 1.);
     let lit = if active { (frac * METER_SEGMENTS as f32).round() as usize } else { 0 };
-    div().flex_1().h(px(16.)).flex().items_center().gap(px(4.)).children(
+    div().flex_1().h(z(16.)).flex().items_center().gap(z(4.)).children(
         (0..METER_SEGMENTS)
-            .map(|i| div().flex_1().h(px(16.)).rounded(px(2.)).bg(c(if i < lit { SENS_HIGH } else { METER_OFF }))),
+            .map(|i| div().flex_1().h(z(16.)).rounded(z(2.)).bg(c(if i < lit { SENS_HIGH } else { METER_OFF }))),
     )
 }
 
@@ -494,29 +495,29 @@ fn input_mode(p: &VoicePrefs, cx: &mut Cx) -> Div {
         let selected = p.input_mode == mode;
         div()
             .id(id)
-            .mb(px(8.))
-            .p(px(10.))
-            .rounded(px(4.))
+            .mb(z(8.))
+            .p(z(10.))
+            .rounded(z(4.))
             .bg(c(if selected { Palette::BG_MOD_SELECTED } else { Palette::BG_SECONDARY }))
             .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
             .cursor_pointer()
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap(z(12.))
             .child(
                 div()
-                    .size(px(20.))
+                    .size(z(20.))
                     .rounded_full()
                     .border_2()
                     .border_color(c(if selected { 0xFFFFFF } else { Palette::INTERACTIVE }))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .when(selected, |d| d.child(div().size(px(10.)).rounded_full().bg(gpui::white()))),
+                    .when(selected, |d| d.child(div().size(z(10.)).rounded_full().bg(gpui::white()))),
             )
             .child(
                 div()
-                    .text_size(px(16.))
+                    .text_size(z(16.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(Palette::TEXT_NORMAL))
                     .child(label),
@@ -551,14 +552,14 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
     let delay = p.ptt_delay_ms;
     div()
         .flex()
-        .gap(px(16.))
+        .gap(z(16.))
         .child(column([
             h5("SHORTCUT").into_any_element(),
             div()
-                .h(px(40.))
-                .pl(px(10.))
-                .pr(px(4.))
-                .rounded(px(4.))
+                .h(z(40.))
+                .pl(z(10.))
+                .pr(z(4.))
+                .rounded(z(4.))
                 .bg(c(SELECT_BG))
                 .border_1()
                 .border_color(c(if recording { Palette::RED } else { SELECT_BG }))
@@ -567,7 +568,7 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(if p.ptt_key.is_some() || recording { Palette::TEXT_NORMAL } else { Palette::TEXT_MUTED }))
                         .child(label),
@@ -579,14 +580,14 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
                         if recording { 0xDA373C } else { 0x4E5058 },
                         if recording { 0xA12D2F } else { 0x6D6F78 },
                     )
-                    .min_w(px(0.))
+                    .min_w(z(0.))
                     .on_click(cx.listener(move |_, _, _, cx| {
                         ptt::set_recording(!recording);
                         cx.notify();
                     })),
                 )
                 .into_any_element(),
-            div().when_some(portal, |d, (t, col)| d.mt(px(8.)).text_size(px(12.)).text_color(c(col)).child(t)).into_any_element(),
+            div().when_some(portal, |d, (t, col)| d.mt(z(8.)).text_size(z(12.)).text_color(c(col)).child(t)).into_any_element(),
         ]))
         .child(column([
             h5("PUSH TO TALK RELEASE DELAY").into_any_element(),
@@ -601,11 +602,11 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
                 }),
                 cx,
             )
-            .mt(px(8.))
+            .mt(z(8.))
             .into_any_element(),
             div()
-                .mt(px(8.))
-                .text_size(px(12.))
+                .mt(z(8.))
+                .text_size(z(12.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(SharedString::from(format!("{delay}ms")))
                 .into_any_element(),
@@ -620,11 +621,11 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
         // Discord: a single bar that lights green while you are detected as speaking.
         let speaking = level.is_some_and(|(_, open)| open);
         div()
-            .mt(px(4.))
-            .h(px(8.))
-            .rounded(px(4.))
+            .mt(z(4.))
+            .h(z(8.))
+            .rounded(z(4.))
             .bg(c(TRACK))
-            .child(div().h_full().w(relative(lvl_frac)).rounded(px(4.)).bg(c(if speaking { SENS_HIGH } else { SENS_LOW })))
+            .child(div().h_full().w(relative(lvl_frac)).rounded(z(4.)).bg(c(if speaking { SENS_HIGH } else { SENS_LOW })))
             .into_any_element()
     } else {
         let t = p.sensitivity_db;
@@ -646,11 +647,11 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
             .child(
                 div()
                     .absolute()
-                    .top(px(8.))
+                    .top(z(8.))
                     .left(relative(lvl_frac))
                     .right_0()
-                    .h(px(8.))
-                    .rounded_r(px(4.))
+                    .h(z(8.))
+                    .rounded_r(z(4.))
                     .bg(gpui::black().opacity(0.45)),
             )
             .into_any_element()
@@ -662,14 +663,14 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
         .child(
             div()
                 .id("vs-auto-sens")
-                .mb(px(16.))
+                .mb(z(16.))
                 .flex()
                 .items_center()
                 .cursor_pointer()
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child("Automatically determine input sensitivity"),
@@ -682,7 +683,7 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
         )
         .child(bar)
         .when(auto && level.is_none(), |d| {
-            d.child(div().mt(px(8.)).child(note("Start a mic test or join a voice channel to see your input level.")))
+            d.child(div().mt(z(8.)).child(note("Start a mic test or join a voice channel to see your input level.")))
         })
 }
 
@@ -695,12 +696,12 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .flex()
         .flex_col()
         .child(h5("MIC TEST"))
-        .child(note("Having mic issues? Start a test and say something fun—we'll play your voice back to you.").mb(px(16.)))
+        .child(note("Having mic issues? Start a test and say something fun—we'll play your voice back to you.").mb(z(16.)))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(px(16.))
+                .gap(z(16.))
                 .child(
                     button(
                         "vs-mic-test",
@@ -719,7 +720,7 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 )
                 .child(meter(level, testing || in_call)),
         )
-        .when_some(err, |d, e| d.child(div().mt(px(8.)).text_size(px(12.)).text_color(c(Palette::RED)).child(SharedString::from(e))))
+        .when_some(err, |d, e| d.child(div().mt(z(8.)).text_size(z(12.)).text_color(c(Palette::RED)).child(SharedString::from(e))))
 }
 
 /// The whole page.
@@ -738,7 +739,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .child(
             div()
                 .flex()
-                .gap(px(16.))
+                .gap(z(16.))
                 .child(column([
                     h5("INPUT DEVICE").into_any_element(),
                     select("input", p.input_device.clone(), inputs, |p, v| p.input_device = v, cx).into_any_element(),
@@ -750,9 +751,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         )
         .child(
             div()
-                .mt(px(20.))
+                .mt(z(20.))
                 .flex()
-                .gap(px(16.))
+                .gap(z(16.))
                 .child(column([
                     h5("INPUT VOLUME").into_any_element(),
                     pct_slider("input-volume", p.input_volume, 100, |p, v| p.input_volume = v, cx).into_any_element(),
@@ -762,11 +763,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     pct_slider("output-volume", p.output_volume, 200, |p, v| p.output_volume = v, cx).into_any_element(),
                 ])),
         )
-        .child(div().mt(px(20.)).child(mic_test(app, cx)))
+        .child(div().mt(z(20.)).child(mic_test(app, cx)))
         .child(divider())
         .child(input_mode(&p, cx))
-        .child(div().mt(px(20.)).child(if p.input_mode == InputMode::PushToTalk { keybind(&p, cx) } else { sensitivity(&p, cx) }))
-        .when(p.input_mode == InputMode::PushToTalk, |d| d.child(div().mt(px(20.)).child(sensitivity(&p, cx))))
+        .child(div().mt(z(20.)).child(if p.input_mode == InputMode::PushToTalk { keybind(&p, cx) } else { sensitivity(&p, cx) }))
+        .when(p.input_mode == InputMode::PushToTalk, |d| d.child(div().mt(z(20.)).child(sensitivity(&p, cx))))
         .child(divider())
         .child(h5("VOICE PROCESSING"))
         .child(switch_row(
@@ -798,8 +799,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         ))
         .child(divider())
         .child(h5("ATTENUATION"))
-        .child(note("Lower the volume of other applications by this percent when someone is speaking. Set to 0% to completely disable attenuation.").mb(px(16.)))
-        .child(pct_slider("attenuation", p.attenuation, 100, |p, v| p.attenuation = v, cx).mb(px(20.)))
+        .child(note("Lower the volume of other applications by this percent when someone is speaking. Set to 0% to completely disable attenuation.").mb(z(16.)))
+        .child(pct_slider("attenuation", p.attenuation, 100, |p, v| p.attenuation = v, cx).mb(z(20.)))
         .child(switch_row("att-self", "When I speak", "", p.attenuate_self, false, |p| p.attenuate_self = !p.attenuate_self, cx))
         .child(switch_row(
             "att-others",
@@ -814,26 +815,26 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .child(h1("Video Settings"))
         .child(
             div()
-                .h(px(200.))
-                .rounded(px(8.))
+                .h(z(200.))
+                .rounded(z(8.))
                 .bg(c(Palette::BG_TERTIARY))
                 .flex()
                 .flex_col()
                 .items_center()
                 .justify_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .child(note("No video devices found")),
         )
-        .child(div().mt(px(20.)).child(h5("CAMERA")))
+        .child(div().mt(z(20.)).child(h5("CAMERA")))
         .child(
             div()
-                .h(px(40.))
-                .px(px(12.))
-                .rounded(px(4.))
+                .h(z(40.))
+                .px(z(12.))
+                .rounded(z(4.))
                 .bg(c(SELECT_BG))
                 .flex()
                 .items_center()
-                .text_size(px(16.))
+                .text_size(z(16.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child("No video devices"),
         )

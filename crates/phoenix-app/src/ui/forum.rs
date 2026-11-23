@@ -10,6 +10,7 @@
 //! The chat column draws [`render`] over the message list when the open
 //! channel is a forum.
 
+use crate::theme::z;
 use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Window, div, img, prelude::*, px};
 use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 
@@ -151,13 +152,13 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
 
 fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
     div()
-        .h(px(24.))
-        .px(px(8.))
-        .rounded(px(12.))
+        .h(z(24.))
+        .px(z(8.))
+        .rounded(z(12.))
         .flex()
         .items_center()
-        .gap(px(4.))
-        .text_size(px(12.))
+        .gap(z(4.))
+        .text_size(z(12.))
         .font_weight(FontWeight::SEMIBOLD)
         .bg(if on { c(Palette::BLURPLE) } else { c(Palette::BG_MOD_HOVER) })
         .text_color(if on { gpui::white() } else { c(Palette::TEXT_NORMAL) })
@@ -175,13 +176,13 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
     let replies = p.message_count;
     div()
         .id(("forum-post", p.thread.0))
-        .p(px(16.))
-        .rounded(px(8.))
+        .p(z(16.))
+        .rounded(z(8.))
         .bg(c(Palette::BG_SECONDARY))
         .cursor_pointer()
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .flex()
-        .gap(px(16.))
+        .gap(z(16.))
         .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
         .child(
             div()
@@ -189,17 +190,17 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(px(6.))
+                .gap(z(6.))
                 .child(
                     div()
                         .flex()
                         .flex_wrap()
-                        .gap(px(4.))
+                        .gap(z(4.))
                         .children(p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).map(|t| tag_pill(t, false))),
                 )
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
                         .child(SharedString::from(p.title.clone())),
@@ -207,9 +208,9 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                 .child(
                     div()
                         .flex()
-                        .gap(px(4.))
-                        .text_size(px(14.))
-                        .line_height(px(18.))
+                        .gap(z(4.))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
                         .min_w_0()
                         .child(
                             div()
@@ -224,21 +225,21 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(12.))
-                        .text_size(px(14.))
+                        .gap(z(12.))
+                        .text_size(z(14.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child(
                             div()
                                 .flex()
                                 .items_center()
-                                .gap(px(4.))
+                                .gap(z(4.))
                                 .child(icon(Icon::Threads, 16., c(Palette::INTERACTIVE)))
                                 .child(replies.to_string()),
                         )
                         .child(ago(now, activity)),
                 ),
         )
-        .when_some(thumb, |d, u| d.child(img(u).size(px(72.)).flex_none().rounded(px(8.)).object_fit(gpui::ObjectFit::Cover)))
+        .when_some(thumb, |d, u| d.child(img(u).size(z(72.)).flex_none().rounded(z(8.)).object_fit(gpui::ObjectFit::Cover)))
         .into_any_element()
 }
 
@@ -252,18 +253,18 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
 
     let top = div()
         .flex()
-        .gap(px(8.))
+        .gap(z(8.))
         .child(
             div()
                 .flex_1()
-                .h(px(40.))
-                .px(px(12.))
-                .rounded(px(8.))
+                .h(z(40.))
+                .px(z(12.))
+                .rounded(z(8.))
                 .bg(c(Palette::INPUT_BG))
                 .flex()
                 .items_center()
-                .gap(px(8.))
-                .text_size(px(16.))
+                .gap(z(8.))
+                .text_size(z(16.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(icon(Icon::Search, 18., c(Palette::TEXT_MUTED)))
                 .child("Search or create a post..."),
@@ -271,16 +272,16 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .child(
             div()
                 .id("forum-new-post")
-                .h(px(40.))
-                .px(px(16.))
-                .rounded(px(8.))
+                .h(z(40.))
+                .px(z(16.))
+                .rounded(z(8.))
                 .bg(c(Palette::BLURPLE))
                 .cursor_pointer()
                 .hover(|s| s.opacity(0.9))
                 .flex()
                 .items_center()
-                .gap(px(6.))
-                .text_size(px(14.))
+                .gap(z(6.))
+                .text_size(z(14.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(gpui::white())
                 .on_click(cx.listener(move |a, _, _, cx| {
@@ -291,7 +292,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .child("New Post"),
         );
 
-    let mut filters = div().flex().flex_wrap().items_center().gap(px(6.));
+    let mut filters = div().flex().flex_wrap().items_center().gap(z(6.));
     let sort_label = match v.sort {
         ForumSort::Recent => "Recently Active",
         ForumSort::Created => "Date Posted",
@@ -299,14 +300,14 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     filters = filters.child(
         div()
             .id("forum-sort")
-            .h(px(24.))
-            .px(px(8.))
-            .rounded(px(12.))
+            .h(z(24.))
+            .px(z(8.))
+            .rounded(z(12.))
             .bg(c(Palette::BG_MOD_HOVER))
             .cursor_pointer()
             .flex()
             .items_center()
-            .text_size(px(12.))
+            .text_size(z(12.))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(c(Palette::TEXT_NORMAL))
             .on_click(cx.listener(move |a, _, _, cx| {
@@ -317,7 +318,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .child(format!("Sort: {sort_label} ▾")),
     );
     if !tags.is_empty() {
-        filters = filters.child(div().w(px(1.)).h(px(16.)).mx(px(4.)).bg(c(Palette::DIVIDER)));
+        filters = filters.child(div().w(z(1.)).h(z(16.)).mx(z(4.)).bg(c(Palette::DIVIDER)));
     }
     for t in &tags {
         let on = v.tags.contains(&t.id);
@@ -338,30 +339,30 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(px(8.));
+        .gap(z(8.));
     if v.loaded && v.posts.is_empty() && !v.loading {
         col = col.child(
             div()
-                .p(px(48.))
+                .p(z(48.))
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .child(icon(Icon::Forum, 64., c(Palette::INTERACTIVE_MUTED)))
-                .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("There are no posts yet"))
-                .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child("Be the first to start a conversation.")),
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("There are no posts yet"))
+                .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Be the first to start a conversation.")),
         );
     }
     for p in &v.posts {
         col = col.child(post_card(app, p, &tags, now, cx));
     }
     if v.loading {
-        col = col.child(div().p(px(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+        col = col.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
     } else if v.has_more {
         col = col.child(
             div()
                 .id("forum-more")
-                .p(px(12.))
+                .p(z(12.))
                 .flex()
                 .justify_center()
                 .cursor_pointer()
@@ -375,14 +376,14 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         let item = |id: &'static str, label: &'static str, s: ForumSort, on: bool| {
             div()
                 .id(id)
-                .px(px(8.))
-                .py(px(6.))
-                .rounded(px(4.))
+                .px(z(8.))
+                .py(z(6.))
+                .rounded(z(4.))
                 .cursor_pointer()
                 .hover(|st| st.bg(c(Palette::BLURPLE)))
                 .flex()
                 .justify_between()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .text_color(c(Palette::TEXT_NORMAL))
                 .child(label)
                 .when(on, |d| d.child("✓"))
@@ -390,15 +391,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         };
         div()
             .absolute()
-            .top(px(96.))
-            .left(px(16.))
-            .w(px(220.))
-            .p(px(8.))
-            .rounded(px(8.))
+            .top(z(96.))
+            .left(z(16.))
+            .w(z(220.))
+            .p(z(8.))
+            .rounded(z(8.))
             .bg(c(Palette::BG_FLOATING))
             .shadow_lg()
             .occlude()
-            .child(div().px(px(8.)).py(px(4.)).text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("SORT BY"))
+            .child(div().px(z(8.)).py(z(4.)).text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("SORT BY"))
             .child(item("sort-recent", "Recently Active", ForumSort::Recent, v.sort == ForumSort::Recent))
             .child(item("sort-created", "Date Posted", ForumSort::Created, v.sort == ForumSort::Created))
     });
@@ -412,10 +413,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .size_full()
             .occlude()
             .bg(c(Palette::BG_PRIMARY))
-            .p(px(16.))
+            .p(z(16.))
             .flex()
             .flex_col()
-            .gap(px(12.))
+            .gap(z(12.))
             .child(top)
             .child(filters)
             .child(col)
@@ -438,7 +439,7 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
             cx.notify();
         })
     });
-    let mut tag_row = div().flex().flex_wrap().gap(px(6.));
+    let mut tag_row = div().flex().flex_wrap().gap(z(6.));
     for t in tags.iter().filter(|t| !t.moderated) {
         let on = comp.tags.contains(&t.id);
         let id = t.id;
@@ -460,12 +461,12 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
         );
     }
     let field = |el: AnyElement, h: f32| {
-        div().min_h(px(h)).px(px(10.)).py(px(8.)).rounded(px(8.)).bg(c(Palette::INPUT_BG)).text_size(px(16.)).child(el)
+        div().min_h(px(h)).px(z(10.)).py(z(8.)).rounded(z(8.)).bg(c(Palette::INPUT_BG)).text_size(z(16.)).child(el)
     };
     let close2 = close.clone();
     let card = div()
-        .w(px(560.))
-        .rounded(px(8.))
+        .w(z(560.))
+        .rounded(z(8.))
         .overflow_hidden()
         .bg(c(Palette::BG_PRIMARY))
         .shadow_lg()
@@ -473,31 +474,31 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
         .flex_col()
         .child(
             div()
-                .p(px(16.))
+                .p(z(16.))
                 .flex()
                 .flex_col()
-                .gap(px(12.))
-                .child(div().text_size(px(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("New Post"))
+                .gap(z(12.))
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("New Post"))
                 .child(field(Input::new(&comp.title).appearance(false).bordered(false).into_any_element(), 40.))
                 .child(field(Textarea::new(&comp.body).appearance(false).bordered(false).into_any_element(), 100.))
                 .when(!tags.is_empty(), |d| {
-                    d.child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("TAGS")).child(tag_row)
+                    d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("TAGS")).child(tag_row)
                 })
-                .when_some(comp.error.clone(), |d, er| d.child(div().text_size(px(14.)).text_color(c(Palette::TEXT_CRITICAL)).child(er))),
+                .when_some(comp.error.clone(), |d, er| d.child(div().text_size(z(14.)).text_color(c(Palette::TEXT_CRITICAL)).child(er))),
         )
         .child(
             div()
-                .p(px(16.))
+                .p(z(16.))
                 .bg(c(Palette::BG_SECONDARY))
                 .flex()
                 .justify_end()
                 .items_center()
-                .gap(px(16.))
+                .gap(z(16.))
                 .child(
                     div()
                         .id("compose-cancel")
                         .cursor_pointer()
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .on_click(move |_, w, cx| close2(w, cx))
                         .child("Cancel"),
@@ -505,13 +506,13 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
                 .child(
                     div()
                         .id("compose-post")
-                        .h(px(32.))
-                        .px(px(16.))
-                        .rounded(px(8.))
+                        .h(z(32.))
+                        .px(z(16.))
+                        .rounded(z(8.))
                         .bg(c(Palette::BLURPLE))
                         .flex()
                         .items_center()
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(gpui::white())
                         .when(!comp.sending, |d| d.cursor_pointer().on_click(cx.listener(move |a, _, _, cx| a.submit_post(forum, cx))))

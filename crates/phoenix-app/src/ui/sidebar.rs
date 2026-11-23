@@ -100,7 +100,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex()
         .flex_col()
         .bg(c(Palette::BG_SECONDARY))
-        .rounded_tl(px(8.))
+        .rounded_tl(z(8.))
         .overflow_hidden()
         .relative()
         .child(header(app, cx))
@@ -119,7 +119,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
         None => div()
             .h(px(m::HEADER_H))
             .flex_none()
-            .px(px(10.))
+            .px(z(10.))
             .flex()
             .items_center()
             .border_b_1()
@@ -127,13 +127,13 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
             .child(
                 div()
                     .w_full()
-                    .h(px(28.))
-                    .rounded(px(4.))
+                    .h(z(28.))
+                    .rounded(z(4.))
                     .bg(c(Palette::BG_TERTIARY))
-                    .px(px(6.))
+                    .px(z(6.))
                     .flex()
                     .items_center()
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .text_color(c(Palette::TEXT_MUTED))
                     .child("Find or start a conversation"),
             )
@@ -174,14 +174,14 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                 })
                         })
                         .child(
-                            div().absolute().top_0().left_0().right_0().h(px(56.)).bg(gpui::linear_gradient(
+                            div().absolute().top_0().left_0().right_0().h(z(56.)).bg(gpui::linear_gradient(
                                 180.,
                                 gpui::linear_color_stop(gpui::black().opacity(0.4), 0.),
                                 gpui::linear_color_stop(gpui::transparent_black(), 1.),
                             )),
                         )
                         .child(
-                            div().absolute().bottom_0().left_0().right_0().h(px(40.)).bg(gpui::linear_gradient(
+                            div().absolute().bottom_0().left_0().right_0().h(z(40.)).bg(gpui::linear_gradient(
                                 180.,
                                 gpui::linear_color_stop(gpui::transparent_black(), 0.),
                                 gpui::linear_color_stop(c(Palette::BG_SECONDARY).opacity(0.8), 1.),
@@ -196,7 +196,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .left_0()
                         .right_0()
                         .h(px(m::HEADER_H))
-                        .px(px(16.))
+                        .px(z(16.))
                         .flex()
                         .items_center()
                         .justify_between()
@@ -210,7 +210,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         })
                         .child(
                             div()
-                                .text_size(px(16.))
+                                .text_size(z(16.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .text_ellipsis()
@@ -235,7 +235,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         return if app.selected_guild.is_none() {
             dm_top(entity, cx).into_any_element()
         } else {
-            div().h(px(8.)).into_any_element()
+            div().h(z(8.)).into_any_element()
         };
     }
     let Some(r) = app.sidebar_rows.get(ix - 1).copied() else {
@@ -249,13 +249,13 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
             div()
                 .id(("cat", id.0))
                 .group("cat")
-                .pt(px(16.))
-                .pl(px(8.))
-                .pr(px(8.))
-                .h(px(40.))
+                .pt(z(16.))
+                .pl(z(8.))
+                .pr(z(8.))
+                .h(z(40.))
                 .flex()
                 .items_center()
-                .gap(px(2.))
+                .gap(z(2.))
                 .cursor_pointer()
                 .text_color(c(Palette::TEXT_MUTED))
                 .hover(|s| s.text_color(c(Palette::INTERACTIVE_HOVER)))
@@ -272,7 +272,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .child(
                     div()
                         .flex_1()
-                        .text_size(px(12.))
+                        .text_size(z(12.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_ellipsis()
                         .child(SharedString::from(ch.name.to_uppercase())),
@@ -296,15 +296,15 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         let e = entity.clone();
         div()
             .id(id)
-            .mx(px(8.))
+            .mx(z(8.))
             .h(z(42.))
             .px(z(8.))
             .rounded(z(ROW_RADIUS))
             .flex()
             .items_center()
-            .gap(px(12.))
+            .gap(z(12.))
             .cursor_pointer()
-            .text_size(px(16.))
+            .text_size(z(16.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
             .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
@@ -321,23 +321,23 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     };
     let e = entity.clone();
     div()
-        .pt(px(8.))
+        .pt(z(8.))
         .flex()
         .flex_col()
-        .gap(px(2.))
+        .gap(z(2.))
         .child(nav("friends", Icon::Friends, "Friends", Some(HomeView::Friends), pending))
         .child(nav("msg-requests", Icon::Inbox, "Message Requests", Some(HomeView::MessageRequests), requests))
         .child(nav("nitro", Icon::Nitro, "Nitro", None, 0))
         .child(nav("shop", Icon::Gift, "Shop", None, 0))
         .child(
             div()
-                .pt(px(18.))
-                .pb(px(4.))
-                .px(px(18.))
+                .pt(z(18.))
+                .pb(z(4.))
+                .px(z(18.))
                 .flex()
                 .justify_between()
                 .items_center()
-                .text_size(px(12.))
+                .text_size(z(12.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_MUTED))
                 .child("DIRECT MESSAGES")
@@ -356,16 +356,16 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
 fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool, bg: gpui::Hsla) -> AnyElement {
     div()
         .relative()
-        .size(px(20.))
+        .size(z(20.))
         .flex_none()
         .child(icon(channel_icon(kind), 20., color))
         .when(locked || nsfw, |d| {
             d.child(
                 div()
                     .absolute()
-                    .right(px(-3.))
-                    .top(px(-3.))
-                    .size(px(11.))
+                    .right(z(-3.))
+                    .top(z(-3.))
+                    .size(z(11.))
                     .rounded_full()
                     .bg(bg)
                     .flex()
@@ -373,7 +373,7 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
                     .justify_center()
                     .when(locked, |d| d.child(icon(Icon::Lock, 9., color)))
                     .when(!locked, |d| {
-                        d.text_size(px(9.)).font_weight(FontWeight::BOLD).text_color(color).child("!")
+                        d.text_size(z(9.)).font_weight(FontWeight::BOLD).text_color(color).child("!")
                     }),
             )
         })
@@ -405,10 +405,10 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         let ex = extra.cloned().unwrap_or_default();
         match ex.group_icon {
             Some(crate::model::ImageRef::Url(u)) => {
-                gpui::img(u).size(px(32.)).rounded_full().flex_none().into_any_element()
+                gpui::img(u).size(z(32.)).rounded_full().flex_none().into_any_element()
             }
             _ => div()
-                .size(px(32.))
+                .size(z(32.))
                 .flex_none()
                 .rounded_full()
                 .bg(c(crate::theme::DEFAULT_AVATAR[(id.0 % 5) as usize]))
@@ -458,18 +458,18 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     div()
         .id(("ch", id.0))
         .relative()
-        .pl(px(8.))
-        .pr(px(8.))
-        .py(px(1.))
+        .pl(z(8.))
+        .pr(z(8.))
+        .py(z(1.))
         .child(
             // unread pill on the far left
             div()
                 .absolute()
                 .left_0()
                 .top(px(if is_dm { 17. } else { 13. }))
-                .w(px(4.))
-                .h(px(8.))
-                .rounded_r(px(4.))
+                .w(z(4.))
+                .h(z(8.))
+                .rounded_r(z(4.))
                 .when(unread && !selected, |d| d.bg(c(Palette::TEXT_HEADER))),
         )
         .child(
@@ -501,8 +501,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .flex_col()
                         .child(
                             div()
-                                .text_size(px(16.))
-                                .line_height(px(20.))
+                                .text_size(z(16.))
+                                .line_height(z(20.))
                                 .font_weight(if unread { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
                                 .text_ellipsis()
                                 .child(name),
@@ -510,8 +510,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .when_some(members, |d, m| {
                             d.child(
                                 div()
-                                    .text_size(px(12.))
-                                    .line_height(px(14.))
+                                    .text_size(z(12.))
+                                    .line_height(z(14.))
                                     .text_color(c(Palette::TEXT_MUTED))
                                     .child(m),
                             )
@@ -535,31 +535,31 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
     div()
         .id(("thread", id.0))
         .relative()
-        .pl(px(8.))
-        .pr(px(8.))
+        .pl(z(8.))
+        .pr(z(8.))
         .child(
             div()
                 .absolute()
-                .left(px(26.))
-                .top(px(-12.))
-                .w(px(12.))
-                .h(px(28.))
+                .left(z(26.))
+                .top(z(-12.))
+                .w(z(12.))
+                .h(z(28.))
                 .border_l_1()
                 .border_b_1()
-                .rounded_bl(px(8.))
+                .rounded_bl(z(8.))
                 .border_color(c(Palette::INTERACTIVE_MUTED)),
         )
         .child(
             div()
                 .id(("threadrow", id.0))
-                .ml(px(36.))
+                .ml(z(36.))
                 .h(z(32.))
                 .px(z(8.))
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .font_weight(if unread { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
                 .text_color(c(if selected || unread { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
                 .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))

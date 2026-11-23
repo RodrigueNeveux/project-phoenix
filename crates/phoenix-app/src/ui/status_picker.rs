@@ -2,6 +2,7 @@
 //! Online / Idle / Do Not Disturb / Invisible + custom status text.
 //! Applied through op 3 and `PATCH /users/@me/settings`.
 
+use crate::theme::z;
 use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, Styled, Window, div, prelude::*, px};
 use gpui_component::input::{Input, InputEvent, InputState};
 
@@ -9,7 +10,7 @@ use crate::{
     app::PhoenixApp,
     model::Presence,
     presence::status_label,
-    theme::{Palette, c, ca, m},
+    theme::{Palette, c, m},
     ui::status_dot,
 };
 
@@ -63,17 +64,17 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .absolute()
         .left(px(m::SERVER_BAR_W + 8.))
         .bottom(px(m::USER_PANEL_H + 4.))
-        .w(px(260.))
-        .p(px(8.))
-        .rounded(px(8.))
+        .w(z(260.))
+        .p(z(8.))
+        .rounded(z(8.))
         .bg(bg)
         .border_1()
-        .border_color(ca(0xFFFFFF14))
+        .border_color(c(Palette::PANEL_BORDER))
         .shadow_lg()
         .occlude()
         .flex()
         .flex_col()
-        .gap(px(2.));
+        .gap(z(2.));
     if let Some(input) = &app.people.custom_input {
         let has = app.people.custom_status.is_some();
         menu = menu
@@ -81,18 +82,18 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 div()
                     .flex()
                     .items_center()
-                    .gap(px(6.))
-                    .px(px(8.))
-                    .h(px(36.))
-                    .rounded(px(4.))
+                    .gap(z(6.))
+                    .px(z(8.))
+                    .h(z(36.))
+                    .rounded(z(4.))
                     .bg(c(Palette::BG_TERTIARY))
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false)))
                     .when(has, |d| {
                         d.child(
                             div()
                                 .id("custom-clear")
-                                .text_size(px(12.))
+                                .text_size(z(12.))
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .cursor_pointer()
                                 .hover(|s| s.text_color(c(Palette::TEXT_NORMAL)))
@@ -104,23 +105,23 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         )
                     }),
             )
-            .child(div().h(px(1.)).mx(px(4.)).my(px(6.)).bg(c(Palette::DIVIDER)));
+            .child(div().h(z(1.)).mx(z(4.)).my(z(6.)).bg(c(Palette::DIVIDER)));
     }
     for (p, desc) in ITEMS {
         let selected = app.presence == p;
         menu = menu.child(
             div()
                 .id(("status", p as usize))
-                .px(px(8.))
-                .py(px(6.))
-                .rounded(px(4.))
+                .px(z(8.))
+                .py(z(6.))
+                .rounded(z(4.))
                 .cursor_pointer()
                 .flex()
-                .gap(px(10.))
+                .gap(z(10.))
                 .when(selected, |d| d.bg(c(Palette::BG_MOD_HOVER)))
                 .hover(|s| s.bg(c(Palette::BLURPLE)))
                 .on_click(cx.listener(move |a, _, _, cx| a.set_own_status(p, cx)))
-                .child(div().pt(px(3.)).child(status_dot(p, 10., bg)))
+                .child(div().pt(z(3.)).child(status_dot(p, 10., bg)))
                 .child(
                     div()
                         .flex()
@@ -128,13 +129,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .min_w_0()
                         .child(
                             div()
-                                .text_size(px(14.))
+                                .text_size(z(14.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(c(Palette::TEXT_NORMAL))
                                 .child(status_label(p)),
                         )
                         .when_some(desc, |d, t| {
-                            d.child(div().text_size(px(12.)).line_height(px(16.)).text_color(c(Palette::TEXT_MUTED)).child(t))
+                            d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(t))
                         }),
                 ),
         );
