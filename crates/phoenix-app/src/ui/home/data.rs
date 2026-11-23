@@ -166,6 +166,8 @@ pub struct NavState {
     pub overlay: Option<Overlay>,
     pub invite_input: Option<gpui::Entity<gpui_component::input::InputState>>,
     pub add_friend_input: Option<gpui::Entity<gpui_component::input::InputState>>,
+    /// Friends list search field (searchBar_wVFOQW).
+    pub friends_search: Option<gpui::Entity<gpui_component::input::InputState>>,
     pub invite_preview: Option<Result<InvitePreview, SharedString>>,
     pub invite_code: Option<String>,
     pub add_friend_result: Option<Result<SharedString, SharedString>>,

@@ -26,6 +26,16 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
     if app.nav.friends_tab == FriendsTab::AddFriend && app.nav.add_friend_input.is_none() {
         ensure_add_input(app, window, cx);
     }
+    if app.nav.friends_search.is_none() {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("search.placeholder")));
+        let sub = cx.subscribe_in(&input, window, |_: &mut PhoenixApp, _, ev: &InputEvent, _w, cx| {
+            if let InputEvent::Change = ev {
+                cx.notify();
+            }
+        });
+        app.nav.subs.push(sub);
+        app.nav.friends_search = Some(input);
+    }
     let body: AnyElement = match app.nav.friends_tab {
         FriendsTab::AddFriend => add_friend(app, cx).into_any_element(),
         tab => list(app, tab, cx).into_any_element(),
@@ -83,22 +93,30 @@ fn send_request(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     );
 }
 
+/// Dump `-channels-me+` node 1066 (`container_ybUK7Z`, padding 8 8 8 20,
+/// 49px) with the `tabBar_zrUwGA topPill_6zZYhF` pills (node 1074).
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let pending = app.nav.count(RelationshipKind::Incoming) as u32;
-    let tab = |id: &'static str, label: SharedString, t: FriendsTab, cx: &mut Context<PhoenixApp>| {
-        let sel = app.nav.friends_tab == t;
+    let pill = || {
+        // item_6zZYhF: padding 4px 12px, margin 0 8px, radius 8, 32px, 16/20 400
         div()
-            .id(id)
             .mx(z(8.))
-            .px(z(8.))
-            .h(z(24.))
-            .rounded(z(4.))
+            .px(z(12.))
+            .py(z(4.))
+            .h(z(32.))
+            .rounded(z(8.))
             .flex()
             .items_center()
             .gap(z(6.))
             .cursor_pointer()
             .text_size(z(16.))
-            .font_weight(FontWeight::MEDIUM)
+            .line_height(z(20.))
+    };
+    let tab = |id: &'static str, label: SharedString, t: FriendsTab, cx: &mut Context<PhoenixApp>| {
+        let sel = app.nav.friends_tab == t;
+        pill()
+            .id(id)
+            // selected_6zZYhF: --background-mod-strong, #dcdcdf; idle #96979e
             .text_color(c(if sel { Palette::TEXT_HEADER } else { Palette::INTERACTIVE }))
             .when(sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
             .when(!sel, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER))))
@@ -113,45 +131,50 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     div()
         .h(px(m::HEADER_H))
         .flex_none()
-        .px(z(16.))
+        .pl(z(20.))
+        .pr(z(8.))
+        .py(z(8.))
         .flex()
         .items_center()
         .border_b_1()
         .border_color(c(Palette::HEADER_SHADOW))
-        .child(icon(Icon::Friends, 24., c(Palette::CHANNEL_ICON)))
+        // iconWrapper_ybUK7Z 32x32, 20px icon --icon-muted
+        .child(div().size(z(32.)).flex().items_center().justify_center().child(icon(Icon::Friends, 20., c(Palette::CHANNEL_ICON))))
         .child(
+            // title_ybUK7Z body-md/medium, margin-right 8
             div()
-                .ml(z(8.))
+                .mr(z(8.))
                 .text_size(z(16.))
-                .font_weight(FontWeight::SEMIBOLD)
+                .line_height(z(20.))
+                .font_weight(FontWeight::MEDIUM)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child(crate::t!("friends.title")),
         )
-        .child(div().mx(z(8.)).w(z(1.)).h(z(24.)).bg(c(Palette::DIVIDER)))
+        // dot_ybUK7Z 4px, margin 0 4px, --background-mod-strong
+        .child(div().mx(z(4.)).size(z(4.)).rounded_full().bg(c(Palette::BG_MOD_SELECTED)))
         .child(tab("tab-online", crate::t!("status.online"), FriendsTab::Online, cx))
         .child(tab("tab-all", crate::t!("friends.all"), FriendsTab::All, cx))
         .child(tab("tab-pending", crate::t!("friends.pending"), FriendsTab::Pending, cx))
-        .child(tab("tab-blocked", crate::t!("friends.blocked"), FriendsTab::Blocked, cx))
         .child(
-            div()
+            // addFriend_zrUwGA: brand bg, white; selected: text brand on mod-strong
+            pill()
                 .id("tab-add")
-                .mx(z(8.))
-                .px(z(8.))
-                .h(z(24.))
-                .rounded(z(4.))
-                .flex()
-                .items_center()
-                .cursor_pointer()
-                .text_size(z(14.))
-                .font_weight(FontWeight::MEDIUM)
-                .when(add_sel, |d| d.text_color(c(Palette::GREEN)))
-                .when(!add_sel, |d| d.bg(c(Palette::GREEN)).text_color(gpui::white()))
+                .when(add_sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)).text_color(c(Palette::TEXT_BRAND)))
+                .when(!add_sel, |d| d.bg(c(Palette::BLURPLE)).text_color(gpui::white()))
                 .on_click(cx.listener(|a, _, _, cx| {
                     a.nav.friends_tab = FriendsTab::AddFriend;
                     a.nav.add_friend_result = None;
                     cx.notify();
                 }))
                 .child(crate::t!("friends.add")),
+        )
+        .child(div().flex_1())
+        // toolbar_ybUK7Z padding-left 10; inviteToolbar_zrUwGA padding-right 8: 32px "New Group DM"
+        .child(
+            div()
+                .pl(z(10.))
+                .pr(z(8.))
+                .child(div().size(z(32.)).flex().items_center().justify_center().child(gpui::svg().path("icons/new-group-dm.svg").size(z(20.)).text_color(c(Palette::TEXT_MUTED)))),
         )
 }
 
@@ -176,22 +199,42 @@ fn visible(app: &PhoenixApp, tab: FriendsTab) -> Vec<Relationship> {
     v
 }
 
+/// peopleColumn_zrUwGA: searchBar_wVFOQW (margin 12 16 8 24, 40px), then
+/// sectionTitle_wVFOQW (50px, h2 margin 16 20 16 24) and rows separated by
+/// divider_y75PxA (1px, margin 0 20 0 30, --border-subtle).
 fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let rows = visible(app, tab);
+    let q = app.nav.friends_search.as_ref().map(|i| i.read(cx).value().to_lowercase()).unwrap_or_default();
+    let rows: Vec<Relationship> = visible(app, tab)
+        .into_iter()
+        .filter(|r| {
+            q.is_empty()
+                || app.users.get(&r.user).is_some_and(|u| u.display_name.to_lowercase().contains(&q) || u.name.to_lowercase().contains(&q))
+        })
+        .collect();
     let label = match tab {
         FriendsTab::Online => crate::t!("friends.h_online"),
         FriendsTab::All => crate::t!("friends.h_all"),
         FriendsTab::Pending => crate::t!("friends.h_pending"),
         _ => crate::t!("friends.h_blocked"),
     };
-    let mut col = div()
-        .id("friends-list")
-        .size_full()
-        .overflow_y_scroll()
-        .pt(z(16.))
-        .px(z(20.))
+    let search = div()
+        .flex_none()
+        .mt(z(12.))
+        .mr(z(16.))
+        .mb(z(8.))
+        .ml(z(24.))
+        .h(z(40.))
+        .pl(z(4.))
+        .gap(z(4.))
+        .rounded(z(8.)) // wrapper_UcGqzv radius 8
+        .border_1()
+        .border_color(c(Palette::BG_MOD_SELECTED)) // 1px #97979f/0.24
+        .bg(c(gpui_input_bg()))
         .flex()
-        .flex_col();
+        .items_center()
+        .child(div().size(z(30.)).flex().items_center().justify_center().child(icon(Icon::Search, 20., c(Palette::TEXT_MUTED))))
+        .when_some(app.nav.friends_search.clone(), |d, i| d.child(div().flex_1().child(Input::new(&i).appearance(false))));
+    let mut col = div().id("friends-list").flex_1().min_h_0().overflow_y_scroll().pb(z(8.)).flex().flex_col();
     if rows.is_empty() {
         let msg = match tab {
             FriendsTab::Online => crate::t!("friends.empty_online"),
@@ -199,39 +242,43 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
             FriendsTab::Blocked => crate::t!("friends.empty_blocked"),
             _ => crate::t!("friends.empty_all"),
         };
-        return col
-            .child(
-                div()
-                    .flex_1()
-                    .pt(z(160.))
-                    .flex()
-                    .justify_center()
-                    .text_size(z(16.))
-                    .text_color(c(Palette::TEXT_MUTED))
-                    .child(msg),
-            )
-            .into_any_element();
+        col = col.child(
+            div().flex_1().pt(z(160.)).flex().justify_center().text_size(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(msg),
+        );
+    } else {
+        col = col.child(
+            div()
+                .h(z(50.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .ml(z(24.))
+                .mr(z(20.))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(Palette::TEXT_NORMAL))
+                .child(SharedString::from(format!("{label} — {}", rows.len()))),
+        );
+        for r in rows {
+            col = col.child(div().flex_none().h(z(1.)).ml(z(30.)).mr(z(20.)).bg(c(Palette::DIVIDER)));
+            col = col.child(friend_row(app, &r, cx));
+        }
     }
-    col = col.child(
-        div()
-            .pb(z(16.))
-            .text_size(z(12.))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(c(Palette::TEXT_MUTED))
-            .child(SharedString::from(format!("{label} — {}", rows.len()))),
-    );
-    for r in rows {
-        col = col.child(friend_row(app, &r, cx));
-    }
-    col.into_any_element()
+    div().size_full().flex().flex_col().child(search).child(col).into_any_element()
+}
+
+/// Search field background (input --input-background-default).
+fn gpui_input_bg() -> u32 {
+    crate::theme::tok(crate::theme::generated::idx::INPUT_BACKGROUND_DEFAULT)
 }
 
 fn round_button(id: (&'static str, u64), glyph: AnyElement, hover: Hsla) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .size(z(36.))
+        .size(z(36.)) // actionButton_5GqXgh 36px circle, page bg, 20px icon #96979e
         .rounded_full()
-        .bg(c(Palette::BG_SECONDARY))
+        .bg(c(Palette::BG_PRIMARY))
         .flex()
         .items_center()
         .justify_center()
@@ -287,10 +334,17 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         RelationshipKind::Friend => {
             actions = actions
                 .child(
-                    round_button(("fr-msg", user.0), icon(Icon::Forum, 20., c(Palette::INTERACTIVE)).into_any_element(), c(Palette::INTERACTIVE_HOVER))
+                    round_button(("fr-msg", user.0), gpui::svg().path("icons/chat.svg").size(z(20.)).text_color(c(Palette::INTERACTIVE)).into_any_element(), c(Palette::INTERACTIVE_HOVER))
                         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx))),
                 )
-                .child(round_button(("fr-rm", user.0), cross(), c(Palette::RED)).on_click(act(RelAction::Remove)));
+                .child({
+                    // "More options": opens the user context menu (Remove Friend lives there).
+                    round_button(("fr-more", user.0), gpui::svg().path("icons/more-vertical.svg").size(z(20.)).text_color(c(Palette::INTERACTIVE)).into_any_element(), c(Palette::INTERACTIVE_HOVER))
+                        .on_click(move |ev, window, cx| {
+                            cx.stop_propagation();
+                            crate::ui::user_menu::open(user, None, ev.position(), window);
+                        })
+                });
         }
         RelationshipKind::Incoming => {
             actions = actions
@@ -307,23 +361,24 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
             );
         }
     }
+    let tag = u.and_then(|u| u.tag.clone());
+    // peopleListItem_y75PxA: padding 16px 10px, margin 0 10 0 14, radius 8, 61px.
     div()
         .id(("friend", user.0))
         .group("friend-row")
-        .h(z(62.))
+        .h(z(61.))
         .flex_none()
-        .border_t_1()
-        .border_color(c(Palette::DIVIDER))
+        .ml(z(14.))
+        .mr(z(10.))
         .px(z(10.))
-        .mx(z(-10.))
         .rounded(z(8.))
         .flex()
         .items_center()
-        .gap(z(12.))
         .cursor_pointer()
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
-        .child(avatar_with_status(u, 32., p, c(Palette::BG_PRIMARY)))
+        // avatar_jPuNMC 32px, margin-right 12
+        .child(div().mr(z(12.)).child(avatar_with_status(u, 32., p, c(Palette::BG_PRIMARY))))
         .child(
             div()
                 .flex_1()
@@ -332,26 +387,44 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                 .flex_col()
                 .child(
                     div()
+                        .h(z(20.))
                         .flex()
-                        .gap(z(6.))
-                        .items_baseline()
+                        .items_center()
                         .child(
+                            // username_jPuNMC 16/20 600 #dcdcdf
                             div()
                                 .text_size(z(16.))
+                                .line_height(z(20.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
+                                .text_ellipsis()
                                 .child(name),
                         )
+                        // guildTag_PTA1Mz margin-left 4
+                        .when_some(tag, |d, t| d.child(crate::ui::members::server_tag(t.0).ml(z(4.))))
                         .child(
+                            // discriminator_jPuNMC margin-left 5, 14/16 500, shown on hover
                             div()
+                                .ml(z(5.))
                                 .text_size(z(14.))
-                                .text_color(c(Palette::TEXT_MUTED))
+                                .line_height(z(16.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(Palette::TEXT_NORMAL))
                                 .opacity(0.)
                                 .group_hover("friend-row", |s| s.opacity(1.))
                                 .child(username),
                         ),
                 )
-                .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(sub)),
+                .child(
+                    // subtext_jPuNMC: 14/17.5 500 --text-muted
+                    div()
+                        .text_size(z(14.))
+                        .line_height(z(17.5))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .text_ellipsis()
+                        .child(sub),
+                ),
         )
         .child(actions)
 }
@@ -439,6 +512,8 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .filter(|(u, _)| app.presence_of(*u) != Presence::Offline)
         .collect();
     active.sort_by_key(|(u, _)| u.0);
+    // nowPlayingColumn_zrUwGA 360px; scroller_GNEh_C padding 6 8 16 (+ thin
+    // gutter); h2 heading-lg/semibold 20/24 margin 8 0 9.
     let mut col = div()
         .id("active-now")
         .w(z(360.))
@@ -446,16 +521,19 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .h_full()
         .border_l_1()
         .border_color(c(Palette::DIVIDER))
-        .px(z(16.))
-        .py(z(16.))
+        .pt(z(14.))
+        .pl(z(17.))
+        .pr(z(16.))
+        .pb(z(16.))
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .gap(z(16.))
         .child(
             div()
+                .mb(z(9.))
                 .text_size(z(20.))
-                .font_weight(FontWeight::BOLD)
+                .line_height(z(24.))
+                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child(crate::t!("friends.active_now")),
         );
@@ -483,37 +561,98 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 ),
         );
     }
+    let now = crate::mock::now();
+    let thumb = |img: Option<SharedString>, size: f32| {
+        div()
+            .size(z(size))
+            .flex_none()
+            .rounded(z(4.))
+            .overflow_hidden()
+            .when_some(img, |d, url| d.child(gpui::img(url).size_full()))
+    };
     for (user, activity) in active {
         let u = app.users.get(&user);
-        col = col.child(
-            div()
-                .id(("active", user.0))
-                .p(z(16.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
-                .border_1()
-                .border_color(c(Palette::DIVIDER))
-                .flex()
-                .items_center()
-                .gap(z(12.))
-                .cursor_pointer()
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
-                .child(avatar_with_status(u, 32., app.presence_of(user), c(Palette::BG_SECONDARY)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .child(
-                            div()
-                                .text_size(z(16.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
-                                .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
-                        )
-                        .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(activity)),
-                ),
-        );
+        let game = app.people.activities.get(&user).and_then(|v| v.iter().find(|a| a.kind == crate::presence::ActivityKind::Playing)).cloned();
+        let sub: SharedString = match &game {
+            Some(g) => match g.start {
+                Some(st) => format!("{} - {}", g.name, crate::ui::members::elapsed(st, now)).into(),
+                None => g.name.clone(),
+            },
+            None => activity,
+        };
+        // itemCard_-7KzVR: margin-top 12, radius 16, 1px --border-subtle,
+        // shadow 0 1 4 rgba(0,0,0,.14). headerFull_o3hXTo: padding 16, gap 12,
+        // --background-mod-muted (#97979f/0.08).
+        let mut card = div()
+            .id(("active", user.0))
+            .mt(z(12.))
+            .rounded(z(16.))
+            .border_1()
+            .border_color(c(Palette::DIVIDER))
+            .overflow_hidden()
+            .bg(c(Palette::BG_PRIMARY))
+            .cursor_pointer()
+            .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
+            .child(
+                div()
+                    .p(z(16.))
+                    .flex()
+                    .items_center()
+                    .gap(z(12.))
+                    .bg(c(Palette::BG_MSG_HOVER))
+                    .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                    .child(avatar_with_status(u, 32., app.presence_of(user), c(Palette::BG_SECONDARY)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                // body-md/semibold 16/20 --text-default
+                                div()
+                                    .text_size(z(16.))
+                                    .line_height(z(20.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(Palette::TEXT_NORMAL))
+                                    .text_ellipsis()
+                                    .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
+                            )
+                            // body-sm/normal 14/18 --text-muted
+                            .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(sub)),
+                    )
+                    // headerIcon_o3hXTo 24px radius 4
+                    .when_some(game.as_ref().and_then(|g| g.image.clone()), |d, i| d.child(thumb(Some(i), 24.))),
+            );
+        if let Some(g) = game {
+            // section_o3hXTo padding 16; gameSection_o3hXTo grid gap 12: 32px icon,
+            // body-sm/semibold title, body-xs/normal subtitle, 24px party avatar.
+            card = card.child(
+                div()
+                    .p(z(16.))
+                    .flex()
+                    .items_center()
+                    .gap(z(12.))
+                    .child(thumb(g.image.clone(), 32.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .text_size(z(14.))
+                                    .line_height(z(18.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(Palette::TEXT_NORMAL))
+                                    .text_ellipsis()
+                                    .child(g.name.clone()),
+                            )
+                            .when_some(g.state.clone().or(g.details.clone()), |d, t| {
+                                d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(t))
+                            }),
+                    )
+                    .child(crate::ui::avatar(u, 24.)),
+            );
+        }
+        col = col.child(card);
     }
     col
 }

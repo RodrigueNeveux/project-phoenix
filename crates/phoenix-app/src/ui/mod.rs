@@ -15,6 +15,7 @@ pub mod members;
 pub mod modal;
 pub mod pickers;
 pub mod profile;
+pub mod dm_profile_panel;
 pub mod search;
 pub mod server_bar;
 pub mod sidebar;

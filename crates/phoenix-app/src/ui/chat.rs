@@ -84,6 +84,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         .children(crate::ui::forum::render(app, cx)),
                 )
                 .when(show_members, |d| d.child(members::render(app, cx)))
+                .children(crate::ui::dm_profile_panel::render(app, cx))
                 .children(panels::thread_panel(app, cx)),
         )
         .children(panels::pins_popout(app, cx))
@@ -92,10 +93,38 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 /// `--chat-input-icon-size` glyph in a 32px toolbar button.
 const HDR_ICON: f32 = 20.;
 
+/// Spacing scale of the user's client (`html.density-cozy`: --space-xs 10px,
+/// --space-md 20px, --space-xl 30px). Dump: -channels-N-N+ #1184 padding
+/// `2px 30px 2px 80px`, #1200 avatar left 20px.
+pub(crate) const SPACE_XS: f32 = 10.;
+pub(crate) const SPACE_MD: f32 = 20.;
+pub(crate) const SPACE_XL: f32 = 30.;
+/// --custom-message-margin-left-content-cozy = avatar + 2 × --space-md.
+pub(crate) const MSG_LEFT: f32 = m::AVATAR + 2. * SPACE_MD;
+
 fn hdr_button(id: &'static str, i: Icon, color: gpui::Hsla, size: f32) -> gpui::Stateful<gpui::Div> {
     icon_button(id, i, color, size * crate::theme::zoom()).size(z(32.)).rounded(z(8.))
 }
 
+/// Header toolbar button whose glyph comes from the runtime icon provider by name
+/// (iconWrapper_ .clickable_: 32px box, 20px svg).
+fn hdr_named(id: &'static str, name: &str, color: gpui::Hsla) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .size(z(32.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(z(8.))
+        .cursor_pointer()
+        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+        .child(gpui::svg().path(crate::icons::path(name)).size(z(HDR_ICON)).flex_none().text_color(color))
+}
+
+/// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
+/// section title_ padding 8px 8px 8px 20px, height 49px, border-bottom --border-subtle;
+/// upperContainer_ → children_ (icon/avatar, title, dot, topic) + toolbar_ (gap 10px, padding-left 10px).
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let is_dm = ch.is_some_and(|c| c.guild.is_none());
@@ -105,87 +134,150 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
     let on = tk(idx::ICON_STRONG);
+    let peer = ch.and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u));
+    let scope: SharedString = if is_dm {
+        peer.map(|u| u.name.clone()).unwrap_or_else(|| name.clone())
+    } else {
+        app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone()).unwrap_or_default()
+    };
+    let search_ph = SharedString::from(format!("{} {}", crate::t!("search.placeholder"), scope));
     div()
-        // Refresh: 49px bar plus the 1px app-frame line on top that continues
-        // the channel list's top border.
         .h(z(m::HEADER_H + 1.))
         .flex_none()
-        .pl(z(16.))
+        .pl(z(20.))
         .pr(z(8.))
+        .py(z(8.))
         .flex()
         .items_center()
-        .gap(z(8.))
         .bg(c(Palette::BG_PRIMARY))
         .border_t_1()
         .border_b_1()
-        .border_color(c(Palette::HEADER_SHADOW))
+        .border_color(tk(idx::BORDER_SUBTLE))
         .child(
+            // children_: flex 1, items centred.
             div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .items_center()
                 .child(if is_dm {
-                    avatar(ch.and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u)), 24. * crate::theme::zoom())
+                    // avatar_ 20px, margin-inline-end 8px (#1092).
+                    div().mr(z(8.)).child(avatar(peer, 20. * crate::theme::zoom())).into_any_element()
                 } else {
-                    icon(channel_icon(kind), m::HEADER_ICON * crate::theme::zoom(), c(Palette::CHANNEL_ICON)).into_any_element()
+                    // channelIcon_ 20px glyph in a 20×32 box, margin 0 11px 0 -1px (#1043); --channel-icon.
+                    div()
+                        .ml(z(-1.))
+                        .mr(z(11.))
+                        .w(z(20.))
+                        .h(z(32.))
+                        .flex()
+                        .items_center()
+                        .child(icon(channel_icon(kind), 20. * crate::theme::zoom(), tk(idx::CHANNEL_ICON)))
+                        .into_any_element()
+                })
+                .child(
+                    // titleWrapper_ margin-inline-end 8px; h1 body-md/medium 16px/20px --text-strong (#1047).
+                    div()
+                        .flex_none()
+                        .mr(z(8.))
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(tk(idx::TEXT_STRONG))
+                        .child(name),
+                )
+                .when_some(topic.filter(|_| !is_dm), |d, t| {
+                    let topic_click = crate::ui::home::topic::on_click(app, cx);
+                    // dot_ 4px, margin 0 4px, --text-muted 24% (#1049); topic_ margin-inline-start 8px,
+                    // body-sm/medium 14px/18px --text-muted (#1050).
+                    d.child(div().flex_none().mx(z(4.)).size(z(4.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_STRONG)))
+                        .child(
+                            div()
+                                .id("channel-topic")
+                                .ml(z(8.))
+                                .flex_1()
+                                .min_w_0()
+                                .cursor_pointer()
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(tk(idx::TEXT_MUTED))
+                                .whitespace_nowrap()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .on_click(topic_click)
+                                .child(t),
+                        )
                 }),
         )
         .child(
             div()
                 .flex_none()
-                .text_size(z(16.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_HEADER))
-                .child(name),
-        )
-        .when_some(topic, |d, t| {
-            let topic_click = crate::ui::home::topic::on_click(app, cx);
-            d.child(div().w(z(1.)).h(z(24.)).mx(z(4.)).bg(c(Palette::DIVIDER)))
-                .child(
-                    div()
-                        .id("channel-topic")
-                        .flex_1()
-                        .min_w_0()
-                        .cursor_pointer()
-                        .text_size(z(14.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .text_ellipsis()
-                        .on_click(topic_click)
-                        .child(t),
-                )
-        })
-        .child(div().flex_1())
-        .child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx))))
-        .child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
-        .child(
-            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
-                .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
-        )
-        .child(
-            hdr_button(
-                "members",
-                Icon::Members,
-                if app.show_members { on } else { ic },
-                HDR_ICON,
-            )
-            .on_click(cx.listener(|a, _, _, cx| {
-                a.show_members = !a.show_members;
-                cx.notify();
-            })),
-        )
-        .child(
-            div()
-                .w(z(160.))
-                .h(z(32.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_TERTIARY))
-                .border_1()
-                .border_color(c(Palette::BORDER_MUTED))
-                .px(z(8.))
+                .pl(z(10.))
                 .flex()
                 .items_center()
-                .justify_between()
-                .text_size(z(14.))
-                .text_color(c(Palette::TEXT_MUTED))
-                .child(crate::t!("search.placeholder"))
-                .child(icon(Icon::Search, 16., c(Palette::TEXT_MUTED))),
+                .gap(z(10.))
+                .when(is_dm, |d| {
+                    // DM toolbar (#1101–#1109): voice call, video call, pins, add to DM, user profile.
+                    d.child(hdr_named("dm-call", "phone-call", ic))
+                        .child(hdr_named("dm-video", "video-call", ic))
+                        .child(
+                            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
+                                .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
+                        )
+                        .child(hdr_named("dm-add", "add-to-dm", ic))
+                        .child(hdr_named("dm-profile", "user-profile", if app.show_members { on } else { ic }).on_click(cx.listener(|a, _, _, cx| {
+                            a.show_members = !a.show_members;
+                            cx.notify();
+                        })))
+                })
+                .when(!is_dm, |d| {
+                    // Guild toolbar (#1055–#1061): threads, notifications, pins, member list.
+                    d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx))))
+                        .child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
+                        .child(
+                            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
+                                .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
+                        )
+                        .child(
+                            hdr_button("members", Icon::Members, if app.show_members { on } else { ic }, HDR_ICON).on_click(
+                                cx.listener(|a, _, _, cx| {
+                                    a.show_members = !a.show_members;
+                                    cx.notify();
+                                }),
+                            ),
+                        )
+                })
+                .child(
+                    // search_ margin-inline-start 4px; searchBar_ 244×32, radius 8px,
+                    // --input-background-default, 1px --input-border-default (#1063–#1073);
+                    // editor_ padding 0 6px, 14px/22px medium; icon_ 24px box, padding 4px, 16px glyph.
+                    div()
+                        .ml(z(4.))
+                        .w(z(244.))
+                        .h(z(32.))
+                        .rounded(z(8.))
+                        .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
+                        .border_1()
+                        .border_color(tk(idx::INPUT_BORDER_DEFAULT))
+                        .flex()
+                        .items_center()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .px(z(6.))
+                                .text_size(z(14.))
+                                .line_height(z(22.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(tk(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT))
+                                .whitespace_nowrap()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .child(search_ph),
+                        )
+                        .child(div().size(z(24.)).p(z(4.)).flex().items_center().child(icon(Icon::Search, 16. * crate::theme::zoom(), tk(idx::ICON_DEFAULT)))),
+                ),
         )
 }
 
@@ -332,7 +424,7 @@ fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -
         .line_height(z(16.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(tk(idx::TEXT_DEFAULT))
-        .when_some(tag.1.clone(), |d, u| d.child(img(u).size(z(12.)).flex_none()))
+        .when_some(tag.1.clone(), |d, u| d.child(img(u).size(z(if in_reply { 12. } else { 14. })).flex_none())) // #1192 12px / #1208 14px
         .child(tag.0.clone())
 }
 
@@ -428,7 +520,7 @@ fn message(
         // --custom-message-reply-indent (.625rem).
         div()
             .relative()
-            .h(z(18.))
+            .h(z(20.)) // #1185 repliedMessage_ height 20px (trailing 20px icon row)
             .when(!compact, |d| d.mb(z(4.)))
             .when(compact, |d| d.ml(z(-24.)).pl(z(10.)))
             .flex()
@@ -444,10 +536,10 @@ fn message(
                 // gutter = meta-space, ends at the reply indent.
                 div()
                     .absolute()
-                    .left(z(if compact { -23. } else { -37. }))
-                    .top(z(9.))
-                    .w(z(if compact { 29. } else { 33. }))
-                    .h(z(9.))
+                    .left(z(if compact { -23. } else { -41. })) // #1186 left -40px, margin-left -1px
+                    .top(z(9.)) // #1186 top 10px, margin-top -1px
+                    .w(z(if compact { 29. } else { 37. })) // #1186 37px
+                    .h(z(if compact { 11. } else { 13. }))
                     .border_l_2()
                     .border_t_2()
                     .rounded_tl(z(6.))
@@ -497,7 +589,7 @@ fn message(
         .group("msg")
         .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
         .relative()
-        .pr(z(16.)) // wrapper_ padding-inline-end --custom-message-margin-horizontal
+        .pr(z(SPACE_XL)) // message_ padding-inline-end --space-xl (#1184)
         .map(|d| {
             // message_:hover / .selected_ --message-background-hover; .mentioned_ and
             // .replying_ have their own backgrounds, hover shades and a 2px bar
@@ -553,7 +645,7 @@ fn message(
             )
             .child(content)
     } else {
-        base.pl(z(m::MSG_GUTTER))
+        base.pl(z(MSG_LEFT)) // --custom-message-margin-left-content-cozy (#1184 80px)
             .py(z(2.))
             .when_some(reply, |d, reply| d.child(reply))
             .when(r.group_start, |d| {
@@ -563,8 +655,9 @@ fn message(
                         // avatar_: inset-inline-start --custom-message-margin-horizontal,
                         // margin-top 4px - cozy vertical padding (so 4px below the row top,
                         // after the reply line when there is one).
-                        .left(z(16.))
-                        .top(z(if msg.reply_to.is_some() { 26. } else { 4. }))
+                        .left(z(SPACE_MD)) // #1200 left 20px
+                        // #1200: 2px row padding + 20px reply + 4px --reply-spacing + 2px margin-top.
+                        .top(z(if msg.reply_to.is_some() { 28. } else { 4. }))
                         .id(("msg-avatar", id.0))
                         .cursor_pointer()
                         .on_click(message_ext::open_author(entity, msg))

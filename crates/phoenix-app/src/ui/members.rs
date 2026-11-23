@@ -182,22 +182,46 @@ fn playing(app: &PhoenixApp, g: Id) -> Vec<(Id, &Activity)> {
 }
 
 /// The "Activity" section at the top of the member list: one card per
-/// member playing a game (name, game title, elapsed time, game art).
-/// Card values: contentInventory card in 4187692321375e83 (--space-12
-/// padding/gap, --radius-sm, --border-subtle) and the 72px post thumbnail.
+/// member playing a game. Dump `-channels-N-N+` nodes 1502 (header) and
+/// 1512 (card `container_g7esM5 usesCardRows_g7esM5`).
 fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> AnyElement {
     let acts = playing(app, g);
     if acts.is_empty() {
         return div().into_any_element();
     }
     let now = crate::mock::now();
+    // headerContainer_HxSvbL: flex, margin -3px 0; label, 24px settingsButton
+    // (padding 4, 12px gear), spacer, 24x18 toggleExpandIcon.
+    let muted = c(Palette::TEXT_MUTED);
     let mut col = div().flex_none().flex().flex_col().child(
         div()
-            .flex()
-            .items_center()
-            .pr(z(8.))
-            .child(div().flex_1().min_w_0().child(header(crate::t!("members.activity", n = acts.len()))))
-            .child(gpui::svg().path("icons/chevron-right.svg").size(z(16.)).flex_none().mt(z(16.)).text_color(c(Palette::INTERACTIVE))),
+            .pt(z(24.)) // membersGroup_86es0b padding 24px 4px 4px 20px
+            .pb(z(4.))
+            .pl(z(20.))
+            .pr(z(4.))
+            .child(
+                div()
+                    .h(z(24.))
+                    .my(z(-3.))
+                    .flex()
+                    .items_center()
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(muted)
+                    .child(crate::t!("members.activity", n = acts.len()))
+                    .child(
+                        div()
+                            .size(z(24.))
+                            .p(z(4.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(gpui::svg().path(crate::icons::path("gear")).size(z(12.)).text_color(muted)),
+                    )
+                    .child(div().flex_1())
+                    .child(gpui::svg().path(crate::icons::path("chevron")).w(z(24.)).h(z(18.)).text_color(c(Palette::INTERACTIVE))),
+            ),
     );
     for (uid, a) in acts.into_iter().take(3) {
         let user = app.users.get(&uid);
@@ -212,27 +236,36 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(z(24.))
+                .text_size(z(16.))
                 .font_weight(FontWeight::BOLD)
-                .text_color(c(Palette::TEXT_MUTED))
+                .text_color(muted)
                 .child(SharedString::from(a.name.chars().next().map(String::from).unwrap_or_default()))
                 .into_any_element(),
+        };
+        let badge = |ic: &'static str, t: SharedString| {
+            // badgeContainer_CTWncy: gap 4, 12px icon, body-xs/normal 12/16
+            div()
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .child(gpui::svg().path(ic).size(z(12.)).flex_none().text_color(c(Palette::TEXT_MUTED)))
+                .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(t))
         };
         col = col.child(
             div()
                 .id(("activity-card", uid.0))
-                .mx(z(8.)) // member_Iy0c7A margin-inline-start 8px
-                .mb(z(8.)) // --space-8
-                .p(z(12.)) // container_DKsPd0 padding --space-12
-                .rounded(z(8.)) // --radius-sm
+                .mt(z(8.)) // container_g7esM5 margin 8px 0 0 8px
+                .ml(z(8.))
+                .mr(z(8.))
+                .p(z(8.)) // padding 8px
+                .rounded(z(12.)) // border-radius 12px
                 .border_1()
-                .border_color(c(Palette::DIVIDER)) // --border-subtle
-                .bg(c(Palette::BG_TERTIARY)) // --background-base-lowest
+                .border_color(c(Palette::DIVIDER)) // --border-subtle (#97979f @16%)
+                .bg(c(Palette::BG_TERTIARY)) // --background-base-lowest (#0a0a0c midnight)
                 .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .cursor_pointer()
                 .flex()
-                .items_center()
-                .gap(z(12.)) // details_DKsPd0 margin 0 --space-12
+                .gap(z(8.)) // cardRow_g7esM5 gap 8px
                 .on_click(move |ev, window, cx| {
                     let at = ev.position();
                     e.update(cx, |a, cx| a.open_profile(uid, Some(g), at, window, cx));
@@ -243,13 +276,15 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                         .min_w_0()
                         .flex()
                         .flex_col()
-                        .gap(z(2.))
+                        .mb(z(-2.)) // infoSection_g7esM5 margin-bottom -2px
                         .child(
+                            // userSection_g7esM5: 18px, margin-bottom 2px; 16px facePile, margin-right 6
                             div()
+                                .h(z(18.))
+                                .mb(z(2.))
                                 .flex()
                                 .items_center()
-                                .gap(z(6.))
-                                .child(crate::ui::avatar(user, 16.))
+                                .child(div().mr(z(6.)).child(crate::ui::avatar(user, 16.)))
                                 .child(
                                     div()
                                         .min_w_0()
@@ -259,33 +294,34 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                         .text_color(role_color(color))
                                         .text_ellipsis()
                                         .child(name),
-                                )
-                                .when_some(user.and_then(|u| u.tag.clone()), |d, t| d.child(server_tag(t.0))),
+                                ),
                         )
                         .child(
+                            // heading-xs/medium lineClamp1: 14/18, 500, --text-default #d4d5d8
                             div()
-                                .text_size(z(16.))
-                                .line_height(z(20.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER)) // --text-strong
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(Palette::TEXT_NORMAL))
                                 .text_ellipsis()
                                 .child(a.name.clone()),
                         )
-                        .when_some(a.start, |d, st| {
-                            d.child(
-                                div()
-                                    .text_size(z(12.))
-                                    .line_height(z(16.))
-                                    .text_color(c(Palette::TEXT_MUTED))
-                                    .child(elapsed(st, now)),
-                            )
-                        }),
+                        .child(
+                            // badgesContainer_CTWncy: gap 0 8px
+                            div()
+                                .h(z(16.))
+                                .flex()
+                                .gap(z(8.))
+                                .overflow_hidden()
+                                .when_some(a.start, |d, st| d.child(badge("icons/controller.svg", elapsed(st, now).into())))
+                                .when_some(a.state.clone().or(a.details.clone()), |d, t| d.child(badge("icons/refresh.svg", t))),
+                        ),
                 )
                 .child(
                     div()
                         .flex_none()
-                        .size(z(72.)) // thumbnailContainer --__post-thumbnail-size 72px
-                        .rounded(z(8.)) // bodyMedia --radius-sm
+                        .size(z(48.)) // thumbnailButton_NJVMoP 48x48, radius 8; img radius 4
+                        .rounded(z(4.))
                         .overflow_hidden()
                         .bg(c(Palette::BG_MOD_SELECTED))
                         .child(art),
@@ -314,10 +350,11 @@ fn header(t: SharedString) -> AnyElement {
     // membersGroup_86es0b: padding-block --space-lg --space-xxs (20/4),
     // padding-inline --space-md --space-xxs (16/4), height auto. Not
     // uppercased in the 2026 client; 14px/500 (Text sm/medium).
+    // Dump node 1598: padding 24px 4px 4px 20px, 46px tall.
     div()
-        .pt(z(20.))
+        .pt(z(24.))
         .pb(z(4.))
-        .pl(z(16.))
+        .pl(z(20.))
         .pr(z(4.))
         .text_size(z(14.))
         .line_height(z(18.))
@@ -395,18 +432,24 @@ fn member_row(
     let e = entity.clone();
     let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(uid);
     let tag = user.and_then(|u| u.tag.clone());
-    // member_Iy0c7A margin-inline-start 8px, max-width list - 16px;
-    // memberInner_Iy0c7A padding-block --space-xxs (4px) around the 42px layout.
-    div().py(z(4.)).child(div()
+    let in_voice = app
+        .guild_channels
+        .get(&g)
+        .is_some_and(|ids| ids.iter().filter_map(|i| app.channels.get(i)).any(|ch| ch.voice_users.contains(&uid)));
+    // Dump `-channels-N-N+` node 1643: member_Iy0c7A margin-left 8px,
+    // padding 1px 0, radius 8 (44px); childContainer_J1Adu_ padding 0 8px 0 10px;
+    // memberInner_Iy0c7A padding 4px 0 (42px); avatar 32 + margin-right 12.
+    div().py(z(1.)).child(div()
         .id(("member", mem.user.0))
         .ml(z(8.))
-        .mr(z(8.))
-        .h(px(m::MEMBER_ROW_H)) // layout_TBNqol height 42px (density-default)
-        .px(z(8.))
-        .rounded(z(4.)) // layout_TBNqol border-radius 4px
+        .h(px(m::MEMBER_ROW_H))
+        .pl(z(10.))
+        .pr(z(8.))
+        .py(z(4.))
+        .rounded(z(8.))
         .flex()
         .items_center()
-        .gap(z(12.)) // avatar_TBNqol margin-inline-end 12px
+        .gap(z(12.))
         .cursor_pointer()
         .when(offline, |d| d.opacity(0.3))
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).opacity(1.))
@@ -442,22 +485,31 @@ fn member_row(
                                 .text_ellipsis()
                                 .child(name),
                         )
-                        .when_some(tag, |d, t| d.child(server_tag(t.0).my(z(1.)))) // clanTag_Iy0c7A margin 1px 0 0 4px
+                        .when_some(tag, |d, t| d.child(server_tag(t.0).my(z(1.)))) // chipletContainerInner_k8jyN7 margin 1px 0 1px 4px
                         .when(user.is_some_and(|u| u.bot), |d| d.child(app_tag())) // botTag_Iy0c7A margin-inline-start 4px
                         .when(owner, |d| {
                             // ownerIcon_Iy0c7A: 14px (icon_Iy0c7A), --text-feedback-warning
-                            d.child(gpui::svg().path("icons/crown.svg").size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
+                            d.child(gpui::svg().path(crate::icons::path("crown")).size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
                         }),
                 )
-                .when_some(mem.activity.clone().filter(|_| !offline), |d, a| {
+                .when(!offline && (in_voice || mem.activity.is_some()), |d| {
+                    // subText_J1Adu_ margin-top -2px; container_HigqCD flex gap 4:
+                    // 12px voice icon, "•" dot (--text-default), body-xs/medium 12/16 status.
                     d.child(
                         div()
-                            .mt(z(-2.)) // subText_TBNqol margin-top -2px
+                            .mt(z(-2.))
+                            .h(z(16.))
+                            .flex()
+                            .items_center()
+                            .gap(z(4.))
                             .text_size(z(12.))
                             .line_height(z(16.))
                             .text_color(c(Palette::TEXT_MUTED))
-                            .text_ellipsis()
-                            .child(a),
+                            .when(in_voice, |d| d.child(gpui::svg().path(crate::icons::path("speaker")).size(z(12.)).flex_none().text_color(c(Palette::TEXT_MUTED))))
+                            .when(in_voice && mem.activity.is_some(), |d| d.child(div().flex_none().text_color(c(Palette::TEXT_NORMAL)).child("•")))
+                            .when_some(mem.activity.clone(), |d, a| {
+                                d.child(div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(a))
+                            }),
                     )
                 }),
         ))

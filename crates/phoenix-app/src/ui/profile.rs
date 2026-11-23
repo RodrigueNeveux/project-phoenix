@@ -158,7 +158,7 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
 }
 
 /// Section heading inside a profile card (Text heading-sm/semibold, 12px/16px).
-fn section_title(t: SharedString) -> Div {
+pub(crate) fn section_title(t: SharedString) -> Div {
     div()
         .text_size(z(12.))
         .line_height(z(16.))
@@ -247,19 +247,19 @@ fn section_title_owned(t: String) -> Div {
 }
 
 /// Everything both layouts need about one user.
-struct Info<'a> {
-    user: Option<&'a crate::model::User>,
-    prof: Option<&'a Profile>,
-    presence: crate::model::Presence,
-    acts: &'a [Activity],
-    custom: Option<SharedString>,
-    display: SharedString,
-    username: SharedString,
-    accent: u32,
-    roles: Vec<crate::model::Role>,
+pub(crate) struct Info<'a> {
+    pub(crate) user: Option<&'a crate::model::User>,
+    pub(crate) prof: Option<&'a Profile>,
+    pub(crate) presence: crate::model::Presence,
+    pub(crate) acts: &'a [Activity],
+    pub(crate) custom: Option<SharedString>,
+    pub(crate) display: SharedString,
+    pub(crate) username: SharedString,
+    pub(crate) accent: u32,
+    pub(crate) roles: Vec<crate::model::Role>,
 }
 
-fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<'a> {
+pub(crate) fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<'a> {
     let user = app.users.get(&uid);
     let prof: Option<&Profile> = app.people.profiles.get(&uid);
     let presence = app.presence_of(uid);
@@ -294,7 +294,7 @@ fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<'a> {
 
 /// Banner: 58495 `banner_s9bWOi` (radius --radius-sm/--radius-lg top, 1px
 /// --border-muted bottom line), height --custom-user-profile-banner-height.
-fn banner(i: &Info, h: f32, radius: f32) -> Div {
+pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> Div {
     div()
         .h(z(h))
         .w_full()
@@ -309,7 +309,7 @@ fn banner(i: &Info, h: f32, radius: f32) -> Div {
 
 /// Avatar with its cut-out ring and decoration. 875762 `avatar_WRLIGC`
 /// positions it; the ring is the card background (6px at 80px, 7px at 120px).
-fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> Div {
+pub(crate) fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> Div {
     div()
         .p(z(ring))
         .rounded_full()
@@ -358,7 +358,7 @@ fn status_bubble(t: SharedString) -> Div {
 }
 
 /// Name block (866212 `displayNameRow_C2XpHA`, `usernameAndPronounsRow_`).
-fn name_block(i: &Info, big: bool) -> Div {
+pub(crate) fn name_block(i: &Info, big: bool) -> Div {
     let tag = i.user.and_then(|u| u.tag.clone());
     let pronouns = i.prof.map(|p| p.pronouns.clone()).filter(|p| !p.is_empty());
     div()
@@ -771,7 +771,7 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
                 cx.notify();
             })
         })
-        .child(gpui::svg().path("icons/close.svg").size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))));
+        .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))));
 
     // root/outer: --background-base-lower, 1px --border-normal, --radius-lg.
     // profileContentInner_s3DB6Y: padding-block-start / inline --custom-modal-v2-padding, end 0.
