@@ -5,12 +5,17 @@ use base64::Engine;
 use serde::Serialize;
 
 /// Electron version of the impersonated desktop client.
-pub const DEFAULT_ELECTRON_VERSION: &str = "37.6.0";
+pub const DEFAULT_ELECTRON_VERSION: &str = "44.10.2";
 /// Desktop client (host) version.
-pub const DEFAULT_CLIENT_VERSION: &str = "0.0.112";
+pub const DEFAULT_CLIENT_VERSION: &str = "1.0.170";
 /// Web client build number. Discord bumps this constantly; callers should
-/// refresh it (e.g. scraped at startup) — an old value still works but looks stale.
-pub const DEFAULT_BUILD_NUMBER: u64 = 460_000;
+/// refresh it (e.g. scraped at startup). A stale value still logs in, but the
+/// API hides newer content from old builds: with 460000 the shop catalogue
+/// (`/collectibles-categories/v2`) returns no profile frames at all, with the
+/// official client's current build it returns all 41. Values below match the
+/// stable Linux desktop client of 2026-11-23 (`build_info.json` 1.0.170,
+/// `build_number` in its web bundle, Chrome/Electron from its user agent).
+pub const DEFAULT_BUILD_NUMBER: u64 = 679_055;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ClientProperties {
@@ -50,7 +55,7 @@ impl ClientProperties {
         let client = DEFAULT_CLIENT_VERSION;
         let ua = format!(
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
-             discord/{client} Chrome/138.0.7204.251 Electron/{electron} Safari/537.36"
+             discord/{client} Chrome/152.0.7977.169 Electron/{electron} Safari/537.36"
         );
         Self {
             os: "Linux".into(),
