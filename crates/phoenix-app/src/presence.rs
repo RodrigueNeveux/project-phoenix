@@ -346,6 +346,10 @@ pub struct People {
     pub custom_status: Option<SharedString>,
     /// Last (guild, first chunk) whose ranges were requested.
     pub requested: Cell<(Id, usize)>,
+    /// Thread member lists (`thread-members`), grouped like the guild list.
+    pub thread_lists: HashMap<Id, Vec<ListEntry>>,
+    /// Threads whose member list was already requested.
+    pub thread_requested: std::cell::RefCell<std::collections::HashSet<Id>>,
 }
 
 impl People {

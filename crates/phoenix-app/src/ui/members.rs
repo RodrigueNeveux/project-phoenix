@@ -41,7 +41,7 @@ pub fn on_event(app: &mut PhoenixApp, ev: AppEvent, cx: &mut Context<PhoenixApp>
 pub fn sync_server_list(app: &mut PhoenixApp) -> bool {
     // +1: item 0 is the Activity section, which scrolls with
     // the list like the client's (they sit inside `members_86es0b`).
-    let Some(len) = app.selected_guild.and_then(|g| app.people.lists.get(&g)).map(|l| l.len() + 1) else {
+    let Some(len) = app.selected_guild.and_then(|g| rows_for(app, g)).map(|l| l.len() + 1) else {
         return false;
     };
     app.member_rows.clear();
@@ -72,10 +72,99 @@ fn request_ranges(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) {
     cx.background_spawn(fut).detach();
 }
 
+/// The open channel when it is a thread.
+fn open_thread(app: &PhoenixApp) -> Option<Id> {
+    app.selected_channel.filter(|c| app.nav.thread_parent(*c).is_some())
+}
+
+static NO_ROWS: Vec<ListEntry> = Vec::new();
+
+/// Rows the member list shows: the thread's own members in a thread (empty
+/// until `thread-members` answers), else the guild's lazy list.
+fn rows_for(app: &PhoenixApp, g: Id) -> Option<&Vec<ListEntry>> {
+    match open_thread(app) {
+        Some(t) => Some(app.people.thread_lists.get(&t).unwrap_or(&NO_ROWS)),
+        None => app.people.lists.get(&g),
+    }
+}
+
+/// Group thread members like the client's thread sidebar: highest hoisted
+/// role (online only), then Online, then Offline; names sorted in each.
+fn thread_rows(app: &PhoenixApp, g: Id, mut members: Vec<Member>) -> Vec<ListEntry> {
+    let roles = app.roles.get(&g).cloned().unwrap_or_default();
+    let mut hoisted: Vec<_> = roles.iter().filter(|r| r.hoist).collect();
+    hoisted.sort_by_key(|r| std::cmp::Reverse(r.position));
+    for m in &mut members {
+        if m.presence == Presence::Offline {
+            m.presence = app.presence_of(m.user);
+        }
+    }
+    let name = |m: &Member| {
+        m.nick.clone().or_else(|| app.users.get(&m.user).map(|u| u.display_name.clone())).unwrap_or_default().to_lowercase()
+    };
+    members.sort_by_key(name);
+    let group_of = |m: &Member| -> String {
+        if m.presence == Presence::Offline {
+            return "offline".into();
+        }
+        hoisted.iter().find(|r| m.roles.contains(&r.id)).map(|r| r.id.0.to_string()).unwrap_or_else(|| "online".into())
+    };
+    let mut order: Vec<String> = hoisted.iter().map(|r| r.id.0.to_string()).collect();
+    order.push("online".into());
+    order.push("offline".into());
+    let mut out = Vec::new();
+    for gid in order {
+        let ms: Vec<&Member> = members.iter().filter(|m| group_of(m) == gid).collect();
+        if ms.is_empty() {
+            continue;
+        }
+        out.push(ListEntry::Group { id: gid.into(), count: ms.len() as u32 });
+        out.extend(ms.into_iter().map(|m| ListEntry::Member(m.clone(), m.nick.clone())));
+    }
+    out
+}
+
+/// Fetch the open thread's members once, and keep the virtual list sized
+/// for whichever list (thread / guild) is showing.
+fn ensure_thread_list(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) {
+    let want = rows_for(app, g).map(|l| l.len() + 1);
+    if want.is_some_and(|n| n != app.member_list.item_count()) {
+        let e = cx.entity();
+        cx.defer(move |cx| {
+            e.update(cx, |a, cx| {
+                sync_server_list(a);
+                cx.notify();
+            })
+        });
+    }
+    let Some(t) = open_thread(app) else { return };
+    if !app.people.thread_requested.borrow_mut().insert(t) {
+        return;
+    }
+    let fut = app.backend.thread_members(t);
+    cx.spawn(async move |this, cx| {
+        let members = match fut.await {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("thread members: {}", e.0);
+                return;
+            }
+        };
+        let _ = this.update(cx, |a, cx| {
+            let rows = thread_rows(a, g, members);
+            a.people.thread_lists.insert(t, rows);
+            sync_server_list(a);
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     if let Some(g) = app.selected_guild {
         request_ranges(app, g, cx);
+        ensure_thread_list(app, g, cx);
     }
     div()
         .w(z(m::MEMBER_LIST_W)) // --custom-member-list-width
@@ -107,7 +196,7 @@ pub fn elapsed(start_ms: i64, now_s: i64) -> String {
 
 /// Members of `g` currently playing something, newest first.
 fn playing(app: &PhoenixApp, g: Id) -> Vec<(Id, &Activity)> {
-    let in_guild = |u: &Id| match app.people.lists.get(&g) {
+    let in_guild = |u: &Id| match rows_for(app, g) {
         Some(rows) => rows.iter().any(|r| matches!(r, ListEntry::Member(m, _) if m.user == *u)),
         None => app.members.get(&g).is_some_and(|ms| ms.iter().any(|m| m.user == *u)),
     };
@@ -371,7 +460,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         }
         return el;
     };
-    if let Some(rows) = app.people.lists.get(&g) {
+    if let Some(rows) = rows_for(app, g) {
         return match rows.get(ix) {
             Some(ListEntry::Group { id, count }) => {
                 // A group row synced without `count`: fall back to the rows below it.

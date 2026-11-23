@@ -259,6 +259,10 @@ pub trait Backend: Send + Sync + 'static {
     fn subscribe_member_ranges(&self, _guild: Id, _channel: Id, _ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    /// `GET /channels/{thread}/thread-members?with_member=true`: the thread member list (read-only).
+    fn thread_members(&self, _thread: Id) -> BoxFuture<Vec<crate::model::Member>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     /// `GET /users/{id}/profile` (+ note).
     fn user_profile(&self, _user: Id, _guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
         Box::pin(async { Err(BackendError("Profiles aren't available.".into())) })

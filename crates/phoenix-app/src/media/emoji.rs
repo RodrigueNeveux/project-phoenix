@@ -14,10 +14,19 @@ pub struct CustomEmoji {
     pub animated: bool,
 }
 
+/// Sizes the media CDN serves; any other `size` (e.g. 38, a zoomed 19.25px
+/// bio emoji at 2x) answers 400 and the emoji stays on its text fallback.
+const CDN_SIZES: [u32; 17] = [16, 20, 22, 24, 28, 32, 40, 44, 48, 56, 60, 64, 80, 96, 100, 128, 160];
+
+/// Smallest CDN size ≥ `want` (or the largest listed / a power of two above it).
+pub fn cdn_size(want: u32) -> u32 {
+    CDN_SIZES.iter().copied().find(|s| *s >= want).unwrap_or_else(|| want.next_power_of_two().min(4096))
+}
+
 impl CustomEmoji {
     pub fn url(&self, size: u32) -> SharedString {
         let ext = if self.animated { "gif" } else { "webp" };
-        format!("https://cdn.discordapp.com/emojis/{}.{ext}?size={size}&quality=lossless", self.id).into()
+        format!("https://cdn.discordapp.com/emojis/{}.{ext}?size={}&quality=lossless", self.id, cdn_size(size)).into()
     }
 }
 
@@ -111,6 +120,14 @@ mod tests {
         let found = find_custom("hi <:a:1> and <a:b:2> <#3>");
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].0, 3..9);
+    }
+
+    #[test]
+    fn cdn_sizes() {
+        assert_eq!(cdn_size(38), 40);
+        assert_eq!(cdn_size(44), 44);
+        assert_eq!(cdn_size(1), 16);
+        assert_eq!(cdn_size(200), 256);
     }
 
     #[test]

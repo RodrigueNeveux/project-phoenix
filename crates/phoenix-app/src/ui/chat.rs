@@ -268,7 +268,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let is_dm = ch.is_some_and(|c| c.guild.is_none());
     let name = ch.map(|c| c.name.clone()).unwrap_or_default();
     let topic = ch.and_then(|c| c.topic.clone());
-    let kind = ch.map(|c| c.kind).unwrap_or(ChannelKind::Text);
+    // Thread: breadcrumb parent › thread, the icon is the parent's (vanilla-thread-channel #1190).
+    let thread_parent = ch.and_then(|c| app.nav.thread_parent(c.id)).and_then(|p| app.channels.get(&p));
+    let kind = thread_parent.or(ch).map(|c| c.kind).unwrap_or(ChannelKind::Text);
     let discoverable = !is_dm && guild_discoverable(app);
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
@@ -293,10 +295,11 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .border_b_1()
         .border_color(tk(idx::BORDER_SUBTLE))
         .child(
-            // children_: flex 1, items centred.
+            // children_: flex 1, items centred, overflow hidden (#1189 clips the Discovery label).
             div()
                 .flex_1()
                 .min_w_0()
+                .overflow_hidden()
                 .flex()
                 .items_center()
                 .child(if let Some(gc) = ch.map(|c| c.id).filter(|c| is_dm && crate::ui::dm_profile_panel::is_group_dm(app, *c)) {
@@ -318,10 +321,42 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .child(icon(channel_icon(kind), 20. * crate::theme::zoom(), tk(idx::CHANNEL_ICON)))
                         .into_any_element()
                 })
+                .when_some(thread_parent.map(|p| (p.id, p.name.clone())), |d, (pid, pname)| {
+                    // vanilla-thread-channel #1193/#1194: parent titleWrapper_ mr 8, h2 body-md/medium
+                    // 16px, 24px tall, --text-default, nowrap, clickable; #1195 caret_ 10×24, mr 8, --icon-muted.
+                    d.child(
+                        div()
+                            .id("thread-parent")
+                            .flex_none()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .mr(z(8.))
+                            .h(z(24.))
+                            .flex()
+                            .items_center()
+                            .cursor_pointer()
+                            .text_size(z(16.))
+                            .line_height(z(20.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(tk(idx::TEXT_DEFAULT))
+                            .on_click(cx.listener(move |a, _, _, cx| a.select_channel(pid, cx)))
+                            .child(pname),
+                    )
+                    .child(
+                        div().flex_none().mr(z(8.)).w(z(10.)).h(z(24.)).flex().items_center().justify_center().child(
+                            gpui::svg().path(crate::icons::path("chevron-right")).size(z(10.)).text_color(tk(idx::ICON_MUTED)),
+                        ),
+                    )
+                })
                 .child(
-                    // titleWrapper_ margin-inline-end 8px; h1 body-md/medium 16px/20px --text-strong (#1047).
+                    // titleWrapper_ margin-inline-end 8px; h1 body-md/medium 16px/20px --text-strong (#1047);
+                    // thread title #1198 is flex 0 1 auto, overflow hidden, nowrap (clipped by children_).
                     div()
-                        .flex_none()
+                        .flex_shrink(1.)
+                        .min_w_0()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
                         .mr(z(8.))
                         .text_size(z(16.))
                         .line_height(z(20.))
@@ -397,7 +432,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 })
                 .when(!is_dm, |d| {
                     // Guild toolbar (#1055–#1061): threads, notifications, pins, member list.
-                    d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx))))
+                    // Inside a thread the toolbar has no Threads button (vanilla-thread-channel #1208).
+                    d.when(thread_parent.is_none(), |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
                         .child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
                         .child(
                             hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
@@ -810,7 +846,27 @@ fn message(
                     .text_ellipsis()
                     // #1291 `repliedTextPlaceholder_`: no text content (embeds, attachments only).
                     .when(found.is_none() || preview.is_empty(), |d| d.italic())
-                    .child(if found.is_some() && preview.is_empty() { crate::t!("chat.reply_click_to_see") } else { preview }),
+                    .map(|d| {
+                        let text = if found.is_some() && preview.is_empty() { crate::t!("chat.reply_click_to_see") } else { preview };
+                        let tokens = crate::media::emoji::find_custom(&text);
+                        if tokens.is_empty() {
+                            return d.child(text);
+                        }
+                        // repliedTextContent_ custom emoji: img.emoji 18×18 inline (vanilla-guild-text-groups).
+                        let mut row = d.flex().items_center();
+                        let mut at = 0;
+                        for (r, _) in &tokens {
+                            if r.start > at {
+                                row = row.child(div().flex_none().child(SharedString::from(text[at..r.start].to_string())));
+                            }
+                            row = row.child(div().flex_none().size(z(18.)).child(crate::media::emoji::emoji_element(&text[r.clone()], 18. * crate::theme::zoom())));
+                            at = r.end;
+                        }
+                        if at < text.len() {
+                            row = row.child(div().flex_none().child(SharedString::from(text[at..].to_string())));
+                        }
+                        row
+                    }),
             )
     });
 

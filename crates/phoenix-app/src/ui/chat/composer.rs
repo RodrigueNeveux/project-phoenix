@@ -239,6 +239,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         Some(c) if matches!(c.kind, crate::model::ChannelKind::Voice | crate::model::ChannelKind::Stage) => {
             crate::t!("chat.placeholder_voice", name = c.name)
         }
+        // Threads quote their name (vanilla-thread-channel composer).
+        Some(c) if app.nav.thread_parent(c.id).is_some() => crate::t!("chat.placeholder_thread_quoted", name = c.name),
         Some(c) => crate::t!("chat.placeholder_channel", name = c.name),
         None => "".into(),
     };
@@ -331,10 +333,12 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                                 .top_0()
                                                 .bottom_0()
                                                 .left(z(2.))
+                                                .right_0()
                                                 .flex()
                                                 .items_center()
                                                 .text_color(super::tk(idx::CHANNEL_TEXT_AREA_PLACEHOLDER)) // #1445 placeholder_
-                                                .child(placeholder),
+                                                // placeholder_ white-space nowrap, overflow hidden, text-overflow ellipsis.
+                                                .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(placeholder)),
                                         )
                                     }),
                             )

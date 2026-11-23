@@ -131,6 +131,10 @@ impl Backend for ReadOnly {
     fn subscribe_member_ranges(&self, g: Id, c: Id, r: Vec<[u32; 2]>) -> BoxFuture<()> {
         self.0.subscribe_member_ranges(g, c, r)
     }
+    /// GET thread-members: read-only.
+    fn thread_members(&self, t: Id) -> BoxFuture<Vec<phoenix_app::model::Member>> {
+        self.0.thread_members(t)
+    }
     fn guild_boosts(&self, g: Id) -> Option<(u32, bool)> {
         self.0.guild_boosts(g)
     }

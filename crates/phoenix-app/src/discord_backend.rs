@@ -15,6 +15,7 @@ mod people;
 mod profile_edit;
 mod profile_widgets;
 mod collectibles_shop;
+mod thread_members;
 #[cfg(test)]
 pub(crate) use profile_edit::bodies as profile_edit_bodies;
 pub mod store;
@@ -272,6 +273,7 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
         }
         account::on_gateway(&s, &ev);
         crate::voice::start_time::on_gateway(&ev);
+        thread_members::on_gateway(&ev);
         if let GatewayEvent::Ready(r) = &ev {
             // Reconnected without RESUME: the cache was rebuilt, rebuild the UI too.
             crate::commands::set_session_id(&r.session_id);
@@ -752,6 +754,9 @@ impl Backend for DiscordBackend {
 
     fn subscribe_member_ranges(&self, guild: Id, channel: Id, ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
         self.people_ranges(guild, channel, ranges)
+    }
+    fn thread_members(&self, thread: Id) -> BoxFuture<Vec<crate::model::Member>> {
+        self.thread_members_impl(thread)
     }
     fn user_profile(&self, user: Id, guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
         self.people_profile(user, guild)
