@@ -201,6 +201,22 @@ async fn run(secs: u64, live: Option<Vec<Value>>) -> anyhow::Result<()> {
     }
     let rs_entries = ready.read_state.as_ref().and_then(|v| v.get("entries").or(Some(v))).and_then(Value::as_array).map_or(0, Vec::len);
     info!("read_state entries {} -> parsed {}", rs_entries, prefs.reads.len());
+    if let Some(Value::Object(o)) = ready.read_state.as_ref() {
+        info!("read_state keys {:?} version={:?} partial={:?}", o.keys().collect::<Vec<_>>(), o.get("version"), o.get("partial"));
+    }
+    for e in ready.read_state.as_ref().and_then(|v| v.get("entries")).and_then(Value::as_array).into_iter().flatten() {
+        let t = e.get("read_state_type").and_then(Value::as_u64).unwrap_or(0);
+        let s = e.to_string();
+        if t != 0 || e.get("mention_count").and_then(Value::as_u64).unwrap_or(0) > 0 {
+            info!("rs entry type={t} {}", s.chars().take(300).collect::<String>());
+        }
+    }
+    for (cid, r) in &prefs.reads {
+        if r.mentions > 0 {
+            let c = cache.channel(api::Snowflake(*cid));
+            info!("mention entry ch {cid} n={} known={} guild={:?} kind={:?} parent={:?}", r.mentions, c.is_some(), c.as_ref().and_then(|c| c.guild_id), c.as_ref().map(|c| c.kind), c.as_ref().and_then(|c| c.parent_id));
+        }
+    }
     if rs_entries > 0 && prefs.reads.is_empty() {
         bug!("read states present in READY but none parsed");
     }

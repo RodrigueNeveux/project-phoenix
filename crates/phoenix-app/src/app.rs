@@ -503,11 +503,7 @@ impl PhoenixApp {
 
     pub fn select_guild(&mut self, guild: Option<Id>, cx: &mut Context<Self>) {
         self.selected_guild = guild;
-        if let Some(g) = guild
-            && let Some(gg) = self.guilds.iter_mut().find(|x| x.id == g)
-        {
-            gg.mentions = 0;
-        }
+        // Selecting a guild clears nothing: its badge is the sum of its channels' mentions.
         self.rebuild_sidebar();
         self.rebuild_members();
         self.backend.select_guild(guild).detach_ok();
@@ -531,6 +527,15 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    /// Guild badge = sum of its channels' mentions (the client's GuildReadStateStore).
+    fn refresh_guild_mentions(&mut self, guild: Option<Id>) {
+        let Some(g) = guild else { return };
+        let n = self.guild_channels.get(&g).map_or(0, |l| l.iter().filter_map(|c| self.channels.get(c)).map(|c| c.mentions).sum());
+        if let Some(gg) = self.guilds.iter_mut().find(|x| x.id == g) {
+            gg.mentions = n;
+        }
+    }
+
     pub fn select_channel(&mut self, id: Id, cx: &mut Context<Self>) {
         let Some(ch) = self.channels.get(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
@@ -550,6 +555,7 @@ impl PhoenixApp {
         ch.unread = false;
         ch.mentions = 0;
         let guild = ch.guild;
+        self.refresh_guild_mentions(guild);
         if guild != self.selected_guild {
             self.selected_guild = guild;
             self.rebuild_sidebar();

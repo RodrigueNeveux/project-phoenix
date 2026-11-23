@@ -35,6 +35,7 @@ pub mod nav_menus;
 pub mod thread_menu;
 pub mod title_bar;
 pub mod tooltip;
+pub mod channel_unread_bar;
 pub mod user_menu;
 pub mod voice_panel;
 

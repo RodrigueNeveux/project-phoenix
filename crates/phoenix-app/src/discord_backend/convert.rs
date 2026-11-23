@@ -659,6 +659,7 @@ pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model:
         banner_color: None,
         owner: g.owner_id().map(id),
         discoverable: g.properties.features.iter().any(|f| f == "DISCOVERABLE"),
+        community: g.properties.features.iter().any(|f| f == "COMMUNITY"),
     }
 }
 
@@ -918,7 +919,11 @@ impl Adapter {
                 out.push(AppEvent::Users(users));
                 if m.author.id == self.me {
                     self.mark_read(m.channel_id.0, m.id.0);
-                } else if m.mentions_user(self.me) || m.mention_everyone {
+                } else if m.mentions_user(self.me)
+                    || m.mention_everyone
+                    // Role pings count too (the live client bumps mention_count on them).
+                    || m.guild_id.and_then(|g| cache.member(g, self.me)).is_some_and(|me| m.mention_roles.iter().any(|r| me.roles.contains(r)))
+                {
                     self.prefs.reads.entry(m.channel_id.0).or_default().mentions += 1;
                 }
                 out.push(AppEvent::MessageCreate(message(m)));

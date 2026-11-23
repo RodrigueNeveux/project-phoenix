@@ -153,9 +153,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .relative()
         .child(header(app, cx))
         .child(
-            div().flex_1().min_h_0().child(
-                list(app.sidebar_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full(),
-            ),
+            div()
+                .flex_1()
+                .min_h_0()
+                .relative()
+                .child(list(app.sidebar_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full())
+                .children(crate::ui::channel_unread_bar::render(app)),
         )
         .when_some(app.selected_guild.filter(|_| app.nav.guild_menu), |d, g| {
             d.child(crate::ui::guild_menu::render(app, g, m::HEADER_H + 4., cx))

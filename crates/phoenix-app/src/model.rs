@@ -59,6 +59,8 @@ pub struct Guild {
     pub owner: Option<Id>,
     /// Guild feature `DISCOVERABLE` ("Mode Découverte" header label + channel notice).
     pub discoverable: bool,
+    /// Guild feature `COMMUNITY` (channel list unread / mention bars).
+    pub community: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

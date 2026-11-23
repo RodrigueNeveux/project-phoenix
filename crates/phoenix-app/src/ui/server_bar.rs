@@ -72,25 +72,34 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex()
         .flex_col()
         .gap(z(GAP))
-        .child(home(app, &entity))
-        // `stack_TWWX0S` "Direct messages" (vanilla-dm-profile-panel #69): one 40px
-        // `listItem_` per DM with unread mentions, same 10px rail gap.
-        .children(unread_dm_items(app, &entity))
-        .child(separator());
-    // Child indexes (home + separator come first) of the unread items, for the "nouveau" bars.
-    let mut unread_ix = Vec::new();
-    let mut mention_n: Vec<u32> = Vec::new();
+        .child(home(app, &entity));
+    // `stack_TWWX0S` "Direct messages" (vanilla-dm-profile-panel #69): one 40px
+    // `listItem_` per DM with unread mentions, same 10px rail gap.
+    let dms = unread_dm_items(app, &entity);
+    let base = 2 + dms.len();
+    col = col.children(dms).child(separator());
+    // Unread guilds for the "nouveau" bars: (rail child index, y offset in that
+    // child, mentions). Guilds of an open folder are checked one by one, like
+    // the official client which tests each guild row, not the folder.
+    let mut spans: Vec<Span> = Vec::new();
+    let is_unread = |g: &Guild| g.unread || g.mentions > 0;
     for (i, item) in rail(app).into_iter().enumerate() {
-        let unread = match &item {
-            RailItem::Guild(g, _) => g.unread || g.mentions > 0,
-            RailItem::Folder { guilds, .. } => guilds.iter().any(|g| g.unread || g.mentions > 0),
-        };
-        if unread {
-            unread_ix.push(i + 2);
-            mention_n.push(match &item {
-                RailItem::Guild(g, _) => g.mentions,
-                RailItem::Folder { guilds, .. } => guilds.iter().map(|g| g.mentions).sum(),
-            });
+        match &item {
+            RailItem::Guild(g, _) if is_unread(g) => spans.push(Span { ix: base + i, y: 0., h: ICON, mentions: g.mentions }),
+            RailItem::Folder { guilds, open: false, .. } if guilds.iter().any(|g| is_unread(g)) => spans.push(Span {
+                ix: base + i,
+                y: 0.,
+                h: FOLDER,
+                mentions: guilds.iter().map(|g| g.mentions).sum(),
+            }),
+            RailItem::Folder { guilds, open: true, .. } => {
+                // Header (48) + `folderGuildsList_` margin-top (GAP - FOLDER_PAD), then 40px rows 10px apart.
+                for (k, g) in guilds.iter().enumerate().filter(|(_, g)| is_unread(g)) {
+                    let y = FOLDER + GAP - FOLDER_PAD + k as f32 * (ICON + GAP);
+                    spans.push(Span { ix: base + i, y, h: ICON, mentions: g.mentions });
+                }
+            }
+            _ => {}
         }
         col = match item {
             RailItem::Guild(g, nested) => col.child(guild(app, &entity, g, nested)),
@@ -111,8 +120,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             action(&entity, "discover", Icon::Compass, crate::t!("rail.discover"))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub(&crate::t!("rail.discover"), cx)))
         });
-    let (above, below) = offscreen_unread(&scroll, &unread_ix);
-    let (m_above, m_below) = offscreen_mentions(&scroll, &unread_ix, &mention_n);
+    let (above, below, m_above, m_below) = offscreen_unread(&scroll, &spans);
     div()
         .w(z(m::SERVER_BAR_W))
         .flex_none()
@@ -128,29 +136,34 @@ thread_local! {
     static RAIL_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
-/// Nearest unread item scrolled off above / below the rail viewport (last frame's layout).
-fn offscreen_unread(h: &gpui::ScrollHandle, ixs: &[usize]) -> (Option<usize>, Option<usize>) {
-    let view = h.bounds();
-    if view.size.height <= px(0.) {
-        return (None, None);
-    }
-    let above = ixs.iter().rev().copied().find(|&i| h.bounds_for_item(i).is_some_and(|b| b.bottom() <= view.top()));
-    let below = ixs.iter().copied().find(|&i| h.bounds_for_item(i).is_some_and(|b| b.top() >= view.bottom()));
-    (above, below)
+/// One unread guild row inside a rail child (see `render`).
+struct Span {
+    ix: usize,
+    y: f32,
+    h: f32,
+    mentions: u32,
 }
 
-/// Mentions of the unread items scrolled off above / below (the mention pill's count).
-fn offscreen_mentions(h: &gpui::ScrollHandle, ixs: &[usize], n: &[u32]) -> (u32, u32) {
+/// Nearest unread row scrolled off above / below the rail viewport (last
+/// frame's layout) and the mentions hidden on each side.
+fn offscreen_unread(h: &gpui::ScrollHandle, spans: &[Span]) -> (Option<usize>, Option<usize>, u32, u32) {
     let view = h.bounds();
-    let (mut a, mut b) = (0, 0);
-    for (&i, &m) in ixs.iter().zip(n) {
-        match h.bounds_for_item(i) {
-            Some(r) if r.bottom() <= view.top() => a += m,
-            Some(r) if r.top() >= view.bottom() => b += m,
-            _ => {}
+    let (mut above, mut below, mut ma, mut mb) = (None, None, 0, 0);
+    if view.size.height <= px(0.) {
+        return (above, below, ma, mb);
+    }
+    for s in spans {
+        let Some(b) = h.bounds_for_item(s.ix) else { continue };
+        let top = b.top() + z(s.y);
+        if top + z(s.h) <= view.top() {
+            above = Some(s.ix);
+            ma += s.mentions;
+        } else if top >= view.bottom() {
+            below.get_or_insert(s.ix);
+            mb += s.mentions;
         }
     }
-    (a, b)
+    (above, below, ma, mb)
 }
 
 /// "nouveau" pill. vanilla-guild-text #56/#57 (top) and #607/#608 (bottom):
@@ -168,7 +181,11 @@ fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool, mentions: u32) -> An
         .left_0()
         .right_0()
         .when(top, |d| d.top_0().p(z(8.)))
-        .when(!top, |d| d.bottom_0().pt(z(8.)).px(z(8.)).pb(z(PAD_BOTTOM)))
+        // Bottom: 8 8 26 inside `wrapper_5dqHTG`, whose margin-bottom
+        // (`--custom-app-panels-height + --space-xs - 16px`) makes it end 16px
+        // under the panels card top. Our rail stops 10px above the card instead,
+        // so the bar lands at the same place with no bottom padding.
+        .when(!top, |d| d.bottom_0().pt(z(8.)).px(z(8.)))
         .child(
             div()
                 .id(if top { "rail-unread-top" } else { "rail-unread-bottom" })
@@ -351,6 +368,40 @@ fn mention_badge(n: u32) -> impl IntoElement {
         .child(badge(n).bg(c(Palette::NOTIFICATION)))
 }
 
+/// `upperBadge_hqZPsU` voice badge (GuildMediaStateStore `audio`): someone is
+/// in one of the guild's voice channels. Hidden for muted guilds unless we are
+/// connected there; `--status-positive` when connected, else `--icon-overlay-dark`
+/// (`iconBadge_rwEpIL`). 16px round, 2px icon padding (`icon_lMvXrQ`), 2px
+/// cut-out ring (`badgeMaskStroke` 2).
+fn voice_badge(app: &PhoenixApp, g: &Guild) -> Option<AnyElement> {
+    use crate::theme::{generated::idx, tok};
+    let chans = app.guild_channels.get(&g.id)?;
+    let connected = app.voice_channel.is_some_and(|v| chans.contains(&v));
+    let busy = connected || chans.iter().filter_map(|c| app.channels.get(c)).any(|c| !c.voice_users.is_empty());
+    if !busy {
+        return None;
+    }
+    if !connected && app.backend.notify_prefs().and_then(|p| p.guilds.get(&g.id.0).map(|x| x.muted)).unwrap_or(false) {
+        return None;
+    }
+    let bg = tok(if connected { idx::STATUS_POSITIVE } else { idx::ICON_OVERLAY_DARK });
+    Some(
+        div()
+            .absolute()
+            .top(z(-2.))
+            .right(z(-2.))
+            .p(z(2.))
+            .rounded_full()
+            .bg(c(Palette::BG_TERTIARY))
+            .child(
+                div().size(z(16.)).rounded_full().bg(c(bg)).flex().items_center().justify_center().child(
+                    gpui::svg().path(crate::icons::path("speaker")).size(z(12.)).text_color(gpui::white()),
+                ),
+            )
+            .into_any_element(),
+    )
+}
+
 /// One 72px-wide rail row holding a centred 40px tile.
 fn row(id: impl Into<ElementId>, key: u64, entity: &Entity<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     track_hover(
@@ -529,7 +580,14 @@ fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, _nested: bool
         .drag_over::<DraggedGuild>(|s, _, _, _| s.border_t_2().border_color(c(Palette::GREEN)))
         .on_drop(move |d: &DraggedGuild, _, cx| drop_e.update(cx, |a, cx| a.move_guild(d.id, id, cx)))
         .child(pill(id.0, selected, hover, g.unread))
-        .child(div().relative().size(z(ICON)).child(icon_box).when(g.mentions > 0, |d| d.child(mention_badge(g.mentions))))
+        .child(
+            div()
+                .relative()
+                .size(z(ICON))
+                .child(icon_box)
+                .children(voice_badge(app, g))
+                .when(g.mentions > 0, |d| d.child(mention_badge(g.mentions))),
+        )
         .when(hover, |d| d.child(right_tooltip(g.name.clone(), ICON)))
         .into_any_element()
 }

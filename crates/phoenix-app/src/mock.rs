@@ -155,6 +155,7 @@ impl MockBackend {
                 banner_color: *banner,
                 owner: Some(Id(2)),
                 discoverable: gi == 0,
+                community: true,
             });
             let layout: &[(&str, &[(&str, ChannelKind)])] = &[
                 (
