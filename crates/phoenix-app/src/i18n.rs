@@ -49,13 +49,29 @@ fn index_of(code: &str) -> usize {
 }
 
 /// Switches the UI language from a Discord locale code ("fr", "en-US", ...).
+/// `PHOENIX_LOCALE` (dev/screenshots) wins over the account locale.
 pub fn set_locale(code: &str) {
-    CURRENT.store(index_of(code), Ordering::Relaxed);
+    let forced = env_locale();
+    CURRENT.store(index_of(forced.as_deref().unwrap_or(code)), Ordering::Relaxed);
+}
+
+fn env_locale() -> Option<String> {
+    std::env::var("PHOENIX_LOCALE").ok().filter(|s| !s.is_empty())
+}
+
+fn current() -> usize {
+    static INIT: OnceLock<()> = OnceLock::new();
+    INIT.get_or_init(|| {
+        if let Some(l) = env_locale() {
+            CURRENT.store(index_of(&l), Ordering::Relaxed);
+        }
+    });
+    CURRENT.load(Ordering::Relaxed)
 }
 
 /// The active language prefix ("en", "fr").
 pub fn locale() -> &'static str {
-    LOCALES[CURRENT.load(Ordering::Relaxed)].0
+    LOCALES[current()].0
 }
 
 fn lookup(idx: usize, key: &str) -> Option<&'static str> {
@@ -73,7 +89,7 @@ fn fill(s: &str, args: &[(&str, &str)]) -> String {
 
 /// Translates `key` in the active locale, filling `{name}` placeholders.
 pub fn t(key: &str, args: &[(&str, &str)]) -> SharedString {
-    t_in(CURRENT.load(Ordering::Relaxed), key, args)
+    t_in(current(), key, args)
 }
 
 fn t_in(idx: usize, key: &str, args: &[(&str, &str)]) -> SharedString {
