@@ -572,10 +572,12 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
     let tag = u.and_then(|u| u.tag.clone());
     let e = entity.clone();
     div()
-        .ml(z(36.))
+        // `list_YUoOxm` padding-left 38 (no right inset); `content_YUoOxm` 32px,
+        // padding 4 10, radius 8, gap 8 (live channel list); right: scrollbar gutter.
+        .ml(z(38.))
         .mr(z(8.))
         .h(z(32.))
-        .px(z(8.))
+        .px(z(10.))
         .rounded(z(8.))
         .flex()
         .items_center()
@@ -594,7 +596,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                         .text_size(z(14.))
                         .text_color(if speaking { t(idx::INTERACTIVE_TEXT_ACTIVE) } else { state })
                         .text_ellipsis()
-                        .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
+                        .child(crate::ui::sidebar::voice_user_name(app, user)),
                 )
                 .when_some(tag, |d, t| d.child(server_tag(&t, 12.))),
         )

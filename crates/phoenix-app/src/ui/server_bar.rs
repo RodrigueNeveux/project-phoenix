@@ -73,6 +73,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex_col()
         .gap(z(GAP))
         .child(home(app, &entity))
+        // `stack_TWWX0S` "Direct messages" (vanilla-dm-profile-panel #69): one 40px
+        // `listItem_` per DM with unread mentions, same 10px rail gap.
+        .children(unread_dm_items(app, &entity))
         .child(separator());
     // Child indexes (home + separator come first) of the unread items, for the "nouveau" bars.
     let mut unread_ix = Vec::new();
@@ -358,13 +361,49 @@ fn row(id: impl Into<ElementId>, key: u64, entity: &Entity<PhoenixApp>) -> gpui:
 }
 
 const HOME_KEY: u64 = 1;
+
+/// Unread DM rail items (vanilla-dm-profile-panel #71..#78): unread pill
+/// (`item__o8_Xq visible`), 40px round avatar, `lowerBadge_hqZPsU` mention count.
+fn unread_dm_items(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Vec<AnyElement> {
+    app.dms
+        .iter()
+        .filter_map(|d| app.channels.get(d))
+        .filter(|ch| ch.mentions > 0)
+        .map(|ch| {
+            let id = ch.id;
+            let key = id.0;
+            let hover = hovered(key);
+            let u = ch.voice_users.first().and_then(|u| app.users.get(u));
+            let name = u.map(|u| u.display_name.clone()).unwrap_or_else(|| ch.name.clone());
+            let e = entity.clone();
+            row(("rail-dm", id.0), key, entity)
+                .on_click(move |_, _, cx| {
+                    e.update(cx, |a, cx| {
+                        a.select_guild(None, cx);
+                        a.select_channel(id, cx);
+                    })
+                })
+                .child(pill(key, false, hover, true))
+                .child(
+                    div()
+                        .relative()
+                        .size(z(ICON))
+                        .child(crate::ui::avatar(u, ICON))
+                        .child(mention_badge(ch.mentions)),
+                )
+                .when(hover, |d| d.child(right_tooltip(name, ICON)))
+                .into_any_element()
+        })
+        .collect()
+}
 const ADD_KEY: u64 = 2;
 const DISCOVER_KEY: u64 = 3;
 
 fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
     let selected = app.selected_guild.is_none();
     let hover = hovered(HOME_KEY);
-    let unread_dms: u32 = app.dms.iter().filter_map(|d| app.channels.get(d)).map(|c| c.mentions).sum();
+    // Unread DMs get their own rail items (`unread_dm_items`): the Home badge only
+    // counts pending friend requests.
     let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
     let e = entity.clone();
     row("home", HOME_KEY, entity)
@@ -384,7 +423,7 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
                         .bg(c(if selected || hover { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
                         .child(svg().path(crate::icons::path("discord-logo")).size(z(30.)).flex_none().text_color(if selected || hover { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
                 )
-                .when(unread_dms + pending > 0, |d| d.child(mention_badge(unread_dms + pending))),
+                .when(pending > 0, |d| d.child(mention_badge(pending))),
         )
         .when(hover, |d| d.child(right_tooltip(crate::t!("dm.title"), ICON)))
         .into_any_element()

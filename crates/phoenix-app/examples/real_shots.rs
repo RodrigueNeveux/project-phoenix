@@ -359,6 +359,8 @@ fn main() -> anyhow::Result<()> {
     .split(',')
     .filter_map(|s| s.trim().parse().ok())
     .collect();
+    let in_voice = env_or_cdp("PHX_IN_VOICE", "(!!document.querySelector('[class*=rtcConnectionStatus_]'))+''").as_deref()
+        == Some("true");
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
     println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} mute={self_mute} deaf={self_deaf}");
 
@@ -454,10 +456,29 @@ fn main() -> anyhow::Result<()> {
             app.deafened = self_deaf;
             app.nav.expanded_folders.clear();
             app.nav.expanded_folders.extend(open_folders.iter().copied());
+            // Discord's own voice connection (client-side): mirror it in memory only, so the
+            // connected row / voice panel match. Never joins anything.
+            if in_voice {
+                app.voice_channel = app
+                    .channels
+                    .values()
+                    .find(|c| c.guild.is_some() && c.voice_users.contains(&app.me.id))
+                    .map(|c| c.id);
+            }
             if let Some(c) = channel {
                 let g = guild.or_else(|| app.channels.get(&c).and_then(|ch| ch.guild));
                 app.select_guild(g, cx);
-                app.select_channel(c, cx);
+                // `select_channel` on a voice channel means "join": just mark it selected
+                // (Discord is showing its text chat).
+                let voice = app.channels.get(&c).is_some_and(|ch| {
+                    matches!(ch.kind, phoenix_app::model::ChannelKind::Voice | phoenix_app::model::ChannelKind::Stage)
+                });
+                if voice {
+                    app.selected_channel = Some(c);
+                    app.rebuild_sidebar();
+                } else {
+                    app.select_channel(c, cx);
+                }
             }
             cx.notify();
         });

@@ -564,6 +564,12 @@ impl Backend for DiscordBackend {
                         }
                     }
                 }
+                // Voice users in the channel list show their server nick too.
+                for v in s.cache.voice_states(Some(g)) {
+                    if !ids.contains(&v.user_id) && s.cache.member(g, v.user_id).is_none() {
+                        ids.push(v.user_id);
+                    }
+                }
                 if !ids.is_empty() {
                     ids.truncate(100);
                     let _ = s.gateway.request_guild_members(phoenix_api::gateway::RequestGuildMembers {

@@ -1156,6 +1156,7 @@ sp.billing.web: "Phoenix doesn't handle payments: find this page in the official
 guild.top.events: "Events"
 guild.top.channels_roles: "Channels & Roles"
 guild.top.browse: "Browse Channels"
+voice.set_status: "Set a channel status"
 guild.top.members: "Members"
 guild.boost_goal.title: "Boost Goal"
 guild.boost_goal.count: "{n}/{max} Boosts"

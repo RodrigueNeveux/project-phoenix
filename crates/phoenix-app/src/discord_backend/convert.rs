@@ -866,7 +866,11 @@ impl Adapter {
         // Own member (READY merged_members / GUILD_MEMBER_UPDATE) and members requested
         // with op 8 so server nicks resolve in headers and reply previews even when the
         // author is outside the synced list range.
-        let extra = std::iter::once(self.me).chain(self.chunked.get(&guild.0).into_iter().flatten().copied());
+        // Voice users too: the channel list shows their server nick.
+        let voice: Vec<api::Snowflake> = cache.voice_states(Some(guild)).iter().map(|v| v.user_id).collect();
+        let extra = std::iter::once(self.me)
+            .chain(self.chunked.get(&guild.0).into_iter().flatten().copied())
+            .chain(voice);
         for u in extra {
             if members.iter().any(|m| m.user == id(u)) {
                 continue;

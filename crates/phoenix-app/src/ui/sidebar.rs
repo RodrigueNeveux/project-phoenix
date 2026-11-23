@@ -75,7 +75,15 @@ pub fn build_rows(app: &mut PhoenixApp) {
                         rows.push(SidebarRow::Thread(t.id));
                     }
                 }
-                rows.extend(ch.voice_users.iter().map(|u| SidebarRow::VoiceUser { user: *u }));
+                // Live client (channel list, 2026-11-23): voice users are listed by their
+                // shown name (guild nick, else display name), case-insensitively.
+                let mut vu: Vec<(String, Id)> = ch
+                    .voice_users
+                    .iter()
+                    .map(|u| (voice_user_name(app, *u).to_lowercase(), *u))
+                    .collect();
+                vu.sort();
+                rows.extend(vu.into_iter().map(|(_, u)| SidebarRow::VoiceUser { user: u }));
             }
             // Drop (expanded) categories left empty by hidden muted channels.
             if hide_muted {
@@ -97,6 +105,13 @@ pub fn build_rows(app: &mut PhoenixApp) {
         }
     }
     app.sidebar_list.reset(app.sidebar_rows.len() + 1);
+}
+
+/// Name a voice user row shows: guild nick, else display name.
+pub fn voice_user_name(app: &PhoenixApp, user: Id) -> SharedString {
+    app.member_nick(user)
+        .or_else(|| app.users.get(&user).map(|u| u.display_name.clone()))
+        .unwrap_or_default()
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -400,7 +415,13 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         }
         SidebarRow::Channel(id) => channel_row(app, entity, id),
         SidebarRow::Thread(id) => thread_row(app, entity, id),
-        SidebarRow::VoiceUser { user } => crate::ui::voice_panel::voice_user_row(app, entity, user),
+        SidebarRow::VoiceUser { user } => {
+            // `list_YUoOxm listDefault_YUoOxm` (live channel list): padding-bottom 10 after
+            // a channel's last voice user.
+            let last = !matches!(app.sidebar_rows.get(ix), Some(SidebarRow::VoiceUser { .. }));
+            let row = crate::ui::voice_panel::voice_user_row(app, entity, user);
+            if last { div().pb(z(10.)).child(row).into_any_element() } else { row }
+        }
     }
 }
 
@@ -611,6 +632,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let Some(ch) = app.channels.get(&id) else { return div().into_any_element() };
     let selected = app.selected_channel == Some(id);
     let is_dm = ch.guild.is_none();
+    let connected = !is_dm && app.voice_channel == Some(id);
     let extra = app.nav.extras.get(&id);
     let is_group = extra.is_some_and(|e| e.recipients > 1 || e.group_icon.is_some());
     let unread = ch.unread && !ch.muted;
@@ -760,7 +782,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .id(("chrow", id.0))
                 .group(group)
                 // `link_TNyK-N` 36px, padding 4/10 (dump #629); DM `link_zln_tS` 48px, pl 10 (me #658).
-                .h(z(if is_dm { 48. } else { 36. }))
+                // Connected voice row: `link_` 52px (linkTop 28 + linkBottom 16 + padding 4/4).
+                .h(z(if is_dm { 48. } else if connected { 52. } else { 36. }))
                 .pl(z(10.))
                 .pr(z(if is_dm { 4. } else { 10. }))
                 .rounded(z(ROW_RADIUS))
@@ -805,6 +828,29 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                 .text_ellipsis()
                                 .child(name),
                         )
+                        .when(connected, |d| {
+                            // `linkBottom_TNyK-N` (live connected voice row): margin-left 30 from
+                            // the icon (so under the name), `subtitle_` body-xs/medium 12/16
+                            // `--channels-default` "Set a channel status" + 12px pencil, margin 4.
+                            d.child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .text_size(z(12.))
+                                    .line_height(z(16.))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .text_color(t(idx::CHANNELS_DEFAULT))
+                                    .child(div().min_w_0().text_ellipsis().child(crate::t!("voice.set_status")))
+                                    .child(
+                                        gpui::svg()
+                                            .path(crate::icons::path("pen"))
+                                            .ml(z(4.))
+                                            .size(z(12.))
+                                            .flex_none()
+                                            .text_color(t(idx::CHANNELS_DEFAULT)),
+                                    ),
+                            )
+                        })
                         .when_some(members, |d, m| {
                             d.child(
                                 div()

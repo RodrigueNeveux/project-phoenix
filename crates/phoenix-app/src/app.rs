@@ -758,6 +758,8 @@ impl PhoenixApp {
                 self.members.insert(guild, members);
                 if self.selected_guild == Some(guild) {
                     self.rebuild_members();
+                    // Voice user rows are sorted by server nick.
+                    self.rebuild_sidebar();
                 }
             }
             AppEvent::ChannelUnread { channel, unread, mentions } => {
