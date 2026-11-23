@@ -109,7 +109,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 list(app.sidebar_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full(),
             ),
         )
-        .child(panels(app, cx))
         .when_some(app.selected_guild.filter(|_| app.nav.guild_menu), |d, g| {
             d.child(crate::ui::guild_menu::render(app, g, m::HEADER_H + 4., cx))
         })
@@ -574,10 +573,28 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
         .into_any_element()
 }
 
-/// The floating panels card at the bottom of the sidebar: `--background-base-low`,
-/// 1px border, 8px radius, 8px from the edges. Holds the voice panel (when
-/// connected) above the user row.
-fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+/// The bottom-left area under both the guild rail and the channel list (as in
+/// the refreshed client): the rail and sidebar backgrounds continue behind a
+/// floating panels card (`--background-base-low`, 1px border, 8px radius, 8px
+/// from the edges) holding the voice panel (when connected) above the user row.
+pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    div()
+        .flex_none()
+        .relative()
+        .child(div().absolute().top_0().bottom_0().left_0().w(z(m::SERVER_BAR_W)).bg(c(Palette::BG_TERTIARY)))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .bottom_0()
+                .right_0()
+                .left(z(m::SERVER_BAR_W))
+                .bg(c(Palette::BG_SECONDARY)),
+        )
+        .child(panels_card(app, cx))
+}
+
+fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     div()
         .flex_none()
         .m(z(8.))

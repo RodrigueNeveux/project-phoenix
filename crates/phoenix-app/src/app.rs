@@ -1105,8 +1105,23 @@ impl Render for PhoenixApp {
                 .size_full()
                 .flex()
                 .flex_row()
-                .child(ui::server_bar::render(self, cx))
-                .child(ui::sidebar::render(self, cx))
+                .child(
+                    div()
+                        .flex_none()
+                        .h_full()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .flex()
+                                .flex_row()
+                                .child(ui::server_bar::render(self, cx))
+                                .child(ui::sidebar::render(self, cx)),
+                        )
+                        .child(ui::sidebar::panels(self, cx)),
+                )
                 .child(ui::home::main_pane(self, window, cx))
                 .into_any_element(),
         };
