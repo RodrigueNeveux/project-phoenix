@@ -28,7 +28,7 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 - [ ] `/channels/{id}/application-command-index`
 - [ ] `/channels/{id}/application-commands/search`
 - [ ] `/channels/{id}/explicit-media`
-- [ ] `/channels/{id}/messages/#mid/ack`
+- [x] `/channels/{id}/messages/#mid/ack`
 - [ ] `/channels/{id}/messages/search`
 - [ ] `/channels/{id}/polls/#pid/answers/@me`
 - [ ] `/channels/{id}/post-data`
@@ -203,9 +203,9 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 - [ ] `/users/@me/referrals/eligibility`
 - [ ] `/users/@me/referrals/eligible-users`
 - [ ] `/users/@me/referrals/{id}/preview`
-- [ ] `/users/@me/relationships`
+- [x] `/users/@me/relationships`
 - [ ] `/users/@me/saved-messages`
-- [ ] `/users/@me/settings-proto`
+- [x] `/users/@me/settings-proto`
 - [ ] `/users/@me/survey`
 - [ ] `/users/@me/unclaimed-games`
 - [ ] `/users/@me/video-filters/assets`
