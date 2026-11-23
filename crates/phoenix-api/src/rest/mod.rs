@@ -5,6 +5,10 @@ pub mod profile;
 pub mod settings;
 pub mod ratelimit;
 pub mod search;
+pub mod commands;
+pub mod inbox;
+pub mod moderation;
+pub mod forum;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
