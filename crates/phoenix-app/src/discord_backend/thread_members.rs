@@ -39,6 +39,8 @@ fn parse(data: &Value) -> Option<(u64, Reply)> {
             nick: m.as_ref().and_then(|m| m.nick.clone()).filter(|n| !n.is_empty()).map(Into::into),
             avatar: guild.zip(m.as_ref()).and_then(|(g, m)| convert::member_avatar_url(phoenix_api::models::Snowflake(g), uid, m)),
             decoration: m.as_ref().and_then(convert::member_decoration_url),
+            joined_at: m.as_ref().and_then(convert::joined_unix),
+            rejoined: m.as_ref().is_some_and(|m| m.flags & 1 != 0),
         });
     }
     Some((thread, (members, users)))

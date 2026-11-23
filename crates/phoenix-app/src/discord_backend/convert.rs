@@ -1162,6 +1162,6 @@ pub fn self_activities(r: &phoenix_api::gateway::events::Ready) -> Option<AppEve
 }
 
 /// `member.joined_at` (ISO 8601) as unix seconds.
-fn joined_unix(m: &api::Member) -> Option<i64> {
+pub(super) fn joined_unix(m: &api::Member) -> Option<i64> {
     m.joined_at.as_deref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.timestamp())
 }
