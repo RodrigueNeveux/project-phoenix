@@ -221,7 +221,12 @@ impl PhoenixApp {
         backend.set_event_sink(sink);
         cx.spawn(async move |this, cx| {
             while let Some(ev) = rx.next().await {
-                if this.update(cx, |this, cx| this.handle_event(ev, cx)).is_err() {
+                // Handle every queued event in one update (one redraw per batch, not per event).
+                let mut batch = vec![ev];
+                while let Ok(ev) = rx.try_recv() {
+                    batch.push(ev);
+                }
+                if this.update(cx, |this, cx| batch.into_iter().for_each(|ev| this.handle_event(ev, cx))).is_err() {
                     break;
                 }
             }

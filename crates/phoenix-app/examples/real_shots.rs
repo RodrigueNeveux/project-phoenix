@@ -175,6 +175,98 @@ fn env_or_cdp(var: &str, expr: &str) -> Option<String> {
     std::env::var(var).ok().filter(|v| !v.is_empty()).or_else(|| cdp(expr))
 }
 
+/// Live scroll state of the user's Discord (read-only `scrollTop` reads).
+#[derive(Debug, Default)]
+struct Scroll {
+    /// Channel list (`sidebarList_` scroller) scrollTop, CSS px.
+    channels: f32,
+    /// Member list (`membersWrap_` scroller) scrollTop, CSS px.
+    members: f32,
+    /// First message whose bottom is below the top of the message scroller,
+    /// and how far (CSS px) the scroller's top edge sits inside it.
+    top_message: Option<(Id, f32)>,
+    /// Message scroller distance from the bottom (fallback when the anchor
+    /// message is not in our loaded history).
+    from_bottom: f32,
+}
+
+const SCROLL_JS: &str = r"(()=>{const q=s=>document.querySelector(s);
+const ch=q('[class*=sidebarList_] [class*=scroller_]'),mb=q('[class*=membersWrap_] [class*=scroller_]'),
+ms=q('ol[data-list-id=chat-messages]')?.closest('[class*=scroller_]')||q('[class*=messagesWrapper_] > [class*=scroller_]');let top='',off=0,fb=0;
+if(ms){const r=ms.getBoundingClientRect();fb=ms.scrollHeight-ms.scrollTop-ms.clientHeight;
+for(const li of ms.querySelectorAll('li[id^=chat-messages-]')){const b=li.getBoundingClientRect();
+if(b.bottom>r.top+1){top=li.id.split('-').pop();off=r.top-b.top;break}}}
+return [ch?ch.scrollTop:0,mb?mb.scrollTop:0,top,off,fb].join(' ')})()";
+
+fn read_scroll() -> Option<Scroll> {
+    if std::env::var_os("PHX_NO_SCROLL").is_some() {
+        return None;
+    }
+    let raw = cdp(SCROLL_JS)?;
+    let f: Vec<&str> = raw.split(' ').collect();
+    let num = |i: usize| f.get(i).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.);
+    Some(Scroll {
+        channels: num(0),
+        members: num(1),
+        top_message: f.get(2).and_then(|v| parse_id(v)).map(|id| (id, num(3))),
+        from_bottom: num(4),
+    })
+}
+
+/// Scrolls our three lists to the Discord offsets. Pixel offsets are replayed
+/// in viewport-sized steps with a frame in between, because `ListState`
+/// only knows the heights of items it has laid out.
+fn apply_scroll(
+    cx: &mut HeadlessAppContext,
+    win: gpui::AnyWindowHandle,
+    v: &Entity<PhoenixApp>,
+    sc: &Scroll,
+    pump: &dyn Fn(&mut HeadlessAppContext, u64),
+) -> anyhow::Result<()> {
+    use gpui::ListOffset;
+    let top = ListOffset { item_ix: 0, offset_in_item: px(0.) };
+    // Message list: anchor on the same message, else same distance from the bottom.
+    let anchor = cx.update(|cx| {
+        let app = v.read(cx);
+        let (id, off) = sc.top_message?;
+        let ix = app.messages.get(&app.selected_channel?)?.index_of(id)?;
+        Some((ix + 1, off)) // item 0 is the channel header / loader
+    });
+    cx.update(|cx| {
+        let app = v.read(cx);
+        app.sidebar_list.scroll_to(top);
+        app.member_list.scroll_to(top);
+        match anchor {
+            Some((ix, off)) => app.message_list.scroll_to(ListOffset { item_ix: ix, offset_in_item: px(off.max(0.)) }),
+            None => app.message_list.scroll_to_end(),
+        }
+    });
+    if anchor.is_none() {
+        eprintln!("top message not in loaded history, using distance from bottom");
+    }
+    let mut left = [sc.channels, sc.members, if anchor.is_none() { sc.from_bottom } else { 0. }];
+    while left.iter().any(|l| *l > 0.5) {
+        cx.update_window(win, |_, window, _| window.refresh())?;
+        pump(cx, 100);
+        cx.update(|cx| {
+            let app = v.read(cx);
+            let lists = [&app.sidebar_list, &app.member_list, &app.message_list];
+            for (i, l) in lists.into_iter().enumerate() {
+                let step = left[i].min(300.);
+                if step > 0. {
+                    // Messages scroll up from the bottom, the other lists down from the top.
+                    l.scroll_by(px(if i == 2 { -step } else { step }));
+                    left[i] -= step;
+                }
+            }
+        });
+    }
+    Ok(())
+}
+
+/// Window height while READY and the history load (see `open_window`).
+const LOAD_H: f32 = 800.;
+
 fn parse_id(s: &str) -> Option<Id> {
     s.parse().ok().map(Id)
 }
@@ -227,9 +319,12 @@ fn main() -> anyhow::Result<()> {
         // SAFETY: single-threaded, before any other thread starts.
         unsafe { std::env::set_var("PHX_SIDEBAR_W", sw) };
     }
+    let scroll = read_scroll();
+    println!("scroll {scroll:?}");
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
     println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} mute={self_mute} deaf={self_deaf}");
 
+    let t0 = std::time::Instant::now();
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
         gpui_platform::current_headless_renderer()
@@ -255,15 +350,27 @@ fn main() -> anyhow::Result<()> {
     let backend: Arc<dyn Backend> = Arc::new(ReadOnly(backend));
     let view: Rc<RefCell<Option<Entity<PhoenixApp>>>> = Rc::default();
     let v2 = view.clone();
-    let win = cx.open_window(size(px(w), px(h)), move |window, cx| {
+    // Load small, capture big: in headless (test) mode gpui draws the window on
+    // every effect flush, i.e. once per gateway event. READY and the presence
+    // storm that follows meant thousands of full-size draws, so tall captures
+    // (PHX_H=1600+) took minutes. The real size is applied after READY.
+    let win = cx.open_window(size(px(w), px(h.min(LOAD_H))), move |window, cx| {
         let v = cx.new(|cx| PhoenixApp::new(backend, window, cx));
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
     })?;
+    // Time-based, not iteration-based: at tall sizes one parked run can draw a
+    // large frame (animated avatars/GIFs keep requesting frames), so a fixed
+    // `ms / 50` iteration count stretched a 15 s wait to minutes.
     let pump = |cx: &mut HeadlessAppContext, ms: u64| {
-        for _ in 0..ms / 50 {
+        let end = std::time::Instant::now() + Duration::from_millis(ms);
+        while std::time::Instant::now() < end {
             std::thread::sleep(Duration::from_millis(50));
+            let t = std::time::Instant::now();
             cx.run_until_parked();
+            if std::env::var_os("PHX_TRACE").is_some() && t.elapsed() > Duration::from_millis(300) {
+                eprintln!("slow parked run: {:?}", t.elapsed());
+            }
         }
     };
     let v = view.borrow().clone().expect("view");
@@ -276,6 +383,7 @@ fn main() -> anyhow::Result<()> {
             break;
         }
     }
+    eprintln!("[{:.1}s] ready", t0.elapsed().as_secs_f32());
     anyhow::ensure!(ready, "no READY after 30s (token missing from keyring?)");
     cx.update_window(win.into(), |_, _, cx| {
         v.update(cx, |app, cx| {
@@ -293,7 +401,13 @@ fn main() -> anyhow::Result<()> {
             cx.notify();
         });
     })?;
-    pump(&mut cx, wait * 1000);
+    pump(&mut cx, wait * 1000 / 2);
+    // Full size for the rest: images in view start loading now.
+    cx.update_window(win.into(), |_, window, cx| {
+        window.resize(size(px(w), px(h)));
+        window.bounds_changed(cx);
+    })?;
+    pump(&mut cx, wait * 1000 / 2);
     // Server nicks of authors outside the synced member-list range come from op 8
     // (GUILD_MEMBERS_CHUNK): wait until every author of the page has a guild member
     // (members who left the guild never get one, hence the timeout).
@@ -326,12 +440,19 @@ fn main() -> anyhow::Result<()> {
             }
         });
     }
+    eprintln!("[{:.1}s] waited", t0.elapsed().as_secs_f32());
+    // Same rows as the user's Discord: replay its scroll offsets on our lists.
+    if let Some(sc) = scroll {
+        apply_scroll(&mut cx, win.into(), &v, &sc, &pump)?;
+        eprintln!("[{:.1}s] scrolled", t0.elapsed().as_secs_f32());
+    }
     let mut img = None;
     for _ in 0..2 {
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
         pump(&mut cx, 200);
         img = Some(cx.capture_screenshot(win.into())?);
     }
+    eprintln!("[{:.1}s] captured", t0.elapsed().as_secs_f32());
     let img = img.expect("frame");
     img.save(&out)?;
     println!("wrote {out} ({}x{})", img.width(), img.height());
