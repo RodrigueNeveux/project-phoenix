@@ -62,6 +62,7 @@ pub enum Icon {
     File,
     Image,
     PhoneHangup,
+    Quests,
 }
 
 impl Icon {
@@ -101,6 +102,7 @@ impl Icon {
             Icon::File => "file",
             Icon::Image => "image",
             Icon::PhoneHangup => "phone-hangup",
+            Icon::Quests => "quests",
         })
     }
 }
@@ -124,6 +126,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/calendar.svg" => s!(r#"<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4m8-4v4"/>"#),
         "icons/boost.svg" => s!(r#"<path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/><path d="m12 7-3 5h6l-3 5"/>"#),
         "icons/chevron-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
+        "icons/flag.svg" => f!(r#"<path d="M5 3h1.5v18H5zM7.5 4h10.2l-2.2 4 2.2 4H7.5z"/>"#),
         "icons/star.svg" => f!(r#"<path d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.3 1.3-6.5-4.9-4.5 6.6-.8z"/>"#),
         "icons/crown.svg" => f!(r#"<path d="M3 7l4.5 4L12 4l4.5 7L21 7l-2 12H5z"/>"#),
         "icons/check.svg" => s!(r#"<path d="m5 12.5 4.5 4.5L19 7.5"/>"#),
@@ -159,6 +162,14 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/friends.svg" => f!(r#"<circle cx="12" cy="7" r="4.5"/><path d="M3 21a9 7 0 0 1 18 0z"/>"#),
         "icons/nitro.svg" => f!(r#"<path d="M3 9h5v2H3zm1 4h4v2H4zM14 4a8 8 0 1 1 0 16 8 8 0 0 1-6.9-4h2.5A6 6 0 1 0 9.6 8H7.1A8 8 0 0 1 14 4zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/>"#),
         "icons/lock.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/>"#),
+        // Hand-drawn stand-ins (the real glyphs come from the local client at runtime).
+        "icons/quests.svg" => s!(r#"<path d="M5 4h14v6a7 7 0 0 1-14 0zM9 21h6M12 17v4M8 9h8"/>"#),
+        "icons/note.svg" => s!(r#"<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7M7 8h6M7 12h8M7 16h4M19 14v8M15 18h8"/>"#),
+        "icons/user-check.svg" => s!(r#"<circle cx="11" cy="7" r="4"/><path d="M3 21a8 8 0 0 1 11-7.4M15 18l2 2 4-4"/>"#),
+        "icons/ribbon.svg" => s!(r#"<circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/>"#),
+        "icons/orbs.svg" => s!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 6l4 6-4 6-4-6z"/>"#),
+        "icons/user-circle.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3.5"/><path d="M6 18.5a8 6 0 0 1 12 0"/>"#),
+        "icons/bell-slash.svg" => s!(r#"<path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l2 2H6M10 21h4M3 3l18 18"/>"#),
         "icons/pen.svg" => f!(r#"<path d="M16.3 3.3a2.4 2.4 0 0 1 3.4 0l1 1a2.4 2.4 0 0 1 0 3.4L9.5 18.9 3 21l2.1-6.5zM15 6.4 17.6 9"/>"#),
         "icons/id.svg" => f!(r#"<path fill-rule="evenodd" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm2 4v8h2V8zm4 0v8h3a4 4 0 0 0 0-8zm2 2h1a2 2 0 0 1 0 4h-1z"/>"#),
         "icons/reply.svg" => s!(r#"<path d="M4 20v-5a6 6 0 0 1 6-6h10M15 4l5 5-5 5"/>"#),

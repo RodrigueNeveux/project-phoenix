@@ -269,6 +269,12 @@ impl PhoenixApp {
         }
 
         let utc_offset = Local::now().offset().local_minus_utc() as i64;
+        // One lock: two `prefs().lock()` temporaries in the same struct
+        // literal deadlock (both guards live until the end of the statement).
+        let (self_mute, self_deaf) = {
+            let p = crate::voice::prefs::prefs().lock();
+            (p.self_mute, p.self_deaf)
+        };
         Self {
             backend,
             screen: Screen::Login,
@@ -288,6 +294,7 @@ impl PhoenixApp {
                 avatar: ImageRef::Default(0),
                 bot: false,
                 tag: None,
+                nameplate: None,
             },
             users: HashMap::new(),
             guilds: Vec::new(),
@@ -315,8 +322,8 @@ impl PhoenixApp {
             typing: HashMap::new(),
             typing_label: None,
             presence: Presence::Online,
-            mic_muted: false,
-            deafened: false,
+            mic_muted: self_mute,
+            deafened: self_deaf,
             voice_channel: None,
             voice: Default::default(),
             show_members: true,
@@ -424,6 +431,7 @@ impl PhoenixApp {
         let mine = self.people.activities.remove(&r.me.id);
         self.clear_session();
         if let Some(a) = mine {
+            self.people.custom_status = a.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom).and_then(|x| x.state.clone());
             self.people.activities.insert(r.me.id, a);
         }
         self.presences = r.presences.into_iter().collect();
@@ -1164,6 +1172,6 @@ impl Render for PhoenixApp {
             .children(ui::profile::overlays(self, window, cx))
             .children(ui::components::overlays(self, window, cx))
             .children(ui::voice_panel::overlays(self, window, cx))
+            .children(crate::actions::overlays(self, window, cx))
     }
 }
-            .children(crate::actions::overlays(self, window, cx))
