@@ -1112,6 +1112,8 @@ impl Render for PhoenixApp {
             .on_action(cx.listener(|this, _: &QuickSwitcher, w, cx| this.open_switcher(w, cx)))
             .on_action(cx.listener(Self::on_escape))
             .on_action(cx.listener(ui::settings::open_action))
+            .capture_key_down(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_down(this, ev, cx)))
+            .capture_key_up(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_up(this, ev, cx)))
             .on_action(cx.listener(|this, _: &ToggleMembers, _, cx| {
                 this.show_members = !this.show_members;
                 cx.notify();
@@ -1129,5 +1131,6 @@ impl Render for PhoenixApp {
             .children(ui::image_viewer::render(window, cx))
             .children(ui::pickers::render_overlays(self, window, cx))
             .children(ui::profile::overlays(self, window, cx))
+            .children(ui::voice_panel::overlays(self, window, cx))
     }
 }

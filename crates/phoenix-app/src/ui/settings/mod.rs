@@ -6,6 +6,7 @@
 //!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
 
 mod view;
+pub(crate) mod voice;
 
 use std::path::PathBuf;
 

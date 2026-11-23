@@ -176,6 +176,10 @@ fn member_row(
             let at = ev.position();
             e.update(cx, |a, cx| a.open_profile(uid, Some(g), at, window, cx));
         })
+        .on_mouse_down(gpui::MouseButton::Right, move |ev, window, cx| {
+            cx.stop_propagation();
+            crate::ui::user_menu::open(uid, Some(g), ev.position, window);
+        })
         .child(avatar_with_status(user, 32., mem.presence, c(Palette::BG_SECONDARY)))
         .child(
             div()

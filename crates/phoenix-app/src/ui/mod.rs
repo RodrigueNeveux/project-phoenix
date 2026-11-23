@@ -1,6 +1,7 @@
 pub mod autocomplete;
 pub mod chat;
 pub mod context_menu;
+pub mod controls;
 pub mod guild_menu;
 pub mod home;
 pub mod invite;
@@ -16,6 +17,7 @@ pub mod server_bar;
 pub mod sidebar;
 pub mod status_picker;
 pub mod switcher;
+pub mod user_menu;
 pub mod voice_panel;
 
 use gpui::{

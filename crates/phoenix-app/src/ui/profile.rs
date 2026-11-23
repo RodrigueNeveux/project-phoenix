@@ -84,7 +84,7 @@ impl PhoenixApp {
 
 /// Everything floating owned by this module, appended to the root.
 pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
-    let mut out = Vec::new();
+    let mut out: Vec<AnyElement> = crate::ui::user_menu::render(app, cx).into_iter().collect();
     if !app.people.any_overlay() {
         return out;
     }

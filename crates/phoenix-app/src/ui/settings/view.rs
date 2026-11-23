@@ -72,16 +72,7 @@ fn secondary(id: impl Into<String>, label: impl Into<SharedString>) -> Stateful<
 }
 
 fn toggle_knob(on: bool) -> Div {
-    div()
-        .w(px(40.))
-        .h(px(24.))
-        .flex_none()
-        .rounded(px(12.))
-        .bg(c(if on { Palette::GREEN } else { 0x80848E }))
-        .p(px(3.))
-        .flex()
-        .when(on, |d| d.justify_end())
-        .child(div().size(px(18.)).rounded_full().bg(gpui::white()))
+    crate::ui::controls::switch(on)
 }
 
 /// Discord switch row: title + description on the left, toggle on the right.
@@ -151,30 +142,30 @@ fn radio(id: impl Into<String>, label: impl Into<SharedString>, selected: bool) 
         )
 }
 
-/// `[-] value [+]` stepper (stands in for Discord's sliders).
-fn stepper(
+/// Discord marker slider bound to a local preference.
+fn slider(
     id: &str,
-    value: String,
-    dec: impl Fn(&mut PhoenixApp, &mut Cx) + 'static,
-    inc: impl Fn(&mut PhoenixApp, &mut Cx) + 'static,
+    values: &[f32],
+    unit: &'static str,
+    current: f32,
+    default: f32,
+    set: impl Fn(&mut PhoenixApp, f32, &mut Cx) + 'static,
     cx: &mut Cx,
 ) -> Div {
-    div()
-        .mb(px(20.))
-        .flex()
-        .items_center()
-        .gap(px(12.))
-        .child(secondary(format!("{id}-dec"), "−").w(px(32.)).px_0().on_click(cx.listener(move |a, _, _, cx| dec(a, cx))))
-        .child(
-            div()
-                .w(px(64.))
-                .flex()
-                .justify_center()
-                .text_size(px(16.))
-                .text_color(c(Palette::TEXT_NORMAL))
-                .child(value),
-        )
-        .child(secondary(format!("{id}-inc"), "+").w(px(32.)).px_0().on_click(cx.listener(move |a, _, _, cx| inc(a, cx))))
+    use crate::ui::controls;
+    let labels = values.iter().map(|v| SharedString::from(format!("{v}{unit}"))).collect();
+    let vals: Vec<f32> = values.to_vec();
+    let ent = cx.entity();
+    controls::marker_slider(
+        SharedString::from(format!("slider-{id}")),
+        labels,
+        controls::nearest(values, current),
+        Some(controls::nearest(values, default)),
+        std::rc::Rc::new(move |i, _, cx| {
+            let v = vals[i];
+            ent.update(cx, |a, cx| set(a, v, cx));
+        }),
+    )
 }
 
 fn field_row(label: &'static str, value: SharedString, action: Option<AnyElement>) -> Div {
@@ -517,19 +508,23 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
         )
         .child(divider())
         .child(h5("CHAT FONT SCALING"))
-        .child(stepper(
+        .child(slider(
             "font",
-            format!("{fs}px"),
-            |a, cx| update_local(a, |p| p.font_size = (p.font_size - 1.).max(12.), cx),
-            |a, cx| update_local(a, |p| p.font_size = (p.font_size + 1.).min(24.), cx),
+            &[12., 14., 15., 16., 18., 20., 24.],
+            "px",
+            fs,
+            16.,
+            |a, v, cx| update_local(a, |p| p.font_size = v, cx),
             cx,
         ))
         .child(h5("ZOOM LEVEL"))
-        .child(stepper(
+        .child(slider(
             "zoom",
-            format!("{zoom}%"),
-            |a, cx| update_local(a, |p| p.zoom = p.zoom.saturating_sub(10).max(50), cx),
-            |a, cx| update_local(a, |p| p.zoom = (p.zoom + 10).min(200), cx),
+            &[50., 67., 75., 80., 90., 100., 110., 125., 150., 175., 200.],
+            "",
+            zoom as f32,
+            100.,
+            |a, v, cx| update_local(a, |p| p.zoom = v as _, cx),
             cx,
         ))
 }
@@ -540,11 +535,13 @@ fn accessibility(app: &PhoenixApp, cx: &mut Cx) -> Div {
     div()
         .child(h1("Accessibility"))
         .child(h5("SATURATION"))
-        .child(stepper(
+        .child(slider(
             "sat",
-            format!("{sat}%"),
-            |a, cx| update_local(a, |p| p.saturation = p.saturation.saturating_sub(10), cx),
-            |a, cx| update_local(a, |p| p.saturation = (p.saturation + 10).min(100), cx),
+            &[0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100.],
+            "%",
+            sat as f32,
+            100.,
+            |a, v, cx| update_local(a, |p| p.saturation = v as _, cx),
             cx,
         ))
         .child(h5("REDUCED MOTION"))
@@ -556,34 +553,6 @@ fn accessibility(app: &PhoenixApp, cx: &mut Cx) -> Div {
             move |a, cx| update_local(a, |p| p.reduced_motion = !rm, cx),
             cx,
         ))
-}
-
-fn voice_video() -> Div {
-    let select = |label: &'static str| {
-        div()
-            .flex_1()
-            .flex()
-            .flex_col()
-            .child(h5(label))
-            .child(
-                div()
-                    .h(px(40.))
-                    .px(px(10.))
-                    .rounded(px(3.))
-                    .bg(c(Palette::BG_TERTIARY))
-                    .flex()
-                    .items_center()
-                    .text_color(c(Palette::TEXT_NORMAL))
-                    .child("Default"),
-            )
-    };
-    div()
-        .child(h1("Voice Settings"))
-        .child(div().flex().gap(px(16.)).child(select("INPUT DEVICE")).child(select("OUTPUT DEVICE")))
-        .child(div().mt(px(20.)).child(note("Device selection arrives with voice support.")))
-        .child(divider())
-        .child(h1("Video Settings"))
-        .child(select("CAMERA"))
 }
 
 fn advanced(app: &PhoenixApp, cx: &mut Cx) -> Div {
@@ -625,7 +594,7 @@ fn page(app: &PhoenixApp, cx: &mut Cx) -> Div {
         Page::Language => language(app, cx),
         Page::Appearance => appearance(app, cx),
         Page::Accessibility => accessibility(app, cx),
-        Page::VoiceVideo => voice_video(),
+        Page::VoiceVideo => super::voice::render(app, cx),
         Page::Advanced => advanced(app, cx),
     }
 }

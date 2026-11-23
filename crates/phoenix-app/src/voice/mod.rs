@@ -8,8 +8,12 @@
 //!   token), then runs a `phoenix_voice` connection with the cpal audio engine.
 
 pub mod call;
+pub mod prefs;
+pub mod ptt;
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
+
+pub use phoenix_voice::connection::ConnStats;
 
 use crate::model::Id;
 
@@ -33,6 +37,11 @@ pub enum VoiceUiEvent {
     Speaking { user: Id, speaking: bool },
     /// DAVE end-to-end encryption on/off.
     Encryption(bool),
+    /// DAVE voice privacy code (30 digits, grouped by 5).
+    PrivacyCode(Option<String>),
+    Stats(ConnStats),
+    /// Voice server host and transport encryption mode.
+    Server { endpoint: String, mode: String },
     Error(String),
 }
 
@@ -49,7 +58,19 @@ pub enum VoiceControl {
     SetInputVolume(f32),
     SetOutputVolume(f32),
     SetUserVolume(Id, f32),
+    SetNoiseSuppression(bool),
+    SetEchoCancellation(bool),
+    SetAgc(bool),
+    /// Push-to-talk instead of voice activity.
+    SetPushToTalk(bool),
+    /// Global push-to-talk key (GPUI keystroke); `None` unbinds.
+    SetPttKey(Option<String>),
+    SetPttPressed(bool),
+    SetPttDelay(u32),
 }
+
+/// Ping samples kept for the connection graph.
+pub const PING_HISTORY: usize = 40;
 
 /// Voice state shown by the UI.
 #[derive(Debug, Clone, Default)]
@@ -59,6 +80,11 @@ pub struct VoiceUi {
     pub speaking: HashSet<Id>,
     pub e2ee: bool,
     pub last_error: Option<String>,
+    pub ping_history: VecDeque<u32>,
+    pub privacy_code: Option<String>,
+    pub stats: ConnStats,
+    pub endpoint: Option<String>,
+    pub mode: Option<String>,
 }
 
 impl VoiceUi {
@@ -70,12 +96,29 @@ impl VoiceUi {
                     self.speaking.clear();
                     self.ping_ms = None;
                     self.e2ee = false;
+                    self.ping_history.clear();
+                    self.privacy_code = None;
+                    self.stats = ConnStats::default();
+                    self.endpoint = None;
+                    self.mode = None;
                 }
                 if s == VoiceStatus::Connected {
                     self.last_error = None;
                 }
             }
-            VoiceUiEvent::Ping(p) => self.ping_ms = Some(p),
+            VoiceUiEvent::Ping(p) => {
+                self.ping_ms = Some(p);
+                if self.ping_history.len() >= PING_HISTORY {
+                    self.ping_history.pop_front();
+                }
+                self.ping_history.push_back(p);
+            }
+            VoiceUiEvent::PrivacyCode(c) => self.privacy_code = c,
+            VoiceUiEvent::Stats(s) => self.stats = s,
+            VoiceUiEvent::Server { endpoint, mode } => {
+                self.endpoint = Some(endpoint);
+                self.mode = Some(mode);
+            }
             VoiceUiEvent::Speaking { user, speaking } => {
                 if speaking {
                     self.speaking.insert(user);
@@ -83,9 +126,26 @@ impl VoiceUi {
                     self.speaking.remove(&user);
                 }
             }
-            VoiceUiEvent::Encryption(on) => self.e2ee = on,
+            VoiceUiEvent::Encryption(on) => {
+                self.e2ee = on;
+                if !on {
+                    self.privacy_code = None;
+                }
+            }
             VoiceUiEvent::Error(e) => self.last_error = Some(e),
         }
+    }
+
+    pub fn average_ping(&self) -> Option<u32> {
+        let n = self.ping_history.len() as u32;
+        (n > 0).then(|| self.ping_history.iter().sum::<u32>() / n)
+    }
+
+    /// Inbound packet loss in percent.
+    pub fn inbound_loss_pct(&self) -> f32 {
+        let s = self.stats;
+        let total = s.packets_received + s.packets_lost;
+        if total == 0 { 0. } else { s.packets_lost as f32 * 100. / total as f32 }
     }
 
     pub fn is_speaking(&self, user: Id) -> bool {
@@ -140,5 +200,12 @@ mod tests {
         v.apply(VoiceUiEvent::Speaking { user: Id(6), speaking: true });
         v.apply(VoiceUiEvent::Status(VoiceStatus::Idle));
         assert!(v.speaking.is_empty() && v.ping_ms.is_none());
+        for p in 0..50 {
+            v.apply(VoiceUiEvent::Ping(p));
+        }
+        assert_eq!(v.ping_history.len(), PING_HISTORY);
+        assert_eq!(v.average_ping(), Some((10..50).sum::<u32>() / 40));
+        v.apply(VoiceUiEvent::Stats(ConnStats { packets_received: 90, packets_lost: 10, ..Default::default() }));
+        assert!((v.inbound_loss_pct() - 10.).abs() < 0.01);
     }
 }

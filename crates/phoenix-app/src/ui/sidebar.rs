@@ -280,35 +280,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         }
         SidebarRow::Channel(id) => channel_row(app, entity, id),
         SidebarRow::Thread(id) => thread_row(app, entity, id),
-        SidebarRow::VoiceUser { user } => {
-            let u = app.users.get(&user);
-            div()
-                .ml(px(36.))
-                .mr(px(8.))
-                .h(px(28.))
-                .px(px(8.))
-                .rounded(px(4.))
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                .child(avatar(u, 24.))
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(px(14.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .text_ellipsis()
-                        .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
-                )
-                .when(user == app.me.id && app.deafened, |d| {
-                    d.child(icon(Icon::HeadphonesOff, 16., c(Palette::TEXT_MUTED)))
-                })
-                .when(user == app.me.id && app.mic_muted && !app.deafened, |d| {
-                    d.child(icon(Icon::MicOff, 16., c(Palette::TEXT_MUTED)))
-                })
-                .into_any_element()
-        }
+        SidebarRow::VoiceUser { user } => crate::ui::voice_panel::voice_user_row(app, entity, user),
     }
 }
 

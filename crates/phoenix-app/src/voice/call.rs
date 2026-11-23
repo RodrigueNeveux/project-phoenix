@@ -42,6 +42,9 @@ struct State {
     output: Option<String>,
     muted: bool,
     deafened: bool,
+    ptt_key: Option<String>,
+    #[cfg(target_os = "linux")]
+    ptt_portal: Option<phoenix_voice::hotkey::GlobalPtt>,
 }
 
 pub struct VoiceManager {
@@ -52,7 +55,30 @@ pub struct VoiceManager {
 /// Process-wide voice manager (one call at a time, like the official client).
 pub fn manager() -> &'static VoiceManager {
     static M: OnceLock<VoiceManager> = OnceLock::new();
-    M.get_or_init(|| VoiceManager { state: Mutex::new(State::default()), control: Arc::new(AudioControl::default()) })
+    static INIT: std::sync::Once = std::sync::Once::new();
+    let m = M.get_or_init(|| VoiceManager { state: Mutex::new(State::default()), control: Arc::new(AudioControl::default()) });
+    INIT.call_once(|| {
+        let controls = super::prefs::prefs().lock().controls();
+        for c in controls {
+            m.apply_control(None, c);
+        }
+    });
+    m
+}
+
+/// Global push-to-talk binding state for the settings page.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum PortalState {
+    #[default]
+    Off,
+    Pending,
+    Bound(String),
+    Unavailable(String),
+}
+
+pub fn portal_state() -> &'static Mutex<PortalState> {
+    static P: OnceLock<Mutex<PortalState>> = OnceLock::new();
+    P.get_or_init(|| Mutex::new(PortalState::Off))
 }
 
 fn ui(emit: &Emit, e: VoiceUiEvent) {
@@ -120,8 +146,11 @@ impl VoiceManager {
                 }
                 Some(c) => {
                     if c.0 != target.channel {
-                        // Moved to another channel: follow it.
+                        // Moved to another channel: follow it. The DAVE group
+                        // is per channel, so the media session restarts.
                         st.target = Some(Target { guild: target.guild, channel: c.0 });
+                        stop(&mut st);
+                        st.generation += 1;
                     }
                     if st.session_id.as_deref() != Some(v.session_id.as_str()) {
                         st.session_id = Some(v.session_id.clone());
@@ -140,7 +169,7 @@ impl VoiceManager {
                 match &s.endpoint {
                     Some(ep) => {
                         let new = Some((ep.clone(), s.token.clone()));
-                        if st.server != new {
+                        if st.server != new || st.running.is_none() {
                             stop(&mut st);
                             st.generation += 1;
                             st.server = new;
@@ -177,6 +206,7 @@ impl VoiceManager {
             token,
             max_dave_protocol_version: phoenix_voice::dave::MAX_PROTOCOL_VERSION,
         };
+        let endpoint = info.endpoint.split(':').next().unwrap_or_default().to_string();
         let s2 = sink.clone();
         let (conn, mut events) = connection::connect(
             VoiceConfig { info, channel_id: t.channel, user_id: me },
@@ -196,7 +226,12 @@ impl VoiceManager {
                     return;
                 }
                 let e = match ev {
-                    VoiceEvent::Connected { .. } => VoiceUiEvent::Status(VoiceStatus::Connected),
+                    VoiceEvent::Connected { mode, .. } => {
+                        ui(&emit, VoiceUiEvent::Server { endpoint: endpoint.clone(), mode });
+                        VoiceUiEvent::Status(VoiceStatus::Connected)
+                    }
+                    VoiceEvent::PrivacyCode(c) => VoiceUiEvent::PrivacyCode(c),
+                    VoiceEvent::Stats(s) => VoiceUiEvent::Stats(s),
                     VoiceEvent::Ping(p) => VoiceUiEvent::Ping(p),
                     VoiceEvent::Speaking { user_id, speaking } => VoiceUiEvent::Speaking { user: Id(user_id), speaking },
                     VoiceEvent::Encryption { e2ee, .. } => VoiceUiEvent::Encryption(e2ee),
@@ -244,6 +279,21 @@ impl VoiceManager {
             VoiceControl::SetInputVolume(v) => self.control.set_input_gain(v),
             VoiceControl::SetOutputVolume(v) => self.control.set_output_gain(v),
             VoiceControl::SetUserVolume(u, v) => self.control.set_user_volume(u.0, v),
+            VoiceControl::SetNoiseSuppression(v) => self.control.set_noise_suppression(v),
+            VoiceControl::SetEchoCancellation(v) => self.control.set_echo_cancellation(v),
+            VoiceControl::SetAgc(v) => self.control.set_agc(v),
+            VoiceControl::SetPushToTalk(v) => {
+                self.control.set_push_to_talk(v);
+                self.control.set_ptt_pressed(false);
+            }
+            VoiceControl::SetPttPressed(v) => self.control.set_ptt_pressed(v),
+            VoiceControl::SetPttDelay(ms) => self.control.set_ptt_release_ms(ms),
+            VoiceControl::SetPttKey(k) => {
+                if st.ptt_key != k {
+                    st.ptt_key = k.clone();
+                    self.bind_portal(&mut st, k);
+                }
+            }
         }
         if resend
             && let (Some(gw), Some(t)) = (gw, st.target)
@@ -265,6 +315,27 @@ impl VoiceManager {
             }
         }
     }
+}
+
+impl VoiceManager {
+    #[cfg(target_os = "linux")]
+    fn bind_portal(&self, st: &mut State, key: Option<String>) {
+        st.ptt_portal = None;
+        let Some(key) = key else {
+            *portal_state().lock() = PortalState::Off;
+            return;
+        };
+        *portal_state().lock() = PortalState::Pending;
+        st.ptt_portal = Some(phoenix_voice::hotkey::start(self.control.clone(), &key, |s| {
+            *portal_state().lock() = match s {
+                phoenix_voice::hotkey::PortalStatus::Bound(d) => PortalState::Bound(d),
+                phoenix_voice::hotkey::PortalStatus::Unavailable(e) => PortalState::Unavailable(e),
+            };
+        }));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn bind_portal(&self, _st: &mut State, _key: Option<String>) {}
 }
 
 /// Available (input, output) device names, default first.

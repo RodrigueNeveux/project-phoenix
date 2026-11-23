@@ -113,6 +113,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/forum.svg" => s!(r#"<path d="M4 4h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4 3V5a1 1 0 0 1 1-1zM20 8h0a1 1 0 0 1 1 1v11l-3-2.5H10a1 1 0 0 1-1-1V17"/>"#),
         "icons/stage.svg" => s!(r#"<circle cx="12" cy="9" r="3"/><path d="M5.6 15.5A8 8 0 1 1 18.4 15.5M8 21l1-5h6l1 5"/>"#),
         "icons/chevron.svg" => s!(r#"<path d="m6 9 6 6 6-6"/>"#),
+        "icons/chevron-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
         "icons/plus.svg" => s!(r#"<path d="M12 5v14M5 12h14"/>"#),
         "icons/mic.svg" => f!(r#"<rect x="8" y="2" width="8" height="13" rx="4"/><path d="M5 11a1 1 0 0 1 1 1 6 6 0 0 0 12 0 1 1 0 1 1 2 0 8 8 0 0 1-7 7.9V22h3a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h3v-2.1A8 8 0 0 1 4 12a1 1 0 0 1 1-1z"/>"#),
         "icons/mic-off.svg" => concat!(
