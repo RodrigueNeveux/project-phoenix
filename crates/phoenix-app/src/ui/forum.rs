@@ -276,6 +276,19 @@ fn card_tag(t: &ForumTag) -> gpui::Div {
         .child(t.name.clone())
 }
 
+/// One-line preview: newlines folded, block markdown prefixes (`# `, `-# `,
+/// `> `, `- `) dropped as the inline renderer does.
+fn preview_text(s: &str) -> String {
+    s.lines()
+        .map(|l| {
+            let l = l.trim_start();
+            ["-# ", "### ", "## ", "# ", ">>> ", "> ", "- ", "* "].iter().find_map(|p| l.strip_prefix(p)).unwrap_or(l)
+        })
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn is_unread(app: &PhoenixApp, p: &ForumPost) -> bool {
     match (app.backend.last_read(p.thread), p.last_message) {
         (Some(r), Some(l)) => l.0 > r.0,
@@ -304,7 +317,7 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
     let author_color = guild
         .zip(author_id)
         .and_then(|(g, u)| app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == u)).and_then(|m| app.member_color(g, m)));
-    let preview: SharedString = first.map(|m| m.content.replace('\n', " ")).unwrap_or_default().into();
+    let preview: SharedString = first.map(|m| preview_text(&m.content)).unwrap_or_default().into();
     let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
     let reaction = first.and_then(|m| m.reactions.iter().max_by_key(|r| r.count)).cloned();
     let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
@@ -390,7 +403,7 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                                     .flex_none()
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .text_color(author_color.map(c).unwrap_or(c(Palette::TEXT_HEADER)))
-                                    .child(author.map(|u| u.display_name.to_string()).unwrap_or_default()),
+                                    .child(author.map(|u| u.display_name.to_string()).unwrap_or_else(|| crate::t!("forum.deleted_user").to_string())),
                             )
                             .child(div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_NORMAL)).child(":"))
                             .child(
@@ -438,7 +451,7 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                                     .items_center()
                                     .gap(z(4.))
                                     .font_weight(FontWeight::MEDIUM)
-                                    .child(icon(Icon::Threads, 14., c(Palette::TEXT_NORMAL)))
+                                    .child(gpui::svg().path(crate::icons::path("chat")).size(z(14.)).flex_none().text_color(c(Palette::TEXT_NORMAL)))
                                     .child(p.message_count.to_string()),
                             )
                             .child(div().size(z(4.)).rounded_full().bg(c(Palette::TEXT_MUTED)))
@@ -585,7 +598,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     a.parity.forum_compose_request = Some(forum);
                     cx.notify();
                 }))
-                .child(icon(Icon::Forum, 16., gpui::white()))
+                .child(gpui::svg().path(crate::icons::path("chat")).size(z(16.)).flex_none().text_color(gpui::white()))
                 .child(crate::t!("forum.new_post")),
         );
 
@@ -899,6 +912,11 @@ mod tests {
         assert_eq!(ago(1000, 1000), "now");
         assert_eq!(ago(4000, 400), "1h ago");
         assert_eq!(ago(200_000, 0), "2d ago");
+    }
+
+    #[test]
+    fn preview_strips_block_markdown() {
+        assert_eq!(preview_text("-# oui je vais\n> en cours"), "oui je vais en cours");
     }
 
     #[test]
