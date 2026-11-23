@@ -476,6 +476,13 @@ impl PhoenixApp {
         for list in self.guild_channels.values_mut() {
             list.sort_by_key(|id| self.channels[id].position);
         }
+        // Our own voice state can arrive (READY_SUPPLEMENTAL) before this
+        // ReadyData, while `me` was still unknown, so the event never set
+        // `voice_channel`: recover it from the queued voice users.
+        let me = self.me.id;
+        self.voice_channel = self.pending_voice.get(&me).copied().or_else(|| {
+            self.channels.values().find(|c| c.guild.is_some() && c.voice_users.contains(&me)).map(|c| c.id)
+        });
         for ch in r.dm_channels {
             self.dms.push(ch.id);
             self.channels.insert(ch.id, ch);

@@ -232,6 +232,8 @@ fn sending(app: &PhoenixApp) -> impl IntoElement {
 pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let placeholder: SharedString = match ch {
+        // Group DMs read "Message <name>" (no @), like threads.
+        Some(c) if c.guild.is_none() && crate::ui::dm_profile_panel::is_group_dm(app, c.id) => crate::t!("chat.placeholder_thread", name = c.name),
         Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = c.name),
         Some(c) => crate::t!("chat.placeholder_channel", name = c.name),
         None => "".into(),

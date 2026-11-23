@@ -411,6 +411,27 @@ fn main() -> anyhow::Result<()> {
     }
     eprintln!("[{:.1}s] ready", t0.elapsed().as_secs_f32());
     anyhow::ensure!(ready, "no READY after 30s (token missing from keyring?)");
+    // `PHX_LIST=1`: print DM / group DM ids and the open threads of the
+    // current guild (for picking capture targets), then exit.
+    if std::env::var_os("PHX_LIST").is_some() {
+        cx.update(|cx| {
+            use phoenix_app::app::SidebarRow;
+            let app = v.read(cx);
+            for d in &app.dms {
+                // A 1:1 DM is named after its recipient; anything else is a group.
+                let group = app.channels.get(d).is_some_and(|c| {
+                    c.voice_users.first().and_then(|u| app.users.get(u)).is_none_or(|u| u.display_name != c.name)
+                });
+                println!("dm {} group={group}", d.0);
+            }
+            for r in &app.sidebar_rows {
+                if let SidebarRow::Thread(t) = r {
+                    println!("thread {} guild={:?}", t.0, app.selected_guild.map(|g| g.0));
+                }
+            }
+        });
+        return Ok(());
+    }
     cx.update_window(win.into(), |_, _, cx| {
         v.update(cx, |app, cx| {
             app.prefs.synced.theme = theme;

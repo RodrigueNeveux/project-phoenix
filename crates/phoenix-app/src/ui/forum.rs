@@ -64,6 +64,9 @@ pub fn ago(now: i64, ts: i64) -> String {
     crate::i18n::ago_short(now - ts).to_string()
 }
 
+/// Automatic retries after a failed post load before only the button is left.
+const FORUM_AUTO_RETRIES: u32 = 3;
+
 impl PhoenixApp {
     /// Active posts (`threads/search?archived=false`), every page, then the
     /// first page of archived ones for the "Older posts" section, as the
@@ -74,6 +77,7 @@ impl PhoenixApp {
             return;
         }
         v.loading = true;
+        v.error = None;
         if fresh {
             v.posts.clear();
             v.archived.clear();
@@ -93,6 +97,7 @@ impl PhoenixApp {
             v.loaded = true;
             match res {
                 Ok(ParityReply::ForumPosts { posts, has_more }) => {
+                    v.failures = 0;
                     let got = !posts.is_empty();
                     v.posts.extend(posts);
                     v.has_more = has_more;
@@ -103,7 +108,27 @@ impl PhoenixApp {
                     }
                 }
                 Ok(_) => {}
-                Err(e) => a.parity_toast(crate::t!("forum.load_failed", e = e.0).to_string(), cx),
+                Err(e) => {
+                    v.failures += 1;
+                    v.error = Some(crate::t!("forum.load_failed", e = e.0.clone()).to_string().into());
+                    let n = v.failures;
+                    a.parity_toast(crate::t!("forum.load_failed", e = e.0).to_string(), cx);
+                    // A few automatic retries with exponential backoff
+                    // (2s, 4s, 8s); after that only the retry button.
+                    if n <= FORUM_AUTO_RETRIES {
+                        let delay = std::time::Duration::from_secs(1 << n);
+                        cx.spawn(async move |this, cx| {
+                            cx.background_executor().timer(delay).await;
+                            let _ = this.update(cx, |a, cx| {
+                                let still = a.parity.forums.get(&forum).is_some_and(|v| v.error.is_some() && !v.loading);
+                                if still && a.selected_channel == Some(forum) {
+                                    a.load_forum(forum, true, cx);
+                                }
+                            });
+                        })
+                        .detach();
+                    }
+                }
             }
         });
     }
@@ -693,7 +718,42 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .flex_col()
         // headerRow_BkGrJJ: padding-bottom 16
         .child(div().pb(z(16.)).child(search_bar).child(filters));
-    if v.loaded && v.posts.is_empty() && v.archived.is_empty() && !v.loading && !v.archived_loading {
+    if let (Some(err), true) = (v.error.clone(), v.posts.is_empty() && !v.loading) {
+        // Failed load: message and a "Try again" button instead of the
+        // empty state, like the client's error view.
+        col = col.child(
+            div()
+                .p(z(48.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(z(8.))
+                .child(icon(Icon::Forum, 64., c(Palette::INTERACTIVE_MUTED)))
+                .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(err))
+                .child(
+                    div()
+                        .id("forum-retry")
+                        .mt(z(8.))
+                        .h(z(32.))
+                        .px(z(16.))
+                        .rounded(z(8.))
+                        .flex()
+                        .items_center()
+                        .bg(c(Palette::BLURPLE)) // --background-brand (button_ filled brand)
+                        .text_color(gpui::white())
+                        .text_size(z(14.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |a, _, _, cx| {
+                            if let Some(v) = a.parity.forums.get_mut(&forum) {
+                                v.failures = 0;
+                            }
+                            a.load_forum(forum, true, cx);
+                        }))
+                        .child(crate::t!("common.retry")),
+                ),
+        );
+    } else if v.loaded && v.posts.is_empty() && v.archived.is_empty() && !v.loading && !v.archived_loading {
         col = col.child(
             div()
                 .p(z(48.))

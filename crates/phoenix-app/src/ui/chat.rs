@@ -272,7 +272,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
     let on = tk(idx::ICON_STRONG);
-    let peer = ch.and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u));
+    let peer = ch.filter(|c| !crate::ui::dm_profile_panel::is_group_dm(app, c.id)).and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u));
     let scope: SharedString = if is_dm {
         peer.map(|u| u.name.clone()).unwrap_or_else(|| name.clone())
     } else {
@@ -476,7 +476,8 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
             .child(if loading { crate::t!("chat.loading_messages") } else { "".into() });
     }
     if let Some(chan) = channel.filter(|c| c.guild.is_none()) {
-        let peer = chan.voice_users.first().and_then(|u| app.users.get(u));
+        let group = crate::ui::dm_profile_panel::is_group_dm(app, chan.id);
+        let peer = chan.voice_users.first().filter(|_| !group).and_then(|u| app.users.get(u));
         return div()
             .m(z(16.))
             .flex()
@@ -495,7 +496,7 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
                 div()
                     .text_size(z(16.))
                     .text_color(tk(idx::TEXT_DEFAULT)) // container_ .description_ color
-                    .child(crate::t!("chat.dm_start", name = name)),
+                    .child(if group { crate::t!("chat.group_start", name = name) } else { crate::t!("chat.dm_start", name = name) }),
             );
     }
     // container_ (welcome) margin: --custom-message-margin-horizontal; header_ margin 8px 0.

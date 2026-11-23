@@ -178,6 +178,11 @@ pub struct ForumView {
     pub has_more: bool,
     pub loading: bool,
     pub loaded: bool,
+    /// Last failed load of the active posts; shows the error state with a
+    /// retry button.
+    pub error: Option<SharedString>,
+    /// Consecutive failed loads, drives the automatic retry backoff.
+    pub failures: u32,
     pub tags: Vec<Id>,
     pub sort: ForumSort,
     pub sort_menu: bool,

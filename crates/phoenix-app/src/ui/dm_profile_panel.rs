@@ -22,9 +22,15 @@ thread_local! {
 }
 
 /// The DM peer whose panel should show, if the open channel is a 1:1 DM.
+/// Group DM: the channel model only keeps the first recipient (avatar), so
+/// use the nav extras (recipient count / group icon), like the DM list does.
+pub fn is_group_dm(app: &PhoenixApp, channel: Id) -> bool {
+    app.nav.extras.get(&channel).is_some_and(|e| e.recipients > 1 || e.group_icon.is_some())
+}
+
 pub fn peer(app: &PhoenixApp) -> Option<Id> {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c))?;
-    if ch.guild.is_some() || ch.voice_users.len() != 1 {
+    if ch.guild.is_some() || ch.voice_users.len() != 1 || is_group_dm(app, ch.id) {
         return None;
     }
     ch.voice_users.first().copied()
