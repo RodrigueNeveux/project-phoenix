@@ -1076,7 +1076,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
         .child(div().mr(z(16.)).w(z(1.)).h(z(24.)).bg(tk(idx::BORDER_SUBTLE)))
         .child(
             // input sm_0PLWhS: 32px, padding-start 4, gap 4, radius 8,
-            // --input-background-default, 1px --input-border-default; 22px icon box.
+            // --input-background-default; 22px icon box.
             div()
                 .w(z(248.))
                 .h(z(32.))
@@ -1084,7 +1084,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .gap(z(4.))
                 .rounded(z(8.))
                 .border_1()
-                .border_color(tk(idx::INPUT_BORDER_DEFAULT))
+                .border_color(tk(idx::INPUT_BORDER_ACTIVE)) // autofocused on open (vanilla-threads-lrer #1357 border = --input-border-active)
                 .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
                 .flex()
                 .items_center()
