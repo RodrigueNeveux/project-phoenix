@@ -16,6 +16,10 @@
 //!   then 224x48 rows.
 //! - decorationPreview_ 208x208 r4 with the 120px avatar centred; small
 //!   previews column 56 wide (40/32/40/32 avatars, 16 apart).
+//! - sections "Exclusivité Nitro" (catalogue `premium_type` 2) and "Va jeter
+//!   un œil à la Boutique" (other products of the kind), 16px apart, from
+//!   `GET /collectibles-categories/v2`. Shop items preview only; Apply stays
+//!   disabled for items you don't own (never buys).
 //! - footer padding 16 24, gap 8, reverse: Apply (md primary, .5 opacity
 //!   until something changes) + Cancel (md secondary).
 
@@ -29,6 +33,9 @@ use crate::{
 };
 
 type Cx<'a> = Context<'a, PhoenixApp>;
+
+/// Max tiles per shop section.
+const SHOP_CAP: usize = 60;
 
 /// Open picker state (inside the profile editor).
 #[derive(Clone, Debug)]
@@ -84,10 +91,11 @@ fn tile_size(k: Kind) -> (f32, f32) {
     }
 }
 
-/// Open the picker for `kind`, loading owned collectibles the first time.
+/// Open the picker for `kind`, loading owned collectibles and the shop
+/// catalogue the first time.
 pub fn open(app: &mut PhoenixApp, kind: Kind, cx: &mut Cx) {
-    let need = app.settings.as_ref().and_then(|s| s.profile.as_ref()).is_some_and(|e| e.collectibles.is_none());
     let Some(e) = app.settings.as_mut().and_then(|s| s.profile.as_mut()) else { return };
+    let (need, need_shop) = (e.collectibles.is_none(), e.shop.is_none());
     let sel = e.equipped.get(kind).flatten();
     e.picker = Some(PickerState { kind, sel });
     if need {
@@ -98,6 +106,22 @@ pub fn open(app: &mut PhoenixApp, kind: Kind, cx: &mut Cx) {
             let _ = this.update(cx, |this, cx| {
                 if let Some(e) = this.settings.as_mut().and_then(|s| s.profile.as_mut()) {
                     e.collectibles = Some(v);
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+    if need_shop {
+        if let Some(e) = app.settings.as_mut().and_then(|s| s.profile.as_mut()) {
+            e.shop = Some(Default::default());
+        }
+        let fut = app.backend.collectibles_shop();
+        cx.spawn(async move |this, cx| {
+            let Ok(v) = fut.await else { return };
+            let _ = this.update(cx, |this, cx| {
+                if let Some(e) = this.settings.as_mut().and_then(|s| s.profile.as_mut()) {
+                    e.shop = Some(v);
                 }
                 cx.notify();
             });
@@ -128,7 +152,6 @@ fn tile(id: SharedString, (w, h): (f32, f32), selected: bool) -> gpui::Stateful<
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .overflow_hidden()
 }
 
 fn icon_tile(id: &str, size: (f32, f32), icon: &str, label: SharedString, selected: bool) -> gpui::Stateful<Div> {
@@ -218,8 +241,16 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
     let (title, yours) = keys(kind);
     let size = tile_size(kind);
     let owned: Vec<&Collectible> = e.collectibles.iter().flatten().filter(|c| c.kind == kind).collect();
-    let chosen = owned.iter().copied().find(|c| Some(c.sku) == p.sel);
-    let changed = e.equipped.get(kind).flatten() != p.sel;
+    let shop = e.shop.as_ref();
+    // The client virtualises these grids; we cap them to keep image loads bounded.
+    fn of_kind<'a>(v: Option<&'a Vec<Collectible>>, kind: Kind, owned: &[&Collectible]) -> Vec<&'a Collectible> {
+        v.into_iter().flatten().filter(|c| c.kind == kind && !owned.iter().any(|o| o.sku == c.sku)).take(SHOP_CAP).collect()
+    }
+    let nitro = of_kind(shop.map(|s| &s.nitro), kind, &owned);
+    let store = of_kind(shop.map(|s| &s.shop), kind, &owned);
+    let chosen = owned.iter().chain(&nitro).chain(&store).copied().find(|c| Some(c.sku) == p.sel);
+    let owns_sel = p.sel.is_none_or(|s| owned.iter().any(|o| o.sku == s));
+    let changed = e.equipped.get(kind).flatten() != p.sel && owns_sel;
     let pick = |sel: Option<u64>| move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _: &mut gpui::Window, cx: &mut Cx| {
         with_picker(a, |e| {
             if let Some(p) = e.picker.as_mut() {
@@ -228,25 +259,68 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
         });
         cx.notify();
     };
+    let row = kind == Kind::Nameplate;
+    let item_tiles = |items: &[&Collectible], locked: bool, cx: &mut Cx| -> Vec<AnyElement> {
+        items
+            .iter()
+            .map(|it| {
+                let sz = if row { (224., 48.) } else { size };
+                // Effect/frame thumbnails fill the 83x80 tile; decorations are 64px.
+                let full = row || matches!(kind, Kind::Effect | Kind::Frame);
+                tile(SharedString::from(format!("pk-item-{}", it.sku)), sz, p.sel == Some(it.sku))
+                    .relative()
+                    .children(it.preview.clone().map(|u| if full { img(u).size_full().rounded(z(4.)).into_any_element() } else { img(u).size(z(64.)).into_any_element() }))
+                    .when(locked, |d| {
+                        // iconBadge_: 20x20 circle, black, 12px white lock, top -6 right -4.
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(z(-6.))
+                                .right(z(-4.))
+                                .size(z(20.))
+                                .rounded_full()
+                                .bg(gpui::black())
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(gpui::svg().path(crate::icons::path("lock")).size(z(12.)).text_color(gpui::white())),
+                        )
+                    })
+                    .on_click(cx.listener(pick(Some(it.sku))))
+                    .into_any_element()
+            })
+            .collect()
+    };
     let mut grid: Vec<AnyElement> = vec![
         icon_tile("none", size, "deny", crate::t!("pk.none"), p.sel.is_none()).on_click(cx.listener(pick(None))).into_any_element(),
         icon_tile("shop", size, "shop", crate::t!("pk.shop"), false).into_any_element(),
     ];
-    let row = kind == Kind::Nameplate;
-    let items: Vec<AnyElement> = owned
-        .iter()
-        .map(|it| {
-            let sz = if row { (224., 48.) } else { size };
-            let img_sz = if row { 0. } else { 64. };
-            tile(SharedString::from(format!("pk-item-{}", it.sku)), sz, p.sel == Some(it.sku))
-                .children(it.preview.clone().map(|u| if row { img(u).size_full().into_any_element() } else { img(u).size(z(img_sz)).into_any_element() }))
-                .on_click(cx.listener(pick(Some(it.sku))))
-                .into_any_element()
-        })
-        .collect();
-    let rows = if row { items } else {
-        grid.extend(items);
+    let owned_tiles = item_tiles(&owned, false, cx);
+    let rows = if row { owned_tiles } else {
+        grid.extend(owned_tiles);
         Vec::new()
+    };
+    let nitro_tiles = item_tiles(&nitro, true, cx);
+    let store_tiles = item_tiles(&store, true, cx);
+    // Section heading: h2 heading-sm/semibold 16/20 (nameplate: body-md/medium),
+    // grid 4px below (effect/frame 8px: tiles at top 28 in section_cR4ic2), 12px gaps.
+    let gap_below = if matches!(kind, Kind::Effect | Kind::Frame) { 8. } else { 4. };
+    let heading = |key: &'static str| {
+        div()
+            .text_size(z(16.))
+            .line_height(z(20.))
+            .font_weight(if row { FontWeight::MEDIUM } else { FontWeight::SEMIBOLD })
+            .text_color(c(tok(idx::TEXT_STRONG)))
+            .mb(z(gap_below))
+            .child(crate::t!(key))
+    };
+    let section = |key: &'static str, tiles: Vec<AnyElement>| {
+        div()
+            .mt(z(16.))
+            .flex()
+            .flex_col()
+            .child(heading(key))
+            .child(if row { div().flex().flex_col().gap(z(12.)) } else { div().flex().flex_wrap().gap(z(12.)) }.children(tiles))
     };
     let list = div()
         .id("pk-list")
@@ -256,10 +330,11 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
         .pb(z(16.))
         .flex()
         .flex_col()
-        .gap(z(4.))
-        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!(yours)))
+        .child(heading(yours))
         .child(div().flex().flex_wrap().gap(z(12.)).children(grid))
-        .when(row, |d| d.child(div().mt(z(12.)).flex().flex_col().gap(z(12.)).children(rows)));
+        .when(row, |d| d.child(div().mt(z(12.)).flex().flex_col().gap(z(12.)).children(rows)))
+        .when(!nitro_tiles.is_empty(), |d| d.child(section("pk.nitro", nitro_tiles)))
+        .when(!store_tiles.is_empty(), |d| d.child(section("pk.browse", store_tiles)));
     let close = |a: &mut PhoenixApp, _: &gpui::ClickEvent, _: &mut gpui::Window, cx: &mut Cx| {
         with_picker(a, |e| e.picker = None);
         cx.notify();
@@ -310,7 +385,7 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
                 .flex()
                 .flex_row_reverse()
                 .gap(z(8.))
-                .child(controls::button("pk-apply", crate::t!("pk.apply"), BtnKind::Primary).when(!changed, |b| b.opacity(0.5)).on_click(cx.listener(apply)))
+                .child(controls::button("pk-apply", crate::t!("pk.apply"), BtnKind::Primary).when(!changed, |b| b.opacity(0.5)).when(changed, |b| b.on_click(cx.listener(apply))))
                 .child(controls::button("pk-cancel", crate::t!("pk.cancel"), BtnKind::Secondary).on_click(cx.listener(close))),
         );
     Some(

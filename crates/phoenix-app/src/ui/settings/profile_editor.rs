@@ -119,6 +119,8 @@ pub struct EditorState {
     pub picker: Option<super::collectible_picker::PickerState>,
     /// Owned collectibles, loaded when a picker first opens.
     pub collectibles: Option<Vec<super::collectibles::Collectible>>,
+    /// Shop catalogue ("Nitro exclusive" / "Shop" picker sections).
+    pub shop: Option<super::collectibles::ShopCatalog>,
     /// Picker choices (editor preview only, never sent).
     pub equipped: super::collectible_picker::Equipped,
     /// Activity tab: recent played games.
@@ -148,6 +150,7 @@ impl EditorState {
             widgets: Vec::new(),
             picker: None,
             collectibles: None,
+            shop: None,
             equipped: Default::default(),
             recent: Vec::new(),
         }

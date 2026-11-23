@@ -285,6 +285,11 @@ pub trait Backend: Send + Sync + 'static {
     fn owned_collectibles(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Shop catalogue (`GET /collectibles-categories/v2`) for the pickers'
+    /// "Nitro exclusive" and "Shop" sections. Read-only.
+    fn collectibles_shop(&self) -> BoxFuture<crate::ui::settings::collectibles::ShopCatalog> {
+        Box::pin(async { Ok(Default::default()) })
+    }
     /// Own status (op 3 + settings). `custom` = custom status text.
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })

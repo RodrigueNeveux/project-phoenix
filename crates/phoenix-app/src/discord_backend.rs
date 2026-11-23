@@ -14,6 +14,7 @@ mod nav;
 mod people;
 mod profile_edit;
 mod profile_widgets;
+mod collectibles_shop;
 #[cfg(test)]
 pub(crate) use profile_edit::bodies as profile_edit_bodies;
 pub mod store;
@@ -763,6 +764,9 @@ impl Backend for DiscordBackend {
     }
     fn owned_collectibles(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {
         self.owned_collectibles_impl()
+    }
+    fn collectibles_shop(&self) -> BoxFuture<crate::ui::settings::collectibles::ShopCatalog> {
+        self.collectibles_shop_impl()
     }
     fn profile_widgets(&self, user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
         self.profile_widgets_impl(user)
