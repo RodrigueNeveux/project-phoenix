@@ -603,6 +603,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         );
 
     // tagsContainer_BkGrJJ: padding 16 0 4
+    let sort_open = app.parity.forums.get(&forum).is_some_and(|v| v.sort_menu);
     let mut filters = div().pt(z(16.)).pb(z(4.)).flex().items_center().overflow_hidden().child(
         // sortDropdown_BkGrJJ: h 32, padding 8 8 8 12, --radius-xl, gap 4
         div()
@@ -627,10 +628,19 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 v.sort_menu = !v.sort_menu;
                 cx.notify();
             }))
-            .child(icon(Icon::Threads, 16., c(Palette::INTERACTIVE)))
+            // ArrowsUpDownIcon size "xs" (16px)
+            .child(gpui::svg().path(crate::icons::path("sort")).size(z(16.)).flex_none().text_color(c(Palette::INTERACTIVE)))
             // sortDropdownText_BkGrJJ: margin 0 4 0 8
             .child(div().ml(z(8.)).mr(z(4.)).child(crate::t!("forum.sort_view")))
-            .child(icon(Icon::Chevron, 16., c(Palette::INTERACTIVE))),
+            // ChevronSmallUpIcon while the popout is shown, else Down; width 20
+            .child(
+                gpui::svg()
+                    .path(crate::icons::path(if sort_open { "chevron-up" } else { "chevron" }))
+                    .w(z(20.))
+                    .h(z(20.))
+                    .flex_none()
+                    .text_color(c(Palette::INTERACTIVE)),
+            ),
     );
     if !tags.is_empty() {
         // divider_BkGrJJ: 2x24, margin 0 16, --border-subtle, --radius-xs

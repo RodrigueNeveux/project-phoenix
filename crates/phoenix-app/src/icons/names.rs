@@ -43,6 +43,9 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("download", &["DownloadIcon"]),
     ("close", &["XLargeIcon", "XLargeBoldIcon"]),
     ("threads", &["ThreadIcon"]),
+    // Forum "Sort & View" dropdown (ForumChannel sortDropdown → ArrowsUpDownIcon xs).
+    ("sort", &["ArrowsUpDownIcon"]),
+    ("chevron-up", &["ChevronSmallUpIcon"]),
     ("friends", &["FriendsIcon"]),
     ("nitro", &["NitroWheelIcon"]),
     ("refresh", &["RefreshIcon"]),
