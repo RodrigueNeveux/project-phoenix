@@ -114,9 +114,44 @@ pub fn parse(mut p: &[u8]) -> Result<Vec<Feedback>> {
     Ok(out)
 }
 
+/// Reception report blocks of SR/RR packets: (reported ssrc, fraction lost
+/// out of 256). Used for the outbound packet loss shown in the UI.
+pub fn report_blocks(mut p: &[u8]) -> Vec<(u32, u8)> {
+    let mut out = Vec::new();
+    while p.len() >= 4 {
+        let count = (p[0] & 0x1f) as usize;
+        let pt = p[1];
+        let len = (u16::from_be_bytes([p[2], p[3]]) as usize + 1) * 4;
+        let Some(pkt) = p.get(..len) else { break };
+        let start = match pt {
+            PT_SR => Some(28),
+            PT_RR => Some(8),
+            _ => None,
+        };
+        if let Some(start) = start {
+            for i in 0..count {
+                let o = start + i * 24;
+                if let Some(b) = pkt.get(o..o + 5) {
+                    out.push((u32::from_be_bytes([b[0], b[1], b[2], b[3]]), b[4]));
+                }
+            }
+        }
+        p = &p[len..];
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn receiver_report_blocks() {
+        let mut v = vec![0x81, PT_RR, 0, 7, 0, 0, 0, 1];
+        v.extend_from_slice(&[0, 0, 0, 42, 64, 0, 0, 3]);
+        v.extend_from_slice(&[0; 16]);
+        assert_eq!(report_blocks(&v), vec![(42, 64)]);
+    }
 
     #[test]
     fn sr_and_pli_roundtrip() {

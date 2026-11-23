@@ -56,8 +56,23 @@ pub enum VoiceEvent {
     Speaking { user_id: u64, speaking: bool },
     /// DAVE end-to-end encryption state changed.
     Encryption { e2ee: bool, protocol_version: u16 },
+    /// Voice privacy code of the current DAVE epoch (None when not E2EE).
+    PrivacyCode(Option<String>),
+    /// Media counters, about once per second.
+    Stats(ConnStats),
     Reconnecting,
     Disconnected { reason: String },
+}
+
+/// Media statistics for the connection info popout.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct ConnStats {
+    pub packets_sent: u64,
+    pub packets_received: u64,
+    /// Inbound packets missing from the received sequence numbers.
+    pub packets_lost: u64,
+    /// Outbound loss reported by the server (RTCP), percent.
+    pub outbound_loss_pct: Option<f32>,
 }
 
 pub struct VoiceConfig {
@@ -143,6 +158,10 @@ async fn run(
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     let mut recv_buf_errors = 0u32;
     let mut audio_open = true;
+    let mut stats = ConnStats::default();
+    let mut last_seq: HashMap<u32, u16> = HashMap::new();
+    let mut last_code: Option<String> = None;
+    let mut ticks = 0u32;
 
     loop {
         tokio::select! {
@@ -188,6 +207,14 @@ async fn run(
                                 dave.add_users([uid]);
                             }
                         }
+                        ServerMessage::Video(v) => {
+                            if let Some(uid) = v.user_id.as_deref().and_then(|u| u.parse::<u64>().ok())
+                                && v.audio_ssrc != 0
+                            {
+                                ssrc_users.insert(v.audio_ssrc, uid);
+                                dave.add_users([uid]);
+                            }
+                        }
                         ServerMessage::ClientsConnect { user_ids } => {
                             dave.add_users(user_ids.iter().filter_map(|u| u.parse().ok()));
                         }
@@ -218,6 +245,11 @@ async fn run(
                     was_e2ee = e2ee;
                     let _ = events.send(VoiceEvent::Encryption { e2ee, protocol_version: dave.protocol_version() });
                 }
+                let code = if e2ee { dave.epoch_authenticator().and_then(|a| crate::dave::privacy_code(&a)) } else { None };
+                if code != last_code {
+                    last_code = code.clone();
+                    let _ = events.send(VoiceEvent::PrivacyCode(code));
+                }
             }
             pkt = async {
                 match media.as_ref() {
@@ -227,7 +259,14 @@ async fn run(
             } => {
                 let pkt = match pkt {
                     Ok(Incoming::Rtp(p)) => p,
-                    Ok(Incoming::Rtcp(_)) => continue,
+                    Ok(Incoming::Rtcp(r)) => {
+                        if let Some(m) = media.as_ref()
+                            && let Some((_, frac)) = rtp::rtcp::report_blocks(&r).into_iter().find(|(ssrc, _)| *ssrc == m.ssrc)
+                        {
+                            stats.outbound_loss_pct = Some(frac as f32 * 100.0 / 256.0);
+                        }
+                        continue;
+                    }
                     Err(Error::Io(e)) => return Err(Error::Io(e)),
                     Err(e) => {
                         recv_buf_errors += 1;
@@ -240,6 +279,16 @@ async fn run(
                 let Ok((h, payload)) = rtp::parse_packet(&pkt) else { continue };
                 if h.payload_type != Codec::Opus.payload_type() {
                     continue;
+                }
+                stats.packets_received += 1;
+                if let Some(prev) = last_seq.insert(h.ssrc, h.sequence) {
+                    let d = h.sequence.wrapping_sub(prev);
+                    if (2..1000).contains(&d) {
+                        stats.packets_lost += u64::from(d - 1);
+                    } else if d == 0 || d >= 32768 {
+                        // Duplicate or reordered: keep the newest sequence.
+                        last_seq.insert(h.ssrc, prev);
+                    }
                 }
                 let Some(&uid) = ssrc_users.get(&h.ssrc) else { continue };
                 let opus = match dave.decrypt(uid, payload) {
@@ -288,8 +337,9 @@ async fn run(
                 let Ok(payload) = dave.encrypt(Codec::Opus, &opus) else { continue };
                 m.timestamp = m.timestamp.wrapping_add(crate::FRAME_SAMPLES as u32);
                 for p in m.sender.wrap(vec![payload], m.timestamp) {
-                    if let Err(e) = m.socket.send_rtp(&p).await {
-                        tracing::debug!(error = %e, "voice: send failed");
+                    match m.socket.send_rtp(&p).await {
+                        Ok(()) => stats.packets_sent += 1,
+                        Err(e) => tracing::debug!(error = %e, "voice: send failed"),
                     }
                 }
             }
@@ -302,6 +352,10 @@ async fn run(
                     }
                     alive
                 });
+                ticks += 1;
+                if ticks.is_multiple_of(10) && media.is_some() {
+                    let _ = events.send(VoiceEvent::Stats(stats));
+                }
             }
             cmd = cmds.recv() => match cmd {
                 Some(Cmd::Close) | None => {

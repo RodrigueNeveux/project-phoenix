@@ -34,6 +34,11 @@ cpal = { version = "0.15", optional = true }
 openmls = "0.9"
 openmls_rust_crypto = "0.6"
 openmls_basic_credential = "0.6"
+futures-executor = "0.3"
+
+# Global push-to-talk through the XDG GlobalShortcuts portal (same ashpd as gpui).
+[target.'cfg(target_os = "linux")'.dependencies]
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "global_shortcuts"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

@@ -6125,9 +6125,11 @@ name = "phoenix-voice"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "ashpd",
  "audiopus",
  "chacha20poly1305",
  "cpal",
+ "futures-executor",
  "futures-util",
  "hmac 0.12.1",
  "openmls",

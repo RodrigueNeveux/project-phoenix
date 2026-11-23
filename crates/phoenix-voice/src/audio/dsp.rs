@@ -62,6 +62,102 @@ impl NoiseGate {
     }
 }
 
+/// One-pole high-pass filter (removes rumble / DC below ~80 Hz).
+#[derive(Debug, Clone)]
+pub struct HighPass {
+    a: f32,
+    prev_in: f32,
+    prev_out: f32,
+}
+
+impl HighPass {
+    pub fn new(cutoff_hz: f32, rate: u32) -> Self {
+        let rc = 1.0 / (2.0 * std::f32::consts::PI * cutoff_hz);
+        let dt = 1.0 / rate as f32;
+        Self { a: rc / (rc + dt), prev_in: 0.0, prev_out: 0.0 }
+    }
+
+    pub fn process(&mut self, x: &mut [f32]) {
+        for s in x.iter_mut() {
+            let y = self.a * (self.prev_out + *s - self.prev_in);
+            self.prev_in = *s;
+            self.prev_out = y;
+            *s = y;
+        }
+    }
+}
+
+/// Simple noise suppression: a downward expander that pulls frames close to
+/// the tracked noise floor down by up to 24 dB, with smoothed gain so the
+/// tail of words is not chopped.
+#[derive(Debug, Clone)]
+pub struct NoiseSuppressor {
+    floor: f32,
+    gain: f32,
+}
+
+impl Default for NoiseSuppressor {
+    fn default() -> Self {
+        Self { floor: -70.0, gain: 1.0 }
+    }
+}
+
+impl NoiseSuppressor {
+    pub fn process(&mut self, frame: &mut [f32]) {
+        let db = level_db(frame);
+        if db < self.floor {
+            self.floor = 0.7 * self.floor + 0.3 * db;
+        } else {
+            self.floor += 0.01 * (db - self.floor);
+        }
+        // 0 dB above floor -> -24 dB, 12 dB above floor -> unity.
+        let over = (db - self.floor).clamp(0.0, 12.0);
+        let target_db = -24.0 * (1.0 - over / 12.0);
+        let target = 10f32.powf(target_db / 20.0);
+        let k = if target > self.gain { 0.6 } else { 0.15 };
+        let start = self.gain;
+        self.gain += k * (target - self.gain);
+        let n = frame.len().max(1) as f32;
+        for (i, s) in frame.iter_mut().enumerate() {
+            *s *= start + (self.gain - start) * (i as f32 / n);
+        }
+    }
+}
+
+/// Automatic gain control towards -20 dBFS RMS on speech frames.
+#[derive(Debug, Clone)]
+pub struct Agc {
+    gain: f32,
+}
+
+impl Default for Agc {
+    fn default() -> Self {
+        Self { gain: 1.0 }
+    }
+}
+
+impl Agc {
+    pub const TARGET_DB: f32 = -20.0;
+
+    pub fn gain(&self) -> f32 {
+        self.gain
+    }
+
+    /// `speech`: whether the frame is voice (only then the gain adapts).
+    pub fn process(&mut self, frame: &mut [f32], speech: bool) {
+        let db = level_db(frame);
+        if speech && db > -70.0 {
+            let want = 10f32.powf((Self::TARGET_DB - db) / 20.0).clamp(0.25, 8.0);
+            // Fast down (avoid clipping), slow up.
+            let k = if want < self.gain { 0.3 } else { 0.03 };
+            self.gain += k * (want - self.gain);
+        }
+        for s in frame.iter_mut() {
+            *s = (*s * self.gain).clamp(-1.0, 1.0);
+        }
+    }
+}
+
 /// Streaming linear resampler for interleaved audio.
 #[derive(Debug, Clone)]
 pub struct Resampler {
@@ -183,6 +279,30 @@ mod tests {
         }
         assert!((out.len() as i32 - 4800).abs() <= 2, "{}", out.len());
         assert!(out[100..].iter().all(|s| (*s - 0.5).abs() < 1e-6));
+    }
+
+    #[test]
+    fn agc_raises_quiet_speech() {
+        let mut a = Agc::default();
+        let mut f: Vec<f32> = (0..960).map(|i| (i as f32 * 0.1).sin() * 0.01).collect();
+        for _ in 0..300 {
+            let mut g = f.clone();
+            a.process(&mut g, true);
+        }
+        a.process(&mut f, true);
+        assert!(level_db(&f) > -26.0, "{}", level_db(&f));
+    }
+
+    #[test]
+    fn suppressor_attenuates_steady_noise() {
+        let mut ns = NoiseSuppressor::default();
+        let noise: Vec<f32> = (0..960).map(|i| if i % 2 == 0 { 0.01 } else { -0.01 }).collect();
+        let mut out = noise.clone();
+        for _ in 0..200 {
+            out = noise.clone();
+            ns.process(&mut out);
+        }
+        assert!(level_db(&out) < level_db(&noise) - 15.0);
     }
 
     #[test]

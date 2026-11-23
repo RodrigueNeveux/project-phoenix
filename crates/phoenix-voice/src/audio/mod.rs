@@ -40,6 +40,14 @@ pub struct AudioControl {
     gate_threshold_db: AtomicU32,
     input_level_db: AtomicU32,
     user_volume: Mutex<HashMap<u64, f32>>,
+    noise_suppression: AtomicBool,
+    agc: AtomicBool,
+    echo_cancellation: AtomicBool,
+    push_to_talk: AtomicBool,
+    ptt_pressed: AtomicBool,
+    ptt_release_ms: AtomicU32,
+    /// Whether the last captured frame passed the gate (or PTT).
+    transmitting: AtomicBool,
 }
 
 impl Default for AudioControl {
@@ -53,6 +61,13 @@ impl Default for AudioControl {
             gate_threshold_db: AtomicU32::new((-50.0f32).to_bits()),
             input_level_db: AtomicU32::new((-100.0f32).to_bits()),
             user_volume: Mutex::new(HashMap::new()),
+            noise_suppression: AtomicBool::new(true),
+            agc: AtomicBool::new(true),
+            echo_cancellation: AtomicBool::new(true),
+            push_to_talk: AtomicBool::new(false),
+            ptt_pressed: AtomicBool::new(false),
+            ptt_release_ms: AtomicU32::new(20),
+            transmitting: AtomicBool::new(false),
         }
     }
 }
@@ -108,5 +123,51 @@ impl AudioControl {
     }
     pub fn set_user_volume(&self, user: u64, v: f32) {
         lock(&self.user_volume).insert(user, v.clamp(0.0, 2.0));
+    }
+    pub fn noise_suppression(&self) -> bool {
+        self.noise_suppression.load(Ordering::Relaxed)
+    }
+    pub fn set_noise_suppression(&self, v: bool) {
+        self.noise_suppression.store(v, Ordering::Relaxed);
+    }
+    /// Automatic gain control.
+    pub fn agc(&self) -> bool {
+        self.agc.load(Ordering::Relaxed)
+    }
+    pub fn set_agc(&self, v: bool) {
+        self.agc.store(v, Ordering::Relaxed);
+    }
+    /// Stored for the settings page; there is no echo canceller yet.
+    pub fn echo_cancellation(&self) -> bool {
+        self.echo_cancellation.load(Ordering::Relaxed)
+    }
+    pub fn set_echo_cancellation(&self, v: bool) {
+        self.echo_cancellation.store(v, Ordering::Relaxed);
+    }
+    /// Push-to-talk mode (instead of voice activity).
+    pub fn push_to_talk(&self) -> bool {
+        self.push_to_talk.load(Ordering::Relaxed)
+    }
+    pub fn set_push_to_talk(&self, v: bool) {
+        self.push_to_talk.store(v, Ordering::Relaxed);
+    }
+    pub fn ptt_pressed(&self) -> bool {
+        self.ptt_pressed.load(Ordering::Relaxed)
+    }
+    pub fn set_ptt_pressed(&self, v: bool) {
+        self.ptt_pressed.store(v, Ordering::Relaxed);
+    }
+    /// Push-to-talk release delay (Discord: 0..=2000 ms, default 20).
+    pub fn ptt_release_ms(&self) -> u32 {
+        self.ptt_release_ms.load(Ordering::Relaxed)
+    }
+    pub fn set_ptt_release_ms(&self, v: u32) {
+        self.ptt_release_ms.store(v.min(2000), Ordering::Relaxed);
+    }
+    pub fn transmitting(&self) -> bool {
+        self.transmitting.load(Ordering::Relaxed)
+    }
+    pub fn set_transmitting(&self, v: bool) {
+        self.transmitting.store(v, Ordering::Relaxed);
     }
 }

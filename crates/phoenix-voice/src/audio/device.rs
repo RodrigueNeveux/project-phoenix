@@ -20,7 +20,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, SampleRate, Stream, StreamConfig, SupportedStreamConfig};
 use tokio::sync::mpsc;
 
-use super::dsp::{NoiseGate, Resampler, convert_channels, level_db, to_i16};
+use super::dsp::{Agc, HighPass, NoiseGate, NoiseSuppressor, Resampler, convert_channels, level_db, to_i16};
 use super::mixer::Mixer;
 use super::{AudioControl, lock};
 use crate::connection::{AudioIn, AudioOut};
@@ -262,6 +262,56 @@ fn open_output(name: Option<&str>, q: Arc<Mutex<VecDeque<f32>>>) -> Option<(Stre
     Some((stream, (cfg.sample_rate.0, ch)))
 }
 
+/// Capture processing shared by calls and the mic test:
+/// high-pass + noise suppression -> input gain -> meter -> gate / PTT -> AGC.
+pub struct Processor {
+    hp: HighPass,
+    ns: NoiseSuppressor,
+    agc: Agc,
+    gate: NoiseGate,
+    ptt_last: Option<Instant>,
+}
+
+impl Default for Processor {
+    fn default() -> Self {
+        Self { hp: HighPass::new(80.0, RATE), ns: NoiseSuppressor::default(), agc: Agc::default(), gate: NoiseGate::default(), ptt_last: None }
+    }
+}
+
+impl Processor {
+    /// Process one 20 ms 48 kHz mono frame in place. Returns (level dBFS,
+    /// whether to transmit).
+    pub fn process(&mut self, control: &AudioControl, frame: &mut [f32]) -> (f32, bool) {
+        if control.noise_suppression() {
+            self.hp.process(frame);
+            self.ns.process(frame);
+        }
+        let g = control.input_gain();
+        if g != 1.0 {
+            frame.iter_mut().for_each(|s| *s *= g);
+        }
+        let db = level_db(frame);
+        self.gate.automatic = control.gate_automatic();
+        self.gate.threshold_db = control.gate_threshold_db();
+        let vad = self.gate.process(db);
+        let open = if control.push_to_talk() {
+            let now = Instant::now();
+            if control.ptt_pressed() {
+                self.ptt_last = Some(now);
+                true
+            } else {
+                self.ptt_last.is_some_and(|t| now.duration_since(t) <= Duration::from_millis(control.ptt_release_ms() as u64))
+            }
+        } else {
+            vad
+        };
+        if control.agc() {
+            self.agc.process(frame, open && vad);
+        }
+        (db, open)
+    }
+}
+
 fn encode_loop(
     control: Arc<AudioControl>,
     stop: Arc<AtomicBool>,
@@ -275,23 +325,18 @@ fn encode_loop(
         return;
     };
     let mut rs = Resampler::new(rate, RATE, 1);
-    let mut gate = NoiseGate::default();
+    let mut proc = Processor::default();
     let mut pending: Vec<f32> = Vec::with_capacity(FRAME_SAMPLES * 4);
     while !stop.load(Ordering::Relaxed) {
         let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) else { continue };
         rs.process(&chunk, &mut pending);
         while pending.len() >= FRAME_SAMPLES {
             let mut frame: Vec<f32> = pending.drain(..FRAME_SAMPLES).collect();
-            let g = control.input_gain();
-            if g != 1.0 {
-                frame.iter_mut().for_each(|s| *s *= g);
-            }
-            let db = level_db(&frame);
+            let (db, open) = proc.process(&control, &mut frame);
             control.set_input_level_db(db);
-            gate.automatic = control.gate_automatic();
-            gate.threshold_db = control.gate_threshold_db();
-            let open = gate.process(db);
-            let msg = if control.muted() || control.deafened() || !open {
+            let send = open && !control.muted() && !control.deafened();
+            control.set_transmitting(send);
+            let msg = if !send {
                 AudioOut::End
             } else {
                 match enc.encode(&to_i16(&frame)) {
@@ -300,9 +345,120 @@ fn encode_loop(
                 }
             };
             if out.send(msg).is_err() {
+                control.set_transmitting(false);
                 return;
             }
         }
+    }
+    control.set_transmitting(false);
+}
+
+/// Settings page "Let's Check": capture with the call's processing, show the
+/// level and play the processed voice back on the output device.
+pub struct MicTest {
+    stop: Arc<AtomicBool>,
+    io_stop: Option<std_mpsc::Sender<()>>,
+    threads: Vec<JoinHandle<()>>,
+    level: Arc<std::sync::atomic::AtomicU32>,
+    open: Arc<AtomicBool>,
+}
+
+impl MicTest {
+    pub fn start(control: Arc<AudioControl>, input: Option<String>, output: Option<String>, loopback: bool) -> Result<Self> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let out_queue: Arc<Mutex<VecDeque<f32>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let (cap_tx, cap_rx) = std_mpsc::channel::<Vec<f32>>();
+        let (io_stop_tx, io_stop_rx) = std_mpsc::channel::<()>();
+        let (ready_tx, ready_rx) = std_mpsc::channel::<(Option<(u32, usize)>, Option<(u32, usize)>)>();
+        let oq = out_queue.clone();
+        let mut threads = vec![
+            std::thread::Builder::new()
+                .name("phoenix-mictest-io".into())
+                .spawn(move || {
+                    let (istream, ifmt) = open_input(input.as_deref(), cap_tx).unzip();
+                    let (ostream, ofmt) = if loopback { open_output(output.as_deref(), oq).unzip() } else { (None, None) };
+                    let _ = ready_tx.send((ifmt, ofmt));
+                    let _keep = (istream, ostream);
+                    let _ = io_stop_rx.recv();
+                })
+                .map_err(Error::Io)?,
+        ];
+        let (ifmt, ofmt) = ready_rx.recv_timeout(Duration::from_secs(5)).map_err(|_| Error::Timeout("audio devices"))?;
+        let Some((irate, _)) = ifmt else {
+            drop(io_stop_tx);
+            for t in threads {
+                let _ = t.join();
+            }
+            return Err(Error::Unsupported("no microphone".into()));
+        };
+        let level = Arc::new(std::sync::atomic::AtomicU32::new((-100.0f32).to_bits()));
+        let open = Arc::new(AtomicBool::new(false));
+        let (l2, o2, s2) = (level.clone(), open.clone(), stop.clone());
+        threads.push(
+            std::thread::Builder::new()
+                .name("phoenix-mictest".into())
+                .spawn(move || {
+                    let mut rs_in = Resampler::new(irate, RATE, 1);
+                    let mut rs_out = ofmt.map(|(r, ch)| (Resampler::new(RATE, r, ch), ch, r as usize * ch * MAX_OUT_MS / 1000));
+                    let mut proc = Processor::default();
+                    let mut pending = Vec::with_capacity(FRAME_SAMPLES * 4);
+                    let mut buf = Vec::new();
+                    while !s2.load(Ordering::Relaxed) {
+                        let Ok(chunk) = cap_rx.recv_timeout(Duration::from_millis(200)) else { continue };
+                        rs_in.process(&chunk, &mut pending);
+                        while pending.len() >= FRAME_SAMPLES {
+                            let mut frame: Vec<f32> = pending.drain(..FRAME_SAMPLES).collect();
+                            let (db, gate_open) = proc.process(&control, &mut frame);
+                            l2.store(db.to_bits(), Ordering::Relaxed);
+                            o2.store(gate_open, Ordering::Relaxed);
+                            if let Some((rs, ch, cap)) = rs_out.as_mut() {
+                                let g = control.output_gain();
+                                if !gate_open {
+                                    frame.iter_mut().for_each(|s| *s = 0.0);
+                                }
+                                let f: Vec<f32> = frame.iter().map(|s| s * g).collect();
+                                let f = convert_channels(&f, 1, *ch);
+                                buf.clear();
+                                rs.process(&f, &mut buf);
+                                let mut q = lock(&out_queue);
+                                if q.len() + buf.len() <= *cap {
+                                    q.extend(buf.iter().copied());
+                                }
+                            }
+                        }
+                    }
+                })
+                .map_err(Error::Io)?,
+        );
+        Ok(Self { stop, io_stop: Some(io_stop_tx), threads, level, open })
+    }
+
+    /// Current input level in dBFS.
+    pub fn level_db(&self) -> f32 {
+        f32::from_bits(self.level.load(Ordering::Relaxed))
+    }
+
+    /// Whether the gate / push-to-talk would transmit right now.
+    pub fn gate_open(&self) -> bool {
+        self.open.load(Ordering::Relaxed)
+    }
+
+    pub fn stop(mut self) {
+        self.shutdown();
+    }
+
+    fn shutdown(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        self.io_stop.take();
+        for t in self.threads.drain(..) {
+            let _ = t.join();
+        }
+    }
+}
+
+impl Drop for MicTest {
+    fn drop(&mut self) {
+        self.shutdown();
     }
 }
 
