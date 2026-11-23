@@ -1,0 +1,112 @@
+//! Voice audio pipeline.
+//!
+//! - [`dsp`]: level meter, noise gate / VAD, resampler, mixing helpers.
+//! - [`AudioControl`]: lock-free knobs shared with the UI (mute, deafen,
+//!   volumes, input sensitivity) and the live input level.
+//! - `mixer` (feature `opus`): per-user jitter buffer + Opus decode + mix.
+//! - `device` (feature `audio`): cpal capture/playback threads.
+
+pub mod dsp;
+#[cfg(feature = "opus")]
+pub mod mixer;
+#[cfg(feature = "audio")]
+pub mod device;
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+use std::sync::{Mutex, MutexGuard};
+
+/// Lock ignoring poisoning (audio threads must never take the app down).
+pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn load_f32(a: &AtomicU32) -> f32 {
+    f32::from_bits(a.load(Ordering::Relaxed))
+}
+
+fn store_f32(a: &AtomicU32, v: f32) {
+    a.store(v.to_bits(), Ordering::Relaxed);
+}
+
+/// Shared audio settings and meters.
+pub struct AudioControl {
+    muted: AtomicBool,
+    deafened: AtomicBool,
+    input_gain: AtomicU32,
+    output_gain: AtomicU32,
+    gate_automatic: AtomicBool,
+    gate_threshold_db: AtomicU32,
+    input_level_db: AtomicU32,
+    user_volume: Mutex<HashMap<u64, f32>>,
+}
+
+impl Default for AudioControl {
+    fn default() -> Self {
+        Self {
+            muted: AtomicBool::new(false),
+            deafened: AtomicBool::new(false),
+            input_gain: AtomicU32::new(1.0f32.to_bits()),
+            output_gain: AtomicU32::new(1.0f32.to_bits()),
+            gate_automatic: AtomicBool::new(true),
+            gate_threshold_db: AtomicU32::new((-50.0f32).to_bits()),
+            input_level_db: AtomicU32::new((-100.0f32).to_bits()),
+            user_volume: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+impl AudioControl {
+    pub fn muted(&self) -> bool {
+        self.muted.load(Ordering::Relaxed)
+    }
+    pub fn set_muted(&self, v: bool) {
+        self.muted.store(v, Ordering::Relaxed);
+    }
+    pub fn deafened(&self) -> bool {
+        self.deafened.load(Ordering::Relaxed)
+    }
+    pub fn set_deafened(&self, v: bool) {
+        self.deafened.store(v, Ordering::Relaxed);
+    }
+    /// Linear input gain (1.0 = unchanged, up to 2.0).
+    pub fn input_gain(&self) -> f32 {
+        load_f32(&self.input_gain)
+    }
+    pub fn set_input_gain(&self, v: f32) {
+        store_f32(&self.input_gain, v.clamp(0.0, 2.0));
+    }
+    pub fn output_gain(&self) -> f32 {
+        load_f32(&self.output_gain)
+    }
+    pub fn set_output_gain(&self, v: f32) {
+        store_f32(&self.output_gain, v.clamp(0.0, 2.0));
+    }
+    pub fn gate_automatic(&self) -> bool {
+        self.gate_automatic.load(Ordering::Relaxed)
+    }
+    pub fn gate_threshold_db(&self) -> f32 {
+        load_f32(&self.gate_threshold_db)
+    }
+    /// `None` = automatic sensitivity, `Some(db)` = fixed threshold.
+    pub fn set_gate(&self, threshold_db: Option<f32>) {
+        self.gate_automatic.store(threshold_db.is_none(), Ordering::Relaxed);
+        if let Some(t) = threshold_db {
+            store_f32(&self.gate_threshold_db, t.clamp(-100.0, 0.0));
+        }
+    }
+    /// Last captured frame level in dBFS (for the sensitivity meter).
+    pub fn input_level_db(&self) -> f32 {
+        load_f32(&self.input_level_db)
+    }
+    pub fn set_input_level_db(&self, v: f32) {
+        store_f32(&self.input_level_db, v);
+    }
+    pub fn user_volume(&self, user: u64) -> f32 {
+        lock(&self.user_volume).get(&user).copied().unwrap_or(1.0)
+    }
+    pub fn set_user_volume(&self, user: u64, v: f32) {
+        lock(&self.user_volume).insert(user, v.clamp(0.0, 2.0));
+    }
+}

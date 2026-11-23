@@ -9,6 +9,8 @@ license = "MIT OR Apache-2.0"
 default = []
 # Opus encode/decode via audiopus (builds bundled libopus with cmake if no system lib).
 opus = ["dep:audiopus"]
+# Microphone capture and speaker playback via cpal (ALSA/PipeWire), with Opus.
+audio = ["opus", "dep:cpal"]
 # Video encoder backends (currently stubs, see src/media/video.rs).
 ffmpeg = []
 vaapi = []
@@ -28,6 +30,7 @@ chacha20poly1305 = "0.10"
 hmac = "0.12"
 sha2 = "0.10"
 audiopus = { version = "0.2", optional = true }
+cpal = { version = "0.15", optional = true }
 openmls = "0.9"
 openmls_rust_crypto = "0.6"
 openmls_basic_credential = "0.6"

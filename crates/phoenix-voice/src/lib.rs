@@ -15,7 +15,9 @@
 //! - [`dave`]: DAVE end-to-end encryption frame transform and MLS interface.
 //! - [`media`]: encoder / capture traits and implementations.
 
+pub mod audio;
 pub mod codec;
+pub mod connection;
 pub mod crypto;
 pub mod dave;
 pub mod error;
@@ -27,3 +29,6 @@ pub mod session;
 pub mod udp;
 
 pub use error::{Error, Result};
+
+/// Samples per channel in one 20 ms Opus frame at 48 kHz.
+pub const FRAME_SAMPLES: usize = 960;
