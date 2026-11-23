@@ -349,7 +349,8 @@ fn related(icon: &'static str, title: &'static str, desc: &'static str, page: Pa
 fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: &mut Cx) {
     match b {
         B::Title(t) => out.push(controls::section_title(tr(t)).into_any_element()),
-        B::Lead(t) => out.push(div().mt(z(-20.)).pb(z(12.)).child(desc_text(tr(t))).into_any_element()),
+        // Lead sits 4px under the 32px heading (vanilla-settings-14b #3019→#3021): pb 24 + column gap 10 - 30.
+        B::Lead(t) => out.push(div().mt(z(-30.)).pb(z(22.)).child(desc_text(tr(t))).into_any_element()),
         B::Legend(t) => out.push(
             div()
                 .pt(z(10.))
@@ -970,8 +971,14 @@ fn limited_theme(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .text_size(z(14.))
                 .line_height(z(18.))
                 .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(tr("sp.ap.limited_d"))
-                .child(div().text_color(c(tok(idx::TEXT_LINK))).child(tr("sp.ap.limited_more"))),
+                // The link runs inline after the note (`anchor_` inside the same text), not on its own line.
+                .child({
+                    let (note, more) = (tr("sp.ap.limited_d"), tr("sp.ap.limited_more"));
+                    let start = note.len() + 1;
+                    let text = format!("{note} {more}");
+                    let end = text.len();
+                    gpui::StyledText::new(text).with_highlights([(start..end, gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() })])
+                }),
         )
         .child(
             div().pt(z(20.)).child(
