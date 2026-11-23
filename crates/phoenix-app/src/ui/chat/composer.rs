@@ -237,6 +237,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
     };
     let ic = c(Palette::INTERACTIVE);
     let placeholder_empty = app.composer.read(cx).value().is_empty();
+    // Discord shows the remaining count once you get near the 2000 limit.
+    let remaining = 2000 - app.composer.read(cx).value().chars().count() as i64;
     let reply = reply_bar(app, cx);
     let has_banner = reply.is_some();
     let tray = upload_tray(app, cx);
@@ -260,6 +262,18 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .id("composer")
                             .min_h(px(44.))
                             .when(has_banner, |d| d.rounded_b(px(8.)))
+                            .relative()
+                            .when(remaining < 200, |d| {
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .right(px(16.))
+                                        .bottom(px(-18.))
+                                        .text_size(px(12.))
+                                        .text_color(c(if remaining < 0 { Palette::RED } else { Palette::TEXT_MUTED }))
+                                        .child(SharedString::from(remaining.to_string())),
+                                )
+                            })
                             .flex()
                             .items_center()
                             .capture_key_down(cx.listener(|a, ev: &KeyDownEvent, w, cx| {

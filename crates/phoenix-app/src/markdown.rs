@@ -18,6 +18,8 @@ impl Style {
     pub const SPOILER: Style = Style(1 << 5);
     pub const LINK: Style = Style(1 << 6);
     pub const MENTION: Style = Style(1 << 7);
+    /// `<t:unix:fmt>` timestamp pill.
+    pub const TIMESTAMP: Style = Style(1 << 8);
 
     pub fn has(self, other: Style) -> bool {
         self.0 & other.0 == other.0 && other.0 != 0
@@ -61,6 +63,86 @@ pub enum Block {
     Paragraph(Inline),
     Quote(Inline),
     Code { lang: Option<String>, code: String },
+    /// `#`, `##`, `###` headers (level 1..=3).
+    Heading(u8, Inline),
+    /// `-# small text`.
+    Subtext(Inline),
+    /// `- item` / `* item` / `1. item`; `depth` from leading indentation.
+    ListItem { ordered: Option<u32>, depth: u8, inline: Inline },
+}
+
+impl Block {
+    /// The inline text of any non-code block.
+    pub fn inline(&self) -> Option<&Inline> {
+        match self {
+            Block::Paragraph(i) | Block::Quote(i) | Block::Heading(_, i) | Block::Subtext(i) => Some(i),
+            Block::ListItem { inline, .. } => Some(inline),
+            Block::Code { .. } => None,
+        }
+    }
+}
+
+/// Line-level constructs: headings, subtext and list items.
+fn line_block(line: &str, r: &dyn MentionResolver, sp: &mut usize) -> Option<Block> {
+    for (pfx, lvl) in [("### ", 3u8), ("## ", 2), ("# ", 1)] {
+        if let Some(t) = line.strip_prefix(pfx)
+            && !t.trim().is_empty()
+        {
+            return Some(Block::Heading(lvl, parse_inline(t.trim(), r, sp)));
+        }
+    }
+    if let Some(t) = line.strip_prefix("-# ")
+        && !t.trim().is_empty()
+    {
+        return Some(Block::Subtext(parse_inline(t.trim(), r, sp)));
+    }
+    let trimmed = line.trim_start_matches(' ');
+    let depth = ((line.len() - trimmed.len()) / 2).min(2) as u8;
+    if let Some(t) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* "))
+        && !t.trim().is_empty()
+    {
+        return Some(Block::ListItem { ordered: None, depth, inline: parse_inline(t, r, sp) });
+    }
+    let digits = trimmed.bytes().take_while(u8::is_ascii_digit).count();
+    if digits > 0
+        && digits < 10
+        && let Some(t) = trimmed[digits..].strip_prefix(". ")
+        && !t.trim().is_empty()
+    {
+        let n = trimmed[..digits].parse().unwrap_or(1);
+        return Some(Block::ListItem { ordered: Some(n), depth, inline: parse_inline(t, r, sp) });
+    }
+    None
+}
+
+/// Format a `<t:unix:style>` timestamp like the official client.
+pub fn format_timestamp(ts: i64, style: char) -> Option<String> {
+    use chrono::{Local, TimeZone};
+    let dt = Local.timestamp_opt(ts, 0).single()?;
+    Some(match style {
+        't' => dt.format("%-I:%M %p").to_string(),
+        'T' => dt.format("%-I:%M:%S %p").to_string(),
+        'd' => dt.format("%m/%d/%Y").to_string(),
+        'D' => dt.format("%B %-d, %Y").to_string(),
+        'F' => dt.format("%A, %B %-d, %Y %-I:%M %p").to_string(),
+        'R' => relative(ts - Local::now().timestamp()),
+        _ => dt.format("%B %-d, %Y %-I:%M %p").to_string(),
+    })
+}
+
+fn relative(delta: i64) -> String {
+    let a = delta.unsigned_abs();
+    let (n, unit) = match a {
+        0..60 => (a, "second"),
+        60..3600 => (a / 60, "minute"),
+        3600..86400 => (a / 3600, "hour"),
+        86400..2_592_000 => (a / 86400, "day"),
+        2_592_000..31_536_000 => (a / 2_592_000, "month"),
+        _ => (a / 31_536_000, "year"),
+    };
+    let unit = if n == 1 { unit.to_string() } else { format!("{unit}s") };
+    let n = if n == 1 && unit != "second" { if unit.starts_with('h') { "an".to_string() } else { "a".to_string() } } else { n.to_string() };
+    if delta >= 0 { format!("in {n} {unit}") } else { format!("{n} {unit} ago") }
 }
 
 /// Resolves `<@id>` / `<#id>` to display text (without the sigil).
@@ -137,7 +219,11 @@ pub fn parse(src: &str, r: &dyn MentionResolver) -> Vec<Block> {
                 continue;
             }
         }
-        if let Some(q) = line.strip_prefix("> ").or_else(|| (line == ">").then_some("")) {
+        if let Some(b) = line_block(line, r, &mut spoilers) {
+            flush(&mut para, false, &mut blocks, &mut spoilers);
+            flush(&mut quote, true, &mut blocks, &mut spoilers);
+            blocks.push(b);
+        } else if let Some(q) = line.strip_prefix("> ").or_else(|| (line == ">").then_some("")) {
             flush(&mut para, false, &mut blocks, &mut spoilers);
             quote.push_str(q);
             quote.push('\n');
@@ -259,6 +345,19 @@ impl Ctx<'_> {
                 && let Some(end) = rest.find('>')
             {
                 let inner = &rest[1..end];
+                if let Some(t) = inner.strip_prefix("t:") {
+                    let (num, st) = t.split_once(':').unwrap_or((t, "f"));
+                    if let (Ok(ts), Some(stc)) = (num.parse::<i64>(), st.chars().next())
+                        && st.len() == 1
+                        && let Some(label) = format_timestamp(ts, stc)
+                    {
+                        self.push(&src[plain_start..i], style, spoiler);
+                        self.push_full(&label, style | Style::TIMESTAMP, None, None, spoiler);
+                        i += end + 1;
+                        plain_start = i;
+                        continue;
+                    }
+                }
                 let parsed = if let Some(id) = inner.strip_prefix("@&") {
                     id.parse().ok().map(|id| {
                         let n = self.r.role(id).unwrap_or_else(|| "unknown-role".into());
@@ -307,8 +406,9 @@ impl Ctx<'_> {
                 && let Some(close) = rest.find("](")
                 && let Some(paren) = rest[close + 2..].find(')')
             {
-                let url = &rest[close + 2..close + 2 + paren];
-                if url.starts_with("http://") || url.starts_with("https://") {
+                let raw = &rest[close + 2..close + 2 + paren];
+                let url = raw.strip_prefix('<').and_then(|u| u.strip_suffix('>')).unwrap_or(raw);
+                if !rest[1..close].contains('\n') && url.starts_with("http://") || url.starts_with("https://") {
                     self.push(&src[plain_start..i], style, spoiler);
                     let label = &rest[1..close];
                     self.push_full(label, style | Style::LINK, Some(url.to_string()), None, spoiler);
@@ -562,5 +662,25 @@ mod tests {
     fn unicode_safe() {
         let i = inline("héllo **wörld** 🎉 _ok_");
         assert_eq!(i.text, "héllo wörld 🎉 ok");
+    }
+
+    #[test]
+    fn headings_lists_subtext() {
+        let b = parse("# Big\n-# small\n- one\n  - two\n3. three\nplain", &NoResolve);
+        assert!(matches!(&b[0], Block::Heading(1, i) if i.text == "Big"));
+        assert!(matches!(&b[1], Block::Subtext(i) if i.text == "small"));
+        assert!(matches!(&b[2], Block::ListItem { ordered: None, depth: 0, inline } if inline.text == "one"));
+        assert!(matches!(&b[3], Block::ListItem { ordered: None, depth: 1, .. }));
+        assert!(matches!(&b[4], Block::ListItem { ordered: Some(3), .. }));
+        assert!(matches!(&b[5], Block::Paragraph(i) if i.text == "plain"));
+    }
+
+    #[test]
+    fn timestamps_and_masked_links() {
+        let i = inline("at <t:0:D> see [x](<https://a.b>)");
+        assert!(i.spans.iter().any(|s| s.style.has(Style::TIMESTAMP)));
+        assert!(i.spans.iter().any(|s| s.link.as_deref() == Some("https://a.b")));
+        assert_eq!(relative(-120), "2 minutes ago");
+        assert_eq!(relative(3600), "in an hour");
     }
 }

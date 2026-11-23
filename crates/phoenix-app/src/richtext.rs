@@ -3,6 +3,8 @@
 
 use std::ops::Range;
 
+pub mod highlight;
+
 use gpui::{
     Font, FontStyle, FontWeight, Hsla, SharedString, StrikethroughStyle, TextRun, UnderlineStyle,
     font, px,
@@ -36,7 +38,35 @@ pub struct RichText {
 pub enum RBlock {
     Text(RichText),
     Quote(RichText),
-    Code { lang: Option<SharedString>, code: SharedString },
+    Code { lang: Option<SharedString>, code: SharedString, runs: Vec<TextRun> },
+    Heading(u8, RichText),
+    Subtext(RichText),
+    ListItem { ordered: Option<u32>, depth: u8, text: RichText },
+}
+
+impl RBlock {
+    pub fn text(&self) -> Option<&RichText> {
+        match self {
+            RBlock::Text(t) | RBlock::Quote(t) | RBlock::Heading(_, t) | RBlock::Subtext(t) => Some(t),
+            RBlock::ListItem { text, .. } => Some(text),
+            RBlock::Code { .. } => None,
+        }
+    }
+}
+
+/// Syntax-coloured monospace runs for a code block.
+pub fn code_runs(code: &str, lang: Option<&str>) -> Vec<TextRun> {
+    highlight::highlight(code, lang)
+        .into_iter()
+        .map(|(r, t)| TextRun {
+            len: r.len(),
+            font: font(FONT_MONO),
+            color: c(t.color()),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        })
+        .collect()
 }
 
 pub fn ui_font() -> Font {
@@ -60,6 +90,9 @@ fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
         color = c(Palette::MENTION_FG);
         background_color = Some(ca(Palette::MENTION_BG));
         f.weight = FontWeight::MEDIUM;
+    }
+    if style.has(Style::TIMESTAMP) {
+        background_color = Some(ca(0x4E50584D));
     }
     if style.has(Style::LINK) {
         color = c(Palette::TEXT_LINK);
@@ -137,6 +170,20 @@ pub fn render_blocks(
             Block::Code { lang, code } => RBlock::Code {
                 lang: lang.clone().map(Into::into),
                 code: code.clone().into(),
+                runs: code_runs(code, lang.as_deref()),
+            },
+            Block::Heading(l, i) => {
+                let mut t = rich_inline(i, revealed, c(Palette::TEXT_HEADER));
+                for r in &mut t.runs {
+                    r.font.weight = FontWeight::BOLD;
+                }
+                RBlock::Heading(*l, t)
+            }
+            Block::Subtext(i) => RBlock::Subtext(rich_inline(i, revealed, c(Palette::TEXT_MUTED))),
+            Block::ListItem { ordered, depth, inline } => RBlock::ListItem {
+                ordered: *ordered,
+                depth: *depth,
+                text: rich_inline(inline, revealed, base),
             },
         })
         .collect()
@@ -163,18 +210,17 @@ pub fn build(
     revealed: &dyn Fn(usize) -> bool,
 ) -> (Vec<Block>, Vec<RBlock>, bool, SharedString) {
     let parsed = markdown::parse(content, resolver);
-    let mentions_me = parsed.iter().any(|b| match b {
-        Block::Paragraph(i) | Block::Quote(i) => i.spans.iter().any(|s| {
+    let mentions_me = parsed.iter().filter_map(Block::inline).any(|i| {
+        i.spans.iter().any(|s| {
             matches!(s.mention, Some(Mention::User(u)) if u == me.0)
                 || matches!(s.mention, Some(Mention::Everyone | Mention::Here))
-        }),
-        _ => false,
+        })
     });
     let preview: String = parsed
         .iter()
         .map(|b| match b {
-            Block::Paragraph(i) | Block::Quote(i) => i.text.as_str(),
             Block::Code { code, .. } => code.as_str(),
+            b => b.inline().map_or("", |i| i.text.as_str()),
         })
         .collect::<Vec<_>>()
         .join(" ")
@@ -244,7 +290,7 @@ pub fn emoji_ranges(text: &str) -> Vec<(Range<usize>, SharedString)> {
 pub fn is_jumbo(blocks: &[RBlock]) -> bool {
     let mut n = 0;
     for b in blocks {
-        let RBlock::Text(t) = b else { return false };
+        let (RBlock::Text(t) | RBlock::Heading(_, t)) = b else { return false };
         let mut last = 0;
         for (r, _) in &t.emoji {
             if !t.text[last..r.start].trim().is_empty() {

@@ -197,10 +197,33 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
             .text_color(c(Palette::TEXT_MUTED))
             .child(if loading { "Loading messages…" } else { "" });
     }
+    if let Some(chan) = channel.filter(|c| c.guild.is_none()) {
+        let peer = chan.voice_users.first().and_then(|u| app.users.get(u));
+        return div()
+            .m(px(16.))
+            .flex()
+            .flex_col()
+            .gap(px(8.))
+            .child(avatar(peer, 80.))
+            .child(
+                div()
+                    .text_size(px(32.))
+                    .line_height(px(40.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(Palette::TEXT_HEADER))
+                    .child(name.clone()),
+            )
+            .child(
+                div()
+                    .text_size(px(16.))
+                    .text_color(c(Palette::TEXT_MUTED))
+                    .child(SharedString::from(format!(
+                        "This is the beginning of your direct message history with {name}."
+                    ))),
+            );
+    }
     div()
-        .px(px(16.))
-        .pt(px(32.))
-        .pb(px(8.))
+        .m(px(16.))
         .flex()
         .flex_col()
         .gap(px(8.))
@@ -217,6 +240,7 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
         .child(
             div()
                 .text_size(px(32.))
+                .line_height(px(40.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child(SharedString::from(format!("Welcome to #{name}!"))),
@@ -250,6 +274,38 @@ fn day_divider(label: SharedString) -> impl IntoElement {
         )
 }
 
+/// "Monday, November 23, 2026 at 3:04 PM" (timestamp tooltip).
+pub fn format_time_tooltip(ts: i64) -> SharedString {
+    use chrono::{Local, TimeZone};
+    Local
+        .timestamp_opt(ts, 0)
+        .single()
+        .map(|d| d.format("%A, %B %-d, %Y at %-I:%M %p").to_string().into())
+        .unwrap_or_default()
+}
+
+fn time_tooltip(ts: i64) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static {
+    move |window, cx| gpui_component::tooltip::Tooltip::new(format_time_tooltip(ts)).build(window, cx)
+}
+
+/// Discord's "APP" tag next to bot authors.
+fn bot_tag() -> impl IntoElement {
+    div()
+        .flex_none()
+        .ml(px(4.))
+        .px(px(4.))
+        .h(px(15.))
+        .rounded(px(3.))
+        .bg(c(Palette::BLURPLE))
+        .flex()
+        .items_center()
+        .text_size(px(10.))
+        .line_height(px(15.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(gpui::white())
+        .child("APP")
+}
+
 fn message(
     app: &PhoenixApp,
     entity: &Entity<PhoenixApp>,
@@ -265,21 +321,23 @@ fn message(
     if let Some(sys) = system::render(app, entity, msg, r) {
         return sys;
     }
+    let compact = app.prefs.synced.compact;
+    let fs = app.prefs.local.font_size.clamp(12., 24.);
+    let scale = fs / 16.;
     let editing = app.chat.edit.as_ref().is_some_and(|e| e.id == id);
     let replying = app.replying_to == Some(id);
     let highlight = r.mentions_me || msg.mention_everyone || replying;
+    let ts = msg.timestamp;
 
-    let mut content = div().flex().flex_col().min_w_0();
+    let mut content = div().flex().flex_col().min_w_0().text_size(px(fs)).text_color(c(Palette::TEXT_NORMAL));
+    let last_text = r.blocks.iter().rposition(|b| matches!(b, RBlock::Text(_)));
+    let n_blocks = r.blocks.len();
     for (bi, b) in r.blocks.iter().enumerate() {
-        content = content.child(block(entity, id, bi, b));
+        let edited_here = msg.edited && last_text == Some(bi) && bi + 1 == n_blocks;
+        content = content.child(block(entity, id, bi, b, edited_here, fs));
     }
-    if msg.edited {
-        content = content.child(
-            div()
-                .text_size(px(10.))
-                .text_color(c(Palette::TEXT_MUTED))
-                .child("(edited)"),
-        );
+    if msg.edited && !last_text.is_some_and(|l| l + 1 == n_blocks) {
+        content = content.child(edited_marker(ts));
     }
     for a in &msg.attachments {
         content = content.child(attachment(a, cx));
@@ -306,130 +364,178 @@ fn message(
         };
         div()
             .relative()
-            .h(px(22.))
+            .h(px(18.))
+            .mb(px(4.))
             .flex()
             .items_center()
             .gap(px(4.))
-            .text_size(px(14.))
+            .text_size(px(14. * scale))
+            .line_height(px(18.))
             .child(
-                // reply spine
+                // Reply spine from the avatar column up to the preview.
                 div()
                     .absolute()
-                    .left(px(-36.))
-                    .top(px(10.))
-                    .w(px(33.))
-                    .h(px(12.))
+                    .left(px(if compact { -20. } else { -36. }))
+                    .top(px(8.))
+                    .w(px(if compact { 18. } else { 33. }))
+                    .h(px(13.))
                     .border_l_2()
                     .border_t_2()
                     .rounded_tl(px(6.))
-                    .border_color(c(0x4E5058)),
+                    .border_color(c(Palette::INTERACTIVE_MUTED)),
             )
-            .child(avatar(ru, 16.))
+            .when(!compact, |d| d.child(avatar(ru, 16.)))
             .child(
                 div()
+                    .flex_none()
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(role_color(ru.and_then(|u| app.author_color(u.id))))
+                    .opacity(0.64)
                     .child(SharedString::from(format!(
                         "@{}",
                         ru.map(|u| u.display_name.as_ref()).unwrap_or("Unknown")
                     ))),
             )
+            .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag()))
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
                     .text_color(c(Palette::INTERACTIVE))
+                    .whitespace_nowrap()
+                    .overflow_hidden()
                     .text_ellipsis()
+                    .when(found.is_none(), |d| d.italic())
                     .child(preview),
             )
     });
 
-    let body = div()
+    let author_name = div()
+        .flex_none()
+        .text_size(px(fs))
+        .line_height(px(22. * scale))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(color)
+        .id(("msg-author", id.0))
+        .cursor_pointer()
+        .hover(|s| s.underline())
+        .on_click(message_ext::open_author(entity, msg))
+        .child(name);
+    let is_bot = author.is_some_and(|a| a.bot);
+
+    let base = div()
         .id(("msg", id.0))
         .group("msg")
         .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
         .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.bg(c(Palette::BG_MSG_HOVER)))
         .relative()
-        .pl(px(m::MSG_GUTTER))
         .pr(px(48.))
-        .py(px(2.))
-        .when(r.group_start, |d| d.mt(px(17.)))
         .when(highlight, |d| {
             d.bg(ca(Palette::MENTIONED_MSG_BG))
                 .border_l_2()
                 .border_color(c(Palette::MENTIONED_MSG_BAR))
         })
         .when(editing, |d| d.bg(c(Palette::BG_MSG_HOVER)))
-        .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
-        .when_some(reply, |d, reply| d.child(reply))
-        .when(r.group_start, |d| {
-            d.child(
-                div()
-                    .absolute()
-                    .left(px(16.))
-                    .top(px(if msg.reply_to.is_some() { 24. } else { 4. }))
-                    .id(("msg-avatar", id.0))
-                    .cursor_pointer()
-                    .on_click(message_ext::open_author(entity, msg))
-                    .child(avatar(author, m::AVATAR)),
-            )
+        .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)));
+
+    let body = if compact {
+        // Compact (IRC-like): [time] name: text, no avatars.
+        base.pl(px(16.))
+            .py(px(1.))
+            .when(r.group_start, |d| d.mt(px(4.)))
+            .when_some(reply, |d, reply| d.child(div().pl(px(68.)).child(reply)))
             .child(
                 div()
                     .flex()
-                    .items_baseline()
-                    .gap(px(4.))
-                    .h(px(22.))
+                    .items_start()
                     .child(
                         div()
-                            .text_size(px(16.))
-                            .line_height(px(22.))
-                            .font_weight(FontWeight::MEDIUM)
-                            .text_color(color)
-                            .id(("msg-author", id.0))
-                            .cursor_pointer()
-                            .hover(|s| s.underline())
-                            .on_click(message_ext::open_author(entity, msg))
-                            .child(name),
+                            .id(("msg-time", id.0))
+                            .flex_none()
+                            .w(px(56.))
+                            .mr(px(4.))
+                            .h(px(22. * scale))
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .text_size(px(11.))
+                            .text_color(c(Palette::TEXT_MUTED))
+                            .when(!r.group_start, |d| {
+                                d.text_color(gpui::transparent_black())
+                                    .group_hover("msg", |s| s.text_color(c(Palette::TEXT_MUTED)))
+                            })
+                            .tooltip(time_tooltip(ts))
+                            .child(r.time_short.clone()),
                     )
-                    .when(author.is_some_and(|a| a.bot), |d| {
+                    .when(r.group_start, |d| {
                         d.child(
                             div()
-                                .px(px(4.))
-                                .h(px(15.))
-                                .rounded(px(3.))
-                                .bg(c(Palette::BLURPLE))
-                                .text_size(px(10.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(gpui::white())
-                                .child("APP"),
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .mr(px(4.))
+                                .child(author_name)
+                                .when(is_bot, |d| d.child(bot_tag())),
                         )
                     })
-                    .child(
-                        div()
-                            .ml(px(4.))
-                            .text_size(px(12.))
-                            .text_color(c(Palette::TEXT_MUTED))
-                            .child(r.time_full.clone()),
-                    ),
+                    .child(div().flex_1().min_w_0().child(content)),
             )
-        })
-        .when(!r.group_start, |d| {
-            d.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top(px(4.))
-                    .w(px(m::MSG_GUTTER - 4.))
-                    .flex()
-                    .justify_center()
-                    .text_size(px(11.))
-                    .text_color(gpui::transparent_black())
-                    .group_hover("msg", |s| s.text_color(c(Palette::TEXT_MUTED)))
-                    .child(r.time_short.clone()),
-            )
-        })
-        .child(content)
-        .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
+    } else {
+        base.pl(px(m::MSG_GUTTER))
+            .py(px(2.))
+            .when(r.group_start, |d| d.mt(px(17.)))
+            .when_some(reply, |d, reply| d.child(reply))
+            .when(r.group_start, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .left(px(16.))
+                        .top(px(if msg.reply_to.is_some() { 24. } else { 2. }))
+                        .id(("msg-avatar", id.0))
+                        .cursor_pointer()
+                        .on_click(message_ext::open_author(entity, msg))
+                        .child(avatar(author, m::AVATAR)),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .h(px(22. * scale))
+                        .child(author_name)
+                        .when(is_bot, |d| d.child(bot_tag()))
+                        .child(
+                            div()
+                                .id(("msg-time", id.0))
+                                .ml(px(8.))
+                                .text_size(px(12.))
+                                .text_color(c(Palette::TEXT_MUTED))
+                                .tooltip(time_tooltip(ts))
+                                .child(r.time_full.clone()),
+                        ),
+                )
+            })
+            .when(!r.group_start, |d| {
+                d.child(
+                    div()
+                        .id(("msg-time", id.0))
+                        .absolute()
+                        .left_0()
+                        .top(px(2.))
+                        .w(px(64.))
+                        .h(px(22. * scale))
+                        .flex()
+                        .items_center()
+                        .justify_end()
+                        .text_size(px(11.))
+                        .text_color(gpui::transparent_black())
+                        .group_hover("msg", |s| s.text_color(c(Palette::TEXT_MUTED)))
+                        .tooltip(time_tooltip(ts))
+                        .child(r.time_short.clone()),
+                )
+            })
+            .child(content)
+    }
+    .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
     let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
     if r.day_divider.is_some() || new_marker {
         div()
@@ -442,19 +548,51 @@ fn message(
     }
 }
 
-fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText) -> AnyElement {
+fn edited_marker(ts: i64) -> impl IntoElement {
+    div()
+        .id(("edited", ts as u64))
+        .text_size(px(10.))
+        .line_height(px(16.))
+        .text_color(c(Palette::TEXT_MUTED))
+        .child("(edited)")
+}
+
+/// Append Discord's small muted " (edited)" after the last line of text.
+fn with_edited(t: &RichText) -> (SharedString, Vec<gpui::TextRun>) {
+    let mut text = t.text.to_string();
+    text.push_str(" (edited)");
+    let mut runs = t.runs.clone();
+    let mut f = crate::richtext::ui_font();
+    f.weight = FontWeight::NORMAL;
+    runs.push(gpui::TextRun {
+        len: " (edited)".len(),
+        font: f,
+        color: c(Palette::TEXT_MUTED),
+        background_color: None,
+        underline: None,
+        strikethrough: None,
+    });
+    (text.into(), runs)
+}
+
+fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: bool) -> AnyElement {
     if !t.emoji.is_empty() {
-        return message_ext::rich_with_emoji(entity, msg, bi, t);
+        let el = message_ext::rich_with_emoji(entity, msg, bi, t);
+        if edited {
+            return div().flex().flex_wrap().items_end().child(el).child(div().ml(px(4.)).child(edited_marker(msg.0 as i64))).into_any_element();
+        }
+        return el;
     }
-    let styled = StyledText::new(t.text.clone()).with_runs(t.runs.clone());
+    let (text, runs) = if edited { with_edited(t) } else { (t.text.clone(), t.runs.clone()) };
+    let styled = StyledText::new(text).with_runs(runs);
+    let lh = gpui::relative(1.375);
     if t.click_ranges.is_empty() {
-        return div().text_size(px(16.)).line_height(px(22.)).child(styled).into_any_element();
+        return div().line_height(lh).child(styled).into_any_element();
     }
     let targets = t.click_targets.clone();
     let e = entity.clone();
     div()
-        .text_size(px(16.))
-        .line_height(px(22.))
+        .line_height(lh)
         .child(
             InteractiveText::new(("rt", (msg.0 << 8) | bi as u64), styled).on_click(
                 t.click_ranges.clone(),
@@ -471,15 +609,57 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText) -> AnyEle
         .into_any_element()
 }
 
-fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock) -> AnyElement {
+fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bool, fs: f32) -> AnyElement {
+    let scale = fs / 16.;
     match b {
-        RBlock::Text(t) => rich(entity, msg, bi, t),
+        RBlock::Text(t) => rich(entity, msg, bi, t, edited),
         RBlock::Quote(t) => div()
             .flex()
-            .child(div().w(px(4.)).rounded(px(4.)).bg(c(0x4E5058)).flex_none())
-            .child(div().pl(px(12.)).pr(px(8.)).child(rich(entity, msg, bi, t)))
+            .child(div().w(px(4.)).rounded(px(4.)).bg(c(Palette::INTERACTIVE_MUTED)).flex_none())
+            .child(div().flex_1().min_w_0().pl(px(12.)).pr(px(8.)).child(rich(entity, msg, bi, t, false)))
             .into_any_element(),
-        RBlock::Code { code, .. } => div()
+        RBlock::Heading(level, t) => {
+            let size = match level {
+                1 => 24.,
+                2 => 20.,
+                _ => 16.,
+            } * scale;
+            div()
+                .mt(px(if bi == 0 { 8. } else { 16. }))
+                .mb(px(8.))
+                .text_size(px(size))
+                .child(rich(entity, msg, bi, t, edited))
+                .into_any_element()
+        }
+        RBlock::Subtext(t) => div()
+            .text_size(px(13. * scale))
+            .text_color(c(Palette::TEXT_MUTED))
+            .child(rich(entity, msg, bi, t, edited))
+            .into_any_element(),
+        RBlock::ListItem { ordered, depth, text } => {
+            let marker: SharedString = match ordered {
+                Some(n) => format!("{n}.").into(),
+                None if *depth == 0 => "\u{2022}".into(),
+                None => "\u{25E6}".into(),
+            };
+            div()
+                .flex()
+                .ml(px(16. * (*depth as f32 + 1.) - 16.))
+                .mb(px(4.))
+                .child(
+                    div()
+                        .flex_none()
+                        .w(px(if ordered.is_some() { 24. } else { 16. }))
+                        .pr(px(4.))
+                        .flex()
+                        .justify_end()
+                        .line_height(gpui::relative(1.375))
+                        .child(marker),
+                )
+                .child(div().flex_1().min_w_0().child(rich(entity, msg, bi, text, edited)))
+                .into_any_element()
+        }
+        RBlock::Code { code, runs, .. } => div()
             .my(px(4.))
             .max_w(px(900.))
             .p(px(8.))
@@ -488,10 +668,10 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock) -> AnyElem
             .border_1()
             .border_color(c(Palette::CODE_BORDER))
             .font_family(FONT_MONO)
-            .text_size(px(14.))
-            .line_height(px(18.))
-            .text_color(c(Palette::TEXT_NORMAL))
-            .child(code.clone())
+            .text_size(px(14. * scale))
+            .line_height(px(18. * scale))
+            .text_color(c(0xB9BBBE))
+            .child(StyledText::new(code.clone()).with_runs(runs.clone()))
             .into_any_element(),
     }
 }
@@ -675,8 +855,52 @@ fn sticker_name(name: SharedString) -> AnyElement {
         .into_any_element()
 }
 
+/// Embed description / field values: Discord renders them as markdown.
+fn embed_markdown(src: &str, size: f32) -> AnyElement {
+    let parsed = crate::markdown::parse(src, &crate::markdown::NoResolve);
+    let blocks = crate::richtext::render_blocks(&parsed, &|_| true, c(Palette::TEXT_NORMAL));
+    let mut d = div().flex().flex_col().text_size(px(size)).line_height(px(18.)).min_w_0();
+    for b in blocks {
+        d = d.child(match b {
+            RBlock::Code { code, runs, .. } => div()
+                .my(px(4.))
+                .p(px(8.))
+                .rounded(px(4.))
+                .bg(c(Palette::BG_TERTIARY))
+                .font_family(FONT_MONO)
+                .text_size(px(12.))
+                .line_height(px(16.))
+                .child(StyledText::new(code).with_runs(runs))
+                .into_any_element(),
+            RBlock::Quote(t) => div()
+                .flex()
+                .child(div().w(px(4.)).rounded(px(4.)).bg(c(Palette::INTERACTIVE_MUTED)).flex_none())
+                .child(div().pl(px(12.)).child(StyledText::new(t.text).with_runs(t.runs)))
+                .into_any_element(),
+            b => {
+                let t = b.text().cloned().unwrap_or_else(|| RichText {
+                    text: "".into(),
+                    runs: vec![],
+                    click_ranges: vec![],
+                    click_targets: vec![],
+                    emoji: vec![],
+                });
+                let el = div().child(StyledText::new(t.text).with_runs(t.runs));
+                match b {
+                    RBlock::Heading(..) => el.font_weight(FontWeight::BOLD).text_size(px(size + 2.)),
+                    RBlock::Subtext(_) => el.text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)),
+                    RBlock::ListItem { .. } => div().flex().child(div().w(px(16.)).child("\u{2022}")).child(el),
+                    _ => el,
+                }
+                .into_any_element()
+            }
+        });
+    }
+    d.into_any_element()
+}
+
 fn embed(e: &Embed) -> AnyElement {
-    let has_text = e.title.is_some() || e.description.is_some();
+    let has_text = e.title.is_some() || e.description.is_some() || e.author.is_some() || !e.fields.is_empty();
     let media_only = matches!(e.kind.as_deref(), Some("image" | "gifv")) && !has_text;
     // Image-only embeds (links to pictures/gifs) render bare, like attachments.
     if media_only && let Some(m) = e.thumbnail.as_ref().or(e.image.as_ref()) {
@@ -691,6 +915,103 @@ fn embed(e: &Embed) -> AnyElement {
     let side_thumb = e.image.is_none() && e.kind.as_deref() != Some("video");
     let thumb = e.thumbnail.clone().filter(|_| side_thumb);
     let big = e.image.clone().or_else(|| e.thumbnail.clone().filter(|_| !side_thumb));
+
+    // Fields: inline ones share a row (up to 3, or 2 with a side thumbnail).
+    let per_row = if thumb.is_some() { 2 } else { 3 };
+    let mut rows: Vec<Vec<&crate::model::EmbedField>> = Vec::new();
+    for f in &e.fields {
+        match rows.last_mut() {
+            Some(r) if f.inline && r.len() < per_row && r.iter().all(|x| x.inline) => r.push(f),
+            _ => rows.push(vec![f]),
+        }
+    }
+    let fields = (!rows.is_empty()).then(|| {
+        let mut grid = div().flex().flex_col().gap(px(8.));
+        for r in rows {
+            let mut row = div().flex().gap(px(8.));
+            for f in r {
+                row = row.child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .mb(px(2.))
+                                .text_size(px(14.))
+                                .line_height(px(18.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(Palette::TEXT_HEADER))
+                                .child(f.name.clone()),
+                        )
+                        .child(embed_markdown(&f.value, 14.)),
+                );
+            }
+            grid = grid.child(row);
+        }
+        grid
+    });
+
+    let footer = (e.footer.is_some() || e.timestamp.is_some()).then(|| {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(f) = &e.footer
+            && !f.text.is_empty()
+        {
+            parts.push(f.text.to_string());
+        }
+        if let Some(ts) = e.timestamp {
+            parts.push(crate::app::format_time_full(ts).to_string());
+        }
+        div()
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .when_some(e.footer.as_ref().and_then(|f| f.icon.clone()), |d, u| {
+                d.child(img(media::resized(&u, 40, 40)).size(px(20.)).rounded_full().flex_none())
+            })
+            .child(
+                div()
+                    .text_size(px(12.))
+                    .line_height(px(16.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(Palette::TEXT_NORMAL))
+                    .child(SharedString::from(parts.join(" \u{2022} "))),
+            )
+    });
+
+    let author = e.author.clone().map(|a| {
+        let url = a.url.clone();
+        div()
+            .id(gpui::ElementId::Name(format!("embed-author-{}", a.name).into()))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .when_some(a.icon.clone(), |d, u| {
+                d.child(img(media::resized(&u, 48, 48)).size(px(24.)).rounded_full().flex_none())
+            })
+            .child(
+                div()
+                    .text_size(px(14.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(Palette::TEXT_HEADER))
+                    .when(url.is_some(), |d| d.hover(|s| s.underline()))
+                    .child(a.name.clone()),
+            )
+            .when_some(url, |d, u| d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&u)))
+    });
+
+    let title = e.title.clone().map(|t| {
+        let url = e.url.clone();
+        div()
+            .id(gpui::ElementId::Name(format!("embed-title-{t}").into()))
+            .text_size(px(16.))
+            .line_height(px(22.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(c(if url.is_some() { Palette::TEXT_LINK } else { Palette::TEXT_HEADER }))
+            .when(url.is_some(), |d| d.hover(|s| s.underline()))
+            .child(t)
+            .when_some(url, |d, u| d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&u)))
+    });
+
     div()
         .mt(px(4.))
         .max_w(px(516.))
@@ -703,8 +1024,10 @@ fn embed(e: &Embed) -> AnyElement {
             div()
                 .flex_1()
                 .min_w_0()
-                .p(px(12.))
+                .pt(px(8.))
                 .pr(px(16.))
+                .pb(px(16.))
+                .pl(px(12.))
                 .flex()
                 .gap(px(16.))
                 .child(
@@ -714,26 +1037,20 @@ fn embed(e: &Embed) -> AnyElement {
                         .flex()
                         .flex_col()
                         .gap(px(8.))
+                        .pt(px(8.))
                         .when_some(e.provider.clone(), |d, p| {
-                            d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_NORMAL)).child(p))
+                            d.child(div().text_size(px(12.)).line_height(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(p))
                         })
-                        .when_some(e.title.clone(), |d, t| {
-                            d.child(
-                                div()
-                                    .text_size(px(16.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(c(if e.url.is_some() { Palette::TEXT_LINK } else { Palette::TEXT_HEADER }))
-                                    .child(t),
-                            )
-                        })
-                        .when_some(e.description.clone(), |d, t| {
-                            d.child(div().text_size(px(14.)).line_height(px(18.)).child(t))
-                        })
+                        .children(author)
+                        .children(title)
+                        .when_some(e.description.clone(), |d, t| d.child(embed_markdown(&t, 14.)))
+                        .children(fields)
                         .when_some(big, |d, m| {
                             let size = media::fit(m.width, m.height, 400., 300.);
                             let original = m.url.clone();
                             d.child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(px(4.)))
-                        }),
+                        })
+                        .children(footer),
                 )
                 .when_some(thumb, |d, m| {
                     let size = media::fit(m.width, m.height, 80., 80.);
@@ -741,6 +1058,7 @@ fn embed(e: &Embed) -> AnyElement {
                     d.child(
                         div()
                             .flex_none()
+                            .pt(px(8.))
                             .child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(px(4.))),
                     )
                 }),

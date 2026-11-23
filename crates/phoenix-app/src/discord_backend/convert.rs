@@ -106,7 +106,7 @@ pub fn message(m: &api::Message) -> model::Message {
         embeds: m
             .embeds
             .iter()
-            .filter(|e| e.title.is_some() || e.description.is_some() || e.image.is_some() || e.thumbnail.is_some())
+            .filter(|e| e.title.is_some() || e.description.is_some() || e.image.is_some() || e.thumbnail.is_some() || e.author.is_some() || !e.fields.is_empty())
             .map(|e| model::Embed {
                 color: e.color,
                 provider: e.provider.as_ref().and_then(|p| p.name.clone()).map(Into::into),
@@ -117,6 +117,25 @@ pub fn message(m: &api::Message) -> model::Message {
                 thumbnail: embed_media(&e.thumbnail),
                 image: embed_media(&e.image),
                 video: embed_media(&e.video),
+                author: e.author.as_ref().map(|a| model::EmbedAuthor {
+                    name: a.name.clone().into(),
+                    url: a.url.clone().map(Into::into),
+                    icon: a.proxy_icon_url.clone().or_else(|| a.icon_url.clone()).map(Into::into),
+                }),
+                fields: e
+                    .fields
+                    .iter()
+                    .map(|f| model::EmbedField { name: f.name.clone().into(), value: f.value.clone().into(), inline: f.inline })
+                    .collect(),
+                footer: e.footer.as_ref().map(|f| model::EmbedFooter {
+                    text: f.text.clone().into(),
+                    icon: f.proxy_icon_url.clone().or_else(|| f.icon_url.clone()).map(Into::into),
+                }),
+                timestamp: e
+                    .timestamp
+                    .as_deref()
+                    .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+                    .map(|d| d.timestamp()),
             })
             .collect(),
         attachments: m

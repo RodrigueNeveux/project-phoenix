@@ -93,6 +93,31 @@ pub struct Embed {
     pub thumbnail: Option<EmbedMedia>,
     pub image: Option<EmbedMedia>,
     pub video: Option<EmbedMedia>,
+    pub author: Option<EmbedAuthor>,
+    pub fields: Vec<EmbedField>,
+    pub footer: Option<EmbedFooter>,
+    /// Unix seconds, shown next to the footer.
+    pub timestamp: Option<i64>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct EmbedAuthor {
+    pub name: SharedString,
+    pub url: Option<SharedString>,
+    pub icon: Option<SharedString>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct EmbedField {
+    pub name: SharedString,
+    pub value: SharedString,
+    pub inline: bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct EmbedFooter {
+    pub text: SharedString,
+    pub icon: Option<SharedString>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
