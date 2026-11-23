@@ -22,6 +22,7 @@ futures = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 phoenix-api = { path = "../phoenix-api" }
+phoenix-voice = { path = "../phoenix-voice", features = ["audio"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
 keyring = { version = "3", features = ["async-secret-service", "tokio", "crypto-rust"] }

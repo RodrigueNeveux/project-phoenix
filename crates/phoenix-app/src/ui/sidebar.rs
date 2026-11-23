@@ -40,7 +40,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 list(app.sidebar_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full(),
             ),
         )
-        .when(app.voice_channel.is_some(), |d| d.child(voice_panel(app, cx)))
+        .when(app.voice_channel.is_some(), |d| d.child(crate::ui::voice_panel::voice_panel(app, cx)))
         .child(user_panel(app, cx))
 }
 
@@ -317,42 +317,6 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         .into_any_element()
 }
 
-fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let ch = app.voice_channel.and_then(|v| app.channels.get(&v));
-    let guild = ch
-        .and_then(|c| c.guild)
-        .and_then(|g| app.guilds.iter().find(|x| x.id == g))
-        .map(|g| g.name.clone())
-        .unwrap_or_default();
-    let label: SharedString = format!("{} / {}", ch.map(|c| c.name.as_ref()).unwrap_or(""), guild).into();
-    div()
-        .flex_none()
-        .bg(c(Palette::BG_SECONDARY_ALT))
-        .border_b_1()
-        .border_color(c(Palette::DIVIDER))
-        .px(px(8.))
-        .py(px(8.))
-        .flex()
-        .items_center()
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(
-                    div()
-                        .text_size(px(14.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::GREEN))
-                        .child("Voice Connected"),
-                )
-                .child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(label)),
-        )
-        .child(
-            icon_button("hangup", Icon::PhoneHangup, c(Palette::INTERACTIVE), 20.)
-                .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
-        )
-}
-
 fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let status = match app.presence {
         crate::model::Presence::Online => "Online",
@@ -418,6 +382,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             )
             .on_click(cx.listener(|a, _, _, cx| {
                 a.mic_muted = !a.mic_muted;
+                crate::voice::sync_self_state(a);
                 cx.notify();
             })),
         )
@@ -430,6 +395,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             )
             .on_click(cx.listener(|a, _, _, cx| {
                 a.deafened = !a.deafened;
+                crate::voice::sync_self_state(a);
                 cx.notify();
             })),
         )

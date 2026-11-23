@@ -1,4 +1,3 @@
-pub mod autocomplete;
 pub mod chat;
 pub mod image_viewer;
 pub mod context_menu;
@@ -9,13 +8,13 @@ pub mod login;
 pub mod settings;
 pub mod members;
 pub mod profile;
-pub mod search;
 pub mod modal;
 pub mod pickers;
 pub mod server_bar;
 pub mod sidebar;
 pub mod status_picker;
 pub mod switcher;
+pub mod voice_panel;
 
 use gpui::{
     AnyElement, Div, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div,

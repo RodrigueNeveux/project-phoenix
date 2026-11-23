@@ -6113,6 +6113,7 @@ dependencies = [
  "notify-rust",
  "parking_lot",
  "phoenix-api",
+ "phoenix-voice",
  "qrcode",
  "reqwest",
  "serde_json",

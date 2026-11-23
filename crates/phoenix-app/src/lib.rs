@@ -15,6 +15,7 @@ pub mod notifications;
 pub mod richtext;
 pub mod theme;
 pub mod ui;
+pub mod voice;
 
 use std::sync::Arc;
 

@@ -525,6 +525,12 @@ impl Backend for MockBackend {
 
     fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
         self.emit_later(Duration::from_millis(50), move || AppEvent::VoiceStateUpdate { channel, user: ME });
+        if channel.is_some() {
+            self.emit_later(Duration::from_millis(60), || {
+                AppEvent::Voice(crate::voice::VoiceUiEvent::Status(crate::voice::VoiceStatus::Connected))
+            });
+            self.emit_later(Duration::from_millis(70), || AppEvent::Voice(crate::voice::VoiceUiEvent::Ping(38)));
+        }
         Box::pin(async { Ok(()) })
     }
     fn delete_message(&self, channel: Id, id: Id) -> BoxFuture<()> {

@@ -64,6 +64,8 @@ pub enum AppEvent {
     GuildMembers { guild: Id, members: Vec<Member> },
     ChannelUnread { channel: Id, unread: bool, mentions: u32 },
     VoiceStateUpdate { channel: Option<Id>, user: Id },
+    /// Voice call runtime state (connection, ping, speaking, encryption).
+    Voice(crate::voice::VoiceUiEvent),
     /// New or updated user objects (message authors, member list entries...).
     Users(Vec<User>),
     /// Replace the whole (ordered) channel list of a guild.
@@ -114,6 +116,11 @@ pub trait Backend: Send + Sync + 'static {
     fn edit_message(&self, channel: Id, id: Id, content: String) -> BoxFuture<Message>;
     fn trigger_typing(&self, channel: Id) -> BoxFuture<()>;
     fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()>;
+    /// Mute/deafen, devices and volumes of the voice call.
+    fn voice_control(&self, control: crate::voice::VoiceControl) -> BoxFuture<()> {
+        let _ = control;
+        Box::pin(async { Ok(()) })
+    }
     fn delete_message(&self, channel: Id, id: Id) -> BoxFuture<()>;
     /// Log in from a stored session at startup, if the backend has one.
     /// The future fails with an empty message when nothing is stored.
@@ -206,29 +213,5 @@ pub trait Backend: Send + Sync + 'static {
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })
-    }
-    fn guild_emojis(&self, _guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
-        Vec::new()
-    }
-    fn guild_stickers(&self, _guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
-        Vec::new()
-    }
-    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-    fn send_sticker(&self, _channel: Id, _sticker: Id) -> BoxFuture<()> {
-        Box::pin(async { Err(BackendError("Stickers aren't available.".into())) })
-    }
-    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
-        Box::pin(async { Err(BackendError("GIFs aren't available.".into())) })
-    }
-    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-    fn gif_search(&self, _query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-    fn search_messages(&self, _req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
-        Box::pin(async { Err(BackendError("Search isn't available.".into())) })
     }
 }

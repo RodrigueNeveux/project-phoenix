@@ -7,7 +7,6 @@
 //! [`convert::Adapter`].
 
 pub mod convert;
-mod expressions;
 mod account;
 pub mod http;
 mod people;
@@ -254,6 +253,11 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             return;
         }
         s.cache.apply(&ev);
+        if matches!(ev, GatewayEvent::VoiceStateUpdate(_) | GatewayEvent::VoiceServerUpdate(_)) {
+            let i = inner.clone();
+            let emit: crate::voice::call::Emit = Arc::new(move |e| i.emit(e));
+            crate::voice::call::manager().on_gateway(&emit, s.adapter.lock().me.0, &ev);
+        }
         account::on_gateway(&s, &ev);
         let events = s.adapter.lock().map(&s.cache, &ev);
         if let GatewayEvent::MessageCreate(m) = &ev
@@ -480,10 +484,17 @@ impl Backend for DiscordBackend {
         })
     }
 
-    fn join_voice(&self, _channel: Option<Id>) -> BoxFuture<()> {
-        // phoenix-voice isn't wired to the UI yet; announcing a voice state
-        // without a media connection would show us as connected-but-silent.
-        Box::pin(async { Err(err("Voice isn't available in this build yet.")) })
+    fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
+        self.with_session(move |inner, s| async move {
+            let emit: crate::voice::call::Emit = Arc::new(move |e| inner.emit(e));
+            crate::voice::call::manager().join(&emit, &s.gateway, &s.cache, channel.map(|c| c.0)).map_err(err)
+        })
+    }
+
+    fn voice_control(&self, control: crate::voice::VoiceControl) -> BoxFuture<()> {
+        let s = self.inner.session.lock().clone();
+        crate::voice::call::manager().apply_control(s.as_ref().map(|s| &s.gateway), control);
+        Box::pin(async { Ok(()) })
     }
 
     fn subscribe_member_ranges(&self, guild: Id, channel: Id, ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
@@ -519,31 +530,6 @@ impl Backend for DiscordBackend {
             s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             Ok(convert::message(&m))
         })
-    }
-
-    fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
-        self.inner.session().map(|s| expressions::guild_emojis(&s, guild)).unwrap_or_default()
-    }
-    fn guild_stickers(&self, guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
-        self.inner.session().map(|s| expressions::guild_stickers(&s, guild)).unwrap_or_default()
-    }
-    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
-        self.with_session(|_, s| expressions::sticker_packs(s))
-    }
-    fn send_sticker(&self, channel: Id, sticker: Id) -> BoxFuture<()> {
-        self.with_session(move |_, s| expressions::send_sticker(s, channel, sticker))
-    }
-    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
-        self.with_session(|_, s| expressions::gif_trending(s))
-    }
-    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        self.with_session(|_, s| expressions::gif_trending_gifs(s))
-    }
-    fn gif_search(&self, query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
-        self.with_session(move |_, s| expressions::gif_search(s, query))
-    }
-    fn search_messages(&self, req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
-        self.with_session(move |inner, s| expressions::search(inner, s, req))
     }
 
     fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
