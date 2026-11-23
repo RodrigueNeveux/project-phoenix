@@ -5,7 +5,8 @@
 //! `PHX_REAL=1` renders the user's REAL account instead of the mock (token from
 //! the keyring, strictly read-only: every write the backend could do is refused,
 //! so nothing is ever saved). `PHX_TAB=0|1|2` picks Board / Activity / Wishlist,
-//! `PHX_WAIT` seconds to wait for the profile and images (default 12).
+//! `PHX_SWITCHER=1` opens the profile switcher, `PHX_NO_PREMIUM=1` (mock) shows
+//! the Nitro locks. `PHX_WAIT` seconds to wait for the profile and images (default 12).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -278,6 +279,8 @@ fn main() -> anyhow::Result<()> {
             v.update(cx, |app, cx| {
                 if let Some(e) = app.settings.as_mut().and_then(|s| s.profile.as_mut()) {
                     e.tab = tab;
+                    // `PHX_SWITCHER=1` opens the profile switcher popout.
+                    e.switcher_open = std::env::var_os("PHX_SWITCHER").is_some();
                 }
                 use phoenix_app::ui::settings::collectibles::Kind;
                 // `PHX_PICKER=decoration|effect|frame|nameplate` opens that picker.

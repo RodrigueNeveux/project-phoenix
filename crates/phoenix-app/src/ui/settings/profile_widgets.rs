@@ -28,6 +28,13 @@ use serde_json::Value;
 
 use crate::theme::{c, generated::idx, tok, z};
 
+/// imageFadeToLeftMask_sIDBpr stops: (position, mask alpha).
+const FADE_MASK: [(f32, f32); 17] = [
+    (0., 0.), (0.047, 0.013), (0.092, 0.049), (0.136, 0.104), (0.18, 0.175), (0.226, 0.259),
+    (0.274, 0.352), (0.326, 0.45), (0.383, 0.55), (0.445, 0.648), (0.514, 0.741), (0.591, 0.825),
+    (0.677, 0.896), (0.773, 0.951), (0.88, 0.987), (0.94, 1.), (1., 1.),
+];
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WidgetItem {
     pub name: SharedString,
@@ -182,12 +189,24 @@ pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
             .rounded_tr(z(16.))
             .overflow_hidden()
             .child(img(u).w(z(204.)).h(z(151.)).object_fit(gpui::ObjectFit::Cover))
-            // imageFadeToLeftMask_: transparent → opaque over the image width.
-            .child(div().absolute().inset_0().bg(gpui::linear_gradient(
-                90.,
-                gpui::linear_color_stop(col.fade, 0.),
-                gpui::linear_color_stop(col.fade.opacity(0.), 0.6),
-            )))
+            // imageFadeToLeftMask_sIDBpr: eased 90deg alpha ramp (16 stops);
+            // GPUI has no masks, so paint the fade colour at 1 - alpha per
+            // segment (2-stop gradients only).
+            .children(FADE_MASK.windows(2).map(|w| {
+                let (x0, a0) = w[0];
+                let (x1, a1) = w[1];
+                div()
+                    .absolute()
+                    .top_0()
+                    .bottom_0()
+                    .left(z(204. * x0))
+                    .w(z(204. * (x1 - x0) + 0.5))
+                    .bg(gpui::linear_gradient(
+                        90.,
+                        gpui::linear_color_stop(col.fade.opacity(1. - a0), 0.),
+                        gpui::linear_color_stop(col.fade.opacity(1. - a1), 1.),
+                    ))
+            }))
     });
     let top = div().relative().pt(z(12.)).px(z(16.)).children(hero).child(header).child(content);
     let item = |i: &WidgetItem| {

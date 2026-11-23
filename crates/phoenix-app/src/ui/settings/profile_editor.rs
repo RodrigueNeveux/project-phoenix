@@ -429,21 +429,12 @@ fn tile(id: &str, w: f32, h: f32, locked: bool) -> Stateful<Div> {
         .justify_center()
         .cursor_pointer()
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
-        .when(locked, |d| {
-            d.child(
-                div()
-                    .absolute()
-                    .top(z(4.))
-                    .right(z(4.))
-                    .size(z(20.))
-                    .rounded_full()
-                    .bg(c(tok(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT)))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(gpui::svg().path(crate::icons::path("lock")).size(z(12.)).text_color(c(tok(idx::TEXT_OVERLAY_LIGHT)))),
-            )
-        })
+        // tileInner_HhFoZE:after inset 1px --border-muted ring.
+        .border_1()
+        .border_color(c(tok(idx::BORDER_MUTED)))
+        // disabled_HhFoZE: opacity .5 (no lock badge in the client CSS; the
+        // Nitro glyph sits on the group label instead).
+        .when(locked, |d| d.opacity(0.5))
 }
 
 fn plus_icon(size: f32) -> gpui::Svg {
@@ -600,14 +591,14 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
         .flex_col()
         .gap(z(24.))
         .p(z(16.))
-        .child(group(group_label("sp.pf.nameplate", false), tile("nameplate", 208., 42., locked).child(nameplate.child(plus_icon(20.))).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Nameplate, cx))).into_any_element()))
+        .child(group(group_label("sp.pf.nameplate", false), tile("nameplate", 208., 42., false).child(nameplate.child(plus_icon(20.))).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Nameplate, cx))).into_any_element()))
         .child(group(
             group_label("sp.pf.avatar", false),
             div()
                 .flex()
                 .gap(z(8.))
                 .child(tile("avatar", 100., 100., false).child(avatar_preview).on_click(cx.listener(|_, _, _, cx| pick_image(false, cx))))
-                .child(tile("decoration", 100., 100., locked).map(|t| match decoration_url(e) {
+                .child(tile("decoration", 100., 100., false).map(|t| match decoration_url(e) {
                     // decorationPreview: the avatar (72, #3249) wearing the chosen decoration.
                     Some(d) => t.child(div().relative().size(z(72.)).child(avatar(Some(me), 72.)).child(img(d).absolute().size(z(86.4)).left(z(-7.2)).top(z(-7.2)))),
                     None => t.child(plus_icon(24.)),
@@ -642,11 +633,11 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
             div()
                 .flex()
                 .gap(z(8.))
-                .child(tile("effect", 100., 100., locked).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Effect, cx))))
-                .child(tile("frame", 100., 100., locked).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Frame, cx))))
+                .child(tile("effect", 100., 100., false).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Effect, cx))))
+                .child(tile("frame", 100., 100., false).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Frame, cx))))
                 .into_any_element(),
         ));
-    let mut aside = div()
+    let aside = div()
         .relative()
         .w(z(242.))
         .h_full()
@@ -660,9 +651,7 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
         .border_color(c(tok(idx::BORDER_SUBTLE)))
         .child(header)
         .child(div().id("pe-styles").flex_1().min_h_0().overflow_y_scroll().child(content));
-    if e.switcher_open {
-        aside = aside.child(switcher(app, e, cx));
-    }
+    // The switcher popout is painted by `render` so it can overflow the panel.
     aside
 }
 
@@ -673,13 +662,17 @@ fn switcher(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
             .id(id)
             .flex()
             .items_center()
-            .gap(z(8.))
-            .px(z(8.))
-            .py(z(6.))
-            .rounded(z(8.))
+            // listBoxItem_b5PEJH: r --radius-xs, hover --background-mod-normal;
+            // guildOptionRow_VrghH6: min-h --select-option-height 40, p 4 4 4 8.
+            .flex_none()
+            .min_h(z(40.))
+            .p(z(4.))
+            .pl(z(8.))
+            .rounded(z(4.))
             .cursor_pointer()
-            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
-            .child(icon)
+            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+            // guildOptionLeading_VrghH6: 32x32, p 4, margin-inline-start -8.
+            .child(div().flex_none().size(z(32.)).ml(z(-8.)).flex().items_center().justify_center().child(icon))
             .child(
                 div()
                     .flex_1()
@@ -689,7 +682,8 @@ fn switcher(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
                     .child(div().truncate().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).child(name))
                     .children(sub.map(|s| div().truncate().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_MUTED))).child(s))),
             )
-            .when(sel, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(c(tok(idx::ICON_STRONG)))))
+            // selectedIcon_b5PEJH: 20px glyph, 4px inline padding.
+            .when(sel, |d| d.child(div().flex_none().px(z(4.)).child(gpui::svg().path(crate::icons::path("check")).size(z(20.)).text_color(c(tok(idx::ICON_STRONG))))))
     };
     let main = row(
         "pe-scope-main".into(),
@@ -712,16 +706,19 @@ fn switcher(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
     });
     div()
         .absolute()
+        // -switcher dump #3188 selectDropdown_vWC4bk: 264x221 at panel (9,80),
+        // --background-surface-higher, 1px --border-subtle, --radius-sm,
+        // shadow 0 2px 8px --opacity-black-16; listBox_b5PEJH padding 4.
         .top(z(80.))
-        .left(z(8.))
+        .left(z(9.))
         .w(z(264.))
-        .max_h(z(220.))
+        .max_h(z(221.))
         .p(z(4.))
         .rounded(z(8.))
-        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
         .border_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .shadow_lg()
+        .shadow(vec![gpui::BoxShadow { color: c(tok(idx::OPACITY_BLACK_16)), offset: gpui::point(z(0.), z(2.)), blur_radius: z(8.), spread_radius: z(0.), inset: false }])
         .child(div().id("pe-scope-list").max_h(z(212.)).overflow_y_scroll().flex().flex_col().child(main).children(guilds))
 }
 
@@ -1173,16 +1170,23 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
 
 /// Unsaved-changes notice over the card column.
 fn unsaved_bar(e: &EditorState, cx: &mut Cx) -> Div {
+    // profileCardToastContainer_s3DB6Y: left --custom-modal-v2-padding (48),
+    // top padding + 0 (no system bar / private banner) + --space-8 = 56,
+    // width --custom-modal-v2-profile-width (400), z 7. Toast container_aTnRjo:
+    // --background-surface-highest, 1px --border-subtle, --radius-sm,
+    // padding-block 10, inline 16 10; actions_aTnRjo gap 10.
     div()
         .absolute()
-        .bottom(z(16.))
+        .top(z(56.))
         .left(z(48.))
         .w(z(400.))
-        .p(z(10.))
+        .py(z(10.))
         .pl(z(16.))
+        .pr(z(10.))
         .rounded(z(8.))
         .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
-        .shadow_lg()
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
         .flex()
         .items_center()
         .justify_between()
@@ -1194,7 +1198,9 @@ fn unsaved_bar(e: &EditorState, cx: &mut Cx) -> Div {
                 .text_size(z(14.))
                 .line_height(z(18.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(tok(idx::TEXT_STRONG)))
+                // message_aTnRjo: --text-default, ellipsis
+                .truncate()
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
                 .child(e.error.clone().unwrap_or_else(|| crate::t!("pe.unsaved"))),
         )
         .child(
@@ -1329,7 +1335,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
                 .flex()
                 .child(styles_panel(app, e, cx))
                 .child(right)
-                .child(close),
+                .child(close)
+                .when(e.switcher_open, |d| d.child(switcher(app, e, cx))),
         )
         .children(super::collectible_picker::render(app, e, cx))
         .into_any_element()

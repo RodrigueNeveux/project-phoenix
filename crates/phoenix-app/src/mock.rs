@@ -406,6 +406,10 @@ impl MockBackend {
 }
 
 impl Backend for MockBackend {
+    /// `PHX_NO_PREMIUM=1` previews the non-Nitro UI (locks) in examples.
+    fn has_premium(&self) -> bool {
+        std::env::var_os("PHX_NO_PREMIUM").is_none()
+    }
     /// Profile editor: accepted locally, nothing leaves the machine.
     fn update_profile(&self, _guild: Option<Id>, _patch: crate::ui::settings::profile_editor::ProfilePatch) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
