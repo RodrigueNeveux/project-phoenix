@@ -55,6 +55,7 @@ pub fn init(cx: &mut App) {
     gpui_component::init(cx);
     Theme::change(ThemeMode::Dark, None, cx);
     app::bind_keys(cx);
+    media::lru::init(cx);
 }
 
 pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {

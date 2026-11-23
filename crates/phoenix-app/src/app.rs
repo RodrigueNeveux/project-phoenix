@@ -68,6 +68,17 @@ pub struct ChannelMessages {
     pub reached_start: bool,
 }
 
+impl ChannelMessages {
+    /// Position of message `id`. History is in snowflake order, so this is a
+    /// binary search; out-of-order entries fall back to a reverse scan.
+    pub fn index_of(&self, id: Id) -> Option<usize> {
+        match self.msgs.binary_search_by_key(&id.0, |m| m.id.0) {
+            Ok(i) if self.msgs[i].id == id => Some(i),
+            _ => self.msgs.iter().rposition(|m| m.id == id),
+        }
+    }
+}
+
 pub use crate::ui::switcher::Switcher;
 
 pub struct PhoenixApp {
@@ -511,7 +522,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    fn load_older(&mut self, cx: &mut Context<Self>) {
+    pub fn load_older(&mut self, cx: &mut Context<Self>) {
         let Some(id) = self.selected_channel else { return };
         let Some(entry) = self.messages.get_mut(&id) else { return };
         if entry.loading || entry.reached_start || !entry.loaded_once {
@@ -614,7 +625,8 @@ impl PhoenixApp {
             }
             return;
         };
-        if entry.msgs.iter().any(|x| x.id == m.id) {
+        // New messages are almost always newer than the tail: skip the scan then.
+        if entry.msgs.last().is_some_and(|l| l.id.0 >= m.id.0) && entry.index_of(m.id).is_some() {
             self.messages.insert(ch, entry);
             return;
         }
@@ -637,9 +649,8 @@ impl PhoenixApp {
     pub(crate) fn replace_message(&mut self, m: Message, cx: &mut Context<Self>) {
         let ch = m.channel;
         let Some(mut entry) = self.messages.remove(&ch) else { return };
-        if let Some(ix) = entry.msgs.iter().position(|x| x.id == m.id) {
-            let prev = ix.checked_sub(1).map(|p| entry.msgs[p].clone());
-            entry.rendered[ix] = self.render_msg(&m, prev.as_ref());
+        if let Some(ix) = entry.index_of(m.id) {
+            entry.rendered[ix] = self.render_msg(&m, ix.checked_sub(1).map(|p| &entry.msgs[p]));
             entry.msgs[ix] = m;
             if self.selected_channel == Some(ch) {
                 self.message_list.splice(ix + 1..ix + 2, 1);
@@ -670,7 +681,7 @@ impl PhoenixApp {
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
             AppEvent::MessageDelete { channel, id } => {
                 if let Some(e) = self.messages.get_mut(&channel)
-                    && let Some(ix) = e.msgs.iter().position(|m| m.id == id)
+                    && let Some(ix) = e.index_of(id)
                 {
                     e.msgs.remove(ix);
                     e.rendered.remove(ix);

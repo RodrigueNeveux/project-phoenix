@@ -506,7 +506,7 @@ fn message(
     };
 
     let reply = msg.reply_to.map(|rid| {
-        let found = entry.msgs.iter().position(|m| m.id == rid);
+        let found = entry.index_of(rid);
         let (ru, preview) = match found {
             Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone()),
             None => (None, crate::t!("chat.reply_deleted")),
@@ -936,8 +936,12 @@ fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, o
         width: ow,
         height: oh,
     };
-    img(src.clone())
-        .id(gpui::ElementId::Name(src))
+    let mut im = img(src.clone());
+    // Bounded LRU instead of the window's keep-forever asset cache.
+    if let Some(cache) = media::lru::chat() {
+        im = im.image_cache(&cache);
+    }
+    im.id(gpui::ElementId::Name(src))
         .w(z(w))
         .h(z(h))
         .rounded(z(8.))
@@ -1097,11 +1101,34 @@ fn sticker_name(name: SharedString) -> AnyElement {
 }
 
 /// Embed description / field values: Discord renders them as markdown.
+/// Parsed embed markdown, keyed by source text and style generation, so
+/// visible embeds are not re-parsed on every frame. Cleared when full.
+fn embed_blocks(src: &str) -> std::rc::Rc<[RBlock]> {
+    use std::{cell::RefCell, collections::HashMap, rc::Rc};
+    type EmbedCache = (u32, HashMap<SharedString, Rc<[RBlock]>>);
+    thread_local! {
+        static CACHE: RefCell<EmbedCache> = RefCell::default();
+    }
+    CACHE.with_borrow_mut(|(generation, map)| {
+        let g = crate::theme::style_generation();
+        if *generation != g || map.len() >= 512 {
+            *generation = g;
+            map.clear();
+        }
+        if let Some(b) = map.get(src) {
+            return b.clone();
+        }
+        let parsed = crate::markdown::parse(src, &crate::markdown::NoResolve);
+        let blocks: Rc<[RBlock]> = crate::richtext::render_blocks(&parsed, &|_| true, c(Palette::TEXT_NORMAL)).into();
+        map.insert(SharedString::from(src.to_owned()), blocks.clone());
+        blocks
+    })
+}
+
 fn embed_markdown(src: &str, size: f32) -> AnyElement {
-    let parsed = crate::markdown::parse(src, &crate::markdown::NoResolve);
-    let blocks = crate::richtext::render_blocks(&parsed, &|_| true, c(Palette::TEXT_NORMAL));
+    let blocks = embed_blocks(src);
     let mut d = div().flex().flex_col().text_size(fz(size)).line_height(z(18.)).min_w_0();
-    for b in blocks {
+    for b in blocks.iter().cloned() {
         d = d.child(match b {
             RBlock::Code { code, runs, .. } => div()
                 .my(z(4.))

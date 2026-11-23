@@ -7,6 +7,7 @@
 
 pub mod cache;
 pub mod emoji;
+pub mod lru;
 
 use std::collections::HashSet;
 
