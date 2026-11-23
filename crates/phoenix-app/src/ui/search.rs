@@ -418,7 +418,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .child(pager)
             .into_any_element()
     } else {
-        return Some(options_popout(input, error, loading, more, cx));
+        return Some(options_popout(app, input, error, loading, more, cx));
     };
 
     Some(
@@ -481,6 +481,61 @@ fn named(name: &str, size: f32, color: gpui::Hsla) -> gpui::Svg {
 
 /// `itemContainer_lm2_KW` > `item_`: radius 8, padding 4 8; 20px `itemIcon_`
 /// (--text-muted, margin-end 8); hover --interactive-background-hover.
+/// A history query split into free text and `key:value` filters.
+#[derive(Debug, PartialEq)]
+enum HistorySeg {
+    Text(String),
+    Filter { key: &'static str, value: String },
+}
+
+fn history_segments(q: &str) -> Vec<HistorySeg> {
+    let keys: Vec<&'static str> = FILTERS.iter().map(|f| f.0).chain(MORE.iter().map(|m| m.0)).collect();
+    let mut out: Vec<HistorySeg> = Vec::new();
+    for word in q.split_whitespace() {
+        let lower = word.to_lowercase();
+        if let Some(k) = keys.iter().find(|k| lower.starts_with(**k) && word.len() > k.len()) {
+            out.push(HistorySeg::Filter { key: k, value: word[k.len()..].to_owned() });
+        } else if let Some(HistorySeg::Text(t)) = out.last_mut() {
+            t.push(' ');
+            t.push_str(word);
+        } else {
+            out.push(HistorySeg::Text(word.to_owned()));
+        }
+    }
+    out
+}
+
+/// History row content (search-popout #75 `autocompletePillContainer_lm2_KW`):
+/// free text = `nonText_` body-sm/semibold --text-strong, margin-end 8;
+/// filter = `filterPill_` (padding 3 2 3 6, radius --radius-xs 0 0 --radius-xs)
+/// plus `answerPill_` (padding 3 6 3 2, radius 0 --radius-xs --radius-xs 0,
+/// gap 4, margin-end 8), both --background-mod-strong; user answers carry a
+/// 16px avatar.
+fn history_pills(app: &PhoenixApp, q: &str) -> gpui::Div {
+    let mut row = div().flex().items_center().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).whitespace_nowrap().overflow_hidden();
+    let pill = || div().py(z(3.)).bg(tk(idx::BACKGROUND_MOD_STRONG));
+    for seg in history_segments(q) {
+        row = match seg {
+            HistorySeg::Text(t) => row.child(div().mr(z(8.)).child(t)),
+            HistorySeg::Filter { key, value } => {
+                let label: SharedString = FILTERS.iter().find(|f| f.0 == key).map(|f| crate::i18n::t(f.3, &[])).unwrap_or(key.into());
+                let user = (key == "from:" || key == "mentions:")
+                    .then(|| {
+                        let n = value.to_lowercase();
+                        app.users.values().find(|u| u.name.to_lowercase() == n || u.display_name.to_lowercase() == n)
+                    })
+                    .flatten();
+                let mut answer = pill().pl(z(2.)).pr(z(6.)).mr(z(8.)).rounded_r(z(4.)).flex().items_center().gap(z(4.));
+                if let Some(u) = user {
+                    answer = answer.child(crate::ui::avatar(Some(u), 16.));
+                }
+                row.child(pill().pl(z(6.)).pr(z(2.)).rounded_l(z(4.)).child(label)).child(answer.child(value))
+            }
+        };
+    }
+    row
+}
+
 fn option_row(id: (&'static str, usize)) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
@@ -516,7 +571,7 @@ fn group_header(label: SharedString) -> gpui::Div {
 /// body-sm/medium --text-muted, gap 4), a `divider_` (margin 8 −8, 1px
 /// --border-subtle), "History" (28px rows: search glyph + query
 /// body-sm/semibold --text-strong; 18px clear-history trash).
-fn options_popout(input: Entity<InputState>, error: Option<SharedString>, loading: bool, more: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<SharedString>, loading: bool, more: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let history = cx.try_global::<SearchHistory>().map(|h| h.0.clone()).unwrap_or_default();
     let mut filters = div().flex().flex_col().gap(z(4.)).child(group_header(crate::t!("search.filters")));
     for (i, (k, glyph, label, key, value)) in FILTERS.into_iter().enumerate() {
@@ -621,7 +676,7 @@ fn options_popout(input: Entity<InputState>, error: Option<SharedString>, loadin
                         submit(a, cx);
                     }))
                     .child(named("search", 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
-                    .child(div().mr(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(SharedString::from(q))),
+                    .child(history_pills(app, &q)),
             );
         }
         body = body.child(div().my(z(8.)).mx(z(-8.)).h(z(1.)).bg(tk(idx::BORDER_SUBTLE))).child(group);
@@ -726,4 +781,22 @@ fn sort_button(
         .when(active, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
         .on_click(f)
         .child(label)
+}
+
+#[cfg(test)]
+mod history_tests {
+    use super::*;
+
+    #[test]
+    fn splits_filters_and_text() {
+        assert_eq!(
+            history_segments("hello world from:kasiopy has:image"),
+            vec![
+                HistorySeg::Text("hello world".into()),
+                HistorySeg::Filter { key: "from:", value: "kasiopy".into() },
+                HistorySeg::Filter { key: "has:", value: "image".into() },
+            ]
+        );
+        assert_eq!(history_segments("from:"), vec![HistorySeg::Text("from:".into())]);
+    }
 }
