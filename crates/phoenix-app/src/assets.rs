@@ -137,6 +137,8 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/more-horizontal.svg" => f!(r#"<path d="M4 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm8 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>"#),
         "icons/medal.svg" => f!(r#"<path d="M7 2h4l1 4 1-4h4l-3 7a6 6 0 1 1-4 0zM12 11a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/>"#),
         "icons/streak.svg" => f!(r#"<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>"#),
+        // Hand-drawn flame (Trending badge of the member list Activity cards).
+        "icons/fire.svg" => f!(r#"<path d="M12 2c1 3.5 5 6 5 11a5 5 0 0 1-10 0c0-2.3 1.2-3.9 2.5-5 .2 1.8 1 3 2.5 3.5-.8-3.2.2-6.3 0-9.5z"/>"#),
         "icons/shop.svg" => f!(r#"<path d="M4 4h16l-1.5 6H5.5zM5 11h14v9H5zM9 14h6v6H9z"/>"#),
         "icons/flag.svg" => f!(r#"<path d="M5 3h1.5v18H5zM7.5 4h10.2l-2.2 4 2.2 4H7.5z"/>"#),
         "icons/star.svg" => f!(r#"<path d="M12 2.5l2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.3 1.3-6.5-4.9-4.5 6.6-.8z"/>"#),
