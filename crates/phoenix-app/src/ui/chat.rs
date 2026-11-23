@@ -177,7 +177,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let Some(ch_id) = app.selected_channel else { return div().into_any_element() };
     let Some(entry) = app.messages.get(&ch_id) else { return div().into_any_element() };
     if ix == 0 {
-        return intro(app, ch_id, entry.reached_start, entry.loading).into_any_element();
+        return row_wrapper().child(intro(app, ch_id, entry.reached_start, entry.loading)).into_any_element();
     }
     let i = ix - 1;
     let (Some(msg), Some(r)) = (entry.msgs.get(i), entry.rendered.get(i)) else {
@@ -321,7 +321,7 @@ fn message(
     let color = role_color(app.author_color(msg.author));
     let id = msg.id;
     if let Some(sys) = system::render(app, entity, msg, r) {
-        return sys;
+        return row_wrapper().child(sys).into_any_element();
     }
     let compact = app.prefs.synced.compact;
     let fs = app.prefs.local.font_size.clamp(12., 24.);
@@ -445,7 +445,6 @@ fn message(
         // Compact (IRC-like): [time] name: text, no avatars.
         base.pl(px(16.))
             .py(px(1.))
-            .when(r.group_start, |d| d.mt(px(4.)))
             .when_some(reply, |d, reply| d.child(div().pl(px(68.)).child(reply)))
             .child(
                 div()
@@ -486,7 +485,6 @@ fn message(
     } else {
         base.pl(px(m::MSG_GUTTER))
             .py(px(2.))
-            .when(r.group_start, |d| d.mt(px(17.)))
             .when_some(reply, |d, reply| d.child(reply))
             .when(r.group_start, |d| {
                 d.child(
@@ -540,15 +538,21 @@ fn message(
     }
     .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
     let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
-    if r.day_divider.is_some() || new_marker {
-        div()
-            .when_some(r.day_divider.clone(), |d, label| d.child(day_divider(label)))
-            .when(new_marker, |d| d.child(message_ext::new_divider()))
-            .child(body)
-            .into_any_element()
-    } else {
-        body.into_any_element()
-    }
+    // The list measures each row with `layout_as_root`, which ignores the
+    // root's own margins: group spacing must be padding on a wrapper or rows
+    // get painted over each other.
+    let gap = if !r.group_start { 0. } else if compact { 4. } else { 17. };
+    row_wrapper()
+        .when_some(r.day_divider.clone(), |d, label| d.child(day_divider(label)))
+        .when(new_marker, |d| d.child(message_ext::new_divider()))
+        .child(div().pt(px(gap)).child(body))
+        .into_any_element()
+}
+
+/// Root of a list row: a flex column so children's margins stay inside the
+/// measured box (no margin collapsing through the root).
+fn row_wrapper() -> gpui::Div {
+    div().w_full().flex().flex_col()
 }
 
 fn edited_marker(ts: i64) -> impl IntoElement {
