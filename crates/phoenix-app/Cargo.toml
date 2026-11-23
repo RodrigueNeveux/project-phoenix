@@ -42,3 +42,4 @@ ttf-parser = "0.25"
 gpui = { package = "gpui-pre", version = "=0.3.12", features = ["test-support"] }
 anyhow = "1"
 gpui-platform = { package = "gpui-pre-platform", version = "=0.3.12", features = ["test-support"] }
+png = "0.18"

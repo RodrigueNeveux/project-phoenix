@@ -48,7 +48,7 @@ pub fn user(u: &api::User) -> model::User {
     model::User {
         id: id(u.id),
         name: u.username.clone().into(),
-        display_name: u.display_name().to_owned().into(),
+        display_name: collapse_ws(u.display_name()).into(),
         avatar,
         bot: u.bot || u.system,
         verified_bot: u.system || u.public_flags.is_some_and(|f| f & (1 << 16) != 0),
@@ -176,7 +176,7 @@ pub fn message(m: &api::Message) -> model::Message {
             .as_ref()
             .is_some_and(|r| m.mentions.iter().any(|u| u.user.id == r.author.id)),
         forward: None,
-        author_nick: m.member.as_ref().and_then(|mb| mb.nick.clone()).filter(|n| !n.is_empty()).map(Into::into),
+        author_nick: m.member.as_ref().and_then(|mb| mb.nick.as_deref()).filter(|n| !n.is_empty()).map(|n| collapse_ws(n).into()),
         embeds: m
             .embeds
             .iter()
@@ -795,7 +795,7 @@ impl MemberList {
                     .and_then(|p| p.get("activities"))
                     .and_then(Value::as_array)
                     .and_then(|a| activity(a)),
-                nick: m.member.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
+                nick: m.member.nick.as_deref().filter(|n| !n.is_empty()).map(|n| collapse_ws(n).into()),
                 avatar: member_avatar_url(guild, u.id, &m.member),
                 decoration: member_decoration_url(&m.member),
                 joined_at: joined_unix(&m.member),
@@ -896,7 +896,7 @@ impl Adapter {
                         self.statuses.get(&u.0).copied().unwrap_or(model::Presence::Offline)
                     },
                     activity: None,
-                    nick: m.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
+                    nick: m.nick.as_deref().filter(|n| !n.is_empty()).map(|n| collapse_ws(n).into()),
                     avatar: member_avatar_url(guild, u, &m),
                     decoration: member_decoration_url(&m),
                     joined_at: joined_unix(&m),
@@ -1170,4 +1170,33 @@ pub(super) fn premium_unix(m: &api::Member) -> Option<i64> {
 
 pub(super) fn joined_unix(m: &api::Member) -> Option<i64> {
     m.joined_at.as_deref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.timestamp())
+}
+
+/// Names render in HTML with `white-space: normal`, which collapses runs of
+/// ASCII spaces / tabs / newlines into one space (a name like "!   Slyto"
+/// shows as "! Slyto"). GPUI keeps every space, so collapse them here.
+pub(crate) fn collapse_ws(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut sp = false;
+    for c in s.chars() {
+        if matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c') {
+            sp = true;
+        } else {
+            if sp && !out.is_empty() {
+                out.push(' ');
+            }
+            sp = false;
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod collapse_tests {
+    #[test]
+    fn collapses_name_spaces() {
+        assert_eq!(super::collapse_ws("!      Slyto  "), "! Slyto");
+        assert_eq!(super::collapse_ws("a\u{3164}b"), "a\u{3164}b");
+    }
 }

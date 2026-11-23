@@ -33,6 +33,8 @@ use crate::{app::PhoenixApp, ui::settings::collectibles::{Anchor, Collectible, F
 const MAX_W: u32 = 450;
 /// Decoded layers kept in memory (one effect has 1-3 layers).
 const MAX_ANIMS: usize = 4;
+/// Intro delay before the first layer (`delayIntro` default: clock at -500 ms).
+const INTRO_MS: u64 = 500;
 
 #[derive(Default)]
 struct Store {
@@ -66,15 +68,26 @@ pub fn product(app: &PhoenixApp, sku: u64, cx: &mut Context<PhoenixApp>) -> Opti
     None
 }
 
-fn decode(bytes: &[u8]) -> anyhow::Result<RenderImage> {
+/// Decodes a PNG / APNG into BGRA frames (the `image` APNG decoder composes
+/// each frame with its dispose / blend ops onto the canvas, so every frame is
+/// a full image). `still`: one frame only. An APNG used as a still (the
+/// `reducedMotionSrc`) keeps its most opaque frame: the default image of an
+/// effect APNG is often the empty intro frame, while the browser shows the
+/// composed animation.
+fn decode(bytes: &[u8], still: bool) -> anyhow::Result<RenderImage> {
     use image::{AnimationDecoder, codecs::png::PngDecoder};
     let dec = PngDecoder::new(std::io::Cursor::new(bytes))?;
-    let frames: Vec<image::Frame> = if dec.is_apng()? {
+    let mut frames: Vec<image::Frame> = if dec.is_apng()? {
         dec.apng()?.into_frames().collect_frames()?
     } else {
         let img = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)?.into_rgba8();
         vec![image::Frame::new(img)]
     };
+    if still && frames.len() > 1 {
+        let ink = |f: &image::Frame| f.buffer().pixels().map(|p| p.0[3] as u64).sum::<u64>();
+        let best = (0..frames.len()).max_by_key(|&i| ink(&frames[i])).unwrap_or(0);
+        frames = vec![frames.swap_remove(best)];
+    }
     let frames = frames
         .into_iter()
         .map(|f| {
@@ -94,7 +107,8 @@ fn decode(bytes: &[u8]) -> anyhow::Result<RenderImage> {
     Ok(RenderImage::new(frames))
 }
 
-fn anim(url: &SharedString, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderImage>> {
+fn anim(src: &SharedString, still: bool, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderImage>> {
+    let url = &SharedString::from(if still { format!("still:{src}") } else { src.to_string() });
     let s = cx.default_global::<Store>();
     if let Some((a, used)) = s.anims.get_mut(url) {
         *used = Instant::now();
@@ -108,14 +122,15 @@ fn anim(url: &SharedString, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderIm
     s.anims.insert(url.clone(), (None, Instant::now()));
     let http = cx.http_client();
     let u = url.clone();
+    let fetch_url = src.clone();
     cx.spawn(async move |this, cx| {
         use futures::AsyncReadExt;
         let mut bytes = Vec::new();
-        let ok = match http.get(&u, Default::default(), true).await {
+        let ok = match http.get(&fetch_url, Default::default(), true).await {
             Ok(mut r) => r.body_mut().read_to_end(&mut bytes).await.is_ok(),
             Err(_) => false,
         };
-        let img = if ok { cx.background_spawn(async move { decode(&bytes).ok() }).await.map(Arc::new) } else { None };
+        let img = if ok { cx.background_spawn(async move { decode(&bytes, still).ok() }).await.map(Arc::new) } else { None };
         let _ = this.update(cx, |_, cx| {
             if let Some(e) = cx.default_global::<Store>().anims.get_mut(&u) {
                 e.0 = img;
@@ -143,14 +158,32 @@ fn clock(sku: u64, cx: &mut App) -> Duration {
 /// The effect overlay: put last inside a `relative` card of width `w`.
 pub fn effect(c: &Collectible, w: f32, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let sku = c.sku;
-    let still = |src: SharedString| img(src).absolute().top_0().left_0().w(crate::theme::z(w)).into_any_element();
+    // `img.effect_` is `width: 100%` with the height from the image's aspect
+    // ratio; GPUI's `img` with only a width keeps the natural height and
+    // letterboxes (object-fit contain), pushing the art down. Size it from
+    // the decoded frame instead.
+    let layer = |a: Arc<RenderImage>, id: Option<SharedString>| {
+        let sz = a.size(0);
+        let h = if sz.width.0 > 0 { w * sz.height.0 as f32 / sz.width.0 as f32 } else { w };
+        let el = img(ImageSource::Render(a)).absolute().top_0().left_0().w(crate::theme::z(w)).h(crate::theme::z(h));
+        match id {
+            Some(id) => el.id(id).into_any_element(),
+            None => el.into_any_element(),
+        }
+    };
     let mut layers: Vec<AnyElement> = Vec::new();
     if c.effects.is_empty() || cx.reduce_motion() {
-        layers.extend(c.full.clone().or(c.preview.clone()).map(still));
+        // Reduced motion: one `img` with `reducedMotionSrc` at `top: 0`.
+        if let Some(src) = c.full.clone().or(c.preview.clone())
+            && let Some(a) = anim(&src, true, cx)
+        {
+            layers.push(layer(a, None));
+        }
     } else {
-        let t = clock(sku, cx).as_millis() as u64;
+        // The client starts its clock at -500 ms (`delayIntro`).
+        let t = (clock(sku, cx).as_millis() as u64).saturating_sub(INTRO_MS);
         for (i, l) in c.effects.iter().enumerate() {
-            let Some(a) = anim(&l.src, cx) else { continue };
+            let Some(a) = anim(&l.src, false, cx) else { continue };
             if t < l.start || l.duration == 0 {
                 continue;
             }
@@ -165,8 +198,7 @@ pub fn effect(c: &Collectible, w: f32, cx: &mut Context<PhoenixApp>) -> Option<A
                 continue;
             }
             // A fresh id per cycle restarts the APNG from its first frame.
-            let id = SharedString::from(format!("pfx-{sku}-{i}-{cycle}"));
-            layers.push(img(ImageSource::Render(a)).id(id).absolute().top_0().left_0().w(crate::theme::z(w)).into_any_element());
+            layers.push(layer(a, Some(SharedString::from(format!("pfx-{sku}-{i}-{cycle}")))));
         }
     }
     Some(
@@ -211,4 +243,44 @@ pub fn frame(f: &FrameSpec, w: f32, front: bool) -> Option<AnyElement> {
         d = d.child(col.child(img(url.clone()).w_full().flex_none()));
     }
     Some(d.into_any_element())
+}
+
+#[cfg(test)]
+mod tests {
+    /// 4x4 APNG: an empty default (intro) frame, then a 2x2 red patch blended
+    /// over it, then a blue 1x1 patch blended over that.
+    fn apng() -> Vec<u8> {
+        let mut out = Vec::new();
+        {
+            let mut e = png::Encoder::new(&mut out, 4, 4);
+            e.set_color(png::ColorType::Rgba);
+            e.set_depth(png::BitDepth::Eight);
+            e.set_animated(3, 0).unwrap();
+            let mut w = e.write_header().unwrap();
+            w.set_dispose_op(png::DisposeOp::None).unwrap();
+            w.set_blend_op(png::BlendOp::Over).unwrap();
+            w.write_image_data(&[0; 64]).unwrap();
+            w.set_frame_dimension(2, 2).unwrap();
+            w.write_image_data(&[255, 0, 0, 255].repeat(4)).unwrap();
+            w.set_frame_dimension(1, 1).unwrap();
+            w.set_frame_position(3, 3).unwrap();
+            w.write_image_data(&[0, 0, 255, 255]).unwrap();
+            w.finish().unwrap();
+        }
+        out
+    }
+
+    #[test]
+    fn decodes_composed_frames_and_skips_empty_intro_for_still() {
+        let b = apng();
+        let anim = super::decode(&b, false).unwrap();
+        assert_eq!(anim.frame_count(), 3);
+        // Frame 3 keeps frame 2's red patch (dispose none) plus the blue pixel (BGRA).
+        let f = anim.as_bytes(2).unwrap();
+        assert_eq!(&f[0..4], &[0, 0, 255, 255]);
+        assert_eq!(&f[60..64], &[255, 0, 0, 255]);
+        let still = super::decode(&b, true).unwrap();
+        assert_eq!(still.frame_count(), 1);
+        assert_eq!(still.as_bytes(0).unwrap(), f);
+    }
 }

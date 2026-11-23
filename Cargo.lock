@@ -6157,6 +6157,7 @@ dependencies = [
  "parking_lot",
  "phoenix-api",
  "phoenix-voice",
+ "png 0.18.1",
  "qrcode",
  "reqwest",
  "serde_json",
