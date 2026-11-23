@@ -28,6 +28,8 @@ To compare existing images, run `compare.py --discord d.png --phoenix p.png --re
 
 - `PHX_GUILD` and `PHX_CHANNEL`, or `PHX_DM=<channel id>`, choose the location. The default is the location shown in Discord.
 - `PHX_W`/`PHX_H`, `PHX_THEME` (dark|light|ash|onyx) and `PHX_COMPACT` set the window size, theme and density. The default reads them from Discord's `<html>` classes.
+- Scroll positions are copied from Discord: the channel list and the message list are anchored on the same first visible row (plus pixel offset), the member list uses the same `scrollTop`. `PHX_NO_SCROLL=1` turns this off.
+- `PHX_TRACE=1` prints the slow event-loop runs (anything over 300 ms).
 - `PHX_WAIT` is how long to wait for messages and images, in seconds (default 15).
 
 It is strictly read-only:

@@ -180,6 +180,9 @@ fn env_or_cdp(var: &str, expr: &str) -> Option<String> {
 struct Scroll {
     /// Channel list (`sidebarList_` scroller) scrollTop, CSS px.
     channels: f32,
+    /// First channel-list row (category / channel / thread id) still in view,
+    /// and how far the scroller's top edge sits inside its `li`.
+    top_channel: Option<(Id, f32)>,
     /// Member list (`membersWrap_` scroller) scrollTop, CSS px.
     members: f32,
     /// First message whose bottom is below the top of the message scroller,
@@ -192,11 +195,13 @@ struct Scroll {
 
 const SCROLL_JS: &str = r"(()=>{const q=s=>document.querySelector(s);
 const ch=q('[class*=sidebarList_] [class*=scroller_]'),mb=q('[class*=membersWrap_] [class*=scroller_]'),
-ms=q('ol[data-list-id=chat-messages]')?.closest('[class*=scroller_]')||q('[class*=messagesWrapper_] > [class*=scroller_]');let top='',off=0,fb=0;
+ms=q('ol[data-list-id=chat-messages]')?.closest('[class*=scroller_]')||q('[class*=messagesWrapper_] > [class*=scroller_]');let top='',off=0,fb=0,ct='',co=0;
+if(ch){const r=ch.getBoundingClientRect();for(const e of ch.querySelectorAll('[data-list-item-id^=channels___]')){
+const b=(e.closest('li')||e).getBoundingClientRect();if(b.bottom>r.top+1){ct=e.getAttribute('data-list-item-id').split('___').pop();co=r.top-b.top;break}}}
 if(ms){const r=ms.getBoundingClientRect();fb=ms.scrollHeight-ms.scrollTop-ms.clientHeight;
 for(const li of ms.querySelectorAll('li[id^=chat-messages-]')){const b=li.getBoundingClientRect();
 if(b.bottom>r.top+1){top=li.id.split('-').pop();off=r.top-b.top;break}}}
-return [ch?ch.scrollTop:0,mb?mb.scrollTop:0,top,off,fb].join(' ')})()";
+return [ch?ch.scrollTop:0,mb?mb.scrollTop:0,top,off,fb,ct,co].join(' ')})()";
 
 fn read_scroll() -> Option<Scroll> {
     if std::env::var_os("PHX_NO_SCROLL").is_some() {
@@ -207,6 +212,7 @@ fn read_scroll() -> Option<Scroll> {
     let num = |i: usize| f.get(i).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.);
     Some(Scroll {
         channels: num(0),
+        top_channel: f.get(5).and_then(|v| parse_id(v)).map(|id| (id, num(6))),
         members: num(1),
         top_message: f.get(2).and_then(|v| parse_id(v)).map(|id| (id, num(3))),
         from_bottom: num(4),
@@ -232,9 +238,19 @@ fn apply_scroll(
         let ix = app.messages.get(&app.selected_channel?)?.index_of(id)?;
         Some((ix + 1, off)) // item 0 is the channel header / loader
     });
+    // Channel list: anchor on the same row (item 0 is the guild banner / top spacer).
+    let ch_anchor = cx.update(|cx| {
+        use phoenix_app::app::SidebarRow::*;
+        let (id, off) = sc.top_channel?;
+        let ix = v.read(cx).sidebar_rows.iter().position(|r| matches!(r, Category(c) | Channel(c) | Thread(c) if *c == id))?;
+        Some((ix + 1, off))
+    });
     cx.update(|cx| {
         let app = v.read(cx);
-        app.sidebar_list.scroll_to(top);
+        match ch_anchor {
+            Some((ix, off)) => app.sidebar_list.scroll_to(ListOffset { item_ix: ix, offset_in_item: px(off.max(0.)) }),
+            None => app.sidebar_list.scroll_to(top),
+        }
         app.member_list.scroll_to(top);
         match anchor {
             Some((ix, off)) => app.message_list.scroll_to(ListOffset { item_ix: ix, offset_in_item: px(off.max(0.)) }),
@@ -244,7 +260,7 @@ fn apply_scroll(
     if anchor.is_none() {
         eprintln!("top message not in loaded history, using distance from bottom");
     }
-    let mut left = [sc.channels, sc.members, if anchor.is_none() { sc.from_bottom } else { 0. }];
+    let mut left = [if ch_anchor.is_none() { sc.channels } else { 0. }, sc.members, if anchor.is_none() { sc.from_bottom } else { 0. }];
     while left.iter().any(|l| *l > 0.5) {
         cx.update_window(win, |_, window, _| window.refresh())?;
         pump(cx, 100);
