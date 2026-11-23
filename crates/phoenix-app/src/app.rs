@@ -1006,7 +1006,7 @@ impl PhoenixApp {
                 .push(MemberRow::Header(format!("{title} — {}", b.len()).into()));
             self.member_rows.extend(b.into_iter().map(MemberRow::Member));
         }
-        self.member_list.reset(self.member_rows.len() + 1); // + Activity header item (ui/members.rs)
+        self.member_list.reset(self.member_rows.len());
     }
 
     pub fn member_color(&self, guild: Id, m: &Member) -> Option<u32> {

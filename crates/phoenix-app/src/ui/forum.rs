@@ -1,9 +1,9 @@
 //! Forum and media channels: post list with tag filter and sort, post cards
 //! (title, tags, author + first message preview, reply count, activity time,
-//! image thumbnail), "New Post" composer with tags.
+//! image thumbnail), crate::t!("forum.new_post") composer with tags.
 //!
 //! Observed layout: 16px gutter, a 40px search/create bar with a blurple
-//! "New Post" button, a row of 24px tag pills, a "Sort & View" menu, then
+//! crate::t!("forum.new_post") button, a row of 24px tag pills, a "Sort & View" menu, then
 //! 8px-radius cards on the secondary background with 16px padding and a
 //! 72px rounded thumbnail on the right.
 //!
@@ -57,14 +57,7 @@ fn snowflake_time(id: Id) -> i64 {
 }
 
 pub fn ago(now: i64, ts: i64) -> String {
-    let d = (now - ts).max(0);
-    match d {
-        d if d < 60 => "now".into(),
-        d if d < 3600 => format!("{}m ago", d / 60),
-        d if d < 86_400 => format!("{}h ago", d / 3600),
-        d if d < 2_592_000 => format!("{}d ago", d / 86_400),
-        d => format!("{}mo ago", d / 2_592_000),
-    }
+    crate::i18n::ago_short(now - ts).to_string()
 }
 
 impl PhoenixApp {
@@ -93,7 +86,7 @@ impl PhoenixApp {
                     v.has_more = has_more;
                 }
                 Ok(_) => {}
-                Err(e) => a.parity_toast(format!("Couldn't load posts: {}", e.0), cx),
+                Err(e) => a.parity_toast(crate::t!("forum.load_failed", e = e.0).to_string(), cx),
             }
         });
     }
@@ -122,7 +115,7 @@ impl PhoenixApp {
         let title = comp.title.read(cx).value().trim().to_owned();
         let content = comp.body.read(cx).value().trim().to_owned();
         if title.is_empty() || content.is_empty() {
-            comp.error = Some("A post needs a title and a message.".into());
+            comp.error = Some(crate::t!("forum.needs_title").into());
             cx.notify();
             return;
         }
@@ -157,7 +150,7 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
     }
     let Some(forum) = open_forum(app) else { return };
     if search_input(forum).is_none() {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search or create a post..."));
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("forum.search")));
         cx.subscribe(&input, move |a: &mut PhoenixApp, _, ev: &gpui_component::input::InputEvent, cx| match ev {
             gpui_component::input::InputEvent::Change => cx.notify(),
             // Enter creates a post titled with the search text.
@@ -176,8 +169,8 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
     }
     if app.parity.forum_compose_request == Some(forum) {
         app.parity.forum_compose_request = None;
-        let title = cx.new(|cx| InputState::new(window, cx).placeholder("Post Title"));
-        let body = cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 12).placeholder("Type your message here"));
+        let title = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("forum.post_title")));
+        let body = cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 12).placeholder(crate::t!("forum.type_message")));
         let query = search_input(forum).map(|i| i.read(cx).value().to_string()).unwrap_or_default();
         title.update(cx, |s, cx| {
             if !query.trim().is_empty() {
@@ -394,13 +387,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     cx.notify();
                 }))
                 .child(icon(Icon::Forum, 16., gpui::white()))
-                .child("New Post"),
+                .child(crate::t!("forum.new_post")),
         );
 
     let mut filters = div().flex().flex_wrap().items_center().gap(z(6.));
     let sort_label = match v.sort {
-        ForumSort::Recent => "Recently Active",
-        ForumSort::Created => "Date Posted",
+        ForumSort::Recent => crate::t!("forum.recent"),
+        ForumSort::Created => crate::t!("forum.created"),
     };
     filters = filters.child(
         div()
@@ -420,7 +413,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 v.sort_menu = !v.sort_menu;
                 cx.notify();
             }))
-            .child(format!("Sort: {sort_label} ▾")),
+            .child(crate::t!("forum.sort", sort = sort_label)),
     );
     if !tags.is_empty() {
         filters = filters.child(div().w(z(1.)).h(z(16.)).mx(z(4.)).bg(c(Palette::DIVIDER)));
@@ -454,8 +447,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .items_center()
                 .gap(z(8.))
                 .child(icon(Icon::Forum, 64., c(Palette::INTERACTIVE_MUTED)))
-                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("There are no posts yet"))
-                .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Be the first to start a conversation.")),
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(crate::t!("forum.empty")))
+                .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("forum.empty_sub"))),
         );
     }
     let query = search_input(forum).map(|i| i.read(cx).value().trim().to_lowercase()).unwrap_or_default();
@@ -468,7 +461,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .justify_center()
                 .text_size(z(14.))
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("No posts match your search. Press Enter to create one."),
+                .child(crate::t!("forum.no_match")),
         );
     }
     if app.backend.is_media_channel(forum) {
@@ -482,7 +475,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         }
     }
     if v.loading {
-        col = col.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+        col = col.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
     } else if v.has_more {
         col = col.child(
             div()
@@ -493,12 +486,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .cursor_pointer()
                 .text_color(c(Palette::TEXT_LINK))
                 .on_click(cx.listener(move |a, _, _, cx| a.load_forum(forum, false, cx)))
-                .child("Load more posts"),
+                .child(crate::t!("forum.load_more")),
         );
     }
 
     let sort_menu = v.sort_menu.then(|| {
-        let item = |id: &'static str, label: &'static str, s: ForumSort, on: bool| {
+        let item = |id: &'static str, label: SharedString, s: ForumSort, on: bool| {
             div()
                 .id(id)
                 .px(z(8.))
@@ -524,9 +517,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .bg(c(Palette::BG_FLOATING))
             .shadow_lg()
             .occlude()
-            .child(div().px(z(8.)).py(z(4.)).text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("SORT BY"))
-            .child(item("sort-recent", "Recently Active", ForumSort::Recent, v.sort == ForumSort::Recent))
-            .child(item("sort-created", "Date Posted", ForumSort::Created, v.sort == ForumSort::Created))
+            .child(div().px(z(8.)).py(z(4.)).text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("forum.sort_by")))
+            .child(item("sort-recent", crate::t!("forum.recent"), ForumSort::Recent, v.sort == ForumSort::Recent))
+            .child(item("sort-created", crate::t!("forum.created"), ForumSort::Created, v.sort == ForumSort::Created))
     });
 
     Some(
@@ -550,7 +543,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     )
 }
 
-/// "New Post" dialog (title, message, tags).
+/// crate::t!("forum.new_post") dialog (title, message, tags).
 pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let forum = open_forum(app)?;
     let comp = app.parity.forums.get(&forum)?.compose.as_ref()?;
@@ -603,11 +596,11 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
                 .flex()
                 .flex_col()
                 .gap(z(12.))
-                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("New Post"))
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(crate::t!("forum.new_post")))
                 .child(field(Input::new(&comp.title).appearance(false).bordered(false).into_any_element(), 40.))
                 .child(field(Textarea::new(&comp.body).appearance(false).bordered(false).into_any_element(), 100.))
                 .when(!tags.is_empty(), |d| {
-                    d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("TAGS")).child(tag_row)
+                    d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("forum.tags"))).child(tag_row)
                 })
                 .when_some(comp.error.clone(), |d, er| d.child(div().text_size(z(14.)).text_color(c(Palette::TEXT_CRITICAL)).child(er))),
         )
@@ -626,7 +619,7 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
                         .text_size(z(14.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .on_click(move |_, w, cx| close2(w, cx))
-                        .child("Cancel"),
+                        .child(crate::t!("common.cancel")),
                 )
                 .child(
                     div()
@@ -642,7 +635,7 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
                         .text_color(gpui::white())
                         .when(!comp.sending, |d| d.cursor_pointer().on_click(cx.listener(move |a, _, _, cx| a.submit_post(forum, cx))))
                         .when(comp.sending, |d| d.opacity(0.5))
-                        .child(if comp.sending { "Posting…" } else { "Post" }),
+                        .child(if comp.sending { crate::t!("forum.posting") } else { crate::t!("forum.post") }),
                 ),
         );
     Some(crate::ui::modal::frame("forum-compose", close, card))

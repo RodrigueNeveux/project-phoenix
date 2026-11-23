@@ -13,7 +13,7 @@ use crate::{
     theme::{Palette, c},
 };
 
-fn label(text: &'static str, error: Option<&SharedString>) -> impl IntoElement {
+fn label(text: SharedString, error: Option<&SharedString>) -> impl IntoElement {
     div()
         .mb(px(8.))
         .flex()
@@ -59,7 +59,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .text_color(c(Palette::TEXT_HEADER))
                 .flex()
                 .justify_center()
-                .child("Welcome back!"),
+                .child(crate::t!("login.welcome")),
         )
         .child(
             div()
@@ -69,32 +69,32 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .flex()
                 .justify_center()
                 .child(if app.login_with_token {
-                    "Paste your user token to continue."
+                    crate::t!("login.paste_token")
                 } else {
-                    "We're so excited to see you again!"
+                    crate::t!("login.excited")
                 }),
         )
         .child(div().h(px(20.)))
         .map(|d| {
             if app.login_with_token {
-                d.child(label("TOKEN", err)).child(field(&app.login_token)).child(
+                d.child(label(crate::t!("login.token"), err)).child(field(&app.login_token)).child(
                     div()
                         .mt(px(8.))
                         .text_size(px(12.))
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("Your token is stored only in your system keyring and never shared."),
+                        .child(crate::t!("login.token_note")),
                 )
             } else if app.login_mfa_step {
                 let opts = app.backend.mfa_options();
                 let method = app.login_ui.mfa_method;
-                let (title, hint): (&'static str, SharedString) = match method {
-                    MfaMethod::Totp => ("TWO-FACTOR CODE", "Open your authenticator app and enter the 6-digit code.".into()),
-                    MfaMethod::Backup => ("BACKUP CODE", "Enter one of your 8-character backup codes.".into()),
+                let (title, hint): (SharedString, SharedString) = match method {
+                    MfaMethod::Totp => (crate::t!("login.mfa_code"), crate::t!("login.mfa_hint").into()),
+                    MfaMethod::Backup => (crate::t!("login.backup_code"), crate::t!("login.backup_hint").into()),
                     MfaMethod::Sms => (
-                        "SMS CODE",
+                        crate::t!("login.sms_code"),
                         match &app.login_ui.sms_phone {
-                            Some(p) => format!("We sent a code to {p}.").into(),
-                            None => "Sending a code to your phone…".into(),
+                            Some(p) => crate::t!("login.sms_sent", p = p),
+                            None => crate::t!("login.sms_sending").into(),
                         },
                     ),
                 };
@@ -117,14 +117,14 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                 .text_color(c(Palette::TEXT_LINK))
                                 .cursor_pointer()
                                 .on_click(cx.listener(move |a, _, _, cx| crate::auth::choose_mfa(a, m, cx)))
-                                .child(SharedString::from(format!("Use {}", m.label().to_lowercase())))
+                                .child(crate::t!("login.use_method", m = m.label().to_lowercase()))
                         },
                     )))
             } else {
-                d.child(label("EMAIL OR PHONE NUMBER", err))
+                d.child(label(crate::t!("login.email"), err))
                     .child(field(&app.login_email))
                     .child(div().h(px(20.)))
-                    .child(label("PASSWORD", err))
+                    .child(label(crate::t!("login.password"), err))
                     .child(field(&app.login_password))
                     .child(
                         div()
@@ -133,7 +133,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(c(Palette::TEXT_LINK))
                             .cursor_pointer()
-                            .child("Forgot your password?"),
+                            .child(crate::t!("login.forgot")),
                     )
             }
         })
@@ -153,7 +153,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(gpui::white())
                 .on_click(cx.listener(|a, _, w, cx| a.submit_login(w, cx)))
-                .child(if app.logging_in { "…" } else { "Log In" }),
+                .child(if app.logging_in { "…".into() } else { crate::t!("login.login") }),
         )
         .child(
             div()
@@ -161,8 +161,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .flex()
                 .gap(px(4.))
                 .text_size(px(14.))
-                .child(div().text_color(c(Palette::TEXT_MUTED)).child("Need an account?"))
-                .child(div().text_color(c(Palette::TEXT_LINK)).cursor_pointer().child("Register")),
+                .child(div().text_color(c(Palette::TEXT_MUTED)).child(crate::t!("login.need_account")))
+                .child(div().text_color(c(Palette::TEXT_LINK)).cursor_pointer().child(crate::t!("login.register"))),
         )
         .child(
             div()
@@ -177,19 +177,19 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                     a.login_error = None;
                     cx.notify();
                 }))
-                .child(if app.login_with_token { "Log in with email instead" } else { "Log in with a token" }),
+                .child(if app.login_with_token { crate::t!("login.with_email") } else { crate::t!("login.with_token") }),
         );
 
-    let (qr_box, qr_title, qr_text): (AnyElement, &'static str, SharedString) = match &app.login_ui.qr {
+    let (qr_box, qr_title, qr_text): (AnyElement, SharedString, SharedString) = match &app.login_ui.qr {
         QrState::Code { modules, size, .. } => (
             qr_code(modules, *size),
-            "Log in with QR Code",
-            "Scan this with the Discord mobile app to log in instantly.".into(),
+            crate::t!("login.qr_title"),
+            crate::t!("login.qr_hint").into(),
         ),
         QrState::Scanned(name) => (
             div().text_size(px(48.)).child("✓").into_any_element(),
-            "Check your phone!",
-            format!("Logging in as {name}. Confirm on the Discord mobile app.").into(),
+            crate::t!("login.check_phone"),
+            crate::t!("login.qr_scanned", name = name),
         ),
         QrState::Unavailable(e) => (
             div()
@@ -198,15 +198,15 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 .text_color(c(Palette::BLURPLE))
                 .text_size(px(14.))
                 .on_click(cx.listener(|a, _, _, cx| crate::auth::retry_qr(a, cx)))
-                .child("Retry")
+                .child(crate::t!("common.retry"))
                 .into_any_element(),
-            "QR code unavailable",
+            crate::t!("login.qr_unavailable"),
             e.clone().into(),
         ),
         _ => (
-            div().text_color(gpui::black()).text_size(px(14.)).child("Generating…").into_any_element(),
-            "Log in with QR Code",
-            "Scan this with the Discord mobile app to log in instantly.".into(),
+            div().text_color(gpui::black()).text_size(px(14.)).child(crate::t!("login.generating")).into_any_element(),
+            crate::t!("login.qr_title"),
+            crate::t!("login.qr_hint").into(),
         ),
     };
     let qr = div()

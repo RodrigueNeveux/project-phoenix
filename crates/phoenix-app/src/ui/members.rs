@@ -40,9 +40,7 @@ pub fn on_event(app: &mut PhoenixApp, ev: AppEvent, cx: &mut Context<PhoenixApp>
 /// If the open guild has a server list, size the virtual list for it
 /// (keeping the scroll position) and return true.
 pub fn sync_server_list(app: &mut PhoenixApp) -> bool {
-    // +1: item 0 is the counts row + Activity section, which scrolls with
-    // the list like the client's (they sit inside `members_86es0b`).
-    let Some(len) = app.selected_guild.and_then(|g| app.people.lists.get(&g)).map(|l| l.len() + 1) else {
+    let Some(len) = app.selected_guild.and_then(|g| app.people.lists.get(&g)).map(Vec::len) else {
         return false;
     };
     app.member_rows.clear();
@@ -60,7 +58,7 @@ pub fn sync_server_list(app: &mut PhoenixApp) -> bool {
 /// Ask for the ranges around the scroll position when it enters a new chunk.
 fn request_ranges(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) {
     let (Some(ch), true) = (app.selected_channel, app.people.lists.contains_key(&g)) else { return };
-    let top = app.member_list.logical_scroll_top().item_ix.saturating_sub(1);
+    let top = app.member_list.logical_scroll_top().item_ix;
     let key = (g, top / 100);
     if app.people.requested.get() == key {
         return;
@@ -87,6 +85,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .bg(c(Palette::BG_SECONDARY)) // container_86es0b --custom-channel-members-bg = --background-base-lower
         .border_l_1()
         .border_color(c(Palette::DIVIDER)) // container_86es0b border-inline-start --border-subtle
+        .when_some(app.selected_guild, |d, g| d.child(counts_row(app, g)).child(activity_section(app, &entity, g)))
         .child(
             list(app.member_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                 .flex_1()
@@ -358,11 +357,6 @@ fn placeholder(ix: usize) -> AnyElement {
 fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let app = entity.read(cx);
     let Some(g) = app.selected_guild else { return div().into_any_element() };
-    // Item 0: counts row + Activity section, scrolled with the members.
-    let Some(ix) = ix.checked_sub(1) else {
-        let entity = entity.clone();
-        return div().flex().flex_col().child(counts_row(app, g)).child(activity_section(app, &entity, g)).into_any_element();
-    };
     if let Some(rows) = app.people.lists.get(&g) {
         return match rows.get(ix) {
             Some(ListEntry::Group { id, count }) => header(group_title(app, g, id, *count)),

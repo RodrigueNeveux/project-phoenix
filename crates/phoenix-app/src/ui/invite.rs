@@ -49,15 +49,15 @@ impl PhoenixApp {
             }
             this.nav.invite_preview = Some(match res {
                 Ok(NavReply::Invite(p)) => Ok(p),
-                Ok(_) => Err("The invite is invalid or has expired.".into()),
-                Err(_) => Err("The invite is invalid or has expired.".into()),
+                Ok(_) => Err(crate::t!("invite.invalid").into()),
+                Err(_) => Err(crate::t!("invite.invalid").into()),
             });
         });
     }
 
     pub fn join_invite(&mut self, cx: &mut Context<Self>) {
         let Some(code) = self.nav.invite_code.clone() else {
-            self.nav.invite_preview = Some(Err("Please enter a valid invite link or invite code.".into()));
+            self.nav.invite_preview = Some(Err(crate::t!("invite.enter_valid").into()));
             cx.notify();
             return;
         };
@@ -103,7 +103,7 @@ impl PhoenixApp {
             let link: SharedString = match res {
                 Ok(NavReply::Text(t)) => t,
                 Ok(_) => "".into(),
-                Err(e) => format!("Couldn't create an invite: {}", e.0).into(),
+                Err(e) => crate::t!("invite.create_failed", e = e.0),
             };
             if let Some(Overlay::InviteLink { guild: g, .. }) = &this.nav.overlay
                 && *g == guild
@@ -220,7 +220,7 @@ fn preview_card(p: &InvitePreview) -> gpui::Div {
                         div()
                             .text_size(z(12.))
                             .text_color(c(Palette::TEXT_MUTED))
-                            .child(SharedString::from(format!("{i} invited you to join"))),
+                            .child(crate::t!("invite.invited_you", i = i)),
                     )
                 })
                 .child(
@@ -239,10 +239,10 @@ fn preview_card(p: &InvitePreview) -> gpui::Div {
                         .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child(dot(Palette::GREEN))
-                        .child(SharedString::from(format!("{} Online", p.online)))
+                        .child(crate::t!("invite.online", n = p.online))
                         .child(div().w(z(8.)))
                         .child(dot(Palette::GREY))
-                        .child(SharedString::from(format!("{} Members", p.members))),
+                        .child(crate::t!("invite.members", n = p.members)),
                 ),
         )
 }
@@ -256,14 +256,14 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                 .p(z(16.))
                 .flex()
                 .flex_col()
-                .child(title("Join a Server"))
+                .child(title(crate::t!("invite.join_title")))
                 .child(
                     div()
                         .mt(z(8.))
                         .text_size(z(14.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .text_center()
-                        .child("Enter an invite below to join an existing server"),
+                        .child(crate::t!("invite.join_sub")),
                 )
                 .child(
                     div()
@@ -271,7 +271,7 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                         .text_size(z(12.))
                         .font_weight(FontWeight::BOLD)
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("INVITE LINK"),
+                        .child(crate::t!("invite.link")),
                 )
                 .child(
                     div()
@@ -295,17 +295,17 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                         .mt(z(12.))
                         .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("Invites should look like hTKzmak, https://discord.gg/hTKzmak or https://discord.gg/cool-people"),
+                        .child(crate::t!("invite.examples")),
                 ),
             };
             let inner = div().flex().flex_col().child(body).child(
                 footer()
                     .child(
-                        button("join-back", "Back", Palette::BG_SECONDARY)
+                        button("join-back", crate::t!("common.back"), Palette::BG_SECONDARY)
                             .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
                     )
                     .child(
-                        button("join-go", if busy { "Joining..." } else { "Join Server" }, Palette::BLURPLE)
+                        button("join-go", if busy { crate::t!("invite.joining") } else { crate::t!("invite.join") }, Palette::BLURPLE)
                             .on_click(cx.listener(|a, _, _, cx| a.join_invite(cx))),
                     ),
             );
@@ -314,19 +314,19 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
         Overlay::InviteLink { guild, link } => {
             let name = app.guilds.iter().find(|g| g.id == *guild).map(|g| g.name.clone()).unwrap_or_default();
             let link = link.clone();
-            let shown: SharedString = link.clone().unwrap_or_else(|| "Creating invite...".into());
+            let shown: SharedString = link.clone().unwrap_or_else(|| crate::t!("invite.creating").into());
             let inner = div()
                 .p(z(16.))
                 .flex()
                 .flex_col()
                 .gap(z(12.))
-                .child(title(format!("Invite friends to {name}")))
+                .child(title(crate::t!("invite.friends_to", name = name)))
                 .child(
                     div()
                         .text_size(z(12.))
                         .font_weight(FontWeight::BOLD)
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("OR, SEND A SERVER INVITE LINK TO A FRIEND"),
+                        .child(crate::t!("invite.or_send")),
                 )
                 .child(
                     div()
@@ -338,7 +338,7 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                         .flex()
                         .items_center()
                         .child(div().flex_1().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(shown))
-                        .child(button("copy-invite", "Copy", Palette::BLURPLE).h(z(32.)).on_click(cx.listener(
+                        .child(button("copy-invite", crate::t!("common.copy"), Palette::BLURPLE).h(z(32.)).on_click(cx.listener(
                             move |_, _, _, cx| {
                                 if let Some(l) = &link {
                                     cx.write_to_clipboard(gpui::ClipboardItem::new_string(l.to_string()));
@@ -350,7 +350,7 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                     div()
                         .text_size(z(12.))
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("Your invite link expires in 7 days."),
+                        .child(crate::t!("invite.expires")),
                 );
             modal("invite-modal", cx, inner)
         }
@@ -371,20 +371,20 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                                 .text_size(z(20.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
-                                .child(SharedString::from(format!("Leave '{name}'"))),
+                                .child(crate::t!("invite.leave_title", name = name)),
                         )
                         .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(
-                            format!("Are you sure you want to leave {name}? You won't be able to rejoin this server unless you are re-invited."),
+                            crate::t!("invite.leave_body", name = name),
                         ))),
                 )
                 .child(
                     footer()
                         .child(
-                            button("leave-cancel", "Cancel", Palette::BG_SECONDARY)
+                            button("leave-cancel", crate::t!("common.cancel"), Palette::BG_SECONDARY)
                                 .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
                         )
                         .child(
-                            button("leave-ok", "Leave Server", Palette::RED)
+                            button("leave-ok", crate::t!("menu.leave_server"), Palette::RED)
                                 .on_click(cx.listener(move |a, _, _, cx| a.leave_guild(g, cx))),
                         ),
                 );
@@ -406,12 +406,12 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                                 .text_size(z(14.))
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .text_center()
-                                .child("This screen isn't available in Phoenix yet."),
+                                .child(crate::t!("invite.stub")),
                         ),
                 )
                 .child(
                     footer().child(
-                        button("stub-ok", "Okay", Palette::BLURPLE)
+                        button("stub-ok", crate::t!("common.okay"), Palette::BLURPLE)
                             .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
                     ),
                 );
