@@ -423,6 +423,11 @@ impl Backend for DiscordBackend {
         Some(Id(r))
     }
 
+    fn is_media_channel(&self, channel: Id) -> bool {
+        let Ok(s) = self.inner.session() else { return false };
+        s.cache.channel(sf(channel)).is_some_and(|c| c.kind == api::ChannelType::GuildMedia)
+    }
+
     fn forum_tags(&self, forum: Id) -> Vec<crate::commands::ForumTag> {
         let Ok(s) = self.inner.session() else { return Vec::new() };
         s.cache.channel(sf(forum)).map(|c| convert::forum_tags(&c)).unwrap_or_default()

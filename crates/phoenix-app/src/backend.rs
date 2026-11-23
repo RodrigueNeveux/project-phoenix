@@ -216,6 +216,10 @@ pub trait Backend: Send + Sync + 'static {
     fn notify_prefs(&self) -> Option<crate::notifications::NotifyPrefs> {
         None
     }
+    /// Whether a forum-like channel is a media channel (type 16, grid layout).
+    fn is_media_channel(&self, _channel: Id) -> bool {
+        false
+    }
     /// Synced user settings (settings-proto, JSON fallback).
     fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
         Box::pin(async { Ok(Default::default()) })

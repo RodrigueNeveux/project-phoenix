@@ -1,6 +1,6 @@
 //! Offscreen render of one non-chat view in a given theme.
 //! `cargo run -p phoenix-app --example views -- out.png [dark|light|ash|onyx] <scene>`
-//! Scenes: appearance, account, status, switcher, emoji, gif, sticker, friends.
+//! Scenes: appearance, account, status, switcher, emoji, gif, sticker, friends, forum.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -82,6 +82,12 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
+                    "forum" => {
+                        let id = app.channels.values().find(|c| c.kind == phoenix_app::model::ChannelKind::Forum).map(|c| c.id);
+                        if let Some(id) = id {
+                            app.select_channel(id, cx);
+                        }
+                    }
                     _ => page(app, settings::Page::Appearance, cx),
                 }
                 cx.notify();

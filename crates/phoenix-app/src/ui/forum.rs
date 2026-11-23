@@ -26,6 +26,26 @@ use crate::{
     ui::icon,
 };
 
+thread_local! {
+    /// The "Search or create a post" input, per open forum.
+    static SEARCH: std::cell::RefCell<Option<(Id, gpui::Entity<InputState>)>> = const { std::cell::RefCell::new(None) };
+}
+
+fn search_input(forum: Id) -> Option<gpui::Entity<InputState>> {
+    SEARCH.with(|s| s.borrow().as_ref().filter(|(f, _)| *f == forum).map(|(_, e)| e.clone()))
+}
+
+/// Case-insensitive match of the search text on the title, preview and tags.
+fn post_matches(p: &ForumPost, tags: &[ForumTag], q: &str) -> bool {
+    if q.is_empty() {
+        return true;
+    }
+    let has = |s: &str| s.to_lowercase().contains(q);
+    has(&p.title)
+        || p.first_message.as_ref().is_some_and(|m| has(&m.content))
+        || p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).any(|t| has(&t.name))
+}
+
 fn open_forum(app: &PhoenixApp) -> Option<Id> {
     let id = app.selected_channel?;
     (app.channels.get(&id)?.kind == ChannelKind::Forum).then_some(id)
@@ -136,6 +156,20 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
         app.open_thread(t, window, cx);
     }
     let Some(forum) = open_forum(app) else { return };
+    if search_input(forum).is_none() {
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search or create a post..."));
+        cx.subscribe(&input, move |a: &mut PhoenixApp, _, ev: &gpui_component::input::InputEvent, cx| match ev {
+            gpui_component::input::InputEvent::Change => cx.notify(),
+            // Enter creates a post titled with the search text.
+            gpui_component::input::InputEvent::PressEnter { .. } => {
+                a.parity.forum_compose_request = Some(forum);
+                cx.notify();
+            }
+            _ => {}
+        })
+        .detach();
+        SEARCH.with(|s| *s.borrow_mut() = Some((forum, input)));
+    }
     let v = app.parity.forums.entry(forum).or_default();
     if !v.loaded && !v.loading {
         app.load_forum(forum, true, cx);
@@ -144,7 +178,13 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
         app.parity.forum_compose_request = None;
         let title = cx.new(|cx| InputState::new(window, cx).placeholder("Post Title"));
         let body = cx.new(|cx| TextareaState::new(window, cx).auto_grow(4, 12).placeholder("Type your message here"));
-        title.update(cx, |s, cx| s.focus(window, cx));
+        let query = search_input(forum).map(|i| i.read(cx).value().to_string()).unwrap_or_default();
+        title.update(cx, |s, cx| {
+            if !query.trim().is_empty() {
+                s.set_value(query.trim().to_string(), window, cx);
+            }
+            s.focus(window, cx)
+        });
         app.parity.forums.entry(forum).or_default().compose =
             Some(ForumCompose { title, body, tags: Vec::new(), sending: false, error: None });
     }
@@ -243,6 +283,69 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
         .into_any_element()
 }
 
+/// Media channel tile: a 16:9 cover (first image, else a placeholder icon),
+/// then tags, the title and the reply count / activity line.
+fn media_tile(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let first = p.first_message.as_ref();
+    let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
+    let author = p.owner.or(first.map(|m| m.author)).and_then(|u| app.users.get(&u));
+    let activity = snowflake_time(p.last_message.unwrap_or(p.thread));
+    let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
+    let cover = div().w_full().h(z(146.)).rounded_t(z(8.)).overflow_hidden().bg(c(Palette::BG_TERTIARY));
+    let cover = match thumb {
+        Some(u) => cover.child(img(u).size_full().object_fit(gpui::ObjectFit::Cover)),
+        None => cover.flex().items_center().justify_center().child(icon(Icon::Forum, 40., c(Palette::INTERACTIVE_MUTED))),
+    };
+    div()
+        .id(("media-post", p.thread.0))
+        .w(z(260.))
+        .flex_none()
+        .rounded(z(8.))
+        .bg(c(Palette::BG_SECONDARY))
+        .border_1()
+        .border_color(c(Palette::PANEL_BORDER))
+        .cursor_pointer()
+        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+        .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
+        .child(cover)
+        .child(
+            div()
+                .p(z(12.))
+                .flex()
+                .flex_col()
+                .gap(z(6.))
+                .when(!p.tags.is_empty(), |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap(z(4.))
+                            .children(p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).map(|t| tag_pill(t, false))),
+                    )
+                })
+                .child(
+                    div()
+                        .text_size(z(16.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(Palette::TEXT_HEADER))
+                        .text_ellipsis()
+                        .child(SharedString::from(p.title.clone())),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z(8.))
+                        .text_size(z(12.))
+                        .text_color(c(Palette::TEXT_MUTED))
+                        .child(div().min_w_0().text_ellipsis().child(author.map(|u| u.display_name.to_string()).unwrap_or_default()))
+                        .child(div().flex().items_center().gap(z(4.)).child(icon(Icon::Threads, 14., c(Palette::INTERACTIVE))).child(p.message_count.to_string()))
+                        .child(ago(now, activity)),
+                ),
+        )
+        .into_any_element()
+}
+
 /// Post list covering the chat column when a forum is open.
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let forum = open_forum(app)?;
@@ -265,9 +368,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .items_center()
                 .gap(z(8.))
                 .text_size(z(16.))
-                .text_color(c(Palette::TEXT_MUTED))
+                .text_color(c(Palette::TEXT_NORMAL))
                 .child(icon(Icon::Search, 18., c(Palette::TEXT_MUTED)))
-                .child("Search or create a post..."),
+                .when_some(search_input(forum), |d, i| {
+                    d.child(div().flex_1().min_w_0().child(Input::new(&i).appearance(false).bordered(false)))
+                }),
         )
         .child(
             div()
@@ -353,8 +458,28 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Be the first to start a conversation.")),
         );
     }
-    for p in &v.posts {
-        col = col.child(post_card(app, p, &tags, now, cx));
+    let query = search_input(forum).map(|i| i.read(cx).value().trim().to_lowercase()).unwrap_or_default();
+    let shown: Vec<&ForumPost> = v.posts.iter().filter(|p| post_matches(p, &tags, &query)).collect();
+    if !query.is_empty() && shown.is_empty() && !v.posts.is_empty() {
+        col = col.child(
+            div()
+                .p(z(32.))
+                .flex()
+                .justify_center()
+                .text_size(z(14.))
+                .text_color(c(Palette::TEXT_MUTED))
+                .child("No posts match your search. Press Enter to create one."),
+        );
+    }
+    if app.backend.is_media_channel(forum) {
+        // Media channels: a wrapping grid of thumbnail tiles.
+        col = col.child(
+            div().flex().flex_wrap().gap(z(16.)).children(shown.iter().map(|p| media_tile(app, p, &tags, now, cx))),
+        );
+    } else {
+        for p in shown {
+            col = col.child(post_card(app, p, &tags, now, cx));
+        }
     }
     if v.loading {
         col = col.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
