@@ -1,5 +1,5 @@
 //! Friends page (Online / All / Pending / Blocked / Add Friend) with the
-//! "Active Now" column, and the Message Requests page.
+//! crate::t!("friends.active_now") column, and the Message Requests page.
 
 use crate::theme::z;
 use gpui::{
@@ -51,7 +51,7 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
 }
 
 fn ensure_add_input(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
-    let input = cx.new(|cx| InputState::new(window, cx).placeholder("You can add friends with their Discord username."));
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("friends.add_hint")));
     let sub = cx.subscribe_in(&input, window, |this: &mut PhoenixApp, _, ev: &InputEvent, _w, cx| {
         if let InputEvent::PressEnter { .. } = ev {
             send_request(this, cx);
@@ -72,9 +72,9 @@ fn send_request(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         cx,
         move |this, res, _| {
             this.nav.add_friend_result = Some(match res {
-                Ok(_) => Ok(format!("Success! Your friend request to {name} was sent.").into()),
+                Ok(_) => Ok(crate::t!("friends.request_sent", name = name)),
                 Err(e) => Err(if e.0.is_empty() {
-                    "Hm, didn't work. Double check that the username is correct.".into()
+                    crate::t!("friends.request_failed").into()
                 } else {
                     e.0.into()
                 }),
@@ -85,7 +85,7 @@ fn send_request(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
 
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let pending = app.nav.count(RelationshipKind::Incoming) as u32;
-    let tab = |id: &'static str, label: &'static str, t: FriendsTab, cx: &mut Context<PhoenixApp>| {
+    let tab = |id: &'static str, label: SharedString, t: FriendsTab, cx: &mut Context<PhoenixApp>| {
         let sel = app.nav.friends_tab == t;
         div()
             .id(id)
@@ -125,13 +125,13 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .text_size(z(16.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child("Friends"),
+                .child(crate::t!("friends.title")),
         )
         .child(div().mx(z(8.)).w(z(1.)).h(z(24.)).bg(c(Palette::DIVIDER)))
-        .child(tab("tab-online", "Online", FriendsTab::Online, cx))
-        .child(tab("tab-all", "All", FriendsTab::All, cx))
-        .child(tab("tab-pending", "Pending", FriendsTab::Pending, cx))
-        .child(tab("tab-blocked", "Blocked", FriendsTab::Blocked, cx))
+        .child(tab("tab-online", crate::t!("status.online"), FriendsTab::Online, cx))
+        .child(tab("tab-all", crate::t!("friends.all"), FriendsTab::All, cx))
+        .child(tab("tab-pending", crate::t!("friends.pending"), FriendsTab::Pending, cx))
+        .child(tab("tab-blocked", crate::t!("friends.blocked"), FriendsTab::Blocked, cx))
         .child(
             div()
                 .id("tab-add")
@@ -151,7 +151,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     a.nav.add_friend_result = None;
                     cx.notify();
                 }))
-                .child("Add Friend"),
+                .child(crate::t!("friends.add")),
         )
 }
 
@@ -179,10 +179,10 @@ fn visible(app: &PhoenixApp, tab: FriendsTab) -> Vec<Relationship> {
 fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let rows = visible(app, tab);
     let label = match tab {
-        FriendsTab::Online => "ONLINE",
-        FriendsTab::All => "ALL FRIENDS",
-        FriendsTab::Pending => "PENDING",
-        _ => "BLOCKED",
+        FriendsTab::Online => crate::t!("friends.h_online"),
+        FriendsTab::All => crate::t!("friends.h_all"),
+        FriendsTab::Pending => crate::t!("friends.h_pending"),
+        _ => crate::t!("friends.h_blocked"),
     };
     let mut col = div()
         .id("friends-list")
@@ -194,10 +194,10 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
         .flex_col();
     if rows.is_empty() {
         let msg = match tab {
-            FriendsTab::Online => "No one's around to play with Wumpus.",
-            FriendsTab::Pending => "There are no pending friend requests. Here's Wumpus for now.",
-            FriendsTab::Blocked => "You can't unblock the Wumpus.",
-            _ => "Wumpus is waiting on friends. You don't have to though!",
+            FriendsTab::Online => crate::t!("friends.empty_online"),
+            FriendsTab::Pending => crate::t!("friends.empty_pending"),
+            FriendsTab::Blocked => crate::t!("friends.empty_blocked"),
+            _ => crate::t!("friends.empty_all"),
         };
         return col
             .child(
@@ -251,15 +251,15 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .or_else(|| u.map(|u| u.display_name.clone()))
         .unwrap_or_else(|| SharedString::from(user.0.to_string()));
     let sub: SharedString = match r.kind {
-        RelationshipKind::Incoming => "Incoming Friend Request".into(),
-        RelationshipKind::Outgoing => "Outgoing Friend Request".into(),
-        RelationshipKind::Blocked => "Blocked".into(),
+        RelationshipKind::Incoming => crate::t!("friends.incoming").into(),
+        RelationshipKind::Outgoing => crate::t!("friends.outgoing").into(),
+        RelationshipKind::Blocked => crate::t!("friends.blocked").into(),
         RelationshipKind::Friend => app.nav.activities.get(&user).cloned().unwrap_or_else(|| {
             match p {
-                Presence::Online => "Online",
-                Presence::Idle => "Idle",
-                Presence::Dnd => "Do Not Disturb",
-                Presence::Offline => "Offline",
+                Presence::Online => crate::t!("status.online"),
+                Presence::Idle => crate::t!("status.idle"),
+                Presence::Dnd => crate::t!("status.dnd"),
+                Presence::Offline => crate::t!("status.offline"),
             }
             .into()
         }),
@@ -377,14 +377,14 @@ fn add_friend(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .text_size(z(16.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child("ADD FRIEND"),
+                .child(crate::t!("friends.h_add")),
         )
         .child(
             div()
                 .mt(z(8.))
                 .text_size(z(14.))
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("You can add friends with their Discord username."),
+                .child(crate::t!("friends.add_hint")),
         )
         .child(
             div()
@@ -418,7 +418,7 @@ fn add_friend(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .items_center()
                         .cursor_pointer()
                         .on_click(cx.listener(|a, _, _, cx| send_request(a, cx)))
-                        .child("Send Friend Request"),
+                        .child(crate::t!("friends.send_request")),
                 ),
         )
         .when_some(result, |d, r| {
@@ -458,7 +458,7 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .text_size(z(20.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child("Active Now"),
+                .child(crate::t!("friends.active_now")),
         );
     if active.is_empty() {
         return col.child(
@@ -473,14 +473,14 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
-                        .child("It's quiet for now..."),
+                        .child(crate::t!("friends.quiet")),
                 )
                 .child(
                     div()
                         .text_size(z(14.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .text_center()
-                        .child("When a friend starts an activity—like playing a game or hanging out on voice—we'll show it here!"),
+                        .child(crate::t!("friends.quiet_sub")),
                 ),
         );
     }
@@ -530,7 +530,7 @@ fn message_requests(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl Into
                 .justify_center()
                 .text_size(z(16.))
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("There are no pending message requests."),
+                .child(crate::t!("friends.no_message_requests")),
         );
     }
     for id in reqs {
@@ -575,7 +575,7 @@ fn message_requests(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl Into
                         .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_HEADER))
-                        .child("Message Requests"),
+                        .child(crate::t!("friends.message_requests")),
                 ),
         )
         .child(body)

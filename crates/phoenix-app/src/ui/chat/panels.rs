@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div,
+    AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, Styled, Window, div,
     prelude::*,
 };
 use gpui_component::input::Input;
@@ -71,50 +71,50 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }
     let mut items = vec![MenuItem::Custom(strip.into_any_element()), MenuItem::Separator];
     let ee = e.clone();
-    items.push(MenuItem::action("Add Reaction", ic(ChatIcon::AddReaction), move |_, _, cx| {
+    items.push(MenuItem::action(crate::t!("msg.add_reaction"), ic(ChatIcon::AddReaction), move |_, _, cx| {
         ee.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
     if own {
         let ee = e.clone();
-        items.push(MenuItem::action("Edit Message", ic(ChatIcon::Edit), move |_, w, cx| {
+        items.push(MenuItem::action(crate::t!("msg.edit"), ic(ChatIcon::Edit), move |_, w, cx| {
             ee.update(cx, |a, cx| a.start_edit(id, w, cx))
         }));
     }
     let ee = e.clone();
-    items.push(MenuItem::action("Reply", Some(Icon::Reply.path()), move |_, w, cx| {
+    items.push(MenuItem::action(crate::t!("msg.reply"), Some(Icon::Reply.path()), move |_, w, cx| {
         ee.update(cx, |a, cx| a.start_reply(id, w, cx))
     }));
     items.push(MenuItem::Separator);
     if has_text {
         let ee = e.clone();
-        items.push(MenuItem::action("Copy Text", ic(ChatIcon::Copy), move |_, _, cx| {
+        items.push(MenuItem::action(crate::t!("msg.copy_text"), ic(ChatIcon::Copy), move |_, _, cx| {
             ee.update(cx, |a, cx| a.copy_message_text(ch, id, cx))
         }));
     }
     let ee = e.clone();
     items.push(MenuItem::action(
-        if pinned { "Unpin Message" } else { "Pin Message" },
+        if pinned { crate::t!("msg.unpin") } else { crate::t!("msg.pin") },
         Some(Icon::Pin.path()),
         move |_, _, cx| ee.update(cx, |a, cx| a.toggle_pin(ch, id, cx)),
     ));
     let ee = e.clone();
-    items.push(MenuItem::action("Mark Unread", ic(ChatIcon::Unread), move |_, _, cx| {
+    items.push(MenuItem::action(crate::t!("msg.mark_unread"), ic(ChatIcon::Unread), move |_, _, cx| {
         ee.update(cx, |a, cx| a.mark_unread_from(ch, id, cx))
     }));
     let ee = e.clone();
-    items.push(MenuItem::action("Copy Message Link", ic(ChatIcon::Link), move |_, _, cx| {
+    items.push(MenuItem::action(crate::t!("msg.copy_link"), ic(ChatIcon::Link), move |_, _, cx| {
         ee.update(cx, |a, cx| a.copy_message_link(ch, id, cx))
     }));
     if own {
         let ee = e.clone();
-        items.push(MenuItem::danger("Delete Message", ic(ChatIcon::Trash), move |ev, _, cx| {
+        items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |ev, _, cx| {
             let skip = ev.modifiers().shift;
             ee.update(cx, |a, cx| a.request_delete(ch, id, skip, cx))
         }));
     }
     if app.prefs.synced.developer_mode {
     items.push(MenuItem::Separator);
-    items.push(MenuItem::action("Copy Message ID", ic(ChatIcon::IdBadge), move |_, _, cx| {
+    items.push(MenuItem::action(crate::t!("msg.copy_id"), ic(ChatIcon::IdBadge), move |_, _, cx| {
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(id.0.to_string()))
     }));
     }
@@ -154,7 +154,7 @@ fn message_card(app: &PhoenixApp, m: &Message) -> gpui::Div {
                                 .text_size(z(16.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(crate::theme::role_color(app.author_color(m.author)))
-                                .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into())),
+                                .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
                         )
                         .child(
                             div()
@@ -169,7 +169,7 @@ fn message_card(app: &PhoenixApp, m: &Message) -> gpui::Div {
                         .line_height(z(22.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(if m.content.is_empty() && !m.attachments.is_empty() {
-                            SharedString::from(format!("{} attachment(s)", m.attachments.len()))
+                            crate::t!("msg.attachments", n = m.attachments.len())
                         } else {
                             m.content.clone()
                         }),
@@ -185,7 +185,7 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
         div()
             .text_size(z(16.))
             .text_color(c(Palette::TEXT_NORMAL))
-            .child("Are you sure you want to delete this message?")
+            .child(crate::t!("msg.delete_confirm"))
             .into_any_element(),
     ];
     if let Some(m) = msg {
@@ -196,19 +196,19 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
             .flex()
             .flex_col()
             .gap(z(4.))
-            .child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::GREEN)).child("PROTIP:"))
+            .child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::GREEN)).child(crate::t!("msg.protip")))
             .child(
                 div()
                     .text_size(z(14.))
                     .text_color(c(Palette::TEXT_NORMAL))
-                    .child("Hold Shift while clicking Delete Message to skip this confirmation."),
+                    .child(crate::t!("msg.protip_delete")),
             )
             .into_any_element(),
     );
     modal::confirm(modal::Confirm {
-        title: "Delete Message".into(),
+        title: crate::t!("msg.delete").into(),
         body,
-        confirm_label: "Delete".into(),
+        confirm_label: crate::t!("common.delete"),
         danger: true,
         on_confirm: Rc::new(move |_, cx| e.update(cx, |a, cx| a.confirm_delete(cx))),
         on_cancel: Rc::new(move |_, cx| {
@@ -226,7 +226,7 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
     let ch = p.channel;
     let mut list = div().id("pins-list").flex_1().min_h_0().overflow_y_scroll().p(z(8.)).flex().flex_col().gap(z(8.));
     if p.loading {
-        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
     } else if p.msgs.is_empty() {
         list = list.child(
             div()
@@ -240,7 +240,7 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                     div()
                         .text_size(z(16.))
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("This channel doesn't have any pinned messages... yet."),
+                        .child(crate::t!("pins.empty")),
                 ),
         );
     }
@@ -299,7 +299,7 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                             .text_size(z(16.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(Palette::TEXT_HEADER))
-                            .child("Pinned Messages"),
+                            .child(crate::t!("pins.title")),
                     ),
             )
             .child(list)
@@ -320,7 +320,7 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
             }
         }
         _ => {
-            body = body.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+            body = body.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
         }
     }
     let empty = t.input.read(cx).value().is_empty();
@@ -383,7 +383,7 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
                                     .flex()
                                     .items_center()
                                     .text_color(c(0x6D6F78))
-                                    .child(SharedString::from(format!("Message {}", t.thread.name))),
+                                    .child(crate::t!("chat.placeholder_thread", name = t.thread.name)),
                             )
                         }),
                 ),
@@ -418,10 +418,7 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
             .font_weight(FontWeight::MEDIUM)
             .text_color(gpui::white())
             .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
-            .child(SharedString::from(format!(
-                "{n} new message{} since {since}",
-                if n == 1 { "" } else { "s" }
-            )))
+            .child(if n == 1 { crate::t!("chat.new_since_one", since = since) } else { crate::t!("chat.new_since_many", n = n, since = since) })
             .child(
                 div()
                     .id("mark-read")
@@ -431,7 +428,7 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
                         cx.stop_propagation();
                         a.mark_channel_read(cx)
                     }))
-                    .child("Mark As Read"),
+                    .child(crate::t!("menu.mark_read")),
             )
             .into_any_element(),
     )
@@ -459,7 +456,7 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
             .justify_between()
             .text_size(z(14.))
             .text_color(c(Palette::TEXT_NORMAL))
-            .child("You're Viewing Older Messages")
+            .child(crate::t!("chat.older"))
             .child(
                 div()
                     .id("jump-present-btn")
@@ -474,7 +471,7 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
                     .cursor_pointer()
                     .hover(|s| s.bg(c(0x4752C4)))
                     .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
-                    .child("Jump To Present"),
+                    .child(crate::t!("chat.jump_present")),
             )
             .into_any_element(),
     )
@@ -518,13 +515,13 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
                                 .text_size(z(20.))
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(gpui::white())
-                                .child(SharedString::from(format!("Upload to #{name}"))),
+                                .child(crate::t!("chat.upload_to", name = name)),
                         )
                         .child(
                             div()
                                 .text_size(z(14.))
                                 .text_color(gpui::white())
-                                .child("You can add comments before uploading."),
+                                .child(crate::t!("chat.upload_hint")),
                         ),
                 ),
         )
