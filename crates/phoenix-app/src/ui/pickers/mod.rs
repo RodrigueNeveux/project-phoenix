@@ -29,7 +29,7 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use crate::{
     app::PhoenixApp,
     assets::Icon,
-    model::{Id, Reaction},
+    model::Id,
     theme::{Palette, c},
     ui::{self, icon},
 };
@@ -230,6 +230,7 @@ fn switch_tab(app: &mut PhoenixApp, tab: Tab, window: &mut Window, cx: &mut Cont
 }
 
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    app.chat.emoji_target = None;
     if cx.global_mut::<Pickers>().open.take().is_some() {
         app.composer.update(cx, |s, cx| s.focus(window, cx));
         cx.notify();
@@ -327,15 +328,17 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
             }
         }
         EmojiTarget::Reaction { channel, message } => {
-            let reaction = match &item {
-                PickItem::Unicode(ix) => {
-                    Reaction { emoji: emoji::toned(*ix, tone).into(), count: 1, me: true, emoji_id: None }
-                }
-                PickItem::Custom(e) => Reaction { emoji: e.name.clone(), count: 1, me: true, emoji_id: Some(e.id) },
+            // The chat view owns reactions (optimistic update + error banner).
+            let (emoji, id) = match &item {
+                PickItem::Unicode(ix) => (emoji::toned(*ix, tone), None),
+                PickItem::Custom(e) => (e.token(), Some(e.id)),
             };
-            detach(app.backend.set_reaction(channel, message, reaction, true), cx);
+            app.chat.emoji_target = Some(crate::ui::chat::state::EmojiTarget::Reaction { channel, msg: message });
+            app.emoji_picked(emoji.into(), id, window, cx);
             if !keep_open {
                 close(app, window, cx);
+            } else {
+                app.chat.emoji_target = Some(crate::ui::chat::state::EmojiTarget::Reaction { channel, msg: message });
             }
         }
     }
@@ -369,6 +372,16 @@ pub(crate) fn debounce(cx: &mut Context<PhoenixApp>, ms: u64, f: impl FnOnce(&mu
 /// Popups drawn above the whole window, in stacking order.
 pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out = Vec::new();
+    // The chat view requests the picker through `ChatState::emoji_target`.
+    if let Some(t) = app.chat.emoji_target
+        && !is_open(cx)
+    {
+        let target = match t {
+            crate::ui::chat::state::EmojiTarget::Composer => EmojiTarget::Composer,
+            crate::ui::chat::state::EmojiTarget::Reaction { channel, msg } => EmojiTarget::Reaction { channel, message: msg },
+        };
+        cx.defer_in(window, move |app, window, cx| open(app, Tab::Emoji, target, window, cx));
+    }
     if let Some(el) = ui::autocomplete::render(app, cx) {
         out.push(el);
     }
