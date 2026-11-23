@@ -104,6 +104,65 @@ static NOTICE_CLOSED: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::ne
 /// border-bottom 1px --inlinenotice-border-info, margin-top -1, padding 4 8 4 16, gap 8;
 /// #1103 text_ body-sm/normal 14/18 --text-default with an underlined "En savoir plus" (#1104);
 /// #1105 close_ 32×32, --icon-muted (hover --icon-default), 18px glyph.
+/// Window x of the "Mode Découverte" label centre (f32 bits), set while painting the header.
+static LABEL_CX: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+fn discovery_label_probe() -> impl IntoElement {
+    gpui::canvas(
+        |b, _, _| {
+            let cx = f32::from(b.origin.x) + f32::from(b.size.width) / 2.;
+            LABEL_CX.store(cx.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+/// vanilla-guild-text #1102 `arrow_8PBDGr`: 16×10, fixed, centred under the header's
+/// Discovery label (#1061, centre 666 vs arrow 657+8), top = bar top − 9 so its base
+/// sits on the bar's 1px top border. Filled --background-base-lower then
+/// --background-feedback-mod-info, edges stroked --inlinenotice-border-info.
+/// Our own path (rounded apex), not the client's SVG.
+fn discovery_arrow() -> impl IntoElement {
+    gpui::canvas(
+        |_, _, _| {},
+        |b, _, window, _| {
+            let lcx = f32::from_bits(LABEL_CX.load(std::sync::atomic::Ordering::Relaxed));
+            if lcx <= 0. {
+                return;
+            }
+            let k = crate::theme::zoom();
+            let (x0, y0) = (lcx - 8. * k, f32::from(b.origin.y) - 9. * k);
+            let p = |x: f32, y: f32| gpui::point(gpui::px(x0 + x * k), gpui::px(y0 + y * k));
+            let shape = |mut pb: gpui::PathBuilder, close: bool| {
+                pb.move_to(p(0., 10.));
+                pb.line_to(p(6., 2.9));
+                pb.curve_to(p(10., 2.9), p(8., 0.7));
+                pb.line_to(p(16., 10.));
+                if close {
+                    pb.close();
+                }
+                pb.build().ok()
+            };
+            for col in [tk(idx::BACKGROUND_BASE_LOWER), tk(idx::BACKGROUND_FEEDBACK_MOD_INFO)] {
+                if let Some(path) = shape(gpui::PathBuilder::fill(), true) {
+                    window.paint_path(path, col);
+                }
+            }
+            if let Some(path) = shape(gpui::PathBuilder::stroke(gpui::px(k)), false) {
+                window.paint_path(path, tk(idx::INLINENOTICE_BORDER_INFO));
+            }
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
 fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
     let gid = app.selected_guild?;
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c))?;
@@ -125,6 +184,8 @@ fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
             .border_t_1()
             .border_b_1()
             .border_color(tk(idx::INLINENOTICE_BORDER_INFO))
+            .relative()
+            .child(discovery_arrow())
             .child(
                 div()
                     .flex_1()
@@ -271,7 +332,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                                 .line_height(z(18.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(tk(idx::TEXT_MUTED))
-                                .child(crate::t!("chat.discovery_mode")),
+                                .relative()
+                                .child(crate::t!("chat.discovery_mode"))
+                                .child(discovery_label_probe()),
                         )
                 })
                 .when_some(topic.filter(|_| !is_dm), |d, t| {
