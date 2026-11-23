@@ -30,12 +30,12 @@ pub enum AppTheme {
 
 impl AppTheme {
     pub const ALL: [AppTheme; 4] = [AppTheme::Light, AppTheme::Ash, AppTheme::Dark, AppTheme::Onyx];
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> gpui::SharedString {
         match self {
-            Self::Dark => "Dark",
-            Self::Light => "Light",
-            Self::Ash => "Ash",
-            Self::Onyx => "Onyx",
+            Self::Dark => crate::t!("settings.theme.dark"),
+            Self::Light => crate::t!("settings.theme.light"),
+            Self::Ash => crate::t!("settings.theme.ash"),
+            Self::Onyx => crate::t!("settings.theme.onyx"),
         }
     }
     /// Preview swatch colour.
@@ -209,29 +209,29 @@ pub enum Page {
 }
 
 impl Page {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> gpui::SharedString {
         match self {
-            Self::MyAccount => "My Account",
-            Self::Profiles => "Profiles",
-            Self::PrivacySafety => "Privacy & Safety",
-            Self::Devices => "Devices",
-            Self::Connections => "Connections",
-            Self::Notifications => "Notifications",
-            Self::Keybinds => "Keybinds",
-            Self::Language => "Language",
-            Self::Appearance => "Appearance",
-            Self::Accessibility => "Accessibility",
-            Self::VoiceVideo => "Voice & Video",
-            Self::Advanced => "Advanced",
+            Self::MyAccount => crate::t!("settings.page.my_account"),
+            Self::Profiles => crate::t!("settings.page.profiles"),
+            Self::PrivacySafety => crate::t!("settings.page.privacy"),
+            Self::Devices => crate::t!("settings.page.devices"),
+            Self::Connections => crate::t!("settings.page.connections"),
+            Self::Notifications => crate::t!("settings.page.notifications"),
+            Self::Keybinds => crate::t!("settings.page.keybinds"),
+            Self::Language => crate::t!("settings.page.language"),
+            Self::Appearance => crate::t!("settings.page.appearance"),
+            Self::Accessibility => crate::t!("settings.page.accessibility"),
+            Self::VoiceVideo => crate::t!("settings.page.voice_video"),
+            Self::Advanced => crate::t!("settings.page.advanced"),
         }
     }
 }
 
 /// Nav sections in Discord order.
 pub const NAV: &[(&str, &[Page])] = &[
-    ("USER SETTINGS", &[Page::MyAccount, Page::Profiles, Page::PrivacySafety, Page::Devices, Page::Connections]),
+    ("settings.nav.user", &[Page::MyAccount, Page::Profiles, Page::PrivacySafety, Page::Devices, Page::Connections]),
     (
-        "APP SETTINGS",
+        "settings.nav.app",
         &[
             Page::Appearance,
             Page::Accessibility,

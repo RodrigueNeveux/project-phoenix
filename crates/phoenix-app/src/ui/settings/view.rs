@@ -23,13 +23,13 @@ fn st(app: &mut PhoenixApp) -> Option<&mut SettingsState> {
     app.settings.as_mut()
 }
 
-fn h1(t: &'static str) -> Div {
+fn h1(t: impl Into<SharedString>) -> Div {
     div()
         .mb(z(20.))
         .text_size(z(20.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_HEADER))
-        .child(t)
+        .child(t.into())
 }
 
 fn h5(t: impl Into<SharedString>) -> Div {
@@ -79,8 +79,8 @@ fn toggle_knob(on: bool) -> Div {
 /// Discord switch row: title + description on the left, toggle on the right.
 fn switch_row(
     id: &str,
-    title: &'static str,
-    desc: &'static str,
+    title: SharedString,
+    desc: SharedString,
     on: bool,
     f: impl Fn(&mut PhoenixApp, &mut Cx) + 'static,
     cx: &mut Cx,
@@ -169,7 +169,7 @@ fn slider(
     )
 }
 
-fn field_row(label: &'static str, value: SharedString, action: Option<AnyElement>) -> Div {
+fn field_row(label: impl Into<SharedString>, value: SharedString, action: Option<AnyElement>) -> Div {
     div()
         .mb(z(24.))
         .flex()
@@ -179,7 +179,7 @@ fn field_row(label: &'static str, value: SharedString, action: Option<AnyElement
                 .flex_1()
                 .flex()
                 .flex_col()
-                .child(h5(label).mb(z(4.)))
+                .child(h5(label.into()).mb(z(4.)))
                 .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(value)),
         )
         .children(action)
@@ -188,7 +188,7 @@ fn field_row(label: &'static str, value: SharedString, action: Option<AnyElement
 fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let me = &app.me;
     let reveal = app.settings.as_ref().is_some_and(|s| s.reveal_email);
-    let email: SharedString = if reveal { "Not shared with Phoenix".into() } else { "**********@*****.com".into() };
+    let email: SharedString = if reveal { crate::t!("settings.account.email_hidden").into() } else { "**********@*****.com".into() };
     let card = div()
         .rounded(z(8.))
         .bg(c(Palette::BG_TERTIARY))
@@ -222,7 +222,7 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                         .child(me.display_name.clone()),
                 )
                 .child(
-                    button("edit-profile", "Edit User Profile", Palette::BLURPLE, 0x4752C4)
+                    button("edit-profile", crate::t!("settings.account.edit_profile"), Palette::BLURPLE, 0x4752C4)
                         .mt(z(16.))
                         .on_click(cx.listener(|a, _, _, cx| {
                             if let Some(s) = st(a) {
@@ -239,10 +239,10 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 .p(z(16.))
                 .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
-                .child(field_row("DISPLAY NAME", me.display_name.clone(), Some(secondary("edit-dn", "Edit").into_any_element())))
-                .child(field_row("USERNAME", me.name.clone(), Some(secondary("edit-un", "Edit").into_any_element())))
+                .child(field_row(crate::t!("settings.account.display_name"), me.display_name.clone(), Some(secondary("edit-dn", crate::t!("common.edit")).into_any_element())))
+                .child(field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element())))
                 .child(field_row(
-                    "EMAIL",
+                    crate::t!("settings.account.email"),
                     email,
                     Some(
                         div()
@@ -257,29 +257,29 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                                 }
                                 cx.notify();
                             }))
-                            .child(if reveal { "Hide" } else { "Reveal" })
+                            .child(if reveal { crate::t!("common.hide") } else { crate::t!("common.reveal") })
                             .into_any_element(),
                     ),
                 ))
-                .child(field_row("PHONE NUMBER", "You haven't added a phone number yet.".into(), Some(secondary("edit-ph", "Add").into_any_element()))),
+                .child(field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone").into(), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element()))),
         );
     div()
-        .child(h1("My Account"))
+        .child(h1(crate::t!("settings.page.my_account")))
         .child(card)
         .child(divider())
-        .child(h1("Password and Authentication"))
-        .child(secondary("change-pw", "Change Password").w(z(160.)))
-        .child(div().mt(z(20.)).child(h5("AUTHENTICATOR APP")))
-        .child(note("Protect your account with an extra layer of security. Manage two-factor authentication from the official client."))
+        .child(h1(crate::t!("settings.account.password_auth")))
+        .child(secondary("change-pw", crate::t!("settings.account.change_password")).w(z(160.)))
+        .child(div().mt(z(20.)).child(h5(crate::t!("settings.account.authenticator"))))
+        .child(note(crate::t!("settings.account.authenticator_note")))
         .child(divider())
-        .child(h5("ACCOUNT REMOVAL"))
-        .child(note("Disabling your account means you can recover it at any time after taking this action."))
+        .child(h5(crate::t!("settings.account.removal")))
+        .child(note(crate::t!("settings.account.removal_note")))
 }
 
 fn profiles(app: &PhoenixApp) -> Div {
     div()
-        .child(h1("Profiles"))
-        .child(h5("DISPLAY NAME"))
+        .child(h1(crate::t!("settings.page.profiles")))
+        .child(h5(crate::t!("settings.account.display_name")))
         .child(
             div()
                 .mb(z(20.))
@@ -292,7 +292,7 @@ fn profiles(app: &PhoenixApp) -> Div {
                 .text_color(c(Palette::TEXT_NORMAL))
                 .child(app.me.display_name.clone()),
         )
-        .child(h5("PREVIEW"))
+        .child(h5(crate::t!("settings.profiles.preview")))
         .child(
             div()
                 .w(z(300.))
@@ -319,25 +319,25 @@ fn profiles(app: &PhoenixApp) -> Div {
 fn privacy(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let allow = app.prefs.synced.allow_server_dms;
     div()
-        .child(h1("Privacy & Safety"))
-        .child(h5("SERVER PRIVACY DEFAULTS"))
+        .child(h1(crate::t!("settings.page.privacy")))
+        .child(h5(crate::t!("settings.privacy.server_defaults")))
         .child(switch_row(
             "server-dms",
-            "Allow DMs from other members in servers you join",
-            "This setting is applied when you join a new server. It does not apply retroactively to your existing servers.",
+            crate::t!("settings.privacy.allow_dms"),
+            crate::t!("settings.privacy.allow_dms_note"),
             allow,
             move |a, cx| save(a, SettingsPatch::AllowServerDms(!allow), cx),
             cx,
         ))
-        .child(h5("HOW WE USE YOUR DATA"))
-        .child(note("Phoenix stores your token only in the system keyring and talks to Discord directly."))
+        .child(h5(crate::t!("settings.privacy.data")))
+        .child(note(crate::t!("settings.privacy.data_note")))
 }
 
 fn devices() -> Div {
     div()
-        .child(h1("Devices"))
-        .child(note("Here are all the devices that are currently logged in with your Discord account."))
-        .child(div().mt(z(20.)).child(h5("CURRENT DEVICE")))
+        .child(h1(crate::t!("settings.page.devices")))
+        .child(note(crate::t!("settings.devices.note")))
+        .child(div().mt(z(20.)).child(h5(crate::t!("settings.devices.current"))))
         .child(
             div()
                 .p(z(16.))
@@ -350,7 +350,7 @@ fn devices() -> Div {
                         .text_color(c(Palette::TEXT_HEADER))
                         .child("LINUX · DISCORD PHOENIX"),
                 )
-                .child(note("This device")),
+                .child(note(crate::t!("settings.devices.this"))),
         )
 }
 
@@ -368,14 +368,14 @@ fn connections() -> Div {
             .child(name)
     };
     div()
-        .child(h1("Connections"))
+        .child(h1(crate::t!("settings.page.connections")))
         .child(
             div()
                 .p(z(16.))
                 .rounded(z(8.))
                 .bg(c(Palette::BG_SECONDARY))
-                .child(h5("ADD ACCOUNTS TO YOUR PROFILE"))
-                .child(note("Connecting accounts needs the official client's browser flow."))
+                .child(h5(crate::t!("settings.connections.add")))
+                .child(note(crate::t!("settings.connections.note")))
                 .child(
                     div()
                         .mt(z(16.))
@@ -391,19 +391,19 @@ fn notifications(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let l = &app.prefs.local;
     let (desk, sounds) = (l.desktop_notifications, l.notification_sounds);
     div()
-        .child(h1("Notifications"))
+        .child(h1(crate::t!("settings.page.notifications")))
         .child(switch_row(
             "desktop-notif",
-            "Enable Desktop Notifications",
-            "Direct messages and mentions show a system notification, following each server's and channel's notification settings and mutes.",
+            crate::t!("settings.notif.desktop"),
+            crate::t!("settings.notif.desktop_note"),
             desk,
             move |a, cx| update_local(a, |p| p.desktop_notifications = !desk, cx),
             cx,
         ))
         .child(switch_row(
             "notif-sounds",
-            "Enable Notification Sounds",
-            "",
+            crate::t!("settings.notif.sounds"),
+            "".into(),
             sounds,
             move |a, cx| update_local(a, |p| p.notification_sounds = !sounds, cx),
             cx,
@@ -411,7 +411,7 @@ fn notifications(app: &PhoenixApp, cx: &mut Cx) -> Div {
 }
 
 fn keybinds() -> Div {
-    let row = |action: &'static str, keys: &'static str| {
+    let row = |action: SharedString, keys: &'static str| {
         div()
             .mb(z(8.))
             .p(z(16.))
@@ -433,13 +433,13 @@ fn keybinds() -> Div {
             )
     };
     div()
-        .child(h1("Keybinds"))
-        .child(h5("DEFAULT KEYBINDS"))
-        .child(row("Quick Switcher", "CTRL + K"))
-        .child(row("Toggle Member List", "CTRL + U"))
-        .child(row("Open User Settings", "CTRL + ,"))
-        .child(row("Edit Last Message", "UP"))
-        .child(row("Close / Cancel", "ESC"))
+        .child(h1(crate::t!("settings.page.keybinds")))
+        .child(h5(crate::t!("settings.keybinds.default")))
+        .child(row(crate::t!("settings.keybinds.quick_switcher"), "CTRL + K"))
+        .child(row(crate::t!("settings.keybinds.member_list"), "CTRL + U"))
+        .child(row(crate::t!("settings.keybinds.user_settings"), "CTRL + ,"))
+        .child(row(crate::t!("settings.keybinds.edit_last"), "UP"))
+        .child(row(crate::t!("settings.keybinds.close"), "ESC"))
 }
 
 pub const LOCALES: &[(&str, &str)] = &[
@@ -460,7 +460,7 @@ pub const LOCALES: &[(&str, &str)] = &[
 
 fn language(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let cur = app.prefs.synced.locale.clone();
-    div().child(h1("Language")).child(h5("SELECT A LANGUAGE")).children(LOCALES.iter().map(|(code, name)| {
+    div().child(h1(crate::t!("settings.page.language"))).child(h5(crate::t!("settings.language.select"))).children(LOCALES.iter().map(|(code, name)| {
         let code: SharedString = (*code).into();
         let c2 = code.clone();
         radio(format!("lang-{code}"), *name, cur == code)
@@ -574,21 +574,21 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
     }));
     let (fs, zoom) = (l.font_size, l.zoom);
     div()
-        .child(h1("Appearance"))
-        .child(h5("THEME"))
+        .child(h1(crate::t!("settings.page.appearance")))
+        .child(h5(crate::t!("settings.appearance.theme")))
         .child(swatches)
         .child(divider())
-        .child(h5("MESSAGE DISPLAY"))
+        .child(h5(crate::t!("settings.appearance.display")))
         .child(
-            radio("display-cozy", "Cozy: Modern, beautiful, and easy on your eyes.", !compact)
+            radio("display-cozy", crate::t!("settings.appearance.cozy"), !compact)
                 .on_click(cx.listener(|a, _, _, cx| save(a, SettingsPatch::Compact(false), cx))),
         )
         .child(
-            radio("display-compact", "Compact: Fit more messages on screen at one time. #IRC", compact)
+            radio("display-compact", crate::t!("settings.appearance.compact"), compact)
                 .on_click(cx.listener(|a, _, _, cx| save(a, SettingsPatch::Compact(true), cx))),
         )
         .child(divider())
-        .child(h5("CHAT FONT SCALING"))
+        .child(h5(crate::t!("settings.appearance.font")))
         .child(slider(
             "font",
             &[12., 14., 15., 16., 18., 20., 24.],
@@ -598,7 +598,7 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
             |a, v, cx| update_local(a, |p| p.font_size = v, cx),
             cx,
         ))
-        .child(h5("ZOOM LEVEL"))
+        .child(h5(crate::t!("settings.appearance.zoom")))
         .child(slider(
             "zoom",
             &[50., 67., 75., 80., 90., 100., 110., 125., 150., 175., 200.],
@@ -614,8 +614,8 @@ fn accessibility(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let l = &app.prefs.local;
     let (rm, sat) = (l.reduced_motion, l.saturation);
     div()
-        .child(h1("Accessibility"))
-        .child(h5("SATURATION"))
+        .child(h1(crate::t!("settings.page.accessibility")))
+        .child(h5(crate::t!("settings.a11y.saturation")))
         .child(slider(
             "sat",
             &[0., 10., 20., 30., 40., 50., 60., 70., 80., 90., 100.],
@@ -625,11 +625,11 @@ fn accessibility(app: &PhoenixApp, cx: &mut Cx) -> Div {
             |a, v, cx| update_local(a, |p| p.saturation = v as _, cx),
             cx,
         ))
-        .child(h5("REDUCED MOTION"))
+        .child(h5(crate::t!("settings.a11y.reduced_motion")))
         .child(switch_row(
             "reduced-motion",
-            "Enable Reduced Motion",
-            "Reduce the amount of animations and hover effects.",
+            crate::t!("settings.a11y.reduced_motion_enable"),
+            crate::t!("settings.a11y.reduced_motion_note"),
             rm,
             move |a, cx| update_local(a, |p| p.reduced_motion = !rm, cx),
             cx,
@@ -640,23 +640,23 @@ fn advanced(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let dev = app.prefs.synced.developer_mode;
     let my_id = app.me.id.0.to_string();
     div()
-        .child(h1("Advanced"))
+        .child(h1(crate::t!("settings.page.advanced")))
         .child(switch_row(
             "dev-mode",
-            "Developer Mode",
-            "Developer Mode exposes context menu items helpful for people writing bots using the Discord API.",
+            crate::t!("settings.advanced.dev_mode"),
+            crate::t!("settings.advanced.dev_mode_note"),
             dev,
             move |a, cx| save(a, SettingsPatch::DeveloperMode(!dev), cx),
             cx,
         ))
         .when(dev, |d| {
-            d.child(h5("YOUR USER ID")).child(
+            d.child(h5(crate::t!("settings.advanced.user_id"))).child(
                 div()
                     .flex()
                     .items_center()
                     .gap(z(12.))
                     .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(my_id.clone()))
-                    .child(secondary("copy-my-id", "Copy User ID").on_click(cx.listener(move |_, _, _, cx| {
+                    .child(secondary("copy-my-id", crate::t!("common.copy_user_id")).on_click(cx.listener(move |_, _, _, cx| {
                         cx.write_to_clipboard(gpui::ClipboardItem::new_string(my_id.clone()));
                     }))),
             )
@@ -680,7 +680,7 @@ fn page(app: &PhoenixApp, cx: &mut Cx) -> Div {
     }
 }
 
-fn nav_item(id: impl Into<String>, label: &'static str, selected: bool, color: u32) -> Stateful<Div> {
+fn nav_item(id: impl Into<String>, label: impl Into<SharedString>, selected: bool, color: u32) -> Stateful<Div> {
     div()
         .id(eid(id))
         .mb(z(2.))
@@ -695,7 +695,7 @@ fn nav_item(id: impl Into<String>, label: &'static str, selected: bool, color: u
         .text_color(c(if selected { Palette::TEXT_HEADER } else { color }))
         .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
         .when(!selected, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER))))
-        .child(label)
+        .child(label.into())
 }
 
 fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
@@ -705,7 +705,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
         if ix > 0 {
             col = col.child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)));
         }
-        col = col.child(div().px(z(10.)).pb(z(6.)).child(h5(*title).mb_0()));
+        col = col.child(div().px(z(10.)).pb(z(6.)).child(h5(crate::t!(title)).mb_0()));
         for p in pages.iter().copied() {
             col = col.child(nav_item(format!("nav-{}", p.label()), p.label(), p == cur, Palette::INTERACTIVE).on_click(
                 cx.listener(move |a, _, _, cx| {
@@ -719,7 +719,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
         }
     }
     col.child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)))
-        .child(nav_item("nav-logout", "Log Out", false, 0xF23F43).on_click(cx.listener(|a, _, _, cx| {
+        .child(nav_item("nav-logout", crate::t!("settings.logout"), false, 0xF23F43).on_click(cx.listener(|a, _, _, cx| {
             if let Some(s) = st(a) {
                 s.confirm_logout = true;
             }
@@ -789,9 +789,9 @@ fn logout_modal(cx: &mut Cx) -> Div {
                                 .text_size(z(20.))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(c(Palette::TEXT_HEADER))
-                                .child("Log Out"),
+                                .child(crate::t!("settings.logout")),
                         )
-                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child("Are you sure you want to logout?")),
+                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(crate::t!("settings.logout_confirm"))),
                 )
                 .child(
                     div()
@@ -817,9 +817,9 @@ fn logout_modal(cx: &mut Cx) -> Div {
                                     }
                                     cx.notify();
                                 }))
-                                .child("Cancel"),
+                                .child(crate::t!("common.cancel")),
                         )
-                        .child(button("logout-confirm", "Log Out", Palette::RED, 0xDA373C).h(z(38.)).on_click(
+                        .child(button("logout-confirm", crate::t!("settings.logout"), Palette::RED, 0xDA373C).h(z(38.)).on_click(
                             cx.listener(|a, _, _, cx| {
                                 a.settings = None;
                                 a.logout(cx);
