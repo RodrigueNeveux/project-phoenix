@@ -144,6 +144,33 @@ pub fn medium_date(date: chrono::NaiveDate) -> String {
     }
 }
 
+/// "Monday, November 23, 2026 at 3:04 PM" / "lundi 23 novembre 2026 à 15:04".
+pub fn full_datetime(dt: chrono::DateTime<chrono::Local>) -> String {
+    use chrono::Datelike;
+    let wd = t(&format!("weekday.{}", dt.weekday().num_days_from_monday()), &[]);
+    t("time.full", &[("weekday", &wd), ("date", &long_date(dt.date_naive())), ("time", &clock(dt))]).to_string()
+}
+
+/// "in an hour" / "2 minutes ago" (`<t:..:R>`), localized.
+pub fn relative_long(delta: i64) -> String {
+    let a = delta.unsigned_abs();
+    let (n, unit) = match a {
+        0..60 => (a, "second"),
+        60..3600 => (a / 60, "minute"),
+        3600..86400 => (a / 3600, "hour"),
+        86400..2_592_000 => (a / 86400, "day"),
+        2_592_000..31_536_000 => (a / 2_592_000, "month"),
+        _ => (a / 31_536_000, "year"),
+    };
+    let what = if n == 1 && unit != "second" {
+        t(&format!("unit.{unit}_a"), &[]).to_string()
+    } else {
+        let u = t(&format!("unit.{unit}_{}", if n == 1 { "one" } else { "many" }), &[]);
+        format!("{n} {u}")
+    };
+    t(if delta >= 0 { "time.in" } else { "time.ago" }, &[("what", &what)]).to_string()
+}
+
 /// Short elapsed time: "now", "5m ago", "2h ago", "2d ago", "3mo ago".
 pub fn ago_short(secs: i64) -> SharedString {
     let s = secs.max(0);

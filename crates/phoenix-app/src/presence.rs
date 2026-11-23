@@ -60,11 +60,11 @@ impl Activity {
                 }
                 s.into()
             }
-            ActivityKind::Playing => format!("Playing {n}").into(),
-            ActivityKind::Streaming => format!("Streaming {}", self.details.as_ref().unwrap_or(n)).into(),
-            ActivityKind::Listening => format!("Listening to {n}").into(),
-            ActivityKind::Watching => format!("Watching {n}").into(),
-            ActivityKind::Competing => format!("Competing in {n}").into(),
+            ActivityKind::Playing => crate::t!("activity.playing_n", n = n),
+            ActivityKind::Streaming => crate::t!("activity.streaming_n", n = self.details.as_ref().unwrap_or(n)),
+            ActivityKind::Listening => crate::t!("activity.listening_n", n = n),
+            ActivityKind::Watching => crate::t!("activity.watching_n", n = n),
+            ActivityKind::Competing => crate::t!("activity.competing_n", n = n),
         }
     }
 }
@@ -138,12 +138,12 @@ pub fn status_str(p: Presence) -> &'static str {
     }
 }
 
-pub fn status_label(p: Presence) -> &'static str {
+pub fn status_label(p: Presence) -> SharedString {
     match p {
-        Presence::Online => "Online",
-        Presence::Idle => "Idle",
-        Presence::Dnd => "Do Not Disturb",
-        Presence::Offline => "Invisible",
+        Presence::Online => crate::t!("status.online"),
+        Presence::Idle => crate::t!("status.idle"),
+        Presence::Dnd => crate::t!("status.dnd"),
+        Presence::Offline => crate::t!("status.invisible"),
     }
 }
 
@@ -288,7 +288,7 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
 
 /// "Nov 23, 2026"
 pub fn format_date(ts: i64) -> SharedString {
-    chrono::DateTime::from_timestamp(ts, 0).map(|d| d.format("%b %-d, %Y").to_string()).unwrap_or_default().into()
+    chrono::DateTime::from_timestamp(ts, 0).map(|d| crate::i18n::medium_date(d.date_naive())).unwrap_or_default().into()
 }
 
 // ---------------------------------------------------------------- UI state

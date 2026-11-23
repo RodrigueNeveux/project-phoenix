@@ -120,29 +120,18 @@ pub fn format_timestamp(ts: i64, style: char) -> Option<String> {
     use chrono::{Local, TimeZone};
     let dt = Local.timestamp_opt(ts, 0).single()?;
     Some(match style {
-        't' => dt.format("%-I:%M %p").to_string(),
-        'T' => dt.format("%-I:%M:%S %p").to_string(),
-        'd' => dt.format("%m/%d/%Y").to_string(),
-        'D' => dt.format("%B %-d, %Y").to_string(),
-        'F' => dt.format("%A, %B %-d, %Y %-I:%M %p").to_string(),
+        't' => crate::i18n::clock(dt),
+        'T' => if crate::i18n::locale() == "en" { dt.format("%-I:%M:%S %p").to_string() } else { dt.format("%H:%M:%S").to_string() },
+        'd' => crate::i18n::short_date(dt),
+        'D' => crate::i18n::long_date(dt.date_naive()),
+        'F' => crate::i18n::full_datetime(dt),
         'R' => relative(ts - Local::now().timestamp()),
-        _ => dt.format("%B %-d, %Y %-I:%M %p").to_string(),
+        _ => format!("{} {}", crate::i18n::long_date(dt.date_naive()), crate::i18n::clock(dt)),
     })
 }
 
 fn relative(delta: i64) -> String {
-    let a = delta.unsigned_abs();
-    let (n, unit) = match a {
-        0..60 => (a, "second"),
-        60..3600 => (a / 60, "minute"),
-        3600..86400 => (a / 3600, "hour"),
-        86400..2_592_000 => (a / 86400, "day"),
-        2_592_000..31_536_000 => (a / 2_592_000, "month"),
-        _ => (a / 31_536_000, "year"),
-    };
-    let unit = if n == 1 { unit.to_string() } else { format!("{unit}s") };
-    let n = if n == 1 && unit != "second" { if unit.starts_with('h') { "an".to_string() } else { "a".to_string() } } else { n.to_string() };
-    if delta >= 0 { format!("in {n} {unit}") } else { format!("{n} {unit} ago") }
+    crate::i18n::relative_long(delta)
 }
 
 /// Resolves `<@id>` / `<#id>` to display text (without the sigil).
