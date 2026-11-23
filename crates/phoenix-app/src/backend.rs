@@ -89,6 +89,8 @@ pub enum AppEvent {
     RemoteAuth(crate::auth::RemoteAuthUpdate),
     /// Fresh READY after a reconnect that could not resume.
     Resync(crate::commands::Resync),
+    /// Bot modals, interaction failures, live poll votes.
+    Parity(crate::commands::ParityEvent),
 }
 
 /// A file to attach to an outgoing message.
@@ -246,6 +248,18 @@ pub trait Backend: Send + Sync + 'static {
     /// Slash commands, interactions, inbox, moderation, forums, polls (`crate::commands`).
     fn parity(&self, _req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
         Box::pin(async { Err(BackendError("Not available offline.".into())) })
+    }
+    /// Our guild-level permission bits (moderation menu entries).
+    fn guild_permissions(&self, _guild: Id) -> u64 {
+        0
+    }
+    /// Last message we read in `channel` (for the "NEW" divider).
+    fn last_read(&self, _channel: Id) -> Option<Id> {
+        None
+    }
+    /// Tags of a forum / media channel.
+    fn forum_tags(&self, _forum: Id) -> Vec<crate::commands::ForumTag> {
+        Vec::new()
     }
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {

@@ -343,7 +343,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                     div()
                         .id("new-dm")
                         .cursor_pointer()
-                        .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub("Select Friends", cx)))
+                        .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_group_dm_picker(cx)))
                         .child(icon(Icon::Plus, 16., c(Palette::TEXT_MUTED))),
                 ),
         )

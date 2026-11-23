@@ -324,7 +324,7 @@ impl PhoenixApp {
         self.cancel_edit(window, cx);
     }
 
-    fn refresh_row(&mut self, channel: Id, id: Id) {
+    pub(crate) fn refresh_row(&mut self, channel: Id, id: Id) {
         if self.selected_channel == Some(channel)
             && let Some(ix) = self.messages.get(&channel).and_then(|e| e.msgs.iter().position(|m| m.id == id))
         {

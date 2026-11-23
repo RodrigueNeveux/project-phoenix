@@ -10,10 +10,10 @@ use phoenix_api::{
 };
 use serde_json::{Value, json};
 
-use super::{ForumPost, ModAction, ParityReply, ParityRequest, SlashCommand, session_id, slash};
+use super::{FolderSync, ForumPost, ModAction, ParityReply, ParityRequest, SlashCommand, session_id, slash};
 use crate::{
-    backend::BackendError,
-    discord_backend::convert::{id, message, sf},
+    backend::{AppEvent, BackendError, EventSink},
+    discord_backend::convert::{id, message, message_users, sf},
     model::Id,
 };
 
@@ -51,7 +51,34 @@ pub fn merge_commands(indexes: &[CommandIndex]) -> Vec<SlashCommand> {
     out
 }
 
-pub async fn request(rest: RestClient, req: ParityRequest) -> Result<ParityReply, BackendError> {
+/// Authors of fetched messages go to the UI first so rows show names.
+fn emit_users(emit: &EventSink, msgs: &[&phoenix_api::models::Message]) {
+    let mut users = Vec::new();
+    for m in msgs {
+        message_users(m, &mut users);
+    }
+    if !users.is_empty() {
+        emit(AppEvent::Users(users));
+    }
+}
+
+/// Legacy JSON `guild_folders` (Discord replaces the whole list).
+pub fn folders_json(folders: &[FolderSync]) -> Value {
+    let list: Vec<Value> = folders
+        .iter()
+        .map(|f| {
+            json!({
+                "guild_ids": f.guilds.iter().map(|g| g.0.to_string()).collect::<Vec<_>>(),
+                "id": f.id,
+                "name": f.name,
+                "color": f.color,
+            })
+        })
+        .collect();
+    json!({ "guild_folders": list })
+}
+
+pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> Result<ParityReply, BackendError> {
     let session = session_id();
     Ok(match req {
         ParityRequest::Commands { guild, channel } => {
@@ -92,7 +119,9 @@ pub async fn request(rest: RestClient, req: ParityRequest) -> Result<ParityReply
         }
         ParityRequest::Mentions { before, guild } => {
             let q = MentionsQuery { before: before.map(sf), guild: guild.map(sf), ..Default::default() };
-            ParityReply::Messages(rest.get_mentions(q).await.map_err(e)?.iter().map(message).collect())
+            let msgs = rest.get_mentions(q).await.map_err(e)?;
+            emit_users(&emit, &msgs.iter().collect::<Vec<_>>());
+            ParityReply::Messages(msgs.iter().map(message).collect())
         }
         ParityRequest::DismissMention(m) => {
             rest.dismiss_mention(sf(m)).await.map_err(e)?;
@@ -100,7 +129,9 @@ pub async fn request(rest: RestClient, req: ParityRequest) -> Result<ParityReply
         }
         ParityRequest::SavedMessages => {
             let s = rest.get_saved_messages().await.map_err(e)?;
-            ParityReply::Messages(s.results.iter().filter_map(|r| r.message.as_ref()).map(message).collect())
+            let msgs: Vec<_> = s.results.iter().filter_map(|r| r.message.as_ref()).collect();
+            emit_users(&emit, &msgs);
+            ParityReply::Messages(msgs.into_iter().map(message).collect())
         }
         ParityRequest::SetSaved { channel, message: m, saved } => {
             if saved {
@@ -115,8 +146,10 @@ pub async fn request(rest: RestClient, req: ParityRequest) -> Result<ParityReply
             rest.vote_poll(sf(channel), sf(m), &answers).await.map_err(e)?;
             ParityReply::Done
         }
-        ParityRequest::ForumPosts { forum, tags, offset } => {
-            let r = rest.search_threads(sf(forum), ThreadSort::LastMessage, &ids(&tags), offset, false).await.map_err(e)?;
+        ParityRequest::ForumPosts { forum, tags, offset, by_creation } => {
+            let sort = if by_creation { ThreadSort::Created } else { ThreadSort::LastMessage };
+            let r = rest.search_threads(sf(forum), sort, &ids(&tags), offset, false).await.map_err(e)?;
+            emit_users(&emit, &r.first_messages.iter().collect::<Vec<_>>());
             let posts = r
                 .threads
                 .iter()
@@ -126,6 +159,8 @@ pub async fn request(rest: RestClient, req: ParityRequest) -> Result<ParityReply
                     tags: t.applied_tags.iter().copied().map(id).collect(),
                     message_count: t.message_count.unwrap_or(0),
                     first_message: r.first_messages.iter().find(|m| m.channel_id == t.id).map(message),
+                    owner: t.owner_id.map(id),
+                    last_message: t.last_message_id.map(id),
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more: r.has_more }
@@ -153,6 +188,10 @@ pub async fn request(rest: RestClient, req: ParityRequest) -> Result<ParityReply
             let ch = rest.create_group_dm(&ids(&users)).await.map_err(e)?;
             ParityReply::Channel(id(ch.id))
         }
+        ParityRequest::GuildFolders(folders) => {
+            rest.patch_settings_json(folders_json(&folders)).await.map_err(e)?;
+            ParityReply::Done
+        }
     })
 }
 
@@ -172,5 +211,18 @@ mod tests {
         let m = merge_commands(&[a.clone(), a]);
         assert_eq!(m.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["alpha", "zeta"]);
         assert_eq!(m[0].app_name, "Bot");
+    }
+
+    #[test]
+    fn folders_body() {
+        let f = [
+            FolderSync { id: None, name: None, color: None, guilds: vec![Id(1)] },
+            FolderSync { id: Some(9), name: Some("Games".into()), color: Some(255), guilds: vec![Id(2), Id(3)] },
+        ];
+        let v = folders_json(&f);
+        assert_eq!(v["guild_folders"][0]["guild_ids"], json!(["1"]));
+        assert_eq!(v["guild_folders"][0]["id"], Value::Null);
+        assert_eq!(v["guild_folders"][1]["name"], "Games");
+        assert_eq!(v["guild_folders"][1]["guild_ids"], json!(["2", "3"]));
     }
 }

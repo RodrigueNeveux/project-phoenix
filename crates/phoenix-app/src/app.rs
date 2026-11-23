@@ -137,6 +137,7 @@ pub struct PhoenixApp {
     pub prefs: ui::settings::Prefs,
     pub login_ui: crate::auth::LoginUi,
     pub chat: crate::ui::chat::ChatState,
+    pub parity: crate::commands::ParityUi,
     pub revealed: HashSet<(Id, usize)>,
     pub utc_offset: i64,
     _subs: Vec<Subscription>,
@@ -319,6 +320,7 @@ impl PhoenixApp {
             people: Default::default(),
             switcher: None,
             chat: Default::default(),
+            parity: Default::default(),
             revealed: HashSet::new(),
             utc_offset,
             settings: None,
@@ -477,6 +479,7 @@ impl PhoenixApp {
     }
 
     pub fn select_channel(&mut self, id: Id, cx: &mut Context<Self>) {
+        crate::commands::state::remember_read_mark(self, id);
         let Some(ch) = self.channels.get_mut(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
             self.join_voice(Some(id), cx);
@@ -508,6 +511,7 @@ impl PhoenixApp {
                 let _ = this.update(cx, |this, cx| {
                     let msgs = res.unwrap_or_default();
                     this.insert_history(id, msgs, false, cx);
+                    crate::commands::state::apply_read_mark(this, id);
                 });
             })
             .detach();
@@ -802,6 +806,7 @@ impl PhoenixApp {
             ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => ui::members::on_event(self, ev, cx),
             AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
             AppEvent::Resync(r) => crate::commands::on_resync(self, r, cx),
+            AppEvent::Parity(e) => crate::commands::on_event(self, e, cx),
             AppEvent::Disconnected(reason) => {
                 self.clear_session();
                 self.login_error = Some(reason.into());
@@ -1093,8 +1098,8 @@ impl Focusable for PhoenixApp {
 impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::auth::ensure_qr(self, cx);
-        let body = match self.screen {
         crate::theme::sync(&self.prefs, window, cx);
+        let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),
             Screen::Main => div()
                 .size_full()
@@ -1131,6 +1136,7 @@ impl Render for PhoenixApp {
             .children(ui::image_viewer::render(window, cx))
             .children(ui::pickers::render_overlays(self, window, cx))
             .children(ui::profile::overlays(self, window, cx))
+            .children(ui::components::overlays(self, window, cx))
             .children(ui::voice_panel::overlays(self, window, cx))
     }
 }

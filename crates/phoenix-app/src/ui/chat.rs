@@ -75,7 +75,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                 .children(panels::jump_bar(app, cx)),
                         )
                         .child(composer::render(app, window, cx))
-                        .child(panels::drop_overlay(app)),
+                        .child(panels::drop_overlay(app))
+                        .children(crate::ui::forum::render(app, cx)),
                 )
                 .when(show_members, |d| d.child(members::render(app, cx)))
                 .children(panels::thread_panel(app, cx)),
@@ -133,7 +134,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 )
         })
         .child(div().flex_1())
-        .child(icon_button("threads", Icon::Threads, ic, 24.))
+        .child(icon_button("threads", Icon::Threads, ic, 24.).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx))))
         .child(icon_button("bell", Icon::Bell, ic, 24.))
         .child(
             icon_button("pin", Icon::Pin, if app.chat.pins.is_some() { c(Palette::INTERACTIVE_HOVER) } else { ic }, 24.)
@@ -167,7 +168,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .child("Search")
                 .child(icon(Icon::Search, 16., c(Palette::TEXT_MUTED))),
         )
-        .child(icon_button("inbox", Icon::Inbox, ic, 24.))
+        .child(icon_button("inbox", Icon::Inbox, ic, 24.).on_click(cx.listener(|a, _, _, cx| a.toggle_inbox(cx))))
         .child(icon_button("help", Icon::Help, ic, 24.))
 }
 
@@ -346,6 +347,7 @@ fn message(
     for e in &msg.embeds {
         content = content.child(embed(e));
     }
+    content = content.children(crate::ui::components::render(app, entity, msg)).children(crate::ui::components::render_poll(app, entity, msg));
     if !msg.reactions.is_empty() {
         content = content.child(message_ext::reactions(app, entity, msg));
     }

@@ -212,6 +212,7 @@ impl PhoenixApp {
             f.guilds.insert(at, dragged);
         }
         self.nav.folders.retain(|f| !f.guilds.is_empty());
+        self.sync_guild_folders(cx);
         cx.notify();
     }
 }

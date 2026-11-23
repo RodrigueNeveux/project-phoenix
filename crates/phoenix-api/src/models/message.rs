@@ -348,6 +348,9 @@ pub struct Message {
     pub pinned: bool,
     #[serde(default)]
     pub webhook_id: Option<Snowflake>,
+    /// Set on interaction responses; components are sent back to this app.
+    #[serde(default)]
+    pub application_id: Option<Snowflake>,
     #[serde(rename = "type", default)]
     pub kind: MessageType,
     #[serde(default, deserialize_with = "null_default")]

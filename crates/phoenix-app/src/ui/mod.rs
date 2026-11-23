@@ -1,5 +1,8 @@
 pub mod autocomplete;
 pub mod chat;
+pub mod components;
+pub mod forum;
+pub mod inbox;
 pub mod context_menu;
 pub mod controls;
 pub mod guild_menu;

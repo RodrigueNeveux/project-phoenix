@@ -95,6 +95,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.relationship_action(u, RelAction::Block, cx))
         }));
     }
+    items.extend(crate::ui::inbox::moderation_items(app, u, g, &e));
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
         items.push(MenuItem::action("Copy User ID", None, move |_, _, cx: &mut App| {

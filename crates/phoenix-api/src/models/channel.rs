@@ -171,6 +171,9 @@ pub struct Channel {
     pub default_sort_order: Option<u8>,
     #[serde(default)]
     pub default_forum_layout: Option<u8>,
+    /// DM from a non-friend waiting in "Message Requests".
+    #[serde(default, deserialize_with = "null_default")]
+    pub is_message_request: bool,
 }
 
 impl Channel {

@@ -273,6 +273,9 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             nav::snapshot(&s.cache, r).into_iter().for_each(|e| inner.emit(e));
             continue;
         }
+        if let Some(e) = crate::commands::from_gateway(&ev) {
+            inner.emit(AppEvent::Parity(e));
+        }
         nav::on_gateway(&s.cache, &ev).into_iter().for_each(|e| inner.emit(e));
         let events = s.adapter.lock().map(&s.cache, &ev);
         if let GatewayEvent::MessageCreate(m) = &ev
@@ -398,7 +401,27 @@ impl Backend for DiscordBackend {
     }
 
     fn parity(&self, req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
-        self.with_session(move |_, s| crate::commands::exec::request(s.rest.clone(), req))
+        self.with_session(move |inner, s| {
+            let emit: crate::backend::EventSink = Arc::new(move |e| inner.emit(e));
+            crate::commands::exec::request(s.rest.clone(), req, emit)
+        })
+    }
+
+    fn guild_permissions(&self, guild: Id) -> u64 {
+        let Ok(s) = self.inner.session() else { return 0 };
+        // Base permissions are the same in every channel for the bits we use.
+        s.cache.guild_channels(sf(guild)).first().map(|c| s.cache.permissions_in(c.id).bits()).unwrap_or(0)
+    }
+
+    fn last_read(&self, channel: Id) -> Option<Id> {
+        let s = self.inner.session().ok()?;
+        let r = s.adapter.lock().prefs.reads.get(&channel.0).map(|r| r.last_read)?;
+        Some(Id(r))
+    }
+
+    fn forum_tags(&self, forum: Id) -> Vec<crate::commands::ForumTag> {
+        let Ok(s) = self.inner.session() else { return Vec::new() };
+        s.cache.channel(sf(forum)).map(|c| convert::forum_tags(&c)).unwrap_or_default()
     }
 
     fn nav(&self, req: crate::ui::home::data::NavRequest) -> BoxFuture<crate::ui::home::data::NavReply> {

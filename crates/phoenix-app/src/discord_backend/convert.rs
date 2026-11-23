@@ -89,6 +89,7 @@ fn embed_media(m: &Option<api::EmbedMedia>) -> Option<model::EmbedMedia> {
 }
 
 pub fn message(m: &api::Message) -> model::Message {
+    crate::commands::store::record(m);
     let reply_to = m
         .message_reference
         .as_ref()
@@ -952,3 +953,20 @@ pub fn fatal_message(code: u16, reason: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+
+/// `available_tags` of a forum / media channel.
+pub fn forum_tags(c: &api::Channel) -> Vec<crate::commands::ForumTag> {
+    c.available_tags
+        .iter()
+        .map(|t| crate::commands::ForumTag {
+            id: id(t.id),
+            name: t.name.clone().into(),
+            emoji: match (t.emoji_id, &t.emoji_name) {
+                (Some(e), n) => Some(format!("<:{}:{}>", n.as_deref().unwrap_or("e"), e.0)),
+                (None, Some(n)) if !n.is_empty() => Some(n.clone()),
+                _ => None,
+            },
+            moderated: t.moderated,
+        })
+        .collect()
+}
