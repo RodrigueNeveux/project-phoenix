@@ -54,8 +54,12 @@ pub mod capabilities {
     pub const PASSIVE_GUILD_UPDATE_V2: u64 = 1 << 14;
 
     /// The set this crate's models are written against.
+    /// PRIORITIZED_READY_PAYLOAD is what makes Discord send READY_SUPPLEMENTAL
+    /// (friend / guild presences and voice states at login); without it a
+    /// user session gets no presences until each one changes.
     pub const DEFAULT: u64 = LAZY_USER_NOTES
         | NO_AFFINE_USER_IDS
+        | PRIORITIZED_READY_PAYLOAD
         | VERSIONED_READ_STATES
         | VERSIONED_USER_GUILD_SETTINGS
         | DEDUPE_USER_OBJECTS
@@ -572,6 +576,11 @@ async fn timeout_at<F: std::future::Future>(deadline: Instant, f: F) -> Option<F
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_capabilities_request_ready_supplemental() {
+        assert_ne!(capabilities::DEFAULT & capabilities::PRIORITIZED_READY_PAYLOAD, 0);
+    }
 
     #[test]
     fn url_building() {

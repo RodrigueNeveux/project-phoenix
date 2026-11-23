@@ -141,6 +141,9 @@ async fn run(secs: u64, live: Option<Vec<Value>>) -> anyhow::Result<()> {
 
     let mut cfg = GatewayConfig::new(token.expose());
     cfg.properties = props.clone();
+    if let Ok(c) = std::env::var("PROBE_CAPS") {
+        cfg.capabilities = c.parse()?;
+    }
     let (gw, mut rx) = Gateway::spawn(cfg);
     let cache = Cache::default();
     let mut st = Stats { events: BTreeMap::new(), unknown: BTreeMap::new(), parse_fail: BTreeMap::new() };

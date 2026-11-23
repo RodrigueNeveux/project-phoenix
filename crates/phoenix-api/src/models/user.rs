@@ -32,6 +32,9 @@ pub struct User {
     /// Server tag the user chose to display ("GLAD"), if any.
     #[serde(default)]
     pub primary_guild: Option<Box<PrimaryGuild>>,
+    /// Profile collectibles (`{"nameplate": {"asset", "palette", ...}}`).
+    #[serde(default)]
+    pub collectibles: Option<Box<serde_json::Value>>,
     // Current-user only:
     #[serde(default)]
     pub email: Option<String>,
@@ -49,6 +52,18 @@ pub struct User {
     pub flags: Option<u64>,
     #[serde(default)]
     pub bio: Option<String>,
+}
+
+impl User {
+    /// Static image of the nameplate shown behind the name in the DM list
+    /// and member list (`collectibles.nameplate.asset`), with its palette.
+    pub fn nameplate(&self) -> Option<(String, Option<String>)> {
+        let n = self.collectibles.as_ref()?.get("nameplate")?;
+        let asset = n.get("asset")?.as_str().filter(|a| !a.is_empty())?;
+        let sep = if asset.ends_with('/') { "" } else { "/" };
+        let palette = n.get("palette").and_then(|p| p.as_str()).map(str::to_owned);
+        Some((format!("https://cdn.discordapp.com/assets/collectibles/{asset}{sep}static.png"), palette))
+    }
 }
 
 /// `user.primary_guild`: the server tag shown next to a user's name.
@@ -139,4 +154,22 @@ pub struct Relationship {
     pub user_id: Option<UserId>,
     #[serde(default)]
     pub nickname: Option<String>,
+}
+
+#[cfg(test)]
+mod nameplate_tests {
+    use super::User;
+
+    #[test]
+    fn nameplate_from_collectibles() {
+        let u: User = serde_json::from_str(
+            r#"{"id":"1","username":"a","discriminator":"0","collectibles":{"nameplate":{"asset":"nameplates/nameplates/test/","palette":"crimson","sku_id":"2"}}}"#,
+        )
+        .unwrap();
+        let (url, pal) = u.nameplate().unwrap();
+        assert_eq!(url, "https://cdn.discordapp.com/assets/collectibles/nameplates/nameplates/test/static.png");
+        assert_eq!(pal.as_deref(), Some("crimson"));
+        let none: User = serde_json::from_str(r#"{"id":"1","username":"a","discriminator":"0","collectibles":null}"#).unwrap();
+        assert!(none.nameplate().is_none());
+    }
 }
