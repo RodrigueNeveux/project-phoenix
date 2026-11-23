@@ -239,3 +239,14 @@ mod tests {
         assert_eq!(acronym("gpui").as_ref(), "g");
     }
 }
+
+/// Flags of a user's voice state, shown as icons on voice channel member rows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VoiceFlags {
+    pub self_mute: bool,
+    pub self_deaf: bool,
+    pub server_mute: bool,
+    pub server_deaf: bool,
+    pub stream: bool,
+    pub video: bool,
+}

@@ -7,7 +7,7 @@ use gpui::{Context, FontWeight, IntoElement, ParentElement, SharedString, Styled
 use crate::{
     app::PhoenixApp,
     assets::Icon,
-    theme::{Palette, c, m, z, zoom},
+    theme::{Palette, c, generated::idx, m, tok, z, zoom},
     ui::{home::data::HomeView, icon},
 };
 
@@ -32,9 +32,10 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: &'static str) -> gpu
         .justify_center()
         .rounded(z(m::TITLE_BAR_ITEM_RADIUS))
         .cursor_pointer()
-        .when(active, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .child(icon(i, 18. * zoom(), c(if active { Palette::INTERACTIVE_HOVER } else { Palette::INTERACTIVE })))
+        // `clickable_fErCLM`: `--icon-muted`; hover `--background-mod-normal` +
+        // `--interactive-icon-hover`; selected `--interactive-icon-active`.
+        .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+        .child(icon(i, 18. * zoom(), c(tok(if active { idx::INTERACTIVE_ICON_ACTIVE } else { idx::ICON_MUTED }))))
         .tooltip(crate::ui::tooltip::tip(tip))
 }
 

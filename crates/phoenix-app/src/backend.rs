@@ -64,6 +64,8 @@ pub enum AppEvent {
     GuildMembers { guild: Id, members: Vec<Member> },
     ChannelUnread { channel: Id, unread: bool, mentions: u32 },
     VoiceStateUpdate { channel: Option<Id>, user: Id },
+    /// Mute / deafen / stream / video flags of a user's voice state.
+    VoiceFlags { user: Id, flags: crate::model::VoiceFlags },
     /// Voice call runtime state (connection, ping, speaking, encryption).
     Voice(crate::voice::VoiceUiEvent),
     /// New or updated user objects (message authors, member list entries...).

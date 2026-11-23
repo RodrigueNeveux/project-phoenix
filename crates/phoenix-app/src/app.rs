@@ -719,6 +719,7 @@ impl PhoenixApp {
                 }
                 self.rebuild_sidebar();
             }
+            AppEvent::VoiceFlags { user, flags } => crate::ui::voice_panel::set_flags(user, flags),
             AppEvent::VoiceStateUpdate { channel, user } => {
                 // DMs keep their recipient in `voice_users` (avatar): skip them.
                 for ch in self.channels.values_mut().filter(|c| c.guild.is_some()) {

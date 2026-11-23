@@ -65,8 +65,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .id("guild-rail")
         .size_full()
         .overflow_y_scroll()
-        .pt(z(PAD_Y))
-        .pb(z(PAD_Y))
+        .pt(z(PAD_TOP))
+        .pb(z(PAD_BOTTOM))
         .flex()
         .flex_col()
         .gap(z(GAP))
@@ -104,10 +104,20 @@ const FOLDER: f32 = 48.;
 const ICON_RADIUS: f32 = 12.;
 /// `--radius-lg`: open folder background.
 const FOLDER_RADIUS: f32 = 16.;
+/// `--space-xs`: spacing between rail items (`scroller_5dqHTG>[hidden]` margin-top).
 const GAP: f32 = 8.;
-const PAD_Y: f32 = 12.;
-/// Pill animation duration.
-const PILL_MS: u64 = 150;
+/// `scroller_5dqHTG` padding-top (desktop `.platform-win`/`.platform-osx`).
+const PAD_TOP: f32 = 4.;
+/// `scroller_5dqHTG` padding-bottom: `calc(var(--space-xs) + 16px)`.
+const PAD_BOTTOM: f32 = 24.;
+/// `--custom-folder-padding`: `(--guildbar-folder-size - --guildbar-avatar-size) / 2`.
+const FOLDER_PAD: f32 = (FOLDER - ICON) / 2.;
+/// `--custom-folder-preview-padding` (`--space-4`).
+const PREVIEW_PAD: f32 = 4.;
+/// `--custom-folder-preview-gap`.
+const PREVIEW_GAP: f32 = 2.;
+/// `item__o8_Xq` transition: height/opacity/transform .2s ease-out.
+const PILL_MS: u64 = 200;
 
 thread_local! {
     /// Rail item currently under the mouse (drives the pill and the tooltip).
@@ -216,9 +226,9 @@ fn pill(key: u64, selected: bool, hover: bool, unread: bool) -> AnyElement {
 fn mention_badge(n: u32) -> impl IntoElement {
     div()
         .absolute()
-        .right(z(-4.))
+        .right(z(-4.)) // lowerBadge_hqZPsU bottom/right 0 + 4px cut-out ring
         .bottom(z(-4.))
-        .p(z(3.))
+        .p(z(4.))
         .rounded(z(12.))
         .bg(c(Palette::BG_TERTIARY))
         .child(badge(n).bg(c(Palette::NOTIFICATION)))
@@ -386,32 +396,44 @@ fn folder(
     let has_selected = guilds.iter().any(|g| Some(g.id) == app.selected_guild);
     let e = entity.clone();
     let head_inner: AnyElement = if open {
-        // Open folder: folder glyph in the folder colour on a hover-able tile.
+        // Open folder (`folderIconWrapper_RTMSuZ` padding `--custom-folder-padding`):
+        // folder glyph in `--custom-folder-color` on a `--guildbar-avatar-size`
+        // tile, `--radius-md`, `--background-mod-subtle` on hover.
         div()
-            .size(z(ICON))
-            .rounded(z(ICON_RADIUS))
-            .flex()
-            .items_center()
-            .justify_center()
-            .when(hover, |d| d.bg(c(Palette::GUILD_ICON_BG)))
+            .size(z(FOLDER))
+            .p(z(FOLDER_PAD))
             .child(
                 div()
-                    .w(z(20.))
-                    .h(z(15.))
-                    .mt(z(2.))
-                    .rounded(z(2.))
-                    .bg(c(color))
-                    .relative()
-                    .child(div().absolute().top(z(-3.)).left_0().w(z(8.)).h(z(4.)).rounded_t(z(2.)).bg(c(color))),
+                    .size(z(ICON))
+                    .rounded(z(ICON_RADIUS))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .when(hover, |d| d.bg(c(Palette::GUILD_ICON_BG)))
+                    .child(
+                        div()
+                            .w(z(20.))
+                            .h(z(15.))
+                            .mt(z(2.))
+                            .rounded(z(2.))
+                            .bg(c(color))
+                            .relative()
+                            .child(
+                                div().absolute().top(z(-3.)).left_0().w(z(8.)).h(z(4.)).rounded_t(z(2.)).bg(c(color)),
+                            ),
+                    ),
             )
             .into_any_element()
     } else {
-        // Closed folder: 2x2 preview of the first guilds on a tinted tile
-        // (folder colour at 40 %, 4px padding, 2px gap).
-        let cell = (ICON - 4. * 2. - 2.) / 2.;
-        let mut grid = div().size(z(ICON - 8.)).flex().flex_wrap().gap(z(2.));
+        // Closed folder (`folderPreviewWrapper_RTMSuZ`): `--guildbar-folder-size`
+        // tile, `--radius-lg`, folder colour mixed 60 % transparent, 4px padding;
+        // 2x2 preview (`folderPreviewGuildIcon_RTMSuZ`) with 2px gap and
+        // 13px outer / 4px inner corner radii.
+        let inner = FOLDER - PREVIEW_PAD * 2.;
+        let cell = (inner - PREVIEW_GAP) / 2.;
+        let mut grid = div().size(z(inner)).flex().flex_wrap().gap(z(PREVIEW_GAP));
         for (i, g) in guilds.iter().take(4).enumerate() {
-            let r = |big: bool| if big { z(cell * 0.45) } else { z(4.) };
+            let r = |big: bool| if big { z(13.) } else { z(4.) };
             grid = grid.child(
                 div()
                     .size(z(cell))
@@ -429,28 +451,32 @@ fn folder(
             );
         }
         div()
-            .size(z(ICON))
-            .rounded(z(ICON_RADIUS))
-            .p(z(4.))
+            .size(z(FOLDER))
+            .rounded(z(FOLDER_RADIUS))
+            .p(z(PREVIEW_PAD))
             .bg(c(color).opacity(0.4))
             .child(grid)
             .into_any_element()
     };
+    // `folderHeader_RTMSuZ` / `folderButton_RTMSuZ`: 48x48.
     let header = row(("folder", id), key, entity)
+        .h(z(FOLDER))
         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_folder(id, cx)))
         .child(pill(key, !open && has_selected, hover, !open && unread))
         .child(
             div()
                 .relative()
-                .size(z(ICON))
+                .size(z(FOLDER))
                 .child(head_inner)
                 .when(!open && mentions > 0, |d| d.child(mention_badge(mentions))),
         )
-        .when(hover, |d| d.child(right_tooltip(name.clone(), ICON)));
+        .when(hover, |d| d.child(right_tooltip(name.clone(), FOLDER)));
     if !open {
         return header.into_any_element();
     }
-    let mut body = div().w_full().flex().flex_col().gap(z(GAP)).pb(z((FOLDER - ICON) / 2.));
+    // `folderGuildsList_RTMSuZ>:first-child` margin-top: `--space-xs - --custom-folder-padding`.
+    let mut body =
+        div().w_full().mt(z(GAP - FOLDER_PAD)).flex().flex_col().gap(z(GAP)).pb(z(FOLDER_PAD));
     for g in guilds {
         body = body.child(guild(app, entity, g, true));
     }
@@ -458,20 +484,21 @@ fn folder(
         .w_full()
         .relative()
         .child(
-            // Tinted column behind the open folder: folder colour at 15 %
-            // over mod-subtle, 1px muted border, 16px radius, 48px wide.
+            // `folderGroupBackground_RTMSuZ`: `--guildbar-folder-size` wide,
+            // `--radius-lg`, 1px `--border-muted`, folder colour mixed 85 %
+            // transparent, inset `--custom-guild-list-padding - --custom-folder-padding`.
             div()
                 .absolute()
-                .top(z(-(FOLDER - ICON) / 2.))
+                .top_0()
                 .bottom_0()
                 .left(z((m::SERVER_BAR_W - FOLDER) / 2.))
                 .w(z(FOLDER))
                 .rounded(z(FOLDER_RADIUS))
                 .border_1()
-                .border_color(c(Palette::PANEL_BORDER).opacity(0.5))
+                .border_color(c(Palette::BORDER_MUTED))
                 .bg(c(color).opacity(0.15)),
         )
-        .child(div().flex().flex_col().gap(z(GAP)).child(header).child(body))
+        .child(div().flex().flex_col().child(header).child(body))
         .into_any_element()
 }
 
@@ -487,8 +514,8 @@ fn separator() -> AnyElement {
         .into_any_element()
 }
 
-/// Add a Server / Discover tiles: mod-subtle tile, text-default glyph,
-/// brand background with a white glyph on hover (150 ms colour fade).
+/// Add a Server / Discover tiles (`circleIconButton_g8YUxD`): `--background-mod-subtle`
+/// tile, `--text-default` glyph, `--background-brand` background on hover.
 fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: &'static str) -> gpui::Stateful<gpui::Div> {
     let key = if id == "add-server" { ADD_KEY } else { DISCOVER_KEY };
     let hover = hovered(key);
@@ -502,7 +529,7 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: &'stati
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icon(i, 20. * crate::theme::zoom(), if hover { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
+                .child(icon(i, 20. * crate::theme::zoom(), c(Palette::TEXT_NORMAL))), // circleIcon_g8YUxD 20px, --text-default
         )
         .when(hover, |d| d.child(right_tooltip(label.into(), ICON)))
 }

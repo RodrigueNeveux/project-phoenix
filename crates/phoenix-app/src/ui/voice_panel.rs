@@ -1,7 +1,8 @@
 //! "Voice Connected" panel above the user panel, and the speaking ring used
 //! on voice channel member avatars.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{
@@ -11,10 +12,15 @@ use gpui::{
 
 use crate::app::PhoenixApp;
 use crate::assets::Icon;
-use crate::theme::{Palette, c, z};
-use crate::model::Id;
+use crate::theme::{Palette, c, generated::idx, tok, z};
+
+/// Colour of a generated CSS token.
+fn t(i: usize) -> Hsla {
+    c(tok(i))
+}
+use crate::model::{Id, VoiceFlags};
 use crate::ui::context_menu::{self, MenuItem};
-use crate::ui::{avatar, icon, icon_button};
+use crate::ui::{avatar, icon};
 use crate::voice::prefs::{prefs, update};
 use crate::voice::{Quality, VoiceStatus};
 
@@ -29,6 +35,30 @@ thread_local! {
     static USER_MENU: Cell<Option<(Id, Point<Pixels>)>> = const { Cell::new(None) };
     /// "Voice Connected" popout.
     static POPOUT: Cell<Option<Tab>> = const { Cell::new(None) };
+    /// Mic / deafen chevron menu: which one, where, and the device names
+    /// (enumerated once when it opens).
+    static AUDIO_MENU: RefCell<Option<AudioMenu>> = const { RefCell::new(None) };
+    /// Voice state flags per user (from `VOICE_STATE_UPDATE`).
+    static FLAGS: RefCell<HashMap<Id, VoiceFlags>> = RefCell::new(HashMap::new());
+}
+
+/// Store a user's voice state flags (hooked from `AppEvent::VoiceFlags`).
+pub fn set_flags(user: Id, flags: VoiceFlags) {
+    FLAGS.with(|f| f.borrow_mut().insert(user, flags));
+}
+
+fn flags(user: Id) -> VoiceFlags {
+    FLAGS.with(|f| f.borrow().get(&user).copied().unwrap_or_default())
+}
+
+/// Open chevron menu: button, click position, device names.
+type AudioMenu = (Audio, Point<Pixels>, Vec<String>);
+
+/// Which audio button a chevron menu belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Audio {
+    Mic,
+    Deafen,
 }
 
 const CAMERA: &str = "icons/voice/camera.svg";
@@ -36,6 +66,8 @@ const SCREEN: &str = "icons/voice/screen.svg";
 const SOUNDBOARD: &str = "icons/voice/soundboard.svg";
 const ACTIVITY: &str = "icons/voice/activity.svg";
 const SHIELD: &str = "icons/voice/shield.svg";
+const NOISE: &str = "icons/voice/noise.svg";
+const VIDEO: &str = "icons/voice/video-small.svg";
 
 /// Icons owned by this module (hooked into the asset source).
 pub fn svg_asset(path: &str) -> Option<&'static str> {
@@ -60,6 +92,18 @@ pub fn svg_asset(path: &str) -> Option<&'static str> {
             r#"<path fill-rule="evenodd" d="M7 6h10a5 5 0 0 1 5 5v2a5 5 0 0 1-8.5 3.5h-3A5 5 0 0 1 2 13v-2a5 5 0 0 1 5-5zm0 3v1.5H5.5v2H7V14h2v-1.5h1.5v-2H9V9zm9.5 0a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4zm-2 2.6a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z"/>"#,
             "</svg>"
         ),
+        NOISE => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
+            r#"<rect x="3" y="9" width="2" height="6" rx="1"/><rect x="7" y="6" width="2" height="12" rx="1"/>"#,
+            r#"<rect x="11" y="3" width="2" height="18" rx="1"/><rect x="15" y="6" width="2" height="12" rx="1"/>"#,
+            r#"<rect x="19" y="9" width="2" height="6" rx="1"/>"#,
+            "</svg>"
+        ),
+        VIDEO => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
+            r#"<path d="M4 6h10a2 2 0 0 1 2 2v1.5l4.4-2.9A1 1 0 0 1 22 7.4v9.2a1 1 0 0 1-1.6.8L16 14.5V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/>"#,
+            "</svg>"
+        ),
         SHIELD => concat!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
             r#"<path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/>"#,
@@ -73,7 +117,180 @@ fn asset_icon(path: &'static str, size: f32, color: Hsla) -> gpui::Svg {
     svg().path(SharedString::new_static(path)).size(px(size)).flex_none().text_color(color)
 }
 
-/// Three rising bars, Discord's connection-quality glyph.
+/// `button_Y-8oZW`: 32px square, `--radius-sm`, `--icon-subtle` glyph,
+/// `--control-secondary-background-hover` on hover; `redGlow_Y-8oZW` (muted /
+/// deafened) is `--opacity-red-12` (24 on hover) with an
+/// `--icon-feedback-critical` glyph (`redIcon__WEKcz`).
+pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .size(z(32.))
+        .flex_none()
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .when(red, |d| d.bg(t(idx::OPACITY_RED_12)).hover(|s| s.bg(t(idx::OPACITY_RED_24))))
+        .when(!red, |d| d.hover(|s| s.bg(t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+        .child(glyph)
+}
+
+/// Glyph colour of a panel button (`--icon-subtle` / `--icon-feedback-critical`).
+pub fn panel_glyph(i: Icon, red: bool) -> AnyElement {
+    icon(i, 20. * crate::theme::zoom(), t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE })).into_any_element()
+}
+
+/// Mic / deafen button with its dropdown chevron (`audioButtonParent_gKpIZP`):
+/// 32px button with square right corners, then a 16x32 chevron
+/// (`buttonChevron_gKpIZP`, 1px gap, square left corners, 16px icon). Hovering
+/// the pair tints both with `--background-mod-muted`; the red state covers both.
+pub fn audio_button(
+    kind: Audio,
+    i: Icon,
+    red: bool,
+    tip: &'static str,
+    on_click: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static,
+    cx: &mut Context<PhoenixApp>,
+) -> AnyElement {
+    let group: SharedString = format!("audio-{kind:?}").into();
+    let base = |d: gpui::Stateful<gpui::Div>| {
+        d.h(z(32.))
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .when(red, |d| d.bg(t(idx::OPACITY_RED_12)).hover(|s| s.bg(t(idx::OPACITY_RED_24))))
+            .when(!red, |d| {
+                d.group_hover(group.clone(), |s| s.bg(t(idx::BACKGROUND_MOD_MUTED)))
+                    .hover(|s| s.bg(t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
+            })
+    };
+    let open = AUDIO_MENU.with(|m| m.borrow().as_ref().is_some_and(|(k, _, _)| *k == kind));
+    div()
+        .group(group.clone())
+        .flex()
+        .flex_none()
+        .gap(z(1.))
+        .child(
+            base(div().id(SharedString::from(format!("audio-btn-{kind:?}"))))
+                .w(z(32.))
+                .rounded_l(z(8.))
+                .child(panel_glyph(i, red))
+                .tooltip(crate::ui::tooltip::tip(tip))
+                .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx))),
+        )
+        .child(
+            base(div().id(SharedString::from(format!("audio-chev-{kind:?}"))))
+                .w(z(16.))
+                .rounded_r(z(8.))
+                .when(open && !red, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
+                .child(icon(
+                    Icon::Chevron,
+                    16. * crate::theme::zoom(),
+                    t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE }),
+                ))
+                .tooltip(crate::ui::tooltip::tip(match kind {
+                    Audio::Mic => "Input Options",
+                    Audio::Deafen => "Output Options",
+                }))
+                .on_click(cx.listener(move |_, ev: &gpui::ClickEvent, _, cx| {
+                    let now = AUDIO_MENU.with(|m| m.borrow().as_ref().map(|(k, _, _)| *k));
+                    let next = (now != Some(kind)).then(|| {
+                        let (inputs, outputs) = crate::voice::call::devices();
+                        (kind, ev.position(), if kind == Audio::Mic { inputs } else { outputs })
+                    });
+                    AUDIO_MENU.with(|m| *m.borrow_mut() = next);
+                    cx.notify();
+                })),
+        )
+        .into_any_element()
+}
+
+fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let e = cx.entity();
+    let dismiss: context_menu::Dismiss = Rc::new(move |_: &mut Window, cx: &mut App| {
+        AUDIO_MENU.with(|m| *m.borrow_mut() = None);
+        e.update(cx, |_, cx| cx.notify());
+    });
+    let current = {
+        let p = prefs().lock();
+        if kind == Audio::Mic { p.input_device.clone() } else { p.output_device.clone() }
+    };
+    let mut list = vec![MenuItem::radio("Default", current.is_none(), move |_, _, _| {
+        update(move |p| if kind == Audio::Mic { p.input_device = None } else { p.output_device = None }, true)
+    })];
+    for d in devices {
+        let on = current.as_deref() == Some(d.as_str());
+        let name = d.clone();
+        list.push(MenuItem::radio(d, on, move |_, _, _| {
+            let name = name.clone();
+            update(move |p| if kind == Audio::Mic { p.input_device = Some(name) } else { p.output_device = Some(name) }, true)
+        }));
+    }
+    let e = cx.entity();
+    let items = vec![
+        MenuItem::Submenu {
+            label: if kind == Audio::Mic { "Input Device".into() } else { "Output Device".into() },
+            items: list,
+        },
+        MenuItem::Separator,
+        MenuItem::action("Voice Settings", None, move |_, _, cx| {
+            AUDIO_MENU.with(|m| *m.borrow_mut() = None);
+            e.update(cx, |a, cx| {
+                crate::ui::settings::open(a, cx);
+                if let Some(s) = a.settings.as_mut() {
+                    s.page = crate::ui::settings::Page::VoiceVideo;
+                }
+            });
+        }),
+    ];
+    // Open above the button: the panel sits at the bottom of the window.
+    context_menu::render(pos - gpui::point(px(0.), px(120.)), items, dismiss)
+}
+
+/// One of the four large buttons (`button_9U6LUN.buttonColor_9U6LUN`): full
+/// grid cell, `--space-32` high, `--radius-sm`, 1px `--border-muted`,
+/// `--control-secondary-background-default` (hover `-hover`), glyph in
+/// `--control-secondary-text-default`.
+fn action_button(id: &'static str, path: &'static str, label: &'static str, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    div()
+        .id(id)
+        .flex_1()
+        .min_w_0()
+        .h(z(32.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(Palette::BORDER_MUTED))
+        .bg(t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+        .hover(|s| s.bg(t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(asset_icon(path, 20. * crate::theme::zoom(), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+        .tooltip(crate::ui::tooltip::tip(label))
+        .on_click(cx.listener(move |a, _, _, cx| a.stub(label, cx)))
+}
+
+/// Connection glyph in `ping_4LJE6I.largePing_4LJE6I`: 18px icon, 7px padding,
+/// 8px radius, `--background-feedback-mod-*` with a 1px `--border-muted` inset.
+fn large_ping(color: Hsla, bg: Hsla) -> impl IntoElement {
+    div()
+        .size(z(32.))
+        .flex_none()
+        .rounded(z(8.))
+        .bg(bg)
+        .border_1()
+        .border_color(c(Palette::BORDER_MUTED))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(signal_bars(color))
+}
+
+/// Three rising bars, Discord's connection-quality glyph (fits 18px).
 fn signal_bars(color: Hsla) -> impl IntoElement {
     div()
         .flex()
@@ -81,7 +298,7 @@ fn signal_bars(color: Hsla) -> impl IntoElement {
         .gap(z(2.))
         .h(z(14.))
         .flex_none()
-        .children([6., 10., 14.].map(|h| div().w(z(3.)).h(px(h)).rounded(z(1.)).bg(color)))
+        .children([6., 10., 14.].map(|h| div().w(z(3.)).h(z(h)).rounded(z(1.)).bg(color)))
 }
 
 /// Wrap an avatar in the green speaking ring (Discord: 2px ring with a gap).
@@ -99,23 +316,6 @@ pub fn speaking_ring(avatar: AnyElement, size: f32, speaking: bool) -> AnyElemen
         .into_any_element()
 }
 
-fn action_button(id: &'static str, path: &'static str, label: &'static str, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    div()
-        .id(id)
-        .flex_1()
-        .h(z(32.))
-        .rounded(z(8.))
-        .bg(c(Palette::BG_MOD_HOVER))
-        .hover(|s| s.bg(c(Palette::BG_MOD_SELECTED)))
-        .cursor_pointer()
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(asset_icon(path, 20. * crate::theme::zoom(), c(Palette::INTERACTIVE)))
-        .tooltip(crate::ui::tooltip::tip(label))
-        .on_click(cx.listener(move |a, _, _, cx| a.stub(label, cx)))
-}
-
 pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.voice_channel.and_then(|v| app.channels.get(&v));
     let guild = ch
@@ -126,36 +326,47 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
     let name = ch.map(|c| c.name.to_string()).unwrap_or_default();
     let label: SharedString = if guild.is_empty() { name.into() } else { format!("{name} / {guild}").into() };
     let v = &app.voice;
-    let (title, color) = match v.status {
+    // `rtcConnectionStatusConnected/Connecting/Error_4LJE6I`:
+    // `--text-feedback-positive / -warning / -critical`.
+    const OK: (usize, usize) = (idx::TEXT_FEEDBACK_POSITIVE, idx::BACKGROUND_FEEDBACK_MOD_POSITIVE);
+    const WARN: (usize, usize) = (idx::TEXT_FEEDBACK_WARNING, idx::BACKGROUND_FEEDBACK_MOD_WARNING);
+    const BAD: (usize, usize) = (idx::TEXT_FEEDBACK_CRITICAL, idx::BACKGROUND_FEEDBACK_MOD_CRITICAL);
+    // `rtcConnectionQualityFine/Average/Bad_4LJE6I .largePing` backgrounds.
+    let (title, (fg, bg)) = match v.status {
         VoiceStatus::Connected | VoiceStatus::Idle => (
             "Voice Connected",
             match v.quality() {
-                Quality::Fair => Palette::YELLOW,
-                Quality::Bad => Palette::RED,
-                _ => Palette::GREEN,
+                Quality::Fair => WARN,
+                Quality::Bad => BAD,
+                _ => OK,
             },
         ),
-        VoiceStatus::Connecting => ("RTC Connecting", Palette::YELLOW),
-        VoiceStatus::Reconnecting => ("Reconnecting", Palette::YELLOW),
-        VoiceStatus::Failed => ("No Route", Palette::RED),
+        VoiceStatus::Connecting => ("RTC Connecting", WARN),
+        VoiceStatus::Reconnecting => ("Reconnecting", WARN),
+        VoiceStatus::Failed => ("No Route", BAD),
     };
+    let color = t(fg);
     let ping: SharedString = match (v.ping_ms, &v.last_error) {
         (_, Some(e)) if v.status == VoiceStatus::Failed => e.clone().into(),
         (Some(p), _) => format!("Ping: {p} ms{}", if v.e2ee { " · End-to-end encrypted" } else { "" }).into(),
         (None, _) => "Waiting for the voice server".into(),
     };
-    // Sits inside the sidebar's floating panels card, separated from the user
-    // row by a 1px subtle border.
+    let noise = prefs().lock().noise_suppression;
+    // `container_9U6LUN`: padding `--custom-guild-list-padding -
+    // --custom-panels-spacing + 4px` (12px), 12px gap, 1px `--border-muted`
+    // bottom border inside the floating panels card.
     div()
         .flex_none()
         .border_b_1()
-        .border_color(c(Palette::PANEL_BORDER))
-        .p(z(8.))
+        .border_color(c(Palette::BORDER_MUTED))
+        .p(z(12.))
         .flex()
         .flex_col()
-        .gap(z(8.))
+        .gap(z(12.))
         .child(
+            // `connection_9U6LUN` / `rtcConnectionStatus_4LJE6I`: 32px row.
             div()
+                .h(z(32.))
                 .flex()
                 .items_center()
                 .gap(z(4.))
@@ -164,60 +375,97 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                         .id("voice-status")
                         .flex_1()
                         .min_w_0()
-                        .pl(z(4.))
+                        .flex()
+                        .items_center()
+                        .gap(z(8.)) // largePing_4LJE6I margin-inline-end
                         .cursor_pointer()
                         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(ping.clone()).build(window, cx))
                         .on_click(cx.listener(|_, _, _, cx| {
                             POPOUT.with(|p| p.set(if p.get().is_some() { None } else { Some(Tab::Connection) }));
                             cx.notify();
                         }))
+                        .child(large_ping(color, t(bg)))
                         .child(
                             div()
+                                .flex_1()
+                                .min_w_0()
                                 .flex()
-                                .items_center()
-                                .gap(z(6.))
-                                .child(signal_bars(c(color)))
+                                .flex_col()
                                 .child(
                                     div()
-                                        .text_size(z(14.))
-                                        .line_height(z(20.))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(c(color))
-                                        .child(title),
+                                        .h(z(20.)) // rtcConnectionStatusLabel_4LJE6I
+                                        .flex()
+                                        .items_center()
+                                        .gap(z(4.)) // statusLine_4LJE6I
+                                        .child(
+                                            div()
+                                                .text_size(z(16.))
+                                                .line_height(z(20.))
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(color)
+                                                .text_ellipsis()
+                                                .child(title),
+                                        )
+                                        .when(v.e2ee, |d| {
+                                            d.child(
+                                                div()
+                                                    .id("voice-e2ee")
+                                                    .cursor_pointer()
+                                                    .child(asset_icon(SHIELD, 12., t(idx::TEXT_FEEDBACK_POSITIVE)))
+                                                    .tooltip(|window, cx| {
+                                                        gpui_component::tooltip::Tooltip::new("End-to-end encrypted")
+                                                            .build(window, cx)
+                                                    })
+                                                    .on_click(cx.listener(|_, _, _, cx| {
+                                                        cx.stop_propagation();
+                                                        POPOUT.with(|p| p.set(Some(Tab::Privacy)));
+                                                        cx.notify();
+                                                    })),
+                                            )
+                                        }),
                                 )
-                                .when(v.e2ee, |d| {
-                                    d.child(
-                                        div()
-                                            .id("voice-e2ee")
-                                            .cursor_pointer()
-                                            .child(asset_icon(SHIELD, 12., c(Palette::GREEN)))
-                                            .tooltip(|window, cx| {
-                                                gpui_component::tooltip::Tooltip::new("End-to-end encrypted").build(window, cx)
-                                            })
-                                            .on_click(cx.listener(|_, _, _, cx| {
-                                                cx.stop_propagation();
-                                                POPOUT.with(|p| p.set(Some(Tab::Privacy)));
-                                                cx.notify();
-                                            })),
-                                    )
-                                }),
-                        )
-                        .child(
-                            div()
-                                .text_size(z(12.))
-                                .line_height(z(16.))
-                                .text_color(c(Palette::TEXT_MUTED))
-                                .text_ellipsis()
-                                .child(label),
+                                .child(
+                                    div()
+                                        .text_size(z(12.))
+                                        .line_height(z(16.))
+                                        .text_color(c(Palette::TEXT_MUTED))
+                                        .text_ellipsis()
+                                        .hover(|s| s.underline()) // channel_9U6LUN:hover
+                                        .child(label),
+                                ),
                         ),
                 )
                 .child(
-                    icon_button("hangup", Icon::PhoneHangup, c(Palette::INTERACTIVE), 20.)
-                        .tooltip(crate::ui::tooltip::tip("Disconnect"))
-                        .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
+                    // `voiceButtonsContainer_9U6LUN`: noise suppression + disconnect, 4px gap.
+                    div()
+                        .flex()
+                        .gap(z(4.))
+                        .child(
+                            panel_button(
+                                "voice-noise",
+                                asset_icon(NOISE, 20. * crate::theme::zoom(), t(idx::ICON_SUBTLE)).into_any_element(),
+                                false,
+                            )
+                            .when(noise, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
+                            .tooltip(crate::ui::tooltip::tip(if noise {
+                                "Disable Noise Suppression"
+                            } else {
+                                "Enable Noise Suppression"
+                            }))
+                            .on_click(cx.listener(|_, _, _, cx| {
+                                update(|p| p.noise_suppression = !p.noise_suppression, true);
+                                cx.notify();
+                            })),
+                        )
+                        .child(
+                            panel_button("hangup", panel_glyph(Icon::PhoneHangup, false), false)
+                                .tooltip(crate::ui::tooltip::tip("Disconnect"))
+                                .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
+                        ),
                 ),
         )
         .child(
+            // `actionButtons_9U6LUN`: equal grid columns, `--space-xs` gap.
             div()
                 .flex()
                 .gap(z(8.))
@@ -228,37 +476,111 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         )
 }
 
-/// Voice channel member row in the channel list: speaking ring, local
-/// mute / deafen badges, right-click menu with the user volume.
+/// Server tag chip (`chipletContainerInner_k8jyN7`): `--background-mod-strong`,
+/// 4px radius, 0 4px padding, 16px line height, 4px from the name
+/// (`chipletParent_kQORUk`); badge icon 16px in voice rows (`clanTagBadge_YUoOxm`).
+pub fn server_tag(tag: &(SharedString, Option<SharedString>), size: f32) -> AnyElement {
+    div()
+        .flex_none()
+        .ml(z(4.))
+        .h(z(16.))
+        .px(z(4.))
+        .rounded(z(4.))
+        .bg(t(idx::BACKGROUND_MOD_STRONG))
+        .flex()
+        .items_center()
+        .gap(z(2.))
+        .when_some(tag.1.clone(), |d, url| d.child(gpui::img(url).size(z(size)).flex_none()))
+        .child(
+            div()
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(Palette::TEXT_NORMAL))
+                .child(tag.0.clone()),
+        )
+        .into_any_element()
+}
+
+/// Voice channel member row in the channel list (`voiceUser_YUoOxm` /
+/// `content_YUoOxm`): `--radius-sm`, 4px/`--space-xs` padding, 8px gap, 24px
+/// avatar (`avatarSmall_YUoOxm`), name in `--channels-default`
+/// (`--interactive-text-active` while speaking), then 16px state icons with a
+/// 4px gap: LIVE pill, camera, server mute/deafen in `--icon-feedback-critical`
+/// (`iconServer_YUoOxm`), self mute/deafen.
 pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -> AnyElement {
     let u = app.users.get(&user);
     let me = user == app.me.id;
     let in_call = app.voice_channel.is_some_and(|ch| app.channels.get(&ch).is_some_and(|c| c.voice_users.contains(&user)));
     let local_muted = !me && prefs().lock().user(user).muted;
     let speaking = app.voice.is_speaking(user) && !local_muted;
+    let mut f = flags(user);
+    if me {
+        f.self_mute = app.mic_muted;
+        f.self_deaf = app.deafened;
+    }
+    let state = t(idx::CHANNELS_DEFAULT);
+    let red = t(idx::ICON_FEEDBACK_CRITICAL);
+    let tag = u.and_then(|u| u.tag.clone());
     let e = entity.clone();
     div()
         .ml(z(36.))
         .mr(z(8.))
         .h(z(32.))
         .px(z(8.))
-        .rounded(z(4.))
+        .rounded(z(8.))
         .flex()
         .items_center()
         .gap(z(8.))
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+        .hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)))
         .child(speaking_ring(avatar(u, 24.), 24., speaking))
         .child(
             div()
                 .flex_1()
-                .text_size(z(14.))
-                .text_color(c(if speaking { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
-                .text_ellipsis()
-                .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
+                .min_w_0()
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_size(z(14.))
+                        .text_color(if speaking { t(idx::INTERACTIVE_TEXT_ACTIVE) } else { state })
+                        .text_ellipsis()
+                        .child(u.map(|u| u.display_name.clone()).unwrap_or_default()),
+                )
+                .when_some(tag, |d, t| d.child(server_tag(&t, 12.))),
         )
-        .when(local_muted, |d| d.child(icon(Icon::MicOff, 16., c(Palette::RED))))
-        .when(me && app.deafened, |d| d.child(icon(Icon::HeadphonesOff, 16., c(Palette::TEXT_MUTED))))
-        .when(me && app.mic_muted && !app.deafened, |d| d.child(icon(Icon::MicOff, 16., c(Palette::TEXT_MUTED))))
+        .child(
+            div()
+                .flex()
+                .flex_none()
+                .items_center()
+                .gap(z(4.))
+                .when(f.stream, |d| {
+                    // `liveIcon_YUoOxm`: `--background-feedback-notification`, white text.
+                    d.child(
+                        div()
+                            .h(z(16.))
+                            .px(z(6.))
+                            .rounded(z(8.))
+                            .bg(t(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
+                            .flex()
+                            .items_center()
+                            .text_size(z(11.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(gpui::white())
+                            .child("LIVE"),
+                    )
+                })
+                .when(f.video, |d| d.child(asset_icon(VIDEO, 16., state)))
+                .when(local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
+                .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
+                .when(f.server_mute && !f.server_deaf, |d| d.child(icon(Icon::MicOff, 16., red)))
+                .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state)))
+                .when(f.self_mute && !f.self_deaf && !f.server_mute && !local_muted, |d| {
+                    d.child(icon(Icon::MicOff, 16., state))
+                }),
+        )
         .when(in_call, |d| {
             d.on_mouse_down(MouseButton::Right, move |ev, _, cx| {
                 USER_MENU.with(|m| m.set(Some((user, ev.position))));
@@ -576,6 +898,9 @@ fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElemen
 /// Root overlays owned by the voice UI (user menu, connection popout).
 pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out = Vec::new();
+    if let Some((kind, pos, devices)) = AUDIO_MENU.with(|m| m.borrow().clone()) {
+        out.push(audio_menu(kind, pos, devices, cx));
+    }
     if app.voice_channel.is_none() {
         USER_MENU.with(|m| m.set(None));
         POPOUT.with(|p| p.set(None));

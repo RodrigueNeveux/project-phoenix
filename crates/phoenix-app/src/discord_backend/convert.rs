@@ -869,6 +869,7 @@ impl Adapter {
                     for v in &g.voice_states {
                         if v.channel_id.is_some() {
                             out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id) });
+                            out.push(AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) });
                         }
                     }
                 }
@@ -935,6 +936,7 @@ impl Adapter {
                     out.push(AppEvent::Users(vec![user(u)]));
                 }
                 out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id) });
+                out.push(AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) });
             }
             GatewayEvent::Fatal { code, reason } => {
                 out.push(AppEvent::Disconnected(fatal_message(*code, reason)));
@@ -971,4 +973,15 @@ pub fn forum_tags(c: &api::Channel) -> Vec<crate::commands::ForumTag> {
             moderated: t.moderated,
         })
         .collect()
+}
+
+fn voice_flags(v: &phoenix_api::models::VoiceState) -> crate::model::VoiceFlags {
+    crate::model::VoiceFlags {
+        self_mute: v.self_mute,
+        self_deaf: v.self_deaf,
+        server_mute: v.mute,
+        server_deaf: v.deaf,
+        stream: v.self_stream.unwrap_or(false),
+        video: v.self_video,
+    }
 }

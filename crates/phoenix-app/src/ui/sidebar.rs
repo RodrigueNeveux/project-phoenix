@@ -14,9 +14,14 @@ use crate::{
     ui::home::data::HomeView,
     assets::Icon,
     model::{ChannelKind, Id},
-    theme::{Palette, c, m, z},
+    theme::{Palette, c, generated::idx, m, tok, z},
     ui::{avatar_with_status, badge, icon},
 };
+
+/// Colour of a generated CSS token.
+fn t(i: usize) -> gpui::Hsla {
+    c(tok(i))
+}
 
 pub fn channel_icon(kind: ChannelKind) -> Icon {
     match kind {
@@ -247,6 +252,11 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     };
     match r {
         SidebarRow::Category(id) => {
+            // `containerDefault_yOdhm_` padding-top `--custom-category-channel-space-before-category`;
+            // `wrapperCommon_yOdhm_`: 24px, padding-inline `--space-md` / `--space-md - --space-xs`,
+            // `--channels-default` (hover `--interactive-text-hover`); name then a 12px
+            // chevron (`mainContent` gap 4px, rotated -90deg when collapsed); 16px add
+            // button shown on hover only (`addButton_yOdhm_`).
             let ch = &app.channels[&id];
             let collapsed = app.collapsed.contains(&id);
             let e = entity.clone();
@@ -254,34 +264,47 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .id(("cat", id.0))
                 .group("cat")
                 .pt(z(16.))
-                .pl(z(8.))
+                .pl(z(16.))
                 .pr(z(8.))
                 .h(z(40.))
                 .flex()
                 .items_center()
-                .gap(z(2.))
+                .justify_between()
                 .cursor_pointer()
-                .text_color(c(Palette::TEXT_MUTED))
-                .hover(|s| s.text_color(c(Palette::INTERACTIVE_HOVER)))
+                .text_color(t(idx::CHANNELS_DEFAULT))
+                .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_category_saved(id, cx)))
                 .child(
-                    icon(Icon::Chevron, 12., c(Palette::TEXT_MUTED))
-                        .group_hover("cat", |s| s.text_color(c(Palette::INTERACTIVE_HOVER)))
-                        .with_transformation(Transformation::rotate(percentage(if collapsed {
-                            -0.25
-                        } else {
-                            0.
-                        }))),
+                    div()
+                        .min_w_0()
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_ellipsis()
+                                .child(ch.name.clone()),
+                        )
+                        .child(
+                            icon(Icon::Chevron, 12., t(idx::CHANNELS_DEFAULT))
+                                .group_hover("cat", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                                .with_transformation(Transformation::rotate(percentage(if collapsed {
+                                    -0.25
+                                } else {
+                                    0.
+                                }))),
+                        ),
                 )
                 .child(
                     div()
-                        .flex_1()
-                        .text_size(z(12.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_ellipsis()
-                        .child(SharedString::from(ch.name.to_uppercase())),
+                        .opacity(0.)
+                        .group_hover("cat", |s| s.opacity(1.))
+                        .child(icon(Icon::Plus, 16., t(idx::CHANNELS_DEFAULT))),
                 )
-                .child(icon(Icon::Plus, 16., c(Palette::TEXT_MUTED)))
                 .into_any_element()
         }
         SidebarRow::Channel(id) => channel_row(app, entity, id),
@@ -393,16 +416,14 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let unread = ch.unread && !ch.muted;
     // `--channels-default` at rest, `--interactive-text-active` when selected
     // or unread, `--interactive-muted` when muted.
-    let fg = if selected {
-        Palette::TEXT_HEADER
+    // `name_TNyK-N`: `--channels-default`; `modeSelected`/`modeUnreadImportant`:
+    // `--interactive-text-active`; `modeMuted`: `--text-muted` at 50 % opacity.
+    let fg = if selected || (ch.unread && !ch.muted) {
+        tok(idx::INTERACTIVE_TEXT_ACTIVE)
     } else if ch.muted {
-        Palette::INTERACTIVE_MUTED
-    } else if ch.unread {
-        Palette::TEXT_HEADER
-    } else if is_dm {
-        Palette::TEXT_MUTED
+        tok(idx::TEXT_MUTED)
     } else {
-        Palette::CHANNEL_ICON
+        tok(idx::CHANNELS_DEFAULT)
     };
     let e = entity.clone();
     let lead: AnyElement = if is_dm && is_group {
@@ -427,13 +448,20 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         let p = ch.voice_users.first().map(|u| app.presence_of(*u)).unwrap_or_default();
         avatar_with_status(u, 32., p, c(Palette::BG_SECONDARY)).into_any_element()
     } else {
-        let col = c(if ch.muted { Palette::INTERACTIVE_MUTED } else { Palette::CHANNEL_ICON });
+        // `icon_TNyK-N` `--channel-icon`; muted `--icon-muted`; unread `--icon-subtle`.
+        let col = t(if ch.muted {
+            idx::ICON_MUTED
+        } else if unread && !selected {
+            idx::ICON_SUBTLE
+        } else {
+            idx::CHANNEL_ICON
+        });
         decorated_icon(
             ch.kind,
             col,
             extra.is_some_and(|e| e.locked),
             extra.is_some_and(|e| e.nsfw),
-            c(if selected { Palette::BG_MOD_SELECTED } else { Palette::BG_SECONDARY }),
+            if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_SECONDARY) },
         )
     };
     let name: SharedString = extra.and_then(|e| e.group_name.clone()).filter(|_| is_dm).unwrap_or_else(|| ch.name.clone());
@@ -450,14 +478,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 cx.stop_propagation();
                 e.update(cx, |a, cx| a.close_dm(id, cx));
             })
-            .child(icon(Icon::Close, 16., c(Palette::INTERACTIVE)))
+            .child(icon(Icon::Close, 16., t(idx::INTERACTIVE_TEXT_DEFAULT)))
     });
     let invite_hover = (!is_dm && !matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage)).then(|| {
         div()
             .opacity(0.)
             .group_hover(group.clone(), |s| s.opacity(1.))
             .when(selected, |d| d.opacity(1.))
-            .child(icon(Icon::Members, 16., c(Palette::INTERACTIVE)))
+            .ml(z(4.)) // iconItem_Wx6SnQ margin-inline-start
+            .child(icon(Icon::Members, 16., t(idx::INTERACTIVE_TEXT_DEFAULT))) // actionIcon_Wx6SnQ
     });
     div()
         .id(("ch", id.0))
@@ -466,15 +495,16 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         .pr(z(8.))
         .py(z(1.))
         .child(
-            // unread pill on the far left
+            // `unread_TNyK-N`: 4x8, `0 --radius-xs --radius-xs 0`, inset
+            // `-(--space-xs) + 1px` from the link, vertically centred.
             div()
                 .absolute()
-                .left_0()
-                .top(px(if is_dm { 17. } else { 13. }))
+                .left(z(1.))
+                .top(z(if is_dm { 18. } else { 13. }))
                 .w(z(4.))
                 .h(z(8.))
                 .rounded_r(z(4.))
-                .when(unread && !selected, |d| d.bg(c(Palette::TEXT_HEADER))),
+                .when(unread && !selected, |d| d.bg(t(idx::INTERACTIVE_TEXT_ACTIVE))),
         )
         .child(
             div()
@@ -485,12 +515,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
-                .gap(px(if is_dm { 12. } else { 6. }))
+                .gap(z(if is_dm { 12. } else { 8. })) // basicChannelRowLink_TNyK-N gap --space-xs
                 .cursor_pointer()
                 .text_color(c(fg))
-                .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
+                .when(ch.muted && !selected, |d| d.opacity(0.5))
+                .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
                 .when(!selected, |d| {
-                    d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER)))
+                    d.hover(|s| {
+                        s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)).opacity(1.)
+                    })
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_channel(id, cx)))
                 .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
@@ -506,8 +539,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .child(
                             div()
                                 .text_size(z(16.))
-                                .line_height(z(20.))
-                                .font_weight(if unread { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
+                                .line_height(z(if is_dm { 20. } else { 24. })) // --channels-name-line-height
+                                .font_weight(FontWeight::MEDIUM) // --font-weight-semibold-1x-light-theme (500)
                                 .text_ellipsis()
                                 .child(name),
                         )
@@ -530,7 +563,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
 
 /// Thread sub-row: curved connector from the parent channel, then the name.
 fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElement {
-    let Some(t) = app.nav.find_thread(id) else { return div().into_any_element() };
+    let Some(th) = app.nav.find_thread(id) else { return div().into_any_element() };
     let selected = app.selected_channel == Some(id);
     let live = app.channels.get(&id);
     let unread = live.is_some_and(|c| c.unread);
@@ -543,35 +576,39 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
         .pr(z(8.))
         .child(
             div()
+                // `spine_reDhww`: `--channels-spine-offset-left`, `--spine-default`.
                 .absolute()
-                .left(z(26.))
+                .left(z(24.))
                 .top(z(-12.))
                 .w(z(12.))
                 .h(z(28.))
                 .border_l_1()
                 .border_b_1()
                 .rounded_bl(z(8.))
-                .border_color(c(Palette::INTERACTIVE_MUTED)),
+                .border_color(t(idx::SPINE_DEFAULT)),
         )
         .child(
             div()
                 .id(("threadrow", id.0))
-                .ml(z(36.))
+                // `typeThread_TNyK-N.wrapper`: margin `28px + --space-xs` from the list
+                // (8px of it is the row inset); link padding 4px / `--space-xs`.
+                .ml(z(28.))
                 .h(z(32.))
                 .px(z(8.))
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .text_size(z(14.))
-                .font_weight(if unread { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
-                .text_color(c(if selected || unread { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
-                .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
+                .text_size(z(16.))
+                .line_height(z(24.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t(if selected || unread { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNELS_DEFAULT }))
+                .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
                 .when(!selected, |d| {
-                    d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER)))
+                    d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_thread(id, cx)))
-                .child(div().flex_1().min_w_0().text_ellipsis().child(t.name.clone()))
+                .child(div().flex_1().min_w_0().text_ellipsis().child(th.name.clone()))
                 .when(mentions > 0, |d| d.child(badge(mentions).bg(c(Palette::NOTIFICATION)))),
         )
         .into_any_element()
@@ -606,8 +643,8 @@ fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEleme
         .m(z(8.))
         .rounded(z(8.))
         .border_1()
-        .border_color(c(Palette::BORDER_MUTED))
-        .bg(c(Palette::BG_BASE_LOW))
+        .border_color(t(idx::BORDER_MUTED)) // panels_pog62O
+        .bg(t(idx::BACKGROUND_BASE_LOW))
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -615,25 +652,8 @@ fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEleme
         .child(user_panel(app, cx))
 }
 
-/// 32px panel button: 8px radius, mod-subtle on hover; red glyph on a
-/// critical tint when `danger` (muted / deafened).
-fn panel_button(id: &'static str, i: Icon, danger: bool, tip: &'static str) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .size(z(32.))
-        .flex_none()
-        .rounded(z(8.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .cursor_pointer()
-        .when(danger, |d| d.bg(c(Palette::RED).opacity(0.15)).hover(|s| s.bg(c(Palette::RED).opacity(0.25))))
-        .when(!danger, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER))))
-        .child(icon(i, 20. * crate::theme::zoom(), c(if danger { Palette::RED } else { Palette::INTERACTIVE })))
-        .tooltip(crate::ui::tooltip::tip(tip))
-}
-
 fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    use crate::ui::voice_panel::{Audio, audio_button, panel_button, panel_glyph};
     let status = match app.presence {
         crate::model::Presence::Online => "Online",
         crate::model::Presence::Idle => "Idle",
@@ -641,27 +661,31 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         crate::model::Presence::Offline => "Invisible",
     };
     let muted = app.mic_muted || app.deafened;
+    // `container_g6VwXp`: 56px, padding `--custom-guild-list-padding -
+    // --custom-panels-spacing + 4px` (12px), `--space-xs` gap.
     div()
         .h(z(m::USER_PANEL_H))
         .flex_none()
-        .px(z(8.))
+        .px(z(12.))
         .flex()
         .items_center()
-        .gap(z(4.))
+        .gap(z(8.))
         .child(
+            // `accountPopoutButtonWrapper_g6VwXp`: -4px inline-start margin,
+            // 5px 4px padding, `--radius-xs`, 8px gap, hover `--background-mod-normal`.
             div()
                 .id("me")
                 .flex_1()
-                .min_w_0()
-                .h(z(40.))
+                .min_w(z(112.))
+                .ml(z(-4.))
+                .py(z(5.))
+                .px(z(4.))
                 .flex()
                 .items_center()
                 .gap(z(8.))
-                .pl(z(4.))
-                .pr(z(8.))
-                .rounded(z(8.))
+                .rounded(z(4.))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
                 .child(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)))
                 .child(
@@ -671,10 +695,12 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .flex_col()
                         .child(
                             div()
+                                .mt(z(-1.)) // panelTitleContainer_g6VwXp
+                                .mb(z(2.))
                                 .text_size(z(14.))
                                 .line_height(z(18.))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
+                                .text_color(t(idx::TEXT_STRONG))
                                 .text_ellipsis()
                                 .child(app.me.display_name.clone()),
                         )
@@ -682,35 +708,46 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                             div()
                                 .text_size(z(12.))
                                 .line_height(z(14.))
-                                .text_color(c(Palette::TEXT_MUTED))
+                                .text_color(t(idx::TEXT_MUTED))
                                 .text_ellipsis()
                                 .child(app.people.custom_status.clone().unwrap_or(status.into())),
                         ),
                 ),
         )
         .child(
-            panel_button("mute", if muted { Icon::MicOff } else { Icon::Mic }, muted, if muted { "Unmute" } else { "Mute" })
-                .on_click(cx.listener(|a, _, _, cx| {
-                    a.mic_muted = !a.mic_muted;
-                    crate::voice::sync_self_state(a);
-                    cx.notify();
-                })),
-        )
-        .child(
-            panel_button(
-                "deafen",
-                if app.deafened { Icon::HeadphonesOff } else { Icon::Headphones },
-                app.deafened,
-                if app.deafened { "Undeafen" } else { "Deafen" },
-            )
-            .on_click(cx.listener(|a, _, _, cx| {
-                a.deafened = !a.deafened;
-                crate::voice::sync_self_state(a);
-                cx.notify();
-            })),
-        )
-        .child(
-            panel_button("settings", Icon::Gear, false, "User Settings")
-                .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
+            // `buttons_g6VwXp`: `--space-8` gap.
+            div()
+                .flex()
+                .flex_none()
+                .gap(z(8.))
+                .child(audio_button(
+                    Audio::Mic,
+                    if muted { Icon::MicOff } else { Icon::Mic },
+                    muted,
+                    if muted { "Unmute" } else { "Mute" },
+                    |a, cx| {
+                        a.mic_muted = !a.mic_muted;
+                        crate::voice::sync_self_state(a);
+                        cx.notify();
+                    },
+                    cx,
+                ))
+                .child(audio_button(
+                    Audio::Deafen,
+                    if app.deafened { Icon::HeadphonesOff } else { Icon::Headphones },
+                    app.deafened,
+                    if app.deafened { "Undeafen" } else { "Deafen" },
+                    |a, cx| {
+                        a.deafened = !a.deafened;
+                        crate::voice::sync_self_state(a);
+                        cx.notify();
+                    },
+                    cx,
+                ))
+                .child(
+                    panel_button("settings", panel_glyph(Icon::Gear, false), false)
+                        .tooltip(crate::ui::tooltip::tip("User Settings"))
+                        .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
+                ),
         )
 }
