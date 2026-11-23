@@ -10,8 +10,8 @@ use std::{
 
 use gpui::{
     Animation, AnimationExt, AnchoredPositionMode, AnyElement, App, Context, ElementId, Entity, FontWeight,
-    ImageSource, IntoElement, ParentElement, Render, SharedString, Styled, Window, anchored, deferred, div,
-    ease_out_quint, img, point, prelude::*, px,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window, anchored, deferred, div,
+    ease_out_quint, img, point, prelude::*, px, svg,
 };
 
 use crate::{
@@ -269,7 +269,7 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
                         .justify_center()
                         .rounded(z(ICON_RADIUS))
                         .bg(c(if selected || hover { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
-                        .child(img(ImageSource::from("icon.png")).size(z(28.))),
+                        .child(svg().path(crate::icons::path("discord-logo")).size(z(30.)).flex_none().text_color(if selected || hover { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
                 )
                 .when(unread_dms + pending > 0, |d| d.child(mention_badge(unread_dms + pending))),
         )

@@ -92,6 +92,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("more-vertical", &["MoreVerticalIcon"]),
     ("new-group-dm", &["ChatPlusIcon"]),
     ("flag", &["FlagIcon"]),
+    // Home button logo in the guild rail (--logo / ClydeIcon in the client).
+    ("discord-logo", &["ClydeIcon"]),
     ("quests", &["QuestsIcon"]),
     ("note", &["PaperPlusIcon"]),
     ("user-check", &["UserCheckIcon"]),
