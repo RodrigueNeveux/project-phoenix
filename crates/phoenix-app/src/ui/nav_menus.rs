@@ -50,30 +50,30 @@ pub fn open(target: Target, pos: Point<Pixels>, window: &mut Window) {
 }
 
 const DURATIONS: [(&str, Option<u32>); 6] = [
-    ("For 15 Minutes", Some(900)),
-    ("For 1 Hour", Some(3600)),
-    ("For 3 Hours", Some(10800)),
-    ("For 8 Hours", Some(28800)),
-    ("For 24 Hours", Some(86400)),
-    ("Until I turn it back on", None),
+    ("menu.mute.15m", Some(900)),
+    ("menu.mute.1h", Some(3600)),
+    ("menu.mute.3h", Some(10800)),
+    ("menu.mute.8h", Some(28800)),
+    ("menu.mute.24h", Some(86400)),
+    ("menu.mute.forever", None),
 ];
 
 type Ent = gpui::Entity<PhoenixApp>;
 
-fn act(e: &Ent, label: &'static str, f: impl Fn(&mut PhoenixApp, &mut Window, &mut Context<PhoenixApp>) + 'static) -> MenuItem {
+fn act(e: &Ent, label: gpui::SharedString, f: impl Fn(&mut PhoenixApp, &mut Window, &mut Context<PhoenixApp>) + 'static) -> MenuItem {
     let e = e.clone();
     MenuItem::action(label, None, move |_, w, cx: &mut App| e.update(cx, |a, cx| f(a, w, cx)))
 }
 
-fn copy(label: &'static str, text: String) -> MenuItem {
+fn copy(label: gpui::SharedString, text: String) -> MenuItem {
     MenuItem::action(label, None, move |_, _, cx: &mut App| cx.write_to_clipboard(ClipboardItem::new_string(text.clone())))
 }
 
 /// "Mute X >" submenu, or a plain "Unmute X" row when already muted.
-fn mute_item(e: &Ent, label: String, muted: bool, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
+fn mute_item(e: &Ent, label: gpui::SharedString, unmute: gpui::SharedString, muted: bool, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
     if muted {
         let e = e.clone();
-        return MenuItem::action(format!("Unmute {}", label.trim_start_matches("Mute ")), None, move |_, _, cx: &mut App| {
+        return MenuItem::action(unmute, None, move |_, _, cx: &mut App| {
             e.update(cx, |a, cx| a.set_nav_mute(guild, channel, false, None, cx))
         });
     }
@@ -81,7 +81,7 @@ fn mute_item(e: &Ent, label: String, muted: bool, guild: Option<Id>, channel: Op
         .iter()
         .map(|&(l, secs)| {
             let e = e.clone();
-            MenuItem::action(l, None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.set_nav_mute(guild, channel, true, secs, cx)))
+            MenuItem::action(crate::t!(l), None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.set_nav_mute(guild, channel, true, secs, cx)))
         })
         .collect();
     MenuItem::submenu(label, items)
@@ -119,21 +119,21 @@ fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>
         .with(|l| l.borrow().get(&(guild, channel)).copied())
         .or_else(|| stored_level(app, guild, channel))
         .unwrap_or(default);
-    let mut opts: Vec<(&str, u8)> = vec![("All Messages", 0), ("Only @mentions", 1), ("Nothing", 2)];
+    let mut opts: Vec<(&str, u8)> = vec![("menu.notify.all", 0), ("menu.notify.mentions", 1), ("menu.notify.nothing", 2)];
     if channel.is_some() {
-        opts.insert(0, ("Use Server Default", 3));
+        opts.insert(0, ("menu.notify.default", 3));
     }
     let items = opts
         .into_iter()
         .map(|(l, lv)| {
             let e = e.clone();
-            MenuItem::radio(l, cur == lv, move |_, _, cx: &mut App| {
+            MenuItem::radio(crate::t!(l), cur == lv, move |_, _, cx: &mut App| {
                 LEVELS.with(|m| m.borrow_mut().insert((guild, channel), lv));
                 e.update(cx, |a, cx| a.nav_request(NavRequest::NotifyLevel { guild, channel, level: lv }, cx, |_, _, _| {}))
             })
         })
         .collect();
-    MenuItem::submenu("Notification Settings", items)
+    MenuItem::submenu(crate::t!("menu.notify_settings"), items)
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -145,41 +145,46 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Target::Channel(id) => {
             let ch = app.channels.get(&id)?;
             let (guild, muted) = (ch.guild, ch.muted);
-            items.push(act(&e, "Mark As Read", move |a, _, cx| a.mark_nav_read(Target::Channel(id), cx)));
+            items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Channel(id), cx)));
             items.push(MenuItem::Separator);
             if let Some(g) = guild {
-                items.push(act(&e, "Invite People", move |a, _, cx| a.open_invite_people(g, cx)));
-                items.push(copy("Copy Link", format!("https://discord.com/channels/{}/{}", g.0, id.0)));
+                items.push(act(&e, crate::t!("menu.invite"), move |a, _, cx| a.open_invite_people(g, cx)));
+                items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, id.0)));
                 items.push(MenuItem::Separator);
-                let noun = if ch.kind == ChannelKind::Category { "Category" } else { "Channel" };
-                items.push(mute_item(&e, format!("Mute {noun}"), muted, guild, Some(id)));
+                let cat = ch.kind == ChannelKind::Category;
+                let (mute, unmute) = if cat {
+                    (crate::t!("menu.mute_category"), crate::t!("menu.unmute_category"))
+                } else {
+                    (crate::t!("menu.mute_channel"), crate::t!("menu.unmute_channel"))
+                };
+                items.push(mute_item(&e, mute, unmute, muted, guild, Some(id)));
                 items.push(notify_item(app, &e, guild, Some(id)));
             } else {
                 let peer = ch.voice_users.first().copied();
                 let is_group = app.nav.extras.get(&id).is_some_and(|x| x.recipients > 1);
                 if let Some(u) = peer.filter(|_| !is_group) {
-                    items.push(act(&e, "Profile", move |a, _, cx| a.open_profile_modal(u, cx)));
+                    items.push(act(&e, crate::t!("menu.profile"), move |a, _, cx| a.open_profile_modal(u, cx)));
                 }
-                items.push(act(&e, if is_group { "Leave Group" } else { "Close DM" }, move |a, _, cx| a.close_dm(id, cx)));
+                items.push(act(&e, if is_group { crate::t!("menu.leave_group") } else { crate::t!("menu.close_dm") }, move |a, _, cx| a.close_dm(id, cx)));
                 items.push(MenuItem::Separator);
                 let who = if is_group { ch.name.to_string() } else { format!("@{}", ch.name) };
-                items.push(mute_item(&e, format!("Mute {who}"), muted, None, Some(id)));
+                items.push(mute_item(&e, crate::t!("menu.mute_who", who = who), crate::t!("menu.unmute_who", who = who), muted, None, Some(id)));
             }
             if dev {
                 items.push(MenuItem::Separator);
-                items.push(copy("Copy Channel ID", id.0.to_string()));
+                items.push(copy(crate::t!("menu.copy_channel_id"), id.0.to_string()));
             }
         }
         Target::Guild(g) => {
             let muted = guild_muted(app, g);
             let hide = app.nav.hide_muted.contains(&g);
-            items.push(act(&e, "Mark As Read", move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
+            items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
             items.push(MenuItem::Separator);
-            items.push(act(&e, "Invite People", move |a, _, cx| a.open_invite_people(g, cx)));
+            items.push(act(&e, crate::t!("menu.invite"), move |a, _, cx| a.open_invite_people(g, cx)));
             items.push(MenuItem::Separator);
-            items.push(mute_item(&e, "Mute Server".into(), muted, Some(g), None));
+            items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), muted, Some(g), None));
             items.push(notify_item(app, &e, Some(g), None));
-            items.push(MenuItem::check("Hide Muted Channels", hide, {
+            items.push(MenuItem::check(crate::t!("menu.hide_muted"), hide, {
                 let e = e.clone();
                 move |_, _, cx: &mut App| {
                     e.update(cx, |a, cx| {
@@ -193,15 +198,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 }
             }));
             items.push(MenuItem::Separator);
-            items.push(act(&e, "Privacy Settings", |a, _, cx| a.stub("Privacy Settings", cx)));
+            items.push(act(&e, crate::t!("menu.privacy_settings"), |a, _, cx| a.stub(&crate::t!("menu.privacy_settings"), cx)));
             items.push(MenuItem::Separator);
-            items.push(MenuItem::danger("Leave Server", None, {
+            items.push(MenuItem::danger(crate::t!("menu.leave_server"), None, {
                 let e = e.clone();
                 move |_, _, cx: &mut App| e.update(cx, |a, cx| a.show_overlay(Overlay::LeaveGuild(g), cx))
             }));
             if dev {
                 items.push(MenuItem::Separator);
-                items.push(copy("Copy Server ID", g.0.to_string()));
+                items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()));
             }
         }
     }
