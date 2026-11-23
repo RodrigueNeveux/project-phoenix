@@ -298,7 +298,17 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
     }
 }
 
+/// Read-only mode (examples/real_shots): never ack / mark anything read on the server.
+pub static NO_ACKS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn acks_disabled() -> bool {
+    NO_ACKS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn schedule_ack(s: &Arc<Session>, channel: api::Snowflake, msg: api::Snowflake) {
+    if acks_disabled() {
+        return;
+    }
     s.adapter.lock().mark_read(channel.0, msg.0);
     if !s.pending_acks.lock().insert(channel.0) {
         return;
@@ -474,7 +484,7 @@ impl Backend for DiscordBackend {
                     a.mark_read(ch.0, last.0);
                     unread
                 };
-                if was_unread {
+                if was_unread && !acks_disabled() {
                     s.rest.ack_message(ch, last).await.map_err(api_err)?;
                 }
             }
