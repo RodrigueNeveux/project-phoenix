@@ -1516,12 +1516,27 @@ fn embed(e: &Embed) -> AnyElement {
         // gifv: play the animated gif rendition (GPUI animates GIF frames only while the
         // row is laid out, i.e. on screen in the virtual list, and the window is active).
         let animated = (e.kind.as_deref() == Some("gifv"))
-            .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url)))
+            .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url, size.0)))
             .flatten();
-        let src = animated.unwrap_or_else(|| m.url.clone());
+        let Some(src) = animated else {
+            return div().mt(z(4.)).child(media_image(&m.url, original, "".into(), (m.width, m.height), size)).into_any_element();
+        };
+        // While the animated rendition downloads/decodes, show the embed's static
+        // thumbnail (proxied, resized) instead of an empty box, then swap.
+        let still = media::resized(&m.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
         return div()
             .mt(z(4.))
-            .child(media_image(&src, original, "".into(), (m.width, m.height), size))
+            .child(media_image(&src, original, "".into(), (m.width, m.height), size).with_loading(move || {
+                let mut im = img(still.clone());
+                if let Some(cache) = media::lru::chat() {
+                    im = im.image_cache(&cache);
+                }
+                im.size_full()
+                    .rounded(z(8.))
+                    .object_fit(gpui::ObjectFit::Cover)
+                    .with_loading(|| div().size_full().rounded(z(8.)).bg(c(Palette::BG_SECONDARY)).into_any_element())
+                    .into_any_element()
+            }))
             .into_any_element();
     }
     // Small thumbnail on the right for article/link embeds, big image below otherwise.

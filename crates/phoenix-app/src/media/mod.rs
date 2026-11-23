@@ -58,10 +58,13 @@ pub fn video_poster(url: &str, w: u32, h: u32) -> SharedString {
 
 /// Animated GIF variant of a gifv embed (Tenor/Giphy) that GPUI can play.
 /// Discord plays the embed's mp4; GPUI only animates GIF/WebP, so Tenor
-/// links are rewritten to the full-size gif rendition (format code `AAAAC`)
-/// and Giphy's `giphy.mp4` to `giphy.gif`. Proxied URLs
+/// links are rewritten to the smallest gif rendition that covers the displayed
+/// width `w` (tinygif `AAAAM` ≤ 220 px, else mediumgif `AAAAd`; the full `AAAAC`
+/// gif is ~2x the decoded memory for no visible gain) and Giphy's `giphy.mp4`
+/// to the animated WebP (`200w.webp` ≤ 200 px, else `giphy.webp`), which GPUI
+/// decodes and is about half the size of the gif. Proxied URLs
 /// (`images-ext-*/external/<sig>/https/media.tenor.com/...`) are unwrapped.
-pub fn gifv_animated(url: &str) -> Option<SharedString> {
+pub fn gifv_animated(url: &str, w: f32) -> Option<SharedString> {
     let url = url.split('?').next().unwrap_or(url);
     for host in ["media.tenor.com/", "media1.tenor.com/", "c.tenor.com/"] {
         if let Some(i) = url.find(host) {
@@ -71,13 +74,15 @@ pub fn gifv_animated(url: &str) -> Option<SharedString> {
                 return None;
             }
             let stem = slug.rsplit_once('.').map_or(slug, |(s, _)| s);
-            return Some(format!("https://media.tenor.com/{}AAAAC/{stem}.gif", &code[..code.len() - 5]).into());
+            let variant = if w <= 220. { "AAAAM" } else { "AAAAd" };
+            return Some(format!("https://media.tenor.com/{}{variant}/{stem}.gif", &code[..code.len() - 5]).into());
         }
     }
     if let Some(i) = url.find("giphy.com/media/") {
         let rest = &url[i + "giphy.com/media/".len()..];
         let id = rest.split('/').next().filter(|s| !s.is_empty())?;
-        return Some(format!("https://media.giphy.com/media/{id}/giphy.gif").into());
+        let file = if w <= 200. { "200w.webp" } else { "giphy.webp" };
+        return Some(format!("https://media.giphy.com/media/{id}/{file}").into());
     }
     None
 }
@@ -195,13 +200,21 @@ pub fn close_viewer(cx: &mut App) -> bool {
 mod tests {
     #[test]
     fn gifv_animated_rewrites_tenor_and_giphy() {
-        let g = |u: &str| super::gifv_animated(u).map(|s| s.to_string());
-        assert_eq!(g("https://media.tenor.com/6n0lkxsBEQkAAAPo/cat.mp4").as_deref(), Some("https://media.tenor.com/6n0lkxsBEQkAAAAC/cat.gif"));
+        let g = |u: &str| super::gifv_animated(u, 400.).map(|s| s.to_string());
+        assert_eq!(g("https://media.tenor.com/6n0lkxsBEQkAAAPo/cat.mp4").as_deref(), Some("https://media.tenor.com/6n0lkxsBEQkAAAAd/cat.gif"));
         assert_eq!(
             g("https://images-ext-1.discordapp.net/external/abc/https/media.tenor.com/6n0lkxsBEQkAAAAe/cat.png?width=10").as_deref(),
-            Some("https://media.tenor.com/6n0lkxsBEQkAAAAC/cat.gif")
+            Some("https://media.tenor.com/6n0lkxsBEQkAAAAd/cat.gif")
         );
-        assert_eq!(g("https://media.giphy.com/media/xyz/giphy.mp4").as_deref(), Some("https://media.giphy.com/media/xyz/giphy.gif"));
+        assert_eq!(
+            super::gifv_animated("https://media.tenor.com/6n0lkxsBEQkAAAPo/cat.mp4", 200.).as_deref(),
+            Some("https://media.tenor.com/6n0lkxsBEQkAAAAM/cat.gif")
+        );
+        assert_eq!(g("https://media.giphy.com/media/xyz/giphy.mp4").as_deref(), Some("https://media.giphy.com/media/xyz/giphy.webp"));
+        assert_eq!(
+            super::gifv_animated("https://media.giphy.com/media/xyz/giphy.mp4", 150.).as_deref(),
+            Some("https://media.giphy.com/media/xyz/200w.webp")
+        );
         assert_eq!(g("https://example.com/a.mp4"), None);
     }
 
