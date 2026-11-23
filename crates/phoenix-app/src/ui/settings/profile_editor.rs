@@ -113,6 +113,8 @@ pub struct EditorState {
     pub rebuild: bool,
     /// Bumped on scope switch so stale profile fetches are dropped.
     pub generation: u32,
+    /// Board tab application widgets (`profile_widgets`).
+    pub widgets: Vec<super::profile_widgets::AppWidget>,
 }
 
 impl EditorState {
@@ -135,6 +137,7 @@ impl EditorState {
             error: None,
             rebuild: true,
             generation: 0,
+            widgets: Vec::new(),
         }
     }
 
@@ -190,6 +193,19 @@ fn fetch(app: &mut PhoenixApp, cx: &mut Cx) {
     let Some(e) = app.settings.as_ref().and_then(|s| s.profile.as_ref()) else { return };
     let (scope, generation) = (e.scope, e.generation);
     let fut = app.backend.user_profile(app.me.id, scope);
+    let wfut = app.backend.profile_widgets(app.me.id);
+    cx.spawn(async move |this, cx| {
+        let Ok(w) = wfut.await else { return };
+        let _ = this.update(cx, |this, cx| {
+            if let Some(e) = ed(this)
+                && e.generation == generation
+            {
+                e.widgets = w;
+                cx.notify();
+            }
+        });
+    })
+    .detach();
     cx.spawn(async move |this, cx| {
         let res = fut.await;
         let _ = this.update(cx, |this, cx| {
@@ -332,6 +348,25 @@ fn ensure_inputs(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) {
         e.rebuild = false;
         cx.notify();
     });
+}
+
+/// sRGB channel mix `a*(1-t) + b*t`.
+fn mix(a: u32, b: u32, t: f32) -> u32 {
+    let ch = |v: u32, s: u32| ((v >> s) & 0xFF) as f32;
+    [16, 8, 0].iter().fold(0, |acc, &s| acc | ((ch(a, s) * (1. - t) + ch(b, s) * t).round() as u32) << s)
+}
+
+/// White at an alpha: the custom-theme text colours (`rgba(255,255,255,.96)`
+/// strong, `.88` headings/tabs, `.76` add-connection; dump #3386/#3439/#3459).
+fn white(a: f32) -> gpui::Hsla {
+    gpui::hsla(0., 0., 1., a)
+}
+
+/// `--profile-gradient-modal-background-color` (outer_P1YEjQ background,
+/// dump #3324: rgb(0,40,51) for theme 00A6FF/00FBFF). Discord computes it in
+/// JS; 20% of the primary/secondary average reproduces the dumped value.
+fn modal_bg((a, b): (u32, u32)) -> u32 {
+    mix(mix(a, b, 0.5), 0, 0.8)
 }
 
 fn hex(v: u32) -> gpui::Hsla {
@@ -658,12 +693,12 @@ fn switcher(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
         .child(div().id("pe-scope-list").max_h(z(212.)).overflow_y_scroll().flex().flex_col().child(main).children(guilds))
 }
 
-fn section(key: &str, body: impl IntoElement) -> Div {
+fn section(key: &str, color: gpui::Hsla, body: impl IntoElement) -> Div {
     div()
         .flex()
         .flex_col()
         .gap(z(8.))
-        .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!(key)))
+        .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(color).child(crate::t!(key)))
         .child(body)
 }
 
@@ -684,9 +719,30 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
         Some(p) => img(p.clone()).size(px(112.)).rounded_full().into_any_element(),
         None => avatar(Some(me), 112.),
     };
-    let card_bg = match e.theme {
-        Some((a, b)) => gpui::linear_gradient(180., gpui::linear_color_stop(hex(a), 0.), gpui::linear_color_stop(hex(b), 1.)),
-        None => gpui::Background::from(c(tok(idx::BACKGROUND_SURFACE_HIGH))),
+    let themed = e.theme.is_some();
+    // .custom-user-profile-theme .profile_s3DB6Y: linear-gradient(primary,
+    // primary --custom-user-profile-banner-height (140), secondary); its :before
+    // = --profile-gradient-overlay-color (dark theme: black/.6) on top.
+    let card_layers: Vec<Div> = match e.theme {
+        Some(t) => vec![
+            div().absolute().top_0().left_0().right_0().h(z(140.)).bg(hex(t.0)),
+            div()
+                .absolute()
+                .top(z(140.))
+                .left_0()
+                .right_0()
+                .bottom_0()
+                .bg(gpui::linear_gradient(180., gpui::linear_color_stop(hex(t.0), 0.), gpui::linear_color_stop(hex(t.1), 1.))),
+            div().absolute().inset_0().bg(gpui::hsla(0., 0., 0., 0.6)),
+        ],
+        None => vec![div().absolute().inset_0().bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))],
+    };
+    let strong = if themed { white(0.96) } else { c(tok(idx::TEXT_STRONG)) };
+    let heading = if themed { white(0.88) } else { c(tok(idx::TEXT_DEFAULT)) };
+    // Avatar cut-out ring = the card colour behind it (primary under the overlay).
+    let ring = match e.theme {
+        Some(t) => hex(mix(t.0, 0, 0.6)),
+        None => c(tok(idx::BACKGROUND_SURFACE_HIGH)),
     };
     let name: AnyElement = match &e.name {
         Some(i) => Input::new(i).appearance(false).bordered(false).text_size(z(24.)).font_weight(FontWeight::SEMIBOLD).into_any_element(),
@@ -724,7 +780,7 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
             div()
                 .flex()
                 .flex_col()
-                .child(inline_field(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(name).into_any_element()))
+                .child(inline_field(div().text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(strong).child(name).into_any_element()))
                 .child(
                     div()
                         .flex()
@@ -733,9 +789,9 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                         .h(z(32.))
                         .text_size(z(14.))
                         .line_height(z(18.))
-                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                        .text_color(strong)
                         .child(me.name.clone())
-                        .child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT))))
+                        .child(div().size(z(4.)).mx(z(1.)).rounded_full().bg(strong)) // dotSpacer_C2XpHA
                         .child(inline_field(div().italic().child(pronouns).into_any_element())),
                 ),
         )
@@ -743,17 +799,31 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
             div()
                 .flex()
                 .gap(z(8.))
-                .child(controls::button_icon("pe-msg", "chat", crate::t!("pe.send_message"), BtnKind::Primary).h(z(31.)).min_w(z(0.)).px(z(11.)).text_size(z(14.)).line_height(z(18.)))
+                .child(
+                    // Own profile: the button is disabled (opacity .5, dump #3421);
+                    // themed it takes --profile-gradient-button-color (JS-computed,
+                    // approximated as 40% of the primary).
+                    controls::button_icon("pe-msg", "chat", crate::t!("pe.send_message"), BtnKind::Primary)
+                        .h(z(31.))
+                        .min_w(z(0.))
+                        .px(z(11.))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .opacity(0.5)
+                        .when_some(e.theme, |b, t| b.bg(hex(mix(t.0, 0, 0.6)))),
+                )
                 .child(sec_btn("gift", "gift"))
                 .child(sec_btn("more", "more-vertical")),
         )
-        .child(section("pe.bio", inline_field(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG))).child(bio).into_any_element())))
+        .child(section("pe.bio", heading, inline_field(div().text_size(z(14.)).line_height(z(18.)).text_color(strong).child(bio).into_any_element())))
         .child(section(
             "pe.member_since",
-            div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG))).child(crate::presence::format_date(created)),
+            heading,
+            div().text_size(z(14.)).line_height(z(18.)).text_color(strong).child(crate::presence::format_date(created)),
         ))
         .child(section(
             "pe.connections",
+            heading,
             div()
                 .flex()
                 .items_center()
@@ -761,8 +831,8 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                 .text_size(z(12.))
                 .line_height(z(16.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(gpui::svg().path(crate::icons::path("plus")).size(z(16.)).text_color(c(tok(idx::TEXT_MUTED))))
+                .text_color(if themed { white(0.76) } else { c(tok(idx::TEXT_MUTED)) })
+                .child(gpui::svg().path(crate::icons::path("plus")).size(z(18.)).text_color(if themed { white(0.76) } else { c(tok(idx::TEXT_MUTED)) }))
                 .child(crate::t!("pe.add_connection")),
         ));
     div()
@@ -773,16 +843,19 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
         .flex_col()
         .rounded_tl(z(16.))
         .rounded_tr(z(16.))
+        .relative()
         .overflow_hidden()
-        .bg(card_bg)
+        .children(card_layers)
         .shadow_md()
         .child(
             div()
                 .relative()
                 .h(z(220.))
                 .flex_none()
-                .child(banner)
-                .child(div().absolute().top(z(8.)).right(z(8.)).child(overlay_button("banner", "pen")))
+                .child(div().id("pe-banner").group("pe-banner").relative().child(banner).child(
+                    // editButton_Pi_vdk: opacity 0 until hover (dump #3336).
+                    div().absolute().top(z(8.)).right(z(8.)).opacity(0.).group_hover("pe-banner", |s| s.opacity(1.)).child(overlay_button("banner", "pen")),
+                ))
                 .child(
                     div()
                         .absolute()
@@ -790,18 +863,25 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                         .top(z(80.))
                         .size(z(120.))
                         .rounded_full()
-                        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+                        .bg(ring)
+                        .group("pe-avatar")
                         .flex()
                         .items_center()
                         .justify_center()
                         .child(av)
-                        .child(div().absolute().top(z(44.)).left(z(44.)).child(overlay_button("avatar", "pen"))),
+                        .child(
+                            // editButton_2IR9L0: opacity 0 until hover (dump #3344).
+                            div().absolute().top(z(44.)).left(z(44.)).opacity(0.).group_hover("pe-avatar", |s| s.opacity(1.)).child(overlay_button("avatar", "pen")),
+                        ),
                 ),
         )
         .child(div().id("pe-card-body").flex_1().min_h_0().overflow_y_scroll().child(body))
 }
 
 fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
+    let themed = e.theme.is_some();
+    let strong = if themed { white(0.96) } else { c(tok(idx::TEXT_STRONG)) };
+    let dim = if themed { white(0.88) } else { c(tok(idx::TEXT_DEFAULT)) };
     let labels = ["pe.tab.board", "pe.tab.activity", "pe.tab.wishlist"];
     let bar = div().flex().gap(z(30.)).border_b_1().border_color(c(tok(idx::BORDER_SUBTLE))).children(labels.iter().enumerate().map(|(i, k)| {
         let sel = e.tab == i;
@@ -811,9 +891,9 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
             .border_b_2()
             .border_color(if sel { c(tok(idx::TEXT_STRONG)) } else { gpui::transparent_black() })
             .text_size(z(16.))
-            .line_height(z(20.))
-            .font_weight(FontWeight::SEMIBOLD)
-            .text_color(if sel { c(tok(idx::TEXT_STRONG)) } else { c(tok(idx::TEXT_DEFAULT)) })
+            .line_height(z(14.)) // item_6zZYhF line-height 14px, padding-bottom 16
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(if sel { strong } else { dim })
             .cursor_pointer()
             .child(crate::t!(*k))
             .on_click(cx.listener(move |a, _, _, cx| {
@@ -823,12 +903,23 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
                 cx.notify();
             }))
     }));
+    let wcol = super::profile_widgets::WidgetColors {
+        strong,
+        muted: dim,
+        // --user-profile-overlay-background (themed: rgba(151,151,159,.16), dump #3498).
+        card: if themed { gpui::hsla(240. / 360., 0.04, 0.61, 0.16) } else { c(tok(idx::BACKGROUND_MOD_SUBTLE)) },
+        fade: match e.theme {
+            Some(t) => hex(mix(modal_bg(t), 0, 0.3)),
+            None => c(tok(idx::BACKGROUND_BASE_LOW)),
+        },
+    };
+    let board: Vec<Div> = if e.tab == 0 { e.widgets.iter().map(|w| super::profile_widgets::render(w, &wcol)).collect() } else { Vec::new() };
     let panel = match e.tab {
         0 => div()
             .flex()
             .items_center()
             .justify_between()
-            .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("pe.widgets")))
+            .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(dim).child(crate::t!("pe.widgets")))
             .child(controls::button_icon("pe-add-widget", "plus", crate::t!("pe.add_widget"), BtnKind::Secondary).h(z(31.)).min_w(z(0.)).px(z(11.)).text_size(z(14.)).line_height(z(18.))),
         1 => div().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("pe.no_activity")),
         _ => div().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("pe.empty_wishlist")),
@@ -838,10 +929,12 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
         .min_w_0()
         .flex()
         .flex_col()
+        // container_y4ZEM5 padding 20 4 0 / margin 0 -4; tabListScroller_ margin
+        // -4 -4 -14 28 + padding 4 20 4 4 → tabs at x+32, y+20 (dump #3476-#3479);
+        // tabPanelScroller_ padding-top 20 → panel 48px below the tab text.
         .pt(z(20.))
-        .px(z(4.))
-        .child(div().pt(z(20.)).pl(z(36.)).pr(z(20.)).child(bar))
-        .child(div().pt(z(20.)).pl(z(36.)).pr(z(20.)).child(panel))
+        .child(div().pl(z(32.)).pr(z(16.)).child(bar))
+        .child(div().pt(z(17.)).pl(z(32.)).pr(z(16.)).flex().flex_col().gap(z(12.)).child(panel).children(board))
 }
 
 /// Unsaved-changes notice over the card column.
@@ -926,16 +1019,56 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
             }
             cx.notify();
         }));
+    // Themed backdrop (dump #3324-#3328): outer_P1YEjQ = modal background
+    // colour; inner_P1YEjQ gradient mix(overlay black/.6, modal) 80% → 20% at
+    // 300px (= black .48 → .12 over the modal colour); backgroundImage_s3DB6Y =
+    // banner (size=1536, background-size 100%) at opacity .3, saturate .5,
+    // masked out by 280px (blur 15px not reproducible: GPUI has no backdrop
+    // filter); scrim_cNDDnH opacity 0.
+    let backdrop: Vec<AnyElement> = match e.theme {
+        Some(t) => {
+            let m = hex(modal_bg(t));
+            let banner = e.profile.as_ref().and_then(|p| p.banner.clone()).map(|u| SharedString::from(u.replace("size=600", "size=1536")));
+            let mut v: Vec<AnyElement> = vec![div().absolute().inset_0().bg(m).into_any_element()];
+            if let Some(u) = banner {
+                v.push(div().absolute().top_0().left_0().right_0().h(z(376.)).opacity(0.3).child(img(u).w_full().h(z(376.)).grayscale(false)).into_any_element());
+                v.push(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .h(z(376.))
+                        .bg(gpui::linear_gradient(180., gpui::linear_color_stop(m.opacity(0.), 0.), gpui::linear_color_stop(m, 280. / 376.)))
+                        .into_any_element(),
+                );
+            }
+            v.push(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .right_0()
+                    .h(z(300.))
+                    .bg(gpui::linear_gradient(180., gpui::linear_color_stop(gpui::hsla(0., 0., 0., 0.48), 0.), gpui::linear_color_stop(gpui::hsla(0., 0., 0., 0.12), 1.)))
+                    .into_any_element(),
+            );
+            v.push(div().absolute().top(z(300.)).left_0().right_0().bottom_0().bg(gpui::hsla(0., 0., 0., 0.12)).into_any_element());
+            v
+        }
+        None => vec![div().absolute().inset_0().bg(c(tok(idx::BACKGROUND_BASE_LOW))).child(div().size_full().bg(c(tok(idx::BACKGROUND_SCRIM)))).into_any_element()],
+    };
     let right = div()
         .relative()
         .flex_1()
         .min_w_0()
         .h_full()
-        .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+        .overflow_hidden()
+        .children(backdrop)
         .child(
             div()
+                .relative()
                 .size_full()
-                .bg(c(tok(idx::BACKGROUND_SCRIM)))
                 .pt(z(80.))
                 .pr(z(32.))
                 .pl(z(48.))

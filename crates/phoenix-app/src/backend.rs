@@ -261,6 +261,11 @@ pub trait Backend: Send + Sync + 'static {
     fn update_profile(&self, _guild: Option<Id>, _patch: crate::ui::settings::profile_editor::ProfilePatch) -> BoxFuture<()> {
         Box::pin(async { Err(BackendError("Profile editing isn't available.".into())) })
     }
+    /// Profile Board application widgets (profile + application identities +
+    /// widget configs, all GETs).
+    fn profile_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     /// Own status (op 3 + settings). `custom` = custom status text.
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })

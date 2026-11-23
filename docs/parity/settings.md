@@ -68,3 +68,20 @@ Dump `vanilla-settings-profile-editor` (+ `-scrolled`, `-switcher`), 2026-11-23,
 | Nitro locks | n/a (account has Nitro) | locked tiles | lock badge + disabled pickers when `has_premium()` is false | `tile(…, locked)` | ❌ unverified |
 
 Scores (`% pixels |Δ|>24`, dump png vs offscreen mock render, 1280x700): styles panel 22.3%, card 95.4%, tabs 59.2%, overall 59.2%. The card and right column are dominated by the user's real data (Nitro gradient theme, image banner, custom profile background, widgets) versus mock data, so they are not a layout measure; the styles panel is the comparable region (residuals: avatar/banner images, gg sans vs Noto Sans).
+
+Real-data mode (`PHX_REAL=1 --example profile_editor`, user's own account read-only, same 1280x700 regions):
+
+| run | styles panel | card | tabs | board | right column | overall |
+|---|---|---|---|---|---|---|
+| mock (e1e62f9) | 22.3% | 95.4% | 59.2% | — | — | 59.2% |
+| real data, before fixes | 14.3% | 79.7% | 99.5% | 94.1% | 70.2% | 55.0% |
+| + themed card/backdrop, tab geometry, app widget | 14.3% | 12.2% | 8.9% | 18.0% | 12.5% | 12.7% |
+
+Added rows:
+
+| element | dump node | property | CSS value | our code | status |
+|---|---|---|---|---|---|
+| themed card | #3330 `profile_s3DB6Y` + `:before` | background | gradient primary→140px→secondary, overlay black/.6 | `card` `card_layers` | ✅ |
+| themed backdrop | #3324-#3328 `outer_P1YEjQ`/`inner_`/`backgroundImage_s3DB6Y` | layers | modal colour, black .48→.12 @300, banner .3 masked 280 | `render` `backdrop` | ✅ (no 15px blur) |
+| tabs | #3476-#3485 | position | x+32, y+20; item lh 14 pb 16; panel +20 | `tabs` | ✅ 8.9% |
+| app widget | #3498-#3539 `widgetContainer_zEJODa` | layout | r16, header 24, content p32 0, hero 204x148 fade, 2x2 items 48px gap 16 | `profile_widgets.rs` | ✅ structure, ❌ hero image fade exact |

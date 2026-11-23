@@ -8,6 +8,7 @@
 mod art;
 mod pages;
 pub(crate) mod profile_editor;
+pub mod profile_widgets;
 mod view;
 pub(crate) mod voice;
 

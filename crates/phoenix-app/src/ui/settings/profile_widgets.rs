@@ -1,0 +1,261 @@
+//! Profile "Board" application widgets (profile editor and full profile).
+//!
+//! Data flow, as the 2026 client does it:
+//! - `GET /users/{id}/profile` → `widgets[]` with `data.type == "application"`
+//!   and `data.application_id` (order = board order);
+//! - `GET /users/{id}/application-identities?with_profiles=true` → per app
+//!   `profile.data.dynamic[] {name, value}` (the values the app pushed);
+//! - `GET /applications/{app}/widget-configs` → `surfaces.widget_top`
+//!   (`title` / `subtitle_1` / `hero_image`) and `surfaces.widget_bottom`
+//!   (`item_N` {name, description, image}), fields typed `data` (key into the
+//!   dynamic values), `custom_string`, or `application_asset` (key into
+//!   `resolved_assets` → `cdn/app-assets/{app}/{asset_id}`).
+//!
+//! Layout from dump `vanilla-settings-profile-editor` #3498-#3539:
+//! container_FNEkcu widgetContainer_zEJODa (radius --radius-lg 16, 1px
+//! --border-muted, --user-profile-overlay-background, padding 0);
+//! root_BQi7pE grid 2 cols, padding 12 16 0, column gap 4: header 24 high
+//! (16px app icon r2 + body-sm/medium name, gap 4), content_rafRmG padding
+//! 32 0 gap 2 (title 20/24 500, subtitle body-sm 14/18); hero image in the
+//! right column, offset -12 top / -16 right, top-right radius 16, faded to
+//! the left (imageFadeToLeftMask_). divider_ZaYWLb 1px --border-subtle.
+//! root_xc-26D grid 2x2 gap 16, padding 24 16 16; collectionItem_ gap 12,
+//! 48px image r8 --background-mod-subtle, content gap 4 margin-block auto
+//! (name body-sm/medium 14/18, value body-xs/medium 12/16).
+
+use gpui::{Div, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div, img, prelude::*};
+use serde_json::Value;
+
+use crate::theme::{c, generated::idx, tok, z};
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WidgetItem {
+    pub name: SharedString,
+    pub value: SharedString,
+    pub image: Option<SharedString>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AppWidget {
+    pub app_id: u64,
+    pub name: SharedString,
+    pub icon: Option<SharedString>,
+    pub title: SharedString,
+    pub subtitle: SharedString,
+    pub hero: Option<SharedString>,
+    pub items: Vec<WidgetItem>,
+}
+
+/// Application ids of the profile's application widgets, in board order.
+pub fn app_ids(profile_widgets: &[Value]) -> Vec<u64> {
+    profile_widgets
+        .iter()
+        .filter_map(|w| {
+            let d = w.get("data")?;
+            (d.get("type")?.as_str()? == "application").then_some(())?;
+            d.get("application_id")?.as_str()?.parse().ok()
+        })
+        .collect()
+}
+
+/// `profile.data.dynamic` of the identity for `app` (name → value).
+pub fn identity_data(identities: &Value, app: u64) -> Vec<(String, String)> {
+    let id = app.to_string();
+    identities
+        .get("identities")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|i| i.get("application_id").and_then(Value::as_str) == Some(id.as_str()))
+        .filter_map(|i| i.pointer("/profile/data/dynamic")?.as_array().cloned())
+        .flatten()
+        .filter_map(|d| {
+            let v = match d.get("value")? {
+                Value::String(s) => s.clone(),
+                Value::Number(n) => n.to_string(),
+                _ => return None,
+            };
+            Some((d.get("name")?.as_str()?.to_owned(), v))
+        })
+        .collect()
+}
+
+fn asset_url(app: u64, cfg: &Value, key: &str, size: u32) -> Option<SharedString> {
+    let a = cfg.get("resolved_assets")?.as_array()?.iter().find(|a| a.get("key").and_then(Value::as_str) == Some(key))?;
+    let id = a.get("asset_id")?.as_str()?;
+    Some(format!("https://cdn.discordapp.com/app-assets/{app}/{id}.png?size={size}").into())
+}
+
+/// One field (`{value_type, presentation_type, value, fallback?}`).
+fn resolve(app: u64, cfg: &Value, data: &[(String, String)], f: Option<&Value>, size: u32) -> Option<SharedString> {
+    let f = f?;
+    let v = f.get("value").and_then(Value::as_str);
+    let out = match f.get("value_type").and_then(Value::as_str) {
+        Some("data") => v.and_then(|k| data.iter().find(|(n, _)| n == k)).map(|(_, v)| SharedString::from(v.clone())),
+        Some("custom_string") => v.map(|s| SharedString::from(s.to_owned())),
+        Some("application_asset") => v.and_then(|k| asset_url(app, cfg, k, size)),
+        _ => None,
+    };
+    out.or_else(|| resolve(app, cfg, data, f.get("fallback"), size))
+}
+
+/// Build the board card for `app` from its first published widget config.
+pub fn build(app: u64, configs: &Value, data: &[(String, String)]) -> Option<AppWidget> {
+    let cfgs = configs.as_array()?;
+    let cfg = cfgs.iter().find(|c| c.get("status").and_then(Value::as_str) == Some("published")).or(cfgs.first())?;
+    let field = |surface: &str, comp: &str, name: &str, size: u32| {
+        resolve(app, cfg, data, cfg.pointer(&format!("/surfaces/{surface}/components/{comp}/fields/{name}")), size)
+    };
+    let mut items: Vec<(u32, WidgetItem)> = cfg
+        .pointer("/surfaces/widget_bottom/components")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, _)| {
+            let n: u32 = k.strip_prefix("item_")?.parse().ok()?;
+            Some((
+                n,
+                WidgetItem {
+                    name: field("widget_bottom", k, "name", 96).unwrap_or_default(),
+                    value: field("widget_bottom", k, "description", 96).unwrap_or_default(),
+                    image: field("widget_bottom", k, "image", 96),
+                },
+            ))
+        })
+        .collect();
+    items.sort_by_key(|(n, _)| *n);
+    let appl = cfg.get("application");
+    let name = appl
+        .and_then(|a| a.get("name"))
+        .or(cfg.get("display_name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let icon = appl
+        .and_then(|a| a.get("icon")?.as_str())
+        .map(|h| SharedString::from(format!("https://cdn.discordapp.com/app-icons/{app}/{h}.png?size=32")));
+    Some(AppWidget {
+        app_id: app,
+        name: name.into(),
+        icon,
+        title: field("widget_top", "title", "text", 0).unwrap_or_default(),
+        subtitle: field("widget_top", "subtitle_1", "text", 0).unwrap_or_default(),
+        hero: field("widget_top", "hero_image", "image", 408),
+        items: items.into_iter().map(|(_, i)| i).collect(),
+    })
+}
+
+/// Text colours of a themed / plain profile (strong, muted).
+pub struct WidgetColors {
+    pub strong: Hsla,
+    pub muted: Hsla,
+    pub card: Hsla,
+    /// Colour the hero image fades into on its left (what is behind the card).
+    pub fade: Hsla,
+}
+
+pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
+    let header = div()
+        .h(z(24.)) // --custom-widget-header-height
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .children(w.icon.clone().map(|u| img(u).size(z(16.)).rounded(z(2.))))
+        .child(div().truncate().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(w.name.clone()));
+    let content = div()
+        .flex()
+        .flex_col()
+        .justify_center()
+        .gap(z(2.))
+        .py(z(32.))
+        .w(z(188.))
+        .child(div().mb(z(4.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(w.title.clone()))
+        .when(!w.subtitle.is_empty(), |d| d.child(div().text_size(z(14.)).line_height(z(18.)).text_color(col.muted).child(w.subtitle.clone())));
+    let hero = w.hero.clone().map(|u| {
+        div()
+            .absolute()
+            .top_0()
+            .right_0()
+            .w(z(204.))
+            .h(z(148.))
+            .rounded_tr(z(16.))
+            .overflow_hidden()
+            .child(img(u).w(z(204.)).h(z(151.)).object_fit(gpui::ObjectFit::Cover))
+            // imageFadeToLeftMask_: transparent → opaque over the image width.
+            .child(div().absolute().inset_0().bg(gpui::linear_gradient(
+                90.,
+                gpui::linear_color_stop(col.fade, 0.),
+                gpui::linear_color_stop(col.fade.opacity(0.), 0.6),
+            )))
+    });
+    let top = div().relative().pt(z(12.)).px(z(16.)).children(hero).child(header).child(content);
+    let item = |i: &WidgetItem| {
+        div()
+            .w(z(182.))
+            .flex()
+            .gap(z(12.))
+            .child(match &i.image {
+                Some(u) => img(u.clone()).size(z(48.)).rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).object_fit(gpui::ObjectFit::Contain).into_any_element(),
+                None => div().size(z(48.)).rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).into_any_element(),
+            })
+            .child(
+                div()
+                    .min_w_0()
+                    .my_auto()
+                    .flex()
+                    .flex_col()
+                    .gap(z(4.))
+                    .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(i.name.clone()))
+                    .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(col.muted).child(i.value.clone())),
+            )
+    };
+    let grid = div()
+        .pt(z(24.))
+        .px(z(16.))
+        .pb(z(16.))
+        .flex()
+        .flex_wrap()
+        .gap(z(16.))
+        .children(w.items.iter().map(item));
+    div()
+        .relative()
+        .rounded(z(16.)) // --custom-application-widget-card-radius = --radius-lg
+        .border_1()
+        .border_color(c(tok(idx::BORDER_MUTED)))
+        .bg(col.card)
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .child(top)
+        .when(!w.items.is_empty(), |d| d.child(div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE)))).child(grid))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn builds_card_from_config_and_identity() {
+        let widgets = vec![json!({"data": {"type": "application", "application_id": "42"}}), json!({"data": {"type": "favorite_games"}})];
+        assert_eq!(app_ids(&widgets), vec![42]);
+        let ident = json!({"identities": [{"application_id": "42", "profile": {"data": {"dynamic": [
+            {"type": 1, "name": "title", "value": "Hello"}, {"type": 1, "name": "users", "value": "12"}]}}}]});
+        let data = identity_data(&ident, 42);
+        let cfg = json!([{"status": "published", "application": {"name": "Bot", "icon": "abc"},
+            "resolved_assets": [{"key": "img", "asset_id": "7"}],
+            "surfaces": {
+                "widget_top": {"components": {"title": {"fields": {"text": {"value_type": "data", "value": "title"}}},
+                    "subtitle_1": {"fields": {"text": {"value_type": "custom_string", "value": "Sub"}}},
+                    "hero_image": {"fields": {"image": {"value_type": "application_asset", "value": "img"}}}}},
+                "widget_bottom": {"components": {
+                    "item_2": {"fields": {"name": {"value_type": "custom_string", "value": "B"}, "description": {"value_type": "data", "value": "nope", "fallback": {"value_type": "custom_string", "value": "-"}}}},
+                    "item_1": {"fields": {"name": {"value_type": "custom_string", "value": "A"}, "description": {"value_type": "data", "value": "users"}}}}}}}]);
+        let w = build(42, &cfg, &data).unwrap();
+        assert_eq!(w.title, "Hello");
+        assert_eq!(w.subtitle, "Sub");
+        assert_eq!(w.name, "Bot");
+        assert_eq!(w.hero.as_deref(), Some("https://cdn.discordapp.com/app-assets/42/7.png?size=408"));
+        assert_eq!(w.items.iter().map(|i| (i.name.to_string(), i.value.to_string())).collect::<Vec<_>>(), vec![("A".into(), "12".into()), ("B".into(), "-".into())]);
+    }
+}
