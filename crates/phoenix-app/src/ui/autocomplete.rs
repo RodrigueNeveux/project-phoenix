@@ -328,7 +328,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .when_some(hint, |d, h| d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(h))),
         );
     }
-    let left = layout::SERVER_BAR_W + layout::SIDEBAR_W + 16.;
+    let left = layout::SERVER_BAR_W + crate::ui::sidebar_resize::width() + 16.;
     let right = 16. + if app.show_members && app.selected_guild.is_some() { layout::MEMBER_LIST_W } else { 0. };
     let bottom = 84. + if app.replying_to.is_some() || app.editing.is_some() { 34. } else { 0. };
     Some(

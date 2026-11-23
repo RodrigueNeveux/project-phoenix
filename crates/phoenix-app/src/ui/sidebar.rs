@@ -102,7 +102,7 @@ pub fn build_rows(app: &mut PhoenixApp) {
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     div()
-        .w(z(m::SIDEBAR_W))
+        .w(z(crate::ui::sidebar_resize::width()))
         .flex_none()
         .h_full()
         .flex()
@@ -123,6 +123,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .when_some(app.selected_guild.filter(|_| app.nav.guild_menu), |d, g| {
             d.child(crate::ui::guild_menu::render(app, g, m::HEADER_H + 4., cx))
         })
+        .child(crate::ui::sidebar_resize::handle(cx))
 }
 
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -172,7 +173,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .flex_none()
                 .relative()
                 .when_some(banner, |d, col| {
-                    let h = (m::SIDEBAR_W * 9. / 21.).round();
+                    let h = (crate::ui::sidebar_resize::width() * 9. / 21.).round();
                     d.h(px(h))
                         .bg(c(col))
                         .overflow_hidden()
@@ -771,7 +772,7 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex_none()
         // Rail + channel list width, so a long custom status ellipsizes instead
         // of widening the card past the sidebar.
-        .w(z(m::SERVER_BAR_W + m::SIDEBAR_W))
+        .w(z(m::SERVER_BAR_W + crate::ui::sidebar_resize::width()))
         .relative()
         .child(div().absolute().top_0().bottom_0().left_0().w(z(m::SERVER_BAR_W)).bg(c(Palette::BG_TERTIARY)))
         .child(

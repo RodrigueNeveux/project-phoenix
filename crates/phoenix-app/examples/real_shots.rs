@@ -209,6 +209,14 @@ fn main() -> anyhow::Result<()> {
     )
     .unwrap_or_default();
     let (self_mute, self_deaf) = (audio.starts_with('1'), audio.get(1..2) == Some("1"));
+    // Channel list width the user dragged to (sidebarList_ box), so compares line up.
+    if std::env::var_os("PHX_SIDEBAR_W").is_none()
+        && let Some(sw) = cdp("(document.querySelector('[class*=sidebarList_]')?.getBoundingClientRect().width||'')+''")
+        && sw.parse::<f32>().is_ok()
+    {
+        // SAFETY: single-threaded, before any other thread starts.
+        unsafe { std::env::set_var("PHX_SIDEBAR_W", sw) };
+    }
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
     println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} mute={self_mute} deaf={self_deaf}");
 

@@ -24,6 +24,7 @@ pub mod profile_note;
 pub mod search;
 pub mod server_bar;
 pub mod sidebar;
+pub mod sidebar_resize;
 pub mod status_picker;
 pub mod switcher;
 pub mod nav_menus;
