@@ -30,6 +30,61 @@ thread_local! {
     static FOCUS: Cell<Focus> = const { Cell::new(Focus::Auto) };
     /// Last pointer move over the call view (idle pills).
     static LAST_MOVE: Cell<Option<Instant>> = const { Cell::new(None) };
+    /// First pointer move after an idle period (start of the fade-in).
+    static WAKE: Cell<Option<Instant>> = const { Cell::new(None) };
+    /// Participants strip shown under the spotlight (participantsButton_1uD6uZ).
+    static STRIP_OPEN: Cell<bool> = const { Cell::new(true) };
+}
+
+pub fn set_strip_open(open: bool) {
+    STRIP_OPEN.with(|c| c.set(open));
+}
+
+pub fn strip_open() -> bool {
+    STRIP_OPEN.with(|c| c.get())
+}
+
+/// overlayContainer_7NOr2f / actionRow_FowdXv: `transition: opacity .2s ease-in-out`.
+pub const FADE: Duration = Duration::from_millis(200);
+
+fn ease_in_out(x: f32) -> f32 {
+    // CSS `ease-in-out` = cubic-bezier(.42,0,.58,1); a smoothstep is within
+    // ~1% of it and needs no solver.
+    let x = x.clamp(0., 1.);
+    x * x * (3. - 2. * x)
+}
+
+/// Overlay opacity right now and whether a fade is still running.
+pub fn overlay_opacity() -> (f32, bool) {
+    let Some(last) = LAST_MOVE.with(|c| c.get()) else { return (0., false) };
+    let since = last.elapsed();
+    if since >= IDLE_TIMEOUT {
+        let p = (since - IDLE_TIMEOUT).as_secs_f32() / FADE.as_secs_f32();
+        return (1. - ease_in_out(p), p < 1.);
+    }
+    match WAKE.with(|c| c.get()) {
+        Some(w) if w.elapsed() < FADE => (ease_in_out(w.elapsed().as_secs_f32() / FADE.as_secs_f32()), true),
+        _ => (1., false),
+    }
+}
+
+/// Control tray collapse level from the call width (`bf(width)` in the
+/// client's call controls module: `<=550` MINIMAL, `<=650` NO_INVITE).
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+pub enum Collapse {
+    None,
+    NoInvite,
+    Minimal,
+}
+
+pub fn collapse(width: f32) -> Collapse {
+    if width <= 550. {
+        Collapse::Minimal
+    } else if width <= 650. {
+        Collapse::NoInvite
+    } else {
+        Collapse::None
+    }
 }
 
 /// Spotlight mode. `Auto` focuses the first Go Live stream, like the
@@ -173,7 +228,10 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         Focus::Tile(u, s) => tiles.iter().position(|t| t.user == u && t.stream == s),
         Focus::Auto => tiles.iter().position(|t| t.stream),
     };
-    let is_idle = idle();
+        let (fade, fading) = overlay_opacity();
+    if fading {
+        window.request_animation_frame();
+    }
 
     let tiles_el = if let Some(fi) = focus.filter(|_| tiles.len() > 1) {
         // Spotlight (vanilla-call-view #1369-#1402): the focused tile is a
@@ -181,7 +239,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         // above the strip (videoSizer_QKgWuD 684x387 in a 579px area); the
         // participants strip (root_coTPKH) is 112px tall, tileSizer_coTPKH
         // tiles share its width with an 8px gap (134.6 = (848 - 5*8) / 6).
-        let band = h - STRIP_H - 8. - 72.;
+        let open = strip_open();
+        let band = if open { h - STRIP_H - 8. - 72. } else { h - 72. };
         let fw = w.min(band.max(40.) * 16. / 9.);
         let rest: Vec<&Tile> = tiles.iter().enumerate().filter(|(i, _)| *i != fi).map(|(_, t)| t).collect();
         let n = rest.len().max(1) as f32;
@@ -201,17 +260,21 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(render_tile(app, &tiles[fi], fw, fw * 9. / 16., is_idle, cx)),
+                    .child(render_tile(app, &tiles[fi], fw, fw * 9. / 16., fade, cx)),
             )
-            .child(
-                div()
-                    .h(z(STRIP_H))
-                    .flex_none()
-                    .flex()
-                    .justify_center()
-                    .gap(z(8.))
-                    .children(rest.into_iter().map(|tile| render_tile(app, tile, sw, STRIP_H, is_idle, cx))),
-            )
+            .relative()
+            .when(open, |d| {
+                d.child(
+                    div()
+                        .h(z(STRIP_H))
+                        .flex_none()
+                        .flex()
+                        .justify_center()
+                        .gap(z(8.))
+                        .children(rest.into_iter().map(|tile| render_tile(app, tile, sw, STRIP_H, fade, cx))),
+                )
+            })
+            .child(strip_button(open, fade, cx))
     } else {
         let (_cols, tw) = grid(tiles.len(), w, h, 8.);
         let th = tw * 9. / 16.;
@@ -224,7 +287,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             .content_center()
             .justify_center()
             .gap(z(8.))
-            .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th, is_idle, cx)))
+            .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th, fade, cx)))
     };
 
     let call = div()
@@ -241,6 +304,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .border_color(t(idx::APP_FRAME_BORDER))
         .on_mouse_move(cx.listener(|_, _, _, cx| {
             let was_idle = idle();
+            if was_idle {
+                WAKE.with(|c| c.set(Some(Instant::now())));
+            }
             let stale = LAST_MOVE.with(|c| c.get()).is_none_or(|t| t.elapsed() >= Duration::from_millis(250));
             touch();
             if stale {
@@ -258,7 +324,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(top_bar(app, ch.name.clone(), cx))
         .child(div().h(z(8.)))
         .child(tiles_el)
-        .child(bottom_controls(app, cx));
+        .child(bottom_controls(app, collapse(w + 16.), cx));
 
     // min_w_0 + overflow_hidden: the call column must shrink beside the
     // fixed-width chat instead of pushing it out of the window.
@@ -282,6 +348,43 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     } else {
         root.into_any_element()
     })
+}
+
+/// participantsButton_1uD6uZ ("Masquer les membres", vanilla-call-view
+/// #1394-#1400): actionRow_FowdXv centred, 8px into the strip (516 vs 508),
+/// 60x32, padding 4, radius 48, --primary-630 (hover --primary-700),
+/// --shadow-border + --shadow-high; downCaret + members icons 24px. Hidden
+/// strip: the row sits 8px above the tiles' bottom and the caret points up.
+fn strip_button(open: bool, fade: f32, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let white = t(idx::WHITE);
+    let row = div().absolute().left_0().right_0().flex().justify_center().opacity(fade);
+    let row = if open { row.bottom(z(STRIP_H - 8. - 32.)) } else { row.bottom(z(8.)) };
+    row.child(
+        div()
+            .id("call-participants")
+            .w(z(60.))
+            .h(z(32.))
+            .p(z(4.))
+            .rounded(z(48.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(t(idx::PRIMARY_630))
+            .hover(|s| s.bg(t(idx::PRIMARY_700)))
+            .shadow(crate::ui::inbox::popout_shadow())
+            .cursor_pointer()
+            .tooltip(crate::ui::tooltip::tip(if open {
+                crate::t!("call.hide_members")
+            } else {
+                crate::t!("call.show_members")
+            }))
+            .child(named(if open { "chevron" } else { "chevron-up" }, 24., white))
+            .child(named("members", 24., white))
+            .on_click(cx.listener(|_, _, _, cx| {
+                set_strip_open(!strip_open());
+                cx.notify();
+            })),
+    )
 }
 
 /// Side chat width: the client's `callChatSidebarWidth` default (480, store
@@ -357,7 +460,7 @@ fn tile_color(app: &PhoenixApp, user: Id) -> Hsla {
     }
 }
 
-fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, idle: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let u = app.users.get(&tile.user);
     let me = tile.user == app.me.id;
     let mut f = crate::ui::voice_panel::flags(tile.user);
@@ -432,7 +535,8 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, idle: bool, cx: &m
                     .absolute()
                     .left(z(4.))
                     .bottom(z(4.))
-                    .when(idle, |d| d.opacity(0.))
+                    // overlayContainer_7NOr2f transition: opacity .2s ease-in-out
+                    .opacity(fade)
                     .child(pill(Some(glyph("icons/voice/screen.svg", 16., white).into_any_element()), Some(name))),
             )
     } else {
@@ -457,8 +561,8 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, idle: bool, cx: &m
                     .bottom(z(4.))
                     .right(z(4.))
                     .flex()
-                    // .idle_7NOr2f{opacity:0}
-                    .when(idle, |d| d.opacity(0.))
+                    // .idle_7NOr2f{opacity:0}, faded over .2s ease-in-out
+                    .opacity(fade)
                     .child(pill(state_icon, Some(name))),
             )
             .when(speaking, |d| {
@@ -568,9 +672,14 @@ fn tray_icon(id: &'static str, icon: gpui::Svg, tip: SharedString) -> AnyElement
         .into_any_element()
 }
 
-/// bottomControls_: 49px row, 20px inline padding (436 - 416), edgeControls
-/// 160px wide with a 24px gap, centerControls wrapper gap 12, 12px bottom margin.
-fn bottom_controls(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+/// bottomControls_: 49px row, 20px inline padding (436 - 416), 12px bottom
+/// margin; bottomControls_rTsZa_ grid `minmax(max-content,1fr) auto
+/// minmax(max-content,1fr)` with column-gap --space-xl (24): the edges share
+/// the free width but never shrink below their content. edgeControls gap 24
+/// (1236 - 1188 - 24), centerControls wrapper gap 12. Narrow calls collapse
+/// like the client: NO_INVITE drops the invite button, MINIMAL drops the
+/// screen share / activity / soundboard / more section.
+fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let white = t(idx::WHITE);
     let tray = t(idx::INTERACTIVE_TEXT_DEFAULT);
     let muted = app.mic_muted || app.deafened;
@@ -591,16 +700,19 @@ fn bottom_controls(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         .flex_none()
         .flex()
         .items_center()
-        .child(
-            div()
-                .w(z(160.))
-                .flex()
-                .gap(z(24.))
-                .child(tray_icon("call-invite", named("invite", 24., tray), crate::t!("call.invite"))),
-        )
+        .gap(z(24.))
         .child(
             div()
                 .flex_1()
+                .flex()
+                .gap(z(24.))
+                .when(level < Collapse::NoInvite, |d| {
+                    d.child(tray_icon("call-invite", named("invite", 24., tray), crate::t!("call.invite")))
+                }),
+        )
+        .child(
+            div()
+                .flex_none()
                 .flex()
                 .justify_center()
                 .gap(z(12.))
@@ -629,7 +741,7 @@ fn bottom_controls(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             cx,
                         )),
                 )
-                .child(
+                .when(level < Collapse::Minimal, |d| d.child(
                     section()
                         .child(center_button(
                             "call-screen",
@@ -667,7 +779,7 @@ fn bottom_controls(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             |_, _| {},
                             cx,
                         )),
-                )
+                ))
                 .child(
                     // disconnect_K9Xq13.fullRegionButton_: 65x49, radius 12,
                     // --control-critical-primary-background-default; glyph box
@@ -694,7 +806,7 @@ fn bottom_controls(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         )
         .child(
             div()
-                .w(z(160.))
+                .flex_1()
                 .flex()
                 .justify_end()
                 .gap(z(24.))

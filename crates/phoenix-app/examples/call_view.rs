@@ -1,5 +1,5 @@
 //! Offscreen render of the voice call view with mock voice state (never joins voice).
-//! `cargo run -p phoenix-app --example call_view -- out.png [chat] [grid]`
+//! `cargo run -p phoenix-app --example call_view -- out.png [chat] [grid] [nostrip]`
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -14,6 +14,7 @@ fn main() -> anyhow::Result<()> {
     let rest: Vec<String> = args.collect();
     let with_chat = rest.iter().any(|a| a == "chat");
     let focus_grid = rest.iter().any(|a| a == "grid");
+    let no_strip = rest.iter().any(|a| a == "nostrip");
 
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
@@ -78,6 +79,7 @@ fn main() -> anyhow::Result<()> {
                     phoenix_app::ui::call_view::set_focus(phoenix_app::ui::call_view::Focus::Grid);
                 }
                 phoenix_app::ui::call_view::touch();
+                phoenix_app::ui::call_view::set_strip_open(!no_strip);
                 phoenix_app::ui::voice_panel::set_flags(me, VoiceFlags { stream: true, ..Default::default() });
                 phoenix_app::ui::voice_panel::set_flags(Id(4), VoiceFlags { self_mute: true, ..Default::default() });
                 phoenix_app::ui::voice_panel::set_flags(Id(7), VoiceFlags { self_deaf: true, ..Default::default() });

@@ -34,3 +34,7 @@ Code: `crates/phoenix-app/src/ui/call_view.rs`. Offscreen render: `cargo run -p 
 | side chat panel | channelChatWrapper_hbKzX7 + JS store `callChatSidebarWidth ?? 480` (min 450) | bg / width | --background-base-lowest / 480 | `render` CHAT_W=480, no member list, call column min_w_0 | ✅ |
 | hover-only name pills (idle opacity 0) | .idle_7NOr2f{opacity:0}, JS IDLE_TIMEOUT:2e3 | opacity | 0 after 2000 ms without mouse move | `idle()` / `on_mouse_move` | ✅ |
 | tray / camera icons | icon provider WindowLaunchIcon, FullscreenEnterIcon, VideoSlashIcon (path data matches dump #1362/#1366) | - | - | icons/names.rs `call/*` | ✅ |
+| tray responsive collapse | call controls module `bf(width)`: <=650 NO_INVITE, <=550 MINIMAL; bottomControls_rTsZa_ grid minmax(max-content,1fr) auto minmax(max-content,1fr) | invite / 2nd section hidden | 650 / 550 px | `collapse()` / `bottom_controls` | ✅ 1280 px + chat: hang-up fully visible (call_view example) |
+| overlay fade | overlayContainer_7NOr2f, actionRow_FowdXv | transition | opacity .2s ease-in-out | `overlay_opacity()` (smoothstep, raf while fading) | ✅ |
+| participants strip toggle | participantsButton_1uD6uZ (#1394-#1400) | box / bg / radius / shadow | 60x32, pad 4, --primary-630 (hover 700), r48, --shadow-border+--shadow-high, caret+members 24 | `strip_button` | ✅ |
+| mic / camera icon | lottieIcon_69Onuk (#1303, #1312) | toggle animation | Lottie animation on toggle, static at rest | static end-frame icon | ❌ toggle animation not reproduced (Lottie player needed); rest state matches |
