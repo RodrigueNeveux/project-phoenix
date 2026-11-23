@@ -302,9 +302,11 @@ async fn run(secs: u64, live: Option<Vec<Value>>) -> anyhow::Result<()> {
             }
             if matches!(kind, Some(api::ChannelType::GuildForum | api::ChannelType::GuildMedia)) {
                 let t = Instant::now();
-                match rest.search_threads(ch, ThreadSort::LastMessage, &[], 0, false).await {
-                    Ok(s) => info!("forum {ch}: {} threads in {:?}", s.threads.len(), t.elapsed()),
-                    Err(e) => bug!("forum {ch}: search_threads failed: {e}"),
+                for archived in [false, true] {
+                    match rest.search_threads(ch, ThreadSort::LastMessage, &[], 0, archived).await {
+                        Ok(s) => info!("forum {ch} archived={archived}: {} threads in {:?}", s.threads.len(), t.elapsed()),
+                        Err(e) => bug!("forum {ch} archived={archived}: search_threads failed: {e}"),
+                    }
                 }
             } else {
                 let t = Instant::now();
@@ -450,6 +452,15 @@ fn probe_targets(cache: &Cache, ready: &events::Ready, data: &phoenix_app::backe
             if readable && (text || forum) && c.last_message_id.is_some() {
                 out.push(c.id);
                 n += 1;
+            }
+        }
+    }
+    // Every readable forum / media channel (they often have no last_message_id).
+    for g in ready.guilds.iter() {
+        for c in cache.guild_channels(g.id) {
+            let forum = matches!(c.kind, api::ChannelType::GuildForum | api::ChannelType::GuildMedia);
+            if forum && !out.contains(&c.id) && cache.permissions_in(c.id).contains(api::Permissions::VIEW_CHANNEL) {
+                out.push(c.id);
             }
         }
     }

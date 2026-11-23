@@ -152,7 +152,17 @@ impl Backend for ReadOnly {
     /// Only the forum post listing (a read-only thread search) goes through.
     fn parity(&self, req: phoenix_app::commands::ParityRequest) -> BoxFuture<phoenix_app::commands::ParityReply> {
         match req {
-            phoenix_app::commands::ParityRequest::ForumPosts { .. } => self.0.parity(req),
+            phoenix_app::commands::ParityRequest::ForumPosts { .. } => {
+                let what = format!("{req:?}");
+                let fut = self.0.parity(req);
+                Box::pin(async move {
+                    let r = fut.await;
+                    if let Err(e) = &r {
+                        eprintln!("real_shots: {what} failed: {}", e.0);
+                    }
+                    r
+                })
+            }
             _ => denied(),
         }
     }
