@@ -582,6 +582,23 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             .child(action(Icon::Members, Some("invite")))
             .when(can_edit, |d| d.child(action(Icon::Gear, None)))
     });
+    // `channelInfo_Wx6SnQ` (vanilla-voice-sidebar #1003..#1006): margin-inline-start 12,
+    // padding-inline-end --space-4; `tabularNumbers_` `body-xs/normal` `fontCode_` 12/16,
+    // `--text-feedback-positive`: time since the channel's `voice_start_time`.
+    let timer = (matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) && !ch.voice_users.is_empty())
+        .then(|| crate::voice::start_time::get(id.0))
+        .flatten()
+        .map(|st| {
+            div()
+                .flex_none()
+                .ml(z(12.))
+                .pr(z(4.))
+                .font_family(crate::theme::FONT_MONO)
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .text_color(t(idx::TEXT_FEEDBACK_POSITIVE))
+                .child(crate::voice::start_time::format(crate::voice::start_time::now_s() - st))
+        });
     div()
         .id(("ch", id.0))
         .relative()
@@ -664,6 +681,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 )
                 .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
                 .when(ch.mentions == 0, |d| d.children(invite_hover))
+                .children(timer)
                 .children(close),
         )
         .into_any_element()

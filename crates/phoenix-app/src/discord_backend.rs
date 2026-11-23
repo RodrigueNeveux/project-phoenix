@@ -266,6 +266,7 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             crate::voice::call::manager().on_gateway(&emit, s.adapter.lock().me.0, &ev);
         }
         account::on_gateway(&s, &ev);
+        crate::voice::start_time::on_gateway(&ev);
         if let GatewayEvent::Ready(r) = &ev {
             // Reconnected without RESUME: the cache was rebuilt, rebuild the UI too.
             crate::commands::set_session_id(&r.session_id);
@@ -476,6 +477,9 @@ impl Backend for DiscordBackend {
         self.with_session(move |_, s| async move {
             if let Some(g) = guild {
                 let _ = s.gateway.subscribe_guild(sf(g), GuildSubscription::focused(None));
+                if let Some((op, d)) = crate::voice::start_time::request(g.0) {
+                    let _ = s.gateway.send(phoenix_api::gateway::GatewayCommand::Raw { op, d });
+                }
             }
             Ok(())
         })

@@ -232,7 +232,7 @@ impl PhoenixApp {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
-                if this.update(cx, |this, cx| this.expire_typing(cx)).is_err() {
+                if this.update(cx, |this, cx| { this.expire_typing(cx); if crate::voice::start_time::ticking() { cx.notify(); } }).is_err() {
                     break;
                 }
             }

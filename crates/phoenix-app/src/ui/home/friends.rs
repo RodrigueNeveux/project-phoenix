@@ -605,6 +605,7 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             .rounded(z(16.))
             .border_1()
             .border_color(c(Palette::DIVIDER))
+            .shadow(crate::ui::inbox::low_shadow()) // --shadow-low: 0 1 4 rgba(0,0,0,.14)
             .overflow_hidden()
             .bg(c(Palette::BG_PRIMARY))
             .cursor_pointer()

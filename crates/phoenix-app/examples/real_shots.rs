@@ -11,6 +11,7 @@
 //! default the location shown by the user's Discord (`cdp.mjs eval location.pathname`).
 //! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx),
 //! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
+//! `PHX_AUDIO` = two digits mute/deaf (e.g. `11`), otherwise read from the live user panel.
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
@@ -194,8 +195,16 @@ fn main() -> anyhow::Result<()> {
         None => AppTheme::Dark,
     };
     let compact = std::env::var_os("PHX_COMPACT").is_some() || classes.contains("density-compact");
+    // Self mute / deafen are client-side state in Discord (not on the account):
+    // read the user panel switches (`audioButtonWithMenu_` role=switch, aria-checked).
+    let audio = env_or_cdp(
+        "PHX_AUDIO",
+        "[...document.querySelectorAll('button[role=switch][class*=audioButtonWithMenu]')].map(b=>b.getAttribute('aria-checked')==='true'?1:0).join('')",
+    )
+    .unwrap_or_default();
+    let (self_mute, self_deaf) = (audio.starts_with('1'), audio.get(1..2) == Some("1"));
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
-    println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact}");
+    println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} mute={self_mute} deaf={self_deaf}");
 
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
@@ -249,6 +258,9 @@ fn main() -> anyhow::Result<()> {
             app.prefs.synced.theme = theme;
             app.prefs.local.zoom = 100;
             app.prefs.synced.compact = compact;
+            // In-memory only: the read-only capture never writes voice.json.
+            app.mic_muted = self_mute || self_deaf;
+            app.deafened = self_deaf;
             if let Some(c) = channel {
                 let g = guild.or_else(|| app.channels.get(&c).and_then(|ch| ch.guild));
                 app.select_guild(g, cx);

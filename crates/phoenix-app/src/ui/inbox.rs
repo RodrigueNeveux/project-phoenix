@@ -330,6 +330,11 @@ fn shadow_tok(t: &[&[Shadow]; 4]) -> Vec<gpui::BoxShadow> {
         .collect()
 }
 
+/// `box-shadow: var(--shadow-low)` (cards, e.g. Active Now `itemCard_`).
+pub fn low_shadow() -> Vec<gpui::BoxShadow> {
+    shadow_tok(&shadow::SHADOW_LOW)
+}
+
 /// `box-shadow: var(--shadow-border), var(--shadow-high)` (popout containers).
 pub fn popout_shadow() -> Vec<gpui::BoxShadow> {
     let mut v = shadow_tok(&shadow::SHADOW_BORDER);
