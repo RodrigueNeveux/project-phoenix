@@ -3,7 +3,7 @@
 
 use crate::theme::z;
 use gpui::{
-    AnyElement, App, FontWeight, ParentElement, SharedString, Styled, Window, div, img, prelude::*, px,
+    AnyElement, App, FontWeight, ParentElement, Styled, Window, div, img, prelude::*, px,
 };
 
 use crate::{
@@ -48,7 +48,7 @@ pub fn render(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
                     .opacity(0.8)
                     .hover(|s| s.opacity(1.).underline())
                     .cursor_pointer()
-                    .child(SharedString::from("Open in browser"))
+                    .child(crate::t!("viewer.open_browser"))
                     .on_click(move |_, _, cx| {
                         cx.stop_propagation();
                         cx.open_url(&original);

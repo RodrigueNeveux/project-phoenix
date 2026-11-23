@@ -95,7 +95,7 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
         }
     }
     if sections.is_empty() {
-        return empty_state(if p.stickers.loading { "Loading stickers…" } else { "No stickers found." });
+        return empty_state(if p.stickers.loading { crate::t!("picker.loading_stickers") } else { crate::t!("picker.no_stickers") });
     }
     let mut body = div().id("sticker-scroll").size_full().overflow_y_scroll().px(z(8.)).pb(z(8.));
     for (title, st) in sections {

@@ -88,13 +88,13 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                 let opts = app.backend.mfa_options();
                 let method = app.login_ui.mfa_method;
                 let (title, hint): (SharedString, SharedString) = match method {
-                    MfaMethod::Totp => (crate::t!("login.mfa_code"), crate::t!("login.mfa_hint").into()),
-                    MfaMethod::Backup => (crate::t!("login.backup_code"), crate::t!("login.backup_hint").into()),
+                    MfaMethod::Totp => (crate::t!("login.mfa_code"), crate::t!("login.mfa_hint")),
+                    MfaMethod::Backup => (crate::t!("login.backup_code"), crate::t!("login.backup_hint")),
                     MfaMethod::Sms => (
                         crate::t!("login.sms_code"),
                         match &app.login_ui.sms_phone {
                             Some(p) => crate::t!("login.sms_sent", p = p),
-                            None => crate::t!("login.sms_sending").into(),
+                            None => crate::t!("login.sms_sending"),
                         },
                     ),
                 };
@@ -184,7 +184,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         QrState::Code { modules, size, .. } => (
             qr_code(modules, *size),
             crate::t!("login.qr_title"),
-            crate::t!("login.qr_hint").into(),
+            crate::t!("login.qr_hint"),
         ),
         QrState::Scanned(name) => (
             div().text_size(px(48.)).child("✓").into_any_element(),
@@ -206,7 +206,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         _ => (
             div().text_color(gpui::black()).text_size(px(14.)).child(crate::t!("login.generating")).into_any_element(),
             crate::t!("login.qr_title"),
-            crate::t!("login.qr_hint").into(),
+            crate::t!("login.qr_hint"),
         ),
     };
     let qr = div()

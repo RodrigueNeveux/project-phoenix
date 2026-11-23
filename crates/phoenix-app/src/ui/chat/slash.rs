@@ -153,7 +153,7 @@ pub fn submit(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
     cx.spawn(async move |this, cx| {
         if let Err(e) = fut.await {
             let _ = this.update(cx, |a, cx| {
-                a.chat.error = Some(format!("Command failed: {e:?}").into());
+                a.chat.error = Some(crate::t!("slash.failed", e = format!("{e:?}")));
                 cx.notify();
             });
         }
@@ -225,7 +225,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         let loading = cx.try_global::<SlashUi>().is_some_and(|s| s.loading == app.selected_channel);
         let Some((_, items)) = list_open(app, cx) else {
             return loading.then(|| {
-                anchor(popup().p(z(12.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Loading commands…"))
+                anchor(popup().p(z(12.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("slash.loading")))
             });
         };
         let sel = cx.try_global::<SlashUi>().map_or(0, |s| s.selected).min(items.len() - 1);

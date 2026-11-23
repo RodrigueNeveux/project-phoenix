@@ -14,16 +14,9 @@ use crate::{
 
 /// Stable pick among the join phrasings (by message id) so a row never
 /// changes text between renders.
-fn join_text(id: u64) -> (&'static str, &'static str) {
-    const JOIN: [(&str, &str); 6] = [
-        ("", " joined the server."),
-        ("Welcome, ", ". Say hi!"),
-        ("", " just showed up."),
-        ("Everyone welcome ", "!"),
-        ("", " hopped into the server."),
-        ("Good to see you, ", "."),
-    ];
-    JOIN[(id >> 22) as usize % JOIN.len()]
+fn join_text(id: u64) -> (SharedString, SharedString) {
+    let n = (id >> 22) as usize % 6;
+    (crate::i18n::t(&format!("sys.join{n}.before"), &[]), crate::i18n::t(&format!("sys.join{n}.after"), &[]))
 }
 
 pub fn is_system(kind: MessageKind) -> bool {
@@ -38,34 +31,34 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .users
         .get(&msg.author)
         .map(|u| u.display_name.clone())
-        .unwrap_or_else(|| "Someone".into());
+        .unwrap_or_else(|| crate::t!("sys.someone"));
     let (icon, color, before, after): (ChatIcon, u32, SharedString, SharedString) = match msg.kind {
         MessageKind::Join => {
             let (b, a) = join_text(msg.id.0);
-            (ChatIcon::Join, Palette::GREEN, b.into(), a.into())
+            (ChatIcon::Join, Palette::GREEN, b, a)
         }
-        MessageKind::Pin => (ChatIcon::Join, Palette::INTERACTIVE, "".into(), " pinned a message to this channel.".into()),
-        MessageKind::Boost(0) => (ChatIcon::Boost, 0xFF73FA, "".into(), " just boosted the server!".into()),
+        MessageKind::Pin => (ChatIcon::Join, Palette::INTERACTIVE, "".into(), crate::t!("sys.pin")),
+        MessageKind::Boost(0) => (ChatIcon::Boost, 0xFF73FA, "".into(), crate::t!("sys.boost")),
         MessageKind::Boost(t) => (
             ChatIcon::Boost,
             0xFF73FA,
             "".into(),
-            format!(" just boosted the server! The server has reached Level {t}!").into(),
+            crate::t!("sys.boost_level", t = t),
         ),
         MessageKind::ThreadCreated => (
             ChatIcon::Thread,
             Palette::INTERACTIVE,
             "".into(),
-            format!(" started a thread: {}", msg.content).into(),
+            crate::t!("sys.thread", c = msg.content),
         ),
-        MessageKind::RecipientAdd => (ChatIcon::Join, Palette::GREEN, "".into(), " added someone to the group.".into()),
-        MessageKind::RecipientRemove => (ChatIcon::Join, Palette::RED, "".into(), " left the group.".into()),
-        MessageKind::Call => (ChatIcon::Join, Palette::GREEN, "".into(), " started a call.".into()),
+        MessageKind::RecipientAdd => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.recipient_add")),
+        MessageKind::RecipientRemove => (ChatIcon::Join, Palette::RED, "".into(), crate::t!("sys.recipient_remove")),
+        MessageKind::Call => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.call")),
         MessageKind::ChannelNameChange => (
             ChatIcon::Edit,
             Palette::INTERACTIVE,
             "".into(),
-            format!(" changed the channel name: {}", msg.content).into(),
+            crate::t!("sys.rename", c = msg.content),
         ),
         _ => (
             ChatIcon::More,
@@ -128,7 +121,7 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
                         let t = t.clone();
                         e.update(cx, |a, cx| a.open_thread(t, w, cx));
                     })
-                    .child("See All Threads"),
+                    .child(crate::t!("sys.see_threads")),
             )
         });
     Some(match r.day_divider.clone() {

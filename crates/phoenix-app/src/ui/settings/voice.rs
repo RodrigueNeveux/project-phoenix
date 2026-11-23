@@ -538,16 +538,16 @@ fn input_mode(p: &VoicePrefs, cx: &mut Cx) -> Div {
 fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
     let recording = ptt::is_recording();
     let label: SharedString = match (&p.ptt_key, recording) {
-        (_, true) => crate::t!("voice.press_key").into(),
+        (_, true) => crate::t!("voice.press_key"),
         (Some(k), false) => ptt::label(k).into(),
-        (None, false) => crate::t!("voice.no_keybind").into(),
+        (None, false) => crate::t!("voice.no_keybind"),
     };
     let portal: Option<(SharedString, u32)> = match portal_state().lock().clone() {
         PortalState::Off => None,
-        PortalState::Pending => Some((crate::t!("voice.portal_pending").into(), Palette::TEXT_MUTED)),
-        PortalState::Bound(d) if d.is_empty() => Some((crate::t!("voice.portal_bound").into(), Palette::TEXT_MUTED)),
+        PortalState::Pending => Some((crate::t!("voice.portal_pending"), Palette::TEXT_MUTED)),
+        PortalState::Bound(d) if d.is_empty() => Some((crate::t!("voice.portal_bound"), Palette::TEXT_MUTED)),
         PortalState::Bound(d) => Some((crate::t!("voice.portal_active", d = d), Palette::TEXT_MUTED)),
-        PortalState::Unavailable(_) => Some((crate::t!("voice.portal_unavailable").into(), Palette::YELLOW)),
+        PortalState::Unavailable(_) => Some((crate::t!("voice.portal_unavailable"), Palette::YELLOW)),
     };
     let delay = p.ptt_delay_ms;
     div()

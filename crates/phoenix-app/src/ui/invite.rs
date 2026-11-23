@@ -49,15 +49,15 @@ impl PhoenixApp {
             }
             this.nav.invite_preview = Some(match res {
                 Ok(NavReply::Invite(p)) => Ok(p),
-                Ok(_) => Err(crate::t!("invite.invalid").into()),
-                Err(_) => Err(crate::t!("invite.invalid").into()),
+                Ok(_) => Err(crate::t!("invite.invalid")),
+                Err(_) => Err(crate::t!("invite.invalid")),
             });
         });
     }
 
     pub fn join_invite(&mut self, cx: &mut Context<Self>) {
         let Some(code) = self.nav.invite_code.clone() else {
-            self.nav.invite_preview = Some(Err(crate::t!("invite.enter_valid").into()));
+            self.nav.invite_preview = Some(Err(crate::t!("invite.enter_valid")));
             cx.notify();
             return;
         };
@@ -314,7 +314,7 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
         Overlay::InviteLink { guild, link } => {
             let name = app.guilds.iter().find(|g| g.id == *guild).map(|g| g.name.clone()).unwrap_or_default();
             let link = link.clone();
-            let shown: SharedString = link.clone().unwrap_or_else(|| crate::t!("invite.creating").into());
+            let shown: SharedString = link.clone().unwrap_or_else(|| crate::t!("invite.creating"));
             let inner = div()
                 .p(z(16.))
                 .flex()
@@ -373,9 +373,7 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
                                 .text_color(c(Palette::TEXT_HEADER))
                                 .child(crate::t!("invite.leave_title", name = name)),
                         )
-                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(
-                            crate::t!("invite.leave_body", name = name),
-                        ))),
+                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(crate::t!("invite.leave_body", name = name))),
                 )
                 .child(
                     footer()

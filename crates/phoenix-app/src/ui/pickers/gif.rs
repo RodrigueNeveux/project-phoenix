@@ -129,10 +129,10 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let content: AnyElement = if g.shown.is_none() && !typed {
         // Home: trending tile + categories.
         let Some(home) = g.home.clone() else {
-            return empty_state(if g.home_loading { "Loading GIFs…" } else { "GIFs are unavailable." });
+            return empty_state(if g.home_loading { crate::t!("picker.loading_gifs") } else { crate::t!("picker.gifs_unavailable") });
         };
         let mut tiles: Vec<AnyElement> = vec![
-            tile(("gif-trending", 0), "Trending GIFs".into(), home.trending_preview.clone(), col_w)
+            tile(("gif-trending", 0), crate::t!("picker.trending"), home.trending_preview.clone(), col_w)
                 .on_click(|_, w, cx| with_app(cx, w, |a, _, cx| run(a, String::new(), cx)))
                 .into_any_element(),
         ];
@@ -156,9 +156,9 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
         }
         div().flex().flex_wrap().gap(px(GAP)).children(tiles).into_any_element()
     } else if g.loading && g.results.is_empty() {
-        return empty_state("Loading GIFs…");
+        return empty_state(crate::t!("picker.loading_gifs"));
     } else if g.results.is_empty() {
-        return empty_state(if g.error.is_some() { "GIFs are unavailable." } else { "No GIFs found." });
+        return empty_state(if g.error.is_some() { crate::t!("picker.gifs_unavailable") } else { crate::t!("picker.no_gifs") });
     } else {
         // Two-column masonry: each GIF goes to the shorter column.
         let mut cols: [(f32, Vec<AnyElement>); 2] = [(0., Vec::new()), (0., Vec::new())];

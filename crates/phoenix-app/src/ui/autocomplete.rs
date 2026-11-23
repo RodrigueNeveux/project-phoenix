@@ -265,9 +265,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let a = cx.try_global::<Autocomplete>()?.active.as_ref()?;
     let tone = cx.try_global::<Pickers>().map(|p| p.prefs.tone).unwrap_or(0);
     let title: SharedString = match a.kind {
-        Kind::Emoji => format!("Emoji matching :{}", a.query).into(),
-        Kind::Mention => if a.query.is_empty() { "Members".into() } else { format!("Members matching @{}", a.query).into() },
-        Kind::Channel => if a.query.is_empty() { "Text channels".into() } else { format!("Channels matching #{}", a.query).into() },
+        Kind::Emoji => crate::t!("ac.emoji", q = a.query),
+        Kind::Mention => if a.query.is_empty() { crate::t!("members.members") } else { crate::t!("ac.members", q = a.query) },
+        Kind::Channel => if a.query.is_empty() { crate::t!("ac.text_channels") } else { crate::t!("ac.channels", q = a.query) },
     };
     let mut rows = div().flex().flex_col().p(px(8.)).pt(px(0.));
     for (i, item) in a.items.iter().enumerate() {
@@ -278,19 +278,19 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 let u = app.users.get(id);
                 (
                     avatar(u, 24.),
-                    u.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into()),
+                    u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown")),
                     u.map(|u| u.name.clone()),
                 )
             }
             Item::Role { name, color, .. } => (
                 div().w(px(24.)).text_color(c(color.unwrap_or(Palette::TEXT_MUTED))).child("@").into_any_element(),
                 format!("@{name}").into(),
-                Some("Notify users with this role".into()),
+                Some(crate::t!("ac.role")),
             ),
             Item::Everyone(e) => (
                 div().w(px(24.)).child("@").into_any_element(),
                 format!("@{e}").into(),
-                Some(if *e == "here" { "Notify everyone online".into() } else { "Notify everyone in this channel".into() }),
+                Some(if *e == "here" { crate::t!("ac.here") } else { crate::t!("ac.everyone") }),
             ),
             Item::Channel(id) => {
                 let ch = app.channels.get(id);

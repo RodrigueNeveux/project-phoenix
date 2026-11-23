@@ -206,11 +206,11 @@ pub fn open(app: &mut PhoenixApp, tab: Tab, target: EmojiTarget, window: &mut Wi
     cx.notify();
 }
 
-fn placeholder(tab: Tab) -> &'static str {
+fn placeholder(tab: Tab) -> SharedString {
     match tab {
-        Tab::Gif => "Search Tenor",
-        Tab::Sticker => "Search for stickers",
-        Tab::Emoji => "Find the perfect emoji",
+        Tab::Gif => crate::t!("picker.search_tenor"),
+        Tab::Sticker => crate::t!("picker.search_stickers"),
+        Tab::Emoji => crate::t!("picker.search_emoji"),
     }
 }
 
@@ -406,9 +406,9 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
             .gap(px(8.))
             .px(px(16.))
             .pt(px(16.))
-            .child(tab_button("GIFs", Tab::Gif, tab, cx))
-            .child(tab_button("Stickers", Tab::Sticker, tab, cx))
-            .child(tab_button("Emoji", Tab::Emoji, tab, cx))
+            .child(tab_button(crate::t!("picker.gifs"), Tab::Gif, tab, cx))
+            .child(tab_button(crate::t!("picker.stickers"), Tab::Sticker, tab, cx))
+            .child(tab_button(crate::t!("picker.emoji"), Tab::Emoji, tab, cx))
             .into_any_element(),
         EmojiTarget::Reaction { .. } => div().into_any_element(),
     };
@@ -475,10 +475,10 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
     )
 }
 
-fn tab_button(label: &'static str, tab: Tab, current: Tab, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+fn tab_button(label: SharedString, tab: Tab, current: Tab, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let active = tab == current;
     div()
-        .id(label)
+        .id(label.clone())
         .px(px(8.))
         .py(px(2.))
         .rounded(px(4.))
@@ -505,7 +505,7 @@ pub(crate) fn section_title(title: SharedString) -> gpui::Div {
         .child(title.to_uppercase())
 }
 
-pub(crate) fn empty_state(text: &'static str) -> AnyElement {
+pub(crate) fn empty_state(text: SharedString) -> AnyElement {
     div()
         .size_full()
         .flex()

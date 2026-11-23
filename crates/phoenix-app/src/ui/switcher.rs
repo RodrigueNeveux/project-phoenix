@@ -158,7 +158,7 @@ pub fn open(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
     if app.screen != crate::app::Screen::Main {
         return;
     }
-    let input = cx.new(|cx| InputState::new(window, cx).placeholder("Where would you like to go?"));
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("switcher.placeholder")));
     let sub = cx.subscribe_in(&input, window, |app, _, ev: &InputEvent, window, cx| match ev {
         InputEvent::Change => update(app, cx),
         InputEvent::PressEnter { .. } => {
@@ -227,7 +227,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
                 .justify_center()
                 .text_size(z(14.))
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("Can't find what you're looking for?"),
+                .child(crate::t!("switcher.cant_find")),
         );
     }
     for (i, t) in sw.results.iter().copied().enumerate() {
@@ -244,7 +244,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
             Target::Dm(id) => {
                 let Some(ch) = app.channels.get(&id) else { continue };
                 let user = app.users.values().find(|u| u.display_name == ch.name || u.name == ch.name);
-                (avatar(user, 20.), ch.name.clone(), "DIRECT MESSAGE".into())
+                (avatar(user, 20.), ch.name.clone(), crate::t!("switcher.dm"))
             }
             Target::User(id) => {
                 let u = app.users.get(&id);
@@ -269,7 +269,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
                         .child(g.acronym.clone())
                         .into_any_element(),
                 };
-                (lead, g.name.clone(), "SERVER".into())
+                (lead, g.name.clone(), crate::t!("switcher.server"))
             }
         };
         let selected = i == sw.selected;
@@ -343,7 +343,7 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
                         .text_size(z(12.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(Palette::TEXT_MUTED))
-                        .child("PROTIP: Start searches with @, #, !, * to narrow down results."),
+                        .child(crate::t!("switcher.protip")),
                 ),
         )
 }

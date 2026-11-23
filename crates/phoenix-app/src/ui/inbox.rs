@@ -778,7 +778,7 @@ fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
     Some(crate::ui::modal::confirm(crate::ui::modal::Confirm {
         title: title.into(),
         body,
-        confirm_label: confirm.into(),
+        confirm_label: confirm,
         danger: true,
         on_confirm: std::rc::Rc::new(move |_, cx| e1.update(cx, |a, cx| a.confirm_moderation(cx))),
         on_cancel: std::rc::Rc::new(move |_, cx| {

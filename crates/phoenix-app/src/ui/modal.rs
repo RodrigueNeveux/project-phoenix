@@ -141,7 +141,7 @@ pub fn confirm(m: Confirm) -> AnyElement {
                 .justify_end()
                 .gap(z(8.))
                 .child(
-                    crate::ui::profile::mana_button("modal-cancel", "Cancel", false, true)
+                    crate::ui::profile::mana_button("modal-cancel", crate::t!("common.cancel"), false, true)
                         .on_click(move |_, w, cx| cancel2(w, cx)),
                 )
                 .child({

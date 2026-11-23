@@ -531,5 +531,5 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedS
                 .justify_center()
                 .child(icon(i, 20. * crate::theme::zoom(), c(Palette::TEXT_NORMAL))), // circleIcon_g8YUxD 20px, --text-default
         )
-        .when(hover, |d| d.child(right_tooltip(label.into(), ICON)))
+        .when(hover, |d| d.child(right_tooltip(label, ICON)))
 }

@@ -135,14 +135,14 @@ pub fn build(app: &PhoenixApp, query: &str, cx: &App) -> Grid {
     if q.is_empty() {
         let now = chrono::Utc::now().timestamp();
         let freq = cx.try_global::<Pickers>().map(|p| p.prefs.frequent(FREQUENT, now)).unwrap_or_default();
-        grid.push_section("Frequently Used".into(), SectionIcon::Frequent, freq, true);
+        grid.push_section(crate::t!("picker.frequent"), SectionIcon::Frequent, freq, true);
         for (g, es) in customs {
             let items = es.into_iter().map(PickItem::Custom).collect();
             grid.push_section(g.name.clone(), SectionIcon::Guild(g.icon.clone(), g.acronym.clone()), items, true);
         }
-        for (cat, title) in emoji::CATEGORIES.iter().enumerate() {
+        for cat in 0..emoji::CATEGORIES.len() {
             let items = (0..emoji::EMOJI.len()).filter(|&i| emoji::EMOJI[i].3 as usize == cat).map(PickItem::Unicode).collect();
-            grid.push_section((*title).into(), SectionIcon::Category(cat), items, true);
+            grid.push_section(crate::i18n::t(&format!("emoji.cat.{cat}"), &[]), SectionIcon::Category(cat), items, true);
         }
     } else {
         let mut custom: Vec<(u8, GuildEmoji)> = customs
@@ -153,7 +153,7 @@ pub fn build(app: &PhoenixApp, query: &str, cx: &App) -> Grid {
         custom.sort_by_key(|(s, _)| *s);
         let mut items: Vec<PickItem> = custom.into_iter().map(|(_, e)| PickItem::Custom(e)).collect();
         items.extend(emoji::search(&q, 300).into_iter().map(PickItem::Unicode));
-        grid.push_section("Search Results".into(), SectionIcon::Frequent, items, false);
+        grid.push_section(crate::t!("picker.results"), SectionIcon::Frequent, items, false);
     }
     grid
 }
@@ -301,7 +301,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     }
 
     let grid_el = if empty {
-        super::empty_state("No emoji match your search.")
+        super::empty_state(crate::t!("picker.no_emoji"))
     } else {
         list(list_state, |ix, _w, cx| render_row(ix, cx)).size_full().into_any_element()
     };
@@ -324,7 +324,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                         .child(SharedString::from(format!(":{}:", item.name()))),
                 )
                 .when_some(preview_from, |d, g| {
-                    d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(SharedString::from(format!("from {g}"))))
+                    d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("picker.from", g = g)))
                 })
         });
 

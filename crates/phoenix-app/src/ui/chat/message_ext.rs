@@ -196,7 +196,7 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
     let ed = app.chat.edit.as_ref().filter(|e| e.id == msg.id)?;
     let e1 = entity.clone();
     let e2 = entity.clone();
-    let link = |id: &'static str, label: &'static str| {
+    let link = |id: &'static str, label: gpui::SharedString| {
         div()
             .id(id)
             .text_color(c(Palette::TEXT_LINK))
@@ -240,10 +240,10 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
                     .gap(z(4.))
                     .text_size(z(12.))
                     .text_color(c(Palette::TEXT_NORMAL))
-                    .child("escape to ")
-                    .child(link("edit-cancel", "cancel").on_click(move |_, w, cx| e1.update(cx, |a, cx| a.cancel_edit(w, cx))))
-                    .child(" • enter to ")
-                    .child(link("edit-save", "save").on_click(move |_, w, cx| e2.update(cx, |a, cx| a.save_edit(w, cx)))),
+                    .child(crate::t!("edit.escape_to"))
+                    .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| a.cancel_edit(w, cx))))
+                    .child(crate::t!("edit.enter_to"))
+                    .child(link("edit-save", crate::t!("edit.save")).on_click(move |_, w, cx| e2.update(cx, |a, cx| a.save_edit(w, cx)))),
             ),
     )
 }
@@ -281,10 +281,10 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef)
                 .text_size(z(14.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_LINK))
-                .child(SharedString::from(match t.message_count {
-                    1 => "1 Message".to_string(),
-                    n => format!("{n} Messages"),
-                })),
+                .child(match t.message_count {
+                    1 => crate::t!("thread.one_message"),
+                    n => crate::t!("thread.messages", n = n),
+                }),
         )
         .child(icon(ChatIcon::ArrowRight, 14., c(Palette::TEXT_LINK)))
         .on_click(move |_, w, cx| {
@@ -322,7 +322,7 @@ pub fn new_divider() -> impl IntoElement {
                 .text_color(gpui::white())
                 .flex()
                 .items_center()
-                .child("NEW"),
+                .child(crate::t!("chat.new")),
         )
 }
 

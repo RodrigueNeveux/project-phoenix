@@ -74,7 +74,7 @@ fn send_request(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
             this.nav.add_friend_result = Some(match res {
                 Ok(_) => Ok(crate::t!("friends.request_sent", name = name)),
                 Err(e) => Err(if e.0.is_empty() {
-                    crate::t!("friends.request_failed").into()
+                    crate::t!("friends.request_failed")
                 } else {
                     e.0.into()
                 }),
@@ -251,9 +251,9 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .or_else(|| u.map(|u| u.display_name.clone()))
         .unwrap_or_else(|| SharedString::from(user.0.to_string()));
     let sub: SharedString = match r.kind {
-        RelationshipKind::Incoming => crate::t!("friends.incoming").into(),
-        RelationshipKind::Outgoing => crate::t!("friends.outgoing").into(),
-        RelationshipKind::Blocked => crate::t!("friends.blocked").into(),
+        RelationshipKind::Incoming => crate::t!("friends.incoming"),
+        RelationshipKind::Outgoing => crate::t!("friends.outgoing"),
+        RelationshipKind::Blocked => crate::t!("friends.blocked"),
         RelationshipKind::Friend => app.nav.activities.get(&user).cloned().unwrap_or_else(|| {
             match p {
                 Presence::Online => crate::t!("status.online"),
@@ -261,7 +261,6 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                 Presence::Dnd => crate::t!("status.dnd"),
                 Presence::Offline => crate::t!("status.offline"),
             }
-            .into()
         }),
     };
     let username = u.map(|u| u.name.clone()).unwrap_or_default();

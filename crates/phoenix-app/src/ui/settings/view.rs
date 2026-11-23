@@ -188,7 +188,7 @@ fn field_row(label: impl Into<SharedString>, value: SharedString, action: Option
 fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let me = &app.me;
     let reveal = app.settings.as_ref().is_some_and(|s| s.reveal_email);
-    let email: SharedString = if reveal { crate::t!("settings.account.email_hidden").into() } else { "**********@*****.com".into() };
+    let email: SharedString = if reveal { crate::t!("settings.account.email_hidden") } else { "**********@*****.com".into() };
     let card = div()
         .rounded(z(8.))
         .bg(c(Palette::BG_TERTIARY))
@@ -261,7 +261,7 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                             .into_any_element(),
                     ),
                 ))
-                .child(field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone").into(), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element()))),
+                .child(field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element()))),
         );
     div()
         .child(h1(crate::t!("settings.page.my_account")))

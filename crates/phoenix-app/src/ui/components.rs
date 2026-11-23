@@ -825,7 +825,7 @@ impl PhoenixApp {
         }
         let target = m.spec.channel.map(|c| (m.spec.guild, c)).or(self.parity.last_target);
         let Some((guild, channel)) = target else {
-            m.error = Some(crate::t!("form.no_channel").into());
+            m.error = Some(crate::t!("form.no_channel"));
             cx.notify();
             return;
         };

@@ -206,7 +206,7 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
             .into_any_element(),
     );
     modal::confirm(modal::Confirm {
-        title: crate::t!("msg.delete").into(),
+        title: crate::t!("msg.delete"),
         body,
         confirm_label: crate::t!("common.delete"),
         danger: true,

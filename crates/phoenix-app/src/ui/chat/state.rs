@@ -601,7 +601,7 @@ impl PhoenixApp {
             files: true,
             directories: false,
             multiple: true,
-            prompt: Some("Upload".into()),
+            prompt: Some(crate::t!("chat.upload")),
         });
         cx.spawn(async move |this, cx| {
             if let Ok(Ok(Some(paths))) = rx.await {
@@ -621,7 +621,7 @@ impl PhoenixApp {
                     let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
                     let len = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
                     if len > MAX_UPLOAD {
-                        return Err(format!("{name} is too large (max 10 MB)."));
+                        return Err(crate::t!("chat.too_large", name = name).to_string());
                     }
                     std::fs::read(&p).map(|b| (name.clone(), b)).map_err(|e| format!("{name}: {e}"))
                 })
@@ -635,7 +635,7 @@ impl PhoenixApp {
                         Ok((name, bytes)) if this.chat.uploads.len() < MAX_FILES => {
                             this.chat.uploads.push(pending_file(name, bytes))
                         }
-                        Ok(_) => this.chat.error = Some(format!("You can only upload {MAX_FILES} files at a time.").into()),
+                        Ok(_) => this.chat.error = Some(crate::t!("chat.max_files", n = MAX_FILES)),
                         Err(e) => this.chat.error = Some(e.into()),
                     }
                 }
@@ -705,7 +705,7 @@ impl PhoenixApp {
             return true;
         }
         if text.len() > 2000 {
-            self.chat.error = Some("Your message is over 2000 characters.".into());
+            self.chat.error = Some(crate::t!("chat.too_long"));
             cx.notify();
             return true;
         }
@@ -727,7 +727,7 @@ impl PhoenixApp {
             let label: SharedString = if files.len() == 1 {
                 files[0].filename.clone().into()
             } else {
-                format!("{} files", files.len()).into()
+                crate::t!("chat.n_files", n = files.len())
             };
             self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now() });
         }

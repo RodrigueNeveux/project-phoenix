@@ -115,7 +115,7 @@ impl PhoenixApp {
         let title = comp.title.read(cx).value().trim().to_owned();
         let content = comp.body.read(cx).value().trim().to_owned();
         if title.is_empty() || content.is_empty() {
-            comp.error = Some(crate::t!("forum.needs_title").into());
+            comp.error = Some(crate::t!("forum.needs_title"));
             cx.notify();
             return;
         }

@@ -711,7 +711,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .line_height(z(14.))
                                 .text_color(t(idx::TEXT_MUTED))
                                 .text_ellipsis()
-                                .child(app.people.custom_status.clone().unwrap_or(status.into())),
+                                .child(app.people.custom_status.clone().unwrap_or(status)),
                         ),
                 ),
         )
