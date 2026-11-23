@@ -684,6 +684,9 @@ fn logout_modal(cx: &mut Cx) -> AnyElement {
 /// 1px --border-subtle; sidebar + content (--background-base-low).
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyElement> {
     let s = app.settings.as_ref()?;
+    if s.page == Page::Profiles {
+        return Some(super::profile_editor::render(app, window, cx));
+    }
     if s.search.is_none() {
         cx.defer_in(window, |a, window, cx| {
             if a.settings.as_ref().is_some_and(|s| s.search.is_none()) {

@@ -256,6 +256,11 @@ pub trait Backend: Send + Sync + 'static {
     fn set_note(&self, _user: Id, _note: String) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    /// Profile editor save: `PATCH /users/@me` + `/users/@me/profile`, or
+    /// `PATCH /guilds/{id}/members/@me` for a per-server profile.
+    fn update_profile(&self, _guild: Option<Id>, _patch: crate::ui::settings::profile_editor::ProfilePatch) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("Profile editing isn't available.".into())) })
+    }
     /// Own status (op 3 + settings). `custom` = custom status text.
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })

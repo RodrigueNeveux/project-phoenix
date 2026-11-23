@@ -45,3 +45,26 @@ Scores = `% pixels |Δ|>24` on the content panel (dump png vs `dialog_shots sett
 | Nitro / Facturation | vanilla-settings-05/06 | Discord marketing art + live subscription data | 49% | ❌ pointer page by design (no billing API) |
 | Système | vanilla-settings-10 | #2728 `warning_vb4RFD` banner (p8, --radius-xs, 20px icon), #2764 `info_0v8Ae1` notices + sm "Modifier dans les paramètres système", secondary "+ Ajouter" button | 6.7% → 6.4% | ✅ |
 | Accessibilité | vanilla-settings-09 | #2690 `preview_TpS9Es` (--background-base-low, --border-normal, p24, 175px max), user's messages + reactions + link, 3 status avatars + sm primary button | 7.0% → 5.9% | ✅ |
+
+## Profile editor (full screen, "Modifier les profils")
+
+Dump `vanilla-settings-profile-editor` (+ `-scrolled`, `-switcher`), 2026-11-23, vanilla client, 1280x700 CSS px. Code: `crates/phoenix-app/src/ui/settings/profile_editor.rs`; offscreen `--example profile_editor -- out.png [dirty]`.
+
+| element | dump node | property | CSS value | our code | status |
+|---|---|---|---|---|---|
+| layer / root | #3153 `layer_C_WHpX`, #3161 `layoutContainer_s3DB6Y` | layout | 1184 wide, 48 each side, full height | `render` max_w 1184 mx 48 | ✅ |
+| styles panel | #3170 `panel_BfN7RR editingPanel_` | box | 242 wide, padding-top 32, --background-base-lowest, 1px --border-subtle left/right | `styles_panel` | ✅ |
+| profile switcher | #3178 `header_cuaHiV`, #3185 `selectButton_VrghH6` | header | padding 4 8, border-bottom; button padding 8 4 4 8, r8, 16/20 500 | `styles_panel` header | ✅ |
+| switcher popout | `-switcher` dump | rows | main profile (Discord glyph + check) then one row per server with the per-server name | `switcher` | ✅ structure, ❌ exact popout box not measured |
+| groups | #3189 `content_UqVm6V`, #3192 `group_Z5MObs` | spacing | padding 16, gap 24, label h3 14/18 500 --text-strong, gap 8 | `group_label` / `content` | ✅ |
+| tiles | #3195/#3231 `tile_HhFoZE` | box | bar 208x42, square 100x100, gap 8, r8, --background-mod-subtle | `tile` | ✅ |
+| theme tile | #3281 `gradient_Z2TFt5`, #3284 `swatchInner_` | swatches | two 24px swatches, 2px white border, r8, on a primary→accent gradient | `theme_tile` | ✅ |
+| card | #3330 `profile_s3DB6Y` | box | 400 wide, r 16 16 0 0, banner 140, avatar 120 at (32,80) | `card` | ✅ |
+| card body | #3373 `profileBody_` | spacing | padding 4 24 32 32, gap 24; name 24/32 600; username 14/18 + 4px dot + pronouns | `card` body | ✅ |
+| inline fields | #3383/#3405/#3443 `container_CJLDJI` / `editable_IEutSJ` | editing | display name, pronouns, bio edited in place on the card | `inline_field` + Input/Textarea | ✅ |
+| tabs | #3479 `tabBarItem_y4ZEM5` | layout | Board / Activity / Wishlist, padding-bottom 16, 30 apart; "Your widgets" 14/18 600 + "Add widget" | `tabs` | ✅ structure, ❌ widget cards (user content) |
+| close | #3164 `modalHeaderButtons_` | box | 31px secondary button, top 40, right 8 | `close` | ✅ |
+| unsaved bar | #3327 `profileCardToastContainer_` | content | not dumpable without a real edit (forbidden) | `unsaved_bar` | ❌ unverified |
+| Nitro locks | n/a (account has Nitro) | locked tiles | lock badge + disabled pickers when `has_premium()` is false | `tile(…, locked)` | ❌ unverified |
+
+Scores (`% pixels |Δ|>24`, dump png vs offscreen mock render, 1280x700): styles panel 22.3%, card 95.4%, tabs 59.2%, overall 59.2%. The card and right column are dominated by the user's real data (Nitro gradient theme, image banner, custom profile background, widgets) versus mock data, so they are not a layout measure; the styles panel is the comparable region (residuals: avatar/banner images, gg sans vs Noto Sans).

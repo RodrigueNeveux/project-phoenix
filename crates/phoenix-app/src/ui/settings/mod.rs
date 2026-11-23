@@ -6,6 +6,7 @@
 //!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
 
 mod pages;
+pub(crate) mod profile_editor;
 mod view;
 pub(crate) mod voice;
 
@@ -283,6 +284,8 @@ pub struct SettingsState {
     /// Sidebar search box (created on first render).
     pub search: Option<gpui::Entity<gpui_component::input::InputState>>,
     pub search_sub: Option<gpui::Subscription>,
+    /// Full-screen profile editor (Page::Profiles).
+    pub profile: Option<profile_editor::EditorState>,
 }
 
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
@@ -299,6 +302,11 @@ pub fn open_action(app: &mut PhoenixApp, _: &OpenSettings, _: &mut gpui::Window,
 /// Esc: close the logout dialog, then the overlay. True when handled.
 pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     let Some(s) = app.settings.as_mut() else { return false };
+    if s.page == Page::Profiles {
+        profile_editor::on_escape(s);
+        cx.notify();
+        return true;
+    }
     if s.confirm_logout {
         s.confirm_logout = false;
     } else if s.open_select.is_some() {

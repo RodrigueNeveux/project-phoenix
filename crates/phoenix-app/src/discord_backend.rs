@@ -12,6 +12,9 @@ mod expressions;
 pub mod http;
 mod nav;
 mod people;
+mod profile_edit;
+#[cfg(test)]
+pub(crate) use profile_edit::bodies as profile_edit_bodies;
 pub mod store;
 
 use std::{
@@ -702,6 +705,9 @@ impl Backend for DiscordBackend {
     }
     fn set_note(&self, user: Id, note: String) -> BoxFuture<()> {
         self.people_note(user, note)
+    }
+    fn update_profile(&self, guild: Option<Id>, patch: crate::ui::settings::profile_editor::ProfilePatch) -> BoxFuture<()> {
+        self.profile_update_impl(guild, patch)
     }
     fn set_status(&self, status: crate::model::Presence, custom: Option<String>) -> BoxFuture<()> {
         self.people_status(status, custom)
