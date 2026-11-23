@@ -76,6 +76,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .child(separator());
     // Child indexes (home + separator come first) of the unread items, for the "nouveau" bars.
     let mut unread_ix = Vec::new();
+    let mut mention_n: Vec<u32> = Vec::new();
     for (i, item) in rail(app).into_iter().enumerate() {
         let unread = match &item {
             RailItem::Guild(g, _) => g.unread || g.mentions > 0,
@@ -83,6 +84,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         };
         if unread {
             unread_ix.push(i + 2);
+            mention_n.push(match &item {
+                RailItem::Guild(g, _) => g.mentions,
+                RailItem::Folder { guilds, .. } => guilds.iter().map(|g| g.mentions).sum(),
+            });
         }
         col = match item {
             RailItem::Guild(g, nested) => col.child(guild(app, &entity, g, nested)),
@@ -104,6 +109,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub(&crate::t!("rail.discover"), cx)))
         });
     let (above, below) = offscreen_unread(&scroll, &unread_ix);
+    let (m_above, m_below) = offscreen_mentions(&scroll, &unread_ix, &mention_n);
     div()
         .w(z(m::SERVER_BAR_W))
         .flex_none()
@@ -111,8 +117,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .relative()
         .bg(c(Palette::BG_TERTIARY))
         .child(col)
-        .children(above.map(|ix| unread_bar(&scroll, ix, true)))
-        .children(below.map(|ix| unread_bar(&scroll, ix, false)))
+        .children(above.map(|ix| unread_bar(&scroll, ix, true, m_above)))
+        .children(below.map(|ix| unread_bar(&scroll, ix, false, m_below)))
 }
 
 thread_local! {
@@ -130,11 +136,28 @@ fn offscreen_unread(h: &gpui::ScrollHandle, ixs: &[usize]) -> (Option<usize>, Op
     (above, below)
 }
 
+/// Mentions of the unread items scrolled off above / below (the mention pill's count).
+fn offscreen_mentions(h: &gpui::ScrollHandle, ixs: &[usize], n: &[u32]) -> (u32, u32) {
+    let view = h.bounds();
+    let (mut a, mut b) = (0, 0);
+    for (&i, &m) in ixs.iter().zip(n) {
+        match h.bounds_for_item(i) {
+            Some(r) if r.bottom() <= view.top() => a += m,
+            Some(r) if r.top() >= view.bottom() => b += m,
+            _ => {}
+        }
+    }
+    (a, b)
+}
+
 /// "nouveau" pill. vanilla-guild-text #56/#57 (top) and #607/#608 (bottom):
 /// unreadMentionsIndicatorTop_/Bottom_ absolute, padding 8 (bottom: 8 8 26);
 /// bar_oJAkDB unread_oJAkDB: h 24, r 12, --background-surface-highest, 1px --border-normal,
 /// shadow 0 2 6 --opacity-black-24, 12px/16px semibold uppercase --text-strong; :active top 1px.
-fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool) -> AnyElement {
+/// With mentions offscreen it becomes the red `mention_oJAkDB` variant: background
+/// --background-feedback-notification, 1px --border-subtle, --shadow-medium,
+/// --text-overlay-light; text intl `A2j16v` "{count} mentions" (uppercased by bar_).
+fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool, mentions: u32) -> AnyElement {
     use crate::theme::{generated::idx, tok};
     let h = h.clone();
     div()
@@ -152,25 +175,41 @@ fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool) -> AnyElement {
                 .items_center()
                 .justify_center()
                 .cursor_pointer()
-                .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
-                .border_1()
-                .border_color(c(tok(idx::BORDER_NORMAL)))
-                .shadow(vec![gpui::BoxShadow {
-                    color: c(tok(idx::OPACITY_BLACK_24)),
-                    offset: point(px(0.), z(2.)),
-                    blur_radius: z(6.),
-                    spread_radius: px(0.),
-                    inset: false,
-                }])
+                .map(|d| {
+                    if mentions > 0 {
+                        d.bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
+                            .border_1()
+                            .border_color(c(tok(idx::BORDER_SUBTLE)))
+                            .shadow(crate::ui::inbox::shadow_medium())
+                    } else {
+                        d.bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
+                            .border_1()
+                            .border_color(c(tok(idx::BORDER_NORMAL)))
+                            .shadow(vec![gpui::BoxShadow {
+                                color: c(tok(idx::OPACITY_BLACK_24)),
+                                offset: point(px(0.), z(2.)),
+                                blur_radius: z(6.),
+                                spread_radius: px(0.),
+                                inset: false,
+                            }])
+                    }
+                })
                 .text_size(z(12.))
                 .line_height(z(16.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(tok(idx::TEXT_STRONG)))
+                .text_color(c(tok(if mentions > 0 { idx::TEXT_OVERLAY_LIGHT } else { idx::TEXT_STRONG })))
                 .on_click(move |_, w, _| {
                     h.scroll_to_item(ix);
                     w.refresh();
                 })
-                .child(crate::t!("rail.unread_new").to_uppercase()),
+                .child(
+                    if mentions > 0 {
+                        crate::t!("rail.unread_mentions", count = mentions)
+                    } else {
+                        crate::t!("rail.unread_new")
+                    }
+                    .to_uppercase(),
+                ),
         )
         .into_any_element()
 }
