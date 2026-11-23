@@ -432,6 +432,10 @@ fn main() -> anyhow::Result<()> {
     if std::env::var("PHX_DEBUG_NICKS").is_ok() {
         cx.update(|cx| {
             let app = v.read(cx);
+            for ch in app.channels.values().filter(|c| !c.voice_users.is_empty() && c.guild == app.selected_guild) {
+                let names: Vec<_> = ch.voice_users.iter().map(|u| app.users.get(u).map(|u| u.display_name.clone())).collect();
+                println!("voice {} {:?}", ch.name, names);
+            }
             if let Some(c) = app.selected_channel.and_then(|c| app.messages.get(&c)) {
                 for m in c.msgs.iter().rev().take(12) {
                     let u = app.users.get(&m.author);

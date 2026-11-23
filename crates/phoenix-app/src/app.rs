@@ -106,6 +106,9 @@ pub struct PhoenixApp {
     pub dms: Vec<Id>,
     pub roles: HashMap<Id, Vec<Role>>,
     pub members: HashMap<Id, Vec<Member>>,
+    /// Voice states (user -> channel) received before their channel exists (READY_SUPPLEMENTAL
+    /// racing ReadyData on first login); applied by `apply_ready`.
+    pub pending_voice: HashMap<Id, Id>,
     /// Presence of users outside the open guild's member list (DMs, friends).
     pub presences: HashMap<Id, Presence>,
     pub messages: HashMap<Id, ChannelMessages>,
@@ -310,6 +313,7 @@ impl PhoenixApp {
             dms: Vec::new(),
             roles: HashMap::new(),
             members: HashMap::new(),
+            pending_voice: HashMap::new(),
             presences: HashMap::new(),
             messages: HashMap::new(),
             selected_guild: None,
@@ -448,9 +452,23 @@ impl PhoenixApp {
         for (g, roles) in r.roles {
             self.roles.insert(g, roles);
         }
-        for ch in r.channels {
+        for mut ch in r.channels {
             if let Some(g) = ch.guild {
                 self.guild_channels.entry(g).or_default().push(ch.id);
+            }
+            // READY_SUPPLEMENTAL (guild voice_states) can be delivered before this ReadyData:
+            // keep the voice users it already put on the channel.
+            if ch.voice_users.is_empty()
+                && let Some(old) = self.channels.get(&ch.id)
+            {
+                ch.voice_users = old.voice_users.clone();
+            }
+            if ch.guild.is_some() {
+                for (u, _) in self.pending_voice.iter().filter(|(_, c)| **c == ch.id) {
+                    if !ch.voice_users.contains(u) {
+                        ch.voice_users.push(*u);
+                    }
+                }
             }
             self.channels.insert(ch.id, ch);
         }
@@ -747,8 +765,11 @@ impl PhoenixApp {
                 for ch in self.channels.values_mut().filter(|c| c.guild.is_some()) {
                     ch.voice_users.retain(|u| *u != user);
                 }
+                self.pending_voice.remove(&user);
                 if let Some(c) = channel.and_then(|c| self.channels.get_mut(&c)) {
                     c.voice_users.push(user);
+                } else if let Some(c) = channel {
+                    self.pending_voice.insert(user, c);
                 }
                 if user == self.me.id {
                     self.voice_channel = channel;

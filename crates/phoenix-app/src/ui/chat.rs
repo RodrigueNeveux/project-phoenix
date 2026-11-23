@@ -448,7 +448,15 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let (Some(msg), Some(r)) = (entry.msgs.get(i), entry.rendered.get(i)) else {
         return div().into_any_element();
     };
-    message(app, entity, msg, r, entry, cx)
+    let el = message(app, entity, msg, r, entry, cx);
+    if i + 1 == entry.msgs.len() {
+        // scrollerSpacer_8AE1Qq height 40px under the last message, overlapped 16px by
+        // the form_ (vanilla-guild-text-groups #2777 at y609, form #2779 at y633): 24px
+        // visible. Our list already ends 9px above the composer (real compare
+        // 20261123-153201: last line 15px lower than vanilla), so pad the remaining 15px.
+        return row_wrapper().pb(z(15.)).child(el).into_any_element();
+    }
+    el
 }
 
 fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl IntoElement {
