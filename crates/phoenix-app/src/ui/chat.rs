@@ -1447,9 +1447,15 @@ fn embed(e: &Embed) -> AnyElement {
         let max_h = if e.kind.as_deref() == Some("gifv") { 300. } else { media::MAX_H };
         let size = media::fit(m.width, m.height, media::MAX_W, max_h);
         let original = e.url.clone().unwrap_or_else(|| m.url.clone());
+        // gifv: play the animated gif rendition (GPUI animates GIF frames only while the
+        // row is laid out, i.e. on screen in the virtual list, and the window is active).
+        let animated = (e.kind.as_deref() == Some("gifv"))
+            .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url)))
+            .flatten();
+        let src = animated.unwrap_or_else(|| m.url.clone());
         return div()
             .mt(z(4.))
-            .child(media_image(&m.url, original, "".into(), (m.width, m.height), size))
+            .child(media_image(&src, original, "".into(), (m.width, m.height), size))
             .into_any_element();
     }
     // Small thumbnail on the right for article/link embeds, big image below otherwise.

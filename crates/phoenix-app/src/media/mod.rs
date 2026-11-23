@@ -56,6 +56,32 @@ pub fn video_poster(url: &str, w: u32, h: u32) -> SharedString {
     format!("{r}{sep}format=webp").into()
 }
 
+/// Animated GIF variant of a gifv embed (Tenor/Giphy) that GPUI can play.
+/// Discord plays the embed's mp4; GPUI only animates GIF/WebP, so Tenor
+/// links are rewritten to the full-size gif rendition (format code `AAAAC`)
+/// and Giphy's `giphy.mp4` to `giphy.gif`. Proxied URLs
+/// (`images-ext-*/external/<sig>/https/media.tenor.com/...`) are unwrapped.
+pub fn gifv_animated(url: &str) -> Option<SharedString> {
+    let url = url.split('?').next().unwrap_or(url);
+    for host in ["media.tenor.com/", "media1.tenor.com/", "c.tenor.com/"] {
+        if let Some(i) = url.find(host) {
+            let mut parts = url[i + host.len()..].split('/').filter(|s| !s.is_empty() && *s != "m");
+            let (code, slug) = (parts.next()?, parts.next()?);
+            if code.len() < 6 || !code.is_ascii() {
+                return None;
+            }
+            let stem = slug.rsplit_once('.').map_or(slug, |(s, _)| s);
+            return Some(format!("https://media.tenor.com/{}AAAAC/{stem}.gif", &code[..code.len() - 5]).into());
+        }
+    }
+    if let Some(i) = url.find("giphy.com/media/") {
+        let rest = &url[i + "giphy.com/media/".len()..];
+        let id = rest.split('/').next().filter(|s| !s.is_empty())?;
+        return Some(format!("https://media.giphy.com/media/{id}/giphy.gif").into());
+    }
+    None
+}
+
 fn strip_params(url: &str, names: &[&str]) -> String {
     let Some((base, q)) = url.split_once('?') else { return url.to_owned() };
     let kept: Vec<&str> = q
@@ -167,6 +193,18 @@ pub fn close_viewer(cx: &mut App) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gifv_animated_rewrites_tenor_and_giphy() {
+        let g = |u: &str| super::gifv_animated(u).map(|s| s.to_string());
+        assert_eq!(g("https://media.tenor.com/6n0lkxsBEQkAAAPo/cat.mp4").as_deref(), Some("https://media.tenor.com/6n0lkxsBEQkAAAAC/cat.gif"));
+        assert_eq!(
+            g("https://images-ext-1.discordapp.net/external/abc/https/media.tenor.com/6n0lkxsBEQkAAAAe/cat.png?width=10").as_deref(),
+            Some("https://media.tenor.com/6n0lkxsBEQkAAAAC/cat.gif")
+        );
+        assert_eq!(g("https://media.giphy.com/media/xyz/giphy.mp4").as_deref(), Some("https://media.giphy.com/media/xyz/giphy.gif"));
+        assert_eq!(g("https://example.com/a.mp4"), None);
+    }
+
     use super::*;
 
     #[test]
