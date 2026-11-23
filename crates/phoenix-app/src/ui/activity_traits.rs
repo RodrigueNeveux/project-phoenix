@@ -37,20 +37,14 @@ pub fn ensure(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     });
 }
 
-/// Authors of the feed entries, `None` until the feed was fetched.
-/// The client builds the member list Activity rows from this feed only
-/// (GLOBAL_FEED entries whose author is a guild member who can view the channel).
-pub fn feed_authors() -> Option<Vec<Id>> {
-    FEED.with(|f| {
-        let f = f.borrow();
-        f.0?;
-        Some(f.1.iter().map(|e| e.0).collect())
-    })
+/// The feed entries (GLOBAL_FEED ranked order), empty until fetched.
+pub fn entries() -> Vec<Entry> {
+    FEED.with(|f| f.borrow().1.clone())
 }
 
 /// True once the feed answered and `user` authored an entry.
 pub fn in_feed(user: Id) -> bool {
-    FEED.with(|f| f.borrow().1.iter().any(|e| e.0 == user))
+    FEED.with(|f| f.borrow().1.iter().any(|e| e.author == user))
 }
 
 /// (first time, resurrected) for `user` playing `game`.
@@ -59,8 +53,8 @@ pub fn traits(user: Id, game: &str) -> (bool, bool) {
         f.borrow()
             .1
             .iter()
-            .filter(|e| e.0 == user && e.2.as_deref().is_none_or(|n| n.eq_ignore_ascii_case(game)))
-            .fold((false, false), |(a, b), e| (a || e.3, b || e.4))
+            .filter(|e| e.author == user && e.game.as_deref().is_none_or(|n| n.eq_ignore_ascii_case(game)))
+            .fold((false, false), |(a, b), e| (a || e.first_time, b || e.resurrected))
     })
 }
 
@@ -70,7 +64,10 @@ mod tests {
 
     #[test]
     fn matches_user_and_game() {
-        FEED.with(|f| *f.borrow_mut() = (Some(Instant::now()), vec![(Id(1), None, Some("Hades".into()), true, false), (Id(2), None, None, false, true)]));
+        FEED.with(|f| *f.borrow_mut() = (Some(Instant::now()), vec![
+                Entry { author: Id(1), game: Some("Hades".into()), first_time: true, ..Default::default() },
+                Entry { author: Id(2), resurrected: true, ..Default::default() },
+            ]));
         assert_eq!(traits(Id(1), "hades"), (true, false));
         assert_eq!(traits(Id(1), "Celeste"), (false, false));
         assert_eq!(traits(Id(2), "x"), (false, true));

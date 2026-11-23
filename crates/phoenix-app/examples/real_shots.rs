@@ -112,6 +112,16 @@ impl Backend for ReadOnly {
     fn notify_prefs(&self) -> Option<phoenix_app::notifications::NotifyPrefs> {
         self.0.notify_prefs()
     }
+    fn member_can_view(&self, c: Id, u: Id) -> bool {
+        self.0.member_can_view(c, u)
+    }
+    fn activity_feed_enabled(&self, g: Id) -> bool {
+        self.0.activity_feed_enabled(g)
+    }
+    /// Gateway op 8 (read-only member lookup) for Activity feed authors.
+    fn request_feed_members(&self, g: Id, u: Vec<Id>) {
+        self.0.request_feed_members(g, u)
+    }
     fn is_media_channel(&self, c: Id) -> bool {
         self.0.is_media_channel(c)
     }
@@ -526,10 +536,10 @@ fn main() -> anyhow::Result<()> {
                     println!("  vu {} member={:?}", u.0, m.map(|m| (m.nick.clone(), m.presence, m.activity.clone())));
                 }
             }
-            println!("feed {:?}", phoenix_app::ui::activity_traits::feed_authors().map(|v| v.len()));
-            for a in phoenix_app::ui::activity_traits::feed_authors().unwrap_or_default() {
-                println!("feed author {} {:?}", a.0, app.users.get(&a).map(|u| u.display_name.clone()));
-            }
+            let feed = phoenix_app::ui::activity_traits::entries();
+            let g = app.selected_guild;
+            let members = feed.iter().filter(|e| g.and_then(|g| app.members.get(&g)).is_some_and(|ms| ms.iter().any(|m| m.user == e.author))).count();
+            println!("feed {} entries, {} by guild members, {} with icons", feed.len(), members, feed.iter().filter(|e| e.icon.is_some()).count());
             if let Some(c) = app.selected_channel.and_then(|c| app.messages.get(&c)) {
                 for m in c.msgs.iter().rev().take(12) {
                     let u = app.users.get(&m.author);

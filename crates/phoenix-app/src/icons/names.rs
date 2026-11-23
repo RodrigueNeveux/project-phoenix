@@ -130,6 +130,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("more-horizontal", &["MoreHorizontalIcon"]),
     ("medal", &["NewUserSimpleIcon", "MedalIcon"]),
     ("streak", &["FlashIcon", "LightningIcon", "BoltIcon", "FireIcon"]),
+    ("fire", &["FireIcon"]),
     ("blur", &["BlurBackgroundIcon"]),
     ("play", &["PlayIcon"]),
     ("image-plus", &["ImagePlusIcon", "ImageIcon"]),

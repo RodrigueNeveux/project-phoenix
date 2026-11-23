@@ -149,11 +149,38 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
         }
         ParityRequest::ContentInventory => {
             let list = rest.get_content_inventory().await.map_err(e)?;
-            ParityReply::Inventory(
-                list.into_iter()
-                    .map(|x| (crate::model::Id(x.author_id), x.application_id.map(crate::model::Id), x.game_name, x.first_time, x.resurrected))
-                    .collect(),
-            )
+            let mut out: Vec<super::InventoryEntry> = list
+                .into_iter()
+                .map(|x| super::InventoryEntry {
+                    id: crate::model::Id(x.id),
+                    author: crate::model::Id(x.author_id),
+                    app: x.application_id.map(crate::model::Id),
+                    game: x.game_name,
+                    content_type: x.content_type,
+                    first_time: x.first_time,
+                    resurrected: x.resurrected,
+                    trending: x.trending,
+                    streak_days: x.streak_days,
+                    icon: None,
+                })
+                .collect();
+            // Card thumbnails: `app-icons/{id}/{icon}.png?size=240` (read-only lookup).
+            let mut ids: Vec<u64> = out.iter().filter_map(|x| x.app.map(|a| a.0)).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            for chunk in ids.chunks(50) {
+                let q = chunk.iter().map(|i| format!("application_ids={i}")).collect::<Vec<_>>().join("&");
+                let Ok(apps) = rest.request_json(reqwest::Method::GET, &format!("/applications/public?{q}"), None).await else { continue };
+                for a in apps.as_array().into_iter().flatten() {
+                    let id = a.get("id").and_then(|v| v.as_str()).and_then(|s| s.parse::<u64>().ok());
+                    let (Some(id), Some(icon)) = (id, a.get("icon").and_then(|v| v.as_str())) else { continue };
+                    let url: gpui::SharedString = format!("https://cdn.discordapp.com/app-icons/{id}/{icon}.png?size=240&keep_aspect_ratio=false").into();
+                    for x in out.iter_mut().filter(|x| x.app.map(|a| a.0) == Some(id)) {
+                        x.icon = Some(url.clone());
+                    }
+                }
+            }
+            ParityReply::Inventory(out)
         }
         ParityRequest::SetSaved { channel, message: m, saved } => {
             if saved {

@@ -350,6 +350,8 @@ pub struct People {
     pub thread_lists: HashMap<Id, Vec<ListEntry>>,
     /// Threads whose member list was already requested.
     pub thread_requested: std::cell::RefCell<std::collections::HashSet<Id>>,
+    /// (guild, user) feed authors already requested with op 8 (member list Activity).
+    pub feed_requested: std::cell::RefCell<std::collections::HashSet<(Id, Id)>>,
 }
 
 impl People {

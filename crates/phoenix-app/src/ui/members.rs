@@ -16,7 +16,7 @@ use crate::{
     app::{MemberRow, PhoenixApp},
     backend::AppEvent,
     model::{Id, Member, Presence},
-    presence::{Activity, ActivityKind, ListEntry, ranges_for},
+    presence::{ListEntry, ranges_for},
     theme::{Palette, c, generated::idx, m, role_color, tok},
     ui::avatar_with_status,
 };
@@ -208,33 +208,45 @@ pub fn elapsed(start_ms: i64, now_s: i64) -> String {
     }
 }
 
-/// Members of `g` currently playing something, newest first.
-fn playing(app: &PhoenixApp, g: Id) -> Vec<(Id, &Activity)> {
-    let in_guild = |u: &Id| match rows_for(app, g) {
-        Some(rows) => rows.iter().any(|r| matches!(r, ListEntry::Member(m, _) if m.user == *u)),
-        None => app.members.get(&g).is_some_and(|ms| ms.iter().any(|m| m.user == *u)),
+/// Member list Activity rows (client member list groups hook): GLOBAL_FEED
+/// entries of the rendered content types whose author is a member of `g`
+/// (unknown authors are requested with op 8, like `requestMember`) and can
+/// VIEW_CHANNEL the open channel, in feed order.
+fn feed_cards(app: &PhoenixApp, g: Id) -> Vec<crate::commands::InventoryEntry> {
+    let is_member = |u: Id| {
+        app.members.get(&g).is_some_and(|ms| ms.iter().any(|m| m.user == u))
+            || rows_for(app, g).is_some_and(|rows| rows.iter().any(|r| matches!(r, ListEntry::Member(m, _) if m.user == u)))
     };
-    let mut v: Vec<(Id, &Activity)> = app
-        .people
-        .activities
-        .iter()
-        .filter(|(u, _)| in_guild(u))
-        // Client member list groups hook: rows come only from the content inventory
-        // GLOBAL_FEED (`entries.filter(author is member && can VIEW_CHANNEL)`), never
-        // from live presences alone, so a game with no feed entry shows no card.
-        .filter(|(u, _)| crate::ui::activity_traits::in_feed(**u))
-        .filter(|(u, _)| app.selected_channel.is_none_or(|ch| app.backend.member_can_view(ch, **u)))
-        .filter_map(|(u, acts)| Some((*u, acts.iter().find(|a| a.kind == ActivityKind::Playing)?)))
-        .collect();
-    v.sort_by_key(|(u, a)| (std::cmp::Reverse(a.start.unwrap_or(0)), u.0));
-    v
+    let entries = crate::ui::activity_traits::entries();
+    let mut unknown: Vec<Id> = Vec::new();
+    let mut out = Vec::new();
+    for e in entries {
+        // u_ content types; we render PLAYED_GAME cards (game name + art).
+        if e.content_type != 1 || e.game.is_none() {
+            continue;
+        }
+        if !is_member(e.author) {
+            if !unknown.contains(&e.author) && app.people.feed_requested.borrow_mut().insert((g, e.author)) {
+                unknown.push(e.author);
+            }
+            continue;
+        }
+        if app.selected_channel.is_some_and(|ch| !app.backend.member_can_view(ch, e.author)) {
+            continue;
+        }
+        out.push(e);
+    }
+    if !unknown.is_empty() {
+        app.backend.request_feed_members(g, unknown);
+    }
+    out
 }
 
 /// The "Activity" section at the top of the member list: one card per
 /// member playing a game. Dump `-channels-N-N+` nodes 1502 (header) and
 /// 1512 (card `container_g7esM5 usesCardRows_g7esM5`).
 fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> AnyElement {
-    let acts = playing(app, g);
+    let acts = feed_cards(app, g);
     // Member list content feed gate (client bundle, member list groups hook):
     // shown when the guild allows it (`activity_feed_enabled`) AND the open
     // channel is not a forum (`isForumChannel()` = GUILD_FORUM only; media
@@ -279,19 +291,25 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                     .child(div().flex_1())
                     // toggleExpandIcon only when expandedCount > 3 (or hidden).
                     .when(acts.len() > 3, |d| {
-                        d.child(gpui::svg().path(crate::icons::path("chevron")).w(z(24.)).h(z(18.)).text_color(c(Palette::INTERACTIVE)))
+                        // collapsed (3 cards): ChevronSmallRight, as in the vanilla capture
+                        d.child(gpui::svg().path(crate::icons::path("chevron-right")).w(z(24.)).h(z(18.)).text_color(c(Palette::INTERACTIVE)))
                     }),
             ),
     );
-    for (uid, a) in acts.into_iter().take(3) {
+    for e in acts.into_iter().take(3) {
+        let uid = e.author;
         let user_cow = app.member_user(Some(g), uid);
         let user = user_cow.as_deref();
         let mem = app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == uid));
         let color = mem.and_then(|m| app.member_color(g, m));
-        let name = user.map(|u| u.display_name.clone()).unwrap_or_default();
-        let e = entity.clone();
-        let (first_time, resurrected) = crate::ui::activity_traits::traits(uid, &a.name);
-        let art = match a.image.clone() {
+        let name = mem
+            .and_then(|m| m.nick.clone())
+            .or_else(|| user.map(|u| u.display_name.clone()))
+            .unwrap_or_default();
+        let ent = entity.clone();
+        let game: SharedString = e.game.clone().unwrap_or_default().into();
+        // thumbnailButton_ img: app-icons/{app}/{icon}.png?size=240
+        let art = match e.icon.clone() {
             Some(url) => gpui::img(url).size_full().into_any_element(),
             None => div()
                 .size_full()
@@ -301,7 +319,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .text_size(z(16.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(muted)
-                .child(SharedString::from(a.name.chars().next().map(String::from).unwrap_or_default()))
+                .child(SharedString::from(game.chars().next().map(String::from).unwrap_or_default()))
                 .into_any_element(),
         };
         let badge = |ic: &'static str, t: SharedString| {
@@ -310,12 +328,12 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .flex()
                 .items_center()
                 .gap(z(4.))
-                .child(gpui::svg().path(ic).size(z(12.)).flex_none().text_color(c(Palette::TEXT_MUTED)))
+                .child(gpui::svg().path(crate::icons::path(ic)).size(z(12.)).flex_none().text_color(c(Palette::TEXT_MUTED)))
                 .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(t))
         };
         col = col.child(
             div()
-                .id(("activity-card", uid.0))
+                .id(("activity-card", e.id.0))
                 .mt(z(8.)) // container_g7esM5 margin 8px 0 0 8px
                 .ml(z(8.))
                 .mr(z(8.))
@@ -330,7 +348,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .gap(z(8.)) // cardRow_g7esM5 gap 8px
                 .on_click(move |ev, window, cx| {
                     let at = ev.position();
-                    e.update(cx, |a, cx| a.open_profile(uid, Some(g), at, window, cx));
+                    ent.update(cx, |a, cx| a.open_profile(uid, Some(g), at, window, cx));
                 })
                 .child(
                     div()
@@ -366,7 +384,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(c(Palette::TEXT_NORMAL))
                                 .text_ellipsis()
-                                .child(a.name.clone()),
+                                .child(game.clone()),
                         )
                         .child(
                             // badgesContainer_CTWncy: gap 0 8px
@@ -375,11 +393,13 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 .flex()
                                 .gap(z(8.))
                                 .overflow_hidden()
-                                // contentInventory traits: FIRST_TIME "New player", RESURRECTED "Resurrection"
-                                .when(first_time, |d| d.child(badge("icons/sparkle.svg", crate::t!("members.new_player"))))
-                                .when(resurrected, |d| d.child(badge("icons/refresh.svg", crate::t!("members.resurrection"))))
-                                .when_some(a.start, |d, st| d.child(badge("icons/controller.svg", elapsed(st, now).into())))
-                                .when_some(a.state.clone().or(a.details.clone()), |d, t| d.child(badge("icons/refresh.svg", t))),
+                                // badgeContainer_: game-controller + "Il y a 2j" (entry id time), then
+                                // the traits: FIRST_TIME "New player", RESURRECTED, TRENDING, streak >= 3.
+                                .child(badge("game-controller", crate::ui::settings::profile_activity::ago(crate::presence::snowflake_time(e.id.0), now)))
+                                .when(e.first_time, |d| d.child(badge("medal", crate::t!("members.new_player"))))
+                                .when(e.resurrected, |d| d.child(badge("refresh", crate::t!("members.resurrection"))))
+                                .when(e.trending, |d| d.child(badge("fire", crate::t!("members.trending"))))
+                                .when_some(e.streak_days.filter(|n| *n >= 3), |d, n| d.child(badge("streak", crate::t!("pa.streak", n = n)))),
                         ),
                 )
                 .child(
@@ -388,7 +408,8 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                         .size(z(48.)) // thumbnailButton_NJVMoP 48x48, radius 8; img radius 4
                         .rounded(z(4.))
                         .overflow_hidden()
-                        .bg(c(Palette::BG_MOD_SELECTED))
+                        // placeholder tile only when the app has no icon
+                        .when(e.icon.is_none(), |d| d.bg(c(Palette::BG_MOD_SELECTED)))
                         .child(art),
                 ),
         );

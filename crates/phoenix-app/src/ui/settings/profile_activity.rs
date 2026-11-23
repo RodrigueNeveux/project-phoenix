@@ -75,7 +75,7 @@ pub fn apply_icons(games: &mut [RecentGame], apps: &Value) {
 /// (module 583846 `aJ`, short format set): measured from the entry id's
 /// snowflake time, < 1 min seconds, < 1 h rounded minutes, < 12 h rounded
 /// hours, < 9 days rounded days, < 4 weeks rounded weeks, else 30-day months.
-fn ago(created: i64, now: i64) -> SharedString {
+pub fn ago(created: i64, now: i64) -> SharedString {
     let d = now - created;
     let a = d.abs();
     let r = |unit: i64| (d as f64 / unit as f64).round() as i64;

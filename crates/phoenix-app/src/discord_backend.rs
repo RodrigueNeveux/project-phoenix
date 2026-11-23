@@ -484,6 +484,21 @@ impl Backend for DiscordBackend {
             .is_none_or(|p| p.contains(phoenix_api::models::Permissions::VIEW_CHANNEL))
     }
 
+    fn request_feed_members(&self, guild: Id, users: Vec<Id>) {
+        let Ok(s) = self.inner.session() else { return };
+        let g = sf(guild);
+        let mut ids: Vec<phoenix_api::models::Snowflake> = users.into_iter().map(sf).filter(|u| s.cache.member(g, *u).is_none()).collect();
+        ids.truncate(100);
+        if !ids.is_empty() {
+            let _ = s.gateway.request_guild_members(phoenix_api::gateway::RequestGuildMembers {
+                guild_id: vec![g],
+                user_ids: Some(ids),
+                presences: true,
+                ..Default::default()
+            });
+        }
+    }
+
     fn activity_feed_enabled(&self, guild: Id) -> bool {
         let Ok(s) = self.inner.session() else { return false };
         let Some(g) = s.cache.guild(sf(guild)) else { return false };

@@ -136,8 +136,21 @@ pub enum ParityRequest {
     ArchivedThreads { channel: Id },
 }
 
-/// (author, application, game name, first time, resurrected).
-pub type InventoryEntry = (Id, Option<Id>, Option<String>, bool, bool);
+/// One content inventory feed entry (member list Activity card).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InventoryEntry {
+    pub id: Id,
+    pub author: Id,
+    pub app: Option<Id>,
+    pub game: Option<String>,
+    pub content_type: u64,
+    pub first_time: bool,
+    pub resurrected: bool,
+    pub trending: bool,
+    pub streak_days: Option<u64>,
+    /// `app-icons/{app}/{icon}.png` from `/applications/public`.
+    pub icon: Option<gpui::SharedString>,
+}
 
 #[derive(Clone, Debug)]
 pub enum ParityReply {
@@ -146,7 +159,7 @@ pub enum ParityReply {
     Messages(Vec<Message>),
     ForumPosts { posts: Vec<ForumPost>, has_more: bool },
     Channel(Id),
-    /// Content inventory entries: (author, application, game name, first time, resurrected).
+    /// Content inventory feed entries.
     Inventory(Vec<InventoryEntry>),
 }
 

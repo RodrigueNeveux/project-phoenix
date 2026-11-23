@@ -25,12 +25,24 @@ pub struct ScheduledMessage {
 
 /// Content inventory trait types (`TraitType` enum of the client).
 pub const TRAIT_FIRST_TIME: u64 = 1;
+pub const TRAIT_DURATION: u64 = 2;
 pub const TRAIT_RESURRECTED: u64 = 5;
+pub const TRAIT_STREAK: u64 = 8;
+pub const TRAIT_TRENDING: u64 = 9;
+/// `ContentInventoryEntryType.PLAYED_GAME` (the only type seen in guild feeds).
+pub const CONTENT_PLAYED_GAME: u64 = 1;
 
 /// What the activity card badges need from one content inventory entry.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InventoryEntry {
+    /// Entry id (snowflake; the card's "2d ago" is measured from it).
+    pub id: u64,
     pub author_id: u64,
+    pub content_type: u64,
+    /// `traits[type=9].trending` -> "Trending".
+    pub trending: bool,
+    /// `traits[type=8].streak_count_days`.
+    pub streak_days: Option<u64>,
     pub application_id: Option<u64>,
     pub game_name: Option<String>,
     /// `traits[type=1].first_time` -> "New player".
@@ -44,17 +56,24 @@ fn id_of(v: &Value) -> Option<u64> {
 }
 
 /// Parses `{ "entries": [{ author_id, extra: { application_id, game_name }, traits: [...] }] }`.
+/// The client's feed store keeps each entry under `content` (`feed.entries.map(e => e.content)`),
+/// so a wrapped entry is unwrapped first.
 pub fn parse_inventory(v: &Value) -> Vec<InventoryEntry> {
     let Some(entries) = v.get("entries").and_then(Value::as_array) else { return Vec::new() };
     entries
         .iter()
+        .map(|e| e.get("content").filter(|c| c.is_object()).unwrap_or(e))
         .filter_map(|e| {
             let author_id = id_of(e.get("author_id")?)?;
             let extra = e.get("extra");
             let traits = e.get("traits").and_then(Value::as_array).cloned().unwrap_or_default();
             let tr = |t: u64| traits.iter().find(|x| x.get("type").and_then(Value::as_u64) == Some(t)).cloned();
             Some(InventoryEntry {
+                id: e.get("id").and_then(id_of).unwrap_or(0),
                 author_id,
+                content_type: e.get("content_type").and_then(Value::as_u64).unwrap_or(CONTENT_PLAYED_GAME),
+                trending: tr(TRAIT_TRENDING).is_some_and(|t| t.get("trending").is_some_and(|x| !x.is_null() && x != &Value::Bool(false))),
+                streak_days: tr(TRAIT_STREAK).and_then(|t| t.get("streak_count_days")?.as_u64()),
                 application_id: extra.and_then(|x| x.get("application_id")).and_then(id_of),
                 game_name: extra.and_then(|x| x.get("game_name")).and_then(Value::as_str).map(str::to_owned),
                 first_time: tr(TRAIT_FIRST_TIME).and_then(|t| t.get("first_time")?.as_bool()).unwrap_or(false),
@@ -93,6 +112,16 @@ mod tests {
         assert!(e[0].first_time && !e[0].resurrected);
         assert_eq!(e[0].application_id, Some(7));
         assert!(e[1].resurrected && !e[1].first_time);
+    }
+
+    #[test]
+    fn unwraps_content() {
+        let v = serde_json::json!({"entries": [{"content": {"id": "9", "author_id": "42", "content_type": 1,
+            "ended_at": "2026-11-21T18:32:38.874000+00:00", "extra": {"game_name": "Roblox"},
+            "traits": [{"type": 8, "streak_count_days": 2}, {"type": 9, "trending": 1}]}}]});
+        let e = parse_inventory(&v);
+        assert_eq!((e[0].id, e[0].author_id, e[0].streak_days), (9, 42, Some(2)));
+        assert!(e[0].trending);
     }
 
     #[test]

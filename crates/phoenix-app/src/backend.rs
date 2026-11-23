@@ -232,6 +232,9 @@ pub trait Backend: Send + Sync + 'static {
     fn activity_feed_enabled(&self, _guild: Id) -> bool {
         true
     }
+    /// Request guild members for content feed authors (gateway op 8, like the
+    /// client's `requestMember`); results arrive as member events.
+    fn request_feed_members(&self, _guild: Id, _users: Vec<Id>) {}
     /// Whether guild member `user` can VIEW_CHANNEL `channel` (true when unknown).
     fn member_can_view(&self, _channel: Id, _user: Id) -> bool {
         true
