@@ -131,16 +131,7 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
     for (ix, r) in msg.reactions.iter().enumerate() {
         let e = entity.clone();
         let rc = r.clone();
-        let custom = r.emoji.starts_with('<');
-        let emoji_el: AnyElement = if custom {
-            let id_str = r.emoji_id.map(|i| i.0.to_string()).unwrap_or_default();
-            let ext = if r.emoji.starts_with("<a:") { "gif" } else { "webp" };
-            gpui::img(SharedString::from(format!("https://cdn.discordapp.com/emojis/{id_str}.{ext}?size=48")))
-                .size(px(16.))
-                .into_any_element()
-        } else {
-            div().text_size(px(16.)).child(r.emoji.clone()).into_any_element()
-        };
+        let emoji_el = crate::media::emoji::emoji_element(&r.emoji, 16.);
         row = row.child(
             div()
                 .id(("reaction", ix))
@@ -328,4 +319,76 @@ pub fn open_author(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&gpui:
             a.open_profile(user, guild, pos, w, cx)
         });
     }
+}
+
+/// Text runs covering `range` of a run list that covers the whole text.
+fn slice_runs(runs: &[gpui::TextRun], range: std::ops::Range<usize>) -> Vec<gpui::TextRun> {
+    let mut out = Vec::new();
+    let mut pos = 0;
+    for r in runs {
+        let (s, e) = (pos, pos + r.len);
+        pos = e;
+        let (a, b) = (s.max(range.start), e.min(range.end));
+        if a < b {
+            let mut n = r.clone();
+            n.len = b - a;
+            out.push(n);
+        }
+    }
+    out
+}
+
+/// Rich text with inline emoji images (jumbo when the block is emoji-only).
+pub fn rich_with_emoji(
+    entity: &Entity<PhoenixApp>,
+    msg: crate::model::Id,
+    bi: usize,
+    t: &crate::richtext::RichText,
+) -> AnyElement {
+    let jumbo = crate::richtext::is_jumbo(&[crate::richtext::RBlock::Text(t.clone())]);
+    let size = if jumbo { 48. } else { 22. };
+    let mut row = div().flex().flex_wrap().items_center().text_size(px(16.)).line_height(px(22.));
+    let mut last = 0;
+    let mut seg = 0usize;
+    let push_text = |row: Div, range: std::ops::Range<usize>, seg: &mut usize| -> Div {
+        if range.is_empty() {
+            return row;
+        }
+        let text: SharedString = t.text[range.clone()].to_owned().into();
+        let styled = gpui::StyledText::new(text).with_runs(slice_runs(&t.runs, range.clone()));
+        // Click ranges fully inside this segment, shifted.
+        let mut ranges = Vec::new();
+        let mut targets = Vec::new();
+        for (cr, tg) in t.click_ranges.iter().zip(t.click_targets.iter()) {
+            if cr.start >= range.start && cr.end <= range.end {
+                ranges.push(cr.start - range.start..cr.end - range.start);
+                targets.push(tg.clone());
+            }
+        }
+        *seg += 1;
+        if ranges.is_empty() {
+            return row.child(styled);
+        }
+        let e = entity.clone();
+        row.child(
+            gpui::InteractiveText::new(("rte", (msg.0 << 12) | ((bi as u64) << 6) | *seg as u64), styled).on_click(
+                ranges,
+                move |ix, _w, cx| match &targets[ix] {
+                    crate::richtext::ClickTarget::Link(url) => cx.open_url(url),
+                    crate::richtext::ClickTarget::Spoiler(sp) => {
+                        let sp = *sp;
+                        e.update(cx, |a, cx| a.reveal_spoiler(msg, sp, cx));
+                    }
+                    crate::richtext::ClickTarget::Mention(_) => {}
+                },
+            ),
+        )
+    };
+    for (r, token) in &t.emoji {
+        row = push_text(row, last..r.start, &mut seg);
+        row = row.child(div().mx(px(1.)).child(crate::media::emoji::emoji_element(token, size)));
+        last = r.end;
+    }
+    row = push_text(row, last..t.text.len(), &mut seg);
+    row.into_any_element()
 }

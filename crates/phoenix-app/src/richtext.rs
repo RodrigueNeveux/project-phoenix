@@ -27,6 +27,9 @@ pub struct RichText {
     pub runs: Vec<TextRun>,
     pub click_ranges: Vec<Range<usize>>,
     pub click_targets: Vec<ClickTarget>,
+    /// Inline emoji to draw as images: byte range in `text` + token
+    /// (`<:name:id>` or the Unicode sequence).
+    pub emoji: Vec<(Range<usize>, SharedString)>,
 }
 
 #[derive(Clone)]
@@ -107,11 +110,17 @@ pub fn rich_inline(inline: &Inline, revealed: &dyn Fn(usize) -> bool, base: Hsla
             click_targets.push(ClickTarget::Mention(m.clone()));
         }
     }
+    // Code spans keep emoji as text.
+    let in_code = |r: &Range<usize>| {
+        inline.spans.iter().any(|s| s.style.has(Style::CODE) && s.range.start <= r.start && r.end <= s.range.end)
+    };
+    let emoji = emoji_ranges(&inline.text).into_iter().filter(|(r, _)| !in_code(r)).collect();
     RichText {
         text: inline.text.clone().into(),
         runs,
         click_ranges,
         click_targets,
+        emoji,
     }
 }
 
@@ -175,4 +184,89 @@ pub fn build(
         .collect();
     let blocks = render_blocks(&parsed, revealed, c(Palette::TEXT_NORMAL));
     (parsed, blocks, mentions_me, preview.into())
+}
+
+fn is_emoji_modifier(c: char) -> bool {
+    matches!(c as u32, 0xFE0F | 0x200D | 0x20E3 | 0x1F3FB..=0x1F3FF | 0xE0020..=0xE007F)
+}
+
+/// Custom emoji tokens and Unicode emoji sequences in `text`, in order.
+pub fn emoji_ranges(text: &str) -> Vec<(Range<usize>, SharedString)> {
+    let custom = crate::media::emoji::find_custom(text);
+    let mut out: Vec<(Range<usize>, SharedString)> = Vec::new();
+    let mut ci = custom.iter().peekable();
+    let mut it = text.char_indices().peekable();
+    while let Some((i, ch)) = it.next() {
+        if let Some((r, _)) = ci.peek()
+            && r.start == i
+        {
+            let r = r.clone();
+            out.push((r.clone(), text[r.clone()].to_owned().into()));
+            ci.next();
+            while it.peek().is_some_and(|(j, _)| *j < r.end) {
+                it.next();
+            }
+            continue;
+        }
+        let cp = ch as u32;
+        let start_ok = cp >= 0x1F000 || (0x2190..0x2BFF).contains(&cp) || (0x2600..0x27C0).contains(&cp);
+        let keycap = ch.is_ascii_digit() || ch == '#' || ch == '*';
+        if !start_ok && !keycap {
+            continue;
+        }
+        let mut end = i + ch.len_utf8();
+        let mut regional = (0x1F1E6..=0x1F1FF).contains(&cp);
+        while let Some(&(j, c)) = it.peek() {
+            let joined = text[..j].ends_with('\u{200D}');
+            if is_emoji_modifier(c) || joined || (regional && (0x1F1E6..=0x1F1FF).contains(&(c as u32))) {
+                if (0x1F1E6..=0x1F1FF).contains(&(c as u32)) {
+                    regional = false;
+                }
+                end = j + c.len_utf8();
+                it.next();
+            } else {
+                break;
+            }
+        }
+        let seq = &text[i..end];
+        if keycap && !seq.contains('\u{20E3}') {
+            continue;
+        }
+        if crate::media::emoji::twemoji_code(seq).is_some() {
+            out.push((i..end, seq.to_owned().into()));
+        }
+    }
+    out
+}
+
+/// Emoji-only message (whitespace aside, at most 27 emoji): Discord draws
+/// them "jumbo" (48px).
+pub fn is_jumbo(blocks: &[RBlock]) -> bool {
+    let mut n = 0;
+    for b in blocks {
+        let RBlock::Text(t) = b else { return false };
+        let mut last = 0;
+        for (r, _) in &t.emoji {
+            if !t.text[last..r.start].trim().is_empty() {
+                return false;
+            }
+            last = r.end;
+            n += 1;
+        }
+        if !t.text[last..].trim().is_empty() {
+            return false;
+        }
+    }
+    n > 0 && n <= 27
+}
+
+#[cfg(test)]
+mod emoji_tests {
+    use super::*;
+    #[test]
+    fn finds_unicode_and_custom() {
+        let t = "hi 👍🏽 <:blob:12> 👨\u{200D}👩\u{200D}👧 🇫🇷 ok 1";
+        let e: Vec<String> = emoji_ranges(t).into_iter().map(|(_, s)| s.to_string()).collect();
+        assert_eq!(e, vec!["👍🏽", "<:blob:12>", "👨\u{200D}👩\u{200D}👧", "🇫🇷"]);
+    }
 }
