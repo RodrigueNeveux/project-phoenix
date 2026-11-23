@@ -16,10 +16,9 @@ use crate::{
     app::{MemberRow, PhoenixApp},
     backend::AppEvent,
     model::{Id, Member, Presence},
-    assets::Icon,
     presence::{Activity, ActivityKind, ListEntry, ranges_for},
     theme::{Palette, c, generated::idx, m, role_color, tok},
-    ui::{avatar_with_status, icon},
+    ui::avatar_with_status,
 };
 
 /// `AppEvent::MemberListRows` / `AppEvent::Activities`.
@@ -40,7 +39,7 @@ pub fn on_event(app: &mut PhoenixApp, ev: AppEvent, cx: &mut Context<PhoenixApp>
 /// If the open guild has a server list, size the virtual list for it
 /// (keeping the scroll position) and return true.
 pub fn sync_server_list(app: &mut PhoenixApp) -> bool {
-    // +1: item 0 is the counts row + Activity section, which scrolls with
+    // +1: item 0 is the Activity section, which scrolls with
     // the list like the client's (they sit inside `members_86es0b`).
     let Some(len) = app.selected_guild.and_then(|g| app.people.lists.get(&g)).map(|l| l.len() + 1) else {
         return false;
@@ -93,64 +92,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .w_full()
                 .pb(z(10.)), // members_86es0b padding-bottom 10px
         )
-}
-
-/// (online, total) from the server list groups, or the local mock list.
-fn counts(app: &PhoenixApp, g: Id) -> (u32, u32) {
-    if let Some(rows) = app.people.lists.get(&g) {
-        let mut online = 0;
-        let mut total = 0;
-        for r in rows {
-            if let ListEntry::Group { id, count } = r {
-                total += count;
-                if id != "offline" {
-                    online += count;
-                }
-            }
-        }
-        return (online, total);
-    }
-    let ms = app.members.get(&g).map(Vec::as_slice).unwrap_or_default();
-    let online = ms.iter().filter(|m| m.presence != Presence::Offline).count() as u32;
-    (online, ms.len() as u32)
-}
-
-/// Header counts: online, members, in voice. The bundle for this row isn't
-/// in the cached CSS; sizes follow the member row text (16/20, gap --space-16).
-fn counts_row(app: &PhoenixApp, g: Id) -> AnyElement {
-    let (online, total) = counts(app, g);
-    let voice: usize = app
-        .guild_channels
-        .get(&g)
-        .map(|ids| ids.iter().filter_map(|i| app.channels.get(i)).map(|c| c.voice_users.len()).sum())
-        .unwrap_or(0);
-    let stat = |dot: AnyElement, n: String, color: u32| {
-        div().flex().items_center().gap(z(6.)).child(dot).child(div().text_color(c(color)).child(n))
-    };
-    div()
-        .flex_none()
-        .h(z(48.))
-        .px(z(16.)) // membersGroup_86es0b padding-inline-start --space-md
-        .flex()
-        .items_center()
-        .gap(z(16.)) // --space-16
-        .text_size(z(16.))
-        .line_height(z(20.))
-        .font_weight(FontWeight::MEDIUM)
-        .child(stat(
-            div().size(z(10.)).rounded_full().bg(c(Palette::GREEN)).into_any_element(),
-            online.to_string(),
-            Palette::GREEN,
-        ))
-        .child(stat(
-            div().size(z(10.)).rounded_full().border_2().border_color(c(Palette::TEXT_MUTED)).into_any_element(),
-            total.to_string(),
-            Palette::TEXT_MUTED,
-        ))
-        .when(voice > 0, |d| {
-            d.child(stat(icon(Icon::Mic, 16., c(Palette::TEXT_MUTED)).into_any_element(), voice.to_string(), Palette::TEXT_MUTED))
-        })
-        .into_any_element()
 }
 
 /// "2d ago" style elapsed time since `start_ms`.
@@ -395,10 +336,11 @@ fn placeholder(ix: usize) -> AnyElement {
 fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let app = entity.read(cx);
     let Some(g) = app.selected_guild else { return div().into_any_element() };
-    // Item 0: counts row + Activity section, scrolled with the members.
+    // Item 0: the Activity section, scrolled with the members. (The online /
+    // total / voice counts row was Vencord's MemberCount plugin, not vanilla.)
     let Some(ix) = ix.checked_sub(1) else {
         let entity = entity.clone();
-        return div().flex().flex_col().child(counts_row(app, g)).child(activity_section(app, &entity, g)).into_any_element();
+        return div().flex().flex_col().child(activity_section(app, &entity, g)).into_any_element();
     };
     if let Some(rows) = app.people.lists.get(&g) {
         return match rows.get(ix) {

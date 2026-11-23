@@ -14,7 +14,7 @@ use crate::{
     model::Id,
     presence::format_date,
     theme::{Palette, c, generated::idx, tok, z},
-    ui::profile::{avatar_block, banner, info, name_block, section_title},
+    ui::profile::{avatar_block, banner, info, mutuals_row, name_block, section_title},
 };
 
 thread_local! {
@@ -53,9 +53,19 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let uid = peer(app)?;
     ensure_profile(app, uid, cx);
     let i = info(app, uid, None);
-    let card_bg = tok(idx::BACKGROUND_BASE_LOW);
+    // `:where(.outer_P1YEjQ).user-profile-sidebar-redesign:not(.custom-user-profile-theme)`
+    // background --chat-background-default (dump vanilla-dm-profile-panel #1548).
+    // With a Nitro theme the outer card is the primary -> secondary gradient and
+    // `inner_P1YEjQ` lays --profile-gradient-overlay (black / .6) over it.
+    let theme = i.prof.and_then(|p| p.theme);
+    let card_bg = tok(idx::CHAT_BACKGROUND_DEFAULT);
+    let mix = |rgb: u32| {
+        // color-mix(in oklab, overlay 100%, theme colour): approximated as 60% black over it.
+        let ch = |sh: u32| (((rgb >> sh) & 0xFF) as f32 * 0.4).round() as u32;
+        (ch(16) << 16) | (ch(8) << 8) | ch(0)
+    };
+    let ring_bg = theme.map(|(p, _)| mix(p)).unwrap_or(card_bg);
     let e = cx.entity();
-    let muted = c(tok(idx::TEXT_MUTED));
     // bannerButton_C4gRrZ: 32px circle, rgba(0,0,0,.56), 1px rgba(255,255,255,.08), 16px glyph.
     let banner_btn = |id: &'static str, icon: &'static str| {
         div()
@@ -71,7 +81,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .cursor_pointer()
             .child(gpui::svg().path(icon).size(z(16.)).text_color(gpui::white()))
     };
-    let mutual = i.prof.map(|p| p.mutual_guilds).unwrap_or(0);
     let bio = i.prof.map(|p| p.bio.clone()).filter(|b| !b.is_empty());
     let created = i.prof.map(|p| p.created);
     let header = div()
@@ -88,10 +97,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .flex()
                 .gap(z(8.))
                 .child(banner_btn("dm-panel-friend", "icons/friends.svg"))
-                .child(banner_btn("dm-panel-more", "icons/more-horizontal.svg")),
+                .child(banner_btn("dm-panel-more", "icons/chat/more.svg")),
         )
         // avatar_WRLIGC: 80px at (14, 55) incl. the ring
-        .child(div().absolute().left(z(8.)).top(z(49.)).child(avatar_block(&i, 80., 6., card_bg)));
+        .child(div().absolute().left(z(8.)).top(z(49.)).child(avatar_block(&i, 80., 6., ring_bg)));
     let mut body = div()
         .mx(z(16.)) // body_A7qlid margin 0 16, gap 20
         .flex()
@@ -104,17 +113,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .flex_col()
                 .gap(z(8.))
                 .child(name_block(&i, false))
-                .when(mutual > 0, |d| {
-                    // section_PXYMZ1 padding 4 0, body-xs/normal 12/16
-                    d.child(
-                        div()
-                            .py(z(4.))
-                            .text_size(z(12.))
-                            .line_height(z(16.))
-                            .text_color(muted)
-                            .child(crate::t!("profile.mutual_servers", n = mutual)),
-                    )
-                }),
+                // mutuals_PXYMZ1: 16px face pile + "N mutual friends" • "N mutual servers"
+                .children(i.prof.and_then(mutuals_row)),
         );
     if let Some(b) = bio {
         // section_NcvRRg gap 8; descriptionClamp_BcddaK body-sm 14/18, 3 lines;
@@ -165,7 +165,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .w_full()
             .h(z(39.))
             .rounded(z(8.))
-            .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))) // secondary_F7qvhY rgba(151,151,159,.12)
             .border_1()
             .border_color(c(Palette::DIVIDER))
             .flex()
@@ -190,15 +190,28 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .child(
                 div()
                     .size_full()
-                    .p(z(2.)) // outer_P1YEjQ padding 2, radius 8
+                    .p(z(2.)) // outer_P1YEjQ padding --custom-user-profile-theme-padding, radius --radius-sm
                     .rounded(z(8.))
-                    .bg(c(tok(idx::BORDER_SUBTLE)))
+                    .map(|d| match theme {
+                        Some((p, s2)) => d.bg(gpui::linear_gradient(
+                            180.,
+                            gpui::linear_color_stop(c(p), 0.18), // primary until the banner height
+                            gpui::linear_color_stop(c(s2), 0.88), // secondary at 100% - footer height
+                        )),
+                        None => d.bg(c(card_bg)),
+                    })
                     .child(
                         div()
                             .size_full()
                             .rounded(z(6.)) // inner_P1YEjQ radius 6
                             .overflow_hidden()
-                            .bg(c(card_bg))
+                            .when_some(theme, |d, (p, s2)| {
+                                d.bg(gpui::linear_gradient(
+                                    180.,
+                                    gpui::linear_color_stop(c(mix(p)), 0.18),
+                                    gpui::linear_color_stop(c(mix(s2)), 1.),
+                                ))
+                            })
                             .flex()
                             .flex_col()
                             .child(div().id("dm-panel-scroll").flex_1().min_h_0().overflow_y_scroll().child(header).child(body))

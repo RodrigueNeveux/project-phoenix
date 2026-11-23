@@ -23,7 +23,7 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | bot tag | 40791 `botTag_Iy0c7A` | margin-inline-start | 4px | ui/members.rs app_tag | ✅ |
 | server tag | 40791 `clanTag_Iy0c7A` | margin | 1px 0 1px 4px | ui/members.rs member_row | ✅ (was missing) |
 | server tag chip | `chipletContainerInner_k8jyN7` | bg / radius / padding / line-height | --background-mod-strong / 4px / 0 4px / 16px | ui/members.rs server_tag | ✅ (new) |
-| counts row | not in cached CSS (screenshot) | online / members / voice | dot+count, gap 16 | ui/members.rs counts_row | ✅ (new) |
+| counts row | Vencord MemberCount plugin (unclassed div, English aria) | — | — | removed from ui/members.rs | ✅ removed (not in vanilla-members) |
 | Activity cards | 4187692 `container_DKsPd0` (closest), `thumbnailContainer` 72px | padding / gap / radius / border | --space-12 / 12 / --radius-sm / --border-subtle | ui/members.rs activity_section | ✅ (new; exact member-list bundle not cached) |
 | Activity badges ("New player", "Resurrection") | content-inventory API | — | — | — | ❌ data not available from presences |
 | context menu | 476662 `menu_M3qk4j` | background | --background-surface-higher | ui/context_menu.rs MENU_BG | ✅ (was surface-high) |
@@ -67,6 +67,10 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | modal backdrop | --background-scrim | bg | scrim token | ui/modal.rs frame, ui/profile.rs | ✅ (was #000000B3) |
 | settings, switcher, pickers, inbox, home rows, status picker | — | — | — | — | ❌ not audited yet |
 
+## Vanilla re-dump (2026-11-23, no Vencord)
+
+Dumps: `vanilla-members`, `vanilla-profile-popout`, `vanilla-profile-modal-board`, `-tab1..4`, `vanilla-friends-{online,all,pending,addfriend}`, `vanilla-message-requests`, `vanilla-dm-profile-panel` (in ~/discord-phoenix-ref/current-client/dumps, private). Class-by-class diff against the with-vencord dumps: the member list, Activity cards, member rows, Friends page and popout structure are unchanged; differences are per-user data (profile themes/frames) except the Vencord-only counts row (removed). Popout additions seen in vanilla still ❌: note button next to the name, "Collection de jeux" widget card (`breadcrumb_s6-upr`, 24px icons r4 gap 4, "+N" overlay rgba(0,0,0,.6)), call / friend banner buttons.
+
 ## Live DOM dump pass (Nov 2026 client, CDP dumps)
 
 Dumps: `/mnt/windata/project-phoenix/dumps/-channels-N-N+.json` (guild, member list),
@@ -105,13 +109,16 @@ client-mod additions, not Discord: kept as our counts row but not treated as ref
 | Active Now card | me #1577 `itemCard_-7KzVR` | margin-top 12, radius 16, 1px #97979f/.2, shadow 0 1 4 .14 | — | ui/home/friends.rs | ✅ (shadow ❌) |
 | Active Now header | me #1579 `headerFull_o3hXTo` | padding 16, gap 12, rgba(151,151,159,.08); 32px avatar, 16/20 600, 14/18 #81828a, 24px icon r4 | — | ui/home/friends.rs | ✅ |
 | Active Now game | me #1590–1600 `gameSection_o3hXTo` | padding 16, gap 12; 32px icon, 14/18 600 title, 12/16 sub, 24px party avatar | — | ui/home/friends.rs | ✅ |
-| DM list Nitro/Shop/Quests | me (sidebar) | "Ton Nitro", "Boutique", "Quêtes" rows under Friends; no Message Requests row | — | sidebar (other owner) | — |
+| DM list Nitro/Shop/Quests | vanilla-friends-online (sidebar links /store, /shop, /quest-home) | Friends, Ton Nitro, Boutique, Quêtes; Message Requests only while requests are pending | — | ui/sidebar.rs dm_top | ✅ (Quests glyph ❌: Compass stand-in) |
+| DM list header | vanilla-friends-online | "Messages privés" / "Direct Messages", not uppercased | — | locales dm.header | ✅ (was uppercase) |
 | DM profile panel | CDP `aside_HbUF2J` | 320px, padding 8 | — | ui/dm_profile_panel.rs | ✅ (new) |
-| DM profile card | CDP `outer_P1YEjQ` / `inner_P1YEjQ` | padding 2 radius 8 / radius 6 | theme gradient → --border-subtle | ui/dm_profile_panel.rs | ✅ |
+| DM profile card | vanilla-dm-profile-panel #1548/#1549 `outer_P1YEjQ` / `inner_P1YEjQ` | padding 2 radius 8 / radius 6; bg | --chat-background-default (no theme); Nitro theme: primary→secondary gradient, inner overlay black/.6 | ui/dm_profile_panel.rs | ✅ (was --border-subtle ring; overlay mix approximated in sRGB) |
 | DM banner | CDP `banner_vNEdYY` | 300x105; banner buttons 32px circles rgba(0,0,0,.56), top/right 8, gap 8 | — | ui/dm_profile_panel.rs | ✅ |
 | DM avatar | CDP `avatar_WRLIGC` | 80px at (14, 55) | — | ui/dm_profile_panel.rs | ✅ |
 | DM body | CDP `body_A7qlid` / `info_A7qlid` | margin 0 16, gap 20 / gap 8; name 20/24 600 | — | ui/dm_profile_panel.rs | ✅ |
-| DM mutuals | CDP `mutuals_PXYMZ1` | padding 4 0, 12/16; 16px avatars -3 overlap | — | ui/dm_profile_panel.rs | ✅ servers (mutual friends ❌ no data) |
+| DM mutuals | vanilla-dm-profile-panel #1587 `mutuals_PXYMZ1` | gap 2 6; sections padding 4 0 gap 4; 16px avatars margin-right -3; 12/16; 4px spacer dot | — | ui/profile.rs mutuals_row (shared) | ✅ friends + servers |
+| DM note button | #1574 `button_AMrbh3` | 24px, padding 4, 16px pencil, next to the display name | — | — | ❌ missing (no icon name yet) |
+| DM footer button | #1613 `secondary_F7qvhY` | bg rgba(151,151,159,.12) | --background-mod-subtle | ui/dm_profile_panel.rs | ✅ (was mod-normal) |
 | DM bio | CDP `section_NcvRRg`, `viewFullBio_BcddaK` | 14/18 clamp; button margin-top 8, 12/16 | — | ui/dm_profile_panel.rs | ✅ |
 | DM member since | CDP `headings_NcvRRg` | 12/16 600; value 14/18; gap 8 | — | ui/dm_profile_panel.rs | ✅ |
 | DM widgets ("Collection de jeux") | CDP `overlay_P1YEjQ` breadcrumb | padding 8 radius 8, 24px icons gap 4 | — | — | ❌ no widget data |

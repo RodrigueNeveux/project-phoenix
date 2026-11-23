@@ -409,9 +409,15 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         .flex()
         .flex_col()
         .child(nav("friends", Icon::Friends, crate::t!("friends.title"), Some(HomeView::Friends), pending))
-        .child(nav("msg-requests", Icon::Inbox, crate::t!("friends.message_requests"), Some(HomeView::MessageRequests), requests))
+        // vanilla (dump vanilla-friends-online): Friends, Nitro, Shop, Quests.
+        // "Message Requests" only shows while requests are pending.
+        .when(requests > 0, |d| {
+            d.child(nav("msg-requests", Icon::Inbox, crate::t!("friends.message_requests"), Some(HomeView::MessageRequests), requests))
+        })
         .child(nav("nitro", Icon::Nitro, crate::t!("dm.nitro"), None, 0))
         .child(nav("shop", Icon::Gift, crate::t!("dm.shop"), None, 0))
+        // Quests (`/quest-home`); its glyph isn't in the icon name map yet, Compass stands in.
+        .child(nav("quests", Icon::Compass, crate::t!("dm.quests"), None, 0))
         // `sectionDivider_u88IQl` (#648): 1px, margin 12/8, `--border-subtle`.
         .child(div().mx(z(8.)).my(z(12.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
         .child(

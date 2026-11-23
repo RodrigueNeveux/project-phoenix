@@ -496,7 +496,7 @@ pub fn guild_channels(cache: &Cache, guild: api::Snowflake, rc: &ReadCtx) -> Vec
     let all: Vec<_> = cache
         .guild_channels(guild)
         .into_iter()
-        .filter(|c| !c.kind.is_thread() && channel_kind(c.kind).is_some())
+        .filter(|c| !c.kind.is_thread() && !c.is_guild_resource() && channel_kind(c.kind).is_some())
         .filter(|c| !perms_known || cache.permissions_in(c.id).contains(api::Permissions::VIEW_CHANNEL))
         .collect();
     let key = |c: &api::Channel| (c.kind.is_voice(), c.position.unwrap_or(0), c.id.0);

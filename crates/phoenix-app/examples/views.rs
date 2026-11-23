@@ -150,6 +150,7 @@ fn main() -> anyhow::Result<()> {
                                     mutual_friends: app.users.values().filter(|u| u.id != uid && u.id != app.me.id).take(2).cloned().collect(),
                                     mutual_guild_ids: app.guilds.iter().take(3).map(|g| g.id).collect(),
                                     badges: Vec::new(),
+                                    theme: None,
                                 },
                             );
                             if scene == "profile-modal" {

@@ -73,3 +73,16 @@ fn read_state_and_proto_order() {
     let b64 = base64::engine::general_purpose::STANDARD.encode(top);
     assert_eq!(guild_order_from_proto(&b64), Some(vec![7, 3]));
 }
+
+#[test]
+fn guild_resource_channels_are_hidden_and_not_unread() {
+    let (cache, r) = ready_cache();
+    let g = r.guilds.iter().find(|g| !g.unavailable).unwrap().id;
+    let raw = format!(
+        r#"{{"id":"700000000000000077","type":0,"guild_id":"{g}","name":"guide-page","position":0,"flags":128,"last_message_id":"700000000000000099"}}"#
+    );
+    cache.apply(&parse_dispatch("CHANNEL_CREATE", &raw));
+    let prefs = Prefs::from_ready(&r);
+    let chs = guild_channels(&cache, g, &prefs.ctx());
+    assert!(!chs.iter().any(|c| c.id == Id(700000000000000077)));
+}

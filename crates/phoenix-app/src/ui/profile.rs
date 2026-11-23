@@ -499,7 +499,7 @@ fn bio_block(bio: SharedString, clamp: bool) -> Div {
 /// `mutuals_PXYMZ1` (gap 2px 6px): stacked 16px friend avatars
 /// (`avatar_NbMTpy` margin-inline-end -3px) + "N Mutual Friends",
 /// `spacer_` dot 4px --interactive-text-default, "N Mutual Servers".
-fn mutuals_row(p: &Profile) -> Option<Div> {
+pub(crate) fn mutuals_row(p: &Profile) -> Option<Div> {
     let friends = p.mutual_friends_count;
     let servers = p.mutual_guilds;
     if friends == 0 && servers == 0 {

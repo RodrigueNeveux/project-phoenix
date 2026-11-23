@@ -232,6 +232,8 @@ pub struct Profile {
     pub mutual_guild_ids: Vec<Id>,
     /// Profile badges: (description, icon URL).
     pub badges: Vec<(SharedString, SharedString)>,
+    /// Nitro profile theme (primary, secondary) colours, `theme_colors`.
+    pub theme: Option<(u32, u32)>,
 }
 
 pub fn snowflake_time(id: u64) -> i64 {
@@ -291,6 +293,7 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
                 Some((desc.to_owned().into(), format!("https://cdn.discordapp.com/badge-icons/{icon}.png").into()))
             })
             .collect(),
+        theme: p.user_profile.as_ref().and_then(|x| x.theme_colors.as_ref()).and_then(|t| Some((*t.first()?, *t.get(1)?))),
     }
 }
 

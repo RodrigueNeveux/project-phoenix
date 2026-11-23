@@ -22,7 +22,8 @@ return b.width&&b.height?[b.x,b.y,b.width,b.height].map(Math.round):null};
 return {vw:innerWidth,vh:innerHeight,dpr:devicePixelRatio,path:location.pathname,
 guilds:q('nav[class*="guilds_"]'),sidebar:q('[class*="sidebar_"]'),chat:q('[class*="chat_"]'),
 header:q('section[class*="title_"]'),form:q('main form, [class*="chatContent_"] form, form'),
-members:q('[class*="membersWrap_"]'),panels:q('section[class*="panels_"]')}})()"""
+members:q('[class*="membersWrap_"]'),
+dmprofile:q('[class*="profilePanel_"]')||q('aside[class*="aside_"]'),panels:q('section[class*="panels_"]')}})()"""
 
 
 def cdp(*args):
@@ -38,7 +39,9 @@ def regions_from(b):
     hdr = b.get("header") or [chat[0], top, chat[2], 48]
     form = b.get("form") or [chat[0], H - 68, chat[2], 68]
     mem = b.get("members")
-    msg_right = (mem[0] if mem else chat[0] + chat[2])
+    dmp = b.get("dmprofile")
+    right = mem or dmp
+    msg_right = (right[0] if right else chat[0] + chat[2])
     r = {
         "title bar": [0, 0, W, top],
         "guild rail": g,
@@ -49,6 +52,9 @@ def regions_from(b):
     }
     if mem:
         r["member list"] = [mem[0], hdr[1] + hdr[3], mem[2], H - hdr[1] - hdr[3]]
+    elif dmp:
+        # 1:1 DM profile side panel (`aside_HbUF2J` in the 2026 client)
+        r["dm profile panel"] = dmp
     return {k: v for k, v in r.items() if v and v[2] > 0 and v[3] > 0}
 
 

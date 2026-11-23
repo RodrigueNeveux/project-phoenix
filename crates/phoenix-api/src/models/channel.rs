@@ -176,7 +176,17 @@ pub struct Channel {
     pub is_message_request: bool,
 }
 
+/// `flags` bit for channels listed in the Server Guide only (onboarding
+/// resources): the official client hides them from the channel list and
+/// never counts them as unread.
+pub const CHANNEL_FLAG_GUILD_RESOURCE: u64 = 1 << 7;
+
 impl Channel {
+    /// A Server Guide resource page, not a sidebar channel.
+    pub fn is_guild_resource(&self) -> bool {
+        self.flags & CHANNEL_FLAG_GUILD_RESOURCE != 0
+    }
+
     /// Human-facing name; for DMs builds it from recipients.
     pub fn display_name(&self) -> String {
         if let Some(n) = self.name.as_deref().filter(|n| !n.is_empty()) {
