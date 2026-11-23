@@ -433,10 +433,22 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
                     // framePresetItem_ padding 6 14): sampleProfile_ small 52x56
                     // (1px --border-strong) under the frame layer (55 wide).
                     .when(kind == Kind::Effect, |d| d.child(sample_profile(sz.0 - 4., sz.1 - 4.)))
+                    // With the frame's layers known, draw the whole layered frame
+                    // (back layers, sample profile, front layers) the way the
+                    // profile card does; else the single static layer below.
                     .when(kind == Kind::Frame, |d| {
-                        d.child(div().absolute().left(z(13.)).top(z(10.)).w(z(52.)).h(z(56.)).rounded(z(4.)).border_1().border_color(c(tok(idx::BORDER_STRONG))).child(sample_profile(50., 54.)))
+                        let sample = div().absolute().left(z(13.)).top(z(10.)).w(z(52.)).h(z(56.)).rounded(z(4.)).border_1().border_color(c(tok(idx::BORDER_STRONG)));
+                        match &it.frame {
+                            Some(f) => d.child(
+                                sample
+                                    .children(crate::ui::profile_fx::frame(f, 50., false))
+                                    .child(sample_profile(50., 54.))
+                                    .children(crate::ui::profile_fx::frame(f, 50., true)),
+                            ),
+                            None => d.child(sample.child(sample_profile(50., 54.))),
+                        }
                     })
-                    .children(it.preview.clone().map(|u| match kind {
+                    .children(it.preview.clone().filter(|_| !(kind == Kind::Frame && it.frame.is_some())).map(|u| match kind {
                         // The 100x195 thumbnail fills the tile width from the top
                         // (what the dump shows for presetEffectImg_).
                         Kind::Effect => {
