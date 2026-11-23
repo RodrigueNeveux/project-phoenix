@@ -166,7 +166,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     a.nav.add_friend_result = None;
                     cx.notify();
                 }))
-                .child(crate::t!("friends.add")),
+                .child(crate::t!("friends.add_tab")), // tab bar label "Ajouter" (#1129)
         )
         .child(div().flex_1())
         // toolbar_ybUK7Z padding-left 10; inviteToolbar_zrUwGA padding-right 8: 32px "New Group DM"
@@ -233,8 +233,12 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
         .bg(c(gpui_input_bg()))
         .flex()
         .items_center()
-        .child(div().size(z(30.)).flex().items_center().justify_center().child(icon(Icon::Search, 20., c(Palette::TEXT_MUTED))))
-        .when_some(app.nav.friends_search.clone(), |d, i| d.child(div().flex_1().child(Input::new(&i).appearance(false))));
+                // icon_0PLWhS 30x30 with a 16px glyph (vanilla-friends-all #1141/#1142)
+        .child(div().size(z(30.)).flex().items_center().justify_center().child(icon(Icon::Search, 16., c(Palette::TEXT_MUTED))))
+        // input_0PLWhS body-md 16px, padding-inline-start 0 (#1143)
+        .when_some(app.nav.friends_search.clone(), |d, i| {
+            d.child(div().flex_1().child(Input::new(&i).appearance(false).bordered(false).pl(z(0.)).text_size(z(16.)).line_height(z(20.))))
+        });
     let mut col = div().id("friends-list").flex_1().min_h_0().overflow_y_scroll().pb(z(8.)).flex().flex_col();
     if rows.is_empty() {
         let msg = match tab {
@@ -407,8 +411,9 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                         .flex()
                         .items_center()
                         .child(
-                            // username_jPuNMC 16/20 600 #dcdcdf
-                            div()
+                            // username_jPuNMC 16/20 600 #dcdcdf; name style font
+                            // (`dnsFont_` on the friend row name, vanilla-friends-all).
+                            crate::fonts::styled_name(div(), u, false)
                                 .text_size(z(16.))
                                 .line_height(z(20.))
                                 .font_weight(FontWeight::SEMIBOLD)
@@ -551,7 +556,7 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .line_height(z(24.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child(crate::t!("friends.active_now")),
+                .child(crate::t!("friends.active_now_title")), // refresh-active-now h2 (#1538)
         );
     if active.is_empty() {
         return col.child(

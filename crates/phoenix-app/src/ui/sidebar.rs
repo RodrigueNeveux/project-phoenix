@@ -854,7 +854,16 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                 .font_weight(FontWeight::MEDIUM) // --font-weight-semibold-1x-light-theme (500)
                                 .flex()
                                 .items_center()
-                                .child(div().min_w_0().text_ellipsis().child(name))
+                                .child(
+                                    // 1:1 DM: `withDisplayNameStyles_zln_tS` > `container_or4Hj- dnsFont_`
+                                    // (vanilla-dm #675/#734): the recipient's name style font.
+                                    crate::fonts::styled_name(
+                                        div().min_w_0().text_ellipsis(),
+                                        (is_dm && !is_group).then(|| ch.voice_users.first().and_then(|u| app.users.get(u))).flatten(),
+                                        false,
+                                    )
+                                    .child(name),
+                                )
                                 // 1:1 DM: server tag chiplet after the name, chipletContainerInner_ margin-left 4px
                                 // (vanilla-dm #677).
                                 .when_some(dm_tag, |d, t| d.child(crate::ui::members::server_tag(&t).ml(z(4.)))),

@@ -74,6 +74,8 @@ def regions_from(b):
     elif dmp:
         # 1:1 DM profile side panel (`aside_HbUF2J` in the 2026 client)
         r["dm profile panel"] = dmp
+    # Extra named regions (e.g. Friends tabs / inbox popout for PHX_VIEW captures).
+    r.update(b.get("extra") or {})
     return {k: v for k, v in r.items() if v and v[2] > 0 and v[3] > 0}
 
 

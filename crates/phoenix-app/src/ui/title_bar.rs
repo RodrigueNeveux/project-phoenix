@@ -75,7 +75,31 @@ fn client_decorated(window: &gpui::Window) -> bool {
         || matches!(window.window_decorations(), gpui::Decorations::Client { .. })
 }
 
+/// Whether the last title bar drew the window buttons (popouts anchored to the
+/// inbox button read it; they render without the window).
+static DREW_WIN_BUTTONS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Distance from the window's right edge to the inbox button's right edge:
+/// help 24 + gap 12 + (window buttons 3×32 + 2×4 gap + 1px divider with 4px
+/// margins + 4 gap = 117, + gap 12) or the 12px trailing padding.
+/// Vanilla-inbox-1: inbox #36 right edge 1115 of 1280 (165).
+pub fn inbox_right_inset() -> f32 {
+    let tail = if DREW_WIN_BUTTONS.load(std::sync::atomic::Ordering::Relaxed) { 117. + 12. } else { 12. };
+    tail + 24. + 12.
+}
+
+/// Window height in CSS px (logical / zoom) at the last title bar render, for
+/// popouts whose max-height depends on `@media (max-height: …)`.
+static VIEWPORT_H_CSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn viewport_h_css() -> f32 {
+    f32::from_bits(VIEWPORT_H_CSS.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let vh = f32::from(window.viewport_size().height) / zoom();
+    VIEWPORT_H_CSS.store(vh.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    DREW_WIN_BUTTONS.store(client_decorated(window), std::sync::atomic::Ordering::Relaxed);
     let (glyph, text) = title(app);
     let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
     // `bar_3zSH5d` (dump #13): 32px, no fill (the app background shows through).

@@ -394,7 +394,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .rounded(z(8.))
         .overflow_hidden()
         .when(theme.is_none(), |d| d.bg(c(surface)).border_1().border_color(c(tok(idx::BORDER_SUBTLE))))
-        .when_some(theme, |d, t| d.children(theme_backdrop(t)))
+        .when_some(theme, |d, t| d.children(theme_backdrop(t, 0.)))
         .shadow_lg()
         .occlude()
         .child(

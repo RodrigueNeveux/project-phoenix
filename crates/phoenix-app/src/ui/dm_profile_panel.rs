@@ -80,6 +80,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         (ch(16) << 16) | (ch(8) << 8) | ch(0)
     };
     let ring_bg = theme.map(|(p, _)| mix(p)).unwrap_or(card_bg);
+    // `profileEffects_ZjcCyW` (vanilla-dm #2060): the applied effect over the 300px inner card.
+    let effect = i
+        .prof
+        .and_then(|p| p.effect_sku)
+        .and_then(|s| crate::ui::profile_fx::product(app, s, cx))
+        .and_then(|c| crate::ui::profile_fx::effect(&c, 300., cx));
     let e = cx.entity();
     let bio = i.prof.map(|p| p.bio.clone()).filter(|b| !b.is_empty());
     let created = i.prof.map(|p| p.created);
@@ -181,7 +187,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .rounded(z(8.))
                     .overflow_hidden()
                     .when(theme.is_none(), |d| d.bg(c(card_bg)))
-                    .when_some(theme, |d, t| d.children(theme_backdrop(t)))
+                    .when_some(theme, |d, t| d.children(theme_backdrop(t, 72.)))
                     .child(
                         div()
                             .relative()
@@ -194,7 +200,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                             .flex()
                             .flex_col()
                             .child(div().id("dm-panel-scroll").flex_1().min_h_0().overflow_y_scroll().child(header).child(body))
-                            .child(footer),
+                            .child(footer)
+                            .children(effect),
                     ),
             )
             .into_any_element(),

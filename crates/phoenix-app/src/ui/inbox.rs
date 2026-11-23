@@ -676,6 +676,13 @@ fn channel_label(app: &PhoenixApp, ch: Id) -> (SharedString, Option<SharedString
     let c = app.channels.get(&ch);
     let name = c.map(|c| c.name.to_string()).unwrap_or_else(|| crate::t!("common.unknown_channel").to_string());
     let guild = c.and_then(|c| c.guild).and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone());
+    // `guildName_8ZcKCk` (vanilla-inbox-1 #2666): "<guild> › <category>" when the
+    // channel sits in a category.
+    let category = c.and_then(|c| c.parent).and_then(|p| app.channels.get(&p)).filter(|p| p.kind == crate::model::ChannelKind::Category);
+    let guild = match (guild, category) {
+        (Some(g), Some(cat)) => Some(format!("{g} \u{203a} {}", cat.name).into()),
+        (g, _) => g,
+    };
     (name.into(), guild)
 }
 
@@ -767,6 +774,9 @@ fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32) -> gpui::Div {
 /// --radius-md, margin-bottom 16.
 fn inbox_box() -> gpui::Div {
     div()
+        // Never shrink inside the scroller's flex column: with more entries than
+        // fit, flex-shrink squashed every box to 0 (blank list over real data).
+        .flex_none()
         .mb(z(16.))
         .rounded(z(12.))
         .border_1()
@@ -1030,10 +1040,15 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             div()
                 .id("inbox-popout")
                 .absolute()
-                .top(z(m::TITLE_BAR_H))
-                .right(z(12. + 24. + 12.))
+                .top(z(m::TITLE_BAR_H + 4.)) // container_uTMZTY y 36 (vanilla-inbox-1 #2620)
+                .right(z(crate::ui::title_bar::inbox_right_inset())) // right edge = inbox button's
                 .w(z(560.))
-                .max_h(gpui::relative(0.7))
+                // max-height 70vh; @media (max-height: 800px) 80vh, (max-height: 700px) 85vh
+                .max_h(gpui::relative(match crate::ui::title_bar::viewport_h_css() {
+                    h if h > 0. && h <= 700. => 0.85,
+                    h if h > 0. && h <= 800. => 0.8,
+                    _ => 0.7,
+                }))
                 .rounded(z(8.))
                 .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
                 .shadow(popout_shadow())

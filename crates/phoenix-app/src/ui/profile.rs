@@ -621,14 +621,18 @@ pub(crate) fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui:
 /// secondary)` (sRGB interpolation). Two absolute layers so the 105px stop is
 /// exact whatever the card height; the content above lays the uniform
 /// `inner_P1YEjQ` overlay (--profile-gradient-overlay-color) on top.
-pub(crate) fn theme_backdrop((primary, secondary): (u32, u32)) -> [Div; 2] {
+/// `footer` is --custom-user-profile-footer-height: the gradient ends at
+/// `calc(100% - footer)` and the secondary colour fills the rest (72px in
+/// `.user-profile-sidebar.user-profile-sidebar-redesign`, 0 by default).
+pub(crate) fn theme_backdrop((primary, secondary): (u32, u32), footer: f32) -> [Div; 3] {
     [
         div().absolute().top_0().left_0().right_0().h(z(105.)).bg(c(primary)),
-        div().absolute().top(z(105.)).left_0().right_0().bottom_0().bg(gpui::linear_gradient(
+        div().absolute().top(z(105.)).left_0().right_0().bottom(z(footer)).bg(gpui::linear_gradient(
             180.,
             gpui::linear_color_stop(c(primary), 0.),
             gpui::linear_color_stop(c(secondary), 1.),
         )),
+        div().absolute().left_0().right_0().bottom_0().h(z(footer)).bg(c(secondary)),
     ]
 }
 

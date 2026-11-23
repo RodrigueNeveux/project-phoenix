@@ -12,6 +12,10 @@
 //! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx),
 //! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
 //! `PHX_AUDIO` = two digits mute/deaf (e.g. `11`), otherwise read from the live user panel.
+//! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
+//! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
+//! mentions|unreads|saved|reminders|scheduled).
+//! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
@@ -164,6 +168,17 @@ impl Backend for ReadOnly {
         self.0.forum_tags(f)
     }
     /// Only the forum post listing and the content inventory (read-only GETs) go through.
+    // GET collectibles product by SKU (profile effects in the DM panel / popout).
+    fn collectible_product(&self, sku: u64) -> BoxFuture<Option<phoenix_app::ui::settings::collectibles::Collectible>> {
+        self.0.collectible_product(sku)
+    }
+    // Inbox "Reminders" tab: read-only list of the saved-message reminders.
+    fn action(&self, req: phoenix_app::actions::ActionRequest) -> BoxFuture<phoenix_app::actions::ActionReply> {
+        match req {
+            phoenix_app::actions::ActionRequest::Reminders => self.0.action(req),
+            _ => denied(),
+        }
+    }
     fn parity(&self, req: phoenix_app::commands::ParityRequest) -> BoxFuture<phoenix_app::commands::ParityReply> {
         match req {
             phoenix_app::commands::ParityRequest::ForumPosts { .. } => {
@@ -179,6 +194,10 @@ impl Backend for ReadOnly {
             }
             // GET /content-inventory/users/@me (member list Activity feed).
             phoenix_app::commands::ParityRequest::ContentInventory => self.0.parity(req),
+            // Inbox popout tabs (PHX_VIEW=inbox): GET mentions / saved / scheduled.
+            phoenix_app::commands::ParityRequest::Mentions { .. }
+            | phoenix_app::commands::ParityRequest::SavedMessages
+            | phoenix_app::commands::ParityRequest::ScheduledMessages => self.0.parity(req),
             _ => denied(),
         }
     }
@@ -411,6 +430,11 @@ fn main() -> anyhow::Result<()> {
         let _ = cx.text_system().add_fonts(fonts);
         cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(http)));
         phoenix_app::init(cx);
+        // `PHX_FX_STILL=1`: profile effects (and other animations) show their still
+        // frame, so a compare is not decided by the effect's animation phase.
+        if std::env::var_os("PHX_FX_STILL").is_some() {
+            cx.set_reduce_motion(true);
+        }
     });
     let backend: Arc<dyn Backend> = Arc::new(ReadOnly(backend));
     let view: Rc<RefCell<Option<Entity<PhoenixApp>>>> = Rc::default();
@@ -492,7 +516,22 @@ fn main() -> anyhow::Result<()> {
                     .find(|c| c.guild.is_some() && c.voice_users.contains(&app.me.id))
                     .map(|c| c.id);
             }
-            if let Some(c) = channel {
+            let view = std::env::var("PHX_VIEW").unwrap_or_default();
+            let tab = std::env::var("PHX_TAB").unwrap_or_default();
+            if view == "friends" {
+                use phoenix_app::ui::home::data::FriendsTab as F;
+                // Like open_home_view(Friends), without saving the nav prefs.
+                app.select_guild(None, cx);
+                app.nav.home = phoenix_app::ui::home::data::HomeView::Friends;
+                app.selected_channel = None;
+                app.nav.friends_tab = match tab.as_str() {
+                    "all" => F::All,
+                    "pending" => F::Pending,
+                    "blocked" => F::Blocked,
+                    "add" => F::AddFriend,
+                    _ => F::Online,
+                };
+            } else if let Some(c) = channel {
                 // Threads live in `nav.threads` until selected (select_thread registers them).
                 let thread = app.nav.find_thread(c).cloned();
                 let g = guild.or_else(|| app.channels.get(&c).or(thread.as_ref()).and_then(|ch| ch.guild));
@@ -503,6 +542,18 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     app.open_channel_chat(c, cx);
                 }
+            }
+            if view == "inbox" {
+                use phoenix_app::commands::state::InboxTab as T;
+                app.parity.inbox.tab = match tab.as_str() {
+                    "unreads" => T::Unreads,
+                    "saved" => T::Saved,
+                    "reminders" => T::Reminders,
+                    "scheduled" => T::Scheduled,
+                    _ => T::Mentions,
+                };
+                app.parity.inbox.open = false;
+                app.toggle_inbox(cx);
             }
             cx.notify();
         });
@@ -556,6 +607,13 @@ fn main() -> anyhow::Result<()> {
                     let u = app.users.get(&m.author);
                     println!("msg {} author {} dn={:?} author_nick={:?} member_nick={:?} reply_to={:?}", m.id.0, m.author.0, u.map(|u| u.display_name.clone()), m.author_nick, app.member_nick(m.author), m.reply_to.map(|r| r.0));
                 }
+            }
+        });
+    }
+    if std::env::var_os("PHX_DEBUG_FX").is_some() {
+        cx.update(|cx| {
+            for (u, p) in &v.read(cx).people.profiles {
+                println!("profile {} effect={:?} frame={:?}", u.0, p.effect_sku, p.frame_sku);
             }
         });
     }
