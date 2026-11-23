@@ -924,18 +924,26 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         )
 }
 
-/// `maxBoostCount` of `GuildPowerupsProgressBarUI`: `M2T[TIER_3]` plus the price of
-/// every power-up not included in a level. Read from the live client's props
-/// (tier-2 `TIERLESS_BOOSTING` guild, vanilla-guild-text #661 "18/36 Boosts"): 36.
-const BOOST_GOAL_MAX: u32 = 36;
+/// `maxBoostCount` of `GuildPowerupsProgressBarUI` (client module 616740 `tg`): the
+/// tier-3 threshold `M2T[TIER_3]` = 14 (0 when the guild has `PREMIUM_TIER_3_OVERRIDE`)
+/// plus `boostPrice` of every power-up with no `includedInLevel` that is enabled
+/// (constants module 568065 `sy`/`YV`, static, not fetched): GUILD_TAGS 3,
+/// ENHANCED_ROLE_COLORS 3, badge packs PETS 3 / FLEX 5 / PLANT 3 / CREEPY_CRAWLIES 2,
+/// GAME_SERVERS 3 (experiment, on for the user); GUILD_THEME is disabled.
+/// Live check: vanilla-guild-text #661 "18/36 Boosts" = 14 + 22.
+fn boost_goal_max(features: &[String]) -> u32 {
+    const TIER_3: u32 = 14;
+    const PERKS: u32 = 3 + 3 + 3 + 5 + 3 + 2 + 3;
+    let base = if features.iter().any(|f| f == "PREMIUM_TIER_3_OVERRIDE") { 0 } else { TIER_3 };
+    base + PERKS
+}
 
 /// Boost goal bar (`GUILD_PREMIUM_PROGRESS_BAR` action row, vanilla-guild-text
 /// #653..#662), shown when `premiumProgressBarEnabled && premiumSubscriberCount > 0`.
-fn boost_goal(count: u32, enabled: bool) -> Option<gpui::AnyElement> {
+fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
     if !enabled || count == 0 {
         return None;
     }
-    let max = BOOST_GOAL_MAX;
     let pct = (count as f32 / max as f32).min(1.);
     let pink = t(idx::GUILD_BOOSTING_PINK_REFRESH);
     let text = |s: SharedString| {
@@ -1085,7 +1093,10 @@ fn guild_top(app: &PhoenixApp) -> impl IntoElement {
         .pt(z(8.))
         .flex()
         .flex_col()
-        .children(app.selected_guild.and_then(|g| app.backend.guild_boosts(g)).and_then(|(n, on)| boost_goal(n, on)))
+        .children(app.selected_guild.and_then(|g| {
+            let (n, on) = app.backend.guild_boosts(g)?;
+            boost_goal(n, on, boost_goal_max(&app.backend.guild_features(g)))
+        }))
         .child(item("g-events", "calendar", crate::t!("guild.top.events")))
         .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"))))
         .child(item("g-boosts", "boost", crate::t!("guild.top.boosts")))
