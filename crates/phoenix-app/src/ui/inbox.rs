@@ -3,7 +3,7 @@
 //! - Threads list of the open channel (header button).
 //! - Moderation entries of the user menu (Timeout / Kick / Ban, shown only
 //!   with the matching permission) and their dialogs.
-//! - "Select Friends" group DM picker (DM list "+").
+//! - crate::t!("groupdm.select") group DM picker (DM list "+").
 //! - Guild folder / order sync after a drag in the guild rail.
 //!
 //! Popouts are 480-600px floating cards under the header (8px radius,
@@ -37,17 +37,17 @@ pub const MODERATE_MEMBERS: u64 = 1 << 40;
 
 /// Timeout choices of the official dialog (label, seconds).
 pub const TIMEOUTS: [(&str, u64); 6] =
-    [("60 secs", 60), ("5 mins", 300), ("10 mins", 600), ("1 hour", 3600), ("1 day", 86_400), ("1 week", 604_800)];
+    [("mod.timeout.60s", 60), ("mod.timeout.5m", 300), ("mod.timeout.10m", 600), ("mod.timeout.1h", 3600), ("mod.timeout.1d", 86_400), ("mod.timeout.1w", 604_800)];
 
 /// "Delete Message History" choices of the ban dialog.
 pub const BAN_HISTORY: [(&str, u32); 7] = [
-    ("Don't Delete Any", 0),
-    ("Previous Hour", 3600),
-    ("Previous 6 Hours", 21_600),
-    ("Previous 12 Hours", 43_200),
-    ("Previous 24 Hours", 86_400),
-    ("Previous 3 Days", 259_200),
-    ("Previous 7 Days", 604_800),
+    ("mod.ban.none", 0),
+    ("mod.ban.1h", 3600),
+    ("mod.ban.6h", 21_600),
+    ("mod.ban.12h", 43_200),
+    ("mod.ban.24h", 86_400),
+    ("mod.ban.3d", 259_200),
+    ("mod.ban.7d", 604_800),
 ];
 
 pub fn has_perm(perms: u64, bit: u64) -> bool {
@@ -120,7 +120,7 @@ impl PhoenixApp {
                     _ => i.saved = msgs,
                 },
                 Ok(_) => {}
-                Err(e) => a.parity_toast(format!("Couldn't load the inbox: {}", e.0), cx),
+                Err(e) => a.parity_toast(crate::t!("inbox.load_failed", e = e.0).to_string(), cx),
             }
         });
     }
@@ -141,7 +141,7 @@ impl PhoenixApp {
     pub fn save_message(&mut self, channel: Id, id: Id, cx: &mut Context<Self>) {
         self.parity_request(ParityRequest::SetSaved { channel, message: id, saved: true }, cx, |a, r, cx| {
             if r.is_ok() {
-                a.parity_toast("Message saved", cx);
+                a.parity_toast(crate::t!("inbox.saved_toast"), cx);
             }
         });
     }
@@ -170,14 +170,14 @@ impl PhoenixApp {
         self.parity_request(ParityRequest::Moderate { guild: d.guild, user: d.user, action }, cx, move |a, r, cx| match r {
             Ok(_) => a.parity_toast(
                 match d.kind {
-                    ModKind::Timeout(0) => format!("Removed {name}'s timeout"),
-                    ModKind::Timeout(_) => format!("{name} was timed out"),
-                    ModKind::Kick => format!("{name} was kicked"),
-                    ModKind::Ban(_) => format!("{name} was banned"),
+                    ModKind::Timeout(0) => crate::t!("mod.timeout_removed", name = name).to_string(),
+                    ModKind::Timeout(_) => crate::t!("mod.timed_out", name = name).to_string(),
+                    ModKind::Kick => crate::t!("mod.kicked", name = name).to_string(),
+                    ModKind::Ban(_) => crate::t!("mod.banned", name = name).to_string(),
                 },
                 cx,
             ),
-            Err(e) => a.parity_toast(format!("Failed: {}", e.0), cx),
+            Err(e) => a.parity_toast(crate::t!("common.failed", e = e.0).to_string(), cx),
         });
         cx.notify();
     }
@@ -213,7 +213,7 @@ impl PhoenixApp {
                     .detach();
                 }
                 Ok(_) => {}
-                Err(e) => a.parity_toast(format!("Couldn't create the group: {}", e.0), cx),
+                Err(e) => a.parity_toast(crate::t!("inbox.group_failed", e = e.0).to_string(), cx),
             }
         });
         cx.notify();
@@ -224,7 +224,7 @@ impl PhoenixApp {
         let folders = folder_sync(self);
         self.parity_request(ParityRequest::GuildFolders(folders), cx, |a, r, cx| {
             if let Err(e) = r {
-                a.parity_toast(format!("Couldn't save the server order: {}", e.0), cx);
+                a.parity_toast(crate::t!("inbox.order_failed", e = e.0).to_string(), cx);
             }
         });
     }
@@ -272,24 +272,24 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
         return Vec::new();
     }
     let perms = app.backend.guild_permissions(g);
-    let name = app.users.get(&user).map(|u| u.name.to_string()).unwrap_or_else(|| "user".into());
+    let name = app.users.get(&user).map(|u| u.name.to_string()).unwrap_or_else(|| crate::t!("common.user").to_string());
     let mut items = Vec::new();
     let item = |label: String, kind: ModKind| {
         let e = entity.clone();
         MenuItem::danger(label, None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_moderation(g, user, kind, cx)))
     };
     if has_perm(perms, MODERATE_MEMBERS) {
-        items.push(item(format!("Timeout {name}"), ModKind::Timeout(TIMEOUTS[0].1)));
+        items.push(item(crate::t!("mod.timeout_user", name = name).to_string(), ModKind::Timeout(TIMEOUTS[0].1)));
         let e = entity.clone();
-        items.push(MenuItem::action("Remove Timeout", None, move |_, _, cx: &mut App| {
+        items.push(MenuItem::action(crate::t!("mod.remove_timeout"), None, move |_, _, cx: &mut App| {
             e.update(cx, |a, cx| a.open_moderation(g, user, ModKind::Timeout(0), cx))
         }));
     }
     if has_perm(perms, KICK_MEMBERS) {
-        items.push(item(format!("Kick {name}"), ModKind::Kick));
+        items.push(item(crate::t!("mod.kick_user", name = name).to_string(), ModKind::Kick));
     }
     if has_perm(perms, BAN_MEMBERS) {
-        items.push(item(format!("Ban {name}"), ModKind::Ban(0)));
+        items.push(item(crate::t!("mod.ban_user", name = name).to_string(), ModKind::Ban(0)));
     }
     if !items.is_empty() {
         items.insert(0, MenuItem::Separator);
@@ -299,7 +299,7 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
 
 // ------------------------------------------------------------- rendering
 
-fn popout_frame(id: &'static str, title: &'static str, ic: Icon, header_extra: Option<AnyElement>, body: AnyElement) -> AnyElement {
+fn popout_frame(id: &'static str, title: gpui::SharedString, ic: Icon, header_extra: Option<AnyElement>, body: AnyElement) -> AnyElement {
     gpui::deferred(
         div()
             .id(id)
@@ -346,7 +346,7 @@ fn popout_frame(id: &'static str, title: &'static str, ic: Icon, header_extra: O
     .into_any_element()
 }
 
-fn tab(id: &'static str, label: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
+fn tab(id: &'static str, label: gpui::SharedString, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .px(z(8.))
@@ -360,7 +360,7 @@ fn tab(id: &'static str, label: &'static str, on: bool) -> gpui::Stateful<gpui::
         .child(label)
 }
 
-fn empty(text: &'static str, sub: &'static str) -> AnyElement {
+fn empty(text: gpui::SharedString, sub: gpui::SharedString) -> AnyElement {
     div()
         .p(z(32.))
         .flex()
@@ -375,7 +375,7 @@ fn empty(text: &'static str, sub: &'static str) -> AnyElement {
 
 fn channel_label(app: &PhoenixApp, ch: Id) -> (SharedString, Option<SharedString>) {
     let c = app.channels.get(&ch);
-    let name = c.map(|c| if c.guild.is_some() { format!("#{}", c.name) } else { c.name.to_string() }).unwrap_or_else(|| "Unknown channel".into());
+    let name = c.map(|c| if c.guild.is_some() { format!("#{}", c.name) } else { c.name.to_string() }).unwrap_or_else(|| crate::t!("common.unknown_channel").to_string());
     let guild = c.and_then(|c| c.guild).and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone());
     (name.into(), guild)
 }
@@ -414,7 +414,7 @@ fn message_entry(
                         .text_color(c(Palette::TEXT_NORMAL))
                         .hover(|s| s.bg(c(Palette::BG_MOD_SELECTED)))
                         .on_click(cx.listener(move |a, _, _, cx| a.jump_from_inbox(ch, id, cx)))
-                        .child("Jump"),
+                        .child(crate::t!("inbox.jump")),
                 )
                 .child(
                     icon_button("inbox-x", Icon::Close, c(Palette::INTERACTIVE), 16.)
@@ -446,7 +446,7 @@ fn message_entry(
                                         .text_size(z(16.))
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(crate::theme::role_color(app.author_color(m.author)))
-                                        .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into())),
+                                        .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
                                 )
                                 .child(
                                     div()
@@ -461,7 +461,7 @@ fn message_entry(
         .into_any_element()
 }
 
-fn check_row(id: &'static str, label: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
+fn check_row(id: &'static str, label: gpui::SharedString, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .px(z(8.))
@@ -502,9 +502,9 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         .flex()
         .items_center()
         .gap(z(4.))
-        .child(tab("inbox-mentions", "Mentions", i.tab == InboxTab::Mentions).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Mentions, cx))))
-        .child(tab("inbox-unreads", "Unreads", i.tab == InboxTab::Unreads).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Unreads, cx))))
-        .child(tab("inbox-saved", "Saved", i.tab == InboxTab::Saved).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Saved, cx))))
+        .child(tab("inbox-mentions", crate::t!("inbox.mentions"), i.tab == InboxTab::Mentions).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Mentions, cx))))
+        .child(tab("inbox-unreads", crate::t!("inbox.unreads"), i.tab == InboxTab::Unreads).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Unreads, cx))))
+        .child(tab("inbox-saved", crate::t!("inbox.saved"), i.tab == InboxTab::Saved).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Saved, cx))))
         .child(div().flex_1())
         .when(i.tab == InboxTab::Mentions, |d| {
             d.child(
@@ -521,7 +521,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                         a.parity.inbox.filter_menu = !a.parity.inbox.filter_menu;
                         cx.notify();
                     }))
-                    .child("Filter ▾"),
+                    .child(crate::t!("inbox.filter")),
             )
         });
     let mut header = div().flex().flex_col().gap(z(4.)).child(tabs);
@@ -540,9 +540,9 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                 .bg(c(Palette::BG_FLOATING))
                 .flex()
                 .flex_col()
-                .child(check_row("f-everyone", "Include @everyone and @here", i.everyone).on_click(toggle(|i| i.everyone = !i.everyone)))
-                .child(check_row("f-roles", "Include all role mentions", i.roles).on_click(toggle(|i| i.roles = !i.roles)))
-                .child(check_row("f-server", "This server only", i.this_server).on_click(toggle(|i| i.this_server = !i.this_server))),
+                .child(check_row("f-everyone", crate::t!("inbox.f_everyone"), i.everyone).on_click(toggle(|i| i.everyone = !i.everyone)))
+                .child(check_row("f-roles", crate::t!("inbox.f_roles"), i.roles).on_click(toggle(|i| i.roles = !i.roles)))
+                .child(check_row("f-server", crate::t!("inbox.f_server"), i.this_server).on_click(toggle(|i| i.this_server = !i.this_server))),
         );
     }
 
@@ -550,7 +550,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     match i.tab {
         InboxTab::Mentions => {
             if i.mentions.is_empty() && !i.loading {
-                list = list.child(empty("You're all caught up!", "Mentions of you will show up here."));
+                list = list.child(empty(crate::t!("inbox.caught_up"), crate::t!("inbox.mentions_empty")));
             }
             for m in &i.mentions {
                 let id = m.id;
@@ -566,13 +566,13 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                         .cursor_pointer()
                         .text_color(c(Palette::TEXT_LINK))
                         .on_click(cx.listener(|a, _, _, cx| a.load_inbox_tab(false, cx)))
-                        .child("Load more"),
+                        .child(crate::t!("common.load_more")),
                 );
             }
         }
         InboxTab::Saved => {
             if i.saved.is_empty() && !i.loading {
-                list = list.child(empty("No saved messages", "Save messages to find them here later."));
+                list = list.child(empty(crate::t!("inbox.saved_empty"), crate::t!("inbox.saved_empty_sub")));
             }
             for m in &i.saved {
                 let (ch, id) = (m.channel, m.id);
@@ -583,7 +583,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             let mut unread: Vec<_> = app.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).collect();
             unread.sort_by_key(|c| (std::cmp::Reverse(c.mentions), c.guild, c.position));
             if unread.is_empty() {
-                list = list.child(empty("You're all caught up!", "Unread channels will show up here."));
+                list = list.child(empty(crate::t!("inbox.caught_up"), crate::t!("inbox.unreads_empty")));
             }
             for ch in unread.into_iter().take(50) {
                 let id = ch.id;
@@ -612,9 +612,9 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         }
     }
     if i.loading {
-        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
     }
-    Some(popout_frame("inbox-popout", "Inbox", Icon::Inbox, Some(header.into_any_element()), list.into_any_element()))
+    Some(popout_frame("inbox-popout", crate::t!("inbox.title"), Icon::Inbox, Some(header.into_any_element()), list.into_any_element()))
 }
 
 fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -625,14 +625,14 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
     let list_src = app.nav.threads.get(&ch).cloned().unwrap_or_default();
     let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).pb(z(16.)).flex().flex_col().gap(z(8.));
     if list_src.is_empty() {
-        list = list.child(empty("There are no threads.", "Stay focused on a conversation with a thread."));
+        list = list.child(empty(crate::t!("threads.empty"), crate::t!("threads.empty_sub")));
     } else {
         list = list.child(
             div()
                 .text_size(z(12.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_MUTED))
-                .child(format!("{} ACTIVE THREAD{}", list_src.len(), if list_src.len() == 1 { "" } else { "S" })),
+                .child(if list_src.len() == 1 { crate::t!("threads.active_one") } else { crate::t!("threads.active_many", n = list_src.len()) }),
         );
     }
     for t in list_src {
@@ -656,7 +656,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(t.name.clone())),
         );
     }
-    Some(popout_frame("threads-popout", "Threads", Icon::Threads, None, list.into_any_element()))
+    Some(popout_frame("threads-popout", crate::t!("threads.title"), Icon::Threads, None, list.into_any_element()))
 }
 
 pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
@@ -671,13 +671,13 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
     if let Some(p) = app.parity.group_dm.as_mut()
         && p.search.is_none()
     {
-        let i = cx.new(|cx| InputState::new(window, cx).placeholder("Type the username of a friend"));
+        let i = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("groupdm.placeholder")));
         i.update(cx, |s, cx| s.focus(window, cx));
         p.search = Some(i);
     }
 }
 
-fn radio_row(id: (&'static str, u64), label: &'static str, on: bool) -> gpui::Stateful<gpui::Div> {
+fn radio_row(id: (&'static str, u64), label: gpui::SharedString, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .px(z(12.))
@@ -705,7 +705,7 @@ fn radio_row(id: (&'static str, u64), label: &'static str, on: bool) -> gpui::St
 
 fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let d = app.parity.moderation?;
-    let name = app.users.get(&d.user).map(|u| u.name.to_string()).unwrap_or_else(|| "this user".into());
+    let name = app.users.get(&d.user).map(|u| u.name.to_string()).unwrap_or_else(|| crate::t!("common.this_user").to_string());
     let guild = app.guilds.iter().find(|g| g.id == d.guild).map(|g| g.name.to_string()).unwrap_or_default();
     let e = cx.entity();
     let set = move |kind: ModKind| {
@@ -719,55 +719,55 @@ fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
             })
         }
     };
-    let (title, confirm, body): (String, &str, Vec<AnyElement>) = match d.kind {
+    let (title, confirm, body): (String, gpui::SharedString, Vec<AnyElement>) = match d.kind {
         ModKind::Timeout(0) => (
-            format!("Remove timeout from {name}"),
-            "Remove Timeout",
-            vec![div().text_color(c(Palette::TEXT_NORMAL)).child(format!("{name} will be able to talk again.")).into_any_element()],
+            crate::t!("mod.remove_timeout_title", name = name).to_string(),
+            crate::t!("mod.remove_timeout"),
+            vec![div().text_color(c(Palette::TEXT_NORMAL)).child(crate::t!("mod.remove_timeout_body", name = name).to_string()).into_any_element()],
         ),
         ModKind::Timeout(secs) => {
             let mut col = div().flex().flex_col().gap(z(4.)).child(
-                div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("DURATION"),
+                div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("mod.duration")),
             );
             for (i, (label, s)) in TIMEOUTS.iter().enumerate() {
-                col = col.child(radio_row(("timeout-opt", i as u64), label, secs == *s).on_click(set(ModKind::Timeout(*s))));
+                col = col.child(radio_row(("timeout-opt", i as u64), crate::t!(label), secs == *s).on_click(set(ModKind::Timeout(*s))));
             }
             (
-                format!("Timeout {name}"),
-                "Timeout",
+                crate::t!("mod.timeout_user", name = name).to_string(),
+                crate::t!("mod.timeout"),
                 vec![
                     div()
                         .text_color(c(Palette::TEXT_NORMAL))
-                        .child("Members who are in timeout are temporarily not allowed to chat or react in text channels, or connect to voice and stage channels.")
+                        .child(crate::t!("mod.timeout_note"))
                         .into_any_element(),
                     col.into_any_element(),
                 ],
             )
         }
         ModKind::Kick => (
-            format!("Kick '{name}' from Server"),
-            "Kick",
+            crate::t!("mod.kick_title", name = name).to_string(),
+            crate::t!("mod.kick"),
             vec![
                 div()
                     .text_color(c(Palette::TEXT_NORMAL))
-                    .child(format!("Are you sure you want to kick @{name} from {guild}? They will be able to rejoin again with a new invite."))
+                    .child(crate::t!("mod.kick_body", name = name, guild = guild).to_string())
                     .into_any_element(),
             ],
         ),
         ModKind::Ban(del) => {
             let mut col = div().flex().flex_col().gap(z(4.)).child(
-                div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child("DELETE MESSAGE HISTORY"),
+                div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("mod.delete_history")),
             );
             for (i, (label, s)) in BAN_HISTORY.iter().enumerate() {
-                col = col.child(radio_row(("ban-opt", i as u64), label, del == *s).on_click(set(ModKind::Ban(*s))));
+                col = col.child(radio_row(("ban-opt", i as u64), crate::t!(label), del == *s).on_click(set(ModKind::Ban(*s))));
             }
             (
-                format!("Ban '{name}'"),
-                "Ban",
+                crate::t!("mod.ban_title", name = name).to_string(),
+                crate::t!("mod.ban"),
                 vec![
                     div()
                         .text_color(c(Palette::TEXT_NORMAL))
-                        .child(format!("Are you sure you want to ban @{name} from {guild}?"))
+                        .child(crate::t!("mod.ban_body", name = name, guild = guild).to_string())
                         .into_any_element(),
                     col.into_any_element(),
                 ],
@@ -810,7 +810,7 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
     let left = GROUP_DM_MAX.saturating_sub(p.picked.len());
     let mut list = div().id("gdm-list").h(z(240.)).overflow_y_scroll().flex().flex_col();
     if friends.is_empty() {
-        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("No friends found that are not already in this DM."));
+        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("groupdm.none")));
     }
     for u in friends {
         let on = p.picked.contains(&u);
@@ -861,7 +861,7 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                 ),
         );
     }
-    let label = if p.picked.len() > 1 { "Create Group DM" } else { "Create DM" };
+    let label = if p.picked.len() > 1 { crate::t!("groupdm.create_group") } else { crate::t!("groupdm.create") };
     let can = !p.picked.is_empty() && !p.sending;
     let e = cx.entity();
     let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
@@ -884,8 +884,8 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                 .flex()
                 .flex_col()
                 .gap(z(4.))
-                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child("Select Friends"))
-                .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(format!("You can add {left} more friend{}.", if left == 1 { "" } else { "s" })))
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(crate::t!("groupdm.select")))
+                .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(if left == 1 { crate::t!("groupdm.left_one") } else { crate::t!("groupdm.left_many", left = left) }))
                 .child(
                     div()
                         .mt(z(12.))
