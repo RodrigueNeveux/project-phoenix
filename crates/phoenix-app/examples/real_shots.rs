@@ -146,7 +146,14 @@ impl Backend for ReadOnly {
     fn forum_tags(&self, f: Id) -> Vec<phoenix_app::commands::ForumTag> {
         self.0.forum_tags(f)
     }
-    // nav / parity / open_dm / notes / stickers / voice_control keep the
+    /// Only the forum post listing (a read-only thread search) goes through.
+    fn parity(&self, req: phoenix_app::commands::ParityRequest) -> BoxFuture<phoenix_app::commands::ParityReply> {
+        match req {
+            phoenix_app::commands::ParityRequest::ForumPosts { .. } => self.0.parity(req),
+            _ => denied(),
+        }
+    }
+    // nav / other parity / open_dm / notes / stickers / voice_control keep the
     // trait defaults (offline errors or no-ops): they may write.
 }
 

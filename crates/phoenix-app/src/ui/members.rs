@@ -352,7 +352,15 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     };
     if let Some(rows) = app.people.lists.get(&g) {
         return match rows.get(ix) {
-            Some(ListEntry::Group { id, count }) => header(group_title(app, g, id, *count)),
+            Some(ListEntry::Group { id, count }) => {
+                // A group row synced without `count`: fall back to the rows below it.
+                let n = if *count > 0 {
+                    *count
+                } else {
+                    rows[ix + 1..].iter().take_while(|r| !matches!(r, ListEntry::Group { .. })).count() as u32
+                };
+                header(group_title(app, g, id, n))
+            }
             Some(ListEntry::Member(mem, nick)) => member_row(app, entity, g, mem, nick.as_ref()),
             Some(ListEntry::Loading) => placeholder(ix),
             None => div().into_any_element(),
