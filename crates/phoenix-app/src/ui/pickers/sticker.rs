@@ -1,17 +1,18 @@
 //! Sticker tab: guild stickers then Discord's standard packs, searchable by
 //! name and tags. Clicking one sends it to the open channel.
 
-use crate::theme::z;
 use gpui::{AnyElement, Context, ParentElement, SharedString, Styled, div, img, prelude::*, px};
 
-use super::{Pickers, close, empty_state, section_title, types::StickerData, with_app};
-use crate::{
-    app::PhoenixApp,
-    media::sticker_url,
-    theme::{Palette, c},
-};
+use super::{Pickers, close, empty_state, grid, idx, section_header, tk, types::StickerData, with_app};
+use crate::{app::PhoenixApp, media::sticker_url, model::ImageRef};
 
-const CELL: f32 = 104.;
+// row_5z8c5P from the `picker-sticker` dump: 4 columns of 98px cells (96px preview,
+// --custom-stickers-constants-sticker-picker-preview-dimensions, + 1px padding),
+// 13px column gap, 12px row margin (--custom-stickers-constants-sticker-picker-preview-margin).
+const CELL: f32 = 98.;
+const COLS: usize = 4;
+const COL_GAP: f32 = 13.;
+const ROW_GAP: f32 = 12.;
 
 pub fn load_packs(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let s = &mut cx.global_mut::<Pickers>().stickers;
@@ -44,40 +45,64 @@ fn send(app: &mut PhoenixApp, id: crate::model::Id, window: &mut gpui::Window, c
     close(app, window, cx);
 }
 
-fn cell(s: &StickerData) -> AnyElement {
-    let id = s.id;
-    let inner: AnyElement = match sticker_url(s.id.0, s.format) {
-        Some(u) => img(u).size(px(CELL - 12.)).into_any_element(),
+fn sticker_graphic(s: &StickerData, size: f32) -> AnyElement {
+    match sticker_url(s.id.0, s.format) {
+        Some(u) => img(u).size(px(size)).flex_none().into_any_element(),
         // Lottie stickers can't be drawn yet: show the name.
         None => div()
-            .size(px(CELL - 12.))
+            .size(px(size))
+            .flex_none()
             .flex()
             .items_center()
             .justify_center()
-            .text_size(z(12.))
-            .text_color(c(Palette::TEXT_MUTED))
+            .overflow_hidden()
+            .text_size(px(12.))
+            .text_color(tk(idx::TEXT_MUTED))
             .child(s.name.clone())
             .into_any_element(),
-    };
+    }
+}
+
+fn cell(s: &StickerData, section: SharedString, inspected: bool, locked: bool) -> AnyElement {
+    let id = s.id;
+    let data = s.clone();
     div()
         .id(("sticker", id.0 as usize))
+        .relative()
         .size(px(CELL))
         .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(z(4.))
+        .p(px(1.))
+        .rounded(px(4.))
         .cursor_pointer()
-        .hover(|st| st.bg(c(Palette::BG_MOD_HOVER)))
-        .on_click(move |_, w, cx| with_app(cx, w, move |a, w, cx| send(a, id, w, cx)))
-        .child(inner)
+        // stickerInspected_5z8c5P .inspectedIndicator: --interactive-background-selected
+        // behind the sticker (rounded mask, 12px like the keyboard focus ring).
+        .when(inspected, |d| d.child(div().absolute().inset_0().rounded(px(12.)).bg(tk(idx::INTERACTIVE_BACKGROUND_SELECTED))))
+        .on_hover(move |h, w, cx| {
+            if *h {
+                let (data, section) = (data.clone(), section.clone());
+                with_app(cx, w, move |_, _, cx| {
+                    let st = &mut cx.global_mut::<Pickers>().stickers;
+                    if st.inspected.as_ref().map(|(d, _)| d.id) != Some(data.id) {
+                        st.inspected = Some((data, section));
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .when(!locked, |d| d.on_click(move |_, w, cx| with_app(cx, w, move |a, w, cx| send(a, id, w, cx))))
+        .child(div().relative().size_full().when(locked, |d| d.opacity(0.3)).child(sticker_graphic(s, CELL - 2.)))
         .into_any_element()
 }
+
+/// (title, rail icon, stickers, locked)
+type Section = (SharedString, Option<(ImageRef, SharedString)>, Vec<StickerData>, bool);
 
 pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let p = cx.global::<Pickers>();
     let q = p.open.as_ref().map(|o| o.input.read(cx).value().trim().to_lowercase()).unwrap_or_default();
-    let mut sections: Vec<(SharedString, Vec<StickerData>)> = Vec::new();
+    let premium = app.backend.has_premium();
+    // (title, rail icon, stickers, locked)
+    let mut sections: Vec<Section> = Vec::new();
     let mut guilds: Vec<_> = app.guilds.iter().collect();
     if let Some(sel) = app.selected_guild {
         guilds.sort_by_key(|g| g.id != sel);
@@ -85,23 +110,67 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     for g in guilds {
         let st: Vec<_> = app.backend.guild_stickers(g.id).into_iter().filter(|s| matches(s, &q)).collect();
         if !st.is_empty() {
-            sections.push((g.name.clone(), st));
+            let locked = !premium && Some(g.id) != app.selected_guild;
+            sections.push((g.name.clone(), Some((g.icon.clone(), g.acronym.clone())), st, locked));
         }
     }
     for pack in p.stickers.packs.iter().flatten() {
         let st: Vec<_> = pack.stickers.iter().filter(|s| matches(s, &q)).cloned().collect();
         if !st.is_empty() {
-            sections.push((pack.name.clone(), st));
+            sections.push((pack.name.clone(), None, st, false));
         }
     }
     if sections.is_empty() {
         return empty_state(if p.stickers.loading { crate::t!("picker.loading_stickers") } else { crate::t!("picker.no_stickers") });
     }
-    let mut body = div().id("sticker-scroll").size_full().overflow_y_scroll().px(z(8.)).pb(z(8.));
-    for (title, st) in sections {
-        body = body.child(section_title(title)).child(div().flex().flex_wrap().children(st.iter().map(cell)));
+    let inspected = p.stickers.inspected.clone().or_else(|| sections.first().and_then(|s| s.2.first().map(|d| (d.clone(), s.0.clone()))));
+    let insp_id = inspected.as_ref().map(|(d, _)| d.id);
+
+    let scroll = gpui::ScrollHandle::new();
+    let mut body = div().id("sticker-scroll").track_scroll(&scroll).size_full().overflow_y_scroll().pl(px(8.));
+    let mut rail = grid::rail();
+    for (si, (title, gicon, st, locked)) in sections.iter().enumerate() {
+        let lead = gicon.as_ref().and_then(|(i, _)| match i {
+            ImageRef::Url(u) => Some(img(u.clone()).size(px(16.)).rounded(px(4.)).flex_none().into_any_element()),
+            _ => None,
+        });
+        // packHeader_dCw_12 bleedHeader: margin-left -8px (bleeds over the list padding).
+        body = body.child(section_header(lead, title.clone()).ml(px(-8.)));
+        let mut sec = div().flex().flex_col().pb(px(12.));
+        for chunk in st.chunks(COLS) {
+            let row = div()
+                .flex()
+                .gap(px(COL_GAP))
+                .mb(px(ROW_GAP))
+                .children(chunk.iter().map(|s| cell(s, title.clone(), Some(s.id) == insp_id, *locked)));
+            sec = sec.child(row);
+        }
+        body = body.child(sec);
+        let content: AnyElement = match gicon {
+            Some((i, a)) => grid::rail_guild_icon(i, a),
+            None => crate::ui::icon(crate::assets::Icon::Sticker, 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)).into_any_element(),
+        };
+        let sh = scroll.clone();
+        rail = rail.child(
+            grid::rail_item(("sticker-section", si), gicon.is_some(), si == 0, 8.)
+                .on_click(move |_, w, cx| {
+                    sh.scroll_to_item(si * 2);
+                    with_app(cx, w, |_, _, cx| cx.notify());
+                })
+                .child(content),
+        );
     }
-    body.into_any_element()
+    let shortcut = crate::ui::icon(crate::assets::Icon::Sticker, 24., tk(idx::INTERACTIVE_TEXT_DEFAULT));
+    let footer = match inspected {
+        Some((d, from)) => grid::inspector(Some(sticker_graphic(&d, 28.)), Some(d.name.clone()), Some(from), Some(sticker_graphic(&d, 32.))),
+        None => grid::inspector(None, None, None, None),
+    };
+    div()
+        .size_full()
+        .flex()
+        .child(grid::rail_shell(rail, shortcut))
+        .child(div().flex_1().min_w_0().flex().flex_col().child(div().flex_1().min_h_0().child(body)).child(footer))
+        .into_any_element()
 }
 
 #[cfg(test)]

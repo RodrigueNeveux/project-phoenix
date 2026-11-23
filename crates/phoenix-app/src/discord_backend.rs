@@ -575,6 +575,9 @@ impl Backend for DiscordBackend {
     fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
         self.inner.session().map(|s| expressions::guild_emojis(&s, guild)).unwrap_or_default()
     }
+    fn has_premium(&self) -> bool {
+        self.inner.session().ok().and_then(|s| s.cache.current_user()).is_none_or(|u| u.premium_type.unwrap_or(0) > 0)
+    }
     fn guild_stickers(&self, guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
         self.inner.session().map(|s| expressions::guild_stickers(&s, guild)).unwrap_or_default()
     }

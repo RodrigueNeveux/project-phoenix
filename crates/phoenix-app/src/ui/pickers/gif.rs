@@ -1,7 +1,6 @@
 //! GIF tab: Tenor categories / trending home, search, masonry results.
 //! Clicking a GIF sends its URL to the open channel (Discord embeds it).
 
-use crate::theme::z;
 use gpui::{
     AnyElement, Context, FontWeight, ObjectFit, ParentElement, SharedString, Styled, StyledImage,
     div, img, prelude::*, px,
@@ -10,11 +9,15 @@ use gpui::{
 use super::{Pickers, PICKER_W, close, debounce, empty_state, types::GifItem, with_app};
 use crate::{
     app::PhoenixApp,
-    theme::{Palette, c, ca},
+    theme::{c, generated::idx, tok},
 };
 
-const GAP: f32 = 8.;
-const PAD: f32 = 16.;
+// From the `picker-gif` dump (result_H8nOze grid): 12px outer padding, 11px column
+// gap, 12px row gap, 110px category tiles with radius 5px.
+const GAP: f32 = 12.;
+const COL_GAP: f32 = 11.;
+const PAD: f32 = 12.;
+const TILE_H: f32 = 110.;
 
 pub fn load_home(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let g = &mut cx.global_mut::<Pickers>().gifs;
@@ -94,29 +97,35 @@ fn send(app: &mut PhoenixApp, gif: &GifItem, window: &mut gpui::Window, cx: &mut
     close(app, window, cx);
 }
 
-fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedString>, w: f32) -> gpui::Stateful<gpui::Div> {
+/// Category tile: image + categoryFade_d2GpC2 (--background-scrim, radius 4px; the
+/// Favorites tile uses categoryFadeBlurple: --background-brand at 80%) + centered
+/// categoryText (16px semibold white, optional 20px icon with 4px margin).
+fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedString>, w: f32, blurple: bool, icon: Option<&'static str>) -> gpui::Stateful<gpui::Div> {
+    let fade = if blurple { c(tok(idx::BACKGROUND_BRAND)).opacity(0.8) } else { c(tok(idx::BACKGROUND_SCRIM)) };
     div()
         .id(id)
         .relative()
         .w(px(w))
-        .h(z(110.))
-        .rounded(z(4.))
+        .h(px(TILE_H))
+        .flex_none()
+        .rounded(px(5.))
         .overflow_hidden()
-        .bg(c(Palette::BG_TERTIARY))
+        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
         .cursor_pointer()
-        .when_some(preview, |d, u| d.child(img(u).size_full().object_fit(ObjectFit::Cover)))
+        .when_some(preview, |d, u| d.child(img(u).absolute().inset_0().size_full().object_fit(ObjectFit::Cover)))
+        .child(div().absolute().inset_0().rounded(px(4.)).bg(fade).hover(|s| s.bg(fade.opacity(0.5))))
         .child(
             div()
                 .absolute()
                 .inset_0()
-                .bg(ca(0x00000080))
-                .hover(|s| s.bg(ca(0x00000040)))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(z(16.))
-                .font_weight(FontWeight::BOLD)
+                .text_size(px(16.))
+                .line_height(px(16.))
+                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(gpui::white())
+                .when_some(icon, |d, i| d.child(gpui::svg().path(crate::icons::path(i)).size(px(20.)).mr(px(4.)).text_color(gpui::white())))
                 .child(name),
         )
 }
@@ -125,21 +134,23 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let p = cx.global::<Pickers>();
     let g = &p.gifs;
     let typed = p.open.as_ref().map(|o| !o.input.read(cx).value().trim().is_empty()).unwrap_or(false);
-    let col_w = (PICKER_W - 2. * PAD - GAP - 8.) / 2.;
+    // Scroller is the picker minus its 1px borders; 8px is the thin scrollbar gutter.
+    let col_w = (PICKER_W - 2. - 2. * PAD - COL_GAP) / 2.;
     let content: AnyElement = if g.shown.is_none() && !typed {
         // Home: trending tile + categories.
         let Some(home) = g.home.clone() else {
             return empty_state(if g.home_loading { crate::t!("picker.loading_gifs") } else { crate::t!("picker.gifs_unavailable") });
         };
         let mut tiles: Vec<AnyElement> = vec![
-            tile(("gif-trending", 0), crate::t!("picker.trending"), home.trending_preview.clone(), col_w)
+            tile(("gif-favorites", 0), crate::t!("picker.favorites"), None, col_w, true, None).into_any_element(),
+            tile(("gif-trending", 0), crate::t!("picker.trending"), home.trending_preview.clone(), col_w, false, Some("picker/trending"))
                 .on_click(|_, w, cx| with_app(cx, w, |a, _, cx| run(a, String::new(), cx)))
                 .into_any_element(),
         ];
         for (i, cat) in home.categories.iter().enumerate() {
             let name = cat.name.clone();
             tiles.push(
-                tile(("gif-cat", i), cat.name.clone(), Some(cat.preview.clone()), col_w)
+                tile(("gif-cat", i), cat.name.clone(), Some(cat.preview.clone()), col_w, false, None)
                     .on_click(move |_, w, cx| {
                         let name = name.clone();
                         with_app(cx, w, move |a, w, cx| {
@@ -154,7 +165,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                     .into_any_element(),
             );
         }
-        div().flex().flex_wrap().gap(px(GAP)).children(tiles).into_any_element()
+        div().flex().flex_wrap().gap_x(px(COL_GAP)).gap_y(px(GAP)).children(tiles).into_any_element()
     } else if g.loading && g.results.is_empty() {
         return empty_state(crate::t!("picker.loading_gifs"));
     } else if g.results.is_empty() {
@@ -173,11 +184,12 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                     .id(("gif", i))
                     .w(px(col_w))
                     .h(px(h))
-                    .rounded(z(4.))
+                    .rounded(px(5.))
                     .overflow_hidden()
-                    .bg(c(Palette::BG_TERTIARY))
+                    .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
                     .cursor_pointer()
-                    .hover(|s| s.border_2().border_color(c(Palette::BLURPLE)))
+                    // result_H8nOze[data-focused]: 2px --border-focus ring
+                    .hover(|s| s.border_2().border_color(c(tok(idx::BORDER_FOCUS))))
                     .on_click(move |_, w, cx| {
                         let item = item.clone();
                         with_app(cx, w, move |a, w, cx| send(a, &item, w, cx));
@@ -189,7 +201,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
         let [(_, a), (_, b)] = cols;
         div()
             .flex()
-            .gap(px(GAP))
+            .gap(px(COL_GAP))
             .child(div().flex().flex_col().gap(px(GAP)).children(a))
             .child(div().flex().flex_col().gap(px(GAP)).children(b))
             .into_any_element()
@@ -198,8 +210,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
         .id("gif-scroll")
         .size_full()
         .overflow_y_scroll()
-        .px(px(PAD))
-        .pb(px(PAD))
+        .p(px(PAD))
         .child(content)
         .into_any_element()
 }

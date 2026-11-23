@@ -30,7 +30,7 @@ use crate::{
     app::PhoenixApp,
     assets::Icon,
     model::Id,
-    theme::{Palette, c},
+    theme::c,
     ui::{self, icon},
 };
 
@@ -85,6 +85,8 @@ pub struct GifState {
 pub struct StickerState {
     pub packs: Option<Vec<StickerPackData>>,
     pub loading: bool,
+    /// Sticker under the mouse (inspector bar), with its section title.
+    pub inspected: Option<(types::StickerData, SharedString)>,
 }
 
 pub struct Pickers {
@@ -218,6 +220,7 @@ fn switch_tab(app: &mut PhoenixApp, tab: Tab, window: &mut Window, cx: &mut Cont
     let Some(op) = cx.global_mut::<Pickers>().open.as_mut() else { return };
     op.tab = tab;
     op.selected = 0;
+    op.hovered = None;
     op.tone_open = false;
     let input = op.input.clone();
     input.update(cx, |s, cx| {
@@ -394,64 +397,69 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
     out
 }
 
+// Sizes from the live client dump `picker-emoji` (positionLayer_58b0l2 subtree).
+/// --custom-emoji-picker-constants-min-emoji-picker-width
 pub const PICKER_W: f32 = 498.;
-pub const PICKER_H: f32 = 440.;
+/// contentWrapper_58b0l2 box height with the tab nav (16 + 30 + 12 + 427 + border).
+pub const PICKER_H: f32 = 486.;
+/// --custom-emoji-picker-constants-emoji-picker-height (reaction picker, no nav).
+pub const PICKER_H_NO_TABS: f32 = 440.;
+
+/// Theme token by CSS variable name.
+pub(crate) fn tk(i: usize) -> gpui::Hsla {
+    c(crate::theme::tok(i))
+}
+pub(crate) use crate::theme::generated::idx;
 
 fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let op = cx.global::<Pickers>().open.as_ref()?;
     let (tab, target, anchor, input) = (op.tab, op.target, op.anchor, op.input.clone());
+    let has_tabs = matches!(target, EmojiTarget::Composer);
+    let ph = if has_tabs { PICKER_H } else { PICKER_H_NO_TABS };
     let vp = window.viewport_size();
     let (vw, vh) = (f32::from(vp.width), f32::from(vp.height));
     let (left, top) = match anchor {
         Some(p) => {
             let x = (f32::from(p.x) - PICKER_W - 8.).clamp(8., (vw - PICKER_W - 8.).max(8.));
-            let y = (f32::from(p.y) - 40.).clamp(8., (vh - PICKER_H - 8.).max(8.));
+            let y = (f32::from(p.y) - 40.).clamp(8., (vh - ph - 8.).max(8.));
             (x, y)
         }
         None => {
+            // positionLayer: right edge 24px left of the composer's right side.
             let right = 16. + if app.show_members && app.selected_guild.is_some() { 240. } else { 0. };
-            ((vw - right - PICKER_W).max(8.), (vh - 84. - PICKER_H).max(8.))
+            ((vw - right - PICKER_W).max(8.), (vh - 75. - ph).max(8.))
         }
     };
-    let tabs = match target {
-        EmojiTarget::Composer => div()
+    // nav_58b0l2: padding 0 16px, height 30, navItem + navItem margin-inline-start 8px
+    let nav = has_tabs.then(|| {
+        div()
+            .flex_none()
+            .h(px(30.))
+            .px(px(16.))
             .flex()
             .gap(px(8.))
-            .px(px(16.))
-            .pt(px(16.))
             .child(tab_button(crate::t!("picker.gifs"), Tab::Gif, tab, cx))
             .child(tab_button(crate::t!("picker.stickers"), Tab::Sticker, tab, cx))
             .child(tab_button(crate::t!("picker.emoji"), Tab::Emoji, tab, cx))
-            .into_any_element(),
-        EmojiTarget::Reaction { .. } => div().into_any_element(),
-    };
-    let header = div()
+    });
+    // header_-sZhZn / header_rfDq2B / header_WSRqCO: padding 0 16px 12px
+    // (--custom-gif-picker-gutter-size), gap 12px, border-bottom 1px --border-subtle.
+    let mut header = div()
         .flex_none()
+        .px(px(16.))
+        .pb(px(12.))
+        .border_b_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
         .flex()
-        .flex_col()
-        .child(tabs)
-        .child(
-            div()
-                .p(px(16.))
-                .pb(px(8.))
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .flex_1()
-                        .h(px(30.))
-                        .px(px(8.))
-                        .rounded(px(4.))
-                        .bg(c(Palette::BG_TERTIARY))
-                        .flex()
-                        .items_center()
-                        .text_size(px(16.))
-                        .child(div().flex_1().child(Input::new(&input).appearance(false).bordered(false)))
-                        .child(icon(Icon::Search, 18., c(Palette::INTERACTIVE))),
-                )
-                .when(tab == Tab::Emoji, |d| d.child(grid::tone_button(cx))),
-        );
+        .items_center()
+        .gap(px(12.))
+        .child(search_box(&input));
+    if tab == Tab::Emoji {
+        header = header.child(grid::tone_button(cx));
+        if has_tabs {
+            header = header.child(add_emoji_button());
+        }
+    }
     let body = match tab {
         Tab::Emoji => grid::render_body(app, cx),
         Tab::Gif => gif::render_body(app, cx),
@@ -465,57 +473,146 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
             .occlude()
             .on_mouse_down(gpui::MouseButton::Left, cx.listener(|a, _, w, cx| close(a, w, cx)))
             .child(
+                // contentWrapper_58b0l2: --background-surface-high, 1px --border-subtle,
+                // --radius-sm (8px), padding-top 16px, row gap 12px, --shadow-high.
                 div()
                     .id("picker")
                     .absolute()
                     .left(px(left))
                     .top(px(top))
                     .w(px(PICKER_W))
-                    .h(px(PICKER_H))
+                    .h(px(ph))
                     .rounded(px(8.))
-                    .bg(c(Palette::BG_SECONDARY))
+                    .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
                     .border_1()
-                    .border_color(c(Palette::BG_TERTIARY))
-                    .shadow_lg()
+                    .border_color(tk(idx::BORDER_SUBTLE))
+                    .shadow(vec![gpui::BoxShadow {
+                        color: gpui::hsla(0., 0., 0., 0.24),
+                        offset: gpui::point(px(0.), px(12.)),
+                        blur_radius: px(24.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
                     .overflow_hidden()
+                    .pt(px(16.))
                     .flex()
                     .flex_col()
+                    .gap(px(12.))
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(header)
-                    .child(div().flex_1().min_h_0().flex().child(body)),
+                    .children(nav)
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .flex()
+                            .flex_col()
+                            .child(header)
+                            .child(div().flex_1().min_h_0().flex().child(body)),
+                    ),
             )
             .into_any_element(),
     )
 }
 
+/// Search field (container_0PLWhS md): height 40, --radius-sm, padding-left 4px, gap 4px,
+/// --input-background-default, 1px border (focused: --border-focus); 30px icon box with
+/// a 16px magnifier; input 16px/20px with padding-right 12px.
+fn search_box(input: &Entity<InputState>) -> gpui::Div {
+    div()
+        .flex_1()
+        .min_w_0()
+        .h(px(40.))
+        .pl(px(4.))
+        .pr(px(12.))
+        .gap(px(4.))
+        .rounded(px(8.))
+        .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
+        .border_1()
+        .border_color(tk(idx::BORDER_FOCUS))
+        .flex()
+        .items_center()
+        .text_size(px(16.))
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .child(div().size(px(30.)).flex_none().flex().items_center().justify_center().child(icon(Icon::Search, 16., tk(idx::TEXT_DEFAULT))))
+        .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false)))
+}
+
+/// "Add Emoji" (button_F7qvhY md secondary): --control-secondary-background-default,
+/// 1px --control-secondary-border-default, --radius-sm, padding 7px 15px, 16px medium.
+fn add_emoji_button() -> impl IntoElement {
+    div()
+        .id("picker-add-emoji")
+        .flex_none()
+        .h(px(40.))
+        .px(px(15.))
+        .rounded(px(8.))
+        .bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+        .border_1()
+        .border_color(tk(idx::CONTROL_SECONDARY_BORDER_DEFAULT))
+        .hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .text_size(px(16.))
+        .line_height(px(20.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(tk(idx::TEXT_STRONG))
+        .child(crate::t!("picker.add_emoji"))
+}
+
+/// navButton_58b0l2: padding 8px 12px, --radius-sm, 14px/14px weight 600, --text-default;
+/// active: --background-mod-normal + --text-strong; hover: --control-secondary-background-hover.
 fn tab_button(label: SharedString, tab: Tab, current: Tab, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let active = tab == current;
     div()
         .id(label.clone())
-        .px(px(8.))
-        .py(px(2.))
-        .rounded(px(4.))
+        .h(px(30.))
+        .px(px(12.))
+        .rounded(px(8.))
+        .flex()
+        .items_center()
         .cursor_pointer()
         .text_size(px(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(c(if active { Palette::TEXT_HEADER } else { Palette::INTERACTIVE }))
-        .when(active, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-        .when(!active, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER))))
+        .line_height(px(14.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(tk(if active { idx::TEXT_STRONG } else { idx::TEXT_DEFAULT }))
+        .when(active, |d| d.bg(tk(idx::BACKGROUND_MOD_NORMAL)).hover(|s| s.bg(tk(idx::BACKGROUND_MOD_STRONG))))
+        .when(!active, |d| {
+            d.hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)).text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
+        })
         .on_click(cx.listener(move |a, _, w, cx| switch_tab(a, tab, w, cx)))
         .child(label)
 }
 
-/// Section title in a picker body ("FREQUENTLY USED", guild names...).
-pub(crate) fn section_title(title: SharedString) -> gpui::Div {
+/// Section header (wrapper_kSdzCr): height 32
+/// (--custom-expression-picker-constants-expression-picker-list-section-heading-height),
+/// padding-inline 8px 4px, --background-surface-high; optional 16px icon, label
+/// body-sm/semibold (14px/18px, --text-default) with 4px margins, 16px collapse chevron.
+pub(crate) fn section_header(lead: Option<AnyElement>, title: SharedString) -> gpui::Div {
+    let fg = tk(idx::TEXT_DEFAULT);
     div()
-        .h(px(28.))
-        .px(px(8.))
+        .h(px(32.))
+        .flex_none()
+        .pl(px(8.))
+        .pr(px(4.))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
         .flex()
         .items_center()
-        .text_size(px(12.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(Palette::TEXT_MUTED))
-        .child(title.to_uppercase())
+        .text_color(fg)
+        .children(lead)
+        .child(
+            div()
+                .mx(px(4.))
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(px(14.))
+                .line_height(px(18.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .child(title),
+        )
+        .child(icon(Icon::Chevron, 16., fg))
 }
 
 pub(crate) fn empty_state(text: SharedString) -> AnyElement {
@@ -525,7 +622,25 @@ pub(crate) fn empty_state(text: SharedString) -> AnyElement {
         .items_center()
         .justify_center()
         .text_size(px(14.))
-        .text_color(c(Palette::TEXT_MUTED))
+        .text_color(tk(idx::TEXT_MUTED))
         .child(text)
         .into_any_element()
+}
+
+/// Hand-made fallbacks for the `picker/*` icon names (used without a local Discord).
+pub fn svg_asset(path: &str) -> Option<&'static str> {
+    macro_rules! sv {
+        ($b:literal) => {
+            concat!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">"#, $b, "</svg>")
+        };
+    }
+    Some(match path {
+        "icons/picker/clock.svg" => sv!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>"#),
+        "icons/picker/trophy.svg" => sv!(r#"<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4M12 14v4M8 21h8"/>"#),
+        "icons/picker/trending.svg" => sv!(r#"<path d="m3 17 6-6 4 4 8-8M15 7h6v6"/>"#),
+        "icons/picker/fire.svg" => sv!(r#"<path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-3 3-5 5-5 8a7 7 0 0 0 7 7z"/>"#),
+        "icons/picker/star.svg" => sv!(r#"<path d="M12 3l2.8 5.8 6.2.9-4.5 4.3 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.7l6.2-.9z"/>"#),
+        "icons/picker/nitro.svg" => sv!(r#"<circle cx="14" cy="12" r="7"/><circle cx="14" cy="12" r="3"/><path d="M3 10h4M4 14h3"/>"#),
+        _ => return None,
+    })
 }

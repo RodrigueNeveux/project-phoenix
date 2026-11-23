@@ -177,6 +177,10 @@ pub trait Backend: Send + Sync + 'static {
     fn guild_stickers(&self, _guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
         Vec::new()
     }
+    /// Whether the user has Nitro (unlocks emoji/stickers from other servers).
+    fn has_premium(&self) -> bool {
+        true
+    }
     fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
         Box::pin(async { Ok(Vec::new()) })
     }

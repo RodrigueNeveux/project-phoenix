@@ -2,17 +2,16 @@
 //! ranking. Prefixes narrow the search: `@` users/DMs, `#` text channels,
 //! `!` voice channels, `*` servers.
 
-use crate::theme::z;
 use gpui::{
-    Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, Subscription, Window,
-    div, prelude::*,
+    AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, Subscription, Window,
+    div, prelude::*, px,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
 use crate::{
     app::PhoenixApp,
     model::{ChannelKind, Id},
-    theme::{Palette, c, ca},
+    theme::{c, generated::idx, tok},
     ui::{avatar, icon, sidebar::channel_icon},
 };
 
@@ -217,134 +216,240 @@ pub fn on_key(app: &mut PhoenixApp, key: &str, _window: &mut Window, cx: &mut Co
     true
 }
 
+// Layout from the live client dump `switcher` (quickswitcher_a1DYes subtree).
+/// Modal width (quickswitcher box 678.667px).
+const W: f32 = 679.;
+
+fn tk(i: usize) -> gpui::Hsla {
+    c(tok(i))
+}
+
+/// (lead, name, username, note, misc)
+type Row = (AnyElement, SharedString, Option<SharedString>, Option<SharedString>, Option<SharedString>);
+
 pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let mut results = div().mt(z(8.)).flex().flex_col().max_h(z(400.)).overflow_hidden();
+    let empty_query = sw.input.read(cx).value().trim().is_empty();
+    let fg = tk(idx::INTERACTIVE_TEXT_DEFAULT);
+    // scroller_a1DYes: margin-top 16px, height 236px; content rows of 34px.
+    let mut rows = div().id("switcher-results").mt(px(16.)).h(px(236.)).overflow_y_scroll().flex().flex_col();
     if sw.results.is_empty() {
-        results = results.child(
+        // emptyState_a1DYes: centered, --font-weight-medium; emptyStateNote 16/20 --text-muted.
+        rows = rows.child(
             div()
-                .py(z(24.))
+                .size_full()
                 .flex()
+                .items_center()
                 .justify_center()
-                .text_size(z(14.))
-                .text_color(c(Palette::TEXT_MUTED))
+                .text_size(px(16.))
+                .line_height(px(20.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tk(idx::TEXT_MUTED))
                 .child(crate::t!("switcher.cant_find")),
+        );
+    } else if empty_query {
+        // header_hm_rAU: 14px medium, line-height 30px, margin-top 4px,
+        // --interactive-text-default, letter-spacing .025em, in a 34px row with 10px padding.
+        rows = rows.child(
+            div()
+                .h(px(34.))
+                .flex_none()
+                .px(px(10.))
+                .pt(px(4.))
+                .text_size(px(14.))
+                .line_height(px(30.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(fg)
+                .child(crate::t!("switcher.previous")),
         );
     }
     for (i, t) in sw.results.iter().copied().enumerate() {
-        let (lead, name, hint): (gpui::AnyElement, SharedString, SharedString) = match t {
+        // (lead, name, username, note, misc)
+        let (lead, name, user, note, misc): Row = match t {
             Target::Channel(id) => {
                 let Some(ch) = app.channels.get(&id) else { continue };
-                let guild: SharedString = ch
-                    .guild
-                    .and_then(|g| app.guilds.iter().find(|x| x.id == g))
-                    .map(|g| g.name.to_uppercase().into())
-                    .unwrap_or_default();
-                (icon(channel_icon(ch.kind), 18., c(Palette::CHANNEL_ICON)).into_any_element(), ch.name.clone(), guild)
+                let guild = ch.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone());
+                let note = ch.parent.and_then(|p| app.channels.get(&p)).map(|p| p.name.clone());
+                // iconContainer_hm_rAU 20x16 with a 16px icon.
+                let lead = div().w(px(20.)).h(px(16.)).flex().justify_center().child(icon(channel_icon(ch.kind), 16., fg)).into_any_element();
+                (lead, ch.name.clone(), None, note, guild)
             }
             Target::Dm(id) => {
                 let Some(ch) = app.channels.get(&id) else { continue };
                 let user = app.users.values().find(|u| u.display_name == ch.name || u.name == ch.name);
-                (avatar(user, 20.), ch.name.clone(), crate::t!("switcher.dm"))
+                (avatar(user, 20.), ch.name.clone(), user.map(|u| u.name.clone()), None, None)
             }
             Target::User(id) => {
                 let u = app.users.get(&id);
-                (
-                    avatar(u, 20.),
-                    u.map(|u| u.display_name.clone()).unwrap_or_default(),
-                    u.map(|u| u.name.clone()).unwrap_or_default(),
-                )
+                (avatar(u, 20.), u.map(|u| u.display_name.clone()).unwrap_or_default(), u.map(|u| u.name.clone()), None, None)
             }
             Target::Guild(id) => {
                 let Some(g) = app.guilds.iter().find(|g| g.id == id) else { continue };
                 let lead = match &g.icon {
-                    crate::model::ImageRef::Url(u) => gpui::img(u.clone()).size(z(20.)).rounded(z(6.)).into_any_element(),
+                    crate::model::ImageRef::Url(u) => gpui::img(u.clone()).size(px(20.)).rounded(px(6.)).into_any_element(),
                     _ => div()
-                        .size(z(20.))
-                        .rounded(z(6.))
-                        .bg(c(Palette::BG_PRIMARY))
+                        .size(px(20.))
+                        .rounded(px(6.))
+                        .bg(tk(idx::BACKGROUND_BASE_LOW))
                         .flex()
                         .items_center()
                         .justify_center()
-                        .text_size(z(8.))
+                        .text_size(px(8.))
                         .child(g.acronym.clone())
                         .into_any_element(),
                 };
-                (lead, g.name.clone(), crate::t!("switcher.server"))
+                (lead, g.name.clone(), None, None, None)
             }
         };
         let selected = i == sw.selected;
-        results = results.child(
+        // result_hm_rAU: 34px, radius 3px, 16px medium; selected: --interactive-background-selected.
+        // content_hm_rAU: padding 0 10px, --interactive-text-default, baseline-aligned row.
+        rows = rows.child(
             div()
                 .id(("sw", i))
-                .h(z(34.))
-                .px(z(8.))
-                .rounded(z(4.))
+                .h(px(34.))
+                .flex_none()
+                .px(px(10.))
+                .rounded(px(3.))
                 .flex()
                 .items_center()
-                .gap(z(8.))
                 .cursor_pointer()
-                .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                .text_size(px(16.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if selected { tk(idx::INTERACTIVE_TEXT_ACTIVE) } else { fg })
+                .when(selected, |d| d.bg(tk(idx::INTERACTIVE_BACKGROUND_SELECTED)))
+                .when(!selected, |d| d.hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER))))
+                .on_mouse_move(cx.listener(move |a, _, _, cx| {
+                    if let Some(sw) = a.switcher.as_mut()
+                        && sw.selected != i
+                    {
+                        sw.selected = i;
+                        cx.notify();
+                    }
+                }))
                 .on_click(cx.listener(move |a, _, w, cx| activate(a, t, w, cx)))
-                .child(lead)
+                // iconContainer margin-inline-end 5px
+                .child(div().flex_none().mr(px(5.)).child(lead))
                 .child(
                     div()
-                        .text_size(z(16.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_NORMAL }))
-                        .child(name),
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .items_center()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        // match_hm_rAU: margin-inline-end 4px, ellipsis
+                        .child(div().mr(px(4.)).flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis().child(name))
+                        // username_hm_rAU: normal weight, opacity .6
+                        .children(user.map(|u| div().flex_none().font_weight(FontWeight::NORMAL).opacity(0.6).child(u)))
+                        // note_hm_rAU: 10px/14px semibold --text-muted, margin-top 1px
+                        .children(note.map(|n| {
+                            div()
+                                .flex_shrink(1.)
+                                .min_w_0()
+                                .mt(px(1.))
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .text_size(px(10.))
+                                .line_height(px(14.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(tk(idx::TEXT_MUTED))
+                                .child(n)
+                        })),
                 )
-                .child(div().flex_1())
-                .child(
+                // misc_hm_rAU (margin-left 4px) > miscContainer_a1DYes: body-sm/medium 14/18, opacity .6
+                .children(misc.map(|m| {
                     div()
-                        .text_size(z(12.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(hint),
-                ),
+                        .ml(px(4.))
+                        .flex_none()
+                        .max_w(px(140.))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ellipsis()
+                        .text_size(px(14.))
+                        .line_height(px(18.))
+                        .opacity(0.6)
+                        .child(m)
+                })),
         );
     }
+    // autocompleteQuerySymbol_a1DYes: --background-base-lowest, radius 4px, --font-code, padding 2px.
+    let sym = |s: &'static str| {
+        div()
+            .mx(px(1.))
+            .px(px(2.))
+            .rounded(px(4.))
+            .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+            .font_family(crate::theme::FONT_MONO)
+            .child(s)
+    };
+    // protip_a1DYes: padding-top 10px; pro_xW8MJW 12px semibold --text-feedback-positive,
+    // margin-right 3px; tip body-sm 12px/16px --text-default; anchor --text-link.
+    let protip = div()
+        .pt(px(10.))
+        .flex()
+        .items_center()
+        .flex_wrap()
+        .text_size(px(12.))
+        .line_height(px(16.))
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .child(
+            div()
+                .mr(px(3.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_FEEDBACK_POSITIVE))
+                .child(crate::t!("switcher.protip_label")),
+        )
+        .child(div().mr(px(3.)).child(crate::t!("switcher.protip")))
+        .children(["@", "#", "!", "*", "$"].map(sym))
+        .child(div().ml(px(3.)).mr(px(3.)).child(crate::t!("switcher.protip_after")))
+        .child(div().text_color(tk(idx::TEXT_LINK)).child(crate::t!("switcher.learn_more")));
     div()
         .id("switcher-backdrop")
         .absolute()
         .inset_0()
-        .bg(ca(0x000000B3))
+        // backdrop_: --opacity-black-70 equivalent scrim behind modals.
+        .bg(tk(idx::BACKGROUND_SCRIM))
         .flex()
         .justify_center()
-        .items_start()
-        .pt(z(120.))
+        .items_center()
         .on_click(cx.listener(|a, _, w, cx| a.close_switcher(w, cx)))
         .child(
+            // quickswitcher_a1DYes: padding 12px 20px 0, radius 8px, --text-default,
+            // on the modal root (--modal-background).
             div()
                 .id("switcher")
-                .w(z(570.))
-                .h_auto()
-                .p(z(16.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
+                .w(px(W))
+                .pt(px(12.))
+                .px(px(20.))
+                .rounded(px(8.))
+                .bg(tk(idx::MODAL_BACKGROUND))
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
                 .shadow_lg()
+                .text_color(tk(idx::TEXT_DEFAULT))
+                .flex()
+                .flex_col()
                 .on_click(|_, _, cx| cx.stop_propagation())
                 .child(
+                    // input_a1DYes: 70px, padding 0 12px, 22px/70px, --input-background-default,
+                    // 1px --input-border-default, --radius-sm.
                     div()
-                        .h(z(70.))
-                        .px(z(16.))
-                        .rounded(z(4.))
-                        .bg(c(Palette::BG_TERTIARY))
+                        .h(px(70.))
+                        .flex_none()
+                        .px(px(12.))
+                        .rounded(px(8.))
+                        .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
+                        .border_1()
+                        .border_color(tk(idx::INPUT_BORDER_DEFAULT))
                         .flex()
                         .items_center()
-                        .text_size(z(20.))
-                        .text_color(c(Palette::TEXT_NORMAL))
+                        .text_size(px(22.))
+                        .text_color(tk(idx::TEXT_DEFAULT))
                         .child(Input::new(&sw.input).appearance(false).bordered(false)),
                 )
-                .child(results)
-                .child(
-                    div()
-                        .mt(z(12.))
-                        .text_size(z(12.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(crate::t!("switcher.protip")),
-                ),
+                // resultsArea_a1DYes: height 262px
+                .child(div().h(px(262.)).flex_none().child(rows))
+                .child(protip.pb(px(1.))),
         )
 }
 
