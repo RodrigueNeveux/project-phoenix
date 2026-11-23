@@ -69,6 +69,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         .on_drop(cx.listener(|a, paths: &gpui::ExternalPaths, _, cx| {
                             a.add_paths(paths.paths().to_vec(), cx)
                         }))
+                        .children(discovery_notice(app, cx))
                         .child(
                             div()
                                 .flex_1()
@@ -90,6 +91,72 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .children(panels::thread_panel(app, cx)),
         )
         .children(panels::pins_popout(app, cx))
+}
+
+fn guild_discoverable(app: &PhoenixApp) -> bool {
+    app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).is_some_and(|g| g.discoverable)
+}
+
+/// Guilds whose Discovery notice was closed this session (Discord keeps it client-side).
+static NOTICE_CLOSED: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+/// Discovery channel notice. vanilla-guild-text #1101 `bar_8PBDGr`: --background-feedback-mod-info,
+/// border-bottom 1px --inlinenotice-border-info, margin-top -1, padding 4 8 4 16, gap 8;
+/// #1103 text_ body-sm/normal 14/18 --text-default with an underlined "En savoir plus" (#1104);
+/// #1105 close_ 32×32, --icon-muted (hover --icon-default), 18px glyph.
+fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
+    let gid = app.selected_guild?;
+    let ch = app.selected_channel.and_then(|c| app.channels.get(&c))?;
+    if ch.guild.is_none() || !guild_discoverable(app) || NOTICE_CLOSED.lock().ok()?.contains(&gid.0) {
+        return None;
+    }
+    Some(
+        div()
+            .flex_none()
+            .mt(z(-1.))
+            .pt(z(4.))
+            .pb(z(4.))
+            .pl(z(16.))
+            .pr(z(8.))
+            .flex()
+            .items_center()
+            .gap(z(8.))
+            .bg(tk(idx::BACKGROUND_FEEDBACK_MOD_INFO))
+            .border_t_1()
+            .border_b_1()
+            .border_color(tk(idx::INLINENOTICE_BORDER_INFO))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    .child(crate::t!("chat.discovery_notice"))
+                    .child(div().underline().child(crate::t!("chat.discovery_more"))),
+            )
+            .child(
+                div()
+                    .id("discovery-notice-close")
+                    .flex_none()
+                    .size(z(32.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .text_color(tk(idx::ICON_MUTED))
+                    .hover(|s| s.text_color(tk(idx::ICON_DEFAULT)))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        if let Ok(mut v) = NOTICE_CLOSED.lock() {
+                            v.push(gid.0);
+                        }
+                        cx.notify();
+                    }))
+                    .child(gpui::svg().path(crate::icons::path("close")).size(z(18.))),
+            )
+            .into_any_element(),
+    )
 }
 
 /// `--chat-input-icon-size` glyph in a 32px toolbar button.
@@ -130,6 +197,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let name = ch.map(|c| c.name.clone()).unwrap_or_default();
     let topic = ch.and_then(|c| c.topic.clone());
     let kind = ch.map(|c| c.kind).unwrap_or(ChannelKind::Text);
+    let discoverable = !is_dm && guild_discoverable(app);
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
     let on = tk(idx::ICON_STRONG);
@@ -185,11 +253,30 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .text_color(tk(idx::TEXT_STRONG))
                         .child(name),
                 )
+                .when(discoverable, |d| {
+                    // vanilla-guild-text #1060 dot_GxzgQj: 4px, --background-mod-strong, margin-inline 4 12;
+                    // #1061/#1062 label_GxzgQj > body-sm/medium 14px/18px --text-muted "Mode Découverte".
+                    d.child(div().flex_none().ml(z(4.)).mr(z(12.)).size(z(4.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_STRONG)))
+                        .child(
+                            div()
+                                .flex_none()
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(tk(idx::TEXT_MUTED))
+                                .child(crate::t!("chat.discovery_mode")),
+                        )
+                })
                 .when_some(topic.filter(|_| !is_dm), |d, t| {
                     let topic_click = crate::ui::home::topic::on_click(app, cx);
-                    // dot_ 4px, margin 0 4px, --text-muted 24% (#1049); topic_ margin-inline-start 8px,
+                    // #1068 leadingBar_pVbL3l after the Discovery label: 1×16, --border-subtle, ml 8.
+                    // Otherwise dot_ 4px, margin 0 4px, --text-muted 24% (#1049); topic_ margin-inline-start 8px,
                     // body-sm/medium 14px/18px --text-muted (#1050).
-                    d.child(div().flex_none().mx(z(4.)).size(z(4.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_STRONG)))
+                    d.child(if discoverable {
+                        div().flex_none().ml(z(8.)).w(z(1.)).h(z(16.)).bg(tk(idx::BORDER_SUBTLE))
+                    } else {
+                        div().flex_none().mx(z(4.)).size(z(4.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_STRONG))
+                    })
                         .child(
                             div()
                                 .id("channel-topic")
@@ -412,7 +499,10 @@ fn time_tooltip(ts: i64) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 's
 fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -> gpui::Div {
     div()
         .flex_none()
+        // vanilla-dm #1270 (message): margin -2 0 0 6, box h 15; #1424 (reply): margin -2 4 0 2, opacity .64.
         .ml(z(if in_reply { 2. } else { 6. }))
+        .when(in_reply, |d| d.mr(z(4.)))
+        .h(z(15.))
         .px(z(4.))
         .rounded(z(4.))
         .bg(tk(idx::BACKGROUND_MOD_STRONG))

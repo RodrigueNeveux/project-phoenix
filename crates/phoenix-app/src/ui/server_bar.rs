@@ -61,10 +61,12 @@ fn rail(app: &PhoenixApp) -> Vec<RailItem<'_>> {
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
+    let scroll = RAIL_SCROLL.with(|h| h.clone());
     let mut col = div()
         .id("guild-rail")
         .size_full()
         .overflow_y_scroll()
+        .track_scroll(&scroll)
         .pt(z(PAD_TOP))
         .pb(z(PAD_BOTTOM))
         .flex()
@@ -72,7 +74,16 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .gap(z(GAP))
         .child(home(app, &entity))
         .child(separator());
-    for item in rail(app) {
+    // Child indexes (home + separator come first) of the unread items, for the "nouveau" bars.
+    let mut unread_ix = Vec::new();
+    for (i, item) in rail(app).into_iter().enumerate() {
+        let unread = match &item {
+            RailItem::Guild(g, _) => g.unread || g.mentions > 0,
+            RailItem::Folder { guilds, .. } => guilds.iter().any(|g| g.unread || g.mentions > 0),
+        };
+        if unread {
+            unread_ix.push(i + 2);
+        }
         col = match item {
             RailItem::Guild(g, nested) => col.child(guild(app, &entity, g, nested)),
             RailItem::Folder { id, name, color, guilds, open } => {
@@ -92,7 +103,76 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             action(&entity, "discover", Icon::Compass, crate::t!("rail.discover"))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub(&crate::t!("rail.discover"), cx)))
         });
-    div().w(z(m::SERVER_BAR_W)).flex_none().h_full().bg(c(Palette::BG_TERTIARY)).child(col)
+    let (above, below) = offscreen_unread(&scroll, &unread_ix);
+    div()
+        .w(z(m::SERVER_BAR_W))
+        .flex_none()
+        .h_full()
+        .relative()
+        .bg(c(Palette::BG_TERTIARY))
+        .child(col)
+        .children(above.map(|ix| unread_bar(&scroll, ix, true)))
+        .children(below.map(|ix| unread_bar(&scroll, ix, false)))
+}
+
+thread_local! {
+    static RAIL_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+}
+
+/// Nearest unread item scrolled off above / below the rail viewport (last frame's layout).
+fn offscreen_unread(h: &gpui::ScrollHandle, ixs: &[usize]) -> (Option<usize>, Option<usize>) {
+    let view = h.bounds();
+    if view.size.height <= px(0.) {
+        return (None, None);
+    }
+    let above = ixs.iter().rev().copied().find(|&i| h.bounds_for_item(i).is_some_and(|b| b.bottom() <= view.top()));
+    let below = ixs.iter().copied().find(|&i| h.bounds_for_item(i).is_some_and(|b| b.top() >= view.bottom()));
+    (above, below)
+}
+
+/// "nouveau" pill. vanilla-guild-text #56/#57 (top) and #607/#608 (bottom):
+/// unreadMentionsIndicatorTop_/Bottom_ absolute, padding 8 (bottom: 8 8 26);
+/// bar_oJAkDB unread_oJAkDB: h 24, r 12, --background-surface-highest, 1px --border-normal,
+/// shadow 0 2 6 --opacity-black-24, 12px/16px semibold uppercase --text-strong; :active top 1px.
+fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool) -> AnyElement {
+    use crate::theme::{generated::idx, tok};
+    let h = h.clone();
+    div()
+        .absolute()
+        .left_0()
+        .right_0()
+        .when(top, |d| d.top_0().p(z(8.)))
+        .when(!top, |d| d.bottom_0().pt(z(8.)).px(z(8.)).pb(z(PAD_BOTTOM)))
+        .child(
+            div()
+                .id(if top { "rail-unread-top" } else { "rail-unread-bottom" })
+                .h(z(24.))
+                .rounded(z(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_NORMAL)))
+                .shadow(vec![gpui::BoxShadow {
+                    color: c(tok(idx::OPACITY_BLACK_24)),
+                    offset: point(px(0.), z(2.)),
+                    blur_radius: z(6.),
+                    spread_radius: px(0.),
+                    inset: false,
+                }])
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .on_click(move |_, w, _| {
+                    h.scroll_to_item(ix);
+                    w.refresh();
+                })
+                .child(crate::t!("rail.unread_new").to_uppercase()),
+        )
+        .into_any_element()
 }
 
 // Metrics of the official guild rail (refresh layout, `.density-cozy`, dump -channels-N-N+ #50..#583).

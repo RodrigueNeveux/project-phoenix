@@ -245,6 +245,21 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                     cx.notify();
                                 }))
                                 .child(
+                                    // vanilla-guild-text #616 guildBadgeAndName_: gap 10; #617/#619
+                                    // guildIconV2Container_ 20px holding an 18px guildBadge_ (Discovery).
+                                    div()
+                                        .min_w_0()
+                                        .flex()
+                                        .items_center()
+                                        .gap(z(10.))
+                                        .when(g.discoverable, |d| {
+                                            d.child(
+                                                div().w(z(20.)).flex_none().flex().justify_center().child(
+                                                    gpui::svg().path(crate::icons::path("compass")).size(z(18.)).text_color(fg),
+                                                ),
+                                            )
+                                        })
+                                        .child(
                                     div()
                                         .min_w_0()
                                         .text_size(z(16.))
@@ -253,6 +268,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                         .text_color(fg)
                                         .text_ellipsis()
                                         .child(g.name.clone()),
+                                        ),
                                 )
                                 .child(icon(if menu_open { Icon::Close } else { Icon::Chevron }, 16. * crate::theme::zoom(), fg)),
                         )

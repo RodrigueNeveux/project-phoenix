@@ -51,6 +51,8 @@ pub struct Guild {
     pub mentions: u32,
     pub banner_color: Option<u32>,
     pub owner: Option<Id>,
+    /// Guild feature `DISCOVERABLE` ("Mode Découverte" header label + channel notice).
+    pub discoverable: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

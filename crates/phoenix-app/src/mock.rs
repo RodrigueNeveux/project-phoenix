@@ -151,6 +151,7 @@ impl MockBackend {
                 mentions: if gi == 3 { 4 } else if gi == 5 { 1 } else { 0 },
                 banner_color: *banner,
                 owner: Some(Id(2)),
+                discoverable: gi == 0,
             });
             let layout: &[(&str, &[(&str, ChannelKind)])] = &[
                 (

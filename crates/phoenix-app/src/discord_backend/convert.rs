@@ -630,6 +630,7 @@ pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model:
         mentions: channels.iter().map(|c| c.mentions).sum(),
         banner_color: None,
         owner: g.owner_id().map(id),
+        discoverable: g.properties.features.iter().any(|f| f == "DISCOVERABLE"),
     }
 }
 
