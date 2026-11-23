@@ -471,7 +471,7 @@ fn language(app: &PhoenixApp, cx: &mut Cx) -> Div {
 /// A theme choice drawn as a miniature chat window in that theme's own colours
 /// (rail, channel list, two messages and a composer), with its name below.
 fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
-    let tc = |tok: u32| c(crate::theme::resolve_for(tok, t));
+    let tc = |tok: u32| crate::theme::c_for(tok, t);
     let line = |w: f32, tok: u32| div().h(z(6.)).w(z(w)).rounded(z(3.)).bg(tc(tok));
     let msg = |w1: f32, w2: f32, av: u32| {
         div()
