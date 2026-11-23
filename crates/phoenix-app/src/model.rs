@@ -243,11 +243,18 @@ pub struct Member {
 }
 
 pub fn acronym(name: &str) -> SharedString {
-    let s: String = name
-        .split_whitespace()
-        .filter_map(|w| w.chars().next())
-        .take(4)
-        .collect();
+    // Client `oN`: `'s ` -> space, each `\w+` run -> its first char, drop whitespace
+    // (non-ASCII letters aren't `\w`, so "La Retaudière" -> "LRèr").
+    let name = name.replace("'s ", " ");
+    let mut s = String::new();
+    let mut in_word = false;
+    for ch in name.chars() {
+        let w = ch.is_ascii_alphanumeric() || ch == '_';
+        if (w && !in_word) || (!w && !ch.is_whitespace()) {
+            s.push(ch);
+        }
+        in_word = w;
+    }
     s.into()
 }
 
@@ -258,6 +265,8 @@ mod tests {
     fn acronyms() {
         assert_eq!(acronym("Rust Programming Language").as_ref(), "RPL");
         assert_eq!(acronym("gpui").as_ref(), "g");
+        assert_eq!(acronym("La Retaudière").as_ref(), "LRèr");
+        assert_eq!(acronym("Roxas's World").as_ref(), "RW");
     }
 }
 

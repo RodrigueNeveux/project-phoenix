@@ -279,7 +279,8 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
 
 fn guild_inner(g: &Guild, size: f32) -> AnyElement {
     match &g.icon {
-        ImageRef::Url(u) => img(u.clone()).size(z(size)).into_any_element(),
+        // The tile's `--radius-md` must clip the image itself (GPUI doesn't clip children).
+        ImageRef::Url(u) => img(u.clone()).size(z(size)).rounded(z(ICON_RADIUS * size / ICON)).into_any_element(),
         _ => div()
             .text_size(z(if size < 30. {
                 7.
@@ -363,7 +364,8 @@ fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, _nested: bool
         .justify_center()
         .overflow_hidden()
         .rounded(z(ICON_RADIUS))
-        .bg(c(if active && !has_icon { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
+        // Icon guilds have no tile behind transparent pixels (vanilla rail).
+        .when(!has_icon, |d| d.bg(c(if active { Palette::BLURPLE } else { Palette::GUILD_ICON_BG })))
         .text_color(if active && !has_icon { gpui::white() } else { c(Palette::TEXT_NORMAL) })
         .child(guild_inner(g, ICON));
     row(("guild", id.0), id.0, entity)

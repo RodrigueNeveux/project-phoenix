@@ -729,6 +729,9 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
 pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     div()
         .flex_none()
+        // Rail + channel list width, so a long custom status ellipsizes instead
+        // of widening the card past the sidebar.
+        .w(z(m::SERVER_BAR_W + m::SIDEBAR_W))
         .relative()
         .child(div().absolute().top_0().bottom_0().left_0().w(z(m::SERVER_BAR_W)).bg(c(Palette::BG_TERTIARY)))
         .child(
@@ -795,9 +798,12 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .cursor_pointer()
                 .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
+                .overflow_hidden()
                 .child(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)))
                 .child(
                     div()
+                        .flex_1()
+                        .overflow_hidden()
                         .min_w_0()
                         .flex()
                         .flex_col()
