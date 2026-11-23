@@ -157,6 +157,8 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/friends.svg" => f!(r#"<circle cx="12" cy="7" r="4.5"/><path d="M3 21a9 7 0 0 1 18 0z"/>"#),
         "icons/nitro.svg" => f!(r#"<path d="M3 9h5v2H3zm1 4h4v2H4zM14 4a8 8 0 1 1 0 16 8 8 0 0 1-6.9-4h2.5A6 6 0 1 0 9.6 8H7.1A8 8 0 0 1 14 4zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8z"/>"#),
         "icons/lock.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/>"#),
+        "icons/pen.svg" => f!(r#"<path d="M16.3 3.3a2.4 2.4 0 0 1 3.4 0l1 1a2.4 2.4 0 0 1 0 3.4L9.5 18.9 3 21l2.1-6.5zM15 6.4 17.6 9"/>"#),
+        "icons/id.svg" => f!(r#"<path fill-rule="evenodd" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm2 4v8h2V8zm4 0v8h3a4 4 0 0 0 0-8zm2 2h1a2 2 0 0 1 0 4h-1z"/>"#),
         "icons/reply.svg" => s!(r#"<path d="M4 20v-5a6 6 0 0 1 6-6h10M15 4l5 5-5 5"/>"#),
         "icons/file.svg" => f!(r#"<path d="M6 2h8l6 6v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm7 1.5V9h5.5z"/>"#),
         "icons/image.svg" => s!(r#"<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>"#),
@@ -166,7 +168,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/add-to-dm.svg" => f!(r#"<circle cx="9" cy="8" r="4"/><path d="M1 20a8 6.5 0 0 1 15.5-2.2V21H1zM19 13a1 1 0 0 1 1 1v3h3a1 1 0 1 1 0 2h-3v3a1 1 0 1 1-2 0v-3h-3a1 1 0 1 1 0-2h3v-3a1 1 0 0 1 1-1z"/>"#),
         "icons/user-profile.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 4a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm-6 12.2a8 8 0 0 0 12 0 7 5 0 0 0-12 0z"/>"#),
         "icons/apps.svg" => f!(r#"<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>"#),
-        _ => return crate::ui::chat::icons::svg(path).or_else(|| crate::ui::voice_panel::svg_asset(path)),
+        _ => return crate::ui::chat::icons::svg(path).or_else(|| crate::ui::voice_panel::svg_asset(path)).or_else(|| crate::ui::inbox::svg_asset(path)),
     })
 }
 

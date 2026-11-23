@@ -21,7 +21,7 @@ use phoenix_voice::audio::device::MicTest;
 use super::Page;
 use crate::app::PhoenixApp;
 use crate::assets::Icon;
-use crate::theme::{Palette, c};
+use crate::theme::{Palette, c, generated::idx, tok};
 use crate::ui::icon;
 use crate::voice::call::{PortalState, manager, portal_state};
 use crate::voice::prefs::{InputMode, VoicePrefs, prefs, update};
@@ -31,7 +31,6 @@ type Cx<'a> = Context<'a, PhoenixApp>;
 pub(crate) type OnSlide = Rc<dyn Fn(&mut PhoenixApp, f32, bool, &mut Cx)>;
 
 const TRACK: u32 = 0x4E5058;
-const SELECT_BG: u32 = 0x1E1F22;
 const METER_OFF: u32 = 0x4E5058;
 const SENS_LOW: u32 = 0xF0B232;
 const SENS_HIGH: u32 = 0x23A55A;
@@ -55,48 +54,43 @@ fn eid(s: impl Into<String>) -> ElementId {
     ElementId::Name(SharedString::from(s.into()))
 }
 
+/// Category title (heading-xl/medium 24/32 --text-strong, 24px under).
 fn h1(t: SharedString) -> Div {
-    div()
-        .mb(z(20.))
-        .text_size(z(20.))
-        .line_height(z(24.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(Palette::TEXT_HEADER))
-        .child(t)
+    crate::ui::controls::section_title(t)
 }
 
+
+/// Field label (label body-md/medium 16/20 --text-strong, 8px under).
 fn h5(t: impl Into<SharedString>) -> Div {
     div()
-        .mb(z(8.))
-        .text_size(z(12.))
-        .line_height(z(16.))
-        .font_weight(FontWeight::BOLD)
-        .text_color(c(Palette::TEXT_MUTED))
+        .pb(z(8.))
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::TEXT_STRONG)))
         .child(t.into())
 }
 
+
+/// body-sm/normal 14/18 --text-subtle.
 fn note(t: impl Into<SharedString>) -> Div {
-    div().text_size(z(14.)).line_height(z(20.)).text_color(c(Palette::TEXT_MUTED)).child(t.into())
+    div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(t.into())
 }
 
+
+/// divider_ZaYWLb: 1px --border-subtle, margin 50px 0.
 fn divider() -> Div {
-    div().my(z(40.)).h(z(1.)).bg(c(Palette::DIVIDER))
+    div().my(z(50.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE)))
 }
+
 
 fn knob(on: bool, disabled: bool) -> Div {
-    div()
-        .w(z(40.))
-        .h(z(24.))
-        .flex_none()
-        .rounded(z(12.))
-        .bg(c(if on { Palette::GREEN } else { 0x80848E }))
-        .when(disabled, |d| d.opacity(0.5))
-        .p(z(3.))
-        .flex()
-        .when(on, |d| d.justify_end())
-        .child(div().size(z(18.)).rounded_full().bg(gpui::white()))
+    crate::ui::controls::switch(on).when(disabled, |d| d.opacity(0.5))
 }
 
+
+/// Switch row (baseControlItem: padding/gap 12, title body-md/medium 16/20
+/// --text-strong, body-sm description 4px under, switch aligned top).
 fn switch_row(
     id: &'static str,
     title: SharedString,
@@ -106,34 +100,40 @@ fn switch_row(
     f: impl Fn(&mut VoicePrefs) + 'static,
     cx: &mut Cx,
 ) -> Div {
-    div()
-        .mb(z(20.))
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .id(eid(format!("vs-switch-{id}")))
-                .flex()
-                .items_center()
-                .when(!disabled, |d| {
-                    d.cursor_pointer().on_click(cx.listener(move |_, _, _, cx| {
-                        update(&f, true);
-                        cx.notify();
-                    }))
-                })
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(z(16.))
-                        .line_height(z(24.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if disabled { Palette::TEXT_MUTED } else { Palette::TEXT_NORMAL }))
-                        .child(title),
-                )
-                .child(knob(on, disabled)),
-        )
-        .when(!desc.is_empty(), |d| d.child(div().mt(z(8.)).child(note(desc))))
-        .child(div().mt(z(20.)).h(z(1.)).bg(c(Palette::DIVIDER)))
+    div().child(
+        div()
+            .id(eid(format!("vs-switch-{id}")))
+            .flex()
+            .gap(z(12.))
+            .mx(z(-12.))
+            .p(z(12.))
+            .min_h(z(48.))
+            .rounded(z(16.))
+            .when(!disabled, |d| {
+                d.cursor_pointer().on_click(cx.listener(move |_, _, _, cx| {
+                    update(&f, true);
+                    cx.notify();
+                }))
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(z(4.))
+                    .child(
+                        div()
+                            .text_size(z(16.))
+                            .line_height(z(20.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(tok(if disabled { idx::TEXT_MUTED } else { idx::TEXT_STRONG })))
+                            .child(title),
+                    )
+                    .when(!desc.is_empty(), |d| d.child(note(desc))),
+            )
+            .child(knob(on, disabled)),
+    )
 }
 
 fn frac_at(id: &'static str, x: Pixels) -> Option<f32> {
@@ -279,10 +279,11 @@ fn select(
         .w_full()
         .max_h(z(300.))
         .overflow_y_scroll()
-        .rounded(z(4.))
+        .p(z(4.))
+        .rounded(z(8.))
         .border_1()
-        .border_color(c(Palette::DIVIDER))
-        .bg(c(Palette::BG_FLOATING))
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
         .shadow_lg()
         .occlude()
         .flex()
@@ -296,16 +297,17 @@ fn select(
         list = list.child(
             div()
                 .id(eid(format!("{id}-opt-{ix}")))
-                .px(z(12.))
-                .py(z(10.))
+                .h(z(40.))
+                .px(z(8.))
+                .rounded(z(4.))
                 .flex()
                 .items_center()
                 .cursor_pointer()
                 .text_size(z(16.))
                 .line_height(z(20.))
-                .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_NORMAL }))
-                .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .when(selected, |d| d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
+                .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
                 .child(div().flex_1().min_w_0().text_ellipsis().child(text))
                 .on_click(cx.listener(move |_, _, _, cx| {
                     OPEN_SELECT.with(|o| o.set(None));
@@ -325,10 +327,10 @@ fn select(
                 .h(z(40.))
                 .pl(z(12.))
                 .pr(z(8.))
-                .rounded(z(4.))
-                .bg(c(SELECT_BG))
+                .rounded(z(8.))
+                .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
                 .border_1()
-                .border_color(c(if open { 0x00A8FC } else { SELECT_BG }))
+                .border_color(c(tok(if open { idx::INPUT_BORDER_ACTIVE } else { idx::INPUT_BORDER_DEFAULT })))
                 .flex()
                 .items_center()
                 .cursor_pointer()
@@ -338,10 +340,11 @@ fn select(
                         .min_w_0()
                         .text_ellipsis()
                         .text_size(z(16.))
-                        .text_color(c(Palette::TEXT_NORMAL))
+                        .line_height(z(20.))
+                        .text_color(c(tok(idx::TEXT_STRONG)))
                         .child(label),
                 )
-                .child(icon(Icon::Chevron, 20., c(Palette::INTERACTIVE)))
+                .child(icon(Icon::Chevron, 20., c(tok(idx::TEXT_STRONG))))
                 .on_click(cx.listener(move |_, _, _, cx| {
                     OPEN_SELECT.with(|o| o.set(if open { None } else { Some(id) }));
                     cx.notify();
@@ -350,24 +353,11 @@ fn select(
         .when(open, |d| d.child(deferred(list).with_priority(2)))
 }
 
-fn button(id: &'static str, label: SharedString, bg: u32, hover: u32) -> gpui::Stateful<Div> {
-    div()
-        .id(id)
-        .h(z(32.))
-        .min_w(z(96.))
-        .px(z(16.))
-        .flex_none()
-        .rounded(z(4.))
-        .bg(c(bg))
-        .hover(move |s| s.bg(c(hover)))
-        .cursor_pointer()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(z(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(gpui::white())
-        .child(label)
+/// Mana md button (button_F7qvhY: 40px, radius 8, 16/500 label); the
+/// caller's colours pick the variant (brand = primary, else secondary).
+fn button(id: &'static str, label: SharedString, bg: u32, _hover: u32) -> gpui::Stateful<Div> {
+    let kind = if bg == Palette::BLURPLE { crate::ui::controls::BtnKind::Primary } else { crate::ui::controls::BtnKind::Secondary };
+    crate::ui::controls::button(id, label, kind)
 }
 
 /// Segmented level meter (mic test).
@@ -495,33 +485,13 @@ fn input_mode(p: &VoicePrefs, cx: &mut Cx) -> Div {
         let selected = p.input_mode == mode;
         div()
             .id(id)
-            .mb(z(8.))
-            .p(z(10.))
-            .rounded(z(4.))
-            .bg(c(if selected { Palette::BG_MOD_SELECTED } else { Palette::BG_SECONDARY }))
-            .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+            .py(z(8.))
             .cursor_pointer()
             .flex()
             .items_center()
             .gap(z(12.))
-            .child(
-                div()
-                    .size(z(20.))
-                    .rounded_full()
-                    .border_2()
-                    .border_color(c(if selected { 0xFFFFFF } else { Palette::INTERACTIVE }))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .when(selected, |d| d.child(div().size(z(10.)).rounded_full().bg(gpui::white()))),
-            )
-            .child(
-                div()
-                    .text_size(z(16.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(Palette::TEXT_NORMAL))
-                    .child(label),
-            )
+            .child(crate::ui::controls::radio_indicator(selected))
+            .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(label))
             .on_click(cx.listener(move |_, _, _, cx| {
                 update(|p| p.input_mode = mode, true);
                 cx.notify();
@@ -559,10 +529,10 @@ fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
                 .h(z(40.))
                 .pl(z(10.))
                 .pr(z(4.))
-                .rounded(z(4.))
-                .bg(c(SELECT_BG))
+                .rounded(z(8.))
+                .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
                 .border_1()
-                .border_color(c(if recording { Palette::RED } else { SELECT_BG }))
+                .border_color(c(tok(if recording { idx::BORDER_FEEDBACK_CRITICAL } else { idx::INPUT_BORDER_DEFAULT })))
                 .flex()
                 .items_center()
                 .child(
@@ -735,7 +705,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 cx.notify();
             }
         }))
-        .child(h1(crate::t!("voice.voice_settings")))
+        .child(h1(crate::t!("sp.vo.t1")))
         .child(
             div()
                 .flex()
@@ -812,12 +782,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
             cx,
         ))
         .child(divider())
-        .child(h1(crate::t!("voice.video_settings")))
+        .child(h1(crate::t!("sp.vo.t2")))
         .child(
             div()
                 .h(z(200.))
                 .rounded(z(8.))
-                .bg(c(Palette::BG_TERTIARY))
+                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
                 .flex()
                 .flex_col()
                 .items_center()
@@ -830,12 +800,14 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
             div()
                 .h(z(40.))
                 .px(z(12.))
-                .rounded(z(4.))
-                .bg(c(SELECT_BG))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+                .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
                 .flex()
                 .items_center()
                 .text_size(z(16.))
-                .text_color(c(Palette::TEXT_MUTED))
+                .text_color(c(tok(idx::TEXT_MUTED)))
                 .child(crate::t!("voice.no_video")),
         )
 }

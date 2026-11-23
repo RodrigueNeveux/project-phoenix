@@ -5,6 +5,7 @@
 //! * [`LocalPrefs`]: client-only settings (font scale, zoom, notifications),
 //!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
 
+mod pages;
 mod view;
 pub(crate) mod voice;
 
@@ -201,6 +202,9 @@ pub enum Page {
     #[default]
     MyAccount,
     Profiles,
+    /// "Données et confidentialité".
+    DataPrivacy,
+    /// "Permissions de messagerie" (content & social).
     PrivacySafety,
     Devices,
     Connections,
@@ -211,6 +215,8 @@ pub enum Page {
     Accessibility,
     VoiceVideo,
     Advanced,
+    System,
+    ActivityPrivacy,
 }
 
 impl Page {
@@ -218,7 +224,10 @@ impl Page {
         match self {
             Self::MyAccount => crate::t!("settings.page.my_account"),
             Self::Profiles => crate::t!("settings.page.profiles"),
-            Self::PrivacySafety => crate::t!("settings.page.privacy"),
+            Self::DataPrivacy => crate::t!("settings.page.privacy"),
+            Self::PrivacySafety => crate::t!("settings.page.content_social"),
+            Self::System => crate::t!("settings.page.system"),
+            Self::ActivityPrivacy => crate::t!("settings.page.activity"),
             Self::Devices => crate::t!("settings.page.devices"),
             Self::Connections => crate::t!("settings.page.connections"),
             Self::Notifications => crate::t!("settings.page.notifications"),
@@ -236,10 +245,11 @@ impl Page {
 /// Sidebar sections in the 2026 order (live settings-home dump): the
 /// profile tab sits above them; the first section's label is visually hidden.
 pub const NAV: &[(&str, &[Page])] = &[
-    ("settings.nav.user", &[Page::MyAccount, Page::PrivacySafety, Page::Devices, Page::Notifications]),
-    ("settings.nav.app", &[Page::VoiceVideo, Page::Appearance, Page::Accessibility, Page::Keybinds, Page::Language]),
-    ("settings.nav.apps", &[Page::Connections]),
-    ("settings.nav.other", &[Page::Advanced]),
+    ("settings.nav.user", &[Page::MyAccount, Page::DataPrivacy, Page::PrivacySafety, Page::Notifications]),
+    ("settings.nav.app", &[Page::VoiceVideo, Page::Appearance, Page::Accessibility, Page::System, Page::Language]),
+    ("settings.nav.apps", &[Page::ActivityPrivacy, Page::Connections]),
+    // last section: no label, "Développeur" then "Déconnexion"
+    ("", &[Page::Advanced]),
 ];
 
 #[derive(Default)]
@@ -248,6 +258,16 @@ pub struct SettingsState {
     pub confirm_logout: bool,
     pub error: Option<SharedString>,
     pub reveal_email: bool,
+    /// Session-only values of settings Phoenix doesn't back yet.
+    pub toggles: std::collections::HashMap<&'static str, bool>,
+    pub picks: std::collections::HashMap<&'static str, usize>,
+    /// Open "Show advanced ..." expanders.
+    pub expanded: std::collections::HashSet<&'static str>,
+    /// Dropdown whose list is open.
+    pub open_select: Option<&'static str>,
+    /// Sidebar search box (created on first render).
+    pub search: Option<gpui::Entity<gpui_component::input::InputState>>,
+    pub search_sub: Option<gpui::Subscription>,
 }
 
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
@@ -266,6 +286,8 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     let Some(s) = app.settings.as_mut() else { return false };
     if s.confirm_logout {
         s.confirm_logout = false;
+    } else if s.open_select.is_some() {
+        s.open_select = None;
     } else {
         app.settings = None;
     }

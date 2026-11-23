@@ -63,9 +63,12 @@ fn main() -> anyhow::Result<()> {
                 use phoenix_app::ui::settings::Page;
                 if let Some(p) = scene.strip_prefix("settings:") {
                     phoenix_app::ui::settings::open(app, cx);
-                    let page = match p {
+                    let page = match p.split(':').next().unwrap_or("") {
                         "profiles" => Page::Profiles,
-                        "privacy" => Page::PrivacySafety,
+                        "privacy" | "content" => Page::PrivacySafety,
+                        "data" => Page::DataPrivacy,
+                        "system" => Page::System,
+                        "activity" => Page::ActivityPrivacy,
                         "devices" => Page::Devices,
                         "connections" => Page::Connections,
                         "notifications" => Page::Notifications,
@@ -97,6 +100,17 @@ fn main() -> anyhow::Result<()> {
             });
         })?;
         pump(&mut cx, 10);
+        // settings:<page>:<query> types <query> into the sidebar search
+        if let Some(q) = scene.strip_prefix("settings:").and_then(|p| p.split_once(':')).map(|(_, q)| q.to_owned()) {
+            cx.update_window(win.into(), |_, window, cx| {
+                v.update(cx, |app, cx| {
+                    if let Some(i) = app.settings.as_ref().and_then(|s| s.search.clone()) {
+                        i.update(cx, |i, cx| i.set_value(q.clone(), window, cx));
+                    }
+                });
+            })?;
+            pump(&mut cx, 6);
+        }
     }
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     pump(&mut cx, 8);

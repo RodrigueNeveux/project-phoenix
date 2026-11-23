@@ -187,7 +187,6 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
     let mut body: Vec<AnyElement> = vec![
         div()
             .text_size(z(16.))
-            .text_color(c(Palette::TEXT_NORMAL))
             .child(crate::t!("msg.delete_confirm"))
             .into_any_element(),
     ];
@@ -223,91 +222,9 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
     })
 }
 
-/// Pinned messages popout under the header pin icon.
+/// Pinned messages popout under the header pin icon (lives in `ui::inbox`).
 pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
-    let p = app.chat.pins.as_ref()?;
-    let ch = p.channel;
-    let mut list = div().id("pins-list").flex_1().min_h_0().overflow_y_scroll().p(z(8.)).flex().flex_col().gap(z(8.));
-    if p.loading {
-        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
-    } else if p.msgs.is_empty() {
-        list = list.child(
-            div()
-                .p(z(32.))
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(z(8.))
-                .child(icon(ChatIcon::Unread, 48., c(Palette::INTERACTIVE_MUTED)))
-                .child(
-                    div()
-                        .text_size(z(16.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(crate::t!("pins.empty")),
-                ),
-        );
-    }
-    for m in &p.msgs {
-        let id = m.id;
-        list = list.child(
-            div()
-                .id(("pin", id.0))
-                .group("pin")
-                .relative()
-                .cursor_pointer()
-                .on_click(cx.listener(move |a, _, _, cx| a.jump_to_message(ch, id, cx)))
-                .child(message_card(app, m))
-                .child(
-                    div()
-                        .absolute()
-                        .top(z(4.))
-                        .right(z(4.))
-                        .invisible()
-                        .group_hover("pin", |s| s.visible())
-                        .child(icon_button("unpin", Icon::Close, c(Palette::INTERACTIVE), 16.).on_click(cx.listener(
-                            move |a, _, _, cx| {
-                                cx.stop_propagation();
-                                a.unpin_from_popout(ch, id, cx)
-                            },
-                        ))),
-                ),
-        );
-    }
-    Some(
-        div()
-            .id("pins-popout")
-            .absolute()
-            .top(z(52.))
-            .right(z(16.))
-            .w(z(420.))
-            .max_h(z(560.))
-            .rounded(z(8.))
-            .bg(c(Palette::BG_TERTIARY))
-            .shadow_lg()
-            .occlude()
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .child(
-                div()
-                    .h(z(48.))
-                    .px(z(16.))
-                    .bg(c(Palette::BG_TERTIARY))
-                    .flex()
-                    .items_center()
-                    .gap(z(8.))
-                    .child(crate::ui::icon(Icon::Pin, 20., c(Palette::INTERACTIVE)))
-                    .child(
-                        div()
-                            .text_size(z(16.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(Palette::TEXT_HEADER))
-                            .child(crate::t!("pins.title")),
-                    ),
-            )
-            .child(list)
-            .into_any_element(),
-    )
+    crate::ui::inbox::pins_popout(app, cx)
 }
 
 /// Thread side panel (replaces the member list while open).
