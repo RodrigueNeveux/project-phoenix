@@ -212,7 +212,7 @@ impl PhoenixApp {
     pub fn delete_channel(&mut self, channel: Id, cx: &mut Context<Self>) {
         self.admin(AdminCall::DeleteChannel { channel: sf(channel) }, cx, move |a, r, cx| match r {
             Ok(_) => {
-                if matches!(crate::actions::with_modal(|m| matches!(m, Some(Modal::ChannelSettings(s)) if s.channel == channel)), true) {
+                if crate::actions::with_modal(|m| matches!(m, Some(Modal::ChannelSettings(s)) if s.channel == channel)) {
                     crate::actions::close_modal();
                 }
                 a.drop_channel_local(channel);

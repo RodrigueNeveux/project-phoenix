@@ -463,7 +463,7 @@ pub fn invite_list(list: Option<&[Value]>, id: &'static str, cx: &mut Context<Ph
         let uses = inv.get("uses").and_then(Value::as_u64).unwrap_or(0);
         let max = inv.get("max_uses").and_then(Value::as_u64).unwrap_or(0);
         let age = inv.get("max_age").and_then(Value::as_u64).unwrap_or(0);
-        let expires = if age == 0 { "∞".to_owned() } else { slowmode_label(age.min(u32::MAX as u64) as u32).replace('h', "h").replace("168h", "7d") };
+        let expires = if age == 0 { "∞".to_owned() } else { slowmode_label(age.min(u32::MAX as u64) as u32).replace("168h", "7d") };
         let c2 = code.clone();
         d = d.child(
             div()

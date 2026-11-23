@@ -23,6 +23,7 @@ pub enum SideItem {
     Separator,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn overlay(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let mut side = div().w(z(218.)).flex().flex_col().gap(z(2.)).pt(z(60.)).pb(z(20.)).px(z(6.));
     for (n, it) in side_items.into_iter().enumerate() {
