@@ -573,7 +573,31 @@ fn options_popout(input: Entity<InputState>, error: Option<SharedString>, loadin
             );
         }
     }
-    let mut body = div().flex().flex_col().child(filters);
+    let mut body = div().flex().flex_col();
+    // Typed query: a 28px "Search for: <query>" row (dump search-popout-vanilla
+    // #3369–#3375 `itemContainer_` > `labelWithElements_` body-sm/medium gap 4,
+    // query `nonText_` body-sm/semibold --text-strong), then a `divider_` (#3376).
+    let query = input.read(cx).value().trim().to_string();
+    if !query.is_empty() {
+        body = body
+            .child(
+                option_row(("search-for", 0))
+                    .on_click(cx.listener(|a, _, _, cx| submit(a, cx)))
+                    .child(named("search", 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
+                    .child(
+                        div()
+                            .flex()
+                            .gap(z(4.))
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .text_color(tk(idx::TEXT_STRONG))
+                            .child(div().font_weight(FontWeight::MEDIUM).child(crate::t!("search.search_for")))
+                            .child(div().mr(z(8.)).font_weight(FontWeight::SEMIBOLD).child(SharedString::from(query))),
+                    ),
+            )
+            .child(div().my(z(8.)).mx(z(-8.)).h(z(1.)).bg(tk(idx::BORDER_SUBTLE)));
+    }
+    body = body.child(filters);
     if !history.is_empty() {
         let mut group = div().flex().flex_col().gap(z(4.)).child(
             group_header(crate::t!("search.history")).child(

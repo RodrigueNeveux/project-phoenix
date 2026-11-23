@@ -133,35 +133,42 @@ fn item(e: &Ent, label: gpui::SharedString, f: impl Fn(&mut PhoenixApp, &mut Con
     MenuItem::action(label, None, move |_, _, cx: &mut App| e.update(cx, |a, cx| f(a, cx)))
 }
 
-/// Watch Stream + server voice moderation rows for a user in a guild voice
-/// channel (shown under the volume rows of the user menu).
-pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vec<MenuItem> {
-    let mut out = Vec::new();
+/// Voice rows of the member menu, split the way vanilla-menu-member places
+/// them: Watch Stream after Add Note, Move To > after Roles >, and Server
+/// Mute / Server Deafen (checkboxes) + Disconnect after Open in Mod View.
+#[derive(Default)]
+pub struct VoiceItems {
+    pub watch: Option<MenuItem>,
+    pub move_to: Option<MenuItem>,
+    pub mods: Vec<MenuItem>,
+}
+
+pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> VoiceItems {
+    let mut out = VoiceItems::default();
     let Some(vc) = app.channels.values().find(|c| c.kind != ChannelKind::Category && c.guild.is_some() && c.voice_users.contains(&user)).map(|c| (c.id, c.guild)) else {
         return out;
     };
     let g = guild.or(vc.1);
     let f = crate::ui::voice_panel::flags(user);
     if f.stream && user != app.me.id {
-        out.push(item(e, crate::t!("voice.watch_stream"), move |a, cx| {
+        out.watch = Some(item(e, crate::t!("voice.watch_stream"), move |a, cx| {
             a.select_channel(vc.0, cx);
             a.parity_toast(crate::t!("voice.watch_unsupported"), cx);
         }));
     }
     let Some(g) = g else { return out };
     let admin = has(app, Some(g), super::ADMINISTRATOR);
-    let mut mods = Vec::new();
     if admin || has(app, Some(g), MUTE_MEMBERS) {
         let on = f.server_mute;
         let e = e.clone();
-        mods.push(MenuItem::check(crate::t!("voice.server_mute"), on, move |_, _, cx: &mut App| {
+        out.mods.push(MenuItem::check(crate::t!("voice.server_mute"), on, move |_, _, cx: &mut App| {
             e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Mute(!on), cx))
         }));
     }
     if admin || has(app, Some(g), DEAFEN_MEMBERS) {
         let on = f.server_deaf;
         let e = e.clone();
-        mods.push(MenuItem::check(crate::t!("voice.server_deafen"), on, move |_, _, cx: &mut App| {
+        out.mods.push(MenuItem::check(crate::t!("voice.server_deafen"), on, move |_, _, cx: &mut App| {
             e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Deafen(!on), cx))
         }));
     }
@@ -179,16 +186,12 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Ve
             })
             .collect();
         if !targets.is_empty() {
-            mods.push(MenuItem::submenu(crate::t!("voice.move_to"), targets));
+            out.move_to = Some(MenuItem::submenu(crate::t!("voice.move_to"), targets));
         }
         let e2 = e.clone();
-        mods.push(MenuItem::danger(crate::t!("voice.disconnect"), None, move |_, _, cx: &mut App| {
+        out.mods.push(MenuItem::danger(crate::t!("voice.disconnect"), None, move |_, _, cx: &mut App| {
             e2.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Move(None), cx))
         }));
-    }
-    if !mods.is_empty() {
-        out.push(MenuItem::Separator);
-        out.extend(mods);
     }
     out
 }

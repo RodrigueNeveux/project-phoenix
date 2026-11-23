@@ -82,6 +82,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx)))
             .with_subtext(crate::t!("menu.note_subtext")),
     );
+    let voice = if me { crate::actions::user::VoiceItems::default() } else { crate::actions::user::voice_items(app, u, g, &e) };
+    items.extend(voice.watch);
     if !me && friend {
         items.push(act(crate::t!("menu.friend_nickname"), Rc::new(move |a, _, _, cx| a.open_friend_nickname(u, cx))));
     }
@@ -142,21 +144,32 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(MenuItem::submenu(crate::t!("menu.roles"), rows));
         }
     }
+    if let Some(mv) = voice.move_to {
+        if !matches!(items.last(), Some(MenuItem::Submenu { .. })) {
+            items.push(MenuItem::Separator);
+        }
+        items.push(mv);
+    }
     let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
     if in_call {
         items.push(MenuItem::Separator);
         items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
     }
-    if !me {
-        items.extend(crate::actions::user::voice_items(app, u, g, &e));
+    // vanilla-menu-member: ‖ Open in Mod View, Server Mute, Server Deafen,
+    // Disconnect, then Timeout / Kick / Ban. No "Report" row on members.
+    let mut moderation = crate::ui::inbox::moderation_items(app, u, g, &e);
+    if !voice.mods.is_empty() {
+        let at = if moderation.is_empty() {
+            moderation.push(MenuItem::Separator);
+            1
+        } else {
+            // after the separator (+ Mod View when present)
+            let has_mod_view = moderation.get(1).is_some_and(|m| matches!(m, MenuItem::Action { danger: false, .. }));
+            1 + has_mod_view as usize
+        };
+        moderation.splice(at..at, voice.mods);
     }
-    items.extend(crate::ui::inbox::moderation_items(app, u, g, &e));
-    if !me {
-        items.push(MenuItem::danger(crate::t!("menu.report_user"), Some(crate::icons::path("flag")), {
-            let e = e.clone();
-            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.report_user(u, g, cx))
-        }));
-    }
+    items.extend(moderation);
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
         items.push(MenuItem::action(crate::t!("common.copy_user_id"), Some(crate::icons::path("id")), move |_, _, cx: &mut App| {

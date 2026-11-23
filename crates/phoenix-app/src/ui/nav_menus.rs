@@ -124,17 +124,22 @@ fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>
         .or_else(|| stored_level(app, guild, channel))
         .unwrap_or(default);
     let mut opts: Vec<(&str, u8)> = vec![("menu.notify.all", 0), ("menu.notify.mentions", 1), ("menu.notify.nothing", 2)];
-    if channel.is_some() {
-        opts.insert(0, ("menu.notify.default", 3));
+    // vanilla-menu-channel-notify: "Use Category Default" when the channel sits
+    // in a category, else "Use Server Default"; its subtext is the inherited level.
+    if let Some(ch) = channel {
+        let in_category = app.channels.get(&ch).and_then(|c| c.parent).is_some();
+        opts.insert(0, (if in_category { "menu.notify.default_category" } else { "menu.notify.default" }, 3));
     }
+    let inherited = level_label(app, guild, None);
     let items = opts
         .into_iter()
         .map(|(l, lv)| {
             let e = e.clone();
-            MenuItem::radio(crate::t!(l), cur == lv, move |_, _, cx: &mut App| {
+            let item = MenuItem::radio(crate::t!(l), cur == lv, move |_, _, cx: &mut App| {
                 LEVELS.with(|m| m.borrow_mut().insert((guild, channel), lv));
                 e.update(cx, |a, cx| a.nav_request(NavRequest::NotifyLevel { guild, channel, level: lv }, cx, |_, _, _| {}))
-            })
+            });
+            if lv == 3 { item.with_subtext(inherited.clone()) } else { item }
         })
         .collect();
     MenuItem::submenu(crate::t!("menu.notify_settings"), items)

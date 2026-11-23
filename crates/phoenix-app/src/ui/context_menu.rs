@@ -31,7 +31,7 @@ pub enum MenuItem {
     Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString>, subtext: Option<SharedString> },
     /// Checkbox (`radio: false`) or radio row; the menu stays open on click
     /// for checkboxes, like Discord.
-    Check { label: SharedString, checked: bool, radio: bool, on_click: Handler },
+    Check { label: SharedString, checked: bool, radio: bool, subtext: Option<SharedString>, on_click: Handler },
 }
 
 thread_local! {
@@ -213,7 +213,7 @@ impl MenuItem {
         checked: bool,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self::Check { label: label.into(), checked, radio: false, on_click: Rc::new(on_click) }
+        Self::Check { label: label.into(), checked, radio: false, subtext: None, on_click: Rc::new(on_click) }
     }
 
     pub fn radio(
@@ -221,12 +221,12 @@ impl MenuItem {
         checked: bool,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self::Check { label: label.into(), checked, radio: true, on_click: Rc::new(on_click) }
+        Self::Check { label: label.into(), checked, radio: true, subtext: None, on_click: Rc::new(on_click) }
     }
 
     /// Adds the muted second line under an action's label.
     pub fn with_subtext(mut self, text: impl Into<SharedString>) -> Self {
-        if let Self::Action { subtext, .. } | Self::Submenu { subtext, .. } = &mut self {
+        if let Self::Action { subtext, .. } | Self::Submenu { subtext, .. } | Self::Check { subtext, .. } = &mut self {
             *subtext = Some(text.into());
         }
         self
@@ -293,7 +293,7 @@ fn row_h(item: &MenuItem) -> f32 {
             let text: f32 = 18. + if subtext.is_some() { 18. } else { 0. };
             16. + text.max(if icon.is_some() { 20. } else { 0. })
         }
-        MenuItem::Submenu { subtext: Some(_), .. } => 52.,
+        MenuItem::Submenu { subtext: Some(_), .. } | MenuItem::Check { subtext: Some(_), .. } => 52.,
         MenuItem::Submenu { .. } | MenuItem::Check { .. } => 36.,
     }
 }
@@ -395,7 +395,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     )
                     .into_any_element()
             }
-            MenuItem::Check { label, checked, radio, on_click } => {
+            MenuItem::Check { label, checked, radio, subtext, on_click } => {
                 let dismiss = dismiss.clone();
                 let mark = if radio {
                     // standaloneRadioIndicator_oJuRb (guild notification submenu dump)
@@ -429,7 +429,17 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                             set_hl(depth, Some(ix), w);
                         }
                     })
-                    .child(label_box(label))
+                    .child(div().flex_1().min_w_0().flex().flex_col().child(label_box(label)).when_some(subtext, |d, s| {
+                        // vanilla-menu-channel-notify default radio: subtext_ 12/16 --text-muted, mt 2
+                        d.child(
+                            div()
+                                .mt(z(2.))
+                                .text_size(z(12.))
+                                .line_height(z(16.))
+                                .text_color(c(tok(if lit { idx::TEXT_SUBTLE } else { idx::TEXT_MUTED })))
+                                .child(s),
+                        )
+                    }))
                     .child(div().ml(z(8.)).child(mark))
                     .on_click(move |ev, w, cx| {
                         on_click(ev, w, cx);

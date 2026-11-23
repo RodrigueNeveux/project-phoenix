@@ -1087,7 +1087,9 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 ),
         );
     } else {
-        // sectionHeader_6_wQXw: 24px, margin 8 0, 14px medium --text-default.
+        // sectionHeader_6_wQXw (threads-lrer #1432): 24px, margin 8 0, 14/18.67
+        // 500 --text-default, no uppercase: "N fils rejoints" (the gateway's
+        // active threads are the joined ones; "anciens fils" needs the archive).
         list = list.child(
             div()
                 .flex_none()
@@ -1096,16 +1098,17 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .flex()
                 .items_center()
                 .text_size(z(14.))
+                .line_height(z(18.67))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(tk(idx::TEXT_DEFAULT))
-                .child(if list_src.len() == 1 { crate::t!("threads.active_one") } else { crate::t!("threads.active_many", n = list_src.len()) }),
+                .child(crate::t!("threads.joined", n = list_src.len())),
         );
     }
     let now = chrono::Local::now().timestamp();
     for t in list_src {
         let r = crate::model::ThreadRef { id: t.id, name: t.name.clone(), message_count: 0 };
         let created = ((t.id.0 >> 22) / 1000 + 1_420_070_400) as i64;
-        let sub = format!("{}  •  {}", crate::t!("threads.no_recent"), crate::ui::forum::ago(now, created));
+        let sub = format!("{} • {}", crate::t!("threads.no_recent"), crate::ui::forum::ago(now, created));
         // container_yRVHqK: 72px, padding 15, radius 8, 1px --border-subtle,
         // --background-surface-higher, margin-bottom 8; hover --background-surface-highest
         // + --border-normal. threadName_ heading-sm/semibold 16/20 --text-default,
