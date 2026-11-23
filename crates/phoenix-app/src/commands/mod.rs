@@ -162,7 +162,7 @@ mod tests {
 
     #[gpui::test]
     fn resync_rebuilds_and_keeps_selection(cx: &mut gpui::TestAppContext) {
-        let backend = std::sync::Arc::new(MockBackend::new());
+        let backend = std::sync::Arc::new(MockBackend::synchronous());
         let ready = || futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
         let first = ready();
         cx.update(gpui_component::init);

@@ -280,6 +280,13 @@ impl MockBackend {
         }
     }
 
+    /// Zero-latency mock: every call resolves immediately on the caller's
+    /// thread and events are delivered inline. Used by GPUI tests, whose
+    /// deterministic scheduler rejects wakeups from real threads.
+    pub fn synchronous() -> Self {
+        Self { latency: Duration::ZERO, ..Self::new() }
+    }
+
     fn generate_history(inner: &mut Inner, channel: Id) -> Vec<Message> {
         let mut rng = Lcg(channel.0.wrapping_mul(2654435761));
         // PHOENIX_MOCK_HISTORY=N forces the channel length (benchmarks).
@@ -357,6 +364,11 @@ impl MockBackend {
 
     fn delayed<T: Send + 'static>(&self, f: impl FnOnce() -> T + Send + 'static) -> BoxFuture<T> {
         let latency = self.latency;
+        if latency.is_zero() {
+            // Synchronous mode (tests): no helper thread, so GPUI's test
+            // scheduler never sees a wakeup from a foreign thread.
+            return Box::pin(futures::future::ready(Ok(f())));
+        }
         Box::pin(async move {
             let (tx, rx) = futures::channel::oneshot::channel();
             std::thread::spawn(move || {
@@ -369,6 +381,13 @@ impl MockBackend {
 
     fn emit_later(&self, delay: Duration, ev: impl FnOnce() -> AppEvent + Send + 'static) {
         let inner = self.inner.clone();
+        if self.latency.is_zero() {
+            let sink = inner.lock().ok().and_then(|i| i.sink.clone());
+            if let Some(sink) = sink {
+                sink(ev());
+            }
+            return;
+        }
         std::thread::spawn(move || {
             std::thread::sleep(delay);
             let sink = inner.lock().ok().and_then(|i| i.sink.clone());
