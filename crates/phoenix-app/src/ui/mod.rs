@@ -31,6 +31,7 @@ pub mod sidebar_resize;
 pub mod status_picker;
 pub mod switcher;
 pub mod nav_menus;
+pub mod thread_menu;
 pub mod title_bar;
 pub mod tooltip;
 pub mod user_menu;

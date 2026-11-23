@@ -457,6 +457,12 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                                 }),
                             ),
                         )
+                        // Thread toolbar ends with "Plus" 32×32 (vanilla-thread-channel, x=982).
+                        .when_some(thread_parent.and(ch.map(|c| c.id)), |d, t| {
+                            d.child(hdr_named("thread-more", "more-horizontal", ic).on_click(move |ev, w, _| {
+                                crate::ui::thread_menu::open(t, ev.position(), w)
+                            }))
+                        })
                 })
                 .child(
                     // search_ margin-inline-start 4px; searchBar_ 244×32, radius 8px,

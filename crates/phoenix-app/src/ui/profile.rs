@@ -94,6 +94,7 @@ impl PhoenixApp {
 pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out: Vec<AnyElement> = crate::ui::user_menu::render(app, cx).into_iter().collect();
     out.extend(crate::ui::nav_menus::render(app, cx));
+    out.extend(crate::ui::thread_menu::render(app, cx));
     if !app.people.any_overlay() {
         return out;
     }

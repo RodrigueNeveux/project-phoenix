@@ -116,3 +116,15 @@ Dump `vanilla-guild-text` (guild text channel with embed, reactions, reply). No 
 | media channel grid | no media channel (type 16) in any of the user's 44 guilds' visible sidebars (CDP scan 2026-11-23: aria-labels are only salon textuel/vocal/forum/annonces) | — | tiles 260px | not verified | ui/forum.rs media_tile | ⛔ no data: none of the user's 44 guilds exposes a media channel (type 16), so there is nothing to dump |
 | member list Activity section gate | client bundle, member list groups hook: `showFeed = guildFeedEnabled(guild) && !channel.isForumChannel()`; guildFeedEnabled = feature ACTIVITY_FEED_ENABLED_BY_USER → true, ACTIVITY_FEED_DISABLED_BY_USER → false, else memberCount < 10000; isForumChannel = GUILD_FORUM only (media keeps it); header chevron only when count > 3 | hidden next to forums | forum compare 20261123-154018: section gone, member list 25.7%→20.8%; text channel of same guild shows "Activité — 34" on Discord (CDP) | ui/members.rs activity_section, Backend::activity_feed_enabled | ✅ |
 | forum Sort & View icon | bundle: sortDropdown button → ArrowsUpDownIcon size xs + text + ChevronSmallUp (open) / Down, width 20 | icons | ArrowsUpDownIcon 16, chevron 20 | — | ui/forum.rs, icons/names.rs "sort"/"chevron-up" | ✅ |
+
+### Thread view (dump `vanilla-thread-channel`, offline compare thread-more-1713 on /mnt/windata)
+
+Scores (Phoenix real data vs dump png, no scroll sync): title bar 3.2%, composer 24.0%, header 77.4%, messages 76.7%, member list 89.0%, overall 72.6%. Message rows, replies, tags and the composer line up in the side-by-side. Most of the mismatch comes from the dump's state: the channel list and guild rail are scrolled, a screen-share preview covers the chat, the top message has reactions and a hover toolbar, and the member list shows other people. Rows stay ❌ until a live compare with scroll sync is done.
+
+| element | source | value | our code | status |
+|---|---|---|---|---|
+| thread toolbar order | dump header toolbar 856/898/940/982 | notifications, pins, member list, Plus (no Threads) | chat.rs header | ✅ (structure) |
+| thread "Plus" menu | dump `Plus` 32×32, horizontal-dots svg 20px; client strings `DQ797g` Copy Thread ID | read-only items only: Mark As Read, Copy Link, Copy Thread ID (dev mode). Mute/notify/close/leave not offered; the menu chunk was not loaded, so the item order is not verified | ui/thread_menu.rs | ❌ (order unverified) |
+| thread header title | dump breadcrumb parent › thread | Phoenix shows a "Mode Découverte" chip and truncates the title earlier | chat.rs header | ❌ |
+| reactions in thread | dump top message (scrolled off in Phoenix) | not comparable in this shot | message_ext.rs | ❌ (no evidence) |
+| NEW divider in thread | not present in the dump | — | message_ext.rs | n/a |
