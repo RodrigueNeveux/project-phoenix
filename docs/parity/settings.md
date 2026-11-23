@@ -6,7 +6,7 @@ Source: CDP outlines of each page of the live 2026 client (user settings modal, 
 |---|---|---|---|---|---|
 | sidebar sections | vanilla-settings-open sidebar | order | (General) Account, Data & Privacy, Message Permissions, Notifications / Billing: Nitro, Server Boost, Subscriptions, Gift Inventory, Billing / Experience: Voice & Video, Appearance, Accessibility, System, Language & Time / Games & Apps: Registered Games, Activity Privacy, Connected Apps / (Other) Developer, Log Out — no Vencord/Plugins/Themes/Updater | `mod.rs` `NAV` | ✅ (Billing and Registered Games added; billing pages point to the web) |
 | developer page | vanilla-settings-15 | rows | Developer Mode, Application Test Mode (switches) | `pages.rs` `DEVELOPER` | ✅ (extra "User ID" row removed) |
-| registered games | vanilla-settings-12 | rows | Current Game ("No game detected", "Not seeing your game? Add it!"), Added Games + IGDB note, Related → Activity Privacy | `pages.rs` `GAMES` | ✅ (detected game list ❌: no process scan) |
+| registered games | vanilla-settings-12 | rows | Current Game ("No game detected", "Not seeing your game? Add it!"), Added Games + IGDB note, Related → Activity Privacy | `pages.rs` `GAMES` | ✅ #2686 `notDetected_` box (bg --background-mod-subtle, r12, p16, 16/22 600 + 14 muted + --text-brand "Add it!"), content mismatch 3.7% (game list: no process scan, empty like a fresh client) |
 | sidebar sub-nav | `subnav_8qMUr2` under the active item | rows | the page's category titles | `view.rs` `subnav` / `pages::titles` | ✅ |
 | sidebar search | `searchBar` input (40px, 16px text) | behaviour | filters pages whose texts match, hides empty sections, the sub-nav and Log Out | `view.rs` `nav`, `pages::matches` | ✅ |
 | category title | `heading-xl/medium_RAOoio` | font | 24/32, 500, --text-strong | `controls::section_title` | ✅ |
@@ -39,9 +39,9 @@ Scores = `% pixels |Δ|>24` on the content panel (dump png vs `dialog_shots sett
 | sidebar sub-nav | #2510/#2518–#2527 | first row 40px under the item label; Compte adds "Centre familial"; rows wrap instead of overflowing | side 10.0% → 9.8% | ✅ |
 | switch rows | #2688 `baseSettingWrapper_4Z`, #2700 `description_VhFsFg` | padding 10 0, description max-width 572 | notifications 8.0% → 7.1%, data 12.4% → 12.6% (font wrap) | ✅ |
 | related settings | #2733 `icon_W6yko_` | 48px --background-mod-muted tile behind the 24px glyph | activity 7.7% → 7.5% | ✅ |
-| Apparence "Thèmes par défaut" | #2721 heading-sm/semibold | 600 weight | 7.8% | ✅ (❌ "Aperçu du thème" button, Nitro theme upsell, limited/colour themes, app icon section) |
+| Apparence "Thèmes par défaut" | #2721 heading-sm/semibold | 600 weight | 7.8% | ✅ "Aperçu du thème" secondary md (#2695), colour themes = 22 gradients from #2793-#2856 computed styles, 48px r8 gap 8, custom tile + "nouveau" badge; ❌ Nitro upsell banner + limited-time theme + app icon art (CDN art not fetched yet) |
 | Connexions lead | #2685-ish body-sm | full FR sentence | 14.4% → 14.5% | ✅ text (❌ brand logo tiles: we show text pills) |
 | Voix & Vidéo breadcrumb | #2671 | "Voix & Vidéo" | — | ✅ |
 | Nitro / Facturation | vanilla-settings-05/06 | Discord marketing art + live subscription data | 49% | ❌ pointer page by design (no billing API) |
-| Système | vanilla-settings-10 | hardware-acceleration warning banner, "Ajouter un raccourci clavier" button | 6.7% | ❌ |
-| Accessibilité | vanilla-settings-09 | chat "Aperçu" preview card at the top | 7.0% | ❌ |
+| Système | vanilla-settings-10 | #2728 `warning_vb4RFD` banner (p8, --radius-xs, 20px icon), #2764 `info_0v8Ae1` notices + sm "Modifier dans les paramètres système", secondary "+ Ajouter" button | 6.7% → 6.4% | ✅ |
+| Accessibilité | vanilla-settings-09 | #2690 `preview_TpS9Es` (--background-base-low, --border-normal, p24, 175px max), user's messages + reactions + link, 3 status avatars + sm primary button | 7.0% → 5.9% | ✅ |
