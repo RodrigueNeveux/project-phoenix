@@ -19,7 +19,9 @@ Code: `crates/phoenix-app/src/ui/call_view.rs`. Offscreen render: `cargo run -p 
 | mute/deaf icon | titleIcon_ (#1505) | size | 16px | `render_tile` | ✅ |
 | stream placeholder tile | emptyPreviewContainer_ (#1408) | bg | --background-base-lower | `render_tile` stream | ✅ |
 | LIVE pill | liveIndicator_ (#1413) | font / radius / bg | 12px 600 / 4px / --status-danger | `render_tile` | ✅ |
-| grid layout (no focus) | - | columns | biggest 16:9 tile | `grid` | ❌ not in dump (dump shows focused stream + strip; focus mode not done) |
+| grid layout (no focus) | - | columns | biggest 16:9 tile | `grid` | ✅ (click focused tile → grid) |
+| spotlight focused tile | videoSizer_QKgWuD / focusedVideo_QKgWuD (#1372) | box | 684x387 16:9, 72px below top bar, 8 above strip | `render` focus branch | ✅ |
+| participants strip | root_coTPKH / tileSizer_coTPKH (#1402-#1514) | height / tile / gap | 112 / (W-gaps)/n ≈135 / 8 | `render` STRIP_H | ✅ |
 | button section | buttonSection_9bvEB0 (#1298) | bg / border / radius / gap / padding | --background-surface-high / 1px --border-muted / 12 / 8 / 4 | `section` | ✅ |
 | center button | centerButton_K9Xq13 (#1301) | size / radius | 40x40, 8 (attached 8 0 0 8) | `center_button` | ✅ |
 | caret nub | contextMenuNub_.attachedCaret_ (#1306) | size / radius / margin | 20x40 / 0 8 8 0 / 1px | `center_button` | ✅ |
@@ -29,5 +31,6 @@ Code: `crates/phoenix-app/src/ui/call_view.rs`. Offscreen render: `cargo run -p 
 | disconnect | disconnect_K9Xq13.fullRegionButton_ (#1354) | size / radius / bg | 65x49 / 12 / --control-critical-primary-background-default | `bottom_controls` | ✅ |
 | edge controls | edgeControls_ (#1291, #1358) | width / gap / icon | 160 / 24 / 24px | `bottom_controls` | ✅ |
 | bottom bar | bottomControls_ (#1290) | height / padding / bottom margin | 49 / 20 / 12 | `bottom_controls` | ✅ |
-| side chat panel | channelChatWrapper_hbKzX7 | bg / width | --background-base-lowest / not in dump (closed) | `render` CHAT_W=400 | ❌ chat content lays out too narrow inside the panel |
-| hover-only name pills (idle opacity 0) | overlayTitle_.idle_ | opacity | 0 when idle | - | ❌ pills always shown |
+| side chat panel | channelChatWrapper_hbKzX7 + JS store `callChatSidebarWidth ?? 480` (min 450) | bg / width | --background-base-lowest / 480 | `render` CHAT_W=480, no member list, call column min_w_0 | ✅ |
+| hover-only name pills (idle opacity 0) | .idle_7NOr2f{opacity:0}, JS IDLE_TIMEOUT:2e3 | opacity | 0 after 2000 ms without mouse move | `idle()` / `on_mouse_move` | ✅ |
+| tray / camera icons | icon provider WindowLaunchIcon, FullscreenEnterIcon, VideoSlashIcon (path data matches dump #1362/#1366) | - | - | icons/names.rs `call/*` | ✅ |

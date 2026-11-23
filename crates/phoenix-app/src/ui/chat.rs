@@ -36,6 +36,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let entity = cx.entity();
     let show_members = app.show_members && app.selected_guild.is_some();
     let show_members = show_members && app.chat.thread.is_none();
+    // The call view's side chat has no member list.
+    let show_members = show_members && !crate::ui::call_view::active(app);
     div()
         .flex_1()
         .min_w_0()

@@ -1,5 +1,5 @@
 //! Offscreen render of the voice call view with mock voice state (never joins voice).
-//! `cargo run -p phoenix-app --example call_view -- out.png [chat]`
+//! `cargo run -p phoenix-app --example call_view -- out.png [chat] [grid]`
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -11,7 +11,9 @@ fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let out = args.next().unwrap_or_else(|| "phoenix.png".into());
     let login_only = false;
-    let with_chat = args.next().as_deref() == Some("chat");
+    let rest: Vec<String> = args.collect();
+    let with_chat = rest.iter().any(|a| a == "chat");
+    let focus_grid = rest.iter().any(|a| a == "grid");
 
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
@@ -72,6 +74,10 @@ fn main() -> anyhow::Result<()> {
                 app.open_channel_chat(lounge, cx);
                 phoenix_app::ui::call_view::show(lounge);
                 phoenix_app::ui::call_view::set_chat_open(with_chat);
+                if focus_grid {
+                    phoenix_app::ui::call_view::set_focus(phoenix_app::ui::call_view::Focus::Grid);
+                }
+                phoenix_app::ui::call_view::touch();
                 phoenix_app::ui::voice_panel::set_flags(me, VoiceFlags { stream: true, ..Default::default() });
                 phoenix_app::ui::voice_panel::set_flags(Id(4), VoiceFlags { self_mute: true, ..Default::default() });
                 phoenix_app::ui::voice_panel::set_flags(Id(7), VoiceFlags { self_deaf: true, ..Default::default() });

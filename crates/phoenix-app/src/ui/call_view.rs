@@ -8,6 +8,7 @@
 //! Box sizes in comments are the dump's CSS px.
 
 use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 use gpui::{AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*, svg};
 
@@ -25,6 +26,36 @@ thread_local! {
     static SHOWN: Cell<Option<Id>> = const { Cell::new(None) };
     /// Side chat panel ("Afficher la discussion", chatIcon_Fy2P0m) open.
     static CHAT_OPEN: Cell<bool> = const { Cell::new(false) };
+    /// Spotlight choice (click a tile to focus it, click again for the grid).
+    static FOCUS: Cell<Focus> = const { Cell::new(Focus::Auto) };
+    /// Last pointer move over the call view (idle pills).
+    static LAST_MOVE: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// Spotlight mode. `Auto` focuses the first Go Live stream, like the
+/// vanilla dump (focusedVideo_QKgWuD over the participants strip).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Focus {
+    Auto,
+    Grid,
+    Tile(Id, bool),
+}
+
+pub fn set_focus(f: Focus) {
+    FOCUS.with(|c| c.set(f));
+}
+
+/// IDLE_TIMEOUT in the client's call view module (2e3 ms): overlays
+/// (`.idle_7NOr2f{opacity:0}`) hide after 2 s without pointer movement.
+pub const IDLE_TIMEOUT: Duration = Duration::from_millis(2000);
+
+pub fn idle() -> bool {
+    LAST_MOVE.with(|c| c.get()).is_none_or(|t| t.elapsed() >= IDLE_TIMEOUT)
+}
+
+/// Mark the pointer active (also used by the offscreen example).
+pub fn touch() {
+    LAST_MOVE.with(|c| c.set(Some(Instant::now())));
 }
 
 /// Show the call view for `ch` (hooked from `select_channel` on a voice channel).
@@ -48,6 +79,9 @@ pub fn active(app: &PhoenixApp) -> bool {
         && app.channels.get(&ch).is_some_and(|c| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage))
 }
 
+// Icon provider names (WindowLaunchIcon / FullscreenEnterIcon /
+// VideoSlashIcon in the client); the hand-drawn glyphs below are only the
+// fallback when no local Discord install is found.
 const POPOUT: &str = "icons/call/popout.svg";
 const FULLSCREEN: &str = "icons/call/fullscreen.svg";
 const CAMERA_OFF: &str = "icons/call/camera-off.svg";
@@ -128,46 +162,114 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     // gutter = 72) and the channel sidebar; tiles get 8px side padding
     // (424 - 416), the top bar 33px + 8, the bottom controls 49 + 19 + 12.
     let vp = window.viewport_size();
+    // Side chat: the call container keeps the remaining width.
     let side = if chat_open() { CHAT_W } else { 0. };
     let w = f32::from(vp.width) / zoom - 72. - crate::ui::sidebar_resize::width() - side - 16.;
     let h = f32::from(vp.height) / zoom - 32. - 33. - 8. - 80. - 8.;
-    let (_cols, tw) = grid(tiles.len(), w.max(100.), h.max(60.), 8.);
-    let th = tw * 9. / 16.;
+    let w = w.max(100.);
+    let h = h.max(60.);
+    let focus = match FOCUS.with(|c| c.get()) {
+        Focus::Grid => None,
+        Focus::Tile(u, s) => tiles.iter().position(|t| t.user == u && t.stream == s),
+        Focus::Auto => tiles.iter().position(|t| t.stream),
+    };
+    let is_idle = idle();
 
-    let tiles_el = div()
-        .flex_1()
-        .min_h_0()
-        .px(z(8.))
-        .flex()
-        .flex_wrap()
-        .content_center()
-        .justify_center()
-        .gap(z(8.))
-        .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th)));
+    let tiles_el = if let Some(fi) = focus.filter(|_| tiles.len() > 1) {
+        // Spotlight (vanilla-call-view #1369-#1402): the focused tile is a
+        // 16:9 box centred in the band 72px below the top bar down to 8px
+        // above the strip (videoSizer_QKgWuD 684x387 in a 579px area); the
+        // participants strip (root_coTPKH) is 112px tall, tileSizer_coTPKH
+        // tiles share its width with an 8px gap (134.6 = (848 - 5*8) / 6).
+        let band = h - STRIP_H - 8. - 72.;
+        let fw = w.min(band.max(40.) * 16. / 9.);
+        let rest: Vec<&Tile> = tiles.iter().enumerate().filter(|(i, _)| *i != fi).map(|(_, t)| t).collect();
+        let n = rest.len().max(1) as f32;
+        let sw = ((w - 8. * (n - 1.)) / n).min(STRIP_H * 16. / 9.);
+        div()
+            .flex_1()
+            .min_h_0()
+            .px(z(8.))
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .pt(z(72.))
+                    .pb(z(8.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(render_tile(app, &tiles[fi], fw, fw * 9. / 16., is_idle, cx)),
+            )
+            .child(
+                div()
+                    .h(z(STRIP_H))
+                    .flex_none()
+                    .flex()
+                    .justify_center()
+                    .gap(z(8.))
+                    .children(rest.into_iter().map(|tile| render_tile(app, tile, sw, STRIP_H, is_idle, cx))),
+            )
+    } else {
+        let (_cols, tw) = grid(tiles.len(), w, h, 8.);
+        let th = tw * 9. / 16.;
+        div()
+            .flex_1()
+            .min_h_0()
+            .px(z(8.))
+            .flex()
+            .flex_wrap()
+            .content_center()
+            .justify_center()
+            .gap(z(8.))
+            .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th, is_idle, cx)))
+    };
 
     let call = div()
         // callContainer_hbKzX7: --black, border-top 1px --app-frame-border.
         .id("call-view")
         .flex_1()
         .min_w_0()
+        .overflow_hidden()
         .h_full()
         .flex()
         .flex_col()
         .bg(t(idx::BLACK))
         .border_t_1()
         .border_color(t(idx::APP_FRAME_BORDER))
+        .on_mouse_move(cx.listener(|_, _, _, cx| {
+            let was_idle = idle();
+            let stale = LAST_MOVE.with(|c| c.get()).is_none_or(|t| t.elapsed() >= Duration::from_millis(250));
+            touch();
+            if stale {
+                // Re-render once the pointer has rested IDLE_TIMEOUT.
+                cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(IDLE_TIMEOUT + Duration::from_millis(20)).await;
+                    let _ = this.update(cx, |_, cx| cx.notify());
+                })
+                .detach();
+            }
+            if was_idle {
+                cx.notify();
+            }
+        }))
         .child(top_bar(app, ch.name.clone(), cx))
         .child(div().h(z(8.)))
         .child(tiles_el)
         .child(bottom_controls(app, cx));
 
-    let root = div().size_full().flex().flex_row().bg(t(idx::BACKGROUND_BASE_LOWEST)).child(call);
+    // min_w_0 + overflow_hidden: the call column must shrink beside the
+    // fixed-width chat instead of pushing it out of the window.
+    let root = div().flex_1().min_w_0().size_full().overflow_hidden().flex().flex_row().bg(t(idx::BACKGROUND_BASE_LOWEST)).child(call);
     Some(if chat_open() {
         root.child(
             // channelChatWrapper_hbKzX7: --background-base-lowest, flex.
             div()
                 .w(z(CHAT_W))
                 .flex_none()
+                .min_w_0()
                 .h_full()
                 .flex()
                 .bg(t(idx::BACKGROUND_BASE_LOWEST))
@@ -182,9 +284,12 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     })
 }
 
-/// Side chat width. Not in the vanilla dump (chat closed: channelChatWrapper
-/// width 0); the panel is user-resizable in Discord.
-const CHAT_W: f32 = 400.;
+/// Side chat width: the client's `callChatSidebarWidth` default (480, store
+/// getter `?? 480`); the resizable sidebar's minWidth is 450.
+const CHAT_W: f32 = 480.;
+
+/// Participants strip height in spotlight mode (tileSizer_coTPKH 112px).
+const STRIP_H: f32 = 112.;
 
 /// upperContainer_: 33px row, 24px inline padding (440 - 416), channel icon
 /// 20px (--channel-icon), title body-md/medium 16/500 (--text-strong), right
@@ -252,7 +357,7 @@ fn tile_color(app: &PhoenixApp, user: Id) -> Hsla {
     }
 }
 
-fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32) -> AnyElement {
+fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, idle: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let u = app.users.get(&tile.user);
     let me = tile.user == app.me.id;
     let mut f = crate::ui::voice_panel::flags(tile.user);
@@ -263,7 +368,15 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32) -> AnyElement {
     let speaking = !tile.stream && app.voice.is_speaking(tile.user);
     let name = crate::ui::sidebar::voice_user_name(app, tile.user);
     // tile_p87Rny: --radius-sm (8px), overflow hidden.
+    let key = (tile.user, tile.stream);
     let base = div()
+        .id(SharedString::from(format!("call-tile-{}-{}", tile.user.0, tile.stream)))
+        .on_click(cx.listener(move |_, _, _, cx| {
+            let cur = FOCUS.with(|c| c.get());
+            let focused = matches!(cur, Focus::Tile(u, s) if (u, s) == key) || (cur == Focus::Auto && key.1);
+            set_focus(if focused { Focus::Grid } else { Focus::Tile(key.0, key.1) });
+            cx.notify();
+        }))
         .relative()
         .w(z(w))
         .h(z(h))
@@ -319,6 +432,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32) -> AnyElement {
                     .absolute()
                     .left(z(4.))
                     .bottom(z(4.))
+                    .when(idle, |d| d.opacity(0.))
                     .child(pill(Some(glyph("icons/voice/screen.svg", 16., white).into_any_element()), Some(name))),
             )
     } else {
@@ -343,6 +457,8 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32) -> AnyElement {
                     .bottom(z(4.))
                     .right(z(4.))
                     .flex()
+                    // .idle_7NOr2f{opacity:0}
+                    .when(idle, |d| d.opacity(0.))
                     .child(pill(state_icon, Some(name))),
             )
             .when(speaking, |d| {
