@@ -16,6 +16,8 @@ pub const DEFAULT_CLIENT_VERSION: &str = "1.0.170";
 /// stable Linux desktop client of 2026-11-23 (`build_info.json` 1.0.170,
 /// `build_number` in its web bundle, Chrome/Electron from its user agent).
 pub const DEFAULT_BUILD_NUMBER: u64 = 679_055;
+/// Chromium version bundled with [`DEFAULT_ELECTRON_VERSION`].
+pub const DEFAULT_CHROME_VERSION: &str = "152.0.7977.169";
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ClientProperties {
@@ -50,17 +52,30 @@ impl Default for ClientProperties {
 
 impl ClientProperties {
     /// Properties matching the stable Linux desktop client.
+    /// Built from the compiled-in constants only.
     pub fn linux_desktop() -> Self {
-        let electron = DEFAULT_ELECTRON_VERSION;
-        let client = DEFAULT_CLIENT_VERSION;
+        Self::from_build_info(&crate::build_info::BuildInfo::default())
+    }
+
+    /// Properties using the versions of the locally installed Discord when
+    /// found (see [`crate::build_info::BuildInfo::detect_fast`]), else the
+    /// constants. Cheap: reads a few small files, never scans or networks.
+    pub fn current() -> Self {
+        Self::from_build_info(&crate::build_info::BuildInfo::detect_fast())
+    }
+
+    pub fn from_build_info(b: &crate::build_info::BuildInfo) -> Self {
+        let electron = b.electron_version.as_str();
+        let client = b.client_version.as_str();
+        let chrome = b.chrome_version.as_str();
         let ua = format!(
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) \
-             discord/{client} Chrome/152.0.7977.169 Electron/{electron} Safari/537.36"
+             discord/{client} Chrome/{chrome} Electron/{electron} Safari/537.36"
         );
         Self {
             os: "Linux".into(),
             browser: "Discord Client".into(),
-            release_channel: "stable".into(),
+            release_channel: b.release_channel.clone(),
             client_version: client.into(),
             os_version: "6.12.0".into(),
             os_arch: "x64".into(),
@@ -72,7 +87,7 @@ impl ClientProperties {
             window_manager: "KDE,unknown".into(),
             distro: "Debian GNU/Linux".into(),
             runtime_environment: "native".into(),
-            client_build_number: DEFAULT_BUILD_NUMBER,
+            client_build_number: b.build_number,
             native_build_number: None,
             client_event_source: None,
             client_launch_id: uuid::Uuid::new_v4().to_string(),

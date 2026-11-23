@@ -131,6 +131,11 @@ impl DiscordBackend {
             .enable_all()
             .build()
             .expect("tokio runtime");
+        // Slow scan of the local Discord install for the next start's super
+        // properties (build number, Electron); low priority, off the UI thread.
+        let _ = std::thread::Builder::new().name("phoenix-buildinfo".into()).spawn(|| {
+            phoenix_api::BuildInfo::refresh_cache();
+        });
         Self {
             inner: Arc::new(Inner {
                 rt,
@@ -140,7 +145,7 @@ impl DiscordBackend {
                 mfa_opts: Mutex::new(Default::default()),
                 remote_auth: Mutex::new(None),
                 store,
-                props: ClientProperties::linux_desktop(),
+                props: ClientProperties::current(),
             }),
         }
     }

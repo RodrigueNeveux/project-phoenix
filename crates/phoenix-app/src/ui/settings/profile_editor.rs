@@ -974,12 +974,19 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
         .child(div().id("pe-card-body").flex_1().min_h_0().overflow_y_scroll().child(body))
 }
 
+/// The applied collectible: owned, or a shop / Nitro item applied for
+/// preview (the client previews any applied item, owned or not).
+fn applied_item(e: &EditorState, kind: super::collectibles::Kind, sku: u64) -> Option<&super::collectibles::Collectible> {
+    let shop = e.shop.as_ref().into_iter().flat_map(|s| s.nitro.iter().chain(&s.shop));
+    e.collectibles.iter().flatten().chain(shop).find(|c| c.sku == sku && c.kind == kind)
+}
+
 /// Decoration shown in the editor: the picker choice ("Apply", preview
 /// only) or the profile's current one.
 fn decoration_url(e: &EditorState) -> Option<SharedString> {
     use super::collectibles::Kind;
     match e.equipped.get(Kind::Decoration) {
-        Some(Some(sku)) => e.collectibles.as_ref()?.iter().find(|c| c.sku == sku && c.kind == Kind::Decoration)?.preview.clone(),
+        Some(Some(sku)) => applied_item(e, Kind::Decoration, sku)?.preview.clone(),
         Some(None) => None,
         None => e.profile.as_ref()?.decoration.clone(),
     }
