@@ -355,38 +355,19 @@ pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Con
             modal("invite-modal", cx, inner)
         }
         Overlay::LeaveGuild(g) => {
+            // Live leave-server alertdialog: size-sm confirm, subtitle only,
+            // Cancel + critical "Leave Server".
             let g = *g;
             let name = app.guilds.iter().find(|x| x.id == g).map(|x| x.name.clone()).unwrap_or_default();
-            let inner = div()
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .p(z(16.))
-                        .flex()
-                        .flex_col()
-                        .gap(z(12.))
-                        .child(
-                            div()
-                                .text_size(z(20.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
-                                .child(crate::t!("invite.leave_title", name = name)),
-                        )
-                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(crate::t!("invite.leave_body", name = name))),
-                )
-                .child(
-                    footer()
-                        .child(
-                            button("leave-cancel", crate::t!("common.cancel"), Palette::BG_SECONDARY)
-                                .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
-                        )
-                        .child(
-                            button("leave-ok", crate::t!("menu.leave_server"), Palette::RED)
-                                .on_click(cx.listener(move |a, _, _, cx| a.leave_guild(g, cx))),
-                        ),
-                );
-            modal("leave-modal", cx, inner)
+            let (e1, e2) = (cx.entity(), cx.entity());
+            crate::ui::modal::confirm(crate::ui::modal::Confirm {
+                title: crate::t!("invite.leave_title", name = name.clone()),
+                body: vec![crate::t!("invite.leave_body", name = name).into_any_element()],
+                confirm_label: crate::t!("menu.leave_server"),
+                danger: true,
+                on_confirm: std::rc::Rc::new(move |_, cx| e1.update(cx, |a, cx| a.leave_guild(g, cx))),
+                on_cancel: std::rc::Rc::new(move |_, cx| e2.update(cx, |a, cx| a.close_overlay(cx))),
+            })
         }
         Overlay::Stub(what) => {
             let inner = div()

@@ -26,7 +26,9 @@ pub enum MenuItem {
     /// Arbitrary row (e.g. the quick-reaction strip).
     Custom(AnyElement),
     /// Row with a chevron that opens a nested menu on hover.
-    Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString> },
+    /// `subtext`: muted second line under the label (e.g. the current input
+    /// device in the user panel's mic menu).
+    Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString>, subtext: Option<SharedString> },
     /// Checkbox (`radio: false`) or radio row; the menu stays open on click
     /// for checkboxes, like Discord.
     Check { label: SharedString, checked: bool, radio: bool, on_click: Handler },
@@ -231,12 +233,12 @@ impl MenuItem {
     }
 
     pub fn submenu(label: impl Into<SharedString>, items: Vec<MenuItem>) -> Self {
-        Self::Submenu { label: label.into(), items, icon: None }
+        Self::Submenu { label: label.into(), items, icon: None, subtext: None }
     }
 
     /// Submenu row with a left icon (e.g. "Add to Favorites" with a star).
     pub fn submenu_with_icon(label: impl Into<SharedString>, icon: &str, items: Vec<MenuItem>) -> Self {
-        Self::Submenu { label: label.into(), items, icon: Some(crate::icons::path(icon)) }
+        Self::Submenu { label: label.into(), items, icon: Some(crate::icons::path(icon)), subtext: None }
     }
 }
 
@@ -283,6 +285,7 @@ fn row_h(item: &MenuItem) -> f32 {
             let text: f32 = 18. + if subtext.is_some() { 18. } else { 0. };
             16. + text.max(if icon.is_some() { 20. } else { 0. })
         }
+        MenuItem::Submenu { subtext: Some(_), .. } => 52.,
         MenuItem::Submenu { .. } | MenuItem::Check { .. } => 36.,
     }
 }
@@ -337,7 +340,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
         list = list.child(match item {
             MenuItem::Separator => div().flex_none().my(z(8.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element(),
             MenuItem::Custom(el) => el,
-            MenuItem::Submenu { label, items, icon } => {
+            MenuItem::Submenu { label, items, icon, subtext } => {
                 let open = open_sub == Some(ix);
                 if open {
                     sub_panel = Some(
@@ -361,7 +364,18 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         let fg = if open || lit { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT };
                         d.child(svg().path(path).mr(z(8.)).size(z(20.)).flex_none().text_color(c(tok(fg))))
                     })
-                    .child(label_box(label))
+                    .child(div().flex_1().min_w_0().flex().flex_col().child(label_box(label)).when_some(subtext, |d, s| {
+                        // defaultColor_ subtext: 12/16 --text-muted, margin-top 2
+                        d.child(
+                            div()
+                                .mt(z(2.))
+                                .text_size(z(12.))
+                                .line_height(z(16.))
+                                .font_weight(FontWeight::NORMAL)
+                                .text_color(c(tok(if open || lit { idx::TEXT_SUBTLE } else { idx::TEXT_MUTED })))
+                                .child(s),
+                        )
+                    }))
                     // iconContainer_ margin-inline-start 8; caret_ --text-muted (white when focused)
                     .child(
                         svg()
@@ -376,18 +390,8 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
             MenuItem::Check { label, checked, radio, on_click } => {
                 let dismiss = dismiss.clone();
                 let mark = if radio {
-                    // radioIcon_ 20px; selection --control-brand-foreground-new (white when focused)
-                    let dot = if lit { gpui::white() } else { c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW)) };
-                    div()
-                        .size(z(20.))
-                        .flex_none()
-                        .rounded_full()
-                        .border_2()
-                        .border_color(if checked { dot } else { c(tok(idx::CHECKBOX_BORDER_DEFAULT)) })
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .when(checked, |d| d.child(div().size(z(10.)).rounded_full().bg(dot)))
+                    // standaloneRadioIndicator_oJuRb (guild notification submenu dump)
+                    crate::ui::controls::radio_indicator(checked)
                 } else {
                     let (bg, border) = if checked {
                         (idx::CHECKBOX_BACKGROUND_SELECTED_DEFAULT, idx::CHECKBOX_BORDER_SELECTED_DEFAULT)

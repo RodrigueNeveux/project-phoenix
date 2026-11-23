@@ -1,8 +1,10 @@
 //! Right-click menu on a user (member list row, DM row, message author).
 //!
-//! Item order observed in the official client (guild member, not self):
-//! Profile, Message, (Call in DMs) | Add Note | Invite to Server >,
-//! Add Friend | Ignore, Block | Copy User ID (developer mode).
+//! Item order from the live client (member-menu / author-menu dumps,
+//! 2026-11-23, guild member, not self): Profile, Mention, Message, Add Note
+//! ("Only visible to you" subtext), Add Friend | Invite to Server >,
+//! Remove Friend, Block | voice / moderation items | Copy User ID
+//! (developer mode).
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -64,14 +66,17 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     if !me {
         items.push(act(crate::t!("profile.message"), Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
     }
-    items.push(MenuItem::Separator);
-    items.push(act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))));
-    let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
-    if in_call {
-        items.push(MenuItem::Separator);
-        items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
+    items.push(
+        act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx)))
+            .with_subtext(crate::t!("menu.note_subtext")),
+    );
+    let rel = app.nav.relationship(u).map(|r| r.kind);
+    let friend = rel == Some(crate::ui::home::data::RelationshipKind::Friend);
+    if !me && rel.is_none() {
+        items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
     }
     if !me {
+        items.push(MenuItem::Separator);
         let invites: Vec<MenuItem> = app
             .guilds
             .iter()
@@ -82,18 +87,20 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             })
             .collect();
         if !invites.is_empty() {
-            items.push(MenuItem::Separator);
             items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
         }
-        items.push(MenuItem::Separator);
-        if app.nav.relationship(u).is_none() {
-            items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
-            items.push(MenuItem::Separator);
+        if friend {
+            items.push(act(crate::t!("menu.remove_friend"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Remove, cx))));
         }
         items.push(MenuItem::danger(crate::t!("menu.block"), None, {
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.relationship_action(u, RelAction::Block, cx))
         }));
+    }
+    let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
+    if in_call {
+        items.push(MenuItem::Separator);
+        items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
     }
     items.extend(crate::ui::inbox::moderation_items(app, u, g, &e));
     if app.prefs.synced.developer_mode {

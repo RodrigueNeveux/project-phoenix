@@ -229,15 +229,62 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
             update(move |p| if kind == Audio::Mic { p.input_device = Some(name) } else { p.output_device = Some(name) }, true)
         }));
     }
+    // Live mic-menu dump (2026-11-23, 220px): device submenu with the current
+    // device as subtext | separator | volume label + slider | separator |
+    // Voice Settings with the gear on the left.
+    let device_label: SharedString = current.clone().map(Into::into).unwrap_or_else(|| crate::t!("voice.default"));
     let e = cx.entity();
+    let vol_now = {
+        let p = prefs().lock();
+        if kind == Audio::Mic { p.input_volume } else { p.output_volume }
+    };
+    let max = if kind == Audio::Mic { 100 } else { 200 };
+    let frac = (vol_now as f32 / max as f32).clamp(0., 1.);
+    // labelContainer_ (padding 8, label 14/18 --text-strong) over
+    // sliderContainer_ (padding 0 8, top -4): 4px --slider-track-background
+    // bar, brand fill, 16px white grabber with --border-normal.
+    let volume = div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .p(z(8.))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(t(idx::TEXT_STRONG))
+                .child(if kind == Audio::Mic { crate::t!("voice.input_volume_menu") } else { crate::t!("voice.output_volume_menu") }),
+        )
+        .child(
+            div().px(z(8.)).mt(z(-4.)).h(z(24.)).relative().child(
+                div()
+                    .absolute()
+                    .top(z(10.))
+                    .left_0()
+                    .right_0()
+                    .h(z(4.))
+                    .rounded(z(4.))
+                    .bg(t(idx::SLIDER_TRACK_BACKGROUND))
+                    .child(div().h_full().w(gpui::relative(frac)).rounded(z(4.)).bg(t(idx::SLIDER_INDICATOR_BACKGROUND))),
+            )
+            .child(
+                div().absolute().top(z(4.)).left(gpui::relative(frac)).ml(z(-8.)).child(
+                    div().size(z(16.)).rounded_full().bg(gpui::white()).border_1().border_color(t(idx::BORDER_NORMAL)).shadow_sm(),
+                ),
+            ),
+        )
+        .pb(z(4.));
     let items = vec![
         MenuItem::Submenu {
             label: if kind == Audio::Mic { crate::t!("voice.input_device_menu") } else { crate::t!("voice.output_device_menu") },
             items: list,
             icon: None,
+            subtext: Some(device_label),
         },
         MenuItem::Separator,
-        MenuItem::action(crate::t!("voice.voice_settings"), None, move |_, _, cx| {
+        MenuItem::Custom(volume.into_any_element()),
+        MenuItem::Separator,
+        MenuItem::action(crate::t!("voice.voice_settings"), Some(crate::icons::path("gear")), move |_, _, cx| {
             AUDIO_MENU.with(|m| *m.borrow_mut() = None);
             e.update(cx, |a, cx| {
                 crate::ui::settings::open(a, cx);
@@ -248,7 +295,7 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
         }),
     ];
     // Open above the button: the panel sits at the bottom of the window.
-    context_menu::render(pos - gpui::point(px(0.), px(120.)), items, dismiss)
+    context_menu::render(pos - gpui::point(px(0.), px(200.)), items, dismiss)
 }
 
 /// One of the four large buttons (`button_9U6LUN.buttonColor_9U6LUN`): full

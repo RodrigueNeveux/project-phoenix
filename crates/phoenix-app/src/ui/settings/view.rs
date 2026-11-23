@@ -9,8 +9,11 @@ use gpui::{
 use super::{AppTheme, NAV, Page, SettingsPatch, SettingsState, save, update_local};
 use crate::{
     app::PhoenixApp,
-    theme::{Palette, c},
-    ui::avatar,
+    theme::{Palette, c, generated::idx, tok},
+    ui::{
+        avatar,
+        controls::{self, BtnKind},
+    },
 };
 
 type Cx<'a> = Context<'a, PhoenixApp>;
@@ -23,60 +26,58 @@ fn st(app: &mut PhoenixApp) -> Option<&mut SettingsState> {
     app.settings.as_mut()
 }
 
+// Live 2026 settings modal (dumps settings-home / set-* via CDP, 2026-11-23).
+// Content panel_nNq2Vb: max-width 696 + padding-inline 16, margin-block 64.
+// Each category: heading-xl/medium title + 24px gap, then stacked
+// baseControlItem_FiiQ6I rows (gap 10), categories split by a divider_
+// with margin 50 (--space-xxl + --space-xs).
+
 fn h1(t: impl Into<SharedString>) -> Div {
-    div()
-        .mb(z(20.))
-        .text_size(z(20.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(Palette::TEXT_HEADER))
-        .child(t.into())
+    controls::section_title(t)
+}
+
+/// The 2026 client labels groups in sentence case ("Thèmes par défaut"):
+/// older all-caps strings are folded to that.
+fn sentence(t: SharedString) -> SharedString {
+    if t.chars().any(|ch| ch.is_lowercase()) {
+        return t;
+    }
+    let lower = t.to_lowercase();
+    let mut it = lower.chars();
+    it.next().map(|f| f.to_uppercase().chain(it).collect::<String>().into()).unwrap_or(t)
 }
 
 fn h5(t: impl Into<SharedString>) -> Div {
+    let t = sentence(t.into());
+    // heading-sm/semibold group label inside a category
     div()
-        .mb(z(8.))
-        .text_size(z(12.))
-        .font_weight(FontWeight::BOLD)
-        .text_color(c(Palette::TEXT_MUTED))
-        .child(t.into())
+        .pt(z(8.))
+        .pb(z(12.))
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(tok(idx::TEXT_STRONG)))
+        .child(t)
 }
 
 fn note(t: impl Into<SharedString>) -> Div {
-    div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(t.into())
+    div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(t.into())
 }
 
 fn divider() -> Div {
-    div().my(z(24.)).h(z(1.)).bg(c(Palette::DIVIDER))
+    // divider_ZaYWLb: 1px --border-subtle, margin 50px 0
+    div().my(z(50.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE)))
 }
 
-fn button(id: impl Into<String>, label: impl Into<SharedString>, bg: u32, hover: u32) -> Stateful<Div> {
-    div()
-        .id(eid(id))
-        .h(z(32.))
-        .px(z(16.))
-        .flex_none()
-        .rounded(z(3.))
-        .bg(c(bg))
-        .hover(move |s| s.bg(c(hover)))
-        .cursor_pointer()
-        .flex()
-        .items_center()
-        .justify_center()
-        .text_size(z(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(gpui::white())
-        .child(label.into())
+fn category(title: impl Into<SharedString>, rows: Vec<AnyElement>) -> Div {
+    div().flex().flex_col().child(h1(title)).child(div().flex().flex_col().gap(z(10.)).children(rows))
 }
 
 fn secondary(id: impl Into<String>, label: impl Into<SharedString>) -> Stateful<Div> {
-    button(id, label, 0x4E5058, 0x6D6F78)
+    controls::button(eid(id), label, BtnKind::Secondary)
 }
 
-fn toggle_knob(on: bool) -> Div {
-    crate::ui::controls::switch(on)
-}
-
-/// Discord switch row: title + description on the left, toggle on the right.
+/// Switch row: baseControlItem with the 48x24 switch trailing.
 fn switch_row(
     id: &str,
     title: SharedString,
@@ -86,64 +87,18 @@ fn switch_row(
     cx: &mut Cx,
 ) -> AnyElement {
     div()
-        .flex()
-        .flex_col()
-        .mb(z(20.))
-        .child(
-            div()
-                .id(eid(format!("switch-{id}")))
-                .flex()
-                .items_center()
-                .cursor_pointer()
-                .on_click(cx.listener(move |a, _, _, cx| f(a, cx)))
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(z(16.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(Palette::TEXT_NORMAL))
-                        .child(title),
-                )
-                .child(toggle_knob(on)),
-        )
-        .when(!desc.is_empty(), |d| d.child(div().mt(z(8.)).child(note(desc))))
-        .child(div().mt(z(20.)).h(z(1.)).bg(c(Palette::DIVIDER)))
+        .id(eid(format!("switch-{id}")))
+        .cursor_pointer()
+        .on_click(cx.listener(move |a, _, _, cx| f(a, cx)))
+        .child(controls::control_item(title, Some(desc), Some(controls::switch(on).into_any_element())))
         .into_any_element()
 }
 
 fn radio(id: impl Into<String>, label: impl Into<SharedString>, selected: bool) -> Stateful<Div> {
-    div()
-        .id(eid(id))
-        .mb(z(8.))
-        .p(z(10.))
-        .rounded(z(4.))
-        .bg(c(if selected { Palette::BG_MOD_SELECTED } else { Palette::BG_SECONDARY }))
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .cursor_pointer()
-        .flex()
-        .items_center()
-        .gap(z(12.))
-        .child(
-            div()
-                .size(z(20.))
-                .rounded_full()
-                .border_2()
-                .border_color(c(if selected { Palette::BLURPLE } else { Palette::INTERACTIVE }))
-                .flex()
-                .items_center()
-                .justify_center()
-                .when(selected, |d| d.child(div().size(z(10.)).rounded_full().bg(c(Palette::BLURPLE)))),
-        )
-        .child(
-            div()
-                .text_size(z(16.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(Palette::TEXT_NORMAL))
-                .child(label.into()),
-        )
+    controls::radio_option(eid(id), label, selected).py(z(6.))
 }
 
-/// Discord marker slider bound to a local preference.
+/// Marker slider bound to a local preference.
 fn slider(
     id: &str,
     values: &[f32],
@@ -153,7 +108,6 @@ fn slider(
     set: impl Fn(&mut PhoenixApp, f32, &mut Cx) + 'static,
     cx: &mut Cx,
 ) -> Div {
-    use crate::ui::controls;
     let labels = values.iter().map(|v| SharedString::from(format!("{v}{unit}"))).collect();
     let vals: Vec<f32> = values.to_vec();
     let ent = cx.entity();
@@ -169,111 +123,77 @@ fn slider(
     )
 }
 
-fn field_row(label: impl Into<SharedString>, value: SharedString, action: Option<AnyElement>) -> Div {
-    div()
-        .mb(z(24.))
+/// "Username   kasiopy  [Edit]" row: value (16/500 --text-default) and the
+/// trailing button, 20px apart.
+fn field_row(label: impl Into<SharedString>, value: SharedString, action: Option<AnyElement>) -> AnyElement {
+    let trailing = div()
         .flex()
         .items_center()
-        .child(
-            div()
-                .flex_1()
-                .flex()
-                .flex_col()
-                .child(h5(label.into()).mb(z(4.)))
-                .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(value)),
-        )
-        .children(action)
+        .gap(z(20.))
+        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(value))
+        .children(action);
+    controls::control_item(label, None, Some(trailing.into_any_element())).into_any_element()
 }
 
 fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let me = &app.me;
     let reveal = app.settings.as_ref().is_some_and(|s| s.reveal_email);
     let email: SharedString = if reveal { crate::t!("settings.account.email_hidden") } else { "**********@*****.com".into() };
-    let card = div()
-        .rounded(z(8.))
-        .bg(c(Palette::BG_TERTIARY))
-        .overflow_hidden()
-        .child(div().h(z(100.)).bg(c(Palette::BLURPLE)))
-        .child(
-            div()
-                .relative()
-                .h(z(72.))
-                .px(z(16.))
-                .flex()
-                .items_start()
-                .child(
-                    div()
-                        .absolute()
-                        .left(z(16.))
-                        .top(z(-38.))
-                        .p(z(7.))
-                        .rounded_full()
-                        .bg(c(Palette::BG_TERTIARY))
-                        .child(avatar(Some(me), 80.)),
-                )
-                .child(
-                    div()
-                        .ml(z(104.))
-                        .mt(z(14.))
-                        .flex_1()
-                        .text_size(z(20.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::TEXT_HEADER))
-                        .child(me.display_name.clone()),
-                )
-                .child(
-                    button("edit-profile", crate::t!("settings.account.edit_profile"), Palette::BLURPLE, 0x4752C4)
-                        .mt(z(16.))
-                        .on_click(cx.listener(|a, _, _, cx| {
-                            if let Some(s) = st(a) {
-                                s.page = Page::Profiles;
-                            }
-                            cx.notify();
-                        })),
-                ),
-        )
-        .child(
-            div()
-                .m(z(16.))
-                .mt_0()
-                .p(z(16.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
-                .child(field_row(crate::t!("settings.account.display_name"), me.display_name.clone(), Some(secondary("edit-dn", crate::t!("common.edit")).into_any_element())))
-                .child(field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element())))
-                .child(field_row(
-                    crate::t!("settings.account.email"),
-                    email,
-                    Some(
-                        div()
-                            .id("reveal-email")
-                            .mr(z(16.))
-                            .text_size(z(14.))
-                            .text_color(c(Palette::TEXT_LINK))
-                            .cursor_pointer()
-                            .on_click(cx.listener(|a, _, _, cx| {
-                                if let Some(s) = st(a) {
-                                    s.reveal_email = !s.reveal_email;
-                                }
-                                cx.notify();
-                            }))
-                            .child(if reveal { crate::t!("common.hide") } else { crate::t!("common.reveal") })
-                            .into_any_element(),
-                    ),
-                ))
-                .child(field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element()))),
-        );
+    // textButton_nJgowo: 16/500 --text-link
+    let reveal_btn = div()
+        .id("reveal-email")
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::TEXT_LINK)))
+        .cursor_pointer()
+        .on_click(cx.listener(|a, _, _, cx| {
+            if let Some(s) = st(a) {
+                s.reveal_email = !s.reveal_email;
+            }
+            cx.notify();
+        }))
+        .child(if reveal { crate::t!("common.hide") } else { crate::t!("common.reveal") });
+    let email_val = div()
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(email))
+        .child(reveal_btn);
+    let email_row = controls::control_item(
+        crate::t!("settings.account.email"),
+        None,
+        Some(div().flex().items_center().gap(z(20.)).child(email_val).child(secondary("edit-em", crate::t!("common.edit"))).into_any_element()),
+    )
+    .into_any_element();
     div()
-        .child(h1(crate::t!("settings.page.my_account")))
-        .child(card)
+        .child(category(
+            crate::t!("settings.account.info"),
+            vec![
+                field_row(crate::t!("settings.account.display_name"), me.display_name.clone(), Some(secondary("edit-dn", crate::t!("common.edit")).into_any_element())),
+                field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element())),
+                email_row,
+                field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element())),
+            ],
+        ))
         .child(divider())
-        .child(h1(crate::t!("settings.account.password_auth")))
-        .child(secondary("change-pw", crate::t!("settings.account.change_password")).w(z(160.)))
-        .child(div().mt(z(20.)).child(h5(crate::t!("settings.account.authenticator"))))
-        .child(note(crate::t!("settings.account.authenticator_note")))
+        .child(category(
+            crate::t!("settings.account.security"),
+            vec![
+                controls::control_item(
+                    crate::t!("settings.account.password"),
+                    None,
+                    Some(secondary("change-pw", crate::t!("common.edit")).into_any_element()),
+                )
+                .into_any_element(),
+                controls::control_item(crate::t!("settings.account.authenticator"), Some(crate::t!("settings.account.authenticator_note")), None).into_any_element(),
+            ],
+        ))
         .child(divider())
-        .child(h5(crate::t!("settings.account.removal")))
-        .child(note(crate::t!("settings.account.removal_note")))
+        .child(category(
+            crate::t!("settings.account.removal"),
+            vec![controls::control_item(crate::t!("settings.account.removal"), Some(crate::t!("settings.account.removal_note")), None).into_any_element()],
+        ))
 }
 
 fn profiles(app: &PhoenixApp) -> Div {
@@ -286,10 +206,10 @@ fn profiles(app: &PhoenixApp) -> Div {
                 .h(z(40.))
                 .px(z(10.))
                 .rounded(z(3.))
-                .bg(c(Palette::BG_TERTIARY))
+                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
                 .flex()
                 .items_center()
-                .text_color(c(Palette::TEXT_NORMAL))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
                 .child(app.me.display_name.clone()),
         )
         .child(h5(crate::t!("settings.profiles.preview")))
@@ -308,7 +228,7 @@ fn profiles(app: &PhoenixApp) -> Div {
                             div()
                                 .text_size(z(18.))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
+                                .text_color(c(tok(idx::TEXT_STRONG)))
                                 .child(app.me.display_name.clone()),
                         )
                         .child(note(app.me.name.clone())),
@@ -342,12 +262,12 @@ fn devices() -> Div {
             div()
                 .p(z(16.))
                 .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
                 .child(
                     div()
                         .text_size(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::TEXT_HEADER))
+                        .text_color(c(tok(idx::TEXT_STRONG)))
                         .child("LINUX · DISCORD PHOENIX"),
                 )
                 .child(note(crate::t!("settings.devices.this"))),
@@ -359,12 +279,12 @@ fn connections() -> Div {
         div()
             .size(z(48.))
             .rounded(z(8.))
-            .bg(c(Palette::BG_TERTIARY))
+            .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
             .flex()
             .items_center()
             .justify_center()
             .text_size(z(11.))
-            .text_color(c(Palette::INTERACTIVE))
+            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
             .child(name)
     };
     div()
@@ -373,7 +293,7 @@ fn connections() -> Div {
             div()
                 .p(z(16.))
                 .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
                 .child(h5(crate::t!("settings.connections.add")))
                 .child(note(crate::t!("settings.connections.note")))
                 .child(
@@ -416,19 +336,19 @@ fn keybinds() -> Div {
             .mb(z(8.))
             .p(z(16.))
             .rounded(z(8.))
-            .bg(c(Palette::BG_SECONDARY))
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
             .flex()
             .items_center()
-            .child(div().flex_1().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(action))
+            .child(div().flex_1().text_size(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(action))
             .child(
                 div()
                     .px(z(8.))
                     .py(z(2.))
                     .rounded(z(4.))
-                    .bg(c(Palette::BG_TERTIARY))
+                    .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
                     .text_size(z(14.))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(c(Palette::INTERACTIVE))
+                    .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
                     .child(keys),
             )
     };
@@ -468,100 +388,50 @@ fn language(app: &PhoenixApp, cx: &mut Cx) -> Div {
     }))
 }
 
-/// A theme choice drawn as a miniature chat window in that theme's own colours
-/// (rail, channel list, two messages and a composer), with its name below.
+/// themeSelection_IhyaN_ (live Appearance dump): 48x48 swatch, radius 8,
+/// 8px apart; the selected one gets the 52px selectionCircle_ ring in
+/// --control-brand-foreground-new with a check badge.
 fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
-    let tc = |tok: u32| crate::theme::c_for(tok, t);
-    let line = |w: f32, tok: u32| div().h(z(6.)).w(z(w)).rounded(z(3.)).bg(tc(tok));
-    let msg = |w1: f32, w2: f32, av: u32| {
-        div()
-            .flex()
-            .gap(z(6.))
-            .items_center()
-            .child(div().size(z(14.)).flex_none().rounded_full().bg(c(av)))
-            .child(div().flex().flex_col().gap(z(3.)).child(line(w1, Palette::TEXT_HEADER)).child(line(w2, Palette::TEXT_MUTED)))
-    };
-    let preview = div()
-        .w(z(128.))
-        .h(z(84.))
-        .rounded(z(8.))
-        .overflow_hidden()
-        .flex()
-        .bg(tc(Palette::BG_TERTIARY))
-        .border_2()
-        .border_color(c(if selected { Palette::BLURPLE } else { Palette::DIVIDER }))
-        .child(
-            div()
-                .w(z(18.))
-                .flex_none()
-                .pt(z(6.))
-                .flex()
-                .flex_col()
-                .items_center()
-                .gap(z(4.))
-                .children((0..3).map(|i| div().size(z(10.)).rounded(z(3.)).bg(tc(if i == 0 { Palette::BLURPLE } else { Palette::BG_SECONDARY })))),
-        )
-        .child(
-            div()
-                .w(z(32.))
-                .flex_none()
-                .bg(tc(Palette::BG_SECONDARY))
-                .pt(z(8.))
-                .px(z(4.))
-                .flex()
-                .flex_col()
-                .gap(z(5.))
-                .children([20., 16., 22.].map(|w| line(w, Palette::CHANNEL_ICON))),
-        )
-        .child(
-            div()
-                .flex_1()
-                .bg(tc(Palette::BG_PRIMARY))
-                .p(z(8.))
-                .flex()
-                .flex_col()
-                .gap(z(8.))
-                .child(msg(30., 42., 0x5865F2))
-                .child(msg(24., 36., 0x3BA55C))
-                .child(div().mt_auto().h(z(12.)).rounded(z(4.)).bg(tc(Palette::INPUT_BG))),
-        );
     div()
         .id(eid(format!("theme-{}", t.label())))
-        .flex()
-        .flex_col()
-        .gap(z(6.))
+        .relative()
+        .size(z(48.))
+        .flex_none()
         .cursor_pointer()
         .child(
             div()
-                .relative()
-                .rounded(z(10.))
-                .when(!selected, |d| d.hover(|s| s.opacity(0.85)))
-                .child(preview)
-                .when(selected, |d| {
-                    d.child(
-                        div()
-                            .absolute()
-                            .top(z(-6.))
-                            .right(z(-6.))
-                            .size(z(22.))
-                            .rounded_full()
-                            .bg(c(Palette::BLURPLE))
-                            .border_2()
-                            .border_color(c(Palette::BG_PRIMARY))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(gpui::svg().path("icons/check.svg").size(z(14.)).text_color(gpui::white())),
-                    )
-                }),
+                .size_full()
+                .rounded(z(8.))
+                .bg(c(t.swatch()))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE))),
         )
-        .child(
-            div()
-                .text_size(z(14.))
-                .font_weight(if selected { FontWeight::SEMIBOLD } else { FontWeight::MEDIUM })
-                .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_MUTED }))
-                .child(t.label()),
-        )
+        .when(selected, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .top(z(-2.))
+                    .left(z(-2.))
+                    .size(z(52.))
+                    .rounded(z(10.))
+                    .border_2()
+                    .border_color(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW))),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top(z(-6.))
+                    .right(z(-6.))
+                    .size(z(20.))
+                    .rounded_full()
+                    .bg(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW)))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(gpui::svg().path(crate::icons::path("check")).size(z(14.)).text_color(gpui::white())),
+            )
+        })
+        .hover(|s| s.opacity(0.9))
 }
 
 fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
@@ -569,10 +439,10 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let theme = s.theme;
     let compact = s.compact;
     let l = &app.prefs.local;
-    let swatches = div().mb(z(24.)).flex().gap(z(12.)).children(AppTheme::ALL.map(|t| {
+    let swatches = div().mb(z(24.)).flex().gap(z(8.)).children(AppTheme::ALL.map(|t| {
         theme_card(t, t == theme).on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx)))
     }));
-    let (fs, zoom) = (l.font_size, l.zoom);
+    let (fs, zoom, density) = (l.font_size, l.zoom, l.density);
     div()
         .child(h1(crate::t!("settings.page.appearance")))
         .child(h5(crate::t!("settings.appearance.theme")))
@@ -587,6 +457,11 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
             radio("display-compact", crate::t!("settings.appearance.compact"), compact)
                 .on_click(cx.listener(|a, _, _, cx| save(a, SettingsPatch::Compact(true), cx))),
         )
+        .child(h5(crate::t!("settings.appearance.density")))
+        .children(crate::theme::Density::ALL.map(|d| {
+            radio(format!("density-{}", d.key()), crate::t!(&format!("settings.density.{}", d.key())), density == d)
+                .on_click(cx.listener(move |a, _, _, cx| update_local(a, |p| p.density = d, cx)))
+        }))
         .child(divider())
         .child(h5(crate::t!("settings.appearance.font")))
         .child(slider(
@@ -655,7 +530,7 @@ fn advanced(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     .flex()
                     .items_center()
                     .gap(z(12.))
-                    .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(my_id.clone()))
+                    .child(div().text_size(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(my_id.clone()))
                     .child(secondary("copy-my-id", crate::t!("common.copy_user_id")).on_click(cx.listener(move |_, _, _, cx| {
                         cx.write_to_clipboard(gpui::ClipboardItem::new_string(my_id.clone()));
                     }))),
@@ -680,210 +555,369 @@ fn page(app: &PhoenixApp, cx: &mut Cx) -> Div {
     }
 }
 
-fn nav_item(id: impl Into<String>, label: impl Into<SharedString>, selected: bool, color: u32) -> Stateful<Div> {
+/// Sidebar page icon (icons are requested by name; the provider swaps in the
+/// client's own glyphs when available).
+fn page_icon(p: Page) -> &'static str {
+    match p {
+        Page::MyAccount | Page::Profiles => "friends",
+        Page::PrivacySafety => "lock",
+        Page::Devices => "image",
+        Page::Connections => "plus-circle",
+        Page::Notifications => "bell",
+        Page::Keybinds => "file",
+        Page::Language => "compass",
+        Page::Appearance => "emoji",
+        Page::Accessibility => "help",
+        Page::VoiceVideo => "mic",
+        Page::Advanced => "gear",
+    }
+}
+
+/// item_xyJHva: padding 10, radius 8 (--radius-sm), --text-muted; hover
+/// --background-mod-muted, active --background-mod-normal + --text-strong.
+/// itemContent gap 10: 20px icon + body-md/medium 16/20 label.
+fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, selected: bool, destructive: bool) -> Stateful<Div> {
+    let fg = if selected { idx::TEXT_STRONG } else { idx::TEXT_MUTED };
+    let label_fg = if destructive { idx::TEXT_FEEDBACK_CRITICAL } else { fg };
     div()
         .id(eid(id))
-        .mb(z(2.))
-        .h(z(32.))
-        .px(z(10.))
-        .rounded(z(4.))
+        .p(z(10.))
+        .rounded(z(8.))
         .flex()
         .items_center()
+        .gap(z(10.))
         .cursor_pointer()
-        .text_size(z(16.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(c(if selected { Palette::TEXT_HEADER } else { color }))
-        .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-        .when(!selected, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER))))
-        .child(label.into())
+        .text_color(c(tok(fg)))
+        .when(selected, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+        .when(!selected && !destructive, |d| {
+            d.hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_MUTED))).text_color(c(tok(idx::TEXT_STRONG))))
+        })
+        .when(destructive, |d| d.hover(|s| s.bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_CRITICAL)))))
+        .child(gpui::svg().path(crate::icons::path(icon)).size(z(20.)).flex_none().text_color(c(tok(fg))))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(label_fg)))
+                .child(label.into()),
+        )
+}
+
+/// subnav_8qMUr2 under the active "Account" item: 2px --background-mod-subtle
+/// track (19px in, padding 10 0) with the --interactive-text-active thumb on
+/// the current row; rows body-md/normal 16/20, 20px apart.
+fn account_subnav() -> Div {
+    let rows = [
+        crate::t!("settings.account.info"),
+        crate::t!("settings.account.security"),
+        crate::t!("settings.account.status"),
+    ];
+    let n = rows.len() as f32;
+    div()
+        .py(z(10.))
+        .ml(z(19.))
+        .flex()
+        .gap(z(19.))
+        .child(
+            div()
+                .flex_none()
+                .w(z(2.))
+                .h(z(20. * n + 20. * (n - 1.)))
+                .rounded(z(1.))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                .child(div().w_full().h(z(20.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
+        )
+        .child(div().flex_1().flex().flex_col().gap(z(20.)).children(rows.into_iter().enumerate().map(|(i, t)| {
+            div()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(if i == 0 { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::TEXT_MUTED })))
+                .child(t)
+        })))
+}
+
+fn select_page(p: Page, cx: &mut Cx) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static {
+    cx.listener(move |a, _, _, cx| {
+        if let Some(s) = st(a) {
+            s.page = p;
+            s.error = None;
+        }
+        cx.notify();
+    })
 }
 
 fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let cur = app.settings.as_ref().map(|s| s.page).unwrap_or_default();
-    let mut col = div().w(z(218.)).pt(z(60.)).pb(z(20.)).pr(z(6.)).pl(z(20.)).flex().flex_col();
-    for (ix, (title, pages)) in NAV.iter().enumerate() {
-        if ix > 0 {
-            col = col.child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)));
-        }
-        col = col.child(div().px(z(10.)).pb(z(6.)).child(h5(crate::t!(title)).mb_0()));
-        for p in pages.iter().copied() {
-            col = col.child(nav_item(format!("nav-{}", p.label()), p.label(), p == cur, Palette::INTERACTIVE).on_click(
-                cx.listener(move |a, _, _, cx| {
-                    if let Some(s) = st(a) {
-                        s.page = p;
-                        s.error = None;
-                    }
-                    cx.notify();
-                }),
-            ));
-        }
-    }
-    col.child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)))
-        .child(nav_item("nav-logout", crate::t!("settings.logout"), false, 0xF23F43).on_click(cx.listener(|a, _, _, cx| {
-            if let Some(s) = st(a) {
-                s.confirm_logout = true;
-            }
-            cx.notify();
-        })))
-        .child(div().mx(z(10.)).my(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)))
-        .child(div().px(z(10.)).text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(concat!(
-            "Discord Phoenix ",
-            env!("CARGO_PKG_VERSION"),
-            " (Linux)"
-        )))
-}
+    // fixedContent_: padding-inline 4 16. Profile tab: 48px avatar, gap 12,
+    // name 16/500 --text-strong over "Edit Profiles" 14/18 --text-muted.
+    let profile = div()
+        .id("nav-profiles")
+        .p(z(10.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .gap(z(12.))
+        .cursor_pointer()
+        .when(cur == Page::Profiles, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+        .when(cur != Page::Profiles, |d| d.hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_MUTED)))))
+        .on_click(select_page(Page::Profiles, cx))
+        .child(avatar(Some(&app.me), 48.))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(z(2.))
+                .child(
+                    div()
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .child(app.me.display_name.clone()),
+                )
+                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("settings.edit_profiles"))),
+        );
+    // searchBar: 40px text input (--input-*), 30px icon box + 16px glyph.
+    let search = div()
+        .h(z(40.))
+        .pl(z(4.))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .child(
+            div().size(z(30.)).flex().items_center().justify_center().child(
+                gpui::svg().path(crate::icons::path("search")).size(z(16.)).text_color(c(tok(idx::INPUT_ICON_DEFAULT))),
+            ),
+        )
+        .child(div().text_size(z(16.)).text_color(c(tok(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT))).child(crate::t!("settings.search")));
+    let fixed = div()
+        .pl(z(4.))
+        .pr(z(16.))
+        .flex_none()
+        .child(div().pb(z(10.)).child(profile))
+        .child(search);
 
-fn close_button(cx: &mut Cx) -> Div {
+    // navScroller_: padding 12 12 16 4, margin-end 4; sublist gap 10;
+    // section_: border-bottom 1 --border-subtle (none on the last), pb 10,
+    // gap 4; label_ heading-xs/medium 14/18 --text-muted, margin 8 8 4.
+    let mut list = div().flex().flex_col().gap(z(10.));
+    let last = NAV.len() - 1;
+    for (ix, (title, pages)) in NAV.iter().enumerate() {
+        let mut sec = div().pb(z(10.)).flex().flex_col().gap(z(4.));
+        if ix != last {
+            sec = sec.border_b_1().border_color(c(tok(idx::BORDER_SUBTLE)));
+        }
+        if ix > 0 {
+            sec = sec.child(
+                div()
+                    .mt(z(8.))
+                    .mx(z(8.))
+                    .mb(z(4.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(tok(idx::TEXT_MUTED)))
+                    .child(crate::t!(title)),
+            );
+        }
+        for p in pages.iter().copied() {
+            sec = sec.child(nav_item(format!("nav-{}", p.label()), page_icon(p), p.label(), p == cur, false).on_click(select_page(p, cx)));
+            if p == Page::MyAccount && cur == Page::MyAccount {
+                sec = sec.child(account_subnav());
+            }
+        }
+        if ix == last {
+            sec = sec.child(nav_item("nav-logout", "close", crate::t!("settings.logout"), false, true).on_click(cx.listener(|a, _, _, cx| {
+                if let Some(s) = st(a) {
+                    s.confirm_logout = true;
+                }
+                cx.notify();
+            })));
+            sec = sec.child(div().px(z(10.)).pt(z(8.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_MUTED))).child(concat!(
+                "Discord Phoenix ",
+                env!("CARGO_PKG_VERSION"),
+                " (Linux)"
+            )));
+        }
+        list = list.child(sec);
+    }
+    // sidebar_: flex 0 0 240 (+12 padding-start), --background-base-lower,
+    // border-inline-end 1 --border-muted, padding-top 16.
     div()
-        .ml(z(20.))
-        .pt(z(60.))
+        .w(z(253.))
+        .flex_none()
+        .h_full()
+        .pt(z(16.))
+        .pl(z(12.))
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+        .border_r_1()
+        .border_color(c(tok(idx::BORDER_MUTED)))
         .flex()
         .flex_col()
+        .child(fixed)
+        .child(
+            div()
+                .id("settings-nav")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .pt(z(12.))
+                .pb(z(16.))
+                .pl(z(4.))
+                .pr(z(12.))
+                .mr(z(4.))
+                .child(list),
+        )
+}
+
+/// contentHeader_: 48px, --background-base-low, border-bottom 1
+/// --border-muted, padding-inline 16 8; breadcrumb body-md/medium 16/20
+/// --text-default; sm icon-only close button (32px, 16px glyph).
+fn content_header(label: SharedString, cx: &mut Cx) -> Div {
+    div()
+        .h(z(48.))
+        .flex_none()
+        .pl(z(16.))
+        .pr(z(8.))
+        .flex()
         .items_center()
-        .gap(z(8.))
+        .justify_between()
+        .border_b_1()
+        .border_color(c(tok(idx::BORDER_MUTED)))
+        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(label))
         .child(
             div()
                 .id("settings-close")
-                .size(z(36.))
-                .rounded_full()
-                .border_2()
-                .border_color(c(Palette::INTERACTIVE))
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                .cursor_pointer()
+                .size(z(32.))
+                .rounded(z(8.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(z(18.))
-                .text_color(c(Palette::INTERACTIVE))
+                .cursor_pointer()
+                .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
                 .on_click(cx.listener(|a, _, _, cx| {
                     a.settings = None;
                     cx.notify();
                 }))
-                .child("✕"),
-        )
-        .child(div().text_size(z(13.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::INTERACTIVE)).child("ESC"))
-}
-
-fn logout_modal(cx: &mut Cx) -> Div {
-    div()
-        .absolute()
-        .inset_0()
-        .bg(gpui::rgba(0x000000B3))
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            div()
-                .id("logout-modal")
-                .w(z(440.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_PRIMARY))
-                .overflow_hidden()
-                .on_click(|_, _, cx| cx.stop_propagation())
-                .child(
-                    div()
-                        .p(z(16.))
-                        .child(
-                            div()
-                                .mb(z(12.))
-                                .text_size(z(20.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
-                                .child(crate::t!("settings.logout")),
-                        )
-                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(crate::t!("settings.logout_confirm"))),
-                )
-                .child(
-                    div()
-                        .p(z(16.))
-                        .bg(c(Palette::BG_SECONDARY))
-                        .flex()
-                        .justify_end()
-                        .gap(z(8.))
-                        .child(
-                            div()
-                                .id("logout-cancel")
-                                .h(z(38.))
-                                .px(z(16.))
-                                .flex()
-                                .items_center()
-                                .cursor_pointer()
-                                .text_size(z(14.))
-                                .text_color(c(Palette::TEXT_NORMAL))
-                                .hover(|s| s.underline())
-                                .on_click(cx.listener(|a, _, _, cx| {
-                                    if let Some(s) = st(a) {
-                                        s.confirm_logout = false;
-                                    }
-                                    cx.notify();
-                                }))
-                                .child(crate::t!("common.cancel")),
-                        )
-                        .child(button("logout-confirm", crate::t!("settings.logout"), Palette::RED, 0xDA373C).h(z(38.)).on_click(
-                            cx.listener(|a, _, _, cx| {
-                                a.settings = None;
-                                a.logout(cx);
-                            }),
-                        )),
-                ),
+                .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         )
 }
 
-/// The overlay, when open.
+fn logout_modal(cx: &mut Cx) -> AnyElement {
+    let (e1, e2) = (cx.entity(), cx.entity());
+    crate::ui::modal::confirm(crate::ui::modal::Confirm {
+        title: crate::t!("settings.logout"),
+        body: vec![crate::t!("settings.logout_confirm").into_any_element()],
+        confirm_label: crate::t!("settings.logout"),
+        danger: true,
+        on_confirm: std::rc::Rc::new(move |_, cx| {
+            e1.update(cx, |a, cx| {
+                a.settings = None;
+                a.logout(cx);
+            })
+        }),
+        on_cancel: std::rc::Rc::new(move |_, cx| {
+            e2.update(cx, |a, cx| {
+                if let Some(s) = st(a) {
+                    s.confirm_logout = false;
+                }
+                cx.notify();
+            })
+        }),
+    })
+}
+
+/// The overlay, when open: the 2026 settings modal (modal__F9ieB) inset by
+/// --custom-viewport-padding (40) over the scrim, max-width 1400, radius 12,
+/// 1px --border-subtle; sidebar + content (--background-base-low).
 pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Cx) -> Option<AnyElement> {
     let s = app.settings.as_ref()?;
     let error = s.error.clone();
     let confirm = s.confirm_logout;
+    let page_label = s.page.label();
+    let body = div()
+        .id("settings-content")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .child(
+            // panel_nNq2Vb: margin-block 64 auto, max-width 696, padding 0 16
+            div()
+                .mx_auto()
+                .my(z(64.))
+                .w_full()
+                .max_w(z(728.))
+                .px(z(16.))
+                .flex()
+                .flex_col()
+                .when_some(error, |d, e| {
+                    d.child(
+                        div()
+                            .mb(z(16.))
+                            .p(z(12.))
+                            .rounded(z(8.))
+                            .bg(c(tok(idx::BACKGROUND_FEEDBACK_CRITICAL)))
+                            .border_1()
+                            .border_color(c(tok(idx::BORDER_FEEDBACK_CRITICAL)))
+                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .text_size(z(14.))
+                            .child(e),
+                    )
+                })
+                .child(page(app, cx)),
+        );
+    let card = div()
+        .id("user-settings-card")
+        .size_full()
+        .max_w(z(1400.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+        .overflow_hidden()
+        .occlude()
+        .flex()
+        .child(nav(app, cx))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .flex()
+                .flex_col()
+                .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+                .child(content_header(page_label, cx))
+                .child(body),
+        );
     Some(
         div()
             .id("user-settings")
             .absolute()
             .inset_0()
-            .flex()
             .occlude()
-            .bg(c(Palette::BG_PRIMARY))
+            .bg(c(tok(idx::BACKGROUND_SCRIM)))
+            .on_mouse_down(gpui::MouseButton::Left, cx.listener(|a, _, _, cx| {
+                a.settings = None;
+                cx.notify();
+            }))
             .child(
                 div()
-                    .id("settings-nav")
-                    .flex_1()
-                    .min_w(z(218.))
-                    .bg(c(Palette::BG_SECONDARY))
+                    .absolute()
+                    .inset(z(40.))
                     .flex()
-                    .justify_end()
-                    .overflow_y_scroll()
-                    .child(nav(app, cx)),
-            )
-            .child(
-                div()
-                    .id("settings-content")
-                    .flex_1()
-                    .min_w(z(460.))
-                    .flex()
-                    .overflow_y_scroll()
-                    .child(
-                        div()
-                            .w(z(740.))
-                            .min_w(z(460.))
-                            .pt(z(60.))
-                            .px(z(40.))
-                            .pb(z(80.))
-                            .flex()
-                            .flex_col()
-                            .when_some(error, |d, e| {
-                                d.child(
-                                    div()
-                                        .mb(z(16.))
-                                        .p(z(10.))
-                                        .rounded(z(4.))
-                                        .bg(gpui::rgba(0xF23F4333))
-                                        .text_color(c(Palette::TEXT_NORMAL))
-                                        .text_size(z(14.))
-                                        .child(e),
-                                )
-                            })
-                            .child(page(app, cx)),
-                    )
-                    .child(close_button(cx)),
+                    .justify_center()
+                    .child(card.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())),
             )
             .when(confirm, |d| d.child(logout_modal(cx)))
             .into_any_element(),

@@ -65,16 +65,23 @@ pub fn frame(id: &'static str, on_cancel: Action, card: impl IntoElement) -> Any
 }
 
 pub fn confirm(m: Confirm) -> AnyElement {
+    use crate::ui::controls::{BtnKind, button};
     let cancel = m.on_cancel.clone();
     let cancel2 = m.on_cancel.clone();
     let ok = m.on_confirm.clone();
-    let danger = m.danger;
-    // 776412 `container_dvN-MP`: --background-surface-high, 1px --border-subtle,
-    // --radius-md, --shadow-high; `size-md` max-width 480px; `padding-size-sm`:
-    // padding-top --space-8, padding-bottom --space-16, --custom-modal-padding 24px.
+    // Live dumps (delete-message confirm, leave-server alertdialog, 2026-11-23):
+    // the first body element is the header subtitle (headerSubtitleWrapper_,
+    // body-md/normal 16/20 --text-subtle, 8px under the title); anything after
+    // it goes into body_ between bodySpacerTop (16) and bodySpacerBottom (8).
+    let mut body = m.body.into_iter();
+    let subtitle = body.next();
+    let rest: Vec<AnyElement> = body.collect();
+    let has_body = !rest.is_empty();
+    // container_dvN-MP: --background-surface-high, 1px --border-subtle, radius 12,
+    // --shadow-high; padding 8 0 16. size-sm 400 (no body) / size-md 480.
     let card = div()
         .relative()
-        .w(z(480.))
+        .w(z(if has_body { 480. } else { 400. }))
         .rounded(z(12.))
         .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
         .border_1()
@@ -84,41 +91,60 @@ pub fn confirm(m: Confirm) -> AnyElement {
         .pb(z(16.))
         .flex()
         .flex_col()
-        // section_dvN-MP header: padding 16px 24px 8px
+        // header.section_: padding 16 24 8; stack gap 8. headerMain leaves room
+        // for headerTrailing (12 + 40 - 16 = 36).
         .child(
             div()
                 .pt(z(16.))
                 .px(z(24.))
                 .pb(z(8.))
-                .pr(z(24. + 32.))
-                .text_size(z(20.))
-                .line_height(z(24.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(tok(idx::TEXT_STRONG)))
-                .child(m.title),
-        )
-        // bodyInner_dvN-MP: padding-inline --custom-modal-padding
-        .child(
-            div()
-                .px(z(24.))
                 .flex()
                 .flex_col()
-                .gap(z(12.))
-                .text_size(z(16.))
-                .line_height(z(20.))
-                .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .children(m.body),
+                .gap(z(8.))
+                .child(
+                    div()
+                        .pr(z(36.))
+                        .text_size(z(20.)) // heading-lg/semibold
+                        .line_height(z(24.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .child(m.title),
+                )
+                .children(subtitle.map(|s| {
+                    div()
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .text_color(c(tok(idx::TEXT_SUBTLE)))
+                        .child(s)
+                })),
         )
-        // headerTrailingAbsolute: top --custom-modal-padding-md (16) pulled up by
-        // headerTrailing margin-top -16 / margin-right -(24-8): 8px from the card edge,
-        // in the padding-top 8 -> top 16, right 8. Icon-only `sm` button 32px.
+        // bodySpacerTop 16 / bodyInner padding 0 8 0 24 / bodySpacerBottom 8
+        .when(has_body, |d| {
+            d.child(
+                div()
+                    .pt(z(16.))
+                    .pb(z(8.))
+                    .pl(z(24.))
+                    .pr(z(24.))
+                    .flex()
+                    .flex_col()
+                    .gap(z(20.)) // spacingTop_ margin-top 20
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .children(rest),
+            )
+        })
+        // headerTrailing: margin-top -16 / margin-right -16 against the header's
+        // 16/24 padding -> the 40px md icon-only close button sits 8px from the
+        // card's top and right edges. Icon 20px --control-icon-only-icon-default.
         .child(
             div()
                 .id("modal-close")
                 .absolute()
-                .top(z(16.))
+                .top(z(8.))
                 .right(z(8.))
-                .size(z(32.))
+                .size(z(40.))
                 .rounded(z(8.))
                 .flex()
                 .items_center()
@@ -131,32 +157,25 @@ pub fn confirm(m: Confirm) -> AnyElement {
                 })
                 .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         )
-        // footer section padding 16px 24px 8px; actionBarTrailing gap --space-8; md buttons.
+        // footer.actionBar_: padding 16 24 8; actionBarTrailing stack gap 8 with
+        // both md buttons stretched to equal widths.
         .child(
             div()
                 .pt(z(16.))
                 .px(z(24.))
                 .pb(z(8.))
                 .flex()
-                .justify_end()
                 .gap(z(8.))
                 .child(
-                    crate::ui::profile::mana_button("modal-cancel", crate::t!("common.cancel"), false, true)
+                    button("modal-cancel", crate::t!("common.cancel"), BtnKind::Secondary)
+                        .flex_1()
                         .on_click(move |_, w, cx| cancel2(w, cx)),
                 )
-                .child({
-                    let b = crate::ui::profile::mana_button("modal-confirm", m.confirm_label, true, true);
-                    // critical-primary_F7qvhY
-                    if danger {
-                        b.bg(c(tok(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT)))
-                            .border_color(c(tok(idx::CONTROL_CRITICAL_PRIMARY_BORDER_DEFAULT)))
-                            .text_color(c(tok(idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT)))
-                            .hover(|s| s.bg(c(tok(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER))))
-                    } else {
-                        b
-                    }
-                    .on_click(move |_, w, cx| ok(w, cx))
-                }),
+                .child(
+                    button("modal-confirm", m.confirm_label, if m.danger { BtnKind::Critical } else { BtnKind::Primary })
+                        .flex_1()
+                        .on_click(move |_, w, cx| ok(w, cx)),
+                ),
         );
     frame("modal-backdrop", cancel, card)
 }

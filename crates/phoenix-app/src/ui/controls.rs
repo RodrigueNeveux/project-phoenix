@@ -12,11 +12,8 @@ use gpui::{
     Styled, Window, div, prelude::*, relative,
 };
 
-use crate::theme::{Palette, c, ca};
+use crate::theme::{c, generated::idx, tok};
 
-const TRACK: u32 = 0x595A63;
-const GRABBER_BORDER: u32 = 0x97979F33;
-const MARK_LABEL: u32 = 0x949BA4;
 
 pub type OnSet = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 
@@ -51,14 +48,15 @@ pub fn marker_slider(
                 .child(
                     div()
                         .whitespace_nowrap()
-                        .text_size(z(12.))
-                        .line_height(z(16.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if is_def { Palette::TEXT_NORMAL } else { MARK_LABEL }))
+                        // markValue_OnqacX: 10px bold --text-muted, default --text-default
+                        .text_size(z(10.))
+                        .line_height(z(12.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(c(tok(if is_def { idx::TEXT_DEFAULT } else { idx::TEXT_MUTED })))
                         .child(l.clone()),
                 )
                 // marker dash crossing the bar
-                .child(div().mt(z(8.)).w(z(2.)).h(z(24.)).rounded(z(12.)).bg(c(TRACK))),
+                .child(div().mt(z(8.)).w(z(2.)).h(z(24.)).rounded(z(12.)).bg(c(tok(idx::SLIDER_TRACK_BACKGROUND)))),
         );
     }
 
@@ -98,8 +96,8 @@ pub fn marker_slider(
                 .w_full()
                 .h(z(4.))
                 .rounded(z(2.))
-                .bg(c(TRACK))
-                .child(div().h_full().w(relative(frac)).rounded(z(2.)).bg(c(Palette::BLURPLE))),
+                .bg(c(tok(idx::SLIDER_TRACK_BACKGROUND)))
+                .child(div().h_full().w(relative(frac)).rounded(z(2.)).bg(c(tok(idx::SLIDER_INDICATOR_BACKGROUND)))),
         )
         // grabber
         .child(
@@ -110,7 +108,7 @@ pub fn marker_slider(
                     .rounded_full()
                     .bg(gpui::white())
                     .border_1()
-                    .border_color(ca(GRABBER_BORDER))
+                    .border_color(c(tok(idx::BORDER_NORMAL))) // slider_ .grabber_ border --border-normal
                     .shadow_sm(),
             ),
         )
@@ -127,18 +125,215 @@ pub fn nearest(values: &[f32], value: f32) -> usize {
         .unwrap_or(0)
 }
 
-/// Discord switch: 40x24 pill, green when on, white 18px knob.
+/// Mana switch (switchIndicator_9AraPt, live settings-accessibility dump):
+/// 48x24, 1px border, --radius-lg (16); thumb is a 24px box (margin -1) holding
+/// a 16px white disc, at left 1 off / 24 on.
 pub fn switch(on: bool) -> Div {
+    let (bg, border) = if on {
+        (idx::SWITCH_BACKGROUND_SELECTED_DEFAULT, idx::SWITCH_BORDER_SELECTED_DEFAULT)
+    } else {
+        (idx::SWITCH_BACKGROUND_DEFAULT, idx::SWITCH_BORDER_DEFAULT)
+    };
     div()
-        .w(z(40.))
-        .h(z(24.))
+        .relative()
         .flex_none()
-        .rounded(z(12.))
-        .bg(c(if on { Palette::GREEN } else { 0x80848E }))
-        .p(z(3.))
+        .w(z(48.))
+        .h(z(24.))
+        .rounded(z(16.)) // --radius-lg
+        .border_1()
+        .border_color(c(tok(border)))
+        .bg(c(tok(bg)))
+        .child(
+            div()
+                .absolute()
+                .top(z(-1.))
+                .left(z(if on { 23. } else { 0. })) // left 24 / 1, margin-left -1
+                .size(z(24.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(div().size(z(16.)).rounded_full().bg(c(tok(if on {
+                    idx::SWITCH_THUMB_BACKGROUND_SELECTED_DEFAULT
+                } else {
+                    idx::SWITCH_THUMB_BACKGROUND_DEFAULT
+                })))),
+        )
+}
+
+/// radioIndicator_oJuRbG (20px, viewBox 40): outer disc filled
+/// --radio-background-[selected-]default with a 2/40 (1px) --radio-border-*
+/// stroke; selected adds the r=8/40 (8px) --radio-thumb-background-active dot.
+pub fn radio_indicator(selected: bool) -> Div {
+    let (bg, border) = if selected {
+        (idx::RADIO_BACKGROUND_SELECTED_DEFAULT, idx::RADIO_BORDER_SELECTED_DEFAULT)
+    } else {
+        (idx::RADIO_BACKGROUND_DEFAULT, idx::RADIO_BORDER_DEFAULT)
+    };
+    div()
+        .size(z(20.))
+        .flex_none()
+        .rounded_full()
+        .border_1()
+        .border_color(c(tok(border)))
+        .bg(c(tok(bg)))
         .flex()
-        .when(on, |d| d.justify_end())
-        .child(div().size(z(18.)).rounded_full().bg(gpui::white()))
+        .items_center()
+        .justify_center()
+        .when(selected, |d| d.child(div().size(z(8.)).rounded_full().bg(c(tok(idx::RADIO_THUMB_BACKGROUND_ACTIVE)))))
+}
+
+/// radioGroupOption_oJuRbG: 20px indicator, label at 20 + --space-12,
+/// body-md 16/20, radius 8. Selected/hover recolour the indicator only.
+pub fn radio_option(id: impl Into<ElementId>, label: impl Into<SharedString>, selected: bool) -> gpui::Stateful<Div> {
+    div()
+        .id(id.into())
+        .flex()
+        .items_center()
+        .gap(z(12.)) // --custom-radio-text-start - --custom-radio-size
+        .rounded(z(8.))
+        .cursor_pointer()
+        .child(radio_indicator(selected))
+        .child(
+            div()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .child(label.into()),
+        )
+}
+
+/// Mana button (button_F7qvhY), md size: 40px (7/15 padding + 1px border),
+/// radius 8, label 16/500/20. `kind`: secondary / primary / critical.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum BtnKind {
+    Secondary,
+    Primary,
+    Critical,
+}
+
+pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {
+    let (bg, hover, fg, border) = match kind {
+        BtnKind::Secondary => (
+            idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT,
+            idx::CONTROL_SECONDARY_BACKGROUND_HOVER,
+            idx::CONTROL_SECONDARY_TEXT_DEFAULT,
+            idx::CONTROL_SECONDARY_BORDER_DEFAULT,
+        ),
+        BtnKind::Primary => (
+            idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT,
+            idx::CONTROL_PRIMARY_BACKGROUND_HOVER,
+            idx::CONTROL_PRIMARY_TEXT_DEFAULT,
+            idx::CONTROL_PRIMARY_BORDER_DEFAULT,
+        ),
+        BtnKind::Critical => (
+            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT,
+            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER,
+            idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT,
+            idx::CONTROL_CRITICAL_PRIMARY_BORDER_DEFAULT,
+        ),
+    };
+    div()
+        .id(id.into())
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .h(z(40.))
+        .min_w(z(100.)) // --__button-min-width (md)
+        .px(z(16.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(border)))
+        .bg(c(tok(bg)))
+        .hover(move |s| s.bg(c(tok(hover))))
+        .cursor_pointer()
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(fg)))
+        .whitespace_nowrap()
+        .child(label.into())
+}
+
+/// Select field (selectField_vWC4bk): 40px, 1px --input-border-default,
+/// radius 8, --input-background-default; value body-md 16/20 at 4+8 inset;
+/// 20px chevron in a 36px button on the right.
+pub fn select_field(id: impl Into<ElementId>, value: impl Into<SharedString>) -> gpui::Stateful<Div> {
+    div()
+        .id(id.into())
+        .h(z(40.))
+        .pl(z(12.))
+        .flex()
+        .items_center()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .hover(|s| s.border_color(c(tok(idx::INPUT_BORDER_HOVER))))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .cursor_pointer()
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(value.into()),
+        )
+        .child(
+            div().w(z(36.)).h_full().flex().items_center().justify_center().pr(z(4.)).child(
+                gpui::svg().path("icons/chevron.svg").size(z(20.)).text_color(c(tok(idx::TEXT_STRONG))),
+            ),
+        )
+}
+
+/// baseControlItem_FiiQ6I: row with title (heading-sm/medium 16/20
+/// --text-strong), optional description (body-sm 14/18 --text-subtle, gap 4)
+/// and a trailing control; padding 12, margin-inline -12, radius --radius-lg,
+/// gap 12, min-height 48.
+pub fn control_item(title: impl Into<SharedString>, desc: Option<SharedString>, trailing: Option<gpui::AnyElement>) -> Div {
+    div()
+        .flex()
+        .gap(z(12.))
+        .mx(z(-12.))
+        .p(z(12.))
+        .min_h(z(48.))
+        .rounded(z(16.))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .justify_center()
+                .gap(z(4.))
+                .child(
+                    div()
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .child(title.into()),
+                )
+                .children(desc.filter(|d| !d.is_empty()).map(|d| {
+                    div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(d)
+                })),
+        )
+        .children(trailing.map(|t| div().flex_none().flex().items_center().justify_center().child(t)))
+}
+
+/// Settings category heading (heading-xl/medium 24/500/32 --text-strong) with
+/// its 24px bottom padding.
+pub fn section_title(t: impl Into<SharedString>) -> Div {
+    div()
+        .pb(z(24.))
+        .text_size(z(24.))
+        .line_height(z(32.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::TEXT_STRONG)))
+        .child(t.into())
 }
 
 #[cfg(test)]

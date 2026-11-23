@@ -233,20 +233,13 @@ impl Page {
 }
 
 /// Nav sections in Discord order.
+/// Sidebar sections in the 2026 order (live settings-home dump): the
+/// profile tab sits above them; the first section's label is visually hidden.
 pub const NAV: &[(&str, &[Page])] = &[
-    ("settings.nav.user", &[Page::MyAccount, Page::Profiles, Page::PrivacySafety, Page::Devices, Page::Connections]),
-    (
-        "settings.nav.app",
-        &[
-            Page::Appearance,
-            Page::Accessibility,
-            Page::VoiceVideo,
-            Page::Notifications,
-            Page::Keybinds,
-            Page::Language,
-            Page::Advanced,
-        ],
-    ),
+    ("settings.nav.user", &[Page::MyAccount, Page::PrivacySafety, Page::Devices, Page::Notifications]),
+    ("settings.nav.app", &[Page::VoiceVideo, Page::Appearance, Page::Accessibility, Page::Keybinds, Page::Language]),
+    ("settings.nav.apps", &[Page::Connections]),
+    ("settings.nav.other", &[Page::Advanced]),
 ];
 
 #[derive(Default)]
