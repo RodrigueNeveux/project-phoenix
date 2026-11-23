@@ -182,7 +182,7 @@ impl PhoenixApp {
         let login_email = cx.new(|cx| InputState::new(window, cx));
         let login_password = cx.new(|cx| InputState::new(window, cx).masked(true));
         let login_token = cx.new(|cx| InputState::new(window, cx).masked(true));
-        let login_mfa = cx.new(|cx| InputState::new(window, cx).placeholder("6-digit code"));
+        let login_mfa = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("login.six_digit")));
         let composer = cx.new(|cx| InputState::new(window, cx));
 
         let mut subs = Vec::new();
@@ -998,9 +998,9 @@ impl PhoenixApp {
             let title = if bi < hoisted.len() {
                 hoisted[bi].name.to_uppercase()
             } else if bi == hoisted.len() {
-                "ONLINE".to_string()
+                crate::t!("friends.h_online").to_string()
             } else {
-                "OFFLINE".to_string()
+                crate::t!("members.h_offline").to_string()
             };
             self.member_rows
                 .push(MemberRow::Header(format!("{title} — {}", b.len()).into()));

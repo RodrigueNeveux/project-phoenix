@@ -216,7 +216,7 @@ pub fn on_message(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, viewin
     };
     let mut body: String = m.content.chars().take(200).collect();
     if body.is_empty() && !m.attachments.is_empty() {
-        body = "Uploaded a file".into();
+        body = crate::t!("notif.uploaded").to_string();
     }
     show(title, body);
 }

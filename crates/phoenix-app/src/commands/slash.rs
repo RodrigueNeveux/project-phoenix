@@ -81,7 +81,7 @@ pub fn build_options(schema: &Value, args: &str) -> Result<Value, String> {
     {
         match opts.first() {
             Some(o) => *k = name(o).to_owned(),
-            None => return Err("This command takes no options".into()),
+            None => return Err(crate::t!("slash.no_options").into()),
         }
     }
     for o in opts {

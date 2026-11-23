@@ -278,7 +278,7 @@ pub fn on_event(app: &mut App, ev: ParityEvent, cx: &mut Context<App>) {
         }
         ParityEvent::InteractionFailed => {
             app.parity.pending.clear();
-            app.parity_toast("The application did not respond", cx);
+            app.parity_toast(crate::t!("interaction.no_response"), cx);
         }
         ParityEvent::PollVote { channel, message, user, answer, add } => {
             let mine = user == app.me.id;
