@@ -269,6 +269,25 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Bt
         .child(label.into())
 }
 
+/// `button_F7qvhY` with a leading 20px `icon_F7qvhY` (buttonChildren_ gap 4),
+/// e.g. vanilla-settings-10 #2743 "+ Add a keybind".
+pub fn button_icon(id: impl Into<ElementId>, icon: &'static str, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {
+    let fg = match kind {
+        BtnKind::Secondary => idx::CONTROL_SECONDARY_TEXT_DEFAULT,
+        BtnKind::Primary => idx::CONTROL_PRIMARY_TEXT_DEFAULT,
+        BtnKind::Critical => idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT,
+    };
+    let label: SharedString = label.into();
+    let b = button(id, SharedString::default(), kind);
+    b.gap(z(4.)).child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(20.)).text_color(c(tok(fg)))).child(label)
+}
+
+/// `sm_F7qvhY` button (vanilla-settings-10 #2772): 32px, padding 3 11 inside
+/// the 1px border, body-sm/medium 14/18.
+pub fn button_sm(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {
+    button(id, label, kind).h(z(32.)).min_w(z(60.)).px(z(12.)).text_size(z(14.)).line_height(z(18.))
+}
+
 /// Select field (selectField_vWC4bk): 40px, 1px --input-border-default,
 /// radius 8, --input-background-default; value body-md 16/20 at 4+8 inset;
 /// 20px chevron in a 36px button on the right.

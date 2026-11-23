@@ -584,14 +584,53 @@ pub fn blocks(p: Page) -> &'static [B] {
 // with the IGDB note, then Related Settings → Activity Privacy.
 static GAMES: &[B] = &[
     B::Title("sp.rg.current"),
-    B::Note("sp.rg.none"),
-    B::Action("sp.rg.cant_find", "", "sp.rg.add", false),
+    B::Custom("sp.rg.none", current_game),
     B::Divider,
     B::Title("sp.rg.added"),
     B::Lead("sp.rg.igdb"),
     B::Divider,
     B::Related("user-profile", "settings.page.activity", "sp.rg.related_d", Page::ActivityPrivacy),
 ];
+
+/// vanilla-settings-12 #2686 `notDetected_kQPUsd`: --background-mod-subtle
+/// box, padding 16, radius 12 (computed), game name 16/22 semibold
+/// --interactive-text-active (#2688), then "Not seeing your game?" 14 --text-muted
+/// + "Add it!" body-sm/medium --text-brand text button (#2689-#2692, gap 4).
+fn current_game(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(4.)) // gameNameLastPlayed_ gap
+        .p(z(16.)) // .notDetected_ padding
+        .rounded(z(12.)) // #2686 border-radius
+        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))) // .notDetected_ background-color
+        .child(
+            div()
+                .text_size(z(16.))
+                .line_height(z(22.))
+                .font_weight(FontWeight::SEMIBOLD) // .gameName_ font-weight
+                .text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))
+                .child(tr("sp.rg.none")),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(4.)) // nowPlayingAdd_ gap
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .child(div().text_color(c(tok(idx::TEXT_MUTED))).child(tr("sp.rg.cant_find")))
+                .child(
+                    div()
+                        .id("rg-add")
+                        .cursor_pointer()
+                        .font_weight(FontWeight::MEDIUM) // body-sm/medium
+                        .text_color(c(tok(idx::TEXT_BRAND))) // .primary_nJgowo color
+                        .child(tr("sp.rg.add")),
+                ),
+        )
+        .into_any_element()
+}
 
 // Billing pages: Phoenix doesn't handle payments, each page points to the web.
 static NITRO: &[B] = &[B::Title("settings.page.nitro"), B::Lead("sp.billing.web")];
@@ -1075,47 +1114,59 @@ static PROFILES: &[B] = &[B::Custom("sp.pf.main", |app, _| super::view::profiles
 
 // ------------------------------------------------- extra blocks (vanilla dumps)
 
-/// Picks the French or English string by the synced locale (these labels have
-/// no locale keys yet).
-fn lt(app: &PhoenixApp, fr: &'static str, en: &'static str) -> SharedString {
-    if app.prefs.synced.locale.starts_with("fr") { fr.into() } else { en.into() }
-}
-
-/// Info/warning notice box (vanilla-settings-10 #hwaccel notice, x=457):
-/// 16px icon + body-sm 14/18 text, padding 12, --radius-sm.
-fn notice(icon: &'static str, text: SharedString, warn: bool) -> Div {
-    let (bg, border) = if warn {
-        (idx::BACKGROUND_FEEDBACK_WARNING, idx::BORDER_FEEDBACK_WARNING)
-    } else {
-        (idx::BACKGROUND_FEEDBACK_INFO, idx::BORDER_FEEDBACK_INFO)
-    };
+/// Inline notice `container_0v8Ae1 info_` (vanilla-settings-10 #2764):
+/// --background-feedback-mod-info, 1px --inlinenotice-border-info, radius
+/// --radius-sm, padding --space-12, 16px --icon-feedback-info glyph, gap 8,
+/// body-sm 14/18 --text-strong copy; optional trailing action (gap 12).
+fn info_notice(text: SharedString, action: Option<gpui::Stateful<Div>>) -> Div {
     div()
         .flex()
         .items_start()
-        .gap(z(12.))
-        .p(z(12.))
+        .gap(z(16.)) // --space-16
+        .p(z(12.)) // --space-12
         .rounded(z(8.)) // --radius-sm
         .border_1()
-        .border_color(c(tok(border)))
-        .bg(c(tok(bg)))
-        .child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(16.)).mt(z(1.)).text_color(c(tok(idx::ICON_STRONG))))
-        .child(div().flex_1().min_w_0().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG))).child(text))
+        .border_color(c(tok(idx::INLINENOTICE_BORDER_INFO)))
+        .bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_INFO)))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .gap(z(8.)) // iconAndTextContainer_ --space-8
+                .child(gpui::svg().path(crate::icons::path("info")).flex_none().size(z(16.)).mt(z(1.)).text_color(c(tok(idx::ICON_FEEDBACK_INFO))))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .items_start()
+                        .justify_between()
+                        .gap(z(12.)) // contentsContainer_ gap
+                        .child(div().flex_1().min_w_0().max_w(z(410.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG))).child(text))
+                        .children(action),
+                ),
+        )
 }
 
+/// Hardware-acceleration warning `root_vb4RFD warning_` (vanilla-settings-10
+/// #2728): padding 8, --radius-xs, --background-feedback-mod-warning, 1px
+/// --icon-feedback-warning border, 20px warning icon + 10px margin, body-sm/medium.
 fn hwaccel_banner(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
     if get_bool(app, "hwaccel", Bind::Ui(true)) {
         return div().into_any_element();
     }
-    notice(
-        "warning",
-        lt(
-            app,
-            "L'accélération matérielle est désactivée, ce qui dégrade les performances système.",
-            "Hardware acceleration is disabled, which degrades system performance.",
-        ),
-        true,
-    )
-    .into_any_element()
+    div()
+        .flex()
+        .items_center()
+        .p(z(8.))
+        .rounded(z(crate::theme::generated::global::RADIUS_XS))
+        .border_1()
+        .border_color(c(tok(idx::ICON_FEEDBACK_WARNING)))
+        .bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_WARNING)))
+        .child(gpui::svg().path(crate::icons::path("warning")).flex_none().size(z(20.)).mr(z(10.)).text_color(c(tok(idx::ICON_FEEDBACK_WARNING))))
+        .child(div().flex_1().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr("sp.sy.hwaccel_off")))
+        .into_any_element()
 }
 
 /// vanilla-settings-10: h2 heading-xl 24/32 + 427px description, primary
@@ -1123,7 +1174,7 @@ fn hwaccel_banner(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
 /// user's keybind rows or the empty note.
 fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     let n = get_pick(app, "kb-count", Pick::Ui(0));
-    let add = controls::button(eid("kb-add"), tr("sp.sy.add_kb"), BtnKind::Primary)
+    let add = controls::button_icon(eid("kb-add"), "plus", tr("sp.sy.add_kb"), BtnKind::Secondary)
         .on_click(cx.listener(move |a, _, _, cx| set_pick(a, "kb-count", Pick::Ui(0), n + 1, cx)));
     let mut col = div()
         .flex()
@@ -1134,22 +1185,14 @@ fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
                 .flex()
                 .items_start()
                 .gap(z(16.))
-                .child(div().flex_1().flex().flex_col().gap(z(4.)).child(controls::section_title(tr("sp.sy.t2"))).child(desc_text(tr("sp.sy.t2_d"))))
+                // #2738 description box is 427px wide; the button sits at the right (x=909)
+                .child(div().flex_1().min_w_0().flex().flex_col().gap(z(4.)).child(controls::section_title(tr("sp.sy.t2"))).child(desc_text(tr("sp.sy.t2_d")).max_w(z(427.))))
                 .child(add),
         )
-        .child(notice(
-            "info",
-            lt(app, "Les raccourcis clavier sont désactivés tant que cette page est visible.", "Keybinds are disabled while this page is open."),
-            false,
-        ))
-        .child(notice(
-            "info",
-            lt(
-                app,
-                "Les raccourcis clavier sont enregistrés avec ton ordinateur. Les modifications prennent effet sur cet appareil.",
-                "Keybinds are saved on this computer. Changes only apply to this device.",
-            ),
-            false,
+        .child(info_notice(tr("sp.sy.kb_disabled"), None))
+        .child(info_notice(
+            tr("sp.sy.kb_saved"),
+            Some(controls::button_sm(eid("kb-os"), tr("sp.sy.kb_os"), BtnKind::Secondary)),
         ));
     if n == 0 {
         col = col.child(desc_text(tr("sp.sy.no_kb")));
@@ -1167,10 +1210,10 @@ fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
                 .border_color(c(tok(idx::BORDER_SUBTLE)))
                 .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
                 .child(
-                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(lt(app, "Action", "Action"))).child(desc_text(lt(app, "Non attribué", "Unassigned"))),
+                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(tr("sp.sy.kb_action"))).child(desc_text(tr("sp.sy.kb_unassigned"))),
                 )
                 .child(
-                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(lt(app, "Raccourci clavier", "Keybind"))).child(desc_text(lt(app, "Aucun raccourci clavier défini", "No keybind set"))),
+                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(tr("sp.sy.kb_keybind"))).child(desc_text(tr("sp.sy.kb_none"))),
                 )
                 .child(
                     div()
@@ -1184,140 +1227,223 @@ fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     col.into_any_element()
 }
 
-/// vanilla-settings-09 "Aperçu": h2 16/20 then a message preview card
-/// (--background-base-lower, --radius-md) with two sample messages.
+/// vanilla-settings-09 "Aperçu" (#2687-#2759): h2 body-md/medium, then
+/// `preview_TpS9Es` (--background-base-low, 1px --border-normal, --radius-sm,
+/// padding --space-24, columns 1fr + min-content, gap --space-8). Left: two
+/// cozy messages by the current user (40px avatar at 20px, text at 80px, 16/22),
+/// the first with two reactions (`reaction_MmKct8` radius 8, padding 2 6, 20px
+/// emoji, 16/600 count), the second with a link. Right (`previewRight_`):
+/// three 32px status avatars 6px apart and a primary sm "Sample button".
 fn a11y_preview(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
-    let msg = |name: SharedString, body: SharedString| {
+    let me = &app.me;
+    let name: SharedString = if me.display_name.is_empty() { me.name.clone() } else { me.display_name.clone() };
+    let msg = |body: AnyElement, extra: Option<Div>| {
         div()
-            .flex()
-            .gap(z(16.))
-            .child(div().flex_none().size(z(40.)).rounded_full().bg(c(tok(idx::BACKGROUND_MOD_STRONG))))
+            .relative()
+            .pl(z(80.)) // cozyMessage_ padding-left
+            .pr(z(30.))
+            .py(z(2.))
+            .child(div().absolute().left(z(20.)).top(z(4.)).child(crate::ui::avatar(Some(me), 40.)))
             .child(
                 div()
                     .flex()
-                    .flex_col()
-                    .child(
-                        div()
-                            .flex()
-                            .gap(z(8.))
-                            .items_baseline()
-                            .child(div().text_size(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(name))
-                            .child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child("11:11")),
-                    )
-                    .child(div().text_size(z(16.)).line_height(z(22.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(body)),
+                    .gap(z(8.))
+                    .items_baseline()
+                    .child(div().text_size(z(16.)).line_height(z(22.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(name.clone()))
+                    .child(div().text_size(z(12.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_MUTED))).child("11:11")),
             )
+            .child(div().text_size(z(16.)).line_height(z(22.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(body))
+            .children(extra)
     };
-    div()
+    let reaction = |emoji: &'static str, n: &'static str, me_: bool| {
+        div()
+            .flex()
+            .items_center()
+            .gap(z(6.))
+            .px(z(6.))
+            .py(z(2.))
+            .rounded(z(8.))
+            .border_1()
+            .when(me_, |d| {
+                d.bg(c(tok(idx::REACTION_BACKGROUND_REACTED_DEFAULT))).border_color(c(tok(idx::REACTION_BORDER_REACTED_DEFAULT)))
+            })
+            .when(!me_, |d| d.bg(c(tok(idx::REACTION_BACKGROUND_DEFAULT))).border_color(gpui::transparent_black()))
+            .child(div().text_size(z(16.)).line_height(z(20.)).child(emoji))
+            .child(div().text_size(z(16.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(n))
+    };
+    let link_body = div()
+        .flex()
+        .gap(z(4.))
+        .child(tr("sp.ac.sample2"))
+        .child(div().text_color(c(tok(idx::TEXT_LINK))).child("https://discord.com/accessibility"))
+        .into_any_element();
+    // `messages_TpS9Es` starts 19px left of the padded box (#2691 x=423 vs 442).
+    let left = div()
+        .flex_1()
+        .min_w_0()
+        .ml(z(-19.))
         .flex()
         .flex_col()
         .gap(z(16.))
-        .child(title_text(lt(app, "Aperçu", "Preview")).font_weight(FontWeight::SEMIBOLD))
+        .child(msg(
+            div().child(tr("sp.ac.sample1")).into_any_element(),
+            Some(div().flex().gap(z(4.)).py(z(4.)).child(reaction("👍", "3", true)).child(reaction("🎉", "1", false))),
+        ))
+        .child(msg(link_body, None));
+    let ring = c(tok(idx::BACKGROUND_BASE_LOW));
+    let right = div()
+        .flex_none()
+        .flex()
+        .flex_col()
+        .items_end()
+        .justify_between()
+        .gap(z(20.))
         .child(
             div()
                 .flex()
                 .flex_col()
-                .gap(z(16.))
-                .p(z(16.))
-                .rounded(z(12.)) // --radius-md
+                .gap(z(6.))
+                .children([crate::model::Presence::Idle, crate::model::Presence::Dnd, crate::model::Presence::Online].map(|p| crate::ui::avatar_with_status(Some(me), 32., p, ring))),
+        )
+        .child(controls::button_sm(eid("a11y-sample"), tr("sp.ac.sample_btn"), BtnKind::Primary));
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(8.))
+        .child(title_text(tr("sp.ac.preview")))
+        .child(
+            div()
+                .flex()
+                .gap(z(8.)) // --space-8
+                .p(z(24.)) // --space-24
+                .max_h(z(175.)) // max-height 25vh of the 700px viewport (#2690 h=175)
+                .overflow_hidden()
+                .rounded(z(8.)) // --radius-sm
                 .border_1()
-                .border_color(c(tok(idx::BORDER_SUBTLE)))
-                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
-                .child(msg("Phoenix".into(), lt(app, "qu'est-ce qui est arrivé à tous les haricots", "what happened to all the beans")))
-                .child(
-                    div().flex().items_center().justify_between().child(msg("Phoenix".into(), lt(app, "voici un lien", "here is a link"))).child(
-                        controls::button(eid("a11y-sample"), lt(app, "Bouton d’exemple", "Sample button"), BtnKind::Primary),
-                    ),
-                ),
+                .border_color(c(tok(idx::BORDER_NORMAL)))
+                .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+                .child(left)
+                .child(right),
         )
         .into_any_element()
 }
 
 /// Title row with the secondary "Theme preview" button (vanilla-settings-08,
 /// span at x=980 w=119).
-fn theme_title(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+fn theme_title(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     div()
         .flex()
         .items_start()
         .justify_between()
         .child(controls::section_title(tr("sp.ap.t1")))
-        .child(controls::button(eid("theme-preview"), lt(app, "Aperçu du thème", "Theme preview"), BtnKind::Secondary))
+        .child(controls::button(eid("theme-preview"), tr("sp.ap.theme_preview"), BtnKind::Secondary))
         .into_any_element()
 }
 
-fn lock_badge() -> Div {
-    div()
-        .absolute()
-        .top(z(-4.))
-        .right(z(-4.))
-        .size(z(20.))
-        .rounded_full()
-        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+/// Colour-theme swatches, computed `background-image` of each
+/// `themeSelection_IhyaN_` in vanilla-settings-08 (#2793-#2856): angle, first
+/// stop, most distinct stop (gpui gradients take two stops). Light themes
+/// already include the `.lightOverlay_` --opacity-white-48 layer.
+const THEME_SWATCHES: [(f32, u32, f32, u32, f32); 22] = [
+    (180., 0xa7d9cd, 0.06, 0xcde3b0, 0.93), //  #2793
+    (180., 0xf9d796, 0.31, 0xf6c0a8, 0.67), //  #2796
+    (149., 0x99bbce, 0.06, 0xbcbcdb, 0.26), //  #2799
+    (38., 0xf7d3d7, 0.04, 0xd1eccf, 0.69), //  #2802
+    (154., 0xcd9cb7, 0.09, 0xd1c89a, 0.76), //  #2805
+    (180., 0xf9d3da, 0.09, 0xd6dffd, 0.94), //  #2808
+    (180., 0xd0defb, 0.07, 0xe6eecf, 0.96), //  #2811
+    (39., 0xf3ece7, 0.13, 0xefeacf, 0.52), //  #2814
+    (180., 0x48288c, 0.28, 0xdb7f4b, 0.71), //  #2817
+    (180., 0x0eb5bf, 0.04, 0xa308a7, 0.40), //  #2820
+    (180., 0x142215, 0.11, 0xa98e4b, 0.84), //  #2823
+    (180., 0x950909, 0.16, 0x000000, 0.72), //  #2826
+    (180., 0x5348ca, 0.11, 0x140730, 0.62), //  #2829
+    (180., 0x895240, 0.15, 0x8f4343, 0.75), //  #2832
+    (180., 0x665069, 0.13, 0x91a3d1, 0.86), //  #2835
+    (180., 0x647962, 0.02, 0x6a8482, 0.96), //  #2838
+    (180., 0x3a7ca1, 0.06, 0x58579a, 0.26), //  #2841
+    (180., 0x01a89e, 0.00, 0xb43898, 1.00), //  #2844
+    (180., 0xaf1a6c, 0.19, 0xe7a525, 0.81), //  #2847
+    (180., 0x062053, 0.10, 0x13929a, 0.48), //  #2850
+    (180., 0x857664, 0.14, 0x5b4421, 0.60), //  #2853
+    (180., 0x2c3fe7, 0.11, 0x261d83, 0.65), //  #2856
+];
+
+/// vanilla-settings-08 "Thèmes de couleur" (#2777-#2856): h2 body-md/semibold
+/// 16/20 + body-sm 14/18 subtitle, then a `stack_` (padding-top 24, gap 8) of
+/// 48px `themeSelection_` tiles (radius 8); the first is the custom theme tile
+/// (`borderOverlay_` inset 1px --border-strong, 24px palette icon) with the
+/// "nouveau" badge (`newBadge_` top -8, body-xs/semibold 12/16, padding 0 8,
+/// round, brand background #2790).
+fn nitro_themes(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let tile = |i: usize, (ang, a, pa, b, pb): (f32, u32, f32, u32, f32)| {
+        div()
+            .id(eid(format!("nitro-theme-{i}")))
+            .flex_none()
+            .size(z(48.))
+            .rounded(z(8.)) // .themeSelection_ border-radius
+            .cursor_pointer()
+            .bg(gpui::linear_gradient(
+                ang,
+                gpui::linear_color_stop(gpui::rgb(a), pa),
+                gpui::linear_color_stop(gpui::rgb(b), pb),
+            ))
+    };
+    let custom = div()
+        .id("nitro-theme-custom")
+        .relative()
+        .flex_none()
+        .size(z(48.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_STRONG))) // .borderOverlay_ inset 1px --border-strong
         .flex()
         .items_center()
         .justify_center()
-        .child(gpui::svg().path(crate::icons::path("lock")).size(z(12.)).text_color(c(tok(idx::ICON_STRONG))))
-}
-
-/// Nitro-locked "Thèmes de couleur" (h2 16/20 + 14/18 subtitle, 22 gradient
-/// swatches + custom-theme tile, each with a lock).
-fn nitro_themes(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
-    const SW: [(u32, u32); 22] = [
-        (0x56b69f, 0x635f9e), (0xf9cb5f, 0xfaaa3c), (0x6a71d6, 0xc36ac1), (0xf6b0d3, 0xe08cb6),
-        (0x2e3b8a, 0xd9846c), (0xec96d4, 0x98b4e6), (0x3a3a7d, 0x6a5c9c), (0x6b6c3a, 0xaa9c6c),
-        (0x4c296c, 0xe5734b), (0x404a5c, 0x8a94a6), (0x1d3a2b, 0x4a7552), (0x5f0b1f, 0xb0323f),
-        (0x1c1c66, 0x5465ff), (0x8d3721, 0xc46a3c), (0x3b2d64, 0xc2876c), (0x0f2855, 0x3a6e8c),
-        (0x2a1a4d, 0xd65a8a), (0x0c0d3f, 0xb32bd8), (0xd8476a, 0xf4a28c), (0x1d6a6c, 0x6a2c9c),
-        (0x7a5a3c, 0xb59877), (0x3a2a6c, 0x6a74c9),
-    ];
-    let tile = |i: usize, a: u32, b: u32| {
-        div()
-            .id(eid(format!("nitro-theme-{i}")))
-            .relative()
-            .size(z(60.))
-            .rounded_full()
-            .bg(gpui::linear_gradient(
-                135.,
-                gpui::linear_color_stop(gpui::rgb(a), 0.),
-                gpui::linear_color_stop(gpui::rgb(b), 1.),
-            ))
-            .child(lock_badge())
-    };
+        .child(gpui::svg().path(crate::icons::path("palette")).size(z(24.)).text_color(c(tok(idx::ICON_STRONG))))
+        .child(
+            div()
+                .absolute()
+                .top(z(-8.)) // .newBadge_ top
+                .left(z(-12.))
+                .w(z(72.))
+                .flex()
+                .justify_center()
+                .child(
+                    div()
+                        .px(z(8.))
+                        .rounded_full()
+                        .bg(c(tok(idx::BACKGROUND_BRAND)))
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(gpui::white())
+                        .child(tr("sp.ap.new")),
+                ),
+        );
     div()
         .flex()
         .flex_col()
-        .pt(z(16.))
-        .gap(z(4.))
-        .child(title_text(lt(app, "Thèmes de couleur", "Color themes")).font_weight(FontWeight::SEMIBOLD))
-        .child(desc_text(lt(app, "Prends le contrôle de Discord. Uniquement avec Nitro.", "Make Discord yours. Only with Nitro.")))
+        .child(title_text(tr("sp.ap.color_themes")).font_weight(FontWeight::SEMIBOLD))
+        .child(desc_text(tr("sp.ap.color_themes_d")))
         .child(
             div()
-                .pt(z(20.))
+                .pt(z(24.))
                 .flex()
                 .flex_wrap()
-                .gap(z(16.))
-                .child(
-                    div()
-                        .relative()
-                        .size(z(60.))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(c(tok(idx::BORDER_NORMAL)))
-                        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(gpui::svg().path(crate::icons::path("plus")).size(z(24.)).text_color(c(tok(idx::ICON_STRONG))))
-                        .child(lock_badge()),
-                )
-                .children(SW.iter().enumerate().map(|(i, (a, b))| tile(i, *a, *b))),
+                .gap(z(8.))
+                .child(custom)
+                .children(THEME_SWATCHES.iter().enumerate().map(|(i, s)| tile(i, *s))),
         )
         .into_any_element()
 }
 
-/// Nitro-locked "Icône de l'appli" (heading-xl title + 373px description,
-/// "Icon preview" button at the right, locked icon tiles).
-fn nitro_app_icon(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
-    const IC: [u32; 8] = [0x5865f2, 0x23272a, 0xeb459e, 0x57f287, 0xfee75c, 0xed4245, 0x9b84ee, 0xffffff];
+/// vanilla-settings-08 "Icône de l'appli" (#2903-#2919): heading-xl title +
+/// 373px body-sm description, secondary "Icon preview" button at the right,
+/// then 48px `appIconSelection_` tiles (radius 8, gap 8, box-shadow 0 0 2px
+/// --interactive-text-default). The icon art is a Discord asset we don't
+/// ship, so the tiles stay empty.
+fn nitro_app_icon(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     div()
         .flex()
         .flex_col()
@@ -1327,15 +1453,22 @@ fn nitro_app_icon(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .flex()
                 .items_start()
                 .justify_between()
-                .child(div().flex().flex_col().gap(z(4.)).child(controls::section_title(lt(app, "Icône de l'appli", "App icon"))).child(desc_text(lt(
-                    app,
-                    "Modifie l'icône de l'application Discord, uniquement avec Nitro.",
-                    "Change the Discord app icon, only with Nitro.",
-                ))))
-                .child(controls::button(eid("icon-preview"), lt(app, "Aperçu de l'icône", "Icon preview"), BtnKind::Secondary)),
+                .child(div().flex().flex_col().gap(z(4.)).child(controls::section_title(tr("sp.ap.app_icon"))).child(desc_text(tr("sp.ap.app_icon_d"))))
+                .child(controls::button(eid("icon-preview"), tr("sp.ap.icon_preview"), BtnKind::Secondary)),
         )
-        .child(div().pt(z(20.)).flex().flex_wrap().gap(z(16.)).children(IC.iter().enumerate().map(|(i, col)| {
-            div().id(eid(format!("nitro-icon-{i}"))).relative().size(z(60.)).rounded(z(16.)).bg(gpui::rgb(*col)).child(lock_badge())
+        .child(div().pt(z(20.)).flex().flex_wrap().gap(z(8.)).children((0..23).map(|i| {
+            div()
+                .id(eid(format!("nitro-icon-{i}")))
+                .size(z(48.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                .shadow(vec![gpui::BoxShadow {
+                    color: c(tok(idx::INTERACTIVE_TEXT_DEFAULT)),
+                    offset: gpui::point(gpui::px(0.), gpui::px(0.)),
+                    blur_radius: gpui::px(2.),
+                    spread_radius: gpui::px(0.),
+                    inset: false,
+                }])
         })))
         .into_any_element()
 }
