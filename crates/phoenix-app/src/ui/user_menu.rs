@@ -1,10 +1,12 @@
 //! Right-click menu on a user (member list row, DM row, message author).
 //!
-//! Item order from the live client (member-menu / author-menu dumps,
-//! 2026-11-23, guild member, not self): Profile, Mention, Message, Add Note
-//! ("Only visible to you" subtext), Add Friend | Invite to Server >,
-//! Remove Friend, Block | voice / moderation items | Copy User ID
-//! (developer mode).
+//! Item order from the vanilla client (vanilla-menu-member-* dumps,
+//! 2026-11-23): Profile, Mention, Message, Call (friend), Add Note ("Only
+//! visible to you" subtext), Add Friend Nickname (friend) | Change Nickname
+//! (Manage Nicknames) or Edit Per-server Profile (self), Apps >, Invite to
+//! Server >, Remove Friend / Add Friend, Ignore, Block | Roles > (Manage
+//! Roles) | voice / moderation items | Copy User ID (developer mode).
+//! Bots get neither Invite to Server nor Add Friend.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -18,6 +20,9 @@ use crate::{
         home::data::{NavRequest, RelAction},
     },
 };
+
+const MANAGE_ROLES: u64 = 1 << 28;
+const MANAGE_NICKNAMES: u64 = 1 << 27;
 
 type Act = Rc<dyn Fn(&mut PhoenixApp, &ClickEvent, &mut Window, &mut Context<PhoenixApp>)>;
 
@@ -66,36 +71,74 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     if !me {
         items.push(act(crate::t!("profile.message"), Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
     }
+    let rel = app.nav.relationship(u).map(|r| r.kind);
+    let friend = rel == Some(crate::ui::home::data::RelationshipKind::Friend);
+    let bot = app.users.get(&u).is_some_and(|x| x.bot);
+    let stub = |key: &'static str| act(crate::t!(key), Rc::new(move |a, _, _, cx| a.stub(&crate::t!(key), cx)));
+    if !me && friend {
+        items.push(stub("menu.call"));
+    }
     items.push(
         act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx)))
             .with_subtext(crate::t!("menu.note_subtext")),
     );
-    let rel = app.nav.relationship(u).map(|r| r.kind);
-    let friend = rel == Some(crate::ui::home::data::RelationshipKind::Friend);
-    if !me && rel.is_none() {
-        items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
+    if !me && friend {
+        items.push(stub("menu.friend_nickname"));
     }
+    items.push(MenuItem::Separator);
+    if let Some(gid) = g {
+        if me {
+            items.push(stub("menu.edit_server_profile"));
+        } else if crate::ui::inbox::has_perm(app.backend.guild_permissions(gid), MANAGE_NICKNAMES) {
+            items.push(stub("menu.change_nickname"));
+        }
+    }
+    items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![stub("menu.apps_none")]));
     if !me {
-        items.push(MenuItem::Separator);
-        let invites: Vec<MenuItem> = app
-            .guilds
-            .iter()
-            .filter(|x| Some(x.id) != g)
-            .map(|x| {
-                let gid = x.id;
-                act_owned(&e, x.name.clone(), Rc::new(move |a, _, _, cx| a.open_invite_people(gid, cx)))
-            })
-            .collect();
-        if !invites.is_empty() {
-            items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
+        if !bot {
+            let invites: Vec<MenuItem> = app
+                .guilds
+                .iter()
+                .filter(|x| Some(x.id) != g)
+                .map(|x| {
+                    let gid = x.id;
+                    act_owned(&e, x.name.clone(), Rc::new(move |a, _, _, cx| a.open_invite_people(gid, cx)))
+                })
+                .collect();
+            if !invites.is_empty() {
+                items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
+            }
         }
         if friend {
             items.push(act(crate::t!("menu.remove_friend"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Remove, cx))));
+        } else if rel.is_none() && !bot {
+            items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
         }
+        items.push(stub("menu.ignore"));
         items.push(MenuItem::danger(crate::t!("menu.block"), None, {
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.relationship_action(u, RelAction::Block, cx))
         }));
+    }
+    // "Roles >" (Manage Roles): every role of the guild as a checkbox.
+    if let Some(gid) = g.filter(|gid| crate::ui::inbox::has_perm(app.backend.guild_permissions(*gid), MANAGE_ROLES)) {
+        let has: Vec<crate::model::Id> =
+            app.members.get(&gid).and_then(|m| m.iter().find(|m| m.user == u)).map(|m| m.roles.clone()).unwrap_or_default();
+        let mut roles: Vec<&crate::model::Role> = app.roles.get(&gid).into_iter().flatten().filter(|r| r.id != gid).collect();
+        roles.sort_by_key(|r| -r.position);
+        let rows: Vec<MenuItem> = roles
+            .into_iter()
+            .map(|r| {
+                let e = e.clone();
+                MenuItem::check(r.name.clone(), has.contains(&r.id), move |_, _, cx: &mut App| {
+                    e.update(cx, |a, cx| a.stub(&crate::t!("menu.roles"), cx))
+                })
+            })
+            .collect();
+        if !rows.is_empty() {
+            items.push(MenuItem::Separator);
+            items.push(MenuItem::submenu(crate::t!("menu.roles"), rows));
+        }
     }
     let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
     if in_call {
@@ -105,7 +148,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     items.extend(crate::ui::inbox::moderation_items(app, u, g, &e));
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
-        items.push(MenuItem::action(crate::t!("common.copy_user_id"), None, move |_, _, cx: &mut App| {
+        items.push(MenuItem::action(crate::t!("common.copy_user_id"), Some(crate::icons::path("id")), move |_, _, cx: &mut App| {
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.0.to_string()))
         }));
     }

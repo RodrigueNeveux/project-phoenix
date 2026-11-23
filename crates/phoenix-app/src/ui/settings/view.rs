@@ -322,6 +322,12 @@ fn page_icon(p: Page) -> &'static str {
         Page::VoiceVideo => "speaker",
         Page::Advanced => "file",
         Page::ActivityPrivacy => "user-profile",
+        Page::RegisteredGames => "apps",
+        Page::Nitro => "nitro",
+        Page::ServerBoost => "boost",
+        Page::Subscriptions => "file",
+        Page::GiftInventory => "gift",
+        Page::Billing => "file",
     }
 }
 

@@ -463,6 +463,9 @@ fn folder(
     let header = row(("folder", id), key, entity)
         .h(z(FOLDER))
         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_folder(id, cx)))
+        .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
+            crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Folder(id), ev.position, w)
+        })
         .child(pill(key, !open && has_selected, hover, !open && unread))
         .child(
             div()

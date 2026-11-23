@@ -4,7 +4,9 @@ Source: CDP outlines of each page of the live 2026 client (user settings modal, 
 
 | element | CSS / dump source | property | value | our code | status |
 |---|---|---|---|---|---|
-| sidebar sections | settings sidebar `section_` labels | order | Account, Data & Privacy, Content & Social, Notifications / Experience: Voice & Video, Appearance, Accessibility, System, Language & Time / Games & Apps: Activity Privacy, Connected Apps / (no label) Developer, Log Out | `mod.rs` `NAV` | ✅ (billing and client-mod sections left out) |
+| sidebar sections | vanilla-settings-open sidebar | order | (General) Account, Data & Privacy, Message Permissions, Notifications / Billing: Nitro, Server Boost, Subscriptions, Gift Inventory, Billing / Experience: Voice & Video, Appearance, Accessibility, System, Language & Time / Games & Apps: Registered Games, Activity Privacy, Connected Apps / (Other) Developer, Log Out — no Vencord/Plugins/Themes/Updater | `mod.rs` `NAV` | ✅ (Billing and Registered Games added; billing pages point to the web) |
+| developer page | vanilla-settings-15 | rows | Developer Mode, Application Test Mode (switches) | `pages.rs` `DEVELOPER` | ✅ (extra "User ID" row removed) |
+| registered games | vanilla-settings-12 | rows | Current Game ("No game detected", "Not seeing your game? Add it!"), Added Games + IGDB note, Related → Activity Privacy | `pages.rs` `GAMES` | ✅ (detected game list ❌: no process scan) |
 | sidebar sub-nav | `subnav_8qMUr2` under the active item | rows | the page's category titles | `view.rs` `subnav` / `pages::titles` | ✅ |
 | sidebar search | `searchBar` input (40px, 16px text) | behaviour | filters pages whose texts match, hides empty sections, the sub-nav and Log Out | `view.rs` `nav`, `pages::matches` | ✅ |
 | category title | `heading-xl/medium_RAOoio` | font | 24/32, 500, --text-strong | `controls::section_title` | ✅ |

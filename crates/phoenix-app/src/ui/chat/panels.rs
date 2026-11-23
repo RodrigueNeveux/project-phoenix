@@ -44,9 +44,19 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     let has_text = msg.is_some_and(|x| !x.content.is_empty());
     let ic = |i: ChatIcon| Some(i.path());
 
-    // Live order (msg-context-menu dump, 2026-11-23): 4 quick reactions as 44px
-    // tiles, "Add Reaction", separator, Edit, Reply, separator, Copy Text, Pin,
-    // Mark Unread, Copy Message Link, separator, Delete.
+    // Vanilla order (vanilla-menu-message dump, 2026-11-23): 4 quick reactions
+    // as 44px tiles, Add Reaction, View Reactions | Edit (own), Reply, Forward,
+    // Create Thread | Copy Text, Pin, Bookmark, Remind Me >, Apps >, Mark
+    // Unread, Copy Message Link, Speak Message | Delete, Report (others) |
+    // Copy Message ID. Every row has a left icon.
+    let has_reactions = msg.is_some_and(|x| !x.reactions.is_empty());
+    let in_guild = app.channels.get(&ch).is_some_and(|c| c.guild.is_some());
+    let stub = |key: &'static str, icon: &str| {
+        let ee = e.clone();
+        MenuItem::action(crate::t!(key), Some(crate::icons::path(icon)), move |_, _, cx| {
+            ee.update(cx, |a, cx| a.stub(&crate::t!(key), cx))
+        })
+    };
     let mut strip = div().flex().gap(z(8.)).px(z(2.)).py(z(2.));
     for (i, q) in QUICK_REACTIONS.iter().take(4).enumerate() {
         let e = e.clone();
@@ -75,6 +85,9 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.add_reaction"), ic(ChatIcon::AddReaction), move |_, _, cx| {
         ee.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
+    if has_reactions {
+        items.push(stub("msg.view_reactions", "chat/eye"));
+    }
     items.push(MenuItem::Separator);
     if own {
         let ee = e.clone();
@@ -86,6 +99,10 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.reply"), Some(Icon::Reply.path()), move |_, w, cx| {
         ee.update(cx, |a, cx| a.start_reply(id, w, cx))
     }));
+    items.push(stub("msg.forward", "nav/forward"));
+    if in_guild {
+        items.push(stub("msg.create_thread", "chat/thread"));
+    }
     items.push(MenuItem::Separator);
     if has_text {
         let ee = e.clone();
@@ -99,6 +116,14 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         Some(Icon::Pin.path()),
         move |_, _, cx| ee.update(cx, |a, cx| a.toggle_pin(ch, id, cx)),
     ));
+    items.push(stub("msg.bookmark", "inbox/bookmark"));
+    let reminders = ["msg.remind.30m", "msg.remind.1h", "msg.remind.4h", "msg.remind.tomorrow", "msg.remind.custom"];
+    items.push(MenuItem::submenu_with_icon(
+        crate::t!("msg.remind"),
+        "inbox/clock",
+        reminders.iter().map(|k| { let mut i = stub(k, "inbox/clock"); if let MenuItem::Action { icon, .. } = &mut i { *icon = None; } i }).collect(),
+    ));
+    items.push(MenuItem::submenu_with_icon(crate::t!("menu.apps"), "apps", vec![stub("menu.apps_none", "apps")]));
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.mark_unread"), ic(ChatIcon::Unread), move |_, _, cx| {
         ee.update(cx, |a, cx| a.mark_unread_from(ch, id, cx))
@@ -107,12 +132,18 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.copy_link"), ic(ChatIcon::Link), move |_, _, cx| {
         ee.update(cx, |a, cx| a.copy_message_link(ch, id, cx))
     }));
+    items.push(stub("msg.speak", "speaker"));
+    items.push(MenuItem::Separator);
     if own {
-        items.push(MenuItem::Separator);
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |ev, _, cx| {
             let skip = ev.modifiers().shift;
             ee.update(cx, |a, cx| a.request_delete(ch, id, skip, cx))
+        }));
+    } else {
+        let ee = e.clone();
+        items.push(MenuItem::danger(crate::t!("msg.report"), Some(crate::icons::path("flag")), move |_, _, cx| {
+            ee.update(cx, |a, cx| a.stub(&crate::t!("msg.report"), cx))
         }));
     }
     if app.prefs.synced.developer_mode {

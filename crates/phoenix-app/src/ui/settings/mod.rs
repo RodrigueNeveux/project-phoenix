@@ -217,6 +217,14 @@ pub enum Page {
     Advanced,
     System,
     ActivityPrivacy,
+    /// "Jeux enregistrés" (Games & Apps).
+    RegisteredGames,
+    /// Billing section (vanilla sidebar): read-only pointers to discord.com.
+    Nitro,
+    ServerBoost,
+    Subscriptions,
+    GiftInventory,
+    Billing,
 }
 
 impl Page {
@@ -237,6 +245,12 @@ impl Page {
             Self::Accessibility => crate::t!("settings.page.accessibility"),
             Self::VoiceVideo => crate::t!("settings.page.voice_video"),
             Self::Advanced => crate::t!("settings.page.advanced"),
+            Self::RegisteredGames => crate::t!("sp.games"),
+            Self::Nitro => crate::t!("settings.page.nitro"),
+            Self::ServerBoost => crate::t!("settings.page.server_boost"),
+            Self::Subscriptions => crate::t!("settings.page.subscriptions"),
+            Self::GiftInventory => crate::t!("settings.page.gift_inventory"),
+            Self::Billing => crate::t!("settings.page.billing"),
         }
     }
 }
@@ -246,8 +260,9 @@ impl Page {
 /// profile tab sits above them; the first section's label is visually hidden.
 pub const NAV: &[(&str, &[Page])] = &[
     ("settings.nav.user", &[Page::MyAccount, Page::DataPrivacy, Page::PrivacySafety, Page::Notifications]),
+    ("settings.nav.billing", &[Page::Nitro, Page::ServerBoost, Page::Subscriptions, Page::GiftInventory, Page::Billing]),
     ("settings.nav.app", &[Page::VoiceVideo, Page::Appearance, Page::Accessibility, Page::System, Page::Language]),
-    ("settings.nav.apps", &[Page::ActivityPrivacy, Page::Connections]),
+    ("settings.nav.apps", &[Page::RegisteredGames, Page::ActivityPrivacy, Page::Connections]),
     // last section: no label, "Développeur" then "Déconnexion"
     ("", &[Page::Advanced]),
 ];

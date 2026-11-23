@@ -88,4 +88,5 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("chat", &["ChatIcon"]),
     ("more-vertical", &["MoreVerticalIcon"]),
     ("new-group-dm", &["ChatPlusIcon"]),
+    ("flag", &["FlagIcon"]),
 ];

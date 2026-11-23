@@ -318,6 +318,9 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .text_color(t(idx::CHANNELS_DEFAULT))
                 .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_category_saved(id, cx)))
+                .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
+                    crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(id), ev.position, w)
+                })
                 .child(
                     div()
                         .min_w_0()

@@ -542,9 +542,35 @@ pub fn blocks(p: Page) -> &'static [B] {
         Page::Connections => CONNECTIONS,
         Page::Advanced => DEVELOPER,
         Page::Profiles => PROFILES,
+        Page::RegisteredGames => GAMES,
+        Page::Nitro => NITRO,
+        Page::ServerBoost => BOOST,
+        Page::Subscriptions => SUBSCRIPTIONS,
+        Page::GiftInventory => GIFTS,
+        Page::Billing => BILLING,
         _ => NONE,
     }
 }
+
+// "Jeux enregistrés" (vanilla-settings-12 dump): Current Game / Added Games
+// with the IGDB note, then Related Settings → Activity Privacy.
+static GAMES: &[B] = &[
+    B::Title("sp.rg.current"),
+    B::Note("sp.rg.none"),
+    B::Action("sp.rg.cant_find", "", "sp.rg.add", false),
+    B::Divider,
+    B::Title("sp.rg.added"),
+    B::Lead("sp.rg.igdb"),
+    B::Divider,
+    B::Related("user-profile", "settings.page.activity", "sp.rg.related_d", Page::ActivityPrivacy),
+];
+
+// Billing pages: Phoenix doesn't handle payments, each page points to the web.
+static NITRO: &[B] = &[B::Title("settings.page.nitro"), B::Lead("sp.billing.web")];
+static BOOST: &[B] = &[B::Title("settings.page.server_boost"), B::Lead("sp.billing.web")];
+static SUBSCRIPTIONS: &[B] = &[B::Title("settings.page.subscriptions"), B::Lead("sp.billing.web")];
+static GIFTS: &[B] = &[B::Title("settings.page.gift_inventory"), B::Lead("sp.billing.web")];
+static BILLING: &[B] = &[B::Title("settings.page.billing"), B::Lead("sp.billing.web")];
 
 static DATA: &[B] = &[
     B::Title("sp.data.t1"),
@@ -1000,20 +1026,9 @@ static CONNECTIONS: &[B] = &[
     B::Note("sp.cn.none"),
 ];
 
-fn user_id_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
-    if !app.prefs.synced.developer_mode {
-        return div().into_any_element();
-    }
-    let my_id = app.me.id.0.to_string();
-    let btn = controls::button("copy-my-id", crate::t!("common.copy_user_id"), BtnKind::Secondary)
-        .on_click(cx.listener({
-            let my_id = my_id.clone();
-            move |_, _, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(my_id.clone()))
-        }))
-        .into_any_element();
-    item(crate::t!("settings.advanced.user_id"), Some(desc_text(my_id.into()).into_any_element()), Some(btn), false).into_any_element()
-}
 
+// Vanilla Developer page (vanilla-settings-15): Developer Mode and
+// Application Test Mode switches only.
 static DEVELOPER: &[B] = &[
     B::Switch(
         "dev-mode",
@@ -1021,7 +1036,6 @@ static DEVELOPER: &[B] = &[
         "sp.dv.mode_d",
         Bind::Synced(|s| s.developer_mode, SettingsPatch::DeveloperMode),
     ),
-    B::Custom("settings.advanced.user_id", user_id_row),
     B::Switch("app-test", "sp.dv.test", "sp.dv.test_d", Bind::Ui(false)),
 ];
 

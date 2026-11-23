@@ -226,8 +226,16 @@ impl MenuItem {
 
     /// Adds the muted second line under an action's label.
     pub fn with_subtext(mut self, text: impl Into<SharedString>) -> Self {
-        if let Self::Action { subtext, .. } = &mut self {
+        if let Self::Action { subtext, .. } | Self::Submenu { subtext, .. } = &mut self {
             *subtext = Some(text.into());
+        }
+        self
+    }
+
+    /// Left icon by icon-provider name (iconContainerLeft_M3qk4j).
+    pub fn with_icon(mut self, name: &str) -> Self {
+        if let Self::Action { icon, .. } | Self::Submenu { icon, .. } = &mut self {
+            *icon = Some(crate::icons::path(name));
         }
         self
     }

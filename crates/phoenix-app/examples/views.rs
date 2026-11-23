@@ -124,6 +124,29 @@ fn main() -> anyhow::Result<()> {
                             }
                         }
                     }
+                    // Guild icon / text channel / member menus (vanilla-menu-* dumps).
+                    "guild-menu" => {
+                        if let Some(g) = app.guilds.first().map(|g| g.id) {
+                            phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Guild(g), gpui::point(px(40.), px(120.)), window);
+                        }
+                    }
+                    "channel-menu" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        if let Some(id) = app.selected_channel {
+                            phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Channel(id), gpui::point(px(200.), px(120.)), window);
+                        }
+                    }
+                    "member-menu" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        let uid = g.and_then(|g| app.members.get(&g)).and_then(|m| m.iter().map(|m| m.user).find(|u| *u != app.me.id));
+                        if let Some(uid) = uid {
+                            phoenix_app::ui::user_menu::open(uid, g, gpui::point(px(900.), px(120.)), window);
+                        }
+                    }
+                    "games" => page(app, settings::Page::RegisteredGames, cx),
+                    "developer" => page(app, settings::Page::Advanced, cx),
                     "profile" | "profile-modal" => {
                         let g = app.guilds.first().map(|g| g.id);
                         app.select_guild(g, cx);

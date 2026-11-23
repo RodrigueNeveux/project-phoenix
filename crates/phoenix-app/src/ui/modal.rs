@@ -86,7 +86,14 @@ pub fn confirm(m: Confirm) -> AnyElement {
         .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
         .border_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .shadow_lg()
+        // --shadow-high: 0 12px 24px 0 rgb(0 0 0 / .24) (vanilla-confirm-leave #2068)
+        .shadow(vec![gpui::BoxShadow {
+            color: gpui::hsla(0., 0., 0., 0.24),
+            offset: gpui::point(z(0.), z(12.)),
+            blur_radius: z(24.),
+            spread_radius: z(0.),
+            inset: false,
+        }])
         .pt(z(8.))
         .pb(z(16.))
         .flex()

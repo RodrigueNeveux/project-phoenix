@@ -265,10 +265,10 @@ pub fn folder_sync(app: &PhoenixApp) -> Vec<FolderSync> {
 
 /// Moderation rows for the user context menu (empty without permissions).
 pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &Entity<PhoenixApp>) -> Vec<MenuItem> {
+    // Vanilla member menu (vanilla-menu-member-* dumps): separator, "Open in
+    // Mod View" (Moderate Members, also on yourself), then Timeout, Kick, Ban
+    // for other members, all red.
     let Some(g) = guild else { return Vec::new() };
-    if user == app.me.id {
-        return Vec::new();
-    }
     let perms = app.backend.guild_permissions(g);
     let name = app.users.get(&user).map(|u| u.name.to_string()).unwrap_or_else(|| crate::t!("common.user").to_string());
     let mut items = Vec::new();
@@ -277,17 +277,21 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
         MenuItem::danger(label, None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_moderation(g, user, kind, cx)))
     };
     if has_perm(perms, MODERATE_MEMBERS) {
-        items.push(item(crate::t!("mod.timeout_user", name = name).to_string(), ModKind::Timeout(TIMEOUTS[0].1)));
         let e = entity.clone();
-        items.push(MenuItem::action(crate::t!("mod.remove_timeout"), None, move |_, _, cx: &mut App| {
-            e.update(cx, |a, cx| a.open_moderation(g, user, ModKind::Timeout(0), cx))
+        items.push(MenuItem::action(crate::t!("menu.mod_view"), None, move |_, _, cx: &mut App| {
+            e.update(cx, |a, cx| a.stub(&crate::t!("menu.mod_view"), cx))
         }));
     }
-    if has_perm(perms, KICK_MEMBERS) {
-        items.push(item(crate::t!("mod.kick_user", name = name).to_string(), ModKind::Kick));
-    }
-    if has_perm(perms, BAN_MEMBERS) {
-        items.push(item(crate::t!("mod.ban_user", name = name).to_string(), ModKind::Ban(0)));
+    if user != app.me.id {
+        if has_perm(perms, MODERATE_MEMBERS) {
+            items.push(item(crate::t!("mod.timeout_user", name = name).to_string(), ModKind::Timeout(TIMEOUTS[0].1)));
+        }
+        if has_perm(perms, KICK_MEMBERS) {
+            items.push(item(crate::t!("mod.kick_user", name = name).to_string(), ModKind::Kick));
+        }
+        if has_perm(perms, BAN_MEMBERS) {
+            items.push(item(crate::t!("mod.ban_user", name = name).to_string(), ModKind::Ban(0)));
+        }
     }
     if !items.is_empty() {
         items.insert(0, MenuItem::Separator);
