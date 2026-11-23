@@ -76,6 +76,7 @@ Real-data mode (`PHX_REAL=1 --example profile_editor`, user's own account read-o
 | mock (e1e62f9) | 22.3% | 95.4% | 59.2% | — | — | 59.2% |
 | real data, before fixes | 14.3% | 79.7% | 99.5% | 94.1% | 70.2% | 55.0% |
 | + themed card/backdrop, tab geometry, app widget | 14.3% | 12.2% | 8.9% | 18.0% | 12.5% | 12.7% |
+| + hero asset size fix, status dot, custom status bubble | 13.4% | 8.9% | 8.0% | 9.2% | 9.2% | 10.0% |
 
 Added rows:
 

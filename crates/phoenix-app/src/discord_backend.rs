@@ -712,6 +712,9 @@ impl Backend for DiscordBackend {
     fn set_note(&self, user: Id, note: String) -> BoxFuture<()> {
         self.people_note(user, note)
     }
+    fn owned_collectibles(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {
+        self.owned_collectibles_impl()
+    }
     fn profile_widgets(&self, user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
         self.profile_widgets_impl(user)
     }

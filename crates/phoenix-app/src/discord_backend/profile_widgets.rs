@@ -38,4 +38,15 @@ impl DiscordBackend {
             Ok(out)
         })
     }
+
+    pub(super) fn owned_collectibles_impl(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {
+        self.with_session(move |_, s| async move {
+            let v = s
+                .rest
+                .request_json(Method::GET, "/users/@me/collectibles-purchases?variants_return_style=2", None)
+                .await
+                .map_err(api_err)?;
+            Ok(crate::ui::settings::collectibles::parse_purchases(&v))
+        })
+    }
 }

@@ -86,6 +86,7 @@ fn asset_url(app: u64, cfg: &Value, key: &str, size: u32) -> Option<SharedString
     Some(format!("https://cdn.discordapp.com/app-assets/{app}/{id}.png?size={size}").into())
 }
 
+/// CDN sizes must be powers of two (408 → HTTP 400).
 /// One field (`{value_type, presentation_type, value, fallback?}`).
 fn resolve(app: u64, cfg: &Value, data: &[(String, String)], f: Option<&Value>, size: u32) -> Option<SharedString> {
     let f = f?;
@@ -116,9 +117,9 @@ pub fn build(app: u64, configs: &Value, data: &[(String, String)]) -> Option<App
             Some((
                 n,
                 WidgetItem {
-                    name: field("widget_bottom", k, "name", 96).unwrap_or_default(),
-                    value: field("widget_bottom", k, "description", 96).unwrap_or_default(),
-                    image: field("widget_bottom", k, "image", 96),
+                    name: field("widget_bottom", k, "name", 128).unwrap_or_default(),
+                    value: field("widget_bottom", k, "description", 128).unwrap_or_default(),
+                    image: field("widget_bottom", k, "image", 128),
                 },
             ))
         })
@@ -140,7 +141,7 @@ pub fn build(app: u64, configs: &Value, data: &[(String, String)]) -> Option<App
         icon,
         title: field("widget_top", "title", "text", 0).unwrap_or_default(),
         subtitle: field("widget_top", "subtitle_1", "text", 0).unwrap_or_default(),
-        hero: field("widget_top", "hero_image", "image", 408),
+        hero: field("widget_top", "hero_image", "image", 512),
         items: items.into_iter().map(|(_, i)| i).collect(),
     })
 }
@@ -255,7 +256,7 @@ mod tests {
         assert_eq!(w.title, "Hello");
         assert_eq!(w.subtitle, "Sub");
         assert_eq!(w.name, "Bot");
-        assert_eq!(w.hero.as_deref(), Some("https://cdn.discordapp.com/app-assets/42/7.png?size=408"));
+        assert_eq!(w.hero.as_deref(), Some("https://cdn.discordapp.com/app-assets/42/7.png?size=512"));
         assert_eq!(w.items.iter().map(|i| (i.name.to_string(), i.value.to_string())).collect::<Vec<_>>(), vec![("A".into(), "12".into()), ("B".into(), "-".into())]);
     }
 }

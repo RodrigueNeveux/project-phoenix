@@ -715,9 +715,14 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
         (None, Some(url)) => img(url).w_full().h(z(140.)).into_any_element(),
         _ => div().w_full().h(z(140.)).bg(hex(banner_col)).into_any_element(),
     };
+    // Avatar cut-out ring = the card colour behind it (primary under the overlay).
+    let ring = match e.theme {
+        Some(t) => hex(mix(t.0, 0, 0.6)),
+        None => c(tok(idx::BACKGROUND_SURFACE_HIGH)),
+    };
     let av: AnyElement = match &e.avatar {
         Some(p) => img(p.clone()).size(px(112.)).rounded_full().into_any_element(),
-        None => avatar(Some(me), 112.),
+        None => crate::ui::avatar_with_status(Some(me), 112., app.presence_of(me.id), ring).into_any_element(),
     };
     let themed = e.theme.is_some();
     // .custom-user-profile-theme .profile_s3DB6Y: linear-gradient(primary,
@@ -739,11 +744,6 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
     };
     let strong = if themed { white(0.96) } else { c(tok(idx::TEXT_STRONG)) };
     let heading = if themed { white(0.88) } else { c(tok(idx::TEXT_DEFAULT)) };
-    // Avatar cut-out ring = the card colour behind it (primary under the overlay).
-    let ring = match e.theme {
-        Some(t) => hex(mix(t.0, 0, 0.6)),
-        None => c(tok(idx::BACKGROUND_SURFACE_HIGH)),
-    };
     let name: AnyElement = match &e.name {
         Some(i) => Input::new(i).appearance(false).bordered(false).text_size(z(24.)).font_weight(FontWeight::SEMIBOLD).into_any_element(),
         None => SharedString::from(e.original.name.clone()).into_any_element(),
@@ -875,6 +875,27 @@ fn card(app: &PhoenixApp, e: &EditorState) -> Div {
                         ),
                 ),
         )
+        .when_some(app.people.custom_status.clone(), |d, t| {
+            // container_rmCN9_ editable (dump #3358-#3362): at card (172, 132),
+            // radius 16, padding 8 12, body-sm 14/18, 2 lines max, shadow 0 1 4 .14.
+            d.child(
+                div()
+                    .absolute()
+                    .left(z(172.))
+                    .top(z(132.))
+                    .max_w(z(181.))
+                    .px(z(12.))
+                    .py(z(8.))
+                    .rounded(z(16.))
+                    .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
+                    .shadow_sm()
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .text_color(strong)
+                    .line_clamp(2)
+                    .child(t),
+            )
+        })
         .child(div().id("pe-card-body").flex_1().min_h_0().overflow_y_scroll().child(body))
 }
 
