@@ -8,7 +8,7 @@
 
 use std::{future::Future, pin::Pin, sync::Arc};
 
-use crate::model::{Channel, Guild, Id, Member, Message, Presence, Role, User};
+use crate::model::{Channel, Guild, Id, Member, Message, Presence, Reaction, Role, User};
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, BackendError>> + Send + 'static>>;
 
@@ -87,6 +87,20 @@ pub enum AppEvent {
 
 pub type EventSink = Arc<dyn Fn(AppEvent) + Send + Sync>;
 
+/// A file to attach to an outgoing message.
+#[derive(Clone)]
+pub struct Upload {
+    pub filename: String,
+    pub bytes: Vec<u8>,
+    pub spoiler: bool,
+}
+
+impl std::fmt::Debug for Upload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Upload").field("filename", &self.filename).field("len", &self.bytes.len()).finish()
+    }
+}
+
 pub trait Backend: Send + Sync + 'static {
     /// Register where gateway events must be delivered.
     fn set_event_sink(&self, sink: EventSink);
@@ -103,6 +117,37 @@ pub trait Backend: Send + Sync + 'static {
     fn delete_message(&self, channel: Id, id: Id) -> BoxFuture<()>;
     /// Log in from a stored session at startup, if the backend has one.
     /// The future fails with an empty message when nothing is stored.
+    /// Send with reply options (`mention` pings the replied-to author) and
+    /// file attachments. Defaults to [`Backend::send_message`] without files.
+    fn send_message_ex(
+        &self,
+        channel: Id,
+        content: String,
+        reply: Option<(Id, bool)>,
+        files: Vec<Upload>,
+    ) -> BoxFuture<Message> {
+        let _ = files;
+        self.send_message(channel, content, reply.map(|r| r.0))
+    }
+    /// Add (`add`) or remove our own reaction.
+    fn set_reaction(&self, channel: Id, msg: Id, emoji: Reaction, add: bool) -> BoxFuture<()> {
+        let _ = (channel, msg, emoji, add);
+        Box::pin(async { Ok(()) })
+    }
+    fn set_pinned(&self, channel: Id, msg: Id, pinned: bool) -> BoxFuture<()> {
+        let _ = (channel, msg, pinned);
+        Box::pin(async { Ok(()) })
+    }
+    /// Pinned messages of a channel, newest first.
+    fn load_pins(&self, channel: Id) -> BoxFuture<Vec<Message>> {
+        let _ = channel;
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    /// "Mark Unread": `last_read` is the message just before the one clicked.
+    fn mark_unread(&self, channel: Id, last_read: Id) -> BoxFuture<()> {
+        let _ = (channel, last_read);
+        Box::pin(async { Ok(()) })
+    }
     fn restore_session(&self) -> Option<BoxFuture<ReadyData>> {
         None
     }

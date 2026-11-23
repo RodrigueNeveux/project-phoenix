@@ -487,6 +487,110 @@ impl Backend for DiscordBackend {
 
     fn subscribe_member_ranges(&self, guild: Id, channel: Id, ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
         self.people_ranges(guild, channel, ranges)
+    fn send_message_ex(
+        &self,
+        channel: Id,
+        content: String,
+        reply: Option<(Id, bool)>,
+        files: Vec<crate::backend::Upload>,
+    ) -> BoxFuture<Message> {
+        self.with_session(move |_, s| async move {
+            let mut msg = CreateMessage::text(content);
+            if let Some((r, mention)) = reply {
+                msg = msg.reply_to(sf(channel), sf(r), mention);
+            }
+            let m = if files.is_empty() {
+                s.rest.send_message(sf(channel), msg).await
+            } else {
+                let files = files
+                    .into_iter()
+                    .map(|f| phoenix_api::rest::FileUpload {
+                        filename: f.filename,
+                        bytes: f.bytes,
+                        content_type: None,
+                        description: None,
+                        spoiler: f.spoiler,
+                    })
+                    .collect();
+                s.rest.send_message_with_files(sf(channel), msg, files).await
+            }
+            .map_err(api_err)?;
+            s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
+            Ok(convert::message(&m))
+        })
+    }
+
+    fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
+        self.inner.session().map(|s| expressions::guild_emojis(&s, guild)).unwrap_or_default()
+    }
+    fn guild_stickers(&self, guild: Id) -> Vec<crate::ui::pickers::types::StickerData> {
+        self.inner.session().map(|s| expressions::guild_stickers(&s, guild)).unwrap_or_default()
+    }
+    fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
+        self.with_session(|_, s| expressions::sticker_packs(s))
+    }
+    fn send_sticker(&self, channel: Id, sticker: Id) -> BoxFuture<()> {
+        self.with_session(move |_, s| expressions::send_sticker(s, channel, sticker))
+    }
+    fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
+        self.with_session(|_, s| expressions::gif_trending(s))
+    }
+    fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        self.with_session(|_, s| expressions::gif_trending_gifs(s))
+    }
+    fn gif_search(&self, query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
+        self.with_session(move |_, s| expressions::gif_search(s, query))
+    }
+    fn search_messages(&self, req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
+        self.with_session(move |inner, s| expressions::search(inner, s, req))
+    }
+
+    fn set_reaction(&self, channel: Id, msg: Id, emoji: crate::model::Reaction, add: bool) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            let e = api::ReactionEmoji {
+                id: emoji.emoji_id.map(sf),
+                name: Some(crate::ui::chat::state::reaction_name(&emoji.emoji)),
+                animated: false,
+            };
+            if add {
+                s.rest.add_reaction(sf(channel), sf(msg), &e).await
+            } else {
+                s.rest.remove_own_reaction(sf(channel), sf(msg), &e).await
+            }
+            .map_err(api_err)
+        })
+    }
+
+    fn set_pinned(&self, channel: Id, msg: Id, pinned: bool) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            if pinned {
+                s.rest.pin_message(sf(channel), sf(msg)).await
+            } else {
+                s.rest.unpin_message(sf(channel), sf(msg)).await
+            }
+            .map_err(api_err)
+        })
+    }
+
+    fn load_pins(&self, channel: Id) -> BoxFuture<Vec<Message>> {
+        self.with_session(move |inner, s| async move {
+            let msgs = s.rest.get_pinned_messages(sf(channel)).await.map_err(api_err)?;
+            let mut users = Vec::new();
+            for m in &msgs {
+                convert::message_users(m, &mut users);
+            }
+            inner.emit(AppEvent::Users(users));
+            Ok(msgs.iter().map(convert::message).collect())
+        })
+    }
+
+    fn mark_unread(&self, channel: Id, last_read: Id) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            s.adapter.lock().prefs.reads.entry(channel.0).or_default().last_read = last_read.0;
+            s.rest.ack_message_manual(sf(channel), sf(last_read), 0).await.map_err(api_err)
+        })
+    }
+
     }
     fn user_profile(&self, user: Id, guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
         self.people_profile(user, guild)

@@ -52,6 +52,7 @@ mod tests {
             embeds: vec![],
             attachments: vec![],
             reactions: vec![],
+            ..Default::default()
         }
     }
 

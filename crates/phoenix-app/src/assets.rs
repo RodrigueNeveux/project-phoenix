@@ -149,7 +149,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/file.svg" => f!(r#"<path d="M6 2h8l6 6v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm7 1.5V9h5.5z"/>"#),
         "icons/image.svg" => s!(r#"<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>"#),
         "icons/phone-hangup.svg" => f!(r#"<path d="M12 9c-3.5 0-6.8 1-9.4 2.9a1.5 1.5 0 0 0-.2 2.2l1.8 2a1.5 1.5 0 0 0 1.9.3l2.4-1.4a1.5 1.5 0 0 0 .7-1.3v-1.6a12 12 0 0 1 5.6 0v1.6c0 .5.3 1 .7 1.3l2.4 1.4a1.5 1.5 0 0 0 1.9-.3l1.8-2a1.5 1.5 0 0 0-.2-2.2C18.8 10 15.5 9 12 9z"/>"#),
-        _ => return None,
+        _ => return crate::ui::chat::icons::svg(path),
     })
 }
 

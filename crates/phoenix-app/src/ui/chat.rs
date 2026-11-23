@@ -1,31 +1,47 @@
 //! Chat area: header, virtualized message list, composer, typing indicator.
 
 use gpui::{
-    AnyElement, App, Context, Entity, FontWeight, IntoElement, KeyDownEvent, ParentElement,
+    AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement,
     SharedString, StyledText, Styled, InteractiveText, Window, div, img, list, prelude::*, px,
 };
-use gpui_component::input::Input;
 
 use crate::{
     app::PhoenixApp,
     assets::Icon,
     media,
-    model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message, Reaction},
+    model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message},
     richtext::{ClickTarget, RBlock, RenderedMessage, RichText},
     theme::{FONT_MONO, Palette, c, ca, m, role_color},
     ui::{avatar, icon, icon_button, members, sidebar::channel_icon},
 };
 
+// Messaging features live in submodules (composer moved to `composer.rs`).
+pub mod composer;
+pub mod icons;
+pub mod message_ext;
+pub mod panels;
+pub mod state;
+pub mod system;
+pub use state::ChatState;
+
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     let show_members = app.show_members && app.selected_guild.is_some();
+    let show_members = show_members && app.chat.thread.is_none();
     div()
         .flex_1()
         .min_w_0()
         .h_full()
+        .relative()
         .flex()
         .flex_col()
         .bg(c(Palette::BG_PRIMARY))
+        .on_modifiers_changed(cx.listener(|a, ev: &gpui::ModifiersChangedEvent, _, cx| {
+            if a.chat.shift_held != ev.modifiers.shift {
+                a.chat.shift_held = ev.modifiers.shift;
+                cx.notify();
+            }
+        }))
         .child(header(app, cx))
         .child(
             div()
@@ -35,20 +51,35 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .flex_row()
                 .child(
                     div()
+                        .id("chat-column")
+                        .group("chat-drop")
+                        .relative()
                         .flex_1()
                         .min_w_0()
                         .flex()
                         .flex_col()
+                        .on_drop(cx.listener(|a, paths: &gpui::ExternalPaths, _, cx| {
+                            a.add_paths(paths.paths().to_vec(), cx)
+                        }))
                         .child(
-                            div().flex_1().min_h_0().child(
-                                list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
-                                    .size_full(),
-                            ),
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .relative()
+                                .child(
+                                    list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
+                                        .size_full(),
+                                )
+                                .children(panels::new_messages_bar(app, cx))
+                                .children(panels::jump_bar(app, cx)),
                         )
-                        .child(composer(app, window, cx)),
+                        .child(composer::render(app, window, cx))
+                        .child(panels::drop_overlay(app)),
                 )
-                .when(show_members, |d| d.child(members::render(app, cx))),
+                .when(show_members, |d| d.child(members::render(app, cx)))
+                .children(panels::thread_panel(app, cx)),
         )
+        .children(panels::pins_popout(app, cx))
 }
 
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -92,6 +123,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .min_w_0()
                         .text_size(px(14.))
                         .text_color(c(Palette::TEXT_MUTED))
+                        .cursor_pointer()
                         .text_ellipsis()
                         .child(t),
                 )
@@ -99,7 +131,10 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .child(div().flex_1())
         .child(icon_button("threads", Icon::Threads, ic, 24.))
         .child(icon_button("bell", Icon::Bell, ic, 24.))
-        .child(icon_button("pin", Icon::Pin, ic, 24.))
+        .child(
+            icon_button("pin", Icon::Pin, if app.chat.pins.is_some() { c(Palette::INTERACTIVE_HOVER) } else { ic }, 24.)
+                .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
+        )
         .child(
             icon_button(
                 "members",
@@ -224,10 +259,12 @@ fn message(
     let name = author.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into());
     let color = role_color(app.author_color(msg.author));
     let id = msg.id;
-    let editing = app.editing == Some(id);
-    let own = msg.author == app.me.id;
+    if let Some(sys) = system::render(app, entity, msg, r) {
+        return sys;
+    }
+    let editing = app.chat.edit.as_ref().is_some_and(|e| e.id == id);
     let replying = app.replying_to == Some(id);
-    let highlight = r.mentions_me || replying;
+    let highlight = r.mentions_me || msg.mention_everyone || replying;
 
     let mut content = div().flex().flex_col().min_w_0();
     for (bi, b) in r.blocks.iter().enumerate() {
@@ -248,11 +285,18 @@ fn message(
         content = content.child(embed(e));
     }
     if !msg.reactions.is_empty() {
-        content = content.child(reactions(&msg.reactions));
+        content = content.child(message_ext::reactions(app, entity, msg));
+    }
+    if let Some(t) = &msg.thread {
+        content = content.child(message_ext::thread_chip(app, entity, t));
     }
 
     let reply = msg.reply_to.map(|rid| {
         let found = entry.msgs.iter().position(|m| m.id == rid);
+    let content = match message_ext::edit_box(app, entity, msg) {
+        Some(b) => b,
+        None => content,
+    };
         let (ru, preview) = match found {
             Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone()),
             None => (None, SharedString::from("Original message was deleted")),
@@ -297,13 +341,14 @@ fn message(
             )
     });
 
-    let e = entity.clone();
     let body = div()
         .id(("msg", id.0))
         .group("msg")
         .relative()
         .pl(px(m::MSG_GUTTER))
         .pr(px(48.))
+        .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
+        .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.bg(c(Palette::BG_MSG_HOVER)))
         .py(px(2.))
         .when(r.group_start, |d| d.mt(px(17.)))
         .when(highlight, |d| {
@@ -323,7 +368,9 @@ fn message(
                     .cursor_pointer()
                     .child(avatar(author, m::AVATAR)),
             )
+                    .id(("msg-avatar", id.0))
             .child(
+                    .on_click(message_ext::open_author(entity, msg))
                 div()
                     .flex()
                     .items_baseline()
@@ -338,7 +385,10 @@ fn message(
                             .cursor_pointer()
                             .child(name),
                     )
+                            .id(("msg-author", id.0))
                     .when(author.is_some_and(|a| a.bot), |d| {
+                            .hover(|s| s.underline())
+                            .on_click(message_ext::open_author(entity, msg))
                         d.child(
                             div()
                                 .px(px(4.))
@@ -376,38 +426,14 @@ fn message(
             )
         })
         .child(content)
-        // Hover toolbar
-        .child(
-            div()
-                .absolute()
-                .right(px(16.))
-                .top(px(-16.))
-                .invisible()
-                .group_hover("msg", |s| s.visible())
-                .flex()
-                .bg(c(Palette::BG_PRIMARY))
-                .border_1()
-                .border_color(c(Palette::HEADER_SHADOW))
-                .rounded(px(4.))
-                .child(icon_button("react", Icon::Emoji, c(Palette::INTERACTIVE), 20.))
-                .child(
-                    icon_button("reply", Icon::Reply, c(Palette::INTERACTIVE), 20.).on_click({
-                        let e = e.clone();
-                        move |_, w, cx| {
-                            e.update(cx, |a, cx| a.start_reply(id, w, cx));
-                        }
-                    }),
-                )
-                .when(own, |d| {
-                    d.child(icon_button("delete", Icon::Close, c(Palette::INTERACTIVE), 20.).on_click(
-                        move |_, _, cx| {
-                            e.update(cx, |a, cx| a.delete_message(id, cx));
-                        },
-                    ))
-                }),
-        );
-    if let Some(label) = r.day_divider.clone() {
-        div().child(day_divider(label)).child(body).into_any_element()
+        .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
+    let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
+    if r.day_divider.is_some() || new_marker {
+        div()
+            .when_some(r.day_divider.clone(), |d, label| d.child(day_divider(label)))
+            .when(new_marker, |d| d.child(message_ext::new_divider()))
+            .child(body)
+            .into_any_element()
     } else {
         body.into_any_element()
     }
@@ -714,152 +740,4 @@ fn embed(e: &Embed) -> AnyElement {
                 }),
         )
         .into_any_element()
-}
-
-fn reactions(rs: &[Reaction]) -> AnyElement {
-    let mut row = div().mt(px(4.)).flex().flex_wrap().gap(px(4.));
-    for r in rs {
-        row = row.child(
-            div()
-                .h(px(24.))
-                .px(px(6.))
-                .rounded(px(8.))
-                .flex()
-                .items_center()
-                .gap(px(6.))
-                .border_1()
-                .when(r.me, |d| d.bg(ca(0x5865F23D)).border_color(c(Palette::BLURPLE)))
-                .when(!r.me, |d| d.bg(c(Palette::BG_SECONDARY)).border_color(gpui::transparent_black()))
-                .hover(|s| s.border_color(c(0x4E5058)))
-                .cursor_pointer()
-                .child(media::emoji::emoji_element(&r.emoji, 16.))
-                .child(
-                    div()
-                        .text_size(px(14.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if r.me { 0xDEE0FC } else { Palette::INTERACTIVE }))
-                        .child(SharedString::from(r.count.to_string())),
-                ),
-        );
-    }
-    row.into_any_element()
-}
-
-fn composer(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
-    let placeholder: SharedString = match ch {
-        Some(c) if c.guild.is_none() => format!("Message @{}", c.name).into(),
-        Some(c) => format!("Message #{}", c.name).into(),
-        None => "".into(),
-    };
-    let ic = c(Palette::INTERACTIVE);
-    let banner: Option<(SharedString, bool)> = if app.editing.is_some() {
-        Some(("Editing message — escape to cancel • enter to save".into(), true))
-    } else {
-        app.replying_to.and_then(|rid| {
-            let e = app.messages.get(&app.selected_channel?)?;
-            let m = e.msgs.iter().find(|m| m.id == rid)?;
-            let u = app.users.get(&m.author)?;
-            Some((format!("Replying to {}", u.display_name).into(), false))
-        })
-    };
-    let placeholder_empty = app.composer.read(cx).value().is_empty();
-    div()
-        .flex_none()
-        .px(px(16.))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .rounded(px(8.))
-                .bg(c(Palette::INPUT_BG))
-                .when_some(banner, |d, (label, edit)| {
-                    d.child(
-                        div()
-                            .h(px(34.))
-                            .px(px(16.))
-                            .rounded_t(px(8.))
-                            .bg(c(Palette::BG_SECONDARY))
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .text_size(px(14.))
-                            .text_color(c(Palette::TEXT_MUTED))
-                            .child(label)
-                            .when(!edit, |d| {
-                                d.child(
-                                    icon_button("cancel-reply", Icon::Close, ic, 16.).on_click(cx.listener(
-                                        |a, _, _, cx| {
-                                            a.replying_to = None;
-                                            cx.notify();
-                                        },
-                                    )),
-                                )
-                            }),
-                    )
-                })
-                .child(
-                    div()
-                        .id("composer")
-                        .min_h(px(44.))
-                        .flex()
-                        .items_center()
-                        .capture_key_down(cx.listener(|a, ev: &KeyDownEvent, w, cx| {
-                            if ev.keystroke.key == "up" && ev.keystroke.modifiers.number_of_modifiers() == 0
-                                && a.edit_last(w, cx)
-                            {
-                                cx.stop_propagation();
-                            }
-                        }))
-                        .child(div().pl(px(16.)).pr(px(16.)).child(icon_button("attach", Icon::PlusCircle, ic, 24.).mx(px(-4.))))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .relative()
-                                .text_size(px(16.))
-                                .text_color(c(Palette::TEXT_NORMAL))
-                                .child(Input::new(&app.composer).appearance(false).bordered(false))
-                                .when(placeholder_empty, |d| {
-                                    d.child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .bottom_0()
-                                            .left(px(2.))
-                                            .flex()
-                                            .items_center()
-                                            .text_color(c(0x6D6F78))
-                                            .child(placeholder),
-                                    )
-                                }),
-                        )
-                        .child(
-                            div()
-                                .pr(px(8.))
-                                .flex()
-                                .items_center()
-                                .child(icon_button("gift", Icon::Gift, ic, 24.))
-                                .child(icon_button("gif", Icon::Gif, ic, 24.))
-                                .child(icon_button("sticker", Icon::Sticker, ic, 24.))
-                                .child(icon_button("emoji", Icon::Emoji, ic, 24.)),
-                        ),
-                ),
-        )
-        .child(typing(app))
-}
-
-fn typing(app: &PhoenixApp) -> impl IntoElement {
-    div()
-        .h(px(24.))
-        .flex()
-        .items_center()
-        .gap(px(6.))
-        .text_size(px(12.))
-        .text_color(c(Palette::TEXT_NORMAL))
-        .when_some(app.typing_label.clone(), |d, label| {
-            let dot = || div().size(px(6.)).rounded_full().bg(c(Palette::INTERACTIVE_HOVER));
-            d.child(div().flex().gap(px(2.)).child(dot()).child(dot()).child(dot()))
-                .child(div().font_weight(FontWeight::MEDIUM).child(label))
-        })
 }

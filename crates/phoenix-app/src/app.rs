@@ -135,6 +135,7 @@ pub struct PhoenixApp {
     pub switcher: Option<Switcher>,
     pub settings: Option<ui::settings::SettingsState>,
     pub prefs: ui::settings::Prefs,
+    pub chat: crate::ui::chat::ChatState,
     pub login_ui: crate::auth::LoginUi,
     pub revealed: HashSet<(Id, usize)>,
     pub utc_offset: i64,
@@ -240,6 +241,7 @@ impl PhoenixApp {
             if ev.visible_range.start == 0 {
                 let _ = weak.update(cx, |this, cx| this.load_older(cx));
             }
+            let _ = weak.update(cx, |this, cx| this.chat_on_scroll(ev, cx));
         });
 
         // Auto-login from the stored session (keyring), if any.
@@ -314,6 +316,7 @@ impl PhoenixApp {
             people: Default::default(),
             switcher: None,
             revealed: HashSet::new(),
+            chat: Default::default(),
             utc_offset,
             settings: None,
             prefs: ui::settings::Prefs::load(),
@@ -389,6 +392,7 @@ impl PhoenixApp {
         self.voice_channel = None;
         self.switcher = None;
         self.guild_list.reset(0);
+        self.chat = Default::default();
         self.sidebar_list.reset(0);
         self.message_list.reset(0);
         self.member_list.reset(0);
@@ -489,6 +493,7 @@ impl PhoenixApp {
         self.backend.select_channel(id).detach_ok();
         let entry = self.messages.entry(id).or_default();
         self.message_list.reset(entry.msgs.len() + 1);
+        self.chat_on_select(id);
         if !entry.loaded_once && !entry.loading {
             entry.loading = true;
             let fut = self.backend.load_messages(id, None, 50);
@@ -543,7 +548,7 @@ impl PhoenixApp {
         }
     }
 
-    fn insert_history(&mut self, ch: Id, page: Vec<Message>, older: bool, cx: &mut Context<Self>) {
+    pub(crate) fn insert_history(&mut self, ch: Id, page: Vec<Message>, older: bool, cx: &mut Context<Self>) {
         let mut entry = self.messages.remove(&ch).unwrap_or_default();
         entry.loading = false;
         entry.loaded_once = true;
@@ -591,7 +596,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    fn append_message(&mut self, m: Message, cx: &mut Context<Self>) {
+    pub(crate) fn append_message(&mut self, m: Message, cx: &mut Context<Self>) {
         let ch = m.channel;
         let selected = self.selected_channel == Some(ch);
         let mention = m.content.contains(&format!("<@{}>", self.me.id.0));
@@ -616,16 +621,18 @@ impl PhoenixApp {
         entry.rendered.push(r);
         let len = entry.msgs.len();
         self.messages.insert(ch, entry);
+        let (own, ts) = (m.author == self.me.id, m.timestamp);
         if selected {
             self.message_list.splice(len..len, 1);
         } else if let Some(c) = self.channels.get_mut(&ch) {
             c.unread = true;
         }
         self.update_typing_label();
+            self.chat_note_incoming(own, ts);
         cx.notify();
     }
 
-    fn replace_message(&mut self, m: Message, cx: &mut Context<Self>) {
+    pub(crate) fn replace_message(&mut self, m: Message, cx: &mut Context<Self>) {
         let ch = m.channel;
         let Some(mut entry) = self.messages.remove(&ch) else { return };
         if let Some(ix) = entry.msgs.iter().position(|x| x.id == m.id) {
@@ -873,6 +880,9 @@ impl PhoenixApp {
         if text.is_empty() {
             return;
         }
+        if self.editing.is_none() && self.chat_submit(window, cx) {
+            return;
+        }
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
         if let Some(id) = self.editing.take() {
             let fut = self.backend.edit_message(ch, id, text);
@@ -908,10 +918,8 @@ impl PhoenixApp {
         else {
             return false;
         };
-        self.editing = Some(m.id);
-        let content = m.content.clone();
-        self.composer.update(cx, |s, cx| s.set_value(content, window, cx));
-        cx.notify();
+        let id = m.id;
+        self.start_edit(id, window, cx);
         true
     }
 
@@ -1048,6 +1056,7 @@ impl PhoenixApp {
             .or(known)
             .unwrap_or(Presence::Offline)
     }
+        } else if self.chat_escape(window, cx) {
 
     // ------------------------------------------------------ quick switcher
 
@@ -1108,6 +1117,8 @@ impl PhoenixApp {
         self.composer.update(cx, |s, cx| s.focus(window, cx));
         cx.notify();
     }
+            .children(ui::chat::panels::overlays(self, window, cx))
+            .children(ui::home::overlay(self, window, cx))
 
     fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         if ui::settings::on_escape(self, cx) {
@@ -1159,7 +1170,7 @@ impl Render for PhoenixApp {
                 .flex_row()
                 .child(ui::server_bar::render(self, cx))
                 .child(ui::sidebar::render(self, cx))
-                .child(ui::chat::render(self, window, cx))
+                .child(ui::home::main_pane(self, window, cx))
                 .into_any_element(),
         };
         div()

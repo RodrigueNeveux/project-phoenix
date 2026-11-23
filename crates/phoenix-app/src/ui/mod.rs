@@ -1,9 +1,15 @@
 pub mod chat;
 pub mod image_viewer;
+pub mod context_menu;
+pub mod guild_menu;
+pub mod home;
+pub mod invite;
 pub mod login;
 pub mod settings;
 pub mod members;
 pub mod profile;
+pub mod modal;
+pub mod pickers;
 pub mod server_bar;
 pub mod sidebar;
 pub mod status_picker;

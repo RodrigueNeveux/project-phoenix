@@ -175,8 +175,38 @@ pub fn message(m: &api::Message) -> model::Message {
                 },
                 count: r.count,
                 me: r.me || r.me_burst,
+                emoji_id: r.emoji.id.map(id),
             })
             .collect(),
+        kind: message_kind(m.kind),
+        pinned: m.pinned,
+        mention_everyone: m.mention_everyone,
+        thread: m.thread.as_ref().map(|t| model::ThreadRef {
+            id: id(t.id),
+            name: t.name.clone().unwrap_or_default().into(),
+            message_count: t.message_count.unwrap_or(0),
+        }),
+    }
+}
+
+fn message_kind(k: api::MessageType) -> model::MessageKind {
+    use api::MessageType as T;
+    use model::MessageKind as K;
+    match k {
+        T::Default | T::ChatInputCommand | T::ContextMenuCommand | T::ThreadStarterMessage => K::Default,
+        T::Reply => K::Reply,
+        T::UserJoin => K::Join,
+        T::ChannelPinnedMessage => K::Pin,
+        T::GuildBoost => K::Boost(0),
+        T::GuildBoostTier1 => K::Boost(1),
+        T::GuildBoostTier2 => K::Boost(2),
+        T::GuildBoostTier3 => K::Boost(3),
+        T::ThreadCreated => K::ThreadCreated,
+        T::RecipientAdd => K::RecipientAdd,
+        T::RecipientRemove => K::RecipientRemove,
+        T::Call => K::Call,
+        T::ChannelNameChange => K::ChannelNameChange,
+        _ => K::OtherSystem,
     }
 }
 

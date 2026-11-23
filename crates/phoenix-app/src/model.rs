@@ -118,14 +118,45 @@ pub struct Attachment {
     pub original: SharedString,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Reaction {
     pub emoji: SharedString,
     pub count: u32,
     pub me: bool,
+    /// Custom (guild) emoji id; `None` for unicode emoji.
+    pub emoji_id: Option<Id>,
 }
 
-#[derive(Clone, Debug)]
+/// Non-default message types rendered as system lines.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MessageKind {
+    #[default]
+    Default,
+    Reply,
+    /// Someone joined the guild.
+    Join,
+    /// "X pinned a message to this channel."
+    Pin,
+    /// Server boost, with the tier reached (0 = plain boost).
+    Boost(u8),
+    ThreadCreated,
+    RecipientAdd,
+    RecipientRemove,
+    Call,
+    ChannelNameChange,
+    /// Any other non-user type: shown as a generic system line.
+    OtherSystem,
+}
+
+/// Thread started from a message.
+#[derive(Clone, Debug, Default)]
+pub struct ThreadRef {
+    pub id: Id,
+    pub name: SharedString,
+    pub message_count: u32,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Message {
     pub id: Id,
     pub channel: Id,
@@ -138,6 +169,10 @@ pub struct Message {
     pub embeds: Vec<Embed>,
     pub attachments: Vec<Attachment>,
     pub reactions: Vec<Reaction>,
+    pub kind: MessageKind,
+    pub pinned: bool,
+    pub mention_everyone: bool,
+    pub thread: Option<ThreadRef>,
 }
 
 #[derive(Clone, Debug)]
