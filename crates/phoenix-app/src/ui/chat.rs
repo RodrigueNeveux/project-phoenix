@@ -368,7 +368,12 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .child(
                     // titleWrapper_ margin-inline-end 8px; h1 body-md/medium 16px/20px --text-strong (#1047);
                     // thread title #1198 is flex 0 1 auto, overflow hidden, nowrap (clipped by children_).
-                    div()
+                    // 1:1 DM: the recipient's name style font (vanilla-dm header `dnsFont_`).
+                    crate::fonts::styled_name(
+                        div(),
+                        peer.filter(|_| is_dm),
+                        false,
+                    )
                         .flex_shrink(1.)
                         .min_w_0()
                         .overflow_hidden()
