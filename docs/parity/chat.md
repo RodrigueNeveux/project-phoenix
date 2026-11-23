@@ -88,5 +88,20 @@ indices in the dump JSON (`tools/tree.py <dump> <index>` in ~/discord-phoenix-re
 | attach button | #1438–#1442 | inner pl 15, wrapper p 12 14, 32px r 8 margin 0 10 0 -16, PlusLargeIcon 20 | composer.rs | ✅ (was CirclePlus) |
 | text placeholder | #1445 | padding 17 0, 16px/22px, --channel-text-area-placeholder | composer.rs | ✅ |
 | buttons | #1452–#1480 | gap 8, 32px r 8, 20px icons; gift, GIF, sticker, emoji, app launcher; 12px to edge | composer.rs | ✅ (app launcher added) |
-| translate button | #1453 `vc-trans-*` | Vencord plugin, not stock Discord | — | skipped |
+| translate button | #1453 `vc-trans-*` | Vencord plugin, absent from the vanilla dumps | — | removed from the audit |
 | typing | CSS base_U9Tvvz | absolute bottom 1, h 24, inset 16; dots 7px --text-default opacity .32 | composer.rs typing() | ✅ |
+
+## Vanilla client re-dump (2026-11-23, Vencord off)
+
+Dump `vanilla-guild-text` (guild text channel with embed, reactions, reply). No `vc-*` nodes in the vanilla dumps: the Vencord additions (translate button, platform indicators, voice speaker icons, message decorations) are gone.
+
+| element | dump node | values | our code | status |
+|---|---|---|---|---|
+| reply order | #1280..#1291 | avatar 16 (mr 4), then APP tag (`botTagCompact_`, mr 4), then username 14/500, then preview | chat.rs `reply` | ✅ (tag was after the name) |
+| reply "@" | #1287 | no "@" when the reply didn't ping | chat.rs `reply` | ❌ model has no reply-mention flag yet |
+| reply placeholder | #1291 `repliedTextPlaceholder_` | "Clique pour voir le message", italic, when the replied message has no text | chat.rs `reply` | ✅ (new) |
+| edited marker | #1211 `edited_2i8Bfm` | 10px/10 400 `#73747d`, own line after an embed | chat.rs `edited_marker` | ✅ |
+| reactions | #1275 `reactionBtn_ forceShow_` | add button always visible: padding 5 7, r 8, 1px transparent, `--reaction-background-default`, 18px icon | message_ext.rs `reactions` | ✅ (was hover-only, 20px) |
+| reaction pill | `reaction_` | r 8, padding 2 6, emoji 20, count 14 semibold | message_ext.rs | ✅ |
+| discovery notice | channel notice "Le contenu des messages de ce salon peut être affiché sur des pages web" | banner under the header | — | ❌ not implemented |
+| header topic | header | "Mode Découverte" text before the topic | chat.rs `header` | ❌ |

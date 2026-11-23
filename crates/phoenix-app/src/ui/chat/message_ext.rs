@@ -117,8 +117,8 @@ pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&Mo
     }
 }
 
-/// Reaction pills; click toggles ours. Ends with an "add reaction" button
-/// shown on hover.
+/// Reaction pills; click toggles ours. Ends with the always-visible "add
+/// reaction" button (`forceShow_`).
 pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
     let _ = app;
     let (ch, id) = (msg.channel, msg.id);
@@ -168,22 +168,22 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
     let e = entity.clone();
     row.child(
         div()
-            // reactionBtn_: same pill, --reaction-background-default, icon
-            // --reaction-text-default; shown while the reactions row is hovered.
+            // vanilla-guild-text #1275 `reactionBtn_MmKct8 forceShow_`: always shown,
+            // padding .3125rem .4375rem, 1px transparent border, radius .5rem,
+            // --reaction-background-default, 18px icon in --reaction-text-default;
+            // :hover --reaction-background-hover / --reaction-border-hover.
             .id("reaction-add")
-            .py(z(2.))
-            .px(z(6.))
+            .py(z(5.))
+            .px(z(7.))
             .rounded(z(8.))
             .border_1()
             .border_color(gpui::transparent_black())
             .flex()
             .items_center()
             .bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
-            .invisible()
-            .group_hover("msg", |s| s.visible())
             .cursor_pointer()
             .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
-            .child(div().my(z(2.)).child(icon(ChatIcon::AddReaction, 20., tk(idx::REACTION_TEXT_DEFAULT))))
+            .child(icon(ChatIcon::AddReaction, 18., tk(idx::REACTION_TEXT_DEFAULT)))
             .on_click(move |_, _, cx| {
                 e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
             }),

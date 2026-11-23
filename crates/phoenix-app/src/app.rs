@@ -420,7 +420,12 @@ impl PhoenixApp {
     }
 
     pub fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
+        // Own activities are emitted during login, before this runs (convert::self_activities).
+        let mine = self.people.activities.remove(&r.me.id);
         self.clear_session();
+        if let Some(a) = mine {
+            self.people.activities.insert(r.me.id, a);
+        }
         self.presences = r.presences.into_iter().collect();
         self.me = r.me;
         self.users = r.users.into_iter().map(|u| (u.id, u)).collect();
@@ -1110,7 +1115,7 @@ impl Render for PhoenixApp {
                 .size_full()
                 .flex()
                 .flex_col()
-                .child(ui::title_bar::render(self, cx))
+                .child(ui::title_bar::render(self, window, cx))
                 .child(div().flex_1().min_h_0().flex().flex_row().child(
                     div()
                         .flex_none()

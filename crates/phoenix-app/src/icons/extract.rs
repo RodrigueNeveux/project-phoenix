@@ -143,6 +143,12 @@ fn build(body: &str) -> Option<String> {
         .find(|(k, _)| k == "viewBox")
         .map(|(_, v)| v)
         .unwrap_or_else(|| "0 0 24 24".into());
+    // `secondaryColor:l="transparent"` in the props destructuring: shapes filled
+    // with it are an invisible backdrop (e.g. CircleQuestionIcon's circle).
+    let secondary = body.find("secondaryColor:").map(|i| {
+        let v = &body[i + "secondaryColor:".len()..];
+        v[..v.find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$')).unwrap_or(v.len())].to_owned()
+    });
     let mut shapes = String::new();
     for tag in SHAPES {
         let pat = format!("(\"{tag}\",{{");
@@ -150,6 +156,13 @@ fn build(body: &str) -> Option<String> {
         while let Some(p) = root[f..].find(&pat) {
             let o = f + p + pat.len() - 1;
             let c = close_brace(root.as_bytes(), o)?;
+            if let Some(sv) = secondary.as_deref().filter(|v| !v.is_empty()) {
+                let obj = &root[o + 1..c];
+                if obj.contains(&format!("typeof {sv}?")) || obj.contains(&format!("fill:{sv},")) || obj.contains(&format!("fill:{sv}}}")) {
+                    f = c;
+                    continue;
+                }
+            }
             let attrs: Vec<_> = literal_attrs(&root[o + 1..c]).into_iter().filter(|(k, _)| attr_ok(k)).collect();
             if !attrs.is_empty() {
                 shapes.push('<');

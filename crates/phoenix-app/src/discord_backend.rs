@@ -240,6 +240,9 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready(ready.user_guild_settings.as_ref())),
     });
     *inner.session.lock() = Some(session.clone());
+    if let Some(e) = convert::self_activities(&ready) {
+        inner.emit(e);
+    }
     nav::snapshot(&session.cache, &ready).into_iter().for_each(|e| inner.emit(e));
     tokio::spawn(pump(inner.clone(), session, rx));
     Ok(data)

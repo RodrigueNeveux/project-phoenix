@@ -111,12 +111,13 @@ macro_rules! t {
 
 // ---- dates and times -------------------------------------------------------
 
-/// "Today at 01:30" / "Yesterday at 01:30" / localized full date for older ones.
+/// "01:30" today (the 2026 client drops "Today at", compare run 2026-11-23) /
+/// "Yesterday at 01:30" / localized full date for older ones.
 pub fn calendar(dt: chrono::DateTime<chrono::Local>, now: chrono::DateTime<chrono::Local>) -> SharedString {
     let time = clock(dt);
     let days = (now.date_naive() - dt.date_naive()).num_days();
     match days {
-        0 => t!("time.today_at", time = time),
+        0 => time.into(),
         1 => t!("time.yesterday_at", time = time),
         _ => format!("{} {}", short_date(dt), time).into(),
     }

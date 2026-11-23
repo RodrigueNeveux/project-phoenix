@@ -15,9 +15,9 @@ fn title(app: &PhoenixApp) -> (Icon, SharedString) {
     if let Some(g) = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
         return (Icon::Hash, g.name.clone());
     }
+    // vanilla-dm #29: the bar reads "Direct Messages" in every DM, not the DM name.
     if app.nav.home == HomeView::Dm {
-        let name = app.selected_channel.and_then(|c| app.channels.get(&c)).map(|c| c.name.clone());
-        return (Icon::Members, name.unwrap_or_else(|| crate::t!("dm.title")));
+        return (Icon::Members, crate::t!("dm.title"));
     }
     (Icon::Members, crate::t!("friends.title"))
 }
@@ -66,7 +66,7 @@ fn nav_arrow(id: &'static str, name: &'static str, back: bool, enabled: bool) ->
     }
 }
 
-pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let (glyph, text) = title(app);
     let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
     // `bar_3zSH5d` (dump #13): 32px, no fill (the app background shows through).
@@ -125,6 +125,45 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     bar_button("title-inbox", Icon::Inbox, app.parity.inbox.open, crate::t!("inbox.title"))
                         .on_click(cx.listener(|a, _, _, cx| a.toggle_inbox(cx))),
                 )
-                .child(bar_button("title-help", Icon::Help, false, crate::t!("title.help"))),
+                .child(bar_button("title-help", Icon::Help, false, crate::t!("title.help")))
+                .when(matches!(window.window_decorations(), gpui::Decorations::Client { .. }), |d| d.child(win_buttons(cx))),
         )
+}
+
+/// `winButtons_3zSH5d winButtonsWithDivider_3zSH5d` (vanilla-guild-text #46..#52): gap
+/// `--space-4`, `:before` divider 1px `--border-subtle`, height 32 - `--space-12`,
+/// margin-inline `--space-4`; 32×32 `winButton_3zSH5d` with a 12px glyph in
+/// `--interactive-text-default`. Only drawn when the window has no server-side frame.
+fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let btn = |id: &'static str, glyph: &'static str, close: bool| {
+        div()
+            .id(id)
+            .size(z(m::TITLE_BAR_H))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+            .map(|d| {
+                if close {
+                    // `winButtonClose_3zSH5d:hover`
+                    d.hover(|s| {
+                        s.bg(c(tok(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT)))
+                            .text_color(c(tok(idx::CONTROL_CRITICAL_PRIMARY_ICON_DEFAULT)))
+                    })
+                } else {
+                    // `winButtonMinMax_3zSH5d:hover`
+                    d.hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))).text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
+                }
+            })
+            .child(div().text_size(z(12.)).line_height(z(12.)).child(glyph))
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .child(div().mx(z(4.)).w(z(1.)).h(z(m::TITLE_BAR_H - 12.)).bg(c(tok(idx::BORDER_SUBTLE))))
+        .child(btn("win-min", "\u{2013}", false).on_click(cx.listener(|_, _, w, _| w.minimize_window())))
+        .child(btn("win-max", "\u{25a1}", false).on_click(cx.listener(|_, _, w, _| w.zoom_window())))
+        .child(btn("win-close", "\u{2715}", true).on_click(cx.listener(|_, _, w, _| w.remove_window())))
 }

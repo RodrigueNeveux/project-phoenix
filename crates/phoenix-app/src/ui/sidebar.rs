@@ -286,7 +286,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         return if app.selected_guild.is_none() {
             dm_top(entity, cx).into_any_element()
         } else {
-            div().h(z(8.)).into_any_element()
+            guild_top(app).into_any_element()
         };
     }
     let Some(r) = app.sidebar_rows.get(ix - 1).copied() else {
@@ -314,6 +314,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .flex()
                 .items_center()
                 .justify_between()
+                .w_full()
                 .cursor_pointer()
                 .text_color(t(idx::CHANNELS_DEFAULT))
                 .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
@@ -556,10 +557,27 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let invite_hover = (!is_dm && !matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage)).then(|| {
         div()
             .opacity(0.)
+    // `children_TNyK-N` (vanilla-guild-text #691): margin -4 -4 -4 0, then 24px
+    // `iconItem_Wx6SnQ` boxes (padding 4, 16px `actionIcon`): "Invite" and, with
+    // Manage Channels, "Edit Channel". Shown on hover and on the selected row.
+    let can_edit = ch.guild.is_some_and(|g| {
+        crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 4) // MANAGE_CHANNELS
+    });
+    let action = |i: Icon, path: Option<&'static str>| {
+        let col = t(idx::INTERACTIVE_TEXT_DEFAULT);
+        div().size(z(24.)).p(z(4.)).flex_none().child(match path {
+            Some(p) => gpui::svg().path(crate::icons::path(p)).size(z(16.)).text_color(col).into_any_element(),
+            None => icon(i, 16., col).into_any_element(),
+        })
+    };
             .group_hover(group.clone(), |s| s.opacity(1.))
             .when(selected, |d| d.opacity(1.))
-            .ml(z(4.)) // iconItem_Wx6SnQ margin-inline-start
-            .child(icon(Icon::Members, 16., t(idx::INTERACTIVE_TEXT_DEFAULT))) // actionIcon_Wx6SnQ
+            .flex()
+            .flex_none()
+            .my(z(-4.))
+            .mr(z(-4.))
+            .child(action(Icon::Members, Some("invite")))
+            .when(can_edit, |d| d.child(action(Icon::Gear, None)))
     });
     div()
         .id(("ch", id.0))
@@ -790,7 +808,18 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
                                 .text_ellipsis()
-                                .child(app.people.custom_status.clone().unwrap_or(status)),
+                                .child(
+                                    // vanilla-guild-text user panel: the custom status replaces "Online".
+                                    app.people
+                                        .custom_status
+                                        .clone()
+                                        .or_else(|| {
+                                            app.people.activities.get(&app.me.id)?.iter().find_map(|a| {
+                                                matches!(a.kind, crate::presence::ActivityKind::Custom).then(|| a.state.clone()).flatten()
+                                            })
+                                        })
+                                        .unwrap_or(status),
+                                ),
                         ),
                 ),
         )
@@ -830,4 +859,49 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
                 ),
         )
+}
+
+/// Rows above the first channel of a guild (vanilla-guild-text #663..#680): the
+/// same `wrapper_TNyK-N`/`link_TNyK-N` rows as channels (36px, padding 4 10, gap 10,
+/// 20px `icon_TNyK-N`, 16/28 medium `--channels-default`) for "Events", "Members"
+/// (with moderation rights) and "Server Boosts", then `sectionDivider_ysO7Gy`
+/// (1px `--border-subtle`, inset 20 / 11) and a 12px gap.
+fn guild_top(app: &PhoenixApp) -> impl IntoElement {
+    let perms = app.selected_guild.map(|g| app.backend.guild_permissions(g)).unwrap_or(0);
+    let mods = crate::ui::inbox::has_perm(perms, (1 << 1) | (1 << 2) | (1 << 5)); // KICK | BAN | MANAGE_GUILD
+    let item = |id: &'static str, glyph: &'static str, label: SharedString| {
+        div().pl(z(10.)).pr(z(8.)).py(z(1.)).child(
+            div()
+                .id(id)
+                .h(z(36.))
+                .px(z(10.))
+                .rounded(z(ROW_RADIUS))
+                .flex()
+                .items_center()
+                .gap(z(10.))
+                .cursor_pointer()
+                .text_color(t(idx::CHANNELS_DEFAULT))
+                .hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                .child(gpui::svg().path(crate::icons::path(glyph)).size(z(20.)).flex_none().text_color(t(idx::CHANNEL_ICON)))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(z(16.))
+                        .line_height(z(28.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_ellipsis()
+                        .child(label),
+                ),
+        )
+    };
+    div()
+        .pt(z(8.))
+        .flex()
+        .flex_col()
+        .child(item("g-events", "calendar", crate::t!("guild.top.events")))
+        .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"))))
+        .child(item("g-boosts", "boost", crate::t!("guild.top.boosts")))
+        .child(div().mx(z(20.)).ml(z(20.)).mr(z(11.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
+        .child(div().h(z(12.)))
 }

@@ -985,3 +985,25 @@ fn voice_flags(v: &phoenix_api::models::VoiceState) -> crate::model::VoiceFlags 
         video: v.self_video,
     }
 }
+
+/// Own activities (custom status, games) from READY `sessions`, which the
+/// gateway doesn't echo back as a PRESENCE_UPDATE: the user panel subtext
+/// shows the custom status from them (vanilla-guild-text user panel).
+pub fn self_activities(r: &phoenix_api::gateway::events::Ready) -> Option<AppEvent> {
+    // PreloadedUserSettings.status (11).custom_status (2).text (1).
+    let proto = r.user_settings_proto.as_deref().and_then(|b| base64::engine::general_purpose::STANDARD.decode(b.trim()).ok());
+    let from_proto = proto.as_deref().and_then(|b| {
+        let st = super::nav::fields(b).into_iter().find(|f| f.0 == 11 && f.1 == 2)?.2;
+        let cs = super::nav::fields(st).into_iter().find(|f| f.0 == 2 && f.1 == 2)?.2;
+        let text = super::nav::fields(cs).into_iter().find(|f| f.0 == 1 && f.1 == 2)?.2;
+        std::str::from_utf8(text).ok().filter(|t| !t.is_empty()).map(str::to_owned)
+    });
+    if let Some(text) = from_proto {
+        let a = serde_json::json!({"type": 4, "name": "Custom Status", "state": text});
+        return Some(AppEvent::Activities { user: id(r.user.id), activities: crate::presence::parse_activities(&[a]) });
+    }
+    let sessions = r.sessions.as_ref()?.as_array()?;
+    let s = sessions.iter().find(|s| s.get("session_id").and_then(Value::as_str) == Some("all")).or_else(|| sessions.first())?;
+    let acts = s.get("activities").and_then(Value::as_array)?;
+    Some(AppEvent::Activities { user: id(r.user.id), activities: crate::presence::parse_activities(acts) })
+}

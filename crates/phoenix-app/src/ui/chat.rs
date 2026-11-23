@@ -426,7 +426,7 @@ fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -
 }
 
 /// Discord's "APP" tag next to bot authors.
-fn bot_tag() -> impl IntoElement {
+fn bot_tag() -> gpui::Div {
     div()
         .flex_none()
         .ml(z(4.)) // botTagCozy_ margin-inline-start .25rem
@@ -543,6 +543,8 @@ fn message(
                     .border_color(tk(idx::SPINE_DEFAULT)),
             )
             .when(!compact, |d| d.child(avatar(ru, 16.)))
+            // vanilla-guild-text #1283: `botTagCompact_` sits before the replied username.
+            .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag().ml_0()))
             .child(
                 div()
                     .flex_none()
@@ -555,7 +557,6 @@ fn message(
                     ))),
             )
             .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))
-            .when(ru.is_some_and(|u| u.bot), |d| d.child(bot_tag()))
             .child(
                 div()
                     .flex_1()
@@ -564,8 +565,9 @@ fn message(
                     .whitespace_nowrap()
                     .overflow_hidden()
                     .text_ellipsis()
-                    .when(found.is_none(), |d| d.italic())
-                    .child(preview),
+                    // #1291 `repliedTextPlaceholder_`: no text content (embeds, attachments only).
+                    .when(found.is_none() || preview.is_empty(), |d| d.italic())
+                    .child(if found.is_some() && preview.is_empty() { crate::t!("chat.reply_click_to_see") } else { preview }),
             )
     });
 

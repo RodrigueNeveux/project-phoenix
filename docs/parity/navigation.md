@@ -2,7 +2,45 @@
 
 Primary source: the live-client DOM dumps (`/mnt/windata/project-phoenix/dumps/-channels-N-N+.json` = "N-N", `-channels-me+.json` = "me"; node `#i` = dump index, inspected with `~/discord-phoenix-ref/tree.py`). The user's client runs `.density-cozy` + `.enlarge-target-size` + `.theme-midnight` (Onyx), so the dump values below override the default-density CSS rows further down where they disagree.
 
-## Dump-verified (density-cozy)
+## Vanilla client re-dump (2026-11-23, Vencord off)
+
+Dumps: `vanilla-guild-text` (guild text channel, open folder in the rail), `vanilla-dm`, `vanilla-voice-sidebar`, `vanilla-forum`, `vanilla-guild-menu` in `/mnt/windata/project-phoenix/dumps` (private). Viewport 1280×700 CSS px, `density-cozy`, `theme-midnight`. These rows override the older ones above.
+
+| element | dump node | property | dump value | our code | status |
+|---|---|---|---|---|---|
+| title bar | guild-text #25 `bar_3zSH5d` | height | 32, no fill | title_bar.rs `render` | ✅ |
+| back / forward | #31..#35 | box | leading 80; buttons 26×24 at x 13/41, 18px glyph | title_bar.rs `nav_arrow` | ✅ |
+| title (guild) | #27..#29 | icon / text | 16px guild icon + `body-sm/medium` guild name | title_bar.rs | ✅ |
+| title (DM) | dm #27..#29 | text | always "Messages privés" (18px glyph), never the DM name | title_bar.rs `title` | ✅ (was the DM name) |
+| trailing | #36..#45 | buttons | inbox, help: 24 r6, 18px glyph, gap 12 | title_bar.rs `bar_button` | ✅ |
+| help glyph | #45 | svg | CircleQuestionIcon, backdrop circle `fill=transparent` | icons/extract.rs drops `secondaryColor` shapes | ✅ (rendered as a filled disc) |
+| window buttons | #46..#52 `winButtons_3zSH5d winButtonsWithDivider` | layout | gap 4, divider 1px `--border-subtle` h 20 mx 4, 32×32 buttons, 12px glyph `--interactive-text-default`; close hover `--control-critical-primary-*` | title_bar.rs `win_buttons` (only with client-side decorations) | ✅ |
+| Vencord-only | old #24..#38 | toolbox icon, macOS buttons | not in vanilla | — | removed / never ported |
+| guild list | #55/#60 | width / gap / padding | 80 / 10 / 0 0 26 | server_bar.rs | ✅ |
+| separator | #71 | size / color | 32×1 r1 `#97979f33` | server_bar.rs `separator` | ✅ |
+| open folder | #74 `folderGroupBackground` | bg / border / radius | folder colour 15%, 1px `#97979f29`, 16 | server_bar.rs `folder` | ✅ |
+| folder header | #78 | size | 48×48 | server_bar.rs `folder` | ✅ |
+| "nouveau" bar | #57 `unreadMentionsBar_5dqHTG` | top bar | 64×25 at y -6 (scrolled-off unread) | — | ❌ not implemented |
+| channel list | #610 `sidebarList_pog62O` | border / radius | 1px left `#97979f33`, 12 top-left (width 336 = user resize) | sidebar.rs `render` | ✅ |
+| guild header | #613..#635 | height / padding / dropdown / invite | 49 / 10 / 32 r8 gap 2 / 32 r8 20px glyph; Discovery badge 18px before the name | sidebar.rs `header` | ✅ (Discovery badge ❌) |
+| boost goal | #653..#662 `container_BFMMcK` | bar | 311×26 pill, margin 0 0 12 8, padding 4 4 16, border-bottom `#97979f33`, 12px semibold text | — | ❌ not implemented (no premium progress data) |
+| top rows | #663..#678 | rows | Events / Members / Server Boosts, same `wrapper_TNyK-N` rows as channels | sidebar.rs `guild_top` | ✅ (new) |
+| top divider | #679 `sectionDivider_ysO7Gy` | line | 296×1 at x+20, then 12px gap | sidebar.rs `guild_top` | ✅ (new) |
+| channel row | #664/#665 | wrapper / link | margin-left 10, padding 1 0 / 36, padding 4 10, r 8, gap 10 | sidebar.rs `channel_row` | ✅ |
+| channel name | #667 | font | 16/28 500 `#7a7b83` (`--channels-default`) | sidebar.rs | ✅ |
+| row actions | #691..#696 `children_TNyK-N` | layout | margin -4 -4 -4 0; 24px items (padding 4, 16px): Invite, Edit Channel (manage rights) | sidebar.rs `invite_hover` | ✅ (gear was missing) |
+| category | #716 | row | 24, padding 0 6 0 20 | sidebar.rs `row` | ✅ |
+| category add | #722 | position | 24px, right edge of the row (x 377 of 407) | sidebar.rs `row` (`.w_full()`) | ✅ (was next to the chevron) |
+| voice channel | voice-sidebar | row / users / timer | same 36px row; connected users 24px avatar rows; elapsed timer `47:50:07` monospace on the right | voice_panel.rs `voice_user_row` | ✅ rows / ❌ timer |
+| guild menu | guild-menu | items | Boost, Server Tag (chip), Invite, Settings, Insights, Create Channel / Category / Event, Active Threads, App Directory, Show All Channels (checkbox), Notification Settings, Privacy Settings, Edit Per-server Profile, Hide Muted Channels (checkbox) | guild_menu.rs (other owner) | see popouts.md |
+| panels card | #987 | box | x 10, 396 wide (spans under the guild rail), r 8, 1px `#97979f29` | sidebar.rs `panels` | ✅ |
+| user panel | #990/#991 | container / account | 56, padding 14, gap 10 / 36, padding 5 6, margin-left -6, r 4 | sidebar.rs `user_panel` | ✅ |
+| user subtext | panel | text | custom status text instead of "Online" | sidebar.rs `user_panel` + convert.rs `self_activities` (settings proto / READY sessions) | ✅ |
+| self mute / deaf | panel | state | red slashed mic + headset | voice_panel.rs `audio_button` | ❌ real_shots doesn't know the local mute state (Discord keeps it client-side) |
+| DM nav | dm #604..#644 | rows | Amis / Ton Nitro / Boutique / Quêtes, 40px rows; promo card under Quêtes | sidebar.rs `dm_top` | ✅ (promo card ❌) |
+| DM rows | dm #661.. | li | 50 tall | sidebar.rs `channel_row` | ✅ |
+
+## Dump-verified (density-cozy, with Vencord — superseded)
 
 | element | dump node | property | dump value | our code | status |
 |---|---|---|---|---|---|

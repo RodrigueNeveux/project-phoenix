@@ -55,7 +55,7 @@ fn varint(b: &[u8], i: &mut usize) -> Option<u64> {
 }
 
 /// Minimal protobuf walk: (field, wire type, length-delimited payload, scalar).
-fn fields(b: &[u8]) -> Vec<(u64, u8, &[u8], u64)> {
+pub(crate) fn fields(b: &[u8]) -> Vec<(u64, u8, &[u8], u64)> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
