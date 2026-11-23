@@ -2,6 +2,7 @@ pub mod autocomplete;
 pub mod chat;
 pub mod components;
 pub mod forum;
+pub mod group_dm;
 pub mod inbox;
 pub mod context_menu;
 pub mod controls;

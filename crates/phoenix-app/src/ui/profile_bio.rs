@@ -96,25 +96,59 @@ fn text_el(id: u64, t: &RichText, range: std::ops::Range<usize>) -> gpui::AnyEle
 }
 
 /// One bio line: text runs + inline emoji (`img.emoji` 1.375em = 19.25px,
-/// margin 0 .05em 0 .1em). `wrap` lets it flow on several lines.
+/// margin 0 .05em 0 .1em, vertical-align bottom). `wrap` lets it flow on
+/// several lines: the text is cut into words so the flex row wraps like an
+/// inline box (a whole text segment as one flex item laid the emoji after
+/// the wrapped block, on top of the next line's text). The emoji sits in a
+/// fixed 19.25px box so its ":name:" loading fallback can't spill over.
 fn line_el(id: u64, t: &RichText, wrap: bool) -> Div {
     let size = 19.25;
     let mut row = div().flex().min_w_0().items_end();
     row = if wrap { row.flex_wrap() } else { row.overflow_hidden().whitespace_nowrap().h(z(if t.emoji.is_empty() { 18. } else { size })) };
     let mut last = 0;
     let mut k = 0u64;
+    let push = |row: Div, range: std::ops::Range<usize>, k: &mut u64| -> Div {
+        let mut row = row;
+        for r in if wrap { words(&t.text, range.clone()) } else { vec![range] } {
+            row = row.child(div().flex_none().h(z(18.)).child(text_el(id << 12 | *k, t, r)));
+            *k += 1;
+        }
+        row
+    };
     for (r, token) in &t.emoji {
         if last < r.start {
-            row = row.child(text_el(id << 8 | k, t, last..r.start));
-            k += 1;
+            row = push(row, last..r.start, &mut k);
         }
-        row = row.child(div().flex_none().ml(z(1.4)).mr(z(0.7)).child(crate::media::emoji::emoji_element(token, size)));
+        row = row.child(
+            div().flex_none().ml(z(1.4)).mr(z(0.7)).size(z(size)).overflow_hidden().child(crate::media::emoji::emoji_element(token, size * crate::theme::zoom())),
+        );
         last = r.end;
     }
     if last < t.text.len() {
-        row = row.child(text_el(id << 8 | k, t, last..t.text.len()));
+        row = push(row, last..t.text.len(), &mut k);
     }
     row
+}
+
+/// `range` of `text` cut after each run of whitespace ("a b  c" -> "a ", "b  ", "c").
+fn words(text: &str, range: std::ops::Range<usize>) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = range.start;
+    let mut in_space = false;
+    for (i, ch) in text[range.clone()].char_indices() {
+        let i = range.start + i;
+        if ch.is_whitespace() {
+            in_space = true;
+        } else if in_space {
+            out.push(start..i);
+            start = i;
+            in_space = false;
+        }
+    }
+    if start < range.end {
+        out.push(start..range.end);
+    }
+    out
 }
 
 /// Bio with inline markdown and emoji. `clamp` keeps at most 3 lines with
@@ -164,6 +198,14 @@ mod tests {
         assert_eq!(split_badges(&b, false), (&b[..6], 3));
         assert_eq!(split_badges(&b, true), (&b[..], 0));
         assert_eq!(split_badges(&b[..6], false).1, 0);
+    }
+
+    #[test]
+    fn words_keep_spaces() {
+        let t = "ab  c d";
+        let w: Vec<&str> = words(t, 0..t.len()).into_iter().map(|r| &t[r]).collect();
+        assert_eq!(w, ["ab  ", "c ", "d"]);
+        assert_eq!(words(t, 4..7), [4..6, 6..7]);
     }
 
     #[test]

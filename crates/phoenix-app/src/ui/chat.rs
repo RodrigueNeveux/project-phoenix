@@ -91,6 +91,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 )
                 .when(show_members, |d| d.child(members::render(app, cx)))
                 .children(crate::ui::dm_profile_panel::render(app, cx))
+                .children(crate::ui::group_dm::members_panel(app, cx))
                 .children(panels::thread_panel(app, cx)),
         )
         .children(panels::pins_popout(app, cx))
@@ -298,7 +299,11 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .min_w_0()
                 .flex()
                 .items_center()
-                .child(if is_dm {
+                .child(if let Some(gc) = ch.map(|c| c.id).filter(|c| is_dm && crate::ui::dm_profile_panel::is_group_dm(app, *c)) {
+                    // vanilla-group-dm #1064 hoverableContainer_9yrrgG padding 0 10px, gap 10px;
+                    // #1065 gdmIcon_9yrrgG 24px, margin-inline-end 4px (name at +38px).
+                    div().ml(z(10.)).mr(z(14.)).child(crate::ui::group_dm::group_avatar(app, gc, 24. * crate::theme::zoom(), c(Palette::BG_PRIMARY))).into_any_element()
+                } else if is_dm {
                     // avatar_ 20px, margin-inline-end 8px (#1092).
                     div().mr(z(8.)).child(avatar(peer, 20. * crate::theme::zoom())).into_any_element()
                 } else {
@@ -483,7 +488,8 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
             .flex()
             .flex_col()
             .gap(z(8.))
-            .child(avatar(peer, 80.))
+            // vanilla-group-dm #1104 editableGdmIcon_5yEg41 80px.
+            .child(if group { crate::ui::group_dm::group_avatar(app, chan.id, 80., c(Palette::BG_PRIMARY)) } else { avatar(peer, 80.) })
             .child(
                 div()
                     .text_size(z(32.))

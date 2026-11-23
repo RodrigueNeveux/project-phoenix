@@ -163,7 +163,7 @@ fn main() -> anyhow::Result<()> {
                                     accent: Some(0x5865F2),
                                     decoration: None,
                                     pronouns: "they/them".into(),
-                                    bio: "Building native clients in Rust. Coffee first.".into(),
+                                    bio: std::env::var("PHX_BIO").unwrap_or_else(|_| "Building native clients in Rust. Coffee first.".into()).into(),
                                     roles,
                                     nick: None,
                                     created: 1_500_000_000,

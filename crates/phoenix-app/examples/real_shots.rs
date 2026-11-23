@@ -429,7 +429,6 @@ fn main() -> anyhow::Result<()> {
     // current guild (for picking capture targets), then exit.
     if std::env::var_os("PHX_LIST").is_some() {
         cx.update(|cx| {
-            use phoenix_app::app::SidebarRow;
             let app = v.read(cx);
             for d in &app.dms {
                 // A 1:1 DM is named after its recipient; anything else is a group.
@@ -438,9 +437,11 @@ fn main() -> anyhow::Result<()> {
                 });
                 println!("dm {} group={group}", d.0);
             }
-            for r in &app.sidebar_rows {
-                if let SidebarRow::Thread(t) = r {
-                    println!("thread {} guild={:?}", t.0, app.selected_guild.map(|g| g.0));
+            // Every guild's active threads (READY / GUILD_CREATE), not just the
+            // sidebar rows of the selected guild.
+            for (parent, list) in &app.nav.threads {
+                for t in list {
+                    println!("thread {} guild={:?} parent={} name={:?}", t.id.0, t.guild.map(|g| g.0), parent.0, t.name.as_ref());
                 }
             }
         });
@@ -466,7 +467,9 @@ fn main() -> anyhow::Result<()> {
                     .map(|c| c.id);
             }
             if let Some(c) = channel {
-                let g = guild.or_else(|| app.channels.get(&c).and_then(|ch| ch.guild));
+                // Threads live in `nav.threads` until selected (select_thread registers them).
+                let thread = app.nav.find_thread(c).cloned();
+                let g = guild.or_else(|| app.channels.get(&c).or(thread.as_ref()).and_then(|ch| ch.guild));
                 app.select_guild(g, cx);
                 // `select_channel` on a voice channel means "join": just mark it selected
                 // (Discord is showing its text chat).
@@ -476,6 +479,8 @@ fn main() -> anyhow::Result<()> {
                 if voice {
                     app.selected_channel = Some(c);
                     app.rebuild_sidebar();
+                } else if thread.is_some() && !app.channels.contains_key(&c) {
+                    app.select_thread(c, cx);
                 } else {
                     app.select_channel(c, cx);
                 }

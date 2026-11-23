@@ -205,6 +205,8 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
             .map(|h| ImageRef::Url(format!("{}/channel-icons/{}/{h}.png?size=64", api::CDN_BASE, c.id).into())),
         recipients: if c.kind.is_private() { c.recipient_user_ids().len() } else { 0 },
         group_name: group.then(|| group_name(cache, c)).flatten(),
+        members: if group { c.recipient_user_ids().into_iter().map(id).collect() } else { Vec::new() },
+        owner: c.owner_id.filter(|_| group).map(id),
     }
 }
 

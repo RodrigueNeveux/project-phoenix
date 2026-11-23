@@ -654,6 +654,13 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             Some(crate::model::ImageRef::Url(u)) => {
                 gpui::img(u).size(z(32.)).rounded_full().flex_none().into_any_element()
             }
+            // vanilla-group-dm #800: generated diagonal face pile, 32px.
+            _ if !ex.members.is_empty() => crate::ui::group_dm::group_avatar(
+                app,
+                id,
+                32. * crate::theme::zoom(),
+                if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_SECONDARY) },
+            ),
             _ => div()
                 .size(z(32.))
                 .flex_none()

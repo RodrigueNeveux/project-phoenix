@@ -311,7 +311,7 @@ pub fn server_tag(tag: &(SharedString, Option<SharedString>)) -> gpui::Div {
         .child(tag.0.clone())
 }
 
-fn header(t: SharedString) -> AnyElement {
+pub fn header(t: SharedString) -> AnyElement {
     // membersGroup_86es0b: padding-block --space-lg --space-xxs (20/4),
     // padding-inline --space-md --space-xxs (16/4), height auto. Not
     // uppercased in the 2026 client; 14px/500 (Text sm/medium).
@@ -403,18 +403,34 @@ fn member_row(
     mem: &Member,
     nick: Option<&SharedString>,
 ) -> AnyElement {
-    let user_cow = app.member_user(Some(g), mem.user);
+    let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(mem.user);
+    member_row_in(app, entity, Some(g), mem, nick, owner)
+}
+
+/// A member row; `g: None` is a group DM's member list (no role colour,
+/// voice looked up across every guild).
+pub fn member_row_in(
+    app: &PhoenixApp,
+    entity: &Entity<PhoenixApp>,
+    g: Option<Id>,
+    mem: &Member,
+    nick: Option<&SharedString>,
+    owner: bool,
+) -> AnyElement {
+    let user_cow = app.member_user(g, mem.user);
     let user = user_cow.as_deref();
     let offline = mem.presence == Presence::Offline;
     let name = nick.cloned().or_else(|| user.map(|u| u.display_name.clone())).unwrap_or_default();
     let uid = mem.user;
     let e = entity.clone();
-    let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(uid);
     let tag = user.and_then(|u| u.tag.clone());
-    let in_voice = app
-        .guild_channels
-        .get(&g)
-        .is_some_and(|ids| ids.iter().filter_map(|i| app.channels.get(i)).any(|ch| ch.voice_users.contains(&uid)));
+    let in_voice = match g {
+        Some(g) => app
+            .guild_channels
+            .get(&g)
+            .is_some_and(|ids| ids.iter().filter_map(|i| app.channels.get(i)).any(|ch| ch.voice_users.contains(&uid))),
+        None => app.channels.values().any(|ch| ch.guild.is_some() && ch.voice_users.contains(&uid)),
+    };
     // Dump `-channels-N-N+` node 1643: member_Iy0c7A margin-left 8px,
     // padding 1px 0, radius 8 (44px); childContainer_J1Adu_ padding 0 8px 0 10px;
     // memberInner_Iy0c7A padding 4px 0 (42px); avatar 32 + margin-right 12.
@@ -446,11 +462,11 @@ fn member_row(
         })
         .on_click(move |ev, window, cx| {
             let at = ev.position();
-            e.update(cx, |a, cx| a.open_profile(uid, Some(g), at, window, cx));
+            e.update(cx, |a, cx| a.open_profile(uid, g, at, window, cx));
         })
         .on_mouse_down(gpui::MouseButton::Right, move |ev, window, cx| {
             cx.stop_propagation();
-            crate::ui::user_menu::open(uid, Some(g), ev.position, window);
+            crate::ui::user_menu::open(uid, g, ev.position, window);
         })
         .child(
             div()
@@ -479,7 +495,7 @@ fn member_row(
                                 .text_size(z(16.))
                                 .line_height(z(20.))
                                 .font_weight(FontWeight::MEDIUM)
-                                .text_color(role_color(app.member_color(g, mem)))
+                                .text_color(role_color(g.and_then(|g| app.member_color(g, mem))))
                                 .text_ellipsis()
                                 .child(name),
                         )

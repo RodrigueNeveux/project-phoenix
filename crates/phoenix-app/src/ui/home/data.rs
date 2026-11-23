@@ -45,6 +45,9 @@ pub struct ChannelExtra {
     pub recipients: usize,
     /// Group DM name built from recipients when Discord sent none.
     pub group_name: Option<SharedString>,
+    /// Group DM only: recipient ids (without us) and the group owner.
+    pub members: Vec<Id>,
+    pub owner: Option<Id>,
 }
 
 #[derive(Clone, Debug)]
