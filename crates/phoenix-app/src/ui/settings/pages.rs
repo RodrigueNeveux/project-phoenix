@@ -737,7 +737,78 @@ fn nitro_page(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
 static BOOST: &[B] = &[B::Title("settings.page.server_boost"), B::Lead("sp.billing.web")];
 static SUBSCRIPTIONS: &[B] = &[B::Title("settings.page.subscriptions"), B::Lead("sp.billing.web")];
 static GIFTS: &[B] = &[B::Title("settings.page.gift_inventory"), B::Lead("sp.billing.web")];
-static BILLING: &[B] = &[B::Title("settings.page.billing"), B::Lead("sp.billing.web")];
+/// Facturation (vanilla-settings-06c, #3454-#3517): the data-free frame of the
+/// page. Payment sources, balance and transactions need the billing API, which
+/// Phoenix doesn't call, so those rows stay empty.
+fn billing_sources(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let line = || div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))); // divider_ZaYWLb
+    div()
+        .mt(z(-10.)) // title pb 24 + column gap 10 → line 24px under the heading
+        .flex()
+        .flex_col()
+        .child(
+            // #3482 paymentSourceRow_ (gift card balance): 32px icon, 14/18 500 label at +46, sm secondary "Utiliser"
+            div()
+                .mt(z(50.)) // #3482 (no source rows): 26 + the 24px the empty spacer #3465 leaves
+                .h(z(32.))
+                .flex()
+                .items_center()
+                .child(
+                    // #3484 32px card glyph: brand tile with the white Discord logo
+                    div().size(z(32.)).flex_none().flex().items_center().child(
+                        div().w(z(32.)).h(z(22.)).rounded(z(3.)).bg(c(tok(idx::BRAND_500))).flex().items_center().justify_center()
+                            .child(gpui::svg().path(crate::icons::path("discord-logo")).size(z(16.)).text_color(gpui::white())),
+                    ),
+                )
+                .child(div().ml(z(14.)).flex_1().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr("sp.bl.gift")))
+                .child(controls::button_sm(eid("billing-redeem"), tr("sp.bl.redeem"), BtnKind::Secondary)),
+        )
+        .child(line().mt(z(16.))) // #3493
+        .child(
+            // #3494 footer_: primary md button, right aligned, 20px under the divider
+            div().mt(z(20.)).mb(z(10.)).flex().justify_end().child(controls::button(eid("billing-add"), tr("sp.bl.add"), BtnKind::Primary)),
+        )
+        .into_any_element()
+}
+
+/// "Historique des transactions" table header (#3511 paymentRow_, 53px,
+/// bottom border; #3513-#3515 12/12 600 Date 122px at +21, Description at +151,
+/// Montant right).
+fn billing_history(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let col = |t: &str| div().text_size(z(12.)).line_height(z(12.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr(t));
+    div()
+        .mt(z(-10.)) // #3505 line 24px under the heading
+        .flex()
+        .flex_col()
+        .child(
+            // #3510 paymentPane_: 1px --border-subtle, r8, --background-base-lower
+            div()
+                .mt(z(35.)) // #3505 empty 1px spacer 24px under the heading, pane 10 below
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+                .child(div()
+                .h(z(53.))
+                .flex()
+                .items_center()
+                .border_b_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .child(div().ml(z(21.)).w(z(130.)).flex_none().child(col("sp.bl.date")))
+                .child(div().flex_1().child(col("sp.bl.desc")))
+                .child(div().mr(z(64.)).child(col("sp.bl.amount")))),
+        )
+        .child(div().pt(z(16.)).child(desc_text(tr("sp.billing.web"))))
+        .into_any_element()
+}
+
+static BILLING: &[B] = &[
+    B::Title("sp.bl.t1"),
+    B::Custom("sp.bl.t1", billing_sources),
+    B::Divider,
+    B::Title("sp.bl.t2"),
+    B::Custom("sp.bl.t2", billing_history),
+];
 
 static DATA: &[B] = &[
     B::Title("sp.data.t1"),
