@@ -106,8 +106,9 @@ fn switch_row(
             .flex()
             .gap(z(12.))
             .mx(z(-12.))
-            .p(z(12.))
-            .min_h(z(48.))
+            // baseSettingWrapper_4Z2WJy: padding 10 0 (switch rows)
+            .px(z(12.))
+            .py(z(10.))
             .rounded(z(16.))
             .when(!disabled, |d| {
                 d.cursor_pointer().on_click(cx.listener(move |_, _, _, cx| {
@@ -479,31 +480,6 @@ fn column(children: impl IntoIterator<Item = AnyElement>) -> Div {
     div().flex_1().min_w_0().flex().flex_col().children(children)
 }
 
-fn input_mode(p: &VoicePrefs, cx: &mut Cx) -> Div {
-    let radio = |id: &'static str, label: SharedString, mode: InputMode, cx: &mut Cx| {
-        let selected = p.input_mode == mode;
-        div()
-            .id(id)
-            .py(z(8.))
-            .cursor_pointer()
-            .flex()
-            .items_center()
-            .gap(z(12.))
-            .child(crate::ui::controls::radio_indicator(selected))
-            .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(label))
-            .on_click(cx.listener(move |_, _, _, cx| {
-                update(|p| p.input_mode = mode, true);
-                cx.notify();
-            }))
-    };
-    div()
-        .flex()
-        .flex_col()
-        .child(h5(crate::t!("voice.input_mode")))
-        .child(radio("vs-mode-vad", crate::t!("voice.vad"), InputMode::VoiceActivity, cx))
-        .child(radio("vs-mode-ptt", crate::t!("voice.ptt"), InputMode::PushToTalk, cx))
-}
-
 fn keybind(p: &VoicePrefs, cx: &mut Cx) -> Div {
     let recording = ptt::is_recording();
     let label: SharedString = match (&p.ptt_key, recording) {
@@ -748,79 +724,348 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
         )
         .child(div().mt(z(35.)).child(mic_test(app, cx)))
         .child(divider())
-        .child(input_mode(&p, cx))
-        .child(div().mt(z(20.)).child(if p.input_mode == InputMode::PushToTalk { keybind(&p, cx) } else { sensitivity(&p, cx) }))
-        .when(p.input_mode == InputMode::PushToTalk, |d| d.child(div().mt(z(20.)).child(sensitivity(&p, cx))))
-        .child(divider())
-        .child(h5(crate::t!("voice.processing")))
+        // vanilla-settings-07b: untitled category (input profile, push to
+        // talk, advanced voice), then Caméra and Streaming categories.
+        .child(super::pages::render(app, LOWER, cx))
+}
+
+// ------------------------------------------------------------ lower half
+
+use super::pages::{B, Bind};
+
+static LOWER: &[B] = &[
+    B::Custom("sp.vo.profile", profile_row),
+    B::Custom("sp.vo.ptt", ptt_row),
+    B::Expand(
+        "vo-adv",
+        "sp.vo.adv",
+        "sp.vo.adv_d",
+        &[
+            B::Switch("vo-suggest", "sp.vo.suggest", "sp.vo.suggest_d", Bind::Ui(true)),
+            B::Switch("vo-silent", "sp.vo.silent", "sp.vo.silent_d", Bind::Ui(true)),
+            B::Switch("vo-switch-warn", "sp.vo.switch_warn", "sp.vo.switch_warn_d", Bind::Ui(false)),
+            B::Switch("vo-qos", "sp.vo.qos", "sp.vo.qos_d", Bind::Ui(false)),
+        ],
+    ),
+    B::Divider,
+    B::Title("sp.vo.t2"),
+    B::Custom("sp.vo.test_video", camera_preview),
+    B::Switch("vo-always-preview", "sp.vo.always_preview", "sp.vo.always_preview_d", Bind::Ui(false)),
+    B::Custom("sp.vo.camera", camera_select),
+    B::Custom("sp.vo.bg", backgrounds),
+    B::Divider,
+    B::Title("sp.vo.t3"),
+    B::Switch("vo-stream-preview", "sp.vo.stream_preview", "sp.vo.stream_preview_d", Bind::Ui(false)),
+    B::Expand(
+        "vo-stream-adv",
+        "sp.vo.stream_adv",
+        "sp.vo.stream_adv_d",
+        &[B::Custom("sp.vo.stream_att", stream_attenuation), B::Custom("sp.vo.stream_att_force", stream_strength)],
+    ),
+];
+
+/// "Profil d'entrée audio" (#2786–#2806): label, then a radioGroup whose
+/// options are 42px (title 16/20 + body-sm description 4px under) 16px
+/// apart, text at 32px. "Personnalisés" reveals the manual controls.
+fn profile_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let p = prefs().lock().clone();
+    let opts: [(&str, &str); 3] = [("sp.vo.iso", "sp.vo.iso_d"), ("sp.vo.studio", "sp.vo.studio_d"), ("sp.vo.custom", "sp.vo.custom_d")];
+    let group = div().pt(z(8.)).flex().flex_col().gap(z(16.)).children(opts.iter().enumerate().map(|(i, (t, d))| {
+        let sel = p.audio_profile == i as u32;
+        div()
+            .id(eid(format!("vo-profile-{i}")))
+            .flex()
+            .gap(z(12.))
+            .cursor_pointer()
+            .on_click(cx.listener(move |_, _, _, cx| {
+                update(
+                    move |p| {
+                        p.audio_profile = i as u32;
+                        // Isolation = the whole processing chain, studio = none.
+                        if i < 2 {
+                            let on = i == 0;
+                            p.echo_cancellation = on;
+                            p.noise_suppression = on;
+                            p.agc = on;
+                        }
+                    },
+                    true,
+                );
+                cx.notify();
+            }))
+            .child(crate::ui::controls::radio_indicator(sel))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .gap(z(4.))
+                    .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!(*t)))
+                    .child(note(crate::t!(*d))),
+            )
+    }));
+    let mut col = div().py(z(10.)).flex().flex_col().child(h5(crate::t!("sp.vo.profile")).pb_0()).child(group);
+    if p.audio_profile == 2 {
+        col = col
+            .child(div().mt(z(24.)).child(sensitivity(&p, cx)))
+            .child(div().mt(z(16.)).child(switch_row("echo", crate::t!("voice.echo"), crate::t!("voice.echo_note"), p.echo_cancellation, false, |p| p.echo_cancellation = !p.echo_cancellation, cx)))
+            .child(switch_row("noise", crate::t!("voice.noise"), crate::t!("voice.noise_note"), p.noise_suppression, false, |p| p.noise_suppression = !p.noise_suppression, cx))
+            .child(switch_row("agc", crate::t!("voice.agc"), crate::t!("voice.agc_note"), p.agc, false, |p| p.agc = !p.agc, cx));
+    }
+    col.into_any_element()
+}
+
+/// "Appuyer pour parler" switch (#2812); the keybind and release delay
+/// follow it while it is on.
+fn ptt_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let p = prefs().lock().clone();
+    let on = p.input_mode == InputMode::PushToTalk;
+    div()
+        .flex()
+        .flex_col()
         .child(switch_row(
-            "echo",
-            crate::t!("voice.echo"),
-            crate::t!("voice.echo_note"),
-            false,
-            true,
-            |_| {},
-            cx,
-        ))
-        .child(switch_row(
-            "noise",
-            crate::t!("voice.noise"),
-            crate::t!("voice.noise_note"),
-            p.noise_suppression,
-            false,
-            |p| p.noise_suppression = !p.noise_suppression,
-            cx,
-        ))
-        .child(switch_row(
-            "agc",
-            crate::t!("voice.agc"),
-            crate::t!("voice.agc_note"),
-            p.agc,
-            false,
-            |p| p.agc = !p.agc,
-            cx,
-        ))
-        .child(divider())
-        .child(h5(crate::t!("voice.attenuation")))
-        .child(note(crate::t!("voice.attenuation_note")).mb(z(16.)))
-        .child(pct_slider("attenuation", p.attenuation, 100, |p, v| p.attenuation = v, cx).mb(z(20.)))
-        .child(switch_row("att-self", crate::t!("voice.when_i_speak"), "".into(), p.attenuate_self, false, |p| p.attenuate_self = !p.attenuate_self, cx))
-        .child(switch_row(
-            "att-others",
-            crate::t!("voice.when_others_speak"),
+            "ptt",
+            crate::t!("sp.vo.ptt"),
             "".into(),
-            p.attenuate_others,
+            on,
             false,
-            |p| p.attenuate_others = !p.attenuate_others,
+            move |p| p.input_mode = if on { InputMode::VoiceActivity } else { InputMode::PushToTalk },
             cx,
         ))
-        .child(divider())
-        .child(h1(crate::t!("sp.vo.t2")))
+        .when(on, |d| d.child(div().pt(z(10.)).child(keybind(&p, cx))))
+        .into_any_element()
+}
+
+/// cameraWrapper_3LYQ5J (#2894): 220px black box, radius 4, with the
+/// primary md "Test vidéo" button centred.
+fn camera_preview(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    div()
+        .py(z(10.))
         .child(
             div()
-                .h(z(200.))
-                .rounded(z(8.))
-                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+                .h(z(220.))
+                .rounded(z(4.))
+                .border_1()
+                .border_color(gpui::black()) // cameraWrapper border oklab(0 0 0)
+                .bg(gpui::black()) // cameraWrapper background-color oklab(0 0 0)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(crate::ui::controls::button("vo-test-video", crate::t!("sp.vo.test_video"), crate::ui::controls::BtnKind::Primary)),
+        )
+        .into_any_element()
+}
+
+/// Capture devices from video4linux (name, deduplicated: the metadata
+/// node of a webcam repeats its name).
+fn cameras() -> Vec<String> {
+    let mut nodes: Vec<(u32, String)> = std::fs::read_dir("/sys/class/video4linux")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let n: u32 = e.file_name().to_str()?.strip_prefix("video")?.parse().ok()?;
+            let index = std::fs::read_to_string(e.path().join("index")).ok().and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(0);
+            let name = std::fs::read_to_string(e.path().join("name")).ok()?.trim().to_string();
+            (index == 0).then_some((n, name))
+        })
+        .collect();
+    nodes.sort();
+    let mut out: Vec<String> = Vec::new();
+    for (_, n) in nodes {
+        if !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out
+}
+
+/// "Caméra" select (#2916–#2926): label, 40px field with the device.
+fn camera_select(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    thread_local!(static CAMS: RefCell<Option<Vec<String>>> = const { RefCell::new(None) });
+    let cams = CAMS.with(|c| c.borrow_mut().get_or_insert_with(cameras).clone());
+    let opts: Vec<SharedString> =
+        if cams.is_empty() { vec![crate::t!("voice.no_video")] } else { cams.into_iter().map(SharedString::from).collect() };
+    let cur = app.settings.as_ref().and_then(|s| s.picks.get("vo-camera").copied()).unwrap_or(0).min(opts.len() - 1);
+    let dd = super::pages::dropdown(
+        app,
+        "vo-camera",
+        opts,
+        cur,
+        696.,
+        |a, i, cx| {
+            if let Some(s) = a.settings.as_mut() {
+                s.picks.insert("vo-camera", i);
+                s.open_select = None;
+            }
+            cx.notify();
+        },
+        cx,
+    );
+    div().py(z(10.)).flex().flex_col().gap(z(8.)).child(h5(crate::t!("sp.vo.camera")).pb_0()).child(dd).into_any_element()
+}
+
+/// Preset backgrounds the client offers (CDN content images, loaded at
+/// runtime like the client; the animated ones are videos we can't play,
+/// so they keep their tile and play badge only). (key, image, new badge)
+const PRESETS: &[(&str, Option<&str>, bool)] = &[
+    ("sp.vo.bg1", None, true),
+    ("sp.vo.bg2", None, true),
+    ("sp.vo.bg3", None, true),
+    ("sp.vo.bg4", None, true),
+    ("sp.vo.bg5", Some("https://cdn.discordapp.com/assets/content/e321ddf99270fad41d4c5b21de89a82984d8469c892a3f9a924f5996764d33b4.png"), false),
+    ("sp.vo.bg6", Some("https://cdn.discordapp.com/assets/content/435961b527cedf836cfdfb34cf7c4c7353b248f93be15c30a9a3b778b7d20c76.png"), false),
+    ("sp.vo.bg7", Some("https://cdn.discordapp.com/assets/content/cc4247f477caba753bfda3b66dd480a417c59ccd741b3809fedbfc3c8bdd49fd.png"), false),
+    ("sp.vo.bg8", Some("https://cdn.discordapp.com/assets/content/857242c637737acc689e8e06fdde1ce120fc595fd65833f4f86944eaea46527e.png"), false),
+];
+const BLUR_IMG: &str = "https://cdn.discordapp.com/assets/content/9b1bb92a5685e3f1d67378826197687bb24f8cf1319a4ab2375fbc8a3fb7d0fe.png";
+
+/// newBadgeCutout_imJCJi: 3px page-coloured ring at (-6,-3) around a
+/// white body-xs/semibold 12/16 pill (padding 0 8), black uppercase text.
+fn new_badge() -> Div {
+    div()
+        .absolute()
+        .top(z(-3.))
+        .left(z(-6.))
+        .p(z(3.))
+        .rounded_full()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+        .child(
+            div()
+                .h(z(16.))
+                .px(z(8.))
+                .rounded_full()
+                .bg(gpui::white())
+                .flex()
+                .items_center()
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(gpui::black())
+                .child(crate::t!("sp.vo.new")),
+        )
+}
+
+/// backgroundOptions_imJCJi (#2934): 162x94 tiles, 4 per row, 16px
+/// columns / 15px rows apart, radius 4; the selected one has a 2px
+/// #5865F2 ring 4px outside it (backgroundOptionRing).
+fn backgrounds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let cur = app.settings.as_ref().and_then(|s| s.picks.get("vo-bg").copied()).unwrap_or(0);
+    let label = |icon: &'static str, t: SharedString| {
+        // backgroundOptionContent: centred column, 18px icon in a 24px box,
+        // body-sm 14/18 white text (padding 0 4).
+        div()
+            .absolute()
+            .inset_0()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .child(div().h(z(24.)).flex().items_center().child(gpui::svg().path(crate::icons::path(icon)).size(z(18.)).text_color(gpui::white())))
+            .child(div().px(z(4.)).text_size(z(14.)).line_height(z(18.)).text_color(gpui::white()).child(t))
+    };
+    let tile = |i: usize, inner: Div, badge: bool, selectable: bool, cx: &mut Cx| {
+        div()
+            .id(eid(format!("vo-bg-{i}")))
+            .relative()
+            .w(z(162.))
+            .h(z(94.))
+            .when(selectable, |d| {
+                d.cursor_pointer().on_click(cx.listener(move |a, _, _, cx| {
+                    if let Some(s) = a.settings.as_mut() {
+                        s.picks.insert("vo-bg", i);
+                    }
+                    cx.notify();
+                }))
+            })
+            .child(inner.absolute().inset_0().rounded(z(4.)).overflow_hidden())
+            .when(cur == i, |d| {
+                d.child(div().absolute().top(z(-4.)).left(z(-4.)).w(z(170.)).h(z(102.)).rounded(z(4.)).border_2().border_color(c(0x5865F2)))
+            })
+            .when(badge, |d| d.child(new_badge()))
+    };
+    let mut tiles: Vec<AnyElement> = Vec::new();
+    // backgroundOptionInner #2937: rgb(30, 31, 34)
+    tiles.push(tile(0, div().bg(c(0x1E1F22)).child(label("deny", crate::t!("sp.vo.bg_none"))), false, true, cx).into_any_element());
+    tiles.push(
+        tile(
+            1,
+            div().bg(c(0x1E1F22)).child(gpui::img(BLUR_IMG).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)).child(label("blur", crate::t!("sp.vo.bg_blur"))),
+            false,
+            true,
+            cx,
+        )
+        .into_any_element(),
+    );
+    // backgroundCustomInlineUpsellBackground: Nitro gradient (133,71,198) →
+    // (171,93,138) under a 0.2 rgb(95,96,106) darkener; locked without Nitro.
+    let custom = div()
+        .bg(gpui::linear_gradient(90., gpui::linear_color_stop(c(0x8547C6), 0.), gpui::linear_color_stop(c(0xAB5D8A), 1.)))
+        .child(div().absolute().inset_0().bg(c(0x5F606A)).opacity(0.2))
+        .child(
+            div()
+                .absolute()
+                .inset_0()
                 .flex()
                 .flex_col()
                 .items_center()
                 .justify_center()
-                .gap(z(8.))
-                .child(note(crate::t!("voice.no_video_found"))),
-        )
-        .child(div().mt(z(20.)).child(h5(crate::t!("voice.camera"))))
-        .child(
-            div()
-                .h(z(40.))
-                .px(z(12.))
-                .rounded(z(8.))
-                .border_1()
-                .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
-                .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
-                .flex()
-                .items_center()
-                .text_size(z(16.))
-                .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(crate::t!("voice.no_video")),
-        )
+                .child(div().h(z(24.)).flex().items_center().child(gpui::svg().path(crate::icons::path("image-plus")).size(z(18.)).text_color(gpui::white())))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .child(gpui::svg().path(crate::icons::path("nitro")).size(z(14.)).text_color(gpui::white()))
+                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(gpui::white()).child(crate::t!("sp.vo.bg_custom"))),
+                ),
+        );
+    tiles.push(tile(2, custom, true, false, cx).into_any_element());
+    for (k, (_, img, badge)) in PRESETS.iter().enumerate() {
+        let i = k + 3;
+        let inner = match img {
+            Some(u) => div().bg(c(0x1E1F22)).child(gpui::img(*u).size_full().object_fit(gpui::ObjectFit::Cover)),
+            // playIcon_imJCJi: 16px box 4px in from the top-right, 12px glyph
+            None => div().bg(c(0x1E1F22)).child(
+                div().absolute().top(z(4.)).right(z(4.)).size(z(16.)).flex().items_center().justify_center().child(
+                    gpui::svg().path(crate::icons::path("play")).size(z(12.)).text_color(gpui::white()),
+                ),
+            ),
+        };
+        tiles.push(tile(i, inner, *badge, true, cx).into_any_element());
+    }
+    div()
+        .py(z(10.))
+        .flex()
+        .flex_col()
+        .child(h5(crate::t!("sp.vo.bg")).pb_0())
+        .child(div().pt(z(24.)).flex().flex_wrap().gap_x(z(16.)).gap_y(z(15.)).children(tiles))
+        .into_any_element()
+}
+
+/// "Atténuation du stream" (#3045): lowers others while they talk.
+fn stream_attenuation(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let p = prefs().lock().clone();
+    switch_row(
+        "stream-att",
+        crate::t!("sp.vo.stream_att"),
+        crate::t!("sp.vo.stream_att_d"),
+        p.attenuate_others,
+        false,
+        |p| p.attenuate_others = !p.attenuate_others,
+        cx,
+    )
+    .into_any_element()
+}
+
+/// "Force d'atténuation du stream" (#3057): label, 8px, 24px slider.
+fn stream_strength(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let p = prefs().lock().clone();
+    div()
+        .py(z(10.))
+        .flex()
+        .flex_col()
+        .child(h5(crate::t!("sp.vo.stream_att_force")))
+        .child(pct_slider("attenuation", p.attenuation, 100, |p, v| p.attenuation = v, cx))
+        .into_any_element()
 }

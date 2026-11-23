@@ -419,12 +419,24 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
                 item(
                     tr(t),
                     Some(desc_text(tr(d)).into_any_element()),
+                    // vanilla-settings-07 #2828 triggerButton_MdUQoo: 48px
+                    // --background-mod-subtle tile, --radius-sm, 24px
+                    // --icon-strong chevron (down closed, up open).
                     Some(
-                        gpui::svg()
-                            .path(crate::icons::path("chevron"))
-                            .size(z(24.))
-                            .text_color(c(tok(idx::ICON_DEFAULT)))
-                            .when(open, |s| s.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))))
+                        div()
+                            .size(z(48.))
+                            .rounded(z(8.))
+                            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(
+                                gpui::svg()
+                                    .path(crate::icons::path("chevron"))
+                                    .size(z(24.))
+                                    .text_color(c(tok(idx::ICON_STRONG)))
+                                    .when(open, |s| s.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI)))),
+                            )
                             .into_any_element(),
                     ),
                     false,

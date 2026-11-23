@@ -58,6 +58,8 @@ pub struct VoicePrefs {
     /// User panel mute/deafen: the account doesn't store them, so they stay local.
     pub self_mute: bool,
     pub self_deaf: bool,
+    /// "Profil d'entrée audio": 0 voice isolation, 1 studio, 2 custom.
+    pub audio_profile: u32,
 }
 
 impl Default for VoicePrefs {
@@ -81,6 +83,7 @@ impl Default for VoicePrefs {
             users: HashMap::new(),
             self_mute: false,
             self_deaf: false,
+            audio_profile: 0,
         }
     }
 }
@@ -131,6 +134,7 @@ impl VoicePrefs {
             users,
             self_mute: b("self_mute", false),
             self_deaf: b("self_deaf", false),
+            audio_profile: n("audio_profile").map(|x| x.clamp(0., 2.) as u32).unwrap_or(d.audio_profile),
         }
     }
 
@@ -160,6 +164,7 @@ impl VoicePrefs {
             "users": users,
             "self_mute": self.self_mute,
             "self_deaf": self.self_deaf,
+            "audio_profile": self.audio_profile,
         })
     }
 

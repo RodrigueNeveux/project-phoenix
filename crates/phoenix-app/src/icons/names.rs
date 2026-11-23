@@ -99,4 +99,9 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("orbs", &["OrbsIcon"]),
     ("user-circle", &["UserCircleIcon"]),
     ("bell-slash", &["BellSlashIcon"]),
+    ("camera", &["CameraIcon"]),
+    ("deny", &["DenyIcon"]),
+    ("blur", &["BlurBackgroundIcon"]),
+    ("play", &["PlayIcon"]),
+    ("image-plus", &["ImagePlusIcon", "ImageIcon"]),
 ];
