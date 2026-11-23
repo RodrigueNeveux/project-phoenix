@@ -742,9 +742,10 @@ fn theme_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
 }
 
 static APPEARANCE: &[B] = &[
-    B::Title("sp.ap.t1"),
+    B::Custom("sp.ap.t1", theme_title),
     B::Switch("theme-sync", "sp.ap.sync", "sp.ap.sync_d", Bind::Ui(false)),
     B::Custom("sp.ap.defaults", theme_row),
+    B::Custom("sp.ap.colors", nitro_themes),
     B::Switch("theme-devices", "sp.ap.sync_devices", "", Bind::Ui(true)),
     B::Switch("theme-profiles", "sp.ap.apply_profiles", "", Bind::Ui(true)),
     B::Related("help", "settings.page.accessibility", "sp.ap.a11y_d", Page::Accessibility),
@@ -779,6 +780,8 @@ static APPEARANCE: &[B] = &[
     B::Switch("st-invites", "sp.ap.hide_invites", "", Bind::Ui(true)),
     B::Switch("st-sounds", "sp.ap.no_sounds", "", Bind::Ui(true)),
     B::Switch("st-notifs", "sp.ap.no_notifs", "", Bind::Ui(true)),
+    B::Divider,
+    B::Custom("sp.ap.icon", nitro_app_icon),
 ];
 
 fn slider_row(title: &'static str, desc: &'static str, s: Div) -> AnyElement {
@@ -798,6 +801,7 @@ fn density_idx(p: &LocalPrefs) -> usize {
 }
 
 static A11Y: &[B] = &[
+    B::Custom("sp.ac.preview", a11y_preview),
     B::Title("sp.ac.t1"),
     B::Custom("sp.ac.font", |app, cx| {
         let fs = app.prefs.local.font_size;
@@ -889,10 +893,9 @@ static SYSTEM: &[B] = &[
     B::Switch("startup", "sp.sy.startup", "", Bind::Ui(false)),
     B::Switch("tray", "sp.sy.tray", "sp.sy.tray_d", Bind::Ui(true)),
     B::Switch("hwaccel", "sp.sy.hwaccel", "sp.sy.hwaccel_d", Bind::Ui(true)),
+    B::Custom("sp.sy.hwaccel", hwaccel_banner),
     B::Divider,
-    B::Title("sp.sy.t2"),
-    B::Action("sp.sy.t2", "sp.sy.t2_d", "sp.sy.add_kb", false),
-    B::Note("sp.sy.no_kb"),
+    B::Custom("sp.sy.t2", custom_keybinds),
     B::Divider,
     B::Title("sp.sy.t3"),
     B::KeyGroup("", "", &[("sp.kb.show", &["ctrl", "/"])]),
@@ -1069,3 +1072,270 @@ static DEVELOPER: &[B] = &[
 ];
 
 static PROFILES: &[B] = &[B::Custom("sp.pf.main", |app, _| super::view::profiles(app).into_any_element())];
+
+// ------------------------------------------------- extra blocks (vanilla dumps)
+
+/// Picks the French or English string by the synced locale (these labels have
+/// no locale keys yet).
+fn lt(app: &PhoenixApp, fr: &'static str, en: &'static str) -> SharedString {
+    if app.prefs.synced.locale.starts_with("fr") { fr.into() } else { en.into() }
+}
+
+/// Info/warning notice box (vanilla-settings-10 #hwaccel notice, x=457):
+/// 16px icon + body-sm 14/18 text, padding 12, --radius-sm.
+fn notice(icon: &'static str, text: SharedString, warn: bool) -> Div {
+    let (bg, border) = if warn {
+        (idx::BACKGROUND_FEEDBACK_WARNING, idx::BORDER_FEEDBACK_WARNING)
+    } else {
+        (idx::BACKGROUND_FEEDBACK_INFO, idx::BORDER_FEEDBACK_INFO)
+    };
+    div()
+        .flex()
+        .items_start()
+        .gap(z(12.))
+        .p(z(12.))
+        .rounded(z(8.)) // --radius-sm
+        .border_1()
+        .border_color(c(tok(border)))
+        .bg(c(tok(bg)))
+        .child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(16.)).mt(z(1.)).text_color(c(tok(idx::ICON_STRONG))))
+        .child(div().flex_1().min_w_0().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG))).child(text))
+}
+
+fn hwaccel_banner(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    if get_bool(app, "hwaccel", Bind::Ui(true)) {
+        return div().into_any_element();
+    }
+    notice(
+        "warning",
+        lt(
+            app,
+            "L'accélération matérielle est désactivée, ce qui dégrade les performances système.",
+            "Hardware acceleration is disabled, which degrades system performance.",
+        ),
+        true,
+    )
+    .into_any_element()
+}
+
+/// vanilla-settings-10: h2 heading-xl 24/32 + 427px description, primary
+/// "Add a keybind" button at the right (x=909), two info notices, then the
+/// user's keybind rows or the empty note.
+fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let n = get_pick(app, "kb-count", Pick::Ui(0));
+    let add = controls::button(eid("kb-add"), tr("sp.sy.add_kb"), BtnKind::Primary)
+        .on_click(cx.listener(move |a, _, _, cx| set_pick(a, "kb-count", Pick::Ui(0), n + 1, cx)));
+    let mut col = div()
+        .flex()
+        .flex_col()
+        .gap(z(16.))
+        .child(
+            div()
+                .flex()
+                .items_start()
+                .gap(z(16.))
+                .child(div().flex_1().flex().flex_col().gap(z(4.)).child(controls::section_title(tr("sp.sy.t2"))).child(desc_text(tr("sp.sy.t2_d"))))
+                .child(add),
+        )
+        .child(notice(
+            "info",
+            lt(app, "Les raccourcis clavier sont désactivés tant que cette page est visible.", "Keybinds are disabled while this page is open."),
+            false,
+        ))
+        .child(notice(
+            "info",
+            lt(
+                app,
+                "Les raccourcis clavier sont enregistrés avec ton ordinateur. Les modifications prennent effet sur cet appareil.",
+                "Keybinds are saved on this computer. Changes only apply to this device.",
+            ),
+            false,
+        ));
+    if n == 0 {
+        col = col.child(desc_text(tr("sp.sy.no_kb")));
+    }
+    for i in 0..n {
+        // keybind row: action select + recorded shortcut + remove
+        col = col.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(16.))
+                .p(z(16.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                .child(
+                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(lt(app, "Action", "Action"))).child(desc_text(lt(app, "Non attribué", "Unassigned"))),
+                )
+                .child(
+                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(lt(app, "Raccourci clavier", "Keybind"))).child(desc_text(lt(app, "Aucun raccourci clavier défini", "No keybind set"))),
+                )
+                .child(
+                    div()
+                        .id(eid(format!("kb-rm-{i}")))
+                        .cursor_pointer()
+                        .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::ICON_DEFAULT))))
+                        .on_click(cx.listener(move |a, _, _, cx| set_pick(a, "kb-count", Pick::Ui(0), n - 1, cx))),
+                ),
+        );
+    }
+    col.into_any_element()
+}
+
+/// vanilla-settings-09 "Aperçu": h2 16/20 then a message preview card
+/// (--background-base-lower, --radius-md) with two sample messages.
+fn a11y_preview(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let msg = |name: SharedString, body: SharedString| {
+        div()
+            .flex()
+            .gap(z(16.))
+            .child(div().flex_none().size(z(40.)).rounded_full().bg(c(tok(idx::BACKGROUND_MOD_STRONG))))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .flex()
+                            .gap(z(8.))
+                            .items_baseline()
+                            .child(div().text_size(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(name))
+                            .child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child("11:11")),
+                    )
+                    .child(div().text_size(z(16.)).line_height(z(22.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(body)),
+            )
+    };
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(16.))
+        .child(title_text(lt(app, "Aperçu", "Preview")).font_weight(FontWeight::SEMIBOLD))
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(z(16.))
+                .p(z(16.))
+                .rounded(z(12.)) // --radius-md
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+                .child(msg("Phoenix".into(), lt(app, "qu'est-ce qui est arrivé à tous les haricots", "what happened to all the beans")))
+                .child(
+                    div().flex().items_center().justify_between().child(msg("Phoenix".into(), lt(app, "voici un lien", "here is a link"))).child(
+                        controls::button(eid("a11y-sample"), lt(app, "Bouton d’exemple", "Sample button"), BtnKind::Primary),
+                    ),
+                ),
+        )
+        .into_any_element()
+}
+
+/// Title row with the secondary "Theme preview" button (vanilla-settings-08,
+/// span at x=980 w=119).
+fn theme_title(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    div()
+        .flex()
+        .items_start()
+        .justify_between()
+        .child(controls::section_title(tr("sp.ap.t1")))
+        .child(controls::button(eid("theme-preview"), lt(app, "Aperçu du thème", "Theme preview"), BtnKind::Secondary))
+        .into_any_element()
+}
+
+fn lock_badge() -> Div {
+    div()
+        .absolute()
+        .top(z(-4.))
+        .right(z(-4.))
+        .size(z(20.))
+        .rounded_full()
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(gpui::svg().path(crate::icons::path("lock")).size(z(12.)).text_color(c(tok(idx::ICON_STRONG))))
+}
+
+/// Nitro-locked "Thèmes de couleur" (h2 16/20 + 14/18 subtitle, 22 gradient
+/// swatches + custom-theme tile, each with a lock).
+fn nitro_themes(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    const SW: [(u32, u32); 22] = [
+        (0x56b69f, 0x635f9e), (0xf9cb5f, 0xfaaa3c), (0x6a71d6, 0xc36ac1), (0xf6b0d3, 0xe08cb6),
+        (0x2e3b8a, 0xd9846c), (0xec96d4, 0x98b4e6), (0x3a3a7d, 0x6a5c9c), (0x6b6c3a, 0xaa9c6c),
+        (0x4c296c, 0xe5734b), (0x404a5c, 0x8a94a6), (0x1d3a2b, 0x4a7552), (0x5f0b1f, 0xb0323f),
+        (0x1c1c66, 0x5465ff), (0x8d3721, 0xc46a3c), (0x3b2d64, 0xc2876c), (0x0f2855, 0x3a6e8c),
+        (0x2a1a4d, 0xd65a8a), (0x0c0d3f, 0xb32bd8), (0xd8476a, 0xf4a28c), (0x1d6a6c, 0x6a2c9c),
+        (0x7a5a3c, 0xb59877), (0x3a2a6c, 0x6a74c9),
+    ];
+    let tile = |i: usize, a: u32, b: u32| {
+        div()
+            .id(eid(format!("nitro-theme-{i}")))
+            .relative()
+            .size(z(60.))
+            .rounded_full()
+            .bg(gpui::linear_gradient(
+                135.,
+                gpui::linear_color_stop(gpui::rgb(a), 0.),
+                gpui::linear_color_stop(gpui::rgb(b), 1.),
+            ))
+            .child(lock_badge())
+    };
+    div()
+        .flex()
+        .flex_col()
+        .pt(z(16.))
+        .gap(z(4.))
+        .child(title_text(lt(app, "Thèmes de couleur", "Color themes")).font_weight(FontWeight::SEMIBOLD))
+        .child(desc_text(lt(app, "Prends le contrôle de Discord. Uniquement avec Nitro.", "Make Discord yours. Only with Nitro.")))
+        .child(
+            div()
+                .pt(z(20.))
+                .flex()
+                .flex_wrap()
+                .gap(z(16.))
+                .child(
+                    div()
+                        .relative()
+                        .size(z(60.))
+                        .rounded_full()
+                        .border_1()
+                        .border_color(c(tok(idx::BORDER_NORMAL)))
+                        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(gpui::svg().path(crate::icons::path("plus")).size(z(24.)).text_color(c(tok(idx::ICON_STRONG))))
+                        .child(lock_badge()),
+                )
+                .children(SW.iter().enumerate().map(|(i, (a, b))| tile(i, *a, *b))),
+        )
+        .into_any_element()
+}
+
+/// Nitro-locked "Icône de l'appli" (heading-xl title + 373px description,
+/// "Icon preview" button at the right, locked icon tiles).
+fn nitro_app_icon(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    const IC: [u32; 8] = [0x5865f2, 0x23272a, 0xeb459e, 0x57f287, 0xfee75c, 0xed4245, 0x9b84ee, 0xffffff];
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(4.))
+        .child(
+            div()
+                .flex()
+                .items_start()
+                .justify_between()
+                .child(div().flex().flex_col().gap(z(4.)).child(controls::section_title(lt(app, "Icône de l'appli", "App icon"))).child(desc_text(lt(
+                    app,
+                    "Modifie l'icône de l'application Discord, uniquement avec Nitro.",
+                    "Change the Discord app icon, only with Nitro.",
+                ))))
+                .child(controls::button(eid("icon-preview"), lt(app, "Aperçu de l'icône", "Icon preview"), BtnKind::Secondary)),
+        )
+        .child(div().pt(z(20.)).flex().flex_wrap().gap(z(16.)).children(IC.iter().enumerate().map(|(i, col)| {
+            div().id(eid(format!("nitro-icon-{i}"))).relative().size(z(60.)).rounded(z(16.)).bg(gpui::rgb(*col)).child(lock_badge())
+        })))
+        .into_any_element()
+}
