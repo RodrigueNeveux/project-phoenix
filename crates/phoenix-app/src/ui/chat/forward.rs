@@ -14,8 +14,13 @@ fn tk(i: usize) -> gpui::Hsla {
 }
 
 pub fn wrap(app: &PhoenixApp, f: &Forward, body: gpui::Div) -> AnyElement {
-    let channel = app.channels.get(&f.channel).map(|c| c.name.clone());
     let guild = f.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    // Seen from outside the origin guild (e.g. a DM) the footer names the guild, not the channel
+    // (live client, DM with a forward from a guild, CDP 2026-11-23).
+    let channel = match guild {
+        Some(g) if app.selected_guild != Some(g.id) => Some(g.name.clone()),
+        _ => app.channels.get(&f.channel).map(|c| c.name.clone()),
+    };
     let when = chrono::DateTime::from_timestamp(f.timestamp, 0).map(|t| crate::i18n::clock(t.with_timezone(&chrono::Local)));
     let footer_text = match (channel, when) {
         (Some(ch), Some(t)) => format!("{ch} \u{2022} {t}"),
