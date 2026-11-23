@@ -398,7 +398,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
         // avatar_jPuNMC 32px, margin-right 12
-        .child(div().mr(z(12.)).child(avatar_with_status(u, 32., p, c(Palette::BG_PRIMARY))))
+        .child(div().mr(z(12.)).child(crate::ui::avatar_deco::decorate(avatar_with_status(u, 32., p, c(Palette::BG_PRIMARY)), u, 32.)))
         .child(
             div()
                 .flex_1()
@@ -623,7 +623,7 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     .gap(z(12.))
                     .bg(c(Palette::BG_MSG_HOVER))
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                    .child(avatar_with_status(u, 32., app.presence_of(user), c(Palette::BG_SECONDARY)))
+                    .child(crate::ui::avatar_deco::decorate(avatar_with_status(u, 32., app.presence_of(user), c(Palette::BG_SECONDARY)), u, 32.))
                     .child(
                         div()
                             .flex_1()

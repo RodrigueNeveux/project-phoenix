@@ -711,7 +711,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     } else if is_dm {
         let u = ch.voice_users.first().and_then(|u| app.users.get(u));
         let p = ch.voice_users.first().map(|u| app.presence_of(*u)).unwrap_or_default();
-        avatar_with_status(u, 32., p, c(Palette::BG_SECONDARY)).into_any_element()
+        crate::ui::avatar_deco::decorate(avatar_with_status(u, 32., p, c(Palette::BG_SECONDARY)), u, 32.).into_any_element()
     } else {
         // `icon_TNyK-N` `--channel-icon`; muted `--icon-muted`; unread `--icon-subtle`.
         // `iconLive_Wx6SnQ`: the channel we're connected to tints its icon
@@ -1084,7 +1084,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
                 .overflow_hidden()
-                .child(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)))
+                .child(crate::ui::avatar_deco::decorate(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)), Some(&app.me), 32.))
                 .child(
                     div()
                         .flex_1()
