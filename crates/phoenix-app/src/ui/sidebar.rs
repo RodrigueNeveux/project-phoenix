@@ -100,7 +100,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex()
         .flex_col()
         .bg(c(Palette::BG_SECONDARY))
-        .rounded_tl(z(8.))
+        .border_l_1()
+        .border_t_1()
+        .border_color(c(Palette::APP_FRAME_BORDER))
+        .rounded_tl(z(m::FRAME_RADIUS))
         .overflow_hidden()
         .relative()
         .child(header(app, cx))
@@ -128,7 +131,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 div()
                     .w_full()
                     .h(z(28.))
-                    .rounded(z(4.))
+                    .rounded(z(8.))
                     .bg(c(Palette::BG_TERTIARY))
                     .px(z(6.))
                     .flex()
@@ -143,7 +146,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
             .into_any_element(),
         Some(g) => {
             let hash = app.nav.banners.get(&g.id).cloned();
-            let banner = g.banner_color.or(hash.as_ref().map(|_| Palette::BG_SECONDARY));
+            // The refreshed client only shows a banner when the guild has one.
+            let banner = hash.as_ref().map(|_| g.banner_color.unwrap_or(Palette::BG_SECONDARY));
             let menu_open = app.nav.guild_menu;
             let gid = g.id.0;
             div()
@@ -152,7 +156,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .flex_none()
                 .relative()
                 .when_some(banner, |d, col| {
-                    let h = if hash.is_some() { 135. } else { 84. };
+                    let h = (m::SIDEBAR_W * 9. / 21.).round();
                     d.h(px(h))
                         .bg(c(col))
                         .overflow_hidden()
@@ -212,14 +216,14 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                             div()
                                 .text_size(z(16.))
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
+                                .text_color(if banner.is_some() { gpui::white() } else { c(Palette::TEXT_HEADER) })
                                 .text_ellipsis()
                                 .child(g.name.clone()),
                         )
                         .child(if menu_open {
-                            icon(Icon::Close, 18., c(Palette::TEXT_HEADER))
+                            icon(Icon::Close, 18., if banner.is_some() { gpui::white() } else { c(Palette::TEXT_HEADER) })
                         } else {
-                            icon(Icon::Chevron, 18., c(Palette::TEXT_HEADER))
+                            icon(Icon::Chevron, 18., if banner.is_some() { gpui::white() } else { c(Palette::TEXT_HEADER) })
                         }),
                 )
                 .when(banner.is_none(), |d| d.h(px(m::HEADER_H)))
@@ -589,6 +593,8 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .bottom_0()
                 .right_0()
                 .left(z(m::SERVER_BAR_W))
+                .border_l_1()
+                .border_color(c(Palette::APP_FRAME_BORDER))
                 .bg(c(Palette::BG_SECONDARY)),
         )
         .child(panels_card(app, cx))
@@ -600,8 +606,8 @@ fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEleme
         .m(z(8.))
         .rounded(z(8.))
         .border_1()
-        .border_color(c(Palette::PANEL_BORDER))
-        .bg(c(Palette::BG_SECONDARY_ALT))
+        .border_color(c(Palette::BORDER_MUTED))
+        .bg(c(Palette::BG_BASE_LOW))
         .overflow_hidden()
         .flex()
         .flex_col()

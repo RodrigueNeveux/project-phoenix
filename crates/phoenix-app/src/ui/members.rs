@@ -76,10 +76,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         request_ranges(app, g, cx);
     }
     div()
-        .w(px(m::MEMBER_LIST_W))
+        .w(z(m::MEMBER_LIST_W))
         .flex_none()
         .h_full()
         .bg(c(Palette::BG_SECONDARY))
+        .border_l_1()
+        .border_color(c(Palette::DIVIDER))
         .child(list(app.member_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full())
 }
 

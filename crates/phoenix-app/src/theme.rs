@@ -60,6 +60,11 @@ impl Palette {
     pub const PANEL_BORDER: u32 = TOKEN | 34;
     pub const GUILD_ICON_BG: u32 = TOKEN | 35;
     pub const TEXT_CRITICAL: u32 = TOKEN | 36;
+    pub const BORDER_MUTED: u32 = TOKEN | 37;
+    /// `--app-frame-border` (same row as the guild separator).
+    pub const APP_FRAME_BORDER: u32 = TOKEN | 33;
+    /// `--background-base-low`.
+    pub const BG_BASE_LOW: u32 = TOKEN | 2;
     pub const GREY: u32 = 0x80848E;
     pub const MENTION_BG: u32 = 0x5865F23D; // rgba, --mention-background
     pub const MENTIONED_MSG_BG: u32 = 0xF0B2320F;
@@ -74,7 +79,7 @@ pub const TOKEN: u32 = 0x0100_0000;
 // (theme-darker = Dark, theme-light = Light, theme-dark = Ash, theme-midnight = Onyx).
 // Translucent modifiers are pre-composited over the surface they sit on.
 // Columns: [Dark, Light, Ash, Onyx]
-pub const TOKEN_COUNT: usize = 37;
+pub const TOKEN_COUNT: usize = 38;
 static TABLE: [[u32; 4]; TOKEN_COUNT] = [
     [0x121214, 0xF3F3F4, 0x2C2D32, 0x000000], // BG_TERTIARY --background-base-lowest
     [0x1A1A1E, 0xFBFBFB, 0x323339, 0x000000], // BG_SECONDARY --background-base-lower
@@ -113,6 +118,7 @@ static TABLE: [[u32; 4]; TOKEN_COUNT] = [
     [0x2E2E33, 0xDFDFE1, 0x42434A, 0x1E1E20], // PANEL_BORDER --border-subtle
     [0x222225, 0xE8E8EA, 0x393A3F, 0x121213], // GUILD_ICON_BG --background-mod-subtle
     [0xF87E7A, 0xB92733, 0xFFA09B, 0xEB5F5E], // TEXT_CRITICAL --text-feedback-critical
+    [0x2A2A2E, 0xEBEBEC, 0x3D3E44, 0x0E0E0F], // BORDER_MUTED --border-muted (over base-low)
 ];
 
 static THEME: AtomicU8 = AtomicU8::new(0);
@@ -238,10 +244,22 @@ pub fn to_rgba(h: Hsla) -> Rgba {
 /// Layout metrics in px.
 pub mod m {
     pub const SERVER_BAR_W: f32 = 72.;
-    pub const GUILD_ICON: f32 = 48.;
+    /// `--guildbar-avatar-size` (default density).
+    pub const GUILD_ICON: f32 = 40.;
+    /// `--custom-guild-sidebar-width`.
     pub const SIDEBAR_W: f32 = 268.;
-    pub const MEMBER_LIST_W: f32 = 240.;
-    pub const HEADER_H: f32 = 48.;
+    /// `--custom-member-list-width` (default density).
+    pub const MEMBER_LIST_W: f32 = 264.;
+    /// `--custom-channel-header-height` (includes the 1px bottom border).
+    pub const HEADER_H: f32 = 49.;
+    /// `--custom-app-top-bar-height`.
+    pub const TITLE_BAR_H: f32 = 32.;
+    /// `--custom-app-top-bar-item-radius`.
+    pub const TITLE_BAR_ITEM_RADIUS: f32 = 6.;
+    /// `--chat-input-icon-size`: channel header toolbar glyphs.
+    pub const HEADER_ICON: f32 = 20.;
+    /// `--radius-md`: rounded top-left corner of the channel list.
+    pub const FRAME_RADIUS: f32 = 12.;
     pub const USER_PANEL_H: f32 = 56.;
     pub const AVATAR: f32 = 40.;
     pub const MSG_GUTTER: f32 = 72.;

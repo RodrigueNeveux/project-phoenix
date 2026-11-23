@@ -1105,8 +1105,9 @@ impl Render for PhoenixApp {
             Screen::Main => div()
                 .size_full()
                 .flex()
-                .flex_row()
-                .child(
+                .flex_col()
+                .child(ui::title_bar::render(self, cx))
+                .child(div().flex_1().min_h_0().flex().flex_row().child(
                     div()
                         .flex_none()
                         .h_full()
@@ -1123,7 +1124,7 @@ impl Render for PhoenixApp {
                         )
                         .child(ui::sidebar::panels(self, cx)),
                 )
-                .child(ui::home::main_pane(self, window, cx))
+                .child(ui::home::main_pane(self, window, cx)))
                 .into_any_element(),
         };
         div()
