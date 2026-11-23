@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use gpui::{
     AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div,
-    prelude::*, px,
+    prelude::*,
 };
 use gpui_component::input::Input;
 
@@ -18,7 +18,7 @@ use crate::{
     app::{PhoenixApp, format_time_full},
     assets::Icon,
     model::Message,
-    theme::{Palette, c, ca},
+    theme::{Palette, c, ca, z},
     ui::{avatar, context_menu, icon_button, modal},
 };
 
@@ -45,19 +45,19 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     let ic = |i: ChatIcon| Some(i.path());
 
     // Quick-reaction strip.
-    let mut strip = div().flex().gap(px(4.)).px(px(2.)).pb(px(4.));
+    let mut strip = div().flex().gap(z(4.)).px(z(2.)).pb(z(4.));
     for (i, q) in QUICK_REACTIONS.iter().enumerate() {
         let e = e.clone();
         strip = strip.child(
             div()
                 .id(("menu-quick", i))
-                .size(px(40.))
+                .size(z(40.))
                 .rounded_full()
                 .bg(c(0x2B2D31))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(px(20.))
+                .text_size(z(20.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(0x3D3E45)))
                 .child(*q)
@@ -132,11 +132,11 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
 fn message_card(app: &PhoenixApp, m: &Message) -> gpui::Div {
     let u = app.users.get(&m.author);
     div()
-        .p(px(12.))
-        .rounded(px(4.))
+        .p(z(12.))
+        .rounded(z(4.))
         .bg(c(Palette::BG_SECONDARY))
         .flex()
-        .gap(px(12.))
+        .gap(z(12.))
         .child(avatar(u, 40.))
         .child(
             div()
@@ -148,25 +148,25 @@ fn message_card(app: &PhoenixApp, m: &Message) -> gpui::Div {
                     div()
                         .flex()
                         .items_baseline()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .child(
                             div()
-                                .text_size(px(16.))
+                                .text_size(z(16.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(crate::theme::role_color(app.author_color(m.author)))
                                 .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into())),
                         )
                         .child(
                             div()
-                                .text_size(px(12.))
+                                .text_size(z(12.))
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .child(format_time_full(m.timestamp)),
                         ),
                 )
                 .child(
                     div()
-                        .text_size(px(16.))
-                        .line_height(px(22.))
+                        .text_size(z(16.))
+                        .line_height(z(22.))
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(if m.content.is_empty() && !m.attachments.is_empty() {
                             SharedString::from(format!("{} attachment(s)", m.attachments.len()))
@@ -183,7 +183,7 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
     let msg = app.messages.get(&ch).and_then(|x| x.msgs.iter().find(|x| x.id == id));
     let mut body: Vec<AnyElement> = vec![
         div()
-            .text_size(px(16.))
+            .text_size(z(16.))
             .text_color(c(Palette::TEXT_NORMAL))
             .child("Are you sure you want to delete this message?")
             .into_any_element(),
@@ -195,11 +195,11 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
         div()
             .flex()
             .flex_col()
-            .gap(px(4.))
-            .child(div().text_size(px(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::GREEN)).child("PROTIP:"))
+            .gap(z(4.))
+            .child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::GREEN)).child("PROTIP:"))
             .child(
                 div()
-                    .text_size(px(14.))
+                    .text_size(z(14.))
                     .text_color(c(Palette::TEXT_NORMAL))
                     .child("Hold Shift while clicking Delete Message to skip this confirmation."),
             )
@@ -224,21 +224,21 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
 pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let p = app.chat.pins.as_ref()?;
     let ch = p.channel;
-    let mut list = div().id("pins-list").flex_1().min_h_0().overflow_y_scroll().p(px(8.)).flex().flex_col().gap(px(8.));
+    let mut list = div().id("pins-list").flex_1().min_h_0().overflow_y_scroll().p(z(8.)).flex().flex_col().gap(z(8.));
     if p.loading {
-        list = list.child(div().p(px(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
     } else if p.msgs.is_empty() {
         list = list.child(
             div()
-                .p(px(32.))
+                .p(z(32.))
                 .flex()
                 .flex_col()
                 .items_center()
-                .gap(px(8.))
+                .gap(z(8.))
                 .child(icon(ChatIcon::Unread, 48., c(Palette::INTERACTIVE_MUTED)))
                 .child(
                     div()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .text_color(c(Palette::TEXT_MUTED))
                         .child("This channel doesn't have any pinned messages... yet."),
                 ),
@@ -257,8 +257,8 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                 .child(
                     div()
                         .absolute()
-                        .top(px(4.))
-                        .right(px(4.))
+                        .top(z(4.))
+                        .right(z(4.))
                         .invisible()
                         .group_hover("pin", |s| s.visible())
                         .child(icon_button("unpin", Icon::Close, c(Palette::INTERACTIVE), 16.).on_click(cx.listener(
@@ -274,11 +274,11 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
         div()
             .id("pins-popout")
             .absolute()
-            .top(px(52.))
-            .right(px(16.))
-            .w(px(420.))
-            .max_h(px(560.))
-            .rounded(px(8.))
+            .top(z(52.))
+            .right(z(16.))
+            .w(z(420.))
+            .max_h(z(560.))
+            .rounded(z(8.))
             .bg(c(Palette::BG_TERTIARY))
             .shadow_lg()
             .occlude()
@@ -287,16 +287,16 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
             .overflow_hidden()
             .child(
                 div()
-                    .h(px(48.))
-                    .px(px(16.))
+                    .h(z(48.))
+                    .px(z(16.))
                     .bg(c(Palette::BG_TERTIARY))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(z(8.))
                     .child(crate::ui::icon(Icon::Pin, 20., c(Palette::INTERACTIVE)))
                     .child(
                         div()
-                            .text_size(px(16.))
+                            .text_size(z(16.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(Palette::TEXT_HEADER))
                             .child("Pinned Messages"),
@@ -312,7 +312,7 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
     let t = app.chat.thread.as_ref()?;
     let entity: Entity<PhoenixApp> = cx.entity();
     let id = t.thread.id;
-    let mut body = div().id("thread-msgs").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().pb(px(8.));
+    let mut body = div().id("thread-msgs").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().pb(z(8.));
     match app.messages.get(&id) {
         Some(entry) if entry.loaded_once => {
             for (m, r) in entry.msgs.iter().zip(entry.rendered.iter()) {
@@ -320,13 +320,13 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
             }
         }
         _ => {
-            body = body.child(div().p(px(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
+            body = body.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child("Loading…"));
         }
     }
     let empty = t.input.read(cx).value().is_empty();
     Some(
         div()
-            .w(px(420.))
+            .w(z(420.))
             .flex_none()
             .h_full()
             .border_l_1()
@@ -336,12 +336,12 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
             .flex_col()
             .child(
                 div()
-                    .h(px(48.))
+                    .h(z(48.))
                     .flex_none()
-                    .px(px(16.))
+                    .px(z(16.))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(z(8.))
                     .border_b_1()
                     .border_color(c(Palette::HEADER_SHADOW))
                     .child(icon(ChatIcon::Thread, 22., c(Palette::CHANNEL_ICON)))
@@ -350,7 +350,7 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
                             .flex_1()
                             .min_w_0()
                             .text_ellipsis()
-                            .text_size(px(16.))
+                            .text_size(z(16.))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(c(Palette::TEXT_HEADER))
                             .child(t.thread.name.clone()),
@@ -362,22 +362,22 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
             )
             .child(body)
             .child(
-                div().p(px(16.)).pt(px(0.)).child(
+                div().p(z(16.)).pt(z(0.)).child(
                     div()
-                        .min_h(px(44.))
-                        .px(px(16.))
-                        .rounded(px(8.))
+                        .min_h(z(44.))
+                        .px(z(16.))
+                        .rounded(z(8.))
                         .bg(c(Palette::INPUT_BG))
                         .relative()
                         .flex()
                         .items_center()
-                        .text_size(px(16.))
+                        .text_size(z(16.))
                         .child(div().flex_1().min_w_0().child(Input::new(&t.input).appearance(false).bordered(false)))
                         .when(empty, |d| {
                             d.child(
                                 div()
                                     .absolute()
-                                    .left(px(18.))
+                                    .left(z(18.))
                                     .top_0()
                                     .bottom_0()
                                     .flex()
@@ -404,17 +404,17 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
             .id("new-messages-bar")
             .absolute()
             .top_0()
-            .left(px(16.))
-            .right(px(16.))
-            .h(px(24.))
-            .px(px(12.))
-            .rounded_b(px(8.))
+            .left(z(16.))
+            .right(z(16.))
+            .h(z(24.))
+            .px(z(12.))
+            .rounded_b(z(8.))
             .bg(c(Palette::BLURPLE))
             .flex()
             .items_center()
             .justify_between()
             .cursor_pointer()
-            .text_size(px(14.))
+            .text_size(z(14.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(gpui::white())
             .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
@@ -447,25 +447,25 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
         div()
             .id("jump-present")
             .absolute()
-            .bottom(px(0.))
-            .left(px(16.))
-            .right(px(16.))
-            .h(px(32.))
-            .px(px(12.))
-            .rounded_t(px(8.))
+            .bottom(z(0.))
+            .left(z(16.))
+            .right(z(16.))
+            .h(z(32.))
+            .px(z(12.))
+            .rounded_t(z(8.))
             .bg(c(Palette::BG_SECONDARY_ALT))
             .flex()
             .items_center()
             .justify_between()
-            .text_size(px(14.))
+            .text_size(z(14.))
             .text_color(c(Palette::TEXT_NORMAL))
             .child("You're Viewing Older Messages")
             .child(
                 div()
                     .id("jump-present-btn")
-                    .px(px(8.))
-                    .h(px(24.))
-                    .rounded(px(4.))
+                    .px(z(8.))
+                    .h(z(24.))
+                    .rounded(z(4.))
                     .bg(c(Palette::BLURPLE))
                     .flex()
                     .items_center()
@@ -496,33 +496,33 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
         .justify_center()
         .child(
             div()
-                .w(px(310.))
-                .p(px(8.))
-                .rounded(px(10.))
+                .w(z(310.))
+                .p(z(8.))
+                .rounded(z(10.))
                 .bg(c(Palette::BLURPLE))
                 .child(
                     div()
-                        .p(px(16.))
-                        .pt(px(48.))
-                        .rounded(px(8.))
+                        .p(z(16.))
+                        .pt(z(48.))
+                        .rounded(z(8.))
                         .border_2()
                         .border_dashed()
                         .border_color(ca(0xFFFFFF80))
                         .flex()
                         .flex_col()
                         .items_center()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .child(icon(ChatIcon::Upload, 48., gpui::white()))
                         .child(
                             div()
-                                .text_size(px(20.))
+                                .text_size(z(20.))
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(gpui::white())
                                 .child(SharedString::from(format!("Upload to #{name}"))),
                         )
                         .child(
                             div()
-                                .text_size(px(14.))
+                                .text_size(z(14.))
                                 .text_color(gpui::white())
                                 .child("You can add comments before uploading."),
                         ),

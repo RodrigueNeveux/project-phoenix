@@ -67,6 +67,7 @@ fn main() -> anyhow::Result<()> {
             v.update(cx, |app, cx| {
                 app.prefs.synced.theme = theme;
                 app.prefs.local.zoom = zoom;
+                app.prefs.synced.compact = std::env::var_os("PHX_COMPACT").is_some();
                 cx.notify();
             });
         })?;

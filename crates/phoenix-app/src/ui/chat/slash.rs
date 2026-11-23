@@ -5,14 +5,14 @@
 
 use std::collections::HashMap;
 
-use gpui::{AnyElement, App, Context, FontWeight, ParentElement, SharedString, Styled, Window, div, prelude::*, px};
+use gpui::{AnyElement, App, Context, FontWeight, ParentElement, SharedString, Styled, Window, div, prelude::*};
 use serde_json::Value;
 
 use crate::{
     app::PhoenixApp,
     commands::{ParityReply, ParityRequest, SlashCommand, slash},
     model::Id,
-    theme::{Palette, c},
+    theme::{Palette, c, z},
 };
 
 #[derive(Default)]
@@ -166,14 +166,14 @@ pub fn submit(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
 fn app_badge(name: &str) -> impl IntoElement {
     let initial: SharedString = name.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default().into();
     div()
-        .size(px(24.))
+        .size(z(24.))
         .flex_none()
         .rounded_full()
         .bg(c(Palette::BLURPLE))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(px(12.))
+        .text_size(z(12.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(gpui::white())
         .child(initial)
@@ -200,10 +200,10 @@ fn option_list(raw: &Value) -> Vec<(String, u64, bool, String)> {
 fn popup() -> gpui::Div {
     div()
         .absolute()
-        .left(px(16.))
-        .right(px(16.))
-        .bottom(px(8.))
-        .rounded(px(8.))
+        .left(z(16.))
+        .right(z(16.))
+        .bottom(z(8.))
+        .rounded(z(8.))
         .bg(c(Palette::BG_SECONDARY))
         .border_1()
         .border_color(c(Palette::BG_TERTIARY))
@@ -220,32 +220,32 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         return None;
     }
     ensure_loaded(app, cx);
-    let anchor = |inner: gpui::Div| div().relative().h(px(0.)).child(inner).into_any_element();
+    let anchor = |inner: gpui::Div| div().relative().h(z(0.)).child(inner).into_any_element();
     if name_query(&t).is_some() {
         let loading = cx.try_global::<SlashUi>().is_some_and(|s| s.loading == app.selected_channel);
         let Some((_, items)) = list_open(app, cx) else {
             return loading.then(|| {
-                anchor(popup().p(px(12.)).text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child("Loading commands…"))
+                anchor(popup().p(z(12.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child("Loading commands…"))
             });
         };
         let sel = cx.try_global::<SlashUi>().map_or(0, |s| s.selected).min(items.len() - 1);
-        let mut list = popup().max_h(px(400.));
+        let mut list = popup().max_h(z(400.));
         let mut last_app: Option<&str> = None;
         for (i, cmd) in items.iter().enumerate() {
             if last_app != Some(cmd.app_name.as_str()) {
                 last_app = Some(cmd.app_name.as_str());
                 list = list.child(
                     div()
-                        .px(px(12.))
-                        .pt(px(12.))
-                        .pb(px(4.))
+                        .px(z(12.))
+                        .pt(z(12.))
+                        .pb(z(4.))
                         .flex()
                         .items_center()
-                        .gap(px(8.))
+                        .gap(z(8.))
                         .child(app_badge(&cmd.app_name))
                         .child(
                             div()
-                                .text_size(px(12.))
+                                .text_size(z(12.))
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(c(Palette::TEXT_MUTED))
                                 .child(SharedString::from(cmd.app_name.to_uppercase())),
@@ -262,20 +262,20 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             list = list.child(
                 div()
                     .id(("slash-cmd", i))
-                    .mx(px(8.))
-                    .px(px(8.))
-                    .py(px(6.))
-                    .rounded(px(4.))
+                    .mx(z(8.))
+                    .px(z(8.))
+                    .py(z(6.))
+                    .rounded(z(4.))
                     .cursor_pointer()
                     .when(i == sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
+                    .gap(z(8.))
                     .child(
                         div()
                             .flex_none()
-                            .text_size(px(16.))
+                            .text_size(z(16.))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(c(Palette::TEXT_HEADER))
                             .child(SharedString::from(format!("/{}", cmd.name)))
@@ -288,15 +288,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis()
-                            .text_size(px(14.))
+                            .text_size(z(14.))
                             .text_color(c(Palette::TEXT_MUTED))
                             .child(SharedString::from(cmd.description.clone())),
                     )
-                    .child(div().flex_none().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(SharedString::from(cmd.app_name.clone())))
+                    .child(div().flex_none().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(SharedString::from(cmd.app_name.clone())))
                     .on_click(cx.listener(move |a, _, w, cx| fill(a, &c2, w, cx))),
             );
         }
-        return Some(anchor(list.pb(px(8.))));
+        return Some(anchor(list.pb(z(8.))));
     }
     // A command is picked: hint bar with its options as chips.
     let (name, args) = slash::split_invocation(t.trim_start())?;
@@ -306,11 +306,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .split_whitespace()
         .filter_map(|w| w.split_once(':').map(|(k, _)| k.to_lowercase()))
         .collect();
-    let mut chips = div().flex().flex_wrap().gap(px(6.)).items_center();
+    let mut chips = div().flex().flex_wrap().gap(z(6.)).items_center();
     chips = chips.child(
         div()
-            .mr(px(4.))
-            .text_size(px(14.))
+            .mr(z(4.))
+            .text_size(z(14.))
             .font_weight(FontWeight::SEMIBOLD)
             .text_color(c(Palette::TEXT_HEADER))
             .child(SharedString::from(format!("/{}", cmd.name))),
@@ -323,26 +323,26 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         }
         chips = chips.child(
             div()
-                .px(px(6.))
-                .h(px(20.))
-                .rounded(px(4.))
+                .px(z(6.))
+                .h(z(20.))
+                .rounded(z(4.))
                 .flex()
                 .items_center()
-                .gap(px(4.))
+                .gap(z(4.))
                 .bg(c(if filled { Palette::BG_MOD_SELECTED } else { Palette::BG_TERTIARY }))
-                .text_size(px(12.))
+                .text_size(z(12.))
                 .child(div().text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(format!("{n}:"))))
                 .child(div().text_color(c(Palette::TEXT_MUTED)).child(type_hint(*kind)))
                 .when(*req && !filled, |d| d.child(div().text_color(c(Palette::RED)).child("*"))),
         );
     }
     let bar = popup()
-        .p(px(12.))
-        .gap(px(6.))
+        .p(z(12.))
+        .gap(z(6.))
         .child(chips)
         .child(
             div()
-                .text_size(px(12.))
+                .text_size(z(12.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(SharedString::from(desc.unwrap_or(cmd.description.clone()))),
         );

@@ -2,14 +2,14 @@
 //! icon in the avatar gutter, muted text with the actor's name in white,
 //! timestamp at the end.
 
-use gpui::{AnyElement, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
+use gpui::{AnyElement, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
 
 use super::icons::ChatIcon;
 use crate::{
     app::PhoenixApp,
     model::{Message, MessageKind},
     richtext::RenderedMessage,
-    theme::{Palette, c},
+    theme::{Palette, c, z},
 };
 
 /// Stable pick among the join phrasings (by message id) so a row never
@@ -79,22 +79,22 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
     let line = div()
         .id(("sysmsg", msg.id.0))
         .relative()
-        .pl(px(72.))
-        .pr(px(48.))
-        .py(px(2.))
-        .mt(px(if r.group_start { 17. } else { 0. }))
-        .min_h(px(22.))
+        .pl(z(72.))
+        .pr(z(48.))
+        .py(z(2.))
+        .mt(z(if r.group_start { 17. } else { 0. }))
+        .min_h(z(22.))
         .flex()
         .flex_wrap()
         .items_center()
-        .text_size(px(16.))
+        .text_size(z(16.))
         .text_color(c(Palette::TEXT_MUTED))
         .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
         .child(
             div()
                 .absolute()
-                .left(px(28.))
-                .top(px(5.))
+                .left(z(28.))
+                .top(z(5.))
                 .child(super::icons::icon(icon, 16., c(color))),
         )
         .child(before)
@@ -109,8 +109,8 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .child(after)
         .child(
             div()
-                .ml(px(6.))
-                .text_size(px(12.))
+                .ml(z(6.))
+                .text_size(z(12.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(r.time_full.clone()),
         )
@@ -118,8 +118,8 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             d.child(
                 div()
                     .id(("sys-thread", msg.id.0))
-                    .ml(px(6.))
-                    .text_size(px(14.))
+                    .ml(z(6.))
+                    .text_size(z(14.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .text_color(c(Palette::TEXT_LINK))
                     .cursor_pointer()

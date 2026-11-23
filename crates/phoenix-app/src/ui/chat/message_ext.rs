@@ -3,7 +3,7 @@
 
 use gpui::{
     AnyElement, App, Div, Entity, FontWeight, IntoElement, MouseDownEvent, ParentElement,
-    SharedString, Styled, Window, div, prelude::*, px,
+    SharedString, Styled, Window, div, prelude::*,
 };
 use gpui_component::input::Input;
 
@@ -15,22 +15,22 @@ use crate::{
     app::PhoenixApp,
     assets::Icon,
     model::{Message, ThreadRef},
-    theme::{Palette, c, ca},
+    theme::{Palette, c, ca, z},
     ui,
 };
 
 fn tool_button(id: &'static str, i: SharedString, size: f32) -> gpui::Stateful<Div> {
     div()
         .id(id)
-        .size(px(32.))
+        .size(z(32.))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(4.))
+        .rounded(z(4.))
         .cursor_pointer()
         .hover(|s| s.bg(c(0x3D3E45)))
-        .child(gpui::svg().path(i).size(px(size)).flex_none().text_color(c(Palette::INTERACTIVE)))
+        .child(gpui::svg().path(i).size(z(size)).flex_none().text_color(c(Palette::INTERACTIVE)))
 }
 
 /// The floating hover toolbar (top-right of the hovered message).
@@ -40,17 +40,17 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
     let e = entity.clone();
     let mut bar = div()
         .absolute()
-        .right(px(16.))
-        .top(px(-16.))
+        .right(z(16.))
+        .top(z(-16.))
         .invisible()
         .group_hover("msg", |s| s.visible())
         .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.visible())
         .flex()
-        .p(px(2.))
+        .p(z(2.))
         .bg(c(Palette::BG_PRIMARY))
         .border_1()
         .border_color(c(Palette::HEADER_SHADOW))
-        .rounded(px(4.))
+        .rounded(z(4.))
         .shadow_sm();
     // Quick reactions (Discord shows frequent emoji first).
     for (i, q) in QUICK_REACTIONS.iter().take(3).enumerate() {
@@ -58,19 +58,19 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         bar = bar.child(
             div()
                 .id(("quick", i))
-                .size(px(32.))
+                .size(z(32.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(4.))
+                .rounded(z(4.))
                 .cursor_pointer()
-                .text_size(px(18.))
+                .text_size(z(18.))
                 .hover(|s| s.bg(c(0x3D3E45)))
                 .child(*q)
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.react_with(ch, id, (*q).into(), None, cx))),
         );
     }
-    bar = bar.child(div().w(px(1.)).my(px(6.)).mx(px(2.)).bg(c(Palette::DIVIDER)));
+    bar = bar.child(div().w(z(1.)).my(z(6.)).mx(z(2.)).bg(c(Palette::DIVIDER)));
     bar = bar.child(tool_button("tb-react", ChatIcon::AddReaction.path(), 20.).on_click({
         let e = e.clone();
         move |_, _, cx| e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
@@ -89,11 +89,11 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         bar = bar.child(
             div()
                 .id("tb-delete")
-                .size(px(32.))
+                .size(z(32.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(4.))
+                .rounded(z(4.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(0x3D3E45)))
                 .child(icon(ChatIcon::Trash, 18., c(Palette::RED)))
@@ -127,7 +127,7 @@ pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&Mo
 pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
     let _ = app;
     let (ch, id) = (msg.channel, msg.id);
-    let mut row = div().mt(px(4.)).flex().flex_wrap().gap(px(4.));
+    let mut row = div().mt(z(4.)).flex().flex_wrap().gap(z(4.));
     for (ix, r) in msg.reactions.iter().enumerate() {
         let e = entity.clone();
         let rc = r.clone();
@@ -135,12 +135,12 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
         row = row.child(
             div()
                 .id(("reaction", ix))
-                .h(px(24.))
-                .px(px(6.))
-                .rounded(px(8.))
+                .h(z(24.))
+                .px(z(6.))
+                .rounded(z(8.))
                 .flex()
                 .items_center()
-                .gap(px(6.))
+                .gap(z(6.))
                 .border_1()
                 .when(r.me, |d| d.bg(ca(0x5865F23D)).border_color(c(Palette::BLURPLE)))
                 .when(!r.me, |d| d.bg(c(Palette::BG_SECONDARY)).border_color(gpui::transparent_black()))
@@ -149,7 +149,7 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                 .child(emoji_el)
                 .child(
                     div()
-                        .text_size(px(14.))
+                        .text_size(z(14.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(if r.me { 0xDEE0FC } else { Palette::INTERACTIVE }))
                         .child(SharedString::from(r.count.to_string())),
@@ -161,9 +161,9 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
     row.child(
         div()
             .id("reaction-add")
-            .h(px(24.))
-            .px(px(6.))
-            .rounded(px(8.))
+            .h(z(24.))
+            .px(z(6.))
+            .rounded(z(8.))
             .flex()
             .items_center()
             .bg(c(Palette::BG_SECONDARY))
@@ -200,14 +200,14 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
             .child(
                 div()
                     .id("edit-box")
-                    .mt(px(4.))
-                    .min_h(px(44.))
-                    .px(px(16.))
-                    .rounded(px(8.))
+                    .mt(z(4.))
+                    .min_h(z(44.))
+                    .px(z(16.))
+                    .rounded(z(8.))
                     .bg(c(Palette::INPUT_BG))
                     .flex()
                     .items_center()
-                    .text_size(px(16.))
+                    .text_size(z(16.))
                     .text_color(c(Palette::TEXT_NORMAL))
                     .capture_key_down({
                         let e = entity.clone();
@@ -223,10 +223,10 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
             )
             .child(
                 div()
-                    .py(px(4.))
+                    .py(z(4.))
                     .flex()
-                    .gap(px(4.))
-                    .text_size(px(12.))
+                    .gap(z(4.))
+                    .text_size(z(12.))
                     .text_color(c(Palette::TEXT_NORMAL))
                     .child("escape to ")
                     .child(link("edit-cancel", "cancel").on_click(move |_, w, cx| e1.update(cx, |a, cx| a.cancel_edit(w, cx))))
@@ -243,14 +243,14 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef)
     let t2 = t.clone();
     div()
         .id(("thread-chip", t.id.0))
-        .mt(px(4.))
-        .max_w(px(480.))
-        .p(px(8.))
-        .rounded(px(4.))
+        .mt(z(4.))
+        .max_w(z(480.))
+        .p(z(8.))
+        .rounded(z(4.))
         .bg(c(Palette::BG_SECONDARY))
         .flex()
         .items_center()
-        .gap(px(8.))
+        .gap(z(8.))
         .cursor_pointer()
         .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
         .child(icon(ChatIcon::Thread, 18., c(Palette::INTERACTIVE)))
@@ -259,14 +259,14 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef)
                 .flex_1()
                 .min_w_0()
                 .text_ellipsis()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
                 .child(t.name.clone()),
         )
         .child(
             div()
-                .text_size(px(14.))
+                .text_size(z(14.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_LINK))
                 .child(SharedString::from(match t.message_count {
@@ -285,21 +285,21 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef)
 /// Red "NEW" line drawn above the first unread message.
 pub fn new_divider() -> impl IntoElement {
     div()
-        .mx(px(16.))
-        .mt(px(8.))
-        .h(px(1.))
+        .mx(z(16.))
+        .mt(z(8.))
+        .h(z(1.))
         .bg(c(Palette::RED))
         .relative()
         .child(
             div()
                 .absolute()
-                .right(px(-16.))
-                .top(px(-8.))
-                .h(px(16.))
-                .px(px(4.))
-                .rounded_l(px(4.))
+                .right(z(-16.))
+                .top(z(-8.))
+                .h(z(16.))
+                .px(z(4.))
+                .rounded_l(z(4.))
                 .bg(c(Palette::RED))
-                .text_size(px(10.))
+                .text_size(z(10.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(gpui::white())
                 .flex()
@@ -347,7 +347,7 @@ pub fn rich_with_emoji(
 ) -> AnyElement {
     let jumbo = crate::richtext::is_jumbo(&[crate::richtext::RBlock::Text(t.clone())]);
     let size = if jumbo { 48. } else { 22. };
-    let mut row = div().flex().flex_wrap().items_center().text_size(px(16.)).line_height(px(22.));
+    let mut row = div().flex().flex_wrap().items_center().text_size(z(16.)).line_height(z(22.));
     let mut last = 0;
     let mut seg = 0usize;
     let push_text = |row: Div, range: std::ops::Range<usize>, seg: &mut usize| -> Div {
@@ -386,7 +386,7 @@ pub fn rich_with_emoji(
     };
     for (r, token) in &t.emoji {
         row = push_text(row, last..r.start, &mut seg);
-        row = row.child(div().mx(px(1.)).child(crate::media::emoji::emoji_element(token, size)));
+        row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size)));
         last = r.end;
     }
     row = push_text(row, last..t.text.len(), &mut seg);
