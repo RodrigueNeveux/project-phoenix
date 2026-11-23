@@ -212,7 +212,9 @@ pub fn elapsed(start_ms: i64, now_s: i64) -> String {
 /// entries of the rendered content types whose author is a member of `g`
 /// (unknown authors are requested with op 8, like `requestMember`) and can
 /// VIEW_CHANNEL the open channel, in feed order.
-fn feed_cards(app: &PhoenixApp, g: Id) -> Vec<crate::commands::InventoryEntry> {
+/// Also returns how many entries the header counts: the client counts the
+/// feed entries whose author is not loaded yet too (they are pending op 8).
+fn feed_cards(app: &PhoenixApp, g: Id) -> (Vec<crate::commands::InventoryEntry>, usize) {
     let is_member = |u: Id| {
         app.members.get(&g).is_some_and(|ms| ms.iter().any(|m| m.user == u))
             || rows_for(app, g).is_some_and(|rows| rows.iter().any(|r| matches!(r, ListEntry::Member(m, _) if m.user == u)))
@@ -220,12 +222,16 @@ fn feed_cards(app: &PhoenixApp, g: Id) -> Vec<crate::commands::InventoryEntry> {
     let entries = crate::ui::activity_traits::entries();
     let mut unknown: Vec<Id> = Vec::new();
     let mut out = Vec::new();
+    let mut pending = 0;
     for e in entries {
         // u_ content types; we render PLAYED_GAME cards (game name + art).
         if e.content_type != 1 || e.game.is_none() {
             continue;
         }
         if !is_member(e.author) {
+            if !app.users.contains_key(&e.author) {
+                pending += 1;
+            }
             if !unknown.contains(&e.author) && app.people.feed_requested.borrow_mut().insert((g, e.author)) {
                 unknown.push(e.author);
             }
@@ -239,14 +245,19 @@ fn feed_cards(app: &PhoenixApp, g: Id) -> Vec<crate::commands::InventoryEntry> {
     if !unknown.is_empty() {
         app.backend.request_feed_members(g, unknown);
     }
-    out
+    let n = out.len() + pending;
+    (out, n)
 }
+
+/// Activity section expanded past its first 3 cards (toggleExpandIcon).
+static ACTIVITY_EXPANDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// The "Activity" section at the top of the member list: one card per
 /// member playing a game. Dump `-channels-N-N+` nodes 1502 (header) and
 /// 1512 (card `container_g7esM5 usesCardRows_g7esM5`).
 fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> AnyElement {
-    let acts = feed_cards(app, g);
+    let (acts, count) = feed_cards(app, g);
+    let expanded = ACTIVITY_EXPANDED.load(std::sync::atomic::Ordering::Relaxed);
     // Member list content feed gate (client bundle, member list groups hook):
     // shown when the guild allows it (`activity_feed_enabled`) AND the open
     // channel is not a forum (`isForumChannel()` = GUILD_FORUM only; media
@@ -278,7 +289,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                     .line_height(z(18.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(muted)
-                    .child(crate::t!("members.activity", n = acts.len()))
+                    .child(crate::t!("members.activity", n = count))
                     .child(
                         div()
                             .size(z(24.))
@@ -291,12 +302,31 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                     .child(div().flex_1())
                     // toggleExpandIcon only when expandedCount > 3 (or hidden).
                     .when(acts.len() > 3, |d| {
-                        // collapsed (3 cards): ChevronSmallRight, as in the vanilla capture
-                        d.child(gpui::svg().path(crate::icons::path("chevron-right")).w(z(24.)).h(z(18.)).text_color(c(Palette::INTERACTIVE)))
+                        // collapsed (3 cards): ChevronSmallRight; expanded: ChevronSmallDown.
+                        let ent = entity.clone();
+                        d.child(
+                            div()
+                                .id("activity-expand")
+                                .cursor_pointer()
+                                .on_click(move |_, _, cx| {
+                                    ACTIVITY_EXPANDED.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
+                                    ent.update(cx, |a, cx| {
+                                        a.member_list.remeasure();
+                                        cx.notify();
+                                    });
+                                })
+                                .child(
+                                    gpui::svg()
+                                        .path(crate::icons::path(if expanded { "chevron" } else { "chevron-right" }))
+                                        .w(z(24.))
+                                        .h(z(18.))
+                                        .text_color(c(Palette::INTERACTIVE)),
+                                ),
+                        )
                     }),
             ),
     );
-    for e in acts.into_iter().take(3) {
+    for e in acts.into_iter().take(if expanded { usize::MAX } else { 3 }) {
         let uid = e.author;
         let user_cow = app.member_user(Some(g), uid);
         let user = user_cow.as_deref();
@@ -455,8 +485,37 @@ pub fn header(t: SharedString) -> AnyElement {
         .into_any_element()
 }
 
-fn group_title(app: &PhoenixApp, g: Id, id: &str, count: u32) -> SharedString {
-    let name = match id {
+/// membersGroup_86es0b > membersGroupHeader_86es0b (flex): optional
+/// roleIcon_86es0b 16px (margin-right 4, vertical-align top), the
+/// membersGroupName_ (ellipsis), then " — N" which never truncates.
+fn group_header(app: &PhoenixApp, g: Id, id: &str, count: u32) -> AnyElement {
+    let name = group_name(app, g, id);
+    let icon = id
+        .parse::<u64>()
+        .ok()
+        .and_then(|r| app.roles.get(&g)?.iter().find(|x| x.id == Id(r))?.icon.clone());
+    div()
+        .pt(z(24.))
+        .pb(z(4.))
+        .pl(z(20.))
+        .pr(z(4.))
+        .child(
+            div()
+                .h(z(18.))
+                .flex()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(Palette::TEXT_MUTED))
+                .when_some(icon, |d, url| d.child(gpui::img(url).flex_none().size(z(16.)).mr(z(4.))))
+                .child(div().min_w_0().text_ellipsis().child(name.trim().to_string())) // HTML collapses edge spaces
+                .child(div().flex_none().child(SharedString::from(format!(" — {count}")))),
+        )
+        .into_any_element()
+}
+
+fn group_name(app: &PhoenixApp, g: Id, id: &str) -> String {
+    match id {
         "online" => crate::t!("status.online").to_string(),
         "offline" => crate::t!("status.offline").to_string(),
         _ => id
@@ -464,8 +523,7 @@ fn group_title(app: &PhoenixApp, g: Id, id: &str, count: u32) -> SharedString {
             .ok()
             .and_then(|r| app.roles.get(&g)?.iter().find(|x| x.id == Id(r)).map(|x| x.name.to_string()))
             .unwrap_or_else(|| crate::t!("members.members").to_string()),
-    };
-    format!("{name} — {count}").into()
+    }
 }
 
 fn placeholder(ix: usize) -> AnyElement {
@@ -504,7 +562,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 } else {
                     rows[ix + 1..].iter().take_while(|r| !matches!(r, ListEntry::Group { .. })).count() as u32
                 };
-                header(group_title(app, g, id, n))
+                group_header(app, g, id, n)
             }
             Some(ListEntry::Member(mem, nick)) => member_row(app, entity, g, mem, nick.as_ref()),
             Some(ListEntry::Loading) => placeholder(ix),
@@ -549,8 +607,13 @@ pub fn member_row_in(
     let uid = mem.user;
     let e = entity.clone();
     let tag = user.and_then(|u| u.tag.clone());
-    let sub = SubText::of(app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or(&[]));
-    let in_voice = match g {
+    let acts = app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or(&[]);
+    let sub = SubText::of(acts);
+    // A Streaming activity wins over the presence ("En direct", #9147ff
+    // svg-mask-status-streaming) and over the voice line (dump: the streaming
+    // bot shows only its stream text, no speaker).
+    let streaming = !offline && acts.iter().any(|a| a.kind == crate::presence::ActivityKind::Streaming);
+    let in_voice = !streaming && match g {
         Some(g) => app
             .guild_channels
             .get(&g)
@@ -599,6 +662,7 @@ pub fn member_row_in(
                 .relative()
                 .flex_none()
                 .child(avatar_with_status(user, 32., mem.presence, c(Palette::BG_SECONDARY)))
+                .when(streaming, |d| d.child(streaming_dot()))
                 .when_some(user.and_then(|u| u.decoration.clone()), |d, deco| {
                     // avatarDecorationContainer_: inset/top --custom-avatar-avatar-decoration-border-position
                     // = (1 − 1.2)/2 × 100%, size 120% of the 32px avatar.
@@ -626,7 +690,7 @@ pub fn member_row_in(
                                 .child(name),
                         )
                         .when_some(tag, |d, t| d.child(server_tag(&t).my(z(1.)))) // chipletContainerInner_k8jyN7 margin 1px 0 1px 4px
-                        .when(user.is_some_and(|u| u.bot), |d| d.child(app_tag())) // botTag_Iy0c7A margin-inline-start 4px
+                        .when(user.is_some_and(|u| u.bot), |d| d.child(member_bot_tag(user.is_some_and(|u| u.verified_bot))))
                         .when(owner, |d| {
                             // ownerIcon_Iy0c7A: 14px (icon_Iy0c7A), --text-feedback-warning
                             d.child(gpui::svg().path(crate::icons::path("crown")).size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
@@ -635,6 +699,54 @@ pub fn member_row_in(
                 .when(!offline && (in_voice || mem.activity.is_some() || sub.is_some()), |d| d.child(sub_text(in_voice, sub, mem.activity.clone()))),
         ))
         .into_any_element()
+}
+
+/// Streaming status over the 32px avatar: rect 10x10 at 22,22 fill
+/// --platform-twitch (#9147ff), masked by svg-mask-status-streaming (a play
+/// triangle cut out), inside the 16px ring of the list background.
+fn streaming_dot() -> gpui::Div {
+    let ring = c(Palette::BG_SECONDARY);
+    div()
+        .absolute()
+        .right(px(-4.))
+        .bottom(px(-4.))
+        .size(px(16.))
+        .rounded_full()
+        .bg(ring)
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .size(px(10.))
+                .rounded_full()
+                .bg(c(tok(idx::PLATFORM_TWITCH)))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(gpui::svg().path(crate::icons::path("play")).size(px(6.)).text_color(ring)),
+        )
+}
+
+/// Member list APP tag (vanilla botTag_Iy0c7A botTagRegular_ px_): flex, 16px
+/// tall, padding 0 4px, radius 4, margin-inline-start 4, --background-brand;
+/// botTagVerified_ check 16px margin-left -2; botText_ 12/16 600 uppercase.
+fn member_bot_tag(verified: bool) -> gpui::Div {
+    div()
+        .flex_none()
+        .ml(z(4.))
+        .h(z(16.))
+        .px(z(4.))
+        .rounded(z(4.))
+        .bg(c(tok(idx::BACKGROUND_BRAND)))
+        .flex()
+        .items_center()
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(gpui::white())
+        .when(verified, |d| d.child(gpui::svg().path(crate::icons::path("check")).flex_none().size(z(16.)).ml(z(-2.)).text_color(gpui::white())))
+        .child(crate::t!("common.app").to_uppercase())
 }
 
 pub fn app_tag() -> gpui::Div {
@@ -663,7 +775,9 @@ impl SubText {
             .iter()
             .find(|a| a.kind == K::Custom && (a.state.is_some() || a.emoji.is_some()))
             .map(|a| (a.emoji.clone(), a.state.clone()));
-        let main = acts.iter().find(|a| a.kind != K::Custom).map(|a| (a.name.clone(), matches!(a.kind, K::Playing | K::Competing)));
+        // A stream shows its title (`details`, the "Streame …" line), no icon.
+        let main = acts.iter().find(|a| a.kind == K::Streaming).map(|a| (a.details.clone().unwrap_or_else(|| a.name.clone()), false));
+        let main = main.or_else(|| acts.iter().find(|a| a.kind != K::Custom).map(|a| (a.name.clone(), matches!(a.kind, K::Playing | K::Competing))));
         (custom.is_some() || main.is_some()).then_some(Self { custom, main })
     }
 }
