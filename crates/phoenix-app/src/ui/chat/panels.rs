@@ -44,23 +44,24 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     let has_text = msg.is_some_and(|x| !x.content.is_empty());
     let ic = |i: ChatIcon| Some(i.path());
 
-    // Quick-reaction strip.
-    let mut strip = div().flex().gap(z(4.)).px(z(2.)).pb(z(4.));
-    for (i, q) in QUICK_REACTIONS.iter().enumerate() {
+    // Live order (msg-context-menu dump, 2026-11-23): 4 quick reactions as 44px
+    // tiles, "Add Reaction", separator, Edit, Reply, separator, Copy Text, Pin,
+    // Mark Unread, Copy Message Link, separator, Delete.
+    let mut strip = div().flex().gap(z(8.)).px(z(2.)).py(z(2.));
+    for (i, q) in QUICK_REACTIONS.iter().take(4).enumerate() {
         let e = e.clone();
         strip = strip.child(
             div()
                 .id(("menu-quick", i))
-                .size(z(40.))
-                .rounded_full()
-                .bg(c(0x2B2D31))
+                .size(z(44.))
+                .rounded(z(8.))
+                .bg(crate::ui::chat::tk(crate::theme::generated::idx::BACKGROUND_MOD_SUBTLE))
                 .flex()
                 .items_center()
                 .justify_center()
-                .text_size(z(20.))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(0x3D3E45)))
-                .child(*q)
+                .hover(|s| s.bg(crate::ui::chat::tk(crate::theme::generated::idx::BACKGROUND_MOD_NORMAL)))
+                .child(crate::media::emoji::emoji_element(q, 24.))
                 .on_click(move |_, _, cx| {
                     e.update(cx, |a, cx| {
                         a.chat.menu = None;
@@ -69,11 +70,12 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 }),
         );
     }
-    let mut items = vec![MenuItem::Custom(strip.into_any_element()), MenuItem::Separator];
+    let mut items = vec![MenuItem::Custom(strip.into_any_element())];
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.add_reaction"), ic(ChatIcon::AddReaction), move |_, _, cx| {
         ee.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
+    items.push(MenuItem::Separator);
     if own {
         let ee = e.clone();
         items.push(MenuItem::action(crate::t!("msg.edit"), ic(ChatIcon::Edit), move |_, w, cx| {
@@ -106,6 +108,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         ee.update(cx, |a, cx| a.copy_message_link(ch, id, cx))
     }));
     if own {
+        items.push(MenuItem::Separator);
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |ev, _, cx| {
             let skip = ev.modifiers().shift;

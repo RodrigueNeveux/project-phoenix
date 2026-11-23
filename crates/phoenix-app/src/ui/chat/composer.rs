@@ -243,8 +243,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
     let reply = reply_bar(app, cx);
     let has_banner = reply.is_some();
     let tray = upload_tray(app, cx);
+    let typing_active = app.selected_channel.and_then(|c| app.typing.get(&c)).is_some_and(|v| !v.is_empty());
     div()
         .flex_none()
+        .relative()
         .flex()
         .flex_col()
         .gap(z(8.))
@@ -253,7 +255,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         .child(
             // form_ padding-inline --space-xs; channelTextArea_ --chat-background-default,
             // 1px --border-muted, radius --radius-sm, margin-bottom --custom-chat-input-margin-bottom.
-            div().px(z(8.)).child(
+            div().px(z(super::SPACE_XS)).mb(z(if typing_active { 24. } else { super::SPACE_XS })).child( // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom
                 div()
                     .flex()
                     .flex_col()
@@ -266,7 +268,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                     .child(
                         div()
                             .id("composer")
-                            .min_h(z(44.))
+                            .min_h(z(56.)) // #1437 56px (17px padding + 22px line)
                             .when(has_banner, |d| d.rounded_b(z(8.)))
                             .relative()
                             .when(remaining < 200, |d| {
@@ -297,13 +299,16 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .child(
                                 // inner_ padding-inline-start 15px; attachButton_ margin-inline
                                 // -(space-xs + space-6) 10px around a 32px button.
-                                div().pl(z(15.)).child(
-                                    icon_button("attach", Icon::PlusCircle, ic, 20.)
+                                // #1438 inner_ padding-inline-start 15px; #1439 attachWrapper_ padding 12px 14px;
+                                // #1440 attachButton_ 32px, radius 8px, margin 0 10px 0 -16px, PlusLargeIcon 20px.
+                                div().pl(z(15.)).child(div().px(z(14.)).child(
+                                    icon_button("attach", Icon::Plus, ic, 20.)
                                         .size(z(32.))
-                                        .ml(z(-14.))
+                                        .rounded(z(8.))
+                                        .ml(z(-16.))
                                         .mr(z(10.))
                                         .on_click(cx.listener(|a, _, _, cx| a.prompt_attach(cx))),
-                                ),
+                                )),
                             )
                             .child(
                                 div()
@@ -322,7 +327,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                                 .left(z(2.))
                                                 .flex()
                                                 .items_center()
-                                                .text_color(super::tk(idx::TEXT_MUTED)) // textArea_::placeholder
+                                                .text_color(super::tk(idx::CHANNEL_TEXT_AREA_PLACEHOLDER)) // #1445 placeholder_
                                                 .child(placeholder),
                                         )
                                     }),
@@ -330,22 +335,38 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .child(
                                 // buttons_ gap --space-8, margin-inline-end 6px; button_ 32px;
                                 // icons --chat-input-icon-size (20px).
+                                // #1452 buttons_ gap 8px, 12px to the right edge (#1437 ends 12px early);
+                                // order: gift, GIF, sticker, emoji, app launcher (#1457–#1480).
                                 div()
-                                    .mr(z(6.))
+                                    .mr(z(12.))
                                     .flex()
                                     .gap(z(8.))
                                     .items_center()
-                                    .child(icon_button("gift", Icon::Gift, ic, 20.).size(z(32.)))
-                                    .child(icon_button("gif", Icon::Gif, ic, 20.).size(z(32.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(icon_button("sticker", Icon::Sticker, ic, 20.).size(z(32.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(icon_button("emoji", Icon::Emoji, ic, 20.).size(z(32.)).on_click(cx.listener(
+                                    .child(icon_button("gift", Icon::Gift, ic, 20.).size(z(32.)).rounded(z(8.)))
+                                    .child(icon_button("gif", Icon::Gif, ic, 20.).size(z(32.)).rounded(z(8.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(icon_button("sticker", Icon::Sticker, ic, 20.).size(z(32.)).rounded(z(8.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(icon_button("emoji", Icon::Emoji, ic, 20.).size(z(32.)).rounded(z(8.)).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
-                                    ))),
+                                    )))
+                                    .child(
+                                        // app-launcher-entrypoint: button_ 32px radius 8px, 20px glyph (#1479).
+                                        div()
+                                            .id("apps")
+                                            .size(z(32.))
+                                            .rounded(z(8.))
+                                            .flex()
+                                            .items_center()
+                                            .justify_center()
+                                            .cursor_pointer()
+                                            .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                                            .child(gpui::svg().path(crate::icons::path("apps")).size(z(20.)).flex_none().text_color(ic)),
+                                    ),
                             ),
                     ),
             ),
         )
-        .child(div().px(z(16.)).child(typing(app)))
+        // base_U9Tvvz: absolute, bottom 1px, height 24px, inset-inline --space-16 16px.
+        .child(div().absolute().bottom(z(1.)).left(z(16.)).right(z(16.)).child(typing(app)))
 }
 
 /// "**Name** is typing…" with bouncing dots, from real TYPING_START events.
@@ -374,12 +395,12 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
     }
     let active = !names.is_empty();
     let dot = |i: usize| {
-        div().size(z(6.)).rounded_full().bg(c(Palette::INTERACTIVE_HOVER)).with_animation(
+        div().size(z(7.)).rounded_full().bg(super::tk(idx::TEXT_DEFAULT)).with_animation(
             ("typing-dot", i),
             Animation::new(Duration::from_millis(1200)).repeat(),
             move |d, t| {
                 let phase = ((t * 3. - i as f32 * 0.5).rem_euclid(3.) / 3. * std::f32::consts::TAU).sin();
-                d.opacity(0.4 + 0.6 * phase.max(0.))
+                d.opacity(0.32 + 0.68 * phase.max(0.))
             },
         )
     };

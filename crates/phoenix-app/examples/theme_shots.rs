@@ -1,5 +1,6 @@
 //! Offscreen render of the main window in a given theme and zoom.
 //! `cargo run -p phoenix-app --example theme_shots -- out.png [dark|light|ash|onyx] [zoom%]`
+//! Env: `PHX_COMPACT` (compact mode), `PHX_DM` (open a DM).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -68,6 +69,13 @@ fn main() -> anyhow::Result<()> {
                 app.prefs.synced.theme = theme;
                 app.prefs.local.zoom = zoom;
                 app.prefs.synced.compact = std::env::var_os("PHX_COMPACT").is_some();
+                // PHX_DM=1: open the first direct message instead of the guild channel.
+                if std::env::var_os("PHX_DM").is_some()
+                    && let Some(dm) = app.channels.values().filter(|c| c.guild.is_none()).map(|c| c.id).min()
+                {
+                    app.select_guild(None, cx);
+                    app.select_channel(dm, cx);
+                }
                 cx.notify();
             });
         })?;

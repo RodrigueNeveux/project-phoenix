@@ -54,3 +54,39 @@ CSS under ~/discord-phoenix-ref/current-client/css. Tokens are from `theme::gene
 | server tag (message, reply) | 738015 clanTagChiplet_, chipletContainerInner_ | chip | --background-mod-strong, r 4, 0 4px, .72rem, ml 6px (reply 2px, opacity .64), lh 16 | chat.rs server_tag_chip | ✅ |
 
 Still to check: polls, selects, stickers, the slowmode and char counter details.
+
+## Live DOM dump references (2026-11-23)
+
+Dumps from the real client (`/mnt/windata/project-phoenix/dumps`, private, not committed). The user's client runs
+`html.density-cozy`, so `--space-xs/md/xl` are 10/20/30px (chat.rs `SPACE_XS/SPACE_MD/SPACE_XL`). Node numbers are
+indices in the dump JSON (`tools/tree.py <dump> <index>` in ~/discord-phoenix-ref).
+
+| element | dump node | values | our code | status |
+|---|---|---|---|---|
+| header section | -channels-N-N+ #1040, -channels-me-N+ #1088 | padding 8 8 8 20, h 49, border-bottom --border-subtle | chat.rs header() | ✅ |
+| channel icon | #1043/#1044 | 20px glyph in 20×32, margin 0 11 0 -1, --channel-icon | header() | ✅ |
+| DM avatar | me #1092 | 20px, margin-inline-end 8px | header() | ✅ |
+| title | #1047 | 16px/20px medium, --text-strong, mr 8 | header() | ✅ (was semibold, --header-primary) |
+| topic dot + topic | #1049, #1050 | dot 4px m 0 4; topic ml 8, 14px/18px medium --text-muted | header() | ✅ (was a 1×24 divider) |
+| toolbar | #1054 | gap 10, padding-left 10, 32px buttons, 20px icons | header() | ✅ |
+| guild toolbar order | #1055–#1061 | threads, notifications, pins, member list | header() | ✅ |
+| DM toolbar order | me #1101–#1109 | voice call, video call, pins, add to DM, user profile (selected) | header() (icons `phone-call`, `video-call`, `add-to-dm`, `user-profile`) | ✅ (icons need provider names) |
+| search bar | #1063–#1073 | ml 4, 244×32, r 8, --input-background-default, 1px --input-border-default, editor px 6 14px/22px medium, 24px icon box p 4 | header() | ✅ (was 160px) |
+| search placeholder | #1066 aria | "Search <guild name>" / "Search <username>" | header() | ✅ |
+| message row | #1184 | padding 2 30 2 80 (--space-xl, left-content-cozy), radius 0 4 4 0 | message() | ✅ (was 2 16 2 72) |
+| avatar | #1200 | 40px, left 20 (--space-md), top 26 + margin 2 with reply | message() | ✅ |
+| reply line | #1185 | h 20, 14px/18px, mb 4 | message() reply | ✅ (was 18) |
+| reply spine | #1186 | left -41, top 9, 37×13, 2px --spine-default, r 6 top-left | message() reply | ✅ |
+| server tag chip | #1190 (reply) / #1206 (header) | padding 0 4, r 4, --background-mod-strong, badge 12/14px, 12px semibold text | server_tag_chip() | ✅ (header badge was 12) |
+| cozy timestamp | #1215 | ml 4, 12px medium --chat-text-muted | message() | ✅ |
+| alt timestamp | #1252 | 56px wide, 11px medium --text-muted | message() | ✅ |
+| mention highlight | #1184 .mentioned_ | --message-mentioned-background-default | message() | ✅ |
+| day divider | #1181/#1182 | margin 24 14 8 16, content 12px/13px semibold p 2 4 r 8 --text-muted | day_divider() | ✅ |
+| image attachment | #1388–#1394 | container gap 4 padding 2 0; media radius 8 | attachment() | ✅ |
+| composer form | #1432 | padding-inline --space-xs (10) | composer.rs | ✅ (was 8) |
+| text area | #1435/#1437 | h 56, r 8, --chat-background-default, 1px --border-muted, mb 10 | composer.rs | ✅ (was 44) |
+| attach button | #1438–#1442 | inner pl 15, wrapper p 12 14, 32px r 8 margin 0 10 0 -16, PlusLargeIcon 20 | composer.rs | ✅ (was CirclePlus) |
+| text placeholder | #1445 | padding 17 0, 16px/22px, --channel-text-area-placeholder | composer.rs | ✅ |
+| buttons | #1452–#1480 | gap 8, 32px r 8, 20px icons; gift, GIF, sticker, emoji, app launcher; 12px to edge | composer.rs | ✅ (app launcher added) |
+| translate button | #1453 `vc-trans-*` | Vencord plugin, not stock Discord | — | skipped |
+| typing | CSS base_U9Tvvz | absolute bottom 1, h 24, inset 16; dots 7px --text-default opacity .32 | composer.rs typing() | ✅ |

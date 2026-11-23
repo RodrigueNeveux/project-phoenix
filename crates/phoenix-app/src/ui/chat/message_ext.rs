@@ -47,8 +47,8 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
     let e = entity.clone();
     let mut bar = div()
         .absolute()
-        .right(z(16.))
-        .top(z(-16.))
+        .right(z(14.)) // buttons_ right 0 + padding-inline-end 14px (msg-hover-toolbar #1443)
+        .top(z(-16.)) // #1443 top -16px
         .invisible()
         .group_hover("msg", |s| s.visible())
         .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.visible())
