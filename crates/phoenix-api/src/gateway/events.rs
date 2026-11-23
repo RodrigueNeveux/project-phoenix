@@ -139,6 +139,9 @@ pub struct GuildMembersChunk {
     pub chunk_count: u32,
     #[serde(default)]
     pub not_found: Vec<UserId>,
+    /// Sent when op 8 asked for `presences: true`.
+    #[serde(default)]
+    pub presences: Vec<Value>,
     #[serde(default)]
     pub nonce: Option<String>,
 }

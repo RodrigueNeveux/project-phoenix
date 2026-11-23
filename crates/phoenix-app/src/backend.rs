@@ -232,6 +232,10 @@ pub trait Backend: Send + Sync + 'static {
     fn activity_feed_enabled(&self, _guild: Id) -> bool {
         true
     }
+    /// Whether guild member `user` can VIEW_CHANNEL `channel` (true when unknown).
+    fn member_can_view(&self, _channel: Id, _user: Id) -> bool {
+        true
+    }
     /// Synced user settings (settings-proto, JSON fallback).
     fn load_settings(&self) -> BoxFuture<crate::ui::settings::SyncedSettings> {
         Box::pin(async { Ok(Default::default()) })

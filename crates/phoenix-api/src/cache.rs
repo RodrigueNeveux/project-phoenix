@@ -159,6 +159,18 @@ impl Cache {
         compute_channel_permissions(gid, guild.owner_id(), me.id, &roles, &guild.roles, &ow_src.permission_overwrites)
     }
 
+    /// Permissions of guild member `user` in `channel`; `None` when the member
+    /// (its roles) is not cached.
+    pub fn member_permissions_in(&self, channel: ChannelId, user: UserId) -> Option<Permissions> {
+        let s = self.inner.state.read();
+        let ch = s.channels.get(&channel)?;
+        let gid = ch.guild_id?;
+        let guild = s.guilds.get(&gid)?;
+        let roles = s.members.get(&(gid, user))?.roles.clone();
+        let ow_src = if ch.kind.is_thread() { ch.parent_id.and_then(|p| s.channels.get(&p)).unwrap_or(ch) } else { ch };
+        Some(compute_channel_permissions(gid, guild.owner_id(), user, &roles, &guild.roles, &ow_src.permission_overwrites))
+    }
+
     // ---- writes ------------------------------------------------------------
 
     /// Insert messages fetched over REST (any order); keeps the newest `cap`.

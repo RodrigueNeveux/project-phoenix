@@ -11,6 +11,9 @@ use crate::models::{GuildId, Snowflake, User, UserId, null_default};
 /// Profile section of `GET /users/{id}/profile` (global or per guild).
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct ProfileMetadata {
+    /// Set on `guild_member_profile` (per-guild profile).
+    #[serde(default)]
+    pub guild_id: Option<Snowflake>,
     #[serde(default, deserialize_with = "null_default")]
     pub bio: String,
     #[serde(default, deserialize_with = "null_default")]

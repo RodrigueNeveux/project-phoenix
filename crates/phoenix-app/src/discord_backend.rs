@@ -469,6 +469,13 @@ impl Backend for DiscordBackend {
         s.cache.channel(sf(channel)).is_some_and(|c| c.kind == api::ChannelType::GuildMedia)
     }
 
+    fn member_can_view(&self, channel: Id, user: Id) -> bool {
+        let Ok(s) = self.inner.session() else { return true };
+        s.cache
+            .member_permissions_in(sf(channel), sf(user))
+            .is_none_or(|p| p.contains(phoenix_api::models::Permissions::VIEW_CHANNEL))
+    }
+
     fn activity_feed_enabled(&self, guild: Id) -> bool {
         let Ok(s) = self.inner.session() else { return false };
         let Some(g) = s.cache.guild(sf(guild)) else { return false };
@@ -575,6 +582,7 @@ impl Backend for DiscordBackend {
                     let _ = s.gateway.request_guild_members(phoenix_api::gateway::RequestGuildMembers {
                         guild_id: vec![g],
                         user_ids: Some(ids),
+                        presences: true,
                         ..Default::default()
                     });
                 }

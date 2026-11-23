@@ -120,6 +120,7 @@ fn playing(app: &PhoenixApp, g: Id) -> Vec<(Id, &Activity)> {
         // GLOBAL_FEED (`entries.filter(author is member && can VIEW_CHANNEL)`), never
         // from live presences alone, so a game with no feed entry shows no card.
         .filter(|(u, _)| crate::ui::activity_traits::in_feed(**u))
+        .filter(|(u, _)| app.selected_channel.is_none_or(|ch| app.backend.member_can_view(ch, **u)))
         .filter_map(|(u, acts)| Some((*u, acts.iter().find(|a| a.kind == ActivityKind::Playing)?)))
         .collect();
     v.sort_by_key(|(u, a)| (std::cmp::Reverse(a.start.unwrap_or(0)), u.0));
@@ -424,6 +425,7 @@ pub fn member_row_in(
     let uid = mem.user;
     let e = entity.clone();
     let tag = user.and_then(|u| u.tag.clone());
+    let sub = SubText::of(app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or(&[]));
     let in_voice = match g {
         Some(g) => app
             .guild_channels
@@ -506,32 +508,7 @@ pub fn member_row_in(
                             d.child(gpui::svg().path(crate::icons::path("crown")).size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
                         }),
                 )
-                .when(!offline && (in_voice || mem.activity.is_some()), |d| {
-                    // subText_J1Adu_ margin-top -2px; container_HigqCD flex gap 4:
-                    // 12px voice icon, "•" dot (--text-default), body-xs/medium 12/16 status.
-                    d.child(
-                        div()
-                            .mt(z(-2.))
-                            .h(z(16.))
-                            .flex()
-                            .items_center()
-                            .gap(z(4.))
-                            .text_size(z(12.))
-                            .line_height(z(16.))
-                            .text_color(c(Palette::TEXT_MUTED))
-                            // Voice icon is green like the online dot: both sample #45a366 in the
-                            // vanilla 20261123-155512 capture = --status-online after colour management.
-                            .when(in_voice, |d| d.child(gpui::svg().path(crate::icons::path("speaker")).size(z(12.)).flex_none().text_color(c(tok(idx::STATUS_ONLINE)))))
-                            .when(in_voice && mem.activity.is_some(), |d| d.child(div().flex_none().text_color(c(Palette::TEXT_NORMAL)).child("•")))
-                            .when_some(mem.activity.clone(), |d, a| {
-                                d.child(div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(a))
-                            })
-                            // vanilla dump node 3441: textWithIconContainer_HigqCD > body-xs/medium "Dans un salon vocal"
-                            .when(in_voice && mem.activity.is_none(), |d| {
-                                d.child(div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(crate::t!("members.in_voice")))
-                            }),
-                    )
-                }),
+                .when(!offline && (in_voice || mem.activity.is_some() || sub.is_some()), |d| d.child(sub_text(in_voice, sub, mem.activity.clone()))),
         ))
         .into_any_element()
 }
@@ -545,4 +522,76 @@ pub fn app_tag() -> gpui::Div {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(gpui::white())
         .child(crate::t!("common.app"))
+}
+
+/// What the member row's second line shows (vanilla dump `vanilla-members`, subText_J1Adu_).
+struct SubText {
+    /// Custom status (emoji, text): customStatusContent_HigqCD.
+    custom: Option<(Option<SharedString>, Option<SharedString>)>,
+    /// First non-custom activity: (name, shows the gamepad icon).
+    main: Option<(SharedString, bool)>,
+}
+
+impl SubText {
+    fn of(acts: &[crate::presence::Activity]) -> Option<Self> {
+        use crate::presence::ActivityKind as K;
+        let custom = acts
+            .iter()
+            .find(|a| a.kind == K::Custom && (a.state.is_some() || a.emoji.is_some()))
+            .map(|a| (a.emoji.clone(), a.state.clone()));
+        let main = acts.iter().find(|a| a.kind != K::Custom).map(|a| (a.name.clone(), matches!(a.kind, K::Playing | K::Competing)));
+        (custom.is_some() || main.is_some()).then_some(Self { custom, main })
+    }
+}
+
+/// subText_J1Adu_ (margin-top -2px) > container_HigqCD textXs_HigqCD (flex, gap 4):
+/// - leading 12px icon (icon_HigqCD): speaker in voice, else the gamepad for games,
+///   both --status-online (dump fill #45a366);
+/// - with a custom status the activity keeps only its icon, then the "•" dot
+///   (dot_HigqCD body-xs/normal, --text-default) and the status (emoji 14px + text);
+/// - otherwise the activity name, or "In a voice channel" (body-xs/medium 12/16).
+fn sub_text(in_voice: bool, sub: Option<SubText>, fallback: Option<SharedString>) -> gpui::Div {
+    let green = c(tok(idx::STATUS_ONLINE));
+    let (custom, main) = sub.map(|s| (s.custom, s.main)).unwrap_or((None, None));
+    let icon = if in_voice {
+        Some("speaker")
+    } else {
+        main.as_ref().filter(|m| m.1).map(|_| "game-controller")
+    };
+    let text_el = |t: SharedString| div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(t);
+    let mut row = div()
+        .mt(z(-2.))
+        .h(z(16.))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .text_color(c(Palette::TEXT_MUTED))
+        .overflow_hidden();
+    if let Some(i) = icon {
+        row = row.child(gpui::svg().path(crate::icons::path(i)).size(z(12.)).flex_none().text_color(green));
+    }
+    match custom {
+        Some((emoji, state)) => {
+            if icon.is_some() {
+                row = row.child(div().flex_none().font_weight(FontWeight::NORMAL).text_color(c(Palette::TEXT_NORMAL)).child("•"));
+            }
+            if let Some(e) = emoji {
+                row = row.child(div().flex_none().text_size(z(14.)).child(e)); // emoji_HigqCD 14px
+            }
+            if let Some(t) = state {
+                row = row.child(text_el(t));
+            }
+        }
+        None => {
+            let t = main.map(|m| m.0).or(fallback.filter(|_| !in_voice));
+            row = match t {
+                Some(t) => row.child(text_el(t)),
+                None if in_voice => row.child(text_el(crate::t!("members.in_voice"))),
+                None => row,
+            };
+        }
+    }
+    row
 }

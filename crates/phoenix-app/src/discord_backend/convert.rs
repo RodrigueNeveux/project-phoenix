@@ -812,11 +812,14 @@ pub struct Adapter {
     lists: HashMap<u64, MemberList>,
     /// Members fetched by op 8 (authors / reply targets outside the synced list range).
     chunked: HashMap<u64, Vec<api::Snowflake>>,
+    /// Last known status per user (PRESENCE_UPDATE, READY_SUPPLEMENTAL, op-8 chunk
+    /// presences) so members outside the synced list don't come out offline.
+    statuses: HashMap<u64, model::Presence>,
 }
 
 impl Adapter {
     pub fn new(me: api::Snowflake, prefs: Prefs) -> Self {
-        Self { me, prefs, lists: HashMap::new(), chunked: HashMap::new() }
+        Self { me, prefs, lists: HashMap::new(), chunked: HashMap::new(), statuses: HashMap::new() }
     }
 
     /// Mark a channel read up to `msg` (local state; the REST ack is separate).
@@ -884,7 +887,11 @@ impl Adapter {
                 members.push(model::Member {
                     user: id(u),
                     roles: m.roles.iter().copied().map(id).collect(),
-                    presence: if u == self.me { model::Presence::Online } else { model::Presence::Offline },
+                    presence: if u == self.me {
+                        model::Presence::Online
+                    } else {
+                        self.statuses.get(&u.0).copied().unwrap_or(model::Presence::Offline)
+                    },
                     activity: None,
                     nick: m.nick.clone().filter(|n| !n.is_empty()).map(Into::into),
                     avatar: member_avatar_url(guild, u, &m),
@@ -967,6 +974,7 @@ impl Adapter {
                 out.push(AppEvent::TypingStart { channel: id(t.channel_id), user: id(t.user_id) });
             }
             GatewayEvent::PresenceUpdate(p) => {
+                self.statuses.insert(p.user.id.0, presence(&p.status));
                 out.push(AppEvent::PresenceUpdate { user: id(p.user.id), presence: presence(&p.status) });
                 let activities = crate::presence::parse_activities(&p.activities);
                 out.push(AppEvent::Activities { user: id(p.user.id), activities });
@@ -979,6 +987,7 @@ impl Adapter {
                         let uid = p.get("user_id").or_else(|| p.get("user").and_then(|u| u.get("id"))).and_then(snowflake_value);
                         if let Some(u) = uid {
                             let st = p.get("status").and_then(Value::as_str).unwrap_or("offline");
+                            self.statuses.insert(u, presence(st));
                             out.push(AppEvent::PresenceUpdate { user: Id(u), presence: presence(st) });
                             let a = p.get("activities").and_then(Value::as_array).map(|a| crate::presence::parse_activities(a));
                             out.push(AppEvent::Activities { user: Id(u), activities: a.unwrap_or_default() });
@@ -997,6 +1006,16 @@ impl Adapter {
             GatewayEvent::GuildMemberListUpdate(l) => self.list_update(cache, l, &mut out),
             GatewayEvent::GuildMembersChunk(c) => {
                 out.push(AppEvent::Users(c.members.iter().filter_map(|m| m.user.as_ref()).map(user).collect()));
+                for p in &c.presences {
+                    let uid = p.get("user").and_then(|u| u.get("id")).or_else(|| p.get("user_id")).and_then(snowflake_value);
+                    if let Some(u) = uid {
+                        let st = presence(p.get("status").and_then(Value::as_str).unwrap_or("offline"));
+                        self.statuses.insert(u, st);
+                        out.push(AppEvent::PresenceUpdate { user: Id(u), presence: st });
+                        let a = p.get("activities").and_then(Value::as_array).map(|a| crate::presence::parse_activities(a));
+                        out.push(AppEvent::Activities { user: Id(u), activities: a.unwrap_or_default() });
+                    }
+                }
                 let ids = self.chunked.entry(c.guild_id.0).or_default();
                 for u in c.members.iter().filter_map(|m| m.user_id()) {
                     if !ids.contains(&u) {

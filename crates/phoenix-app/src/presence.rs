@@ -259,15 +259,17 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
             p.extra.keys().collect::<Vec<_>>()
         );
     }
-    let banner_hash = p
-        .guild_member_profile
-        .as_ref()
-        .and_then(|g| g.banner.clone())
-        .or_else(|| p.user_profile.as_ref().and_then(|g| g.banner.clone()))
-        .or_else(|| u.banner.clone());
-    let banner = banner_hash.map(|h| {
-        let ext = if h.starts_with("a_") { "gif" } else { "png" };
-        SharedString::from(format!("https://cdn.discordapp.com/banners/{}/{h}.{ext}?size=600", u.id))
+    // Per-guild banner first: CDN `guilds/{guild}/users/{user}/banners/{hash}`.
+    let ext = |h: &str| if h.starts_with("a_") { "gif" } else { "png" };
+    let guild_banner = p.guild_member_profile.as_ref().and_then(|g| Some((g.guild_id?, g.banner.clone()?))).map(|(g, h)| {
+        SharedString::from(format!("https://cdn.discordapp.com/guilds/{}/users/{}/banners/{h}.{}?size=600", g.0, u.id, ext(&h)))
+    });
+    let banner = guild_banner.or_else(|| {
+        p.user_profile
+            .as_ref()
+            .and_then(|g| g.banner.clone())
+            .or_else(|| u.banner.clone())
+            .map(|h| SharedString::from(format!("https://cdn.discordapp.com/banners/{}/{h}.{}?size=600", u.id, ext(&h))))
     });
     let decoration = u
         .avatar_decoration_data
