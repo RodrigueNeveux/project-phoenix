@@ -160,7 +160,7 @@ Endpoints the official client calls, listed from the route stubs of DiscordBotCl
 - [ ] `/users/%40me/profile`
 - [ ] `/users/{id}/application-command-index`
 - [ ] `/users/{id}/application-identities`
-- [ ] `/users/{id}/profile`
+- [x] `/users/{id}/profile`
 - [ ] `/users/@me`
 - [ ] `/users/@me/activities/statistics/applications`
 - [ ] `/users/@me/affinities/guilds`

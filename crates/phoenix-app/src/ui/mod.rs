@@ -1,4 +1,5 @@
 pub mod chat;
+pub mod image_viewer;
 pub mod login;
 pub mod settings;
 pub mod members;
@@ -10,7 +11,7 @@ pub mod switcher;
 
 use gpui::{
     AnyElement, Div, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div,
-    img, prelude::*, px, svg,
+    prelude::*, px, svg,
 };
 
 use crate::{
@@ -31,7 +32,7 @@ pub fn avatar(user: Option<&User>, size: f32) -> AnyElement {
         None => (ImageRef::Default(1), '?'),
     };
     match img_ref {
-        ImageRef::Url(url) => img(url).size(px(size)).rounded_full().flex_none().into_any_element(),
+        ImageRef::Url(url) => crate::media::avatar_image(url, size),
         ImageRef::Default(ix) => div()
             .size(px(size))
             .flex_none()

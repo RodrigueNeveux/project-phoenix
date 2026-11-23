@@ -73,16 +73,39 @@ pub struct Channel {
     pub voice_users: Vec<Id>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EmbedMedia {
+    /// Proxy URL when available (resizable), else the original.
+    pub url: SharedString,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Embed {
     pub color: Option<u32>,
     pub provider: Option<SharedString>,
     pub title: Option<SharedString>,
     pub description: Option<SharedString>,
     pub url: Option<SharedString>,
+    /// "rich", "image", "gifv", "video", "article", ...
+    pub kind: Option<SharedString>,
+    pub thumbnail: Option<EmbedMedia>,
+    pub image: Option<EmbedMedia>,
+    pub video: Option<EmbedMedia>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AttachmentKind {
+    #[default]
+    File,
+    Image,
+    Video,
+    /// Message sticker rendered as an attachment-like image.
+    Sticker(crate::media::StickerFormat),
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Attachment {
     pub filename: SharedString,
     pub url: SharedString,
@@ -90,6 +113,9 @@ pub struct Attachment {
     pub height: u32,
     pub is_image: bool,
     pub size: u64,
+    pub kind: AttachmentKind,
+    /// Full-resolution URL (viewer / open in browser). Empty = same as `url`.
+    pub original: SharedString,
 }
 
 #[derive(Clone, Debug)]

@@ -13,7 +13,7 @@ fn main() {
                 Arc::new(MockBackend::new())
             } else {
                 let b = DiscordBackend::new();
-                cx.set_http_client(b.http_client());
+                cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(b.http_client())));
                 Arc::new(b)
             };
             phoenix_app::open_main_window(backend, cx);

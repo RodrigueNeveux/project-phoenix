@@ -9,7 +9,8 @@ use gpui_component::input::Input;
 use crate::{
     app::PhoenixApp,
     assets::Icon,
-    model::{Attachment, ChannelKind, Embed, Id, Message, Reaction},
+    media,
+    model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message, Reaction},
     richtext::{ClickTarget, RBlock, RenderedMessage, RichText},
     theme::{FONT_MONO, Palette, c, ca, m, role_color},
     ui::{avatar, icon, icon_button, members, sidebar::channel_icon},
@@ -142,7 +143,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let (Some(msg), Some(r)) = (entry.msgs.get(i), entry.rendered.get(i)) else {
         return div().into_any_element();
     };
-    message(app, entity, msg, r, entry)
+    message(app, entity, msg, r, entry, cx)
 }
 
 fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl IntoElement {
@@ -217,6 +218,7 @@ fn message(
     msg: &Message,
     r: &RenderedMessage,
     entry: &crate::app::ChannelMessages,
+    cx: &App,
 ) -> AnyElement {
     let author = app.users.get(&msg.author);
     let name = author.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into());
@@ -240,7 +242,7 @@ fn message(
         );
     }
     for a in &msg.attachments {
-        content = content.child(attachment(a));
+        content = content.child(attachment(a, cx));
     }
     for e in &msg.embeds {
         content = content.child(embed(e));
@@ -470,22 +472,128 @@ fn human_size(n: u64) -> SharedString {
     }
 }
 
-fn attachment(a: &Attachment) -> AnyElement {
-    if a.is_image {
-        // Placeholder box sized to the image aspect ratio (max 400x300).
-        let scale = (400. / a.width.max(1) as f32).min(300. / a.height.max(1) as f32).min(1.);
-        if a.url.starts_with("https://") {
-            return img(a.url.clone())
+/// Clickable image (opens the viewer). `w x h` is the drawn size; the proxy
+/// is asked for 2x for HiDPI.
+fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, oh): (u32, u32), (w, h): (f32, f32)) -> gpui::Stateful<gpui::Img> {
+    let src = media::resized(url, (w * 2.) as u32, (h * 2.) as u32);
+    let viewer = media::ViewerImage {
+        url: media::resized(url, ow.min(2048), oh.min(2048)),
+        original: if original.is_empty() { url.to_owned().into() } else { original },
+        filename,
+        width: ow,
+        height: oh,
+    };
+    img(src.clone())
+        .id(gpui::ElementId::Name(src))
+        .w(px(w))
+        .h(px(h))
+        .rounded(px(8.))
+        .object_fit(gpui::ObjectFit::Cover)
+        .cursor_pointer()
+        .with_loading(|| div().size_full().rounded(px(8.)).bg(c(Palette::BG_SECONDARY)).into_any_element())
+        .on_click(move |_, _, cx| media::open_viewer(viewer.clone(), cx))
+}
+
+/// Spoiler cover: blurred (tiny upscaled proxy image) + dark veil + pill.
+fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> Option<AnyElement> {
+    if media::is_revealed(&key, cx) {
+        return None;
+    }
+    let tiny = media::resized(url, ((w / 24.) as u32).max(2), ((h / 24.) as u32).max(2));
+    Some(
+        div()
+            .id(gpui::ElementId::Name(format!("spoiler-{key}").into()))
+            .relative()
+            .w(px(w))
+            .h(px(h))
+            .rounded(px(8.))
+            .overflow_hidden()
+            .cursor_pointer()
+            .bg(c(Palette::BG_SECONDARY))
+            .child(img(tiny).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover))
+            .child(
+                div().absolute().inset_0().bg(ca(0x00000099)).flex().items_center().justify_center().child(
+                    div()
+                        .px(px(12.))
+                        .py(px(6.))
+                        .rounded_full()
+                        .bg(ca(0x000000CC))
+                        .text_size(px(15.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(gpui::white())
+                        .child("SPOILER"),
+                ),
+            )
+            .on_click(move |_, _, cx| media::reveal(key.clone(), cx))
+            .into_any_element(),
+    )
+}
+
+fn attachment(a: &Attachment, cx: &App) -> AnyElement {
+    let remote = a.url.starts_with("https://");
+    let spoiler = a.filename.starts_with("SPOILER_");
+    match a.kind {
+        AttachmentKind::Sticker(fmt) => {
+            let name = a.filename.clone();
+            return match media::sticker_url(0, fmt).and(Some(a.url.clone())).filter(|u| !u.is_empty()) {
+                Some(u) => img(u)
+                    .mt(px(4.))
+                    .size(px(160.))
+                    .object_fit(gpui::ObjectFit::Contain)
+                    .with_fallback(move || sticker_name(name.clone()))
+                    .into_any_element(),
+                None => div().mt(px(4.)).child(sticker_name(name)).into_any_element(),
+            };
+        }
+        AttachmentKind::Image | AttachmentKind::Video if remote => {
+            let size = media::fit(a.width, a.height, media::MAX_W, media::MAX_H);
+            if spoiler && let Some(cover) = spoiler_cover(a.url.clone(), &a.url, size, cx) {
+                return div().mt(px(4.)).child(cover).into_any_element();
+            }
+            if a.kind == AttachmentKind::Video {
+                let poster = media::video_poster(&a.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
+                let original = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
+                return div()
+                    .id(gpui::ElementId::Name(format!("video-{}", a.url).into()))
+                    .mt(px(4.))
+                    .relative()
+                    .w(px(size.0))
+                    .h(px(size.1))
+                    .rounded(px(8.))
+                    .overflow_hidden()
+                    .bg(gpui::black())
+                    .cursor_pointer()
+                    .child(img(poster).size_full().object_fit(gpui::ObjectFit::Cover))
+                    .child(
+                        div().absolute().inset_0().flex().items_center().justify_center().child(
+                            div()
+                                .size(px(48.))
+                                .rounded_full()
+                                .bg(ca(0x000000B3))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .text_color(gpui::white())
+                                .text_size(px(20.))
+                                .child("\u{25B6}"),
+                        ),
+                    )
+                    .on_click(move |_, _, cx| cx.open_url(&original))
+                    .into_any_element();
+            }
+            return div()
                 .mt(px(4.))
-                .w(px(a.width as f32 * scale))
-                .h(px(a.height as f32 * scale))
-                .rounded(px(8.))
+                .child(media_image(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size))
                 .into_any_element();
         }
+        _ => {}
+    }
+    if a.is_image {
+        let (w, h) = media::fit(a.width, a.height, media::MAX_W, media::MAX_H);
         return div()
             .mt(px(4.))
-            .w(px(a.width as f32 * scale))
-            .h(px(a.height as f32 * scale))
+            .w(px(w))
+            .h(px(h))
             .rounded(px(8.))
             .bg(c(Palette::BG_SECONDARY))
             .flex()
@@ -497,7 +605,9 @@ fn attachment(a: &Attachment) -> AnyElement {
             .child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(a.filename.clone()))
             .into_any_element();
     }
+    let url = a.url.clone();
     div()
+        .id(gpui::ElementId::Name(format!("file-{}", a.url).into()))
         .mt(px(4.))
         .w(px(432.))
         .p(px(16.))
@@ -517,10 +627,38 @@ fn attachment(a: &Attachment) -> AnyElement {
                 .child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(human_size(a.size))),
         )
         .child(icon(Icon::Download, 24., c(Palette::INTERACTIVE)))
+        .when(remote, |d| d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&url)))
+        .into_any_element()
+}
+
+fn sticker_name(name: SharedString) -> AnyElement {
+    div()
+        .px(px(8.))
+        .py(px(4.))
+        .rounded(px(4.))
+        .bg(c(Palette::BG_SECONDARY))
+        .text_size(px(14.))
+        .text_color(c(Palette::TEXT_MUTED))
+        .child(SharedString::from(format!("Sticker: {name}")))
         .into_any_element()
 }
 
 fn embed(e: &Embed) -> AnyElement {
+    let has_text = e.title.is_some() || e.description.is_some();
+    let media_only = matches!(e.kind.as_deref(), Some("image" | "gifv")) && !has_text;
+    // Image-only embeds (links to pictures/gifs) render bare, like attachments.
+    if media_only && let Some(m) = e.thumbnail.as_ref().or(e.image.as_ref()) {
+        let size = media::fit(m.width, m.height, media::MAX_W, media::MAX_H);
+        let original = e.url.clone().unwrap_or_else(|| m.url.clone());
+        return div()
+            .mt(px(4.))
+            .child(media_image(&m.url, original, "".into(), (m.width, m.height), size))
+            .into_any_element();
+    }
+    // Small thumbnail on the right for article/link embeds, big image below otherwise.
+    let side_thumb = e.image.is_none() && e.kind.as_deref() != Some("video");
+    let thumb = e.thumbnail.clone().filter(|_| side_thumb);
+    let big = e.image.clone().or_else(|| e.thumbnail.clone().filter(|_| !side_thumb));
     div()
         .mt(px(4.))
         .max_w(px(516.))
@@ -532,25 +670,47 @@ fn embed(e: &Embed) -> AnyElement {
         .child(
             div()
                 .flex_1()
+                .min_w_0()
                 .p(px(12.))
                 .pr(px(16.))
                 .flex()
-                .flex_col()
-                .gap(px(8.))
-                .when_some(e.provider.clone(), |d, p| {
-                    d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_NORMAL)).child(p))
-                })
-                .when_some(e.title.clone(), |d, t| {
+                .gap(px(16.))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(8.))
+                        .when_some(e.provider.clone(), |d, p| {
+                            d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_NORMAL)).child(p))
+                        })
+                        .when_some(e.title.clone(), |d, t| {
+                            d.child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(c(if e.url.is_some() { Palette::TEXT_LINK } else { Palette::TEXT_HEADER }))
+                                    .child(t),
+                            )
+                        })
+                        .when_some(e.description.clone(), |d, t| {
+                            d.child(div().text_size(px(14.)).line_height(px(18.)).child(t))
+                        })
+                        .when_some(big, |d, m| {
+                            let size = media::fit(m.width, m.height, 400., 300.);
+                            let original = m.url.clone();
+                            d.child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(px(4.)))
+                        }),
+                )
+                .when_some(thumb, |d, m| {
+                    let size = media::fit(m.width, m.height, 80., 80.);
+                    let original = m.url.clone();
                     d.child(
                         div()
-                            .text_size(px(16.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(if e.url.is_some() { Palette::TEXT_LINK } else { Palette::TEXT_HEADER }))
-                            .child(t),
+                            .flex_none()
+                            .child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(px(4.))),
                     )
-                })
-                .when_some(e.description.clone(), |d, t| {
-                    d.child(div().text_size(px(14.)).line_height(px(18.)).child(t))
                 }),
         )
         .into_any_element()
@@ -572,7 +732,7 @@ fn reactions(rs: &[Reaction]) -> AnyElement {
                 .when(!r.me, |d| d.bg(c(Palette::BG_SECONDARY)).border_color(gpui::transparent_black()))
                 .hover(|s| s.border_color(c(0x4E5058)))
                 .cursor_pointer()
-                .child(div().text_size(px(16.)).child(r.emoji.clone()))
+                .child(media::emoji::emoji_element(&r.emoji, 16.))
                 .child(
                     div()
                         .text_size(px(14.))
