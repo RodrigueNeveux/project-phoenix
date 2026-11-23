@@ -8,6 +8,10 @@ use gpui::{
     Window, deferred, div, prelude::*, px,
 };
 
+use std::time::Duration;
+
+use gpui::{Animation, AnimationExt, ease_out_quint};
+
 use crate::theme::{Palette, c, ca};
 
 pub type Action = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -41,7 +45,18 @@ pub fn frame(id: &'static str, on_cancel: Action, card: impl IntoElement) -> Any
                     .id("modal-card")
                     .occlude()
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(card),
+                    .child(card)
+                    // Discord: card fades in and grows from ~0.9 over ~200ms.
+                    .with_animation(
+                        id,
+                        Animation::new(Duration::from_millis(200)).with_easing(ease_out_quint()),
+                        |d, t| d.opacity(t).mt(px(24. * (1. - t))),
+                    ),
+            )
+            .with_animation(
+                "modal-backdrop-fade",
+                Animation::new(Duration::from_millis(150)),
+                |d, t| d.bg(ca(0x000000B3).opacity(t)),
             ),
     )
     .with_priority(20)
@@ -53,6 +68,7 @@ pub fn confirm(m: Confirm) -> AnyElement {
     let cancel2 = m.on_cancel.clone();
     let ok = m.on_confirm.clone();
     let card = div()
+        .relative()
         .w(px(440.))
         .rounded(px(8.))
         .overflow_hidden()
@@ -74,6 +90,26 @@ pub fn confirm(m: Confirm) -> AnyElement {
                         .child(m.title),
                 )
                 .children(m.body),
+        )
+        .child(
+            div()
+                .id("modal-close")
+                .absolute()
+                .top(px(12.))
+                .right(px(12.))
+                .size(px(24.))
+                .rounded(px(4.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .text_color(c(Palette::INTERACTIVE))
+                .hover(|s| s.text_color(c(Palette::INTERACTIVE_HOVER)))
+                .on_click({
+                    let cancel = m.on_cancel.clone();
+                    move |_, w, cx| cancel(w, cx)
+                })
+                .child(gpui::svg().path("icons/close.svg").size(px(24.)).text_color(c(Palette::INTERACTIVE))),
         )
         .child(
             div()

@@ -483,6 +483,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER)))
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_channel(id, cx)))
+                .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
+                    crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(id), ev.position, w)
+                })
                 .child(lead)
                 .child(
                     div()

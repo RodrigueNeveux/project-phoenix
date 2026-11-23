@@ -286,7 +286,7 @@ pub fn format_time_tooltip(ts: i64) -> SharedString {
 }
 
 fn time_tooltip(ts: i64) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 'static {
-    move |window, cx| gpui_component::tooltip::Tooltip::new(format_time_tooltip(ts)).build(window, cx)
+    crate::ui::tooltip::tip(format_time_tooltip(ts))
 }
 
 /// Discord's "APP" tag next to bot authors.

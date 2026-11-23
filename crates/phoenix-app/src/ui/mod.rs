@@ -17,6 +17,8 @@ pub mod server_bar;
 pub mod sidebar;
 pub mod status_picker;
 pub mod switcher;
+pub mod nav_menus;
+pub mod tooltip;
 pub mod user_menu;
 pub mod voice_panel;
 

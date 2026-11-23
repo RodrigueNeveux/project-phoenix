@@ -255,6 +255,9 @@ fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, _nested: bool
             move |window, cx| gpui_component::tooltip::Tooltip::new(name.clone()).build(window, cx)
         })
         .on_click(move |_, _, cx| e.update(cx, |app, cx| app.select_guild(Some(id), cx)))
+        .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
+            crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Guild(id), ev.position, w)
+        })
         .on_drag(drag, |d: &DraggedGuild, _, _, cx: &mut App| cx.new(|_| d.clone()))
         .drag_over::<DraggedGuild>(|s, _, _, _| s.border_t_2().border_color(c(Palette::GREEN)))
         .on_drop(move |d: &DraggedGuild, _, cx| drop_e.update(cx, |a, cx| a.move_guild(d.id, id, cx)))

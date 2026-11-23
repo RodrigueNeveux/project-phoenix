@@ -112,7 +112,7 @@ fn action_button(id: &'static str, path: &'static str, label: &'static str, cx: 
         .items_center()
         .justify_center()
         .child(asset_icon(path, 20. * crate::theme::zoom(), c(Palette::INTERACTIVE)))
-        .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(label).build(window, cx))
+        .tooltip(crate::ui::tooltip::tip(label))
         .on_click(cx.listener(move |a, _, _, cx| a.stub(label, cx)))
 }
 
@@ -213,7 +213,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                 )
                 .child(
                     icon_button("hangup", Icon::PhoneHangup, c(Palette::INTERACTIVE), 20.)
-                        .tooltip(|window, cx| gpui_component::tooltip::Tooltip::new("Disconnect").build(window, cx))
+                        .tooltip(crate::ui::tooltip::tip("Disconnect"))
                         .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
                 ),
         )

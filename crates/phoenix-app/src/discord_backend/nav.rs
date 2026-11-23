@@ -224,8 +224,9 @@ pub fn snapshot(cache: &Cache, ready: &Ready) -> Vec<AppEvent> {
     }
     let banners = cache.guilds().iter().map(|g| (id(g.id), g.properties.banner.clone())).collect();
     extras.extend(cache.private_channels().iter().map(|c| (id(c.id), extra(cache, c))));
+    let message_requests = cache.private_channels().iter().filter(|c| c.is_message_request).map(|c| id(c.id)).collect();
     vec![
-        AppEvent::Nav(NavEvent::Snapshot { relationships, folders, threads, extras, message_requests: Vec::new() }),
+        AppEvent::Nav(NavEvent::Snapshot { relationships, folders, threads, extras, message_requests }),
         AppEvent::Nav(NavEvent::Banners(banners)),
     ]
 }
@@ -393,7 +394,46 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
             call(Method::DELETE, format!("/channels/{}?silent=false", sf(ch)), None).await?;
             NavReply::Done
         }
+        NavRequest::AckChannel(ch) => {
+            let v = call(Method::GET, format!("/channels/{}", sf(ch)), None).await?;
+            if let Some(last) = v.get("last_message_id").and_then(snowflake) {
+                rest.ack_message(sf(ch), sf(Id(last))).await.map_err(api_err)?;
+            }
+            NavReply::Done
+        }
+        NavRequest::AckGuild(g) => {
+            call(Method::POST, format!("/guilds/{}/ack", sf(g)), Some(json!({}))).await?;
+            NavReply::Done
+        }
+        NavRequest::Mute { guild, channel, muted, secs } => {
+            let end = secs.map(|s| (chrono::Utc::now() + chrono::Duration::seconds(s as i64)).to_rfc3339());
+            let cfg = json!({ "muted": muted, "mute_config": muted.then(|| json!({
+                "selected_time_window": secs.map(|s| s as i64).unwrap_or(-1),
+                "end_time": end,
+            })) });
+            call(Method::PATCH, settings_path(guild), Some(settings_body(channel, cfg))).await?;
+            NavReply::Done
+        }
+        NavRequest::NotifyLevel { guild, channel, level } => {
+            let body = settings_body(channel, json!({ "message_notifications": level }));
+            call(Method::PATCH, settings_path(guild), Some(body)).await?;
+            NavReply::Done
+        }
     })
+}
+
+fn settings_path(guild: Option<Id>) -> String {
+    match guild {
+        Some(g) => format!("/users/@me/guilds/{}/settings", sf(g)),
+        None => "/users/@me/guilds/@me/settings".into(),
+    }
+}
+
+fn settings_body(channel: Option<Id>, fields: Value) -> Value {
+    match channel {
+        Some(ch) => json!({ "channel_overrides": { sf(ch).to_string(): fields } }),
+        None => fields,
+    }
 }
 
 #[cfg(test)]

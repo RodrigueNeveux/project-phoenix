@@ -487,6 +487,26 @@ fn appearance(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     .border_2()
                     .border_color(c(if t == theme { Palette::BLURPLE } else { Palette::DIVIDER }))
                     .cursor_pointer()
+                    .relative()
+                    .when(t != theme, |d| d.hover(|s| s.border_color(c(Palette::INTERACTIVE_HOVER))))
+                    // Selected: blurple ring plus a check badge on the top-right.
+                    .when(t == theme, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(px(-4.))
+                                .right(px(-4.))
+                                .size(px(22.))
+                                .rounded_full()
+                                .bg(c(Palette::BLURPLE))
+                                .border_2()
+                                .border_color(c(Palette::BG_PRIMARY))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(gpui::svg().path("icons/check.svg").size(px(14.)).text_color(gpui::white())),
+                        )
+                    })
                     .on_click(cx.listener(move |a, _, _, cx| save(a, SettingsPatch::Theme(t), cx))),
             )
             .child(note(t.label()))

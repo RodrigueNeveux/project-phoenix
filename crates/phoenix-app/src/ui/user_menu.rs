@@ -48,12 +48,43 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let mut items = vec![
         act("Profile", Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))),
     ];
+    if app.selected_channel.is_some() {
+        items.push(act(
+            "Mention",
+            Rc::new(move |a, _, w, cx| {
+                a.composer.update(cx, |s, cx| {
+                    let v = s.value().to_string();
+                    let sep = if v.is_empty() || v.ends_with(' ') { "" } else { " " };
+                    s.set_value(format!("{v}{sep}<@{}> ", u.0), w, cx);
+                    s.focus(w, cx);
+                })
+            }),
+        ));
+    }
     if !me {
         items.push(act("Message", Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
     }
     items.push(MenuItem::Separator);
     items.push(act("Add Note", Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx))));
+    let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
+    if in_call {
+        items.push(MenuItem::Separator);
+        items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
+    }
     if !me {
+        let invites: Vec<MenuItem> = app
+            .guilds
+            .iter()
+            .filter(|x| Some(x.id) != g)
+            .map(|x| {
+                let gid = x.id;
+                act_owned(&e, x.name.clone(), Rc::new(move |a, _, _, cx| a.open_invite_people(gid, cx)))
+            })
+            .collect();
+        if !invites.is_empty() {
+            items.push(MenuItem::Separator);
+            items.push(MenuItem::submenu("Invite to Server", invites));
+        }
         items.push(MenuItem::Separator);
         if app.nav.relationship(u).is_none() {
             items.push(act("Add Friend", Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
@@ -75,6 +106,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         w.refresh();
     });
     Some(context_menu::render(o.pos, items, dismiss))
+}
+
+fn act_owned(e: &gpui::Entity<PhoenixApp>, label: gpui::SharedString, f: Act) -> MenuItem {
+    let e = e.clone();
+    MenuItem::action(label, None, move |ev, w, cx: &mut App| e.update(cx, |a, cx| f(a, ev, w, cx)))
 }
 
 impl PhoenixApp {

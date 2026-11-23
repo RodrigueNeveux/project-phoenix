@@ -101,6 +101,15 @@ pub enum NavRequest {
     /// Open (or create) the DM with a user; reply is `Channel`.
     OpenDm(Id),
     CloseDm(Id),
+    /// Mark a channel read up to its latest message.
+    AckChannel(Id),
+    /// Mark every channel of a guild read.
+    AckGuild(Id),
+    /// Mute a guild (`channel: None`) or a channel; `secs` None = until unmuted,
+    /// `muted: false` unmutes. DMs use `guild: None`.
+    Mute { guild: Option<Id>, channel: Option<Id>, muted: bool, secs: Option<u32> },
+    /// Notification level: 0 all, 1 mentions, 2 nothing, 3 inherit (channels).
+    NotifyLevel { guild: Option<Id>, channel: Option<Id>, level: u8 },
 }
 
 #[derive(Clone, Debug)]
