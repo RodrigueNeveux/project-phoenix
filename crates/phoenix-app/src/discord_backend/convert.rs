@@ -90,7 +90,49 @@ fn embed_media(m: &Option<api::EmbedMedia>) -> Option<model::EmbedMedia> {
     Some(model::EmbedMedia { url: url.into(), width: m.width.unwrap_or(0), height: m.height.unwrap_or(0) })
 }
 
+/// A forward (`message_snapshots[0].message`) rendered as its snapshot: the outer message with
+/// the snapshot's content, attachments, embeds and edit time swapped in.
+fn forward_snapshot(m: &api::Message) -> Option<(api::Message, model::Forward)> {
+    let snap = m.message_snapshots.as_ref()?.get(0)?.get("message")?;
+    let mut v = serde_json::to_value(m).ok()?;
+    let o = v.as_object_mut()?;
+    for k in ["content", "attachments", "embeds", "edited_timestamp", "sticker_items"] {
+        o.insert(k.into(), snap.get(k).cloned().unwrap_or(serde_json::Value::Null));
+    }
+    for k in ["message_snapshots", "message_reference", "referenced_message"] {
+        o.remove(k);
+    }
+    if o.get("content").is_some_and(|c| c.is_null()) {
+        o.insert("content".into(), "".into());
+    }
+    for k in ["attachments", "embeds"] {
+        if o.get(k).is_some_and(|c| c.is_null()) {
+            o.insert(k.into(), serde_json::json!([]));
+        }
+    }
+    let inner: api::Message = serde_json::from_value(v).ok()?;
+    let r = m.message_reference.as_ref();
+    let ts = snap
+        .get("timestamp")
+        .and_then(|t| t.as_str())
+        .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+        .map(|t| t.timestamp())
+        .or_else(|| r.and_then(|r| r.message_id).map(|i| (i.timestamp_ms() / 1000) as i64))
+        .unwrap_or(0);
+    let f = model::Forward {
+        guild: r.and_then(|r| r.guild_id).map(id),
+        channel: r.and_then(|r| r.channel_id).map(id).unwrap_or(id(m.channel_id)),
+        timestamp: ts,
+    };
+    Some((inner, f))
+}
+
 pub fn message(m: &api::Message) -> model::Message {
+    if let Some((inner, f)) = forward_snapshot(m) {
+        let mut out = message(&inner);
+        out.forward = Some(f);
+        return out;
+    }
     crate::commands::store::record(m);
     let reply_to = m
         .message_reference
@@ -110,6 +152,8 @@ pub fn message(m: &api::Message) -> model::Message {
             .referenced_message
             .as_ref()
             .is_some_and(|r| m.mentions.iter().any(|u| u.user.id == r.author.id)),
+        forward: None,
+        author_nick: m.member.as_ref().and_then(|mb| mb.nick.clone()).filter(|n| !n.is_empty()).map(Into::into),
         embeds: m
             .embeds
             .iter()

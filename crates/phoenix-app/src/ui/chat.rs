@@ -18,6 +18,7 @@ use crate::{
 // Messaging features live in submodules (composer moved to `composer.rs`).
 pub mod composer;
 pub mod icons;
+pub mod forward;
 pub mod message_ext;
 pub mod mosaic;
 pub mod panels;
@@ -453,7 +454,7 @@ fn message(
     cx: &App,
 ) -> AnyElement {
     let author = app.users.get(&msg.author);
-    let name = author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"));
+    let name = msg.author_nick.clone().or_else(|| author.map(|u| u.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown"));
     // username_ color: role colour, else --text-strong.
     let color = app.author_color(msg.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG));
     let id = msg.id;
@@ -503,6 +504,10 @@ fn message(
     for e in &msg.embeds {
         content = content.child(embed(e));
     }
+    // Forward: the snapshot sits inside the quote frame; reactions/threads stay outside.
+    if let Some(f) = &msg.forward {
+        content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL)).child(forward::wrap(app, f, content));
+    }
     content = content.children(crate::ui::components::render(app, entity, msg)).children(crate::ui::components::render_poll(app, entity, msg));
     if !msg.reactions.is_empty() {
         content = content.child(message_ext::reactions(app, entity, msg));
@@ -517,9 +522,9 @@ fn message(
 
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);
-        let (ru, preview) = match found {
-            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone()),
-            None => (None, crate::t!("chat.reply_deleted")),
+        let (ru, preview, rnick) = match found {
+            Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone()),
+            None => (None, crate::t!("chat.reply_deleted"), None),
         };
         // repliedMessage_: 14px, line-height --custom-message-reply-message-preview-line-height
         // (1.125rem), cozy margin-bottom --reply-spacing (4px). Compact: margin-inline-start
@@ -564,7 +569,7 @@ fn message(
                     .child(SharedString::from(format!(
                         "{}{}",
                         if msg.reply_mentions_author { "@" } else { "" }, // repliedMessage_ username: "@" only when the reply pinged
-                        ru.map(|u| u.display_name.to_string()).unwrap_or_else(|| crate::t!("common.unknown").to_string())
+                        rnick.map(|n| n.to_string()).or_else(|| ru.map(|u| u.display_name.to_string())).unwrap_or_else(|| crate::t!("common.unknown").to_string())
                     ))),
             )
             .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))

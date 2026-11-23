@@ -530,6 +530,7 @@ chat.dm_start: "This is the beginning of your direct message history with {name}
 chat.welcome: "Welcome to #{name}!"
 chat.channel_start: "This is the start of the #{name} channel."
 chat.reply_deleted: "Original message was deleted"
+chat.forwarded: "Forwarded"
 chat.reply_click_to_see: "Click to see attachment"
 chat.edited: "(edited)"
 chat.edited_suffix: " (edited)"

@@ -530,6 +530,7 @@ chat.dm_start: "C'est le début de l'historique de tes messages privés avec {na
 chat.welcome: "Bienvenue dans #{name} !"
 chat.channel_start: "C'est le début du salon #{name}."
 chat.reply_deleted: "Le message original a été supprimé"
+chat.forwarded: "Transféré"
 chat.reply_click_to_see: "Clique pour voir le message"
 chat.edited: "(modifié)"
 chat.edited_suffix: " (modifié)"

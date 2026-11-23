@@ -200,6 +200,12 @@ pub struct Message {
     /// The reply pinged the replied-to author (`message.mentions` holds the referenced
     /// author): the client then prefixes the replied username with "@".
     pub reply_mentions_author: bool,
+    /// Forwarded message (`message_snapshots`): content/attachments/embeds above are the
+    /// snapshot's; this keeps where it came from.
+    pub forward: Option<Forward>,
+    /// Guild nickname of the author at send time (`message.member.nick`); the client shows it
+    /// instead of the global display name.
+    pub author_nick: Option<SharedString>,
     pub embeds: Vec<Embed>,
     pub attachments: Vec<Attachment>,
     pub reactions: Vec<Reaction>,
@@ -207,6 +213,15 @@ pub struct Message {
     pub pinned: bool,
     pub mention_everyone: bool,
     pub thread: Option<ThreadRef>,
+}
+
+/// Origin of a forwarded message.
+#[derive(Clone, Debug, Default)]
+pub struct Forward {
+    pub guild: Option<Id>,
+    pub channel: Id,
+    /// Unix seconds of the original message.
+    pub timestamp: i64,
 }
 
 #[derive(Clone, Debug)]
