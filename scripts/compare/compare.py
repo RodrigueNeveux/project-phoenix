@@ -110,8 +110,8 @@ def run(a):
         subprocess.run([str(BIN), str(p_path)], check=True, cwd=out)
 
     W, H = boxes["vw"], boxes["vh"]
-    s = 2  # compare at 2x CSS px (our offscreen renders at scale 2)
-    size = (W * s, H * s)
+    s = float(boxes.get("dpr") or 2)  # compare at the device scale: real_shots renders at Discord's devicePixelRatio
+    size = (round(W * s), round(H * s))
     d = Image.open(d_path).convert("RGB").resize(size, Image.LANCZOS)
     p = Image.open(p_path).convert("RGB").resize(size, Image.LANCZOS)
 
@@ -131,7 +131,7 @@ def run(a):
     mask = diff.point(lambda v: 255 if v > 24 else 0)
     scores = {}
     for name, (x, y, w, h) in regions.items():
-        box = (x * s, y * s, (x + w) * s, (y + h) * s)
+        box = tuple(round(v * s) for v in (x, y, x + w, y + h))
         crop = mask.crop(box)
         n = crop.width * crop.height or 1
         mism = sum(crop.histogram()[255:]) / n

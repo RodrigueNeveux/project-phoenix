@@ -189,6 +189,7 @@ pub fn list_rows<'a>(items: impl Iterator<Item = &'a Option<MemberListItem>>) ->
                     decoration: None,
                     joined_at: m.member.joined_at.as_deref().and_then(iso_to_unix),
                     rejoined: m.member.flags & 1 != 0,
+                    premium_since: m.member.premium_since.as_deref().and_then(iso_to_unix),
                 }, m.member.nick.clone().filter(|n| !n.is_empty()).map(Into::into)));
                 acts.push((uid, a));
             }

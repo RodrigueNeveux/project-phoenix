@@ -800,6 +800,7 @@ impl MemberList {
                 decoration: member_decoration_url(&m.member),
                 joined_at: joined_unix(&m.member),
                 rejoined: m.member.flags & 1 != 0,
+                premium_since: premium_unix(&m.member),
             });
         }
         (ms, us)
@@ -900,6 +901,7 @@ impl Adapter {
                     decoration: member_decoration_url(&m),
                     joined_at: joined_unix(&m),
                     rejoined: m.flags & 1 != 0,
+                    premium_since: premium_unix(&m),
                 });
             }
         }
@@ -1162,6 +1164,10 @@ pub fn self_activities(r: &phoenix_api::gateway::events::Ready) -> Option<AppEve
 }
 
 /// `member.joined_at` (ISO 8601) as unix seconds.
+pub(super) fn premium_unix(m: &api::Member) -> Option<i64> {
+    m.premium_since.as_deref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.timestamp())
+}
+
 pub(super) fn joined_unix(m: &api::Member) -> Option<i64> {
     m.joined_at.as_deref().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.timestamp())
 }

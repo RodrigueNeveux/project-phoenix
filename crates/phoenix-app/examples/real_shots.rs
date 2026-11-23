@@ -333,6 +333,9 @@ fn main() -> anyhow::Result<()> {
             _ => (None, None),
         }
     };
+    // Same device scale as the user's Discord (`devicePixelRatio`, 1.5 here) so
+    // subpixel borders and rounding snap the same way. PHX_SCALE overrides.
+    let scale: f32 = env_or_cdp("PHX_SCALE", "devicePixelRatio").and_then(|v| v.parse().ok()).filter(|s: &f32| *s > 0.).unwrap_or(2.);
     let w: f32 = env_or_cdp("PHX_W", "innerWidth").and_then(|v| v.parse().ok()).unwrap_or(1280.);
     let h: f32 = env_or_cdp("PHX_H", "innerHeight").and_then(|v| v.parse().ok()).unwrap_or(800.);
     let classes = cdp("document.documentElement.className").unwrap_or_default();
@@ -415,6 +418,7 @@ fn main() -> anyhow::Result<()> {
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
     })?;
+    cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
     // Time-based, not iteration-based: at tall sizes one parked run can draw a
     // large frame (animated avatars/GIFs keep requesting frames), so a fixed
     // `ms / 50` iteration count stretched a 15 s wait to minutes.
@@ -502,6 +506,7 @@ fn main() -> anyhow::Result<()> {
     cx.update_window(win.into(), |_, window, cx| {
         window.resize(size(px(w), px(h)));
         window.bounds_changed(cx);
+        window.set_scale_factor(scale);
     })?;
     pump(&mut cx, wait * 1000 / 2);
     // Server nicks of authors outside the synced member-list range come from op 8
@@ -561,7 +566,13 @@ fn main() -> anyhow::Result<()> {
         img = Some(cx.capture_screenshot(win.into())?);
     }
     eprintln!("[{:.1}s] captured", t0.elapsed().as_secs_f32());
-    let img = img.expect("frame");
+    // The test window's framebuffer is always sized at its 2x default; the scene
+    // is drawn at `scale`, so keep only the top-left w*scale x h*scale.
+    let mut img = img.expect("frame");
+    let (cw, ch) = (((w * scale).round() as u32).min(img.width()), ((h * scale).round() as u32).min(img.height()));
+    if (cw, ch) != (img.width(), img.height()) {
+        img = image::imageops::crop_imm(&img, 0, 0, cw, ch).to_image();
+    }
     img.save(&out)?;
     println!("wrote {out} ({}x{})", img.width(), img.height());
     Ok(())

@@ -269,6 +269,7 @@ impl MockBackend {
                     decoration: None,
                     joined_at: None,
                     rejoined: false,
+                    premium_since: None,
                 });
             }
             members.insert(gid, ms);

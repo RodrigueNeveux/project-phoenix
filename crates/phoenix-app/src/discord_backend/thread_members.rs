@@ -41,6 +41,7 @@ fn parse(data: &Value) -> Option<(u64, Reply)> {
             decoration: m.as_ref().and_then(convert::member_decoration_url),
             joined_at: m.as_ref().and_then(convert::joined_unix),
             rejoined: m.as_ref().is_some_and(|m| m.flags & 1 != 0),
+            premium_since: m.as_ref().and_then(convert::premium_unix),
         });
     }
     Some((thread, (members, users)))

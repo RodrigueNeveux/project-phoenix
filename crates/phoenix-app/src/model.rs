@@ -260,6 +260,8 @@ pub struct Member {
     pub joined_at: Option<i64>,
     /// `member.flags` DID_REJOIN (bit 0): rejoining members never get the badge.
     pub rejoined: bool,
+    /// `member.premium_since` as unix seconds: boosting the guild (booster icon).
+    pub premium_since: Option<i64>,
 }
 
 pub fn acronym(name: &str) -> SharedString {

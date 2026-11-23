@@ -677,6 +677,7 @@ pub fn member_row_in(
                 .flex_col()
                 .child(
                     div()
+                        .min_w_0()
                         .flex()
                         .items_center()
                         .gap(z(4.))
@@ -686,6 +687,10 @@ pub fn member_row_in(
                                 .line_height(z(20.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(role_color(g.and_then(|g| app.member_color(g, mem))))
+                                // name_ ellipsis: only the name shrinks, the decorators keep their width
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
                                 .text_ellipsis()
                                 .child(name),
                         )
@@ -694,6 +699,20 @@ pub fn member_row_in(
                         .when(owner, |d| {
                             // ownerIcon_Iy0c7A: 14px (icon_Iy0c7A), --text-feedback-warning
                             d.child(gpui::svg().path(crate::icons::path("crown")).size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
+                        })
+                        .when(mem.premium_since.is_some(), |d| {
+                            // premiumIcon_Iy0c7A + icon_Iy0c7A: 14px, margin-inline-start 3px, top 1px;
+                            // path fill --guild-boosting-pink (dump vanilla-guild-chat-busy node 1757).
+                            d.child(
+                                gpui::svg()
+                                    .path(crate::icons::path("chat/boost"))
+                                    .size(z(14.))
+                                    .flex_none()
+                                    .ml(z(3.)) // after the row gap(4), as the client (wrapper span + 3px)
+                                    .relative()
+                                    .top(z(1.))
+                                    .text_color(c(tok(idx::GUILD_BOOSTING_PINK))),
+                            )
                         }),
                 )
                 .when(!offline && (in_voice || mem.activity.is_some() || sub.is_some()), |d| d.child(sub_text(in_voice, sub, mem.activity.clone()))),
