@@ -225,6 +225,11 @@ pub struct Profile {
     pub joined: Option<i64>,
     pub note: SharedString,
     pub mutual_guilds: usize,
+    pub mutual_friends_count: usize,
+    /// Mutual friends (full profile "Mutual Friends" tab).
+    pub mutual_friends: Vec<crate::model::User>,
+    /// Mutual guild ids (full profile "Mutual Servers" tab).
+    pub mutual_guild_ids: Vec<Id>,
     /// Profile badges: (description, icon URL).
     pub badges: Vec<(SharedString, SharedString)>,
 }
@@ -274,6 +279,9 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
         joined: gm.and_then(|m| m.joined_at.as_deref()).and_then(iso_to_unix),
         note: note.into(),
         mutual_guilds: p.mutual_guilds.len(),
+        mutual_friends_count: p.mutual_friends_count.map(|n| n as usize).unwrap_or(p.mutual_friends.len()),
+        mutual_friends: p.mutual_friends.iter().map(crate::discord_backend::convert::user).collect(),
+        mutual_guild_ids: p.mutual_guilds.iter().map(|g| Id(g.id.0)).collect(),
         badges: p
             .badges
             .iter()

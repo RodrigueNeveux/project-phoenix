@@ -1,6 +1,6 @@
 //! Offscreen render of one non-chat view in a given theme.
 //! `cargo run -p phoenix-app --example views -- out.png [dark|light|ash|onyx] <scene>`
-//! Scenes: profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum, dm-menu, dm-submenu.
+//! Scenes: friends-all, friends-pending, inbox, pins, threads, search, profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum, dm-menu, dm-submenu.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -42,7 +42,9 @@ fn main() -> anyhow::Result<()> {
     });
     let view: Rc<RefCell<Option<Entity<PhoenixApp>>>> = Rc::default();
     let v2 = view.clone();
-    let win = cx.open_window(size(px(1280.), px(800.)), move |window, cx| {
+    // PHOENIX_SHOT_H=700 matches the live client dumps (1280x700 viewport).
+    let h: f32 = std::env::var("PHOENIX_SHOT_H").ok().and_then(|v| v.parse().ok()).unwrap_or(800.);
+    let win = cx.open_window(size(px(1280.), px(h)), move |window, cx| {
         let v = cx.new(|cx| PhoenixApp::new(Arc::new(MockBackend::new()), window, cx));
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
@@ -82,6 +84,24 @@ fn main() -> anyhow::Result<()> {
                     "gif" => pickers::open(app, pickers::Tab::Gif, pickers::EmojiTarget::Composer, window, cx),
                     "sticker" => pickers::open(app, pickers::Tab::Sticker, pickers::EmojiTarget::Composer, window, cx),
                     "friends" => app.select_guild(None, cx),
+                    "friends-all" | "friends-pending" => {
+                        app.select_guild(None, cx);
+                        app.nav.friends_tab = if scene == "friends-all" {
+                            phoenix_app::ui::home::data::FriendsTab::All
+                        } else {
+                            phoenix_app::ui::home::data::FriendsTab::Pending
+                        };
+                    }
+                    "inbox" | "pins" | "threads" | "search" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        match scene.as_str() {
+                            "inbox" => app.toggle_inbox(cx),
+                            "pins" => app.toggle_pins(cx),
+                            "threads" => app.toggle_threads_popout(cx),
+                            _ => phoenix_app::ui::search::open(app, window, cx),
+                        }
+                    }
                     "members" => {
                         let g = app.guilds.first().map(|g| g.id);
                         app.select_guild(g, cx);
@@ -126,6 +146,9 @@ fn main() -> anyhow::Result<()> {
                                     joined: Some(1_650_000_000),
                                     note: "".into(),
                                     mutual_guilds: 3,
+                                    mutual_friends_count: 2,
+                                    mutual_friends: app.users.values().filter(|u| u.id != uid && u.id != app.me.id).take(2).cloned().collect(),
+                                    mutual_guild_ids: app.guilds.iter().take(3).map(|g| g.id).collect(),
                                     badges: Vec::new(),
                                 },
                             );

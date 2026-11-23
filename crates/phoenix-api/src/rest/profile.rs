@@ -60,6 +60,10 @@ pub struct UserProfile {
     pub premium_type: Option<u8>,
     #[serde(default, deserialize_with = "null_default")]
     pub mutual_guilds: Vec<MutualGuild>,
+    #[serde(default)]
+    pub mutual_friends_count: Option<u32>,
+    #[serde(default, deserialize_with = "null_default")]
+    pub mutual_friends: Vec<User>,
     #[serde(default, deserialize_with = "null_default")]
     pub badges: Vec<Value>,
 }
@@ -96,7 +100,7 @@ pub struct CustomStatus {
 }
 
 pub(crate) fn profile_path(user: UserId, guild: Option<GuildId>) -> String {
-    let mut p = format!("/users/{user}/profile?with_mutual_guilds=true&with_mutual_friends_count=false");
+    let mut p = format!("/users/{user}/profile?with_mutual_guilds=true&with_mutual_friends=true&with_mutual_friends_count=true");
     if let Some(g) = guild {
         p.push_str(&format!("&guild_id={g}"));
     }
@@ -162,7 +166,7 @@ mod tests {
     fn paths() {
         assert_eq!(
             profile_path(Snowflake(7), None),
-            "/users/7/profile?with_mutual_guilds=true&with_mutual_friends_count=false"
+            "/users/7/profile?with_mutual_guilds=true&with_mutual_friends=true&with_mutual_friends_count=true"
         );
         assert!(profile_path(Snowflake(7), Some(Snowflake(9))).ends_with("&guild_id=9"));
     }

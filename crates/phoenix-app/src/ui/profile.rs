@@ -6,7 +6,7 @@ use gpui::{
     AnyElement, Context, Div, FontWeight, IntoElement, ParentElement, Pixels, Point, SharedString, Styled,
     Window, div, img, prelude::*, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{InputEvent, InputState};
 
 use crate::{
     app::PhoenixApp,
@@ -72,6 +72,7 @@ impl PhoenixApp {
     /// Popout -> full profile modal.
     pub fn open_profile_modal(&mut self, user: Id, cx: &mut Context<Self>) {
         self.people.popout = None;
+        set_modal_tab(0);
         self.people.modal = Some(user);
         cx.notify();
     }
@@ -168,18 +169,11 @@ pub(crate) fn section_title(t: SharedString) -> Div {
         .child(t)
 }
 
-/// overlay_P1YEjQ (bg --user-profile-overlay-background, --radius-sm) with
-/// card_NOlkhE padding 12px.
-fn overlay_card() -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .p(z(12.)) // card_NOlkhE padding
-        .rounded(z(8.)) // overlay_P1YEjQ --radius-sm
-        .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)))
-}
-
-fn activity_block(a: &Activity) -> Option<AnyElement> {
+/// Activity card (`card_Bu4Al8` inside `overlay_P1YEjQ`): popout padding 8px,
+/// full profile --space-12 with --radius-md; header `headerText_Bu4Al8`
+/// (body-xs/medium), body `content_Bu4Al8` (gap 8px / 12px), title
+/// heading-xs/semibold 14/18, lines body-xs 12/16.
+fn activity_block(a: &Activity, big: bool) -> Option<AnyElement> {
     let title = match a.kind {
         ActivityKind::Custom => return None,
         ActivityKind::Playing => crate::t!("activity.playing").to_string(),
@@ -203,19 +197,35 @@ fn activity_block(a: &Activity) -> Option<AnyElement> {
         let mins = (chrono::Utc::now().timestamp_millis() - start).max(0) / 60_000;
         lines.push(if mins >= 60 { format!("{}:{:02}:00", mins / 60, mins % 60) } else { format!("{mins}:00") }.into());
     }
-    // thumbnailContainer (member list Activity card) 72px -> profile
-    // activity art uses --radius-sm.
+    // imagePosition_1AI0dL: 60px (full profile), --radius-sm
+    let s = if big { 60. } else { 48. };
     let art: AnyElement = match &a.image {
-        Some(u) => img(u.clone()).size(z(72.)).rounded(z(8.)).flex_none().into_any_element(),
-        None => div().size(z(72.)).rounded(z(8.)).flex_none().bg(c(tok(idx::BACKGROUND_MOD_NORMAL))).into_any_element(),
+        Some(u) => img(u.clone()).size(z(s)).rounded(z(8.)).flex_none().into_any_element(),
+        None => div().size(z(s)).rounded(z(8.)).flex_none().bg(c(tok(idx::BACKGROUND_MOD_NORMAL))).into_any_element(),
     };
     Some(
-        overlay_card()
-            .child(section_title_owned(title))
+        div()
+            .flex()
+            .flex_col()
+            .gap(z(8.)) // card_Bu4Al8 gap
+            .p(z(if big { 12. } else { 8. })) // --custom-activity-card-padding
+            .rounded(z(if big { 12. } else { 8. })) // --radius-md / overlay --radius-sm
+            .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND_HOVER))) // card_Bu4Al8 background
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .child(
+                div()
+                    .text_size(z(12.)) // body-xs/medium
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .text_ellipsis()
+                    .child(title),
+            )
             .child(
                 div()
                     .flex()
-                    .gap(z(12.)) // --space-12
+                    .gap(z(if big { 12. } else { 8. })) // content_Bu4Al8 gap
                     .items_center()
                     .child(art)
                     .child(
@@ -223,26 +233,39 @@ fn activity_block(a: &Activity) -> Option<AnyElement> {
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .text_size(z(14.))
-                            .line_height(z(18.))
-                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .gap(z(4.)) // details_Bu4Al8 gap
                             .when_some(line1, |d, l| {
-                                d.child(div().font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).text_ellipsis().child(l))
+                                d.child(
+                                    div()
+                                        .text_size(z(14.)) // heading-xs/semibold
+                                        .line_height(z(18.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(c(tok(idx::TEXT_STRONG)))
+                                        .text_ellipsis()
+                                        .child(l),
+                                )
                             })
-                            .children(lines.into_iter().map(|l| div().text_size(z(12.)).line_height(z(16.)).text_ellipsis().child(l))),
+                            .children(lines.into_iter().map(|l| {
+                                div()
+                                    .text_size(z(12.)) // body-xs/normal
+                                    .line_height(z(16.))
+                                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                                    .text_ellipsis()
+                                    .child(l)
+                            })),
                     ),
             )
             .into_any_element(),
     )
 }
 
-fn section_title_owned(t: String) -> Div {
+/// Full profile section heading (`header_NcvRRg` h2 body-xs/medium, 12/16).
+fn section_heading(t: SharedString) -> Div {
     div()
         .text_size(z(12.))
         .line_height(z(16.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(tok(idx::TEXT_STRONG)))
-        .mb(z(8.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
         .child(t)
 }
 
@@ -322,19 +345,18 @@ pub(crate) fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> D
         })
 }
 
-/// Badge icons. Popout: 352421 `headerTag_NOlkhE` (bottom 8px, end 16px,
-/// --radius-xs); the badge list bundle itself isn't cached, icons are drawn
-/// at the 22px of the CDN badge assets with --space-4 between them.
+/// Badges row (`container_IqWmhA`: inline in the username row, gap 2px,
+/// margin 1px 0; `badge_IqWmhA` 20px).
 fn badges(i: &Info) -> Option<Div> {
     let b = i.prof.map(|p| p.badges.as_slice()).unwrap_or_default();
     (!b.is_empty()).then(|| {
         div()
             .flex()
             .flex_wrap()
-            .gap(z(4.))
-            .p(z(2.))
-            .rounded(z(4.)) // --radius-xs
-            .children(b.iter().map(|(_, icon)| img(icon.clone()).size(z(22.)).flex_none()))
+            .items_center()
+            .gap(z(2.))
+            .my(z(1.))
+            .children(b.iter().map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none()))
     })
 }
 
@@ -357,10 +379,13 @@ fn status_bubble(t: SharedString) -> Div {
         .child(t)
 }
 
-/// Name block (866212 `displayNameRow_C2XpHA`, `usernameAndPronounsRow_`).
+/// Name block (866212 `displayNameRow_C2XpHA`, `usernameAndPronounsRow_`):
+/// display name heading-lg/semibold 20/24 (modal heading-xl/semibold 24/32),
+/// then username, pronouns, server tag and badges (gap 2px 6px).
 pub(crate) fn name_block(i: &Info, big: bool) -> Div {
     let tag = i.user.and_then(|u| u.tag.clone());
     let pronouns = i.prof.map(|p| p.pronouns.clone()).filter(|p| !p.is_empty());
+    let bot = i.user.is_some_and(|u| u.bot);
     div()
         .flex()
         .flex_col()
@@ -372,36 +397,38 @@ pub(crate) fn name_block(i: &Info, big: bool) -> Div {
                 .child(
                     div()
                         .text_size(z(if big { 24. } else { 20. }))
-                        .line_height(z(if big { 30. } else { 24. })) // line-height 24px / .lg 30px
-                        .font_weight(FontWeight::BOLD)
+                        .line_height(z(if big { 32. } else { 24. }))
+                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(tok(idx::TEXT_STRONG)))
                         .text_ellipsis()
                         .child(i.display.clone()),
                 )
-                .when(i.user.is_some_and(|u| u.bot), |d| d.child(app_tag())),
+                .when(bot, |d| d.child(app_tag())),
         )
         .child(
             div()
                 .flex()
                 .flex_wrap()
                 .items_center()
-                // column-gap 9.33px, 6px with pronouns; row-gap 2px (popout)
-                .gap_x(z(if pronouns.is_some() { 6. } else { 9.33 }))
-                .gap_y(z(2.))
-                .text_size(z(14.))
+                .when(bot, |d| d.mt(z(8.))) // usernameAndPronounsRow_.isBot margin-top
+                .gap_x(z(6.))
+                .gap_y(z(if big { 4. } else { 2. }))
+                .text_size(z(14.)) // body-sm/normal
                 .line_height(z(18.))
                 .child(div().h(z(24.)).flex().items_center().text_color(c(tok(idx::TEXT_STRONG))).child(i.username.clone()))
                 .when_some(pronouns, |d, p| {
-                    // dotSpacer_C2XpHA: 4px round --text-default, margin-inline 1px
+                    // dotSpacer_C2XpHA: 4px round, margin-inline 1px
                     d.child(div().size(z(4.)).mx(z(1.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT))))
                         .child(div().mr(z(2.)).text_ellipsis().text_color(c(tok(idx::TEXT_DEFAULT))).child(p))
                 })
-                .when_some(tag, |d, (t, badge)| d.child(guild_tag_pill(t, badge))),
+                .when_some(tag, |d, (t, badge)| d.child(guild_tag_pill(t, badge)))
+                .when_some(badges(i), |d, b| d.child(b)),
         )
 }
 
-/// 866212 `guildTagPill_C2XpHA`: 24px, --radius-sm, --background-mod-subtle,
-/// 1px --border-muted, padding-inline --space-8; hover --background-mod-strong.
+/// `chipletContainerInner_k8jyN7.chipletContainerInline_`: 24px, padding 0 8px,
+/// --radius-sm, --background-mod-normal; text body-xs/normal 12/16, badge
+/// 14px with margin-inline-end 2px.
 fn guild_tag_pill(t: SharedString, badge: Option<SharedString>) -> impl IntoElement {
     div()
         .id(SharedString::from(format!("guild-tag-{t}")))
@@ -409,91 +436,98 @@ fn guild_tag_pill(t: SharedString, badge: Option<SharedString>) -> impl IntoElem
         .px(z(8.))
         .flex()
         .items_center()
-        .gap(z(4.))
         .rounded(z(8.))
-        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-        .border_1()
-        .border_color(c(tok(idx::BORDER_MUTED)))
+        .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_STRONG))))
-        .text_size(z(14.))
-        .font_weight(FontWeight::SEMIBOLD)
+        .text_size(z(12.))
+        .line_height(z(16.))
         .text_color(c(tok(idx::TEXT_STRONG)))
-        .when_some(badge, |d, b| d.child(img(b).size(z(14.)).flex_none()))
+        .when_some(badge, |d, b| d.child(img(b).size(z(14.)).mr(z(2.)).flex_none()))
         .child(t)
 }
 
-/// Role pills (`role_nie4FD`: 22px, --radius-xs 4px, --background-mod-normal,
-/// 12px/500, padding 4px, margin 0 4px 4px 0; `roleCircle_7RsUnm` 12px, margin 0 4px).
+/// Role pills (`roleListContainer_xL50-d` gap 4px, margin-top 2px; `role_xL50-d`
+/// min-height 24px, 1px --user-profile-border, --radius-sm, padding 0 8px 0 2px;
+/// `roleCircle_7RsUnm` 12px margin 0 4px; `roleName_` body-xs/normal).
 fn roles_block(roles: Vec<crate::model::Role>) -> Div {
-    let label = if roles.len() == 1 { crate::t!("profile.role") } else { crate::t!("profile.roles") };
-    div().child(section_title(label)).child(div().flex().flex_wrap().children(roles.into_iter().map(|r| {
+    div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().map(|r| {
         div()
             .flex()
             .items_center()
-            .h(z(22.))
-            .p(z(4.))
-            .mr(z(4.))
-            .mb(z(4.))
-            .rounded(z(4.))
-            .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+            .min_h(z(24.))
+            .pl(z(2.))
+            .pr(z(8.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::USER_PROFILE_BORDER)))
             .text_size(z(12.))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))
+            .line_height(z(16.))
+            .text_color(c(tok(idx::TEXT_STRONG)))
             .child(div().size(z(12.)).mx(z(4.)).flex_none().rounded_full().bg(role_color(r.color.or(Some(0x99AAB5)))))
-            .child(div().mr(z(4.)).max_w(z(200.)).text_ellipsis().child(r.name.clone())) // roleName_nie4FD
-    })))
+            .child(div().max_w(z(200.)).text_ellipsis().child(r.name.clone()))
+    }))
 }
 
-/// About me / member since / roles / note sections, shared by both layouts.
-fn details(i: &Info, guild: Option<Id>, note: Option<&gpui::Entity<InputState>>, mutuals: bool) -> Vec<AnyElement> {
-    let mut out: Vec<AnyElement> = Vec::new();
-    let Some(p) = i.prof else {
-        out.push(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("profile.loading")).into_any_element());
-        return out;
-    };
-    if !p.bio.is_empty() {
-        out.push(
+/// Bio (`section_NcvRRg` gap 8px; `bioText_qjJ3Wv` body-sm 14/18). The popout
+/// clamps it to 3 lines (`descriptionClamp_BcddaK`, max-height 55px) with a
+/// "View Full Bio" text button (`viewFullBio_` margin-top 8px, body-xs).
+fn bio_block(bio: SharedString, clamp: bool) -> Div {
+    let long = clamp && (bio.len() > 120 || bio.lines().count() > 3);
+    div()
+        .flex()
+        .flex_col()
+        .child(
             div()
                 .text_size(z(14.))
                 .line_height(z(18.))
                 .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .child(p.bio.clone())
-                .into_any_element(),
-        );
+                .when(clamp, |d| d.line_clamp(3).max_h(z(55.)).overflow_hidden())
+                .child(bio),
+        )
+        .when(long, |d| {
+            d.child(
+                div()
+                    .mt(z(8.))
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .child(crate::t!("profile.view_full_bio")),
+            )
+        })
+}
+
+/// `mutuals_PXYMZ1` (gap 2px 6px): stacked 16px friend avatars
+/// (`avatar_NbMTpy` margin-inline-end -3px) + "N Mutual Friends",
+/// `spacer_` dot 4px --interactive-text-default, "N Mutual Servers".
+fn mutuals_row(p: &Profile) -> Option<Div> {
+    let friends = p.mutual_friends_count;
+    let servers = p.mutual_guilds;
+    if friends == 0 && servers == 0 {
+        return None;
     }
-    let since = div()
-        .flex()
-        .items_center()
-        .gap(z(8.))
-        .text_size(z(14.))
-        .line_height(z(18.))
-        .text_color(c(tok(idx::TEXT_DEFAULT)))
-        .child(format_date(p.created))
-        .when_some(p.joined, |d, j| {
-            d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT)))).child(format_date(j))
-        });
-    out.push(div().child(section_title(crate::t!("profile.member_since"))).child(since).into_any_element());
-    if mutuals && p.mutual_guilds > 0 {
-        out.push(
-            div()
-                .text_size(z(14.))
-                .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(crate::t!("profile.mutual_servers", n = p.mutual_guilds))
-                .into_any_element(),
-        );
-    }
-    if guild.is_some() && !i.roles.is_empty() {
-        out.push(roles_block(i.roles.clone()).into_any_element());
-    }
-    if let Some(n) = note {
-        out.push(
-            div()
-                .child(section_title(crate::t!("profile.note")))
-                .child(div().text_size(z(12.)).child(Input::new(n).appearance(false).bordered(false)))
-                .into_any_element(),
-        );
-    }
-    out
+    let both = friends > 0 && servers > 0;
+    // body-xs when both sections are shown, body-sm otherwise.
+    let (fs, lh) = if both { (12., 16.) } else { (14., 18.) };
+    let text = move |t: SharedString| {
+        div().text_size(z(fs)).line_height(z(lh)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).child(t)
+    };
+    let section = || div().flex().items_center().gap(z(4.)).py(z(4.));
+    let stack = div().flex().children(p.mutual_friends.iter().take(3).enumerate().map(|(n, u)| {
+        div().when(n < 2.min(p.mutual_friends.len().saturating_sub(1)), |d| d.mr(z(-3.))).child(crate::ui::avatar(Some(u), 16.))
+    }));
+    Some(
+        div()
+            .flex()
+            .flex_wrap()
+            .items_center()
+            .gap_x(z(6.))
+            .gap_y(z(2.))
+            .when(friends > 0, |d| {
+                d.child(section().when(!p.mutual_friends.is_empty(), |s| s.child(stack)).child(text(crate::t!("profile.mutual_friends", n = friends))))
+            })
+            .when(both, |d| d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
+            .when(servers > 0, |d| d.child(section().child(text(crate::t!("profile.mutual_servers", n = servers))))),
+    )
 }
 
 /// Mana button (384209 `button_F7qvhY`): --radius-sm, 1px border; `sm`
@@ -537,70 +571,118 @@ pub fn mana_button(id: impl Into<gpui::ElementId>, label: impl Into<SharedString
         .child(label.into())
 }
 
+/// Round banner button (`bannerButton_C4gRrZ`: --custom-button-button-sm-height
+/// 32px, 50%, --control-overlay-secondary-background-default, 1px
+/// --opacity-white-8, icon 16px --white).
+fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<Div> {
+    div()
+        .id(id)
+        .size(z(32.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_full()
+        .cursor_pointer()
+        .bg(c(tok(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT)))
+        .hover(|s| s.bg(c(tok(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_ACTIVE))))
+        .border_1()
+        .border_color(c(tok(idx::OPACITY_WHITE_8)))
+        .child(gpui::svg().path(crate::icons::path(icon)).size(z(16.)).text_color(c(tok(idx::WHITE))))
+}
+
 fn popout_card(
     app: &PhoenixApp,
     uid: Id,
     guild: Option<Id>,
-    note: Option<&gpui::Entity<InputState>>,
+    _note: Option<&gpui::Entity<InputState>>,
     cx: &mut Context<PhoenixApp>,
 ) -> Div {
     let i = info(app, uid, guild);
     let bg = tok(idx::BACKGROUND_SURFACE_HIGH); // outer_P1YEjQ background
     let e = cx.entity();
-    // header_NOlkhE: min-height banner (105) + 35px; avatar_WRLIGC popout
+    let e_full = e.clone();
+    // header_NOlkhE: banner (105) + 35px; avatar_WRLIGC popout at
     // inset-inline-start 16px, top 61px (6px ring around the 80px avatar).
+    // Clicking the avatar or the name opens the full profile.
     let header = div()
         .relative()
         .flex_none()
         .min_h(z(105. + 35.))
         .child(banner(&i, 105., 8.))
-        .child(div().absolute().left(z(16.)).top(z(61.)).child(avatar_block(&i, 80., 6., bg)))
-        .when_some(badges(&i), |d, b| d.child(div().absolute().right(z(16.)).bottom(z(8.)).child(b)))
+        .child(
+            div()
+                .id(("profile-avatar", uid.0))
+                .absolute()
+                .left(z(10.))
+                .top(z(55.))
+                .cursor_pointer()
+                .on_click(move |_, _, cx| e_full.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
+                .child(avatar_block(&i, 80., 6., bg)),
+        )
+        // wrapper_xpwejc: inset-inline-end 12px, top --space-8, gap 8px
+        .when(uid != app.me.id, |d| {
+            d.child(div().absolute().right(z(12.)).top(z(8.)).flex().gap(z(8.)).child(banner_button(("profile-more", uid.0), "chat/more")))
+        })
         // container_rmCN9_ popout: inset-inline-start 105px, top banner - 7px
         .when_some(i.custom.clone(), |d, t| d.child(div().absolute().left(z(105.)).top(z(98.)).child(status_bubble(t))));
 
-    // body_NOlkhE: column, gap 12px, padding 4px 16px 8px
+    // body_NOlkhE: column, gap 12px, padding 4px 8px 8px 16px (scrollbar gutter)
+    let e_name = e.clone();
     let mut body = div()
         .id(("profile-body", uid.0))
         .flex()
         .flex_col()
         .gap(z(12.))
         .pt(z(4.))
-        .px(z(16.))
+        .pl(z(16.))
+        .pr(z(8.))
         .pb(z(8.))
         .min_h_0()
         .overflow_y_scroll()
-        .child(name_block(&i, false))
-        .when(uid == app.me.id, |d| {
-            d.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(status_label(i.presence)))
-        })
-        .children(details(&i, guild, note, false));
-    for a in i.acts {
-        if let Some(b) = activity_block(a) {
-            body = body.child(b);
+        .child(
+            div()
+                .id(("profile-name", uid.0))
+                .cursor_pointer()
+                .on_click(move |_, _, cx| e_name.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
+                .child(name_block(&i, false)),
+        );
+    if uid == app.me.id {
+        body = body.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(status_label(i.presence)));
+    }
+    match i.prof {
+        None => {
+            body = body.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("profile.loading")));
+        }
+        Some(p) => {
+            if uid != app.me.id {
+                body = body.children(mutuals_row(p));
+            }
+            if !p.bio.is_empty() {
+                body = body.child(bio_block(p.bio.clone(), true));
+            }
         }
     }
-    let e2 = e.clone();
-    body = body.child(
-        div()
-            .id(("profile-full", uid.0))
-            .text_size(z(12.))
-            .text_color(c(tok(idx::TEXT_LINK)))
-            .cursor_pointer()
-            .hover(|s| s.underline())
-            .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
-            .child(crate::t!("profile.view_full")),
-    );
+    // container_M2WrKU (padding-bottom 8px): activity cards
+    for a in i.acts {
+        if let Some(b) = activity_block(a, false) {
+            body = body.child(div().pb(z(8.)).child(b));
+        }
+    }
+    if guild.is_some() && !i.roles.is_empty() {
+        body = body.child(roles_block(i.roles.clone()));
+    }
 
     // footer_NOlkhE: column, padding 0 16px 12px. The "Message @user" box is
-    // a text input (--control-input-height-md 40px, --input-background-default,
-    // 1px --input-border-default, --radius-sm).
+    // an inline chat input (`inlineContainer_2x8-Qn`: --input-background-default,
+    // --input-border-default, --radius-sm; 44px; inner padding-inline-start 15px;
+    // placeholder 14/22; 32px emoji button).
     let footer = (uid != app.me.id).then(|| {
         div().flex().flex_col().px(z(16.)).pb(z(12.)).child(
             div()
                 .id(("profile-message", uid.0))
-                .h(z(40.))
-                .px(z(12.))
+                .h(z(44.))
+                .pl(z(15.))
+                .pr(z(12.))
                 .rounded(z(8.))
                 .flex()
                 .items_center()
@@ -608,10 +690,26 @@ fn popout_card(
                 .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
                 .border_1()
                 .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
-                .text_size(z(14.))
-                .text_color(c(tok(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.message_user(uid, cx)))
-                .child(crate::t!("profile.message_user", name = i.username)),
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .text_size(z(14.))
+                        .line_height(z(22.))
+                        .text_ellipsis()
+                        .text_color(c(tok(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)))
+                        .child(crate::t!("profile.message_user", name = i.display)),
+                )
+                .child(
+                    div()
+                        .size(z(32.))
+                        .flex()
+                        .flex_none()
+                        .items_center()
+                        .justify_center()
+                        .child(gpui::svg().path(crate::icons::path("emoji")).size(z(18.)).text_color(c(tok(idx::ICON_SUBTLE)))),
+                ),
         )
     });
 
@@ -636,8 +734,61 @@ fn popout_card(
         .children(footer)
 }
 
-/// Full profile, modal v2 (`root_ZhNJfE`, `layoutContainer_s3DB6Y`): profile
-/// card column on the left, tab panel on the right.
+thread_local! {
+    /// Selected full-profile tab: 0 Activity, 1 Mutual Friends, 2 Mutual Servers.
+    static MODAL_TAB: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+/// Select a full profile tab (also used by the offscreen screenshots).
+pub fn set_modal_tab(t: u8) {
+    MODAL_TAB.with(|c| c.set(t));
+}
+
+/// Row of the Mutual Friends / Mutual Servers panels (`row_wt-YD5`: padding
+/// 4px, margin 1px 0 1px 12px, --radius-xs; 40px icon with margin-inline-end
+/// 10px; name 16/20 medium; subline body-xs/medium).
+fn mutual_row(id: impl Into<gpui::ElementId>, icon: AnyElement, name: SharedString, sub: Option<SharedString>) -> gpui::Stateful<Div> {
+    div()
+        .id(id)
+        .flex()
+        .items_center()
+        .p(z(4.))
+        .ml(z(12.))
+        .my(z(1.))
+        .rounded(z(4.))
+        .cursor_pointer()
+        .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+        .child(div().mr(z(10.)).flex_none().child(icon))
+        .child(
+            div()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .text_ellipsis()
+                        .child(name),
+                )
+                .when_some(sub, |d, s| {
+                    d.child(
+                        div()
+                            .text_size(z(12.))
+                            .line_height(z(16.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .text_ellipsis()
+                            .child(s),
+                    )
+                }),
+        )
+}
+
+/// Full profile, modal v2 (`root_ZhNJfE`, `profileContentInner_s3DB6Y`):
+/// profile card column on the left, tab panel on the right.
 fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut Context<PhoenixApp>) -> Div {
     let i = info(app, uid, guild);
     let e = cx.entity();
@@ -646,26 +797,93 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
     let pw = (f32::from(vw) * 0.455 - 48. * 0.91).clamp(300., 400.);
     // --custom-modal-v2-padding (--space-48 from 1025px, else --space-32)
     let pad = if f32::from(vw) >= 1025. { 48. } else { 32. };
+    const SYSTEM_BAR: f32 = 32.; // --custom-modal-v2-system-bar-padding
     const GUTTER: f32 = 32.; // --custom-modal-v2-gutter
     const CARD_PAD: f32 = 32.; // --custom-modal-v2-profile-card-padding
     const BANNER: f32 = 140.; // .user-profile-modal-v2 --custom-user-profile-banner-height
     const AV: f32 = 120.; // .user-profile-modal-v2 --custom-user-profile-avatar-size
     const RING: f32 = 7.;
 
+    // profileButtons_s3DB6Y: gap 8px; sm buttons (32px): Message + More.
     let e2 = e.clone();
     let buttons = (uid != app.me.id).then(|| {
-        // headerInner_NxZlvf: min-height 52px, margin-inline-end 16px;
-        // headerButtons_NxZlvf: gap 8px, height --custom-button-button-md-height, padding-top 16px
         div()
             .flex()
-            .justify_end()
-            .min_h(z(52.))
-            .mr(z(16.))
-            .child(div().flex().items_center().gap(z(8.)).pt(z(16.)).child(
+            .items_center()
+            .gap(z(8.))
+            .child(
                 mana_button(("profile-modal-message", uid.0), crate::t!("profile.message"), true, false)
                     .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx))),
-            ))
+            )
+            .child(
+                div()
+                    .id(("profile-modal-more", uid.0))
+                    .size(z(32.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(z(8.))
+                    .border_1()
+                    .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+                    .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+                    .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+                    .cursor_pointer()
+                    .child(gpui::svg().path(crate::icons::path("chat/more")).size(z(16.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))),
+            )
     });
+
+    // profileBody_s3DB6Y: gap --space-24, padding 4px 24px 32px 32px, margin-top -4px.
+    let mut pbody = div()
+        .flex()
+        .flex_col()
+        .gap(z(24.))
+        .mt(z(-4.))
+        .pt(z(4.))
+        .pl(z(CARD_PAD))
+        .pr(z(CARD_PAD - 8.))
+        .pb(z(CARD_PAD))
+        .child(name_block(&i, true))
+        .children(buttons);
+    match i.prof {
+        None => {
+            pbody = pbody.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("profile.loading")));
+        }
+        Some(p) => {
+            if !p.bio.is_empty() {
+                pbody = pbody.child(bio_block(p.bio.clone(), false));
+            }
+            // memberSinceWrapper_EhAvF-: gap 8px; memberSince_ gap 4px with a 16px
+            // guild icon before the join date; divider_ 4px dot.
+            let since = div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .child(format_date(p.created))
+                .when_some(p.joined, |d, j| {
+                    let gicon = guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| {
+                        crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16.)
+                    });
+                    d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT))))
+                        .child(div().flex().items_center().gap(z(4.)).children(gicon).child(format_date(j)))
+                });
+            pbody = pbody.child(div().flex().flex_col().gap(z(8.)).child(section_heading(crate::t!("profile.member_since"))).child(since));
+        }
+    }
+    if guild.is_some() && !i.roles.is_empty() {
+        // profileRolesSection_s3DB6Y: gap 4px
+        pbody = pbody.child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(z(4.))
+                .child(section_heading(if i.roles.len() == 1 { crate::t!("profile.role") } else { crate::t!("profile.roles") }))
+                .child(roles_block(i.roles.clone())),
+        );
+    }
+
     let profile = div()
         .id("profile-modal-card")
         .relative()
@@ -686,49 +904,94 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .when_some(i.custom.clone(), |d, t| {
             d.child(div().absolute().left(z(CARD_PAD + AV + 20.)).top(z(BANNER - 8.)).child(status_bubble(t)))
         })
-        .child(div().min_h(z(AV / 2. + 8.)).children(buttons))
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(z(12.))
-                .px(z(CARD_PAD))
-                .pt(z(8.))
-                .pb(z(CARD_PAD))
-                .child(name_block(&i, true))
-                .when_some(badges(&i), |d, b| d.child(b))
-                .children(details(&i, guild, None, false)),
-        );
+        // profileHeader_s3DB6Y: 220px tall (banner + avatar overhang + 20px)
+        .child(div().h(z(220. - BANNER)).flex_none())
+        .child(pbody);
 
-    // Right column: tabs (291103 `tabBar_OpoUmC`: gap 32px, padding 0 16px,
-    // 1px --user-profile-border bottom; items 25px tall) then the tab panel
-    // (a94a5b `tabPanelScroller_y4ZEM5`: padding-top --space-20, bottom --space-32).
-    let mutuals = i.prof.map(|p| p.mutual_guilds).unwrap_or(0);
-    let tab = |t: String, sel: bool| {
+    // Right column (`container_y4ZEM5`: padding-top 20px). Tab bar `top_6zZYhF`:
+    // 1px --border-subtle bottom; items body-sm/semibold 14/14, padding-bottom
+    // 16px, margin-inline-start 16px (first 0), --text-subtle, selected
+    // --text-strong with a 2px underline.
+    let mutual_f = i.prof.map(|p| p.mutual_friends_count).unwrap_or(0);
+    let mutual_s = i.prof.map(|p| p.mutual_guilds).unwrap_or(0);
+    let sel = MODAL_TAB.with(|c| c.get());
+    let tab = |n: u8, t: SharedString| {
+        let on = sel == n;
         div()
-            .h(z(25.))
-            .when(sel, |d| d.border_b_1().border_color(c(tok(idx::TEXT_STRONG))))
+            .id(("profile-modal-tab", n as u64))
+            .relative()
+            .when(n > 0, |d| d.ml(z(16.)))
+            .pb(z(16.))
+            .mb(z(-1.))
+            .cursor_pointer()
             .text_size(z(14.))
-            .line_height(z(18.))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(c(if sel { tok(idx::TEXT_STRONG) } else { tok(idx::TEXT_SUBTLE) }))
+            .line_height(z(14.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(c(if on { tok(idx::TEXT_STRONG) } else { tok(idx::TEXT_SUBTLE) }))
+            .hover(|s| s.text_color(c(tok(idx::TEXT_STRONG))))
+            .on_click(move |_, window, _| {
+                set_modal_tab(n);
+                window.refresh();
+            })
             .child(t)
+            .when(on, |d| {
+                d.child(div().absolute().left_0().right_0().bottom_0().h(z(2.)).rounded_t(z(2.)).bg(c(tok(idx::TEXT_STRONG))))
+            })
     };
-    let mut panel = div().flex().flex_col().gap(z(12.)).pt(z(20.)).pb(z(32.));
-    let mut any = false;
-    for a in i.acts {
-        if let Some(b) = activity_block(a) {
-            panel = panel.child(b);
-            any = true;
+    // tabPanelScroller_y4ZEM5: padding 20px 8px 16px 0, gap 12px (24px for activity)
+    let mut panel = div().flex().flex_col().pt(z(20.)).pr(z(8.)).pb(z(16.));
+    let empty = |t: SharedString| div().ml(z(12.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(t);
+    match sel {
+        1 => {
+            panel = panel.gap(z(12.));
+            let friends = i.prof.map(|p| p.mutual_friends.as_slice()).unwrap_or_default();
+            if friends.is_empty() {
+                panel = panel.child(empty(crate::t!("profile.no_mutual_friends")));
+            }
+            for u in friends {
+                let fid = u.id;
+                let e3 = e.clone();
+                let icon = crate::ui::avatar_with_status(Some(u), 40., app.presence_of(u.id), c(tok(idx::BACKGROUND_BASE_LOWER))).into_any_element();
+                panel = panel.child(
+                    mutual_row(("mutual-friend", u.id.0), icon, u.display_name.clone(), None).on_click(move |ev, window, cx| {
+                        let at = ev.position();
+                        e3.update(cx, |a, cx| {
+                            a.people.modal = None;
+                            a.open_profile(fid, None, at, window, cx);
+                        })
+                    }),
+                );
+            }
         }
-    }
-    if !any {
-        panel = panel.child(
-            div()
-                .text_size(z(14.))
-                .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(crate::t!("profile.idle_activity", name = i.display)),
-        );
+        2 => {
+            panel = panel.gap(z(12.));
+            let ids = i.prof.map(|p| p.mutual_guild_ids.as_slice()).unwrap_or_default();
+            if ids.is_empty() {
+                panel = panel.child(empty(crate::t!("profile.no_mutual_servers")));
+            }
+            for gid in ids {
+                let Some(g) = app.guilds.iter().find(|g| g.id == *gid) else { continue };
+                let gid = g.id;
+                let e3 = e.clone();
+                // icon_wt-YD5 iconSizeMedium: 40px, --radius-md
+                let icon = crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 40.);
+                panel = panel.child(mutual_row(("mutual-guild", gid.0), icon, g.name.clone(), None).on_click(move |_, _, cx| {
+                    e3.update(cx, |a, cx| {
+                        a.people.close_overlays();
+                        a.select_guild(Some(gid), cx);
+                    })
+                }));
+            }
+        }
+        _ => {
+            panel = panel.gap(z(24.));
+            let cards: Vec<AnyElement> = i.acts.iter().filter_map(|a| activity_block(a, true)).collect();
+            if cards.is_empty() {
+                panel = panel.child(empty(crate::t!("profile.idle_activity", name = i.display)));
+            } else {
+                panel = panel.child(div().flex().flex_col().gap(z(8.)).children(cards));
+            }
+        }
     }
     let right = div()
         .id("profile-modal-tabs")
@@ -736,19 +999,21 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .min_w_0()
         .flex()
         .flex_col()
-        .pl(z(GUTTER)) // tabBarPanel_y4ZEM5 padding-inline-start gutter
+        .pt(z(20.))
         .child(
             div()
                 .flex()
-                .gap(z(32.))
-                .px(z(16.))
-                .mt(z(16.))
+                .ml(z(GUTTER))
+                .mr(z(16.))
+                .mt(z(4.))
                 .border_b_1()
-                .border_color(c(tok(idx::USER_PROFILE_BORDER)))
-                .child(tab(crate::t!("profile.activity").to_string(), true))
-                .child(tab(crate::t!("profile.mutual_servers", n = mutuals).to_string(), false)),
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .child(tab(0, crate::t!("profile.activity")))
+                .child(tab(1, crate::t!("profile.mutual_friends", n = mutual_f)))
+                .child(tab(2, crate::t!("profile.mutual_servers", n = mutual_s))),
         )
-        .child(div().id("profile-modal-panel").flex_1().min_h_0().overflow_y_scroll().child(panel));
+        // tabBarPanel_y4ZEM5: padding-inline-start gutter (scroller margin -12px)
+        .child(div().id("profile-modal-panel").flex_1().min_h_0().pl(z(GUTTER - 12.)).overflow_y_scroll().child(panel));
 
     let e3 = e.clone();
     // modalHeaderButtons_ZhNJfE: top --space-8 (header-button-top), end --space-8
@@ -774,7 +1039,8 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))));
 
     // root/outer: --background-base-lower, 1px --border-normal, --radius-lg.
-    // profileContentInner_s3DB6Y: padding-block-start / inline --custom-modal-v2-padding, end 0.
+    // profileContentInner_s3DB6Y: padding-top --custom-modal-v2-padding +
+    // system bar, inline --custom-modal-v2-padding, bottom 0.
     div()
         .relative()
         .size_full()
@@ -785,8 +1051,9 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .border_color(c(tok(idx::BORDER_NORMAL)))
         .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
         .shadow_lg()
-        .pt(z(pad))
-        .px(z(pad))
+        .pt(z(pad + SYSTEM_BAR))
+        .pl(z(pad))
+        .pr(z(32.))
         .child(profile)
         .child(right)
         .child(close)

@@ -389,6 +389,30 @@ impl Backend for MockBackend {
             Credentials::Password { login, password } => !login.is_empty() && !password.is_empty(),
             Credentials::Mfa { code } => !code.is_empty(),
         };
+        if ok {
+            // Friends list test data: a mix of online/idle/dnd/offline friends,
+            // one incoming and one outgoing request.
+            let rels: Vec<_> = (1..NAMES.len().min(15) as u64)
+                .map(|n| crate::ui::home::data::Relationship {
+                    user: Id(n + 1),
+                    kind: match n {
+                        12 => crate::ui::home::data::RelationshipKind::Incoming,
+                        13 => crate::ui::home::data::RelationshipKind::Outgoing,
+                        _ => crate::ui::home::data::RelationshipKind::Friend,
+                    },
+                    nickname: None,
+                })
+                .collect();
+            self.emit_later(Duration::from_millis(30), move || {
+                AppEvent::Nav(crate::ui::home::data::NavEvent::Snapshot {
+                    relationships: rels,
+                    folders: vec![],
+                    threads: vec![],
+                    extras: vec![],
+                    message_requests: vec![],
+                })
+            });
+        }
         Box::pin(async move {
             if !ok {
                 return Err(BackendError("Login or password is invalid.".into()));
@@ -418,7 +442,20 @@ impl Backend for MockBackend {
                 channels: i.channels.clone(),
                 roles: i.roles.clone(),
                 dm_channels,
-                presences: i.users.iter().map(|u| (u.id, Presence::Online)).collect(),
+                presences: i
+                    .users
+                    .iter()
+                    .map(|u| {
+                        let p = match u.id.0 % 5 {
+                            _ if u.id == ME => Presence::Online,
+                            0 => Presence::Idle,
+                            3 => Presence::Dnd,
+                            4 => Presence::Offline,
+                            _ => Presence::Online,
+                        };
+                        (u.id, p)
+                    })
+                    .collect(),
             })
         })
     }
