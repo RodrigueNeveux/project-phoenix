@@ -17,6 +17,32 @@ fn main() {
                 Arc::new(b)
             };
             phoenix_app::open_main_window(backend, cx);
+            bench_hooks(cx);
             cx.activate(true);
         });
+}
+
+/// PHOENIX_BENCH=1 prints the wall-clock time (epoch ms) of the first painted
+/// frame on stderr; PHOENIX_BENCH_EXIT_MS=N quits N ms after start. Used by
+/// scripts/bench to time cold start without touching the window.
+fn bench_hooks(cx: &mut gpui::App) {
+    if std::env::var_os("PHOENIX_BENCH").is_some()
+        && let Some(win) = cx.windows().first().copied()
+    {
+        let _ = win.update(cx, |_, window, _| {
+            window.on_next_frame(|_, _| {
+                let ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_millis());
+                eprintln!("PHOENIX_BENCH first_frame_epoch_ms={ms}");
+            });
+        });
+    }
+    if let Some(ms) = std::env::var("PHOENIX_BENCH_EXIT_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
+        cx.spawn(async move |cx| {
+            cx.background_executor().timer(std::time::Duration::from_millis(ms)).await;
+            cx.update(|cx| cx.quit());
+        })
+        .detach();
+    }
 }

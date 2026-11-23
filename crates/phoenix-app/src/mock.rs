@@ -282,7 +282,11 @@ impl MockBackend {
 
     fn generate_history(inner: &mut Inner, channel: Id) -> Vec<Message> {
         let mut rng = Lcg(channel.0.wrapping_mul(2654435761));
-        let n = 120 + (rng.next() % 200) as usize;
+        // PHOENIX_MOCK_HISTORY=N forces the channel length (benchmarks).
+        let n = std::env::var("PHOENIX_MOCK_HISTORY")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(120 + (rng.next() % 200) as usize);
         let mut ts = now() - n as i64 * 150 - 86_400;
         let mut out: Vec<Message> = Vec::with_capacity(n);
         let mut author = Id(2);
@@ -380,6 +384,13 @@ impl Backend for MockBackend {
         if let Ok(mut i) = self.inner.lock() {
             i.sink = Some(sink);
         }
+    }
+
+    /// PHOENIX_MOCK_AUTOLOGIN=1 skips the login screen (benchmarks).
+    fn restore_session(&self) -> Option<BoxFuture<ReadyData>> {
+        std::env::var("PHOENIX_MOCK_AUTOLOGIN")
+            .is_ok_and(|v| !v.is_empty() && v != "0")
+            .then(|| self.login(Credentials::Token("mock-token".into())))
     }
 
     fn login(&self, creds: Credentials) -> BoxFuture<ReadyData> {

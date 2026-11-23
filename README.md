@@ -51,8 +51,19 @@ Beta: under active development. Expect missing features and bugs.
 
 ## Benchmarks
 
-Measurements against the official desktop client will be published here, with the method and
-hardware used, once the client can log in and display real servers. Nothing is claimed until then.
+First measurements (i7-6700K, GTX 1050 Ti, 32 GB, Wayland). Discord Phoenix ran on **mock data**,
+while the official client was measured read-only on a **real account**, so treat this as an
+order of magnitude. Full method and caveats: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
+| | Discord Phoenix (mock) | Official Discord 1.0.170 |
+|---|---|---|
+| Idle memory (PSS) | ~140–195 MiB, 1 process | ~805 MiB, 10 processes |
+| Idle CPU | ~0.3 % of one core | ~2.2 % |
+| Start to first frame | ~0.5 s warm, 1.2 s cold | — |
+| 5000-message channel | +14 MiB after loading and scrolling it all | — |
+| Binary | 42 MiB, single stripped file | Electron |
+
+Reproduce with `scripts/bench/run.sh`.
 
 ## Installing
 
