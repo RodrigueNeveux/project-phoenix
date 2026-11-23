@@ -41,7 +41,7 @@ impl PhoenixApp {
             cx.notify();
             return;
         }
-        let note = cx.new(|cx| InputState::new(window, cx).placeholder("Click to add a note"));
+        let note = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("profile.note_placeholder")));
         let sub = cx.subscribe_in(&note, window, move |this, input, ev: &InputEvent, _, cx| {
             if matches!(ev, InputEvent::Blur | InputEvent::PressEnter { .. }) {
                 let text = input.read(cx).value().to_string();
@@ -76,7 +76,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    /// "Message" button: open the DM and switch to it.
+    /// crate::t!("profile.message") button: open the DM and switch to it.
     pub fn message_user(&mut self, user: Id, cx: &mut Context<Self>) {
         self.people.close_overlays();
         let fut = self.backend.open_dm(user);
@@ -158,7 +158,7 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
 }
 
 /// Section heading inside a profile card (Text heading-sm/semibold, 12px/16px).
-fn section_title(t: &'static str) -> Div {
+fn section_title(t: SharedString) -> Div {
     div()
         .text_size(z(12.))
         .line_height(z(16.))
@@ -182,18 +182,18 @@ fn overlay_card() -> Div {
 fn activity_block(a: &Activity) -> Option<AnyElement> {
     let title = match a.kind {
         ActivityKind::Custom => return None,
-        ActivityKind::Playing => "Playing".into(),
-        ActivityKind::Streaming => format!("Live on {}", a.name),
-        ActivityKind::Listening => format!("Listening to {}", a.name),
-        ActivityKind::Watching => format!("Watching {}", a.name),
-        ActivityKind::Competing => "Competing".into(),
+        ActivityKind::Playing => crate::t!("activity.playing").to_string(),
+        ActivityKind::Streaming => crate::t!("activity.streaming", name = a.name).to_string(),
+        ActivityKind::Listening => crate::t!("activity.listening", name = a.name).to_string(),
+        ActivityKind::Watching => crate::t!("activity.watching", name = a.name).to_string(),
+        ActivityKind::Competing => crate::t!("activity.competing").to_string(),
     };
     let spotify = a.is_spotify();
     let line1 = if spotify || a.kind == ActivityKind::Streaming { a.details.clone() } else { Some(a.name.clone()) };
     let mut lines: Vec<SharedString> = Vec::new();
     if spotify {
         if let Some(s) = &a.state {
-            lines.push(format!("by {s}").into());
+            lines.push(crate::t!("activity.by", s = s));
         }
     } else {
         lines.extend(a.details.clone().filter(|_| a.kind != ActivityKind::Streaming));
@@ -275,7 +275,7 @@ fn info<'a>(app: &'a PhoenixApp, uid: Id, guild: Option<Id>) -> Info<'a> {
             })
         })
     });
-    let display = nick.or_else(|| user.map(|u| u.display_name.clone())).unwrap_or_else(|| "Unknown user".into());
+    let display = nick.or_else(|| user.map(|u| u.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown_user"));
     let username = user.map(|u| u.name.clone()).unwrap_or_default();
     let fallback_accent = match user.map(|u| &u.avatar) {
         Some(ImageRef::Default(i)) => DEFAULT_AVATAR[*i as usize % DEFAULT_AVATAR.len()],
@@ -425,7 +425,7 @@ fn guild_tag_pill(t: SharedString, badge: Option<SharedString>) -> impl IntoElem
 /// Role pills (`role_nie4FD`: 22px, --radius-xs 4px, --background-mod-normal,
 /// 12px/500, padding 4px, margin 0 4px 4px 0; `roleCircle_7RsUnm` 12px, margin 0 4px).
 fn roles_block(roles: Vec<crate::model::Role>) -> Div {
-    let label = if roles.len() == 1 { "Role" } else { "Roles" };
+    let label = if roles.len() == 1 { crate::t!("profile.role") } else { crate::t!("profile.roles") };
     div().child(section_title(label)).child(div().flex().flex_wrap().children(roles.into_iter().map(|r| {
         div()
             .flex()
@@ -448,7 +448,7 @@ fn roles_block(roles: Vec<crate::model::Role>) -> Div {
 fn details(i: &Info, guild: Option<Id>, note: Option<&gpui::Entity<InputState>>, mutuals: bool) -> Vec<AnyElement> {
     let mut out: Vec<AnyElement> = Vec::new();
     let Some(p) = i.prof else {
-        out.push(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child("Loading profile…").into_any_element());
+        out.push(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("profile.loading")).into_any_element());
         return out;
     };
     if !p.bio.is_empty() {
@@ -472,13 +472,13 @@ fn details(i: &Info, guild: Option<Id>, note: Option<&gpui::Entity<InputState>>,
         .when_some(p.joined, |d, j| {
             d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT)))).child(format_date(j))
         });
-    out.push(div().child(section_title("Member Since")).child(since).into_any_element());
+    out.push(div().child(section_title(crate::t!("profile.member_since"))).child(since).into_any_element());
     if mutuals && p.mutual_guilds > 0 {
         out.push(
             div()
                 .text_size(z(14.))
                 .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(format!("{} Mutual Servers", p.mutual_guilds))
+                .child(crate::t!("profile.mutual_servers", n = p.mutual_guilds))
                 .into_any_element(),
         );
     }
@@ -488,7 +488,7 @@ fn details(i: &Info, guild: Option<Id>, note: Option<&gpui::Entity<InputState>>,
     if let Some(n) = note {
         out.push(
             div()
-                .child(section_title("Note"))
+                .child(section_title(crate::t!("profile.note")))
                 .child(div().text_size(z(12.)).child(Input::new(n).appearance(false).bordered(false)))
                 .into_any_element(),
         );
@@ -589,7 +589,7 @@ fn popout_card(
             .cursor_pointer()
             .hover(|s| s.underline())
             .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
-            .child("View Full Profile"),
+            .child(crate::t!("profile.view_full")),
     );
 
     // footer_NOlkhE: column, padding 0 16px 12px. The "Message @user" box is
@@ -611,7 +611,7 @@ fn popout_card(
                 .text_size(z(14.))
                 .text_color(c(tok(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.message_user(uid, cx)))
-                .child(format!("Message @{}", i.username)),
+                .child(crate::t!("profile.message_user", name = i.username)),
         )
     });
 
@@ -662,7 +662,7 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
             .min_h(z(52.))
             .mr(z(16.))
             .child(div().flex().items_center().gap(z(8.)).pt(z(16.)).child(
-                mana_button(("profile-modal-message", uid.0), "Message", true, false)
+                mana_button(("profile-modal-message", uid.0), crate::t!("profile.message"), true, false)
                     .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx))),
             ))
     });
@@ -727,7 +727,7 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
             div()
                 .text_size(z(14.))
                 .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(format!("{} isn't doing anything right now.", i.display)),
+                .child(crate::t!("profile.idle_activity", name = i.display)),
         );
     }
     let right = div()
@@ -745,8 +745,8 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
                 .mt(z(16.))
                 .border_b_1()
                 .border_color(c(tok(idx::USER_PROFILE_BORDER)))
-                .child(tab("Activity".into(), true))
-                .child(tab(format!("{mutuals} Mutual Servers"), false)),
+                .child(tab(crate::t!("profile.activity").to_string(), true))
+                .child(tab(crate::t!("profile.mutual_servers", n = mutuals).to_string(), false)),
         )
         .child(div().id("profile-modal-panel").flex_1().min_h_0().overflow_y_scroll().child(panel));
 

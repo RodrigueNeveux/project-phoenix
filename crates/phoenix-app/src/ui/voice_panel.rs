@@ -149,7 +149,7 @@ pub fn audio_button(
     kind: Audio,
     i: Icon,
     red: bool,
-    tip: &'static str,
+    tip: SharedString,
     on_click: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static,
     cx: &mut Context<PhoenixApp>,
 ) -> AnyElement {

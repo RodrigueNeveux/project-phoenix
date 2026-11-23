@@ -143,7 +143,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                     .items_center()
                     .text_size(z(14.))
                     .text_color(c(Palette::TEXT_MUTED))
-                    .child("Find or start a conversation"),
+                    .child(crate::t!("dm.find")),
             )
             .id("dm-search")
             .cursor_pointer()
@@ -318,9 +318,10 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     let home = app.nav.home;
     let requests = app.nav.message_requests.len() as u32;
     let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
-    let nav = |id: &'static str, i: Icon, label: &'static str, view: Option<HomeView>, count: u32| {
+    let nav = |id: &'static str, i: Icon, label: SharedString, view: Option<HomeView>, count: u32| {
         let selected = view.is_some_and(|v| v == home);
         let e = entity.clone();
+        let stub = label.clone();
         div()
             .id(id)
             .mx(z(8.))
@@ -339,7 +340,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
             .on_click(move |_, _, cx| {
                 e.update(cx, |a, cx| match view {
                     Some(v) => a.open_home_view(v, cx),
-                    None => a.stub(label, cx),
+                    None => a.stub(&stub, cx),
                 })
             })
             .child(icon(i, 24., c(Palette::INTERACTIVE)))
@@ -352,10 +353,10 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         .flex()
         .flex_col()
         .gap(z(2.))
-        .child(nav("friends", Icon::Friends, "Friends", Some(HomeView::Friends), pending))
-        .child(nav("msg-requests", Icon::Inbox, "Message Requests", Some(HomeView::MessageRequests), requests))
-        .child(nav("nitro", Icon::Nitro, "Nitro", None, 0))
-        .child(nav("shop", Icon::Gift, "Shop", None, 0))
+        .child(nav("friends", Icon::Friends, crate::t!("friends.title"), Some(HomeView::Friends), pending))
+        .child(nav("msg-requests", Icon::Inbox, crate::t!("friends.message_requests"), Some(HomeView::MessageRequests), requests))
+        .child(nav("nitro", Icon::Nitro, crate::t!("dm.nitro"), None, 0))
+        .child(nav("shop", Icon::Gift, crate::t!("dm.shop"), None, 0))
         .child(
             div()
                 .pt(z(18.))
@@ -367,7 +368,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                 .text_size(z(12.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_MUTED))
-                .child("DIRECT MESSAGES")
+                .child(crate::t!("dm.header"))
                 .child(
                     div()
                         .id("new-dm")
@@ -466,7 +467,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     };
     let name: SharedString = extra.and_then(|e| e.group_name.clone()).filter(|_| is_dm).unwrap_or_else(|| ch.name.clone());
     let members: Option<SharedString> =
-        (is_dm && is_group).then(|| format!("{} Members", extra.map(|e| e.recipients + 1).unwrap_or(1)).into());
+        (is_dm && is_group).then(|| crate::t!("invite.members", n = extra.map(|e| e.recipients + 1).unwrap_or(1)));
     let group = SharedString::from(format!("chrow{}", id.0));
     let close = is_dm.then(|| {
         let e = entity.clone();
@@ -655,10 +656,10 @@ fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEleme
 fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     use crate::ui::voice_panel::{Audio, audio_button, panel_button, panel_glyph};
     let status = match app.presence {
-        crate::model::Presence::Online => "Online",
-        crate::model::Presence::Idle => "Idle",
-        crate::model::Presence::Dnd => "Do Not Disturb",
-        crate::model::Presence::Offline => "Invisible",
+        crate::model::Presence::Online => crate::t!("status.online"),
+        crate::model::Presence::Idle => crate::t!("status.idle"),
+        crate::model::Presence::Dnd => crate::t!("status.dnd"),
+        crate::model::Presence::Offline => crate::t!("status.invisible"),
     };
     let muted = app.mic_muted || app.deafened;
     // `container_g6VwXp`: 56px, padding `--custom-guild-list-padding -
@@ -724,7 +725,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     Audio::Mic,
                     if muted { Icon::MicOff } else { Icon::Mic },
                     muted,
-                    if muted { "Unmute" } else { "Mute" },
+                    if muted { crate::t!("voice.unmute") } else { crate::t!("voice.mute") },
                     |a, cx| {
                         a.mic_muted = !a.mic_muted;
                         crate::voice::sync_self_state(a);
@@ -736,7 +737,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     Audio::Deafen,
                     if app.deafened { Icon::HeadphonesOff } else { Icon::Headphones },
                     app.deafened,
-                    if app.deafened { "Undeafen" } else { "Deafen" },
+                    if app.deafened { crate::t!("voice.undeafen") } else { crate::t!("voice.deafen") },
                     |a, cx| {
                         a.deafened = !a.deafened;
                         crate::voice::sync_self_state(a);
@@ -746,7 +747,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 ))
                 .child(
                     panel_button("settings", panel_glyph(Icon::Gear, false), false)
-                        .tooltip(crate::ui::tooltip::tip("User Settings"))
+                        .tooltip(crate::ui::tooltip::tip(crate::t!("settings.user_settings")))
                         .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
                 ),
         )
