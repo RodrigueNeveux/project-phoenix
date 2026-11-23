@@ -17,7 +17,7 @@ use super::{
 use crate::{
     app::PhoenixApp,
     assets::Icon,
-    theme::{Palette, c, z},
+    theme::{Palette, c, generated::idx, z},
     ui::icon_button,
 };
 
@@ -37,12 +37,13 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
     let own = m.author == app.me.id;
     let mention = app.chat.reply_mention;
     Some(
+        // replyBar_: transparent (background-color unset), top radius 8px; text_ margin-inline-start
+        // --space-16; closeButton_ / mentionButton_ padding 8px 12px; actions_ margin-end --space-4.
         div()
-            .h(z(34.))
+            .h(z(32.))
             .pl(z(16.))
-            .pr(z(8.))
+            .pr(z(4.))
             .rounded_t(z(8.))
-            .bg(c(Palette::BG_SECONDARY))
             .flex()
             .items_center()
             .text_size(z(14.))
@@ -60,8 +61,8 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
                 d.child(
                     div()
                         .id("reply-mention")
-                        .px(z(8.))
-                        .h(z(24.))
+                        .px(z(12.))
+                        .h(z(32.))
                         .flex()
                         .items_center()
                         .gap(z(2.))
@@ -75,10 +76,10 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
                             cx.notify();
                         })),
                 )
-                .child(div().w(z(1.)).h(z(16.)).mx(z(4.)).bg(c(Palette::DIVIDER)))
+                .child(div().w(z(1.)).h(z(20.)).bg(super::tk(idx::BORDER_SUBTLE))) // separator_ 1x20
             })
             .child(
-                icon_button("cancel-reply", Icon::Close, c(Palette::INTERACTIVE), 16.).on_click(cx.listener(
+                icon_button("cancel-reply", Icon::Close, super::tk(idx::INTERACTIVE_TEXT_DEFAULT), 16.).px(z(12.)).on_click(cx.listener(
                     |a, _, _, cx| {
                         a.replying_to = None;
                         cx.notify();
@@ -250,12 +251,16 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         .child(sending(app))
         .children(super::slash::render(app, cx))
         .child(
-            div().px(z(16.)).child(
+            // form_ padding-inline --space-xs; channelTextArea_ --chat-background-default,
+            // 1px --border-muted, radius --radius-sm, margin-bottom --custom-chat-input-margin-bottom.
+            div().px(z(8.)).child(
                 div()
                     .flex()
                     .flex_col()
                     .rounded(z(8.))
-                    .bg(c(Palette::INPUT_BG))
+                    .border_1()
+                    .border_color(super::tk(idx::BORDER_MUTED))
+                    .bg(super::tk(idx::CHAT_BACKGROUND_DEFAULT))
                     .children(reply)
                     .children(tray)
                     .child(
@@ -290,9 +295,13 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                 }
                             }))
                             .child(
-                                div().pl(z(16.)).pr(z(16.)).child(
-                                    icon_button("attach", Icon::PlusCircle, ic, 24.)
-                                        .mx(z(-4.))
+                                // inner_ padding-inline-start 15px; attachButton_ margin-inline
+                                // -(space-xs + space-6) 10px around a 32px button.
+                                div().pl(z(15.)).child(
+                                    icon_button("attach", Icon::PlusCircle, ic, 20.)
+                                        .size(z(32.))
+                                        .ml(z(-14.))
+                                        .mr(z(10.))
                                         .on_click(cx.listener(|a, _, _, cx| a.prompt_attach(cx))),
                                 ),
                             )
@@ -313,20 +322,23 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                                 .left(z(2.))
                                                 .flex()
                                                 .items_center()
-                                                .text_color(c(0x6D6F78))
+                                                .text_color(super::tk(idx::TEXT_MUTED)) // textArea_::placeholder
                                                 .child(placeholder),
                                         )
                                     }),
                             )
                             .child(
+                                // buttons_ gap --space-8, margin-inline-end 6px; button_ 32px;
+                                // icons --chat-input-icon-size (20px).
                                 div()
-                                    .pr(z(8.))
+                                    .mr(z(6.))
                                     .flex()
+                                    .gap(z(8.))
                                     .items_center()
-                                    .child(icon_button("gift", Icon::Gift, ic, 24.))
-                                    .child(icon_button("gif", Icon::Gif, ic, 24.).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(icon_button("sticker", Icon::Sticker, ic, 24.).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(icon_button("emoji", Icon::Emoji, ic, 24.).on_click(cx.listener(
+                                    .child(icon_button("gift", Icon::Gift, ic, 20.).size(z(32.)))
+                                    .child(icon_button("gif", Icon::Gif, ic, 20.).size(z(32.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(icon_button("sticker", Icon::Sticker, ic, 20.).size(z(32.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(icon_button("emoji", Icon::Emoji, ic, 20.).size(z(32.)).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
                                     ))),
                             ),
@@ -371,15 +383,19 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
             },
         )
     };
+    // base_ (typing): height 24px, 12px / 16px, weight 500, --text-subtle; dots_ gap 2px;
+    // text_ margin-inline-start 4px.
     div()
         .h(z(24.))
         .flex()
         .items_center()
-        .gap(z(6.))
+        .gap(z(4.))
         .text_size(z(12.))
-        .text_color(c(Palette::TEXT_NORMAL))
+        .line_height(z(16.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(super::tk(idx::TEXT_SUBTLE))
         .when(active, |d| {
-            d.child(div().flex().gap(z(3.)).child(dot(0)).child(dot(1)).child(dot(2))).child(line)
+            d.child(div().flex().gap(z(2.)).child(dot(0)).child(dot(1)).child(dot(2))).child(line)
         })
         .when_some(app.chat.error.clone(), |d, err| {
             d.child(div().flex_1()).child(div().text_color(c(Palette::RED)).text_ellipsis().child(err))

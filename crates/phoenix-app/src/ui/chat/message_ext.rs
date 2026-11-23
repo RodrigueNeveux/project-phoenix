@@ -15,22 +15,29 @@ use crate::{
     app::PhoenixApp,
     assets::Icon,
     model::{Message, ThreadRef},
-    theme::{Palette, c, ca, z},
+    theme::{Palette, c, generated::idx, z},
     ui,
 };
 
-fn tool_button(id: &'static str, i: SharedString, size: f32) -> gpui::Stateful<Div> {
+use super::tk;
+
+/// Hover bar button: wrapper .button_ height 24px (+ hoverBarButton_ padding 2px),
+/// radius 6px, :hover --interactive-background-hover; icon_ 20px.
+fn bar_button(id: impl Into<gpui::ElementId>) -> gpui::Stateful<Div> {
     div()
         .id(id)
-        .size(z(32.))
+        .size(z(28.))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
-        .rounded(z(4.))
+        .rounded(z(6.))
         .cursor_pointer()
-        .hover(|s| s.bg(c(0x3D3E45)))
-        .child(gpui::svg().path(i).size(z(size)).flex_none().text_color(c(Palette::INTERACTIVE)))
+        .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+}
+
+fn tool_button(id: &'static str, i: SharedString, _size: f32) -> gpui::Stateful<Div> {
+    bar_button(id).child(gpui::svg().path(i).size(z(20.)).flex_none().text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)))
 }
 
 /// The floating hover toolbar (top-right of the hovered message).
@@ -45,32 +52,27 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         .invisible()
         .group_hover("msg", |s| s.visible())
         .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.visible())
+        // popover_: --background-surface-high, 1px --border-muted, radius 8px, padding 2px,
+        // --shadow-low. (Position comes from the client's inline style.)
         .flex()
+        .items_center()
         .p(z(2.))
-        .bg(c(Palette::BG_PRIMARY))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
         .border_1()
-        .border_color(c(Palette::HEADER_SHADOW))
-        .rounded(z(4.))
+        .border_color(tk(idx::BORDER_MUTED))
+        .rounded(z(8.))
         .shadow_sm();
     // Quick reactions (Discord shows frequent emoji first).
     for (i, q) in QUICK_REACTIONS.iter().take(3).enumerate() {
         let e = e.clone();
         bar = bar.child(
-            div()
-                .id(("quick", i))
-                .size(z(32.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(z(4.))
-                .cursor_pointer()
-                .text_size(z(18.))
-                .hover(|s| s.bg(c(0x3D3E45)))
-                .child(*q)
+            bar_button(("quick", i))
+                .child(crate::media::emoji::emoji_element(q, 20.))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.react_with(ch, id, (*q).into(), None, cx))),
         );
     }
-    bar = bar.child(div().w(z(1.)).my(z(6.)).mx(z(2.)).bg(c(Palette::DIVIDER)));
+    // separator_: 1px x 24px, margin 2px 4px, --border-subtle, radius 100px.
+    bar = bar.child(div().w(z(1.)).h(z(24.)).my(z(2.)).mx(z(4.)).rounded_full().bg(tk(idx::BORDER_SUBTLE)));
     bar = bar.child(tool_button("tb-react", ChatIcon::AddReaction.path(), 20.).on_click({
         let e = e.clone();
         move |_, _, cx| e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
@@ -87,16 +89,9 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
     }
     if shift && own {
         bar = bar.child(
-            div()
-                .id("tb-delete")
-                .size(z(32.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(z(4.))
-                .cursor_pointer()
-                .hover(|s| s.bg(c(0x3D3E45)))
-                .child(icon(ChatIcon::Trash, 18., c(Palette::RED)))
+            // .button_.dangerous_ --control-critical-secondary-text-default
+            bar_button("tb-delete")
+                .child(icon(ChatIcon::Trash, 20., tk(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT)))
                 .on_click({
                     let e = e.clone();
                     move |ev, _, cx| {
@@ -127,31 +122,44 @@ pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&Mo
 pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
     let _ = app;
     let (ch, id) = (msg.channel, msg.id);
-    let mut row = div().mt(z(4.)).flex().flex_wrap().gap(z(4.));
+    // reactions_: padding-top .125rem; reaction_ margin-inline-end / margin-bottom 4px.
+    let mut row = div().pt(z(2.)).flex().flex_wrap().gap(z(4.));
     for (ix, r) in msg.reactions.iter().enumerate() {
         let e = entity.clone();
         let rc = r.clone();
-        let emoji_el = crate::media::emoji::emoji_element(&r.emoji, 16.);
+        // reaction_ .emoji 20px, margin 2px 0.
+        let emoji_el = div().my(z(2.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.));
         row = row.child(
+            // reaction_: radius 8px, 1px transparent border, --reaction-background-default;
+            // :hover --reaction-background-hover / --reaction-border-hover; .reactionMe_
+            // --reaction-background-reacted-default / --reaction-border-reacted-default.
+            // reactionInner_ padding 2px 6px. reactionCount_ 14px semibold --text-subtle
+            // (reacted: --reaction-text-reacted-default), margin-inline-start 6px.
             div()
                 .id(("reaction", ix))
-                .h(z(24.))
+                .py(z(2.))
                 .px(z(6.))
                 .rounded(z(8.))
                 .flex()
                 .items_center()
                 .gap(z(6.))
                 .border_1()
-                .when(r.me, |d| d.bg(ca(0x5865F23D)).border_color(c(Palette::BLURPLE)))
-                .when(!r.me, |d| d.bg(c(Palette::BG_SECONDARY)).border_color(gpui::transparent_black()))
-                .hover(|s| s.border_color(c(0x4E5058)))
+                .when(r.me, |d| {
+                    d.bg(tk(idx::REACTION_BACKGROUND_REACTED_DEFAULT))
+                        .border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT))
+                })
+                .when(!r.me, |d| {
+                    d.bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
+                        .border_color(gpui::transparent_black())
+                        .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
+                })
                 .cursor_pointer()
                 .child(emoji_el)
                 .child(
                     div()
                         .text_size(z(14.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if r.me { 0xDEE0FC } else { Palette::INTERACTIVE }))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(tk(if r.me { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::TEXT_SUBTLE }))
                         .child(SharedString::from(r.count.to_string())),
                 )
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_reaction(ch, id, &rc, cx))),
@@ -160,18 +168,22 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
     let e = entity.clone();
     row.child(
         div()
+            // reactionBtn_: same pill, --reaction-background-default, icon
+            // --reaction-text-default; shown while the reactions row is hovered.
             .id("reaction-add")
-            .h(z(24.))
+            .py(z(2.))
             .px(z(6.))
             .rounded(z(8.))
+            .border_1()
+            .border_color(gpui::transparent_black())
             .flex()
             .items_center()
-            .bg(c(Palette::BG_SECONDARY))
+            .bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
             .invisible()
             .group_hover("msg", |s| s.visible())
             .cursor_pointer()
-            .hover(|s| s.border_1().border_color(c(0x4E5058)))
-            .child(icon(ChatIcon::AddReaction, 18., c(Palette::INTERACTIVE)))
+            .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
+            .child(div().my(z(2.)).child(icon(ChatIcon::AddReaction, 20., tk(idx::REACTION_TEXT_DEFAULT))))
             .on_click(move |_, _, cx| {
                 e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
             }),
@@ -284,22 +296,28 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef)
 
 /// Red "NEW" line drawn above the first unread message.
 pub fn new_divider() -> impl IntoElement {
+    // divider_ margin-inline 1rem .875rem; .isUnread_ border --background-feedback-notification;
+    // endCap_ 13px tall, 10px bold, line-height 9px, padding 0 4px 0 1px, radius 0 4px 4px 0,
+    // top -7px at the right edge, white.
     div()
-        .mx(z(16.))
+        .ml(z(16.))
+        .mr(z(14.))
         .mt(z(8.))
         .h(z(1.))
-        .bg(c(Palette::RED))
+        .bg(tk(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
         .relative()
         .child(
             div()
                 .absolute()
-                .right(z(-16.))
-                .top(z(-8.))
-                .h(z(16.))
-                .px(z(4.))
-                .rounded_l(z(4.))
-                .bg(c(Palette::RED))
+                .right_0()
+                .top(z(-7.))
+                .h(z(13.))
+                .pl(z(1.))
+                .pr(z(4.))
+                .rounded_r(z(4.))
+                .bg(tk(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
                 .text_size(z(10.))
+                .line_height(z(9.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(gpui::white())
                 .flex()

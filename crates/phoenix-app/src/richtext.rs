@@ -13,7 +13,7 @@ use gpui::{
 use crate::{
     markdown::{self, Block, Inline, Mention, MentionResolver, Style},
     model::Id,
-    theme::{FONT_MONO, FONT_UI, Palette, c, ca},
+    theme::{FONT_MONO, FONT_UI, Palette, c, ca, generated::idx, tok},
 };
 
 #[derive(Clone, Debug)]
@@ -84,7 +84,9 @@ fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
     let mut color = base;
     let mut background_color = None;
     if style.has(Style::CODE) {
-        background_color = Some(c(Palette::CODE_BG));
+        // markup_ code: --background-code (the 1px --border-normal and 85% size
+        // can't be expressed on a text run).
+        background_color = Some(c(tok(idx::BACKGROUND_CODE)));
     }
     if style.has(Style::MENTION) {
         color = c(Palette::MENTION_FG);
@@ -92,7 +94,8 @@ fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
         f.weight = FontWeight::MEDIUM;
     }
     if style.has(Style::TIMESTAMP) {
-        background_color = Some(ca(0x4E50584D));
+        // markup_ .timestamp_: --background-mod-normal.
+        background_color = Some(c(tok(idx::BACKGROUND_MOD_NORMAL)));
     }
     if style.has(Style::LINK) {
         color = c(Palette::TEXT_LINK);
@@ -166,7 +169,8 @@ pub fn render_blocks(
         .iter()
         .map(|b| match b {
             Block::Paragraph(i) => RBlock::Text(rich_inline(i, revealed, base)),
-            Block::Quote(i) => RBlock::Quote(rich_inline(i, revealed, base)),
+            // markup_ blockquote color --text-subtle.
+            Block::Quote(i) => RBlock::Quote(rich_inline(i, revealed, c(tok(idx::TEXT_SUBTLE)))),
             Block::Code { lang, code } => RBlock::Code {
                 lang: lang.clone().map(Into::into),
                 code: code.clone().into(),
@@ -179,7 +183,8 @@ pub fn render_blocks(
                 }
                 RBlock::Heading(*l, t)
             }
-            Block::Subtext(i) => RBlock::Subtext(rich_inline(i, revealed, c(Palette::TEXT_MUTED))),
+            // markup_ small:not(.inlineFormat_) color --text-subtle.
+            Block::Subtext(i) => RBlock::Subtext(rich_inline(i, revealed, c(tok(idx::TEXT_SUBTLE)))),
             Block::ListItem { ordered, depth, inline } => RBlock::ListItem {
                 ordered: *ordered,
                 depth: *depth,

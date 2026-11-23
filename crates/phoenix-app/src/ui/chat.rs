@@ -11,7 +11,7 @@ use crate::{
     media,
     model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message},
     richtext::{ClickTarget, RBlock, RenderedMessage, RichText},
-    theme::{FONT_MONO, Palette, c, ca, fz, m, role_color, z},
+    theme::{FONT_MONO, Palette, c, ca, fz, generated::idx, m, tok, z},
     ui::{avatar, icon, icon_button, members, sidebar::channel_icon},
 };
 
@@ -24,6 +24,11 @@ pub mod state;
 pub mod slash;
 pub mod system;
 pub use state::ChatState;
+
+/// Colour of a generated CSS token (`--name` → `idx::NAME`) for the active theme.
+pub(crate) fn tk(i: usize) -> gpui::Hsla {
+    c(tok(i))
+}
 
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
@@ -97,7 +102,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let name = ch.map(|c| c.name.clone()).unwrap_or_default();
     let topic = ch.and_then(|c| c.topic.clone());
     let kind = ch.map(|c| c.kind).unwrap_or(ChannelKind::Text);
-    let ic = c(Palette::INTERACTIVE);
+    // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
+    let ic = tk(idx::ICON_MUTED);
+    let on = tk(idx::ICON_STRONG);
     div()
         // Refresh: 49px bar plus the 1px app-frame line on top that continues
         // the channel list's top border.
@@ -148,14 +155,14 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx))))
         .child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
         .child(
-            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { c(Palette::INTERACTIVE_HOVER) } else { ic }, HDR_ICON)
+            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
                 .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
         )
         .child(
             hdr_button(
                 "members",
                 Icon::Members,
-                if app.show_members { c(Palette::INTERACTIVE_HOVER) } else { ic },
+                if app.show_members { on } else { ic },
                 HDR_ICON,
             )
             .on_click(cx.listener(|a, _, _, cx| {
@@ -228,12 +235,13 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
             .child(
                 div()
                     .text_size(z(16.))
-                    .text_color(c(Palette::TEXT_MUTED))
+                    .text_color(tk(idx::TEXT_DEFAULT)) // container_ .description_ color
                     .child(SharedString::from(format!(
                         "This is the beginning of your direct message history with {name}."
                     ))),
             );
     }
+    // container_ (welcome) margin: --custom-message-margin-horizontal; header_ margin 8px 0.
     div()
         .m(z(16.))
         .flex()
@@ -241,9 +249,10 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
         .gap(z(8.))
         .child(
             div()
-                .size(z(68.))
+                .mt(z(16.)) // emptyChannelIcon_ margin-top
+                .size(z(68.)) // emptyChannelIcon_ 68px
                 .rounded_full()
-                .bg(c(0x41434A))
+                .bg(tk(idx::BACKGROUND_MOD_MUTED)) // emptyChannelIcon_ background-color
                 .flex()
                 .items_center()
                 .justify_center()
@@ -260,28 +269,36 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
         .child(
             div()
                 .text_size(z(16.))
-                .text_color(c(Palette::TEXT_MUTED))
+                .text_color(tk(idx::TEXT_DEFAULT)) // description_ color
                 .child(SharedString::from(format!("This is the start of the #{name} channel."))),
         )
 }
 
 fn day_divider(label: SharedString) -> impl IntoElement {
+    // divider_ (message list) margin-inline 1rem .875rem; .group-spacing-16
+    // .divider_.hasContent_ margin 1.5rem top / .5rem bottom; divider_ border-top
+    // --border-subtle; content_ 12px semibold, line-height 13px, padding 2px 4px,
+    // radius 8px, --text-muted on --background-base-lower.
     div()
-        .mx(z(16.))
+        .ml(z(16.))
+        .mr(z(14.))
         .mt(z(24.))
         .mb(z(8.))
         .h(z(1.))
-        .bg(c(Palette::DIVIDER))
+        .bg(tk(idx::BORDER_SUBTLE))
         .flex()
         .justify_center()
         .items_center()
         .child(
             div()
-                .bg(c(Palette::BG_PRIMARY))
+                .bg(tk(idx::BACKGROUND_BASE_LOWER))
+                .rounded(z(8.))
                 .px(z(4.))
+                .py(z(2.))
                 .text_size(z(12.))
+                .line_height(z(13.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_MUTED))
+                .text_color(tk(idx::TEXT_MUTED))
                 .child(label),
         )
 }
@@ -304,11 +321,11 @@ fn time_tooltip(ts: i64) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 's
 fn bot_tag() -> impl IntoElement {
     div()
         .flex_none()
-        .ml(z(4.))
-        .px(z(4.))
-        .h(z(15.))
-        .rounded(z(3.))
-        .bg(c(Palette::BLURPLE))
+        .ml(z(4.)) // botTagCozy_ margin-inline-start .25rem
+        .px(z(4.4)) // .rem_.botTag_ padding 0 .275rem
+        .h(z(15.)) // .rem_.botTag_ height .9375rem
+        .rounded(z(4.)) // .rem_.botTag_ border-radius 4px
+        .bg(tk(idx::BACKGROUND_BRAND)) // botTagRegular_
         .flex()
         .items_center()
         .text_size(z(10.))
@@ -328,7 +345,8 @@ fn message(
 ) -> AnyElement {
     let author = app.users.get(&msg.author);
     let name = author.map(|u| u.display_name.clone()).unwrap_or_else(|| "Unknown".into());
-    let color = role_color(app.author_color(msg.author));
+    // username_ color: role colour, else --text-strong.
+    let color = app.author_color(msg.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG));
     let id = msg.id;
     if let Some(sys) = system::render(app, entity, msg, r) {
         return row_wrapper().child(sys).into_any_element();
@@ -336,7 +354,7 @@ fn message(
     let compact = app.prefs.synced.compact;
     let editing = app.chat.edit.as_ref().is_some_and(|e| e.id == id);
     let replying = app.replying_to == Some(id);
-    let highlight = r.mentions_me || msg.mention_everyone || replying;
+    let mentioned = r.mentions_me || msg.mention_everyone;
     let ts = msg.timestamp;
 
     let mut content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL));
@@ -385,34 +403,43 @@ fn message(
             Some(p) => (app.users.get(&entry.msgs[p].author), entry.rendered[p].preview.clone()),
             None => (None, SharedString::from("Original message was deleted")),
         };
+        // repliedMessage_: 14px, line-height --custom-message-reply-message-preview-line-height
+        // (1.125rem), cozy margin-bottom --reply-spacing (4px). Compact: margin-inline-start
+        // timestamp-width + meta-space - (compact-indent - 1rem) = -24px, padding-inline-start
+        // --custom-message-reply-indent (.625rem).
         div()
             .relative()
             .h(z(18.))
-            .mb(z(4.))
+            .when(!compact, |d| d.mb(z(4.)))
+            .when(compact, |d| d.ml(z(-24.)).pl(z(10.)))
             .flex()
             .items_center()
-            .gap(z(4.))
+            .gap(z(4.)) // replyAvatar_ margin-inline-end --custom-message-meta-space
             .text_size(fz(14.))
             .line_height(z(18.))
+            .text_color(tk(idx::TEXT_DEFAULT))
             .child(
-                // Reply spine from the avatar column up to the preview.
+                // messageSpine_:before — 2px --spine-default, radius 6px, top 50%, bottom 0,
+                // from the avatar centre (avatar/2 + gutter, minus half the spine) to 4px
+                // (--reply-spacing) before the reply. Compact: avatar = 2.25rem timestamp,
+                // gutter = meta-space, ends at the reply indent.
                 div()
                     .absolute()
-                    .left(z(if compact { -20. } else { -36. }))
-                    .top(z(8.))
-                    .w(z(if compact { 18. } else { 33. }))
-                    .h(z(13.))
+                    .left(z(if compact { -23. } else { -37. }))
+                    .top(z(9.))
+                    .w(z(if compact { 29. } else { 33. }))
+                    .h(z(9.))
                     .border_l_2()
                     .border_t_2()
                     .rounded_tl(z(6.))
-                    .border_color(c(Palette::INTERACTIVE_MUTED)),
+                    .border_color(tk(idx::SPINE_DEFAULT)),
             )
             .when(!compact, |d| d.child(avatar(ru, 16.)))
             .child(
                 div()
                     .flex_none()
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(role_color(ru.and_then(|u| app.author_color(u.id))))
+                    .text_color(ru.and_then(|u| app.author_color(u.id)).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
                     .opacity(0.64)
                     .child(SharedString::from(format!(
                         "@{}",
@@ -424,7 +451,7 @@ fn message(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .text_color(c(Palette::INTERACTIVE))
+                    .text_color(tk(idx::TEXT_DEFAULT)) // repliedTextContent_ color: inherit
                     .whitespace_nowrap()
                     .overflow_hidden()
                     .text_ellipsis()
@@ -449,18 +476,29 @@ fn message(
         .id(("msg", id.0))
         .group("msg")
         .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
-        .when(app.chat.menu.is_some_and(|m| m.msg == id), |d| d.bg(c(Palette::BG_MSG_HOVER)))
         .relative()
-        .pr(z(48.))
-        .when(highlight, |d| {
-            // A 2 px bar drawn over the row (not a border), so the text
-            // doesn't shift right.
-            d.bg(ca(Palette::MENTIONED_MSG_BG)).child(
-                div().absolute().left_0().top_0().bottom_0().w(z(2.)).bg(c(Palette::MENTIONED_MSG_BAR)),
-            )
-        })
-        .when(editing, |d| d.bg(c(Palette::BG_MSG_HOVER)))
-        .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)));
+        .pr(z(16.)) // wrapper_ padding-inline-end --custom-message-margin-horizontal
+        .map(|d| {
+            // message_:hover / .selected_ --message-background-hover; .mentioned_ and
+            // .replying_ have their own backgrounds, hover shades and a 2px bar
+            // (--icon-feedback-warning / --brand-500) drawn over the row.
+            let (bg, hover, bar) = if replying {
+                (idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, idx::BRAND_10A, Some(idx::BRAND_500))
+            } else if mentioned {
+                (idx::MESSAGE_MENTIONED_BACKGROUND_DEFAULT, idx::MESSAGE_MENTIONED_BACKGROUND_HOVER, Some(idx::ICON_FEEDBACK_WARNING))
+            } else {
+                (usize::MAX, idx::MESSAGE_BACKGROUND_HOVER, None)
+            };
+            let selected = editing || app.chat.menu.is_some_and(|m| m.msg == id);
+            let d = match (bar, selected) {
+                (_, true) => d.bg(tk(hover)),
+                (Some(_), false) => d.bg(tk(bg)),
+                (None, false) => d,
+            };
+            d.hover(move |s| s.bg(tk(hover))).when_some(bar, |d, b| {
+                d.child(div().absolute().left_0().top_0().bottom_0().w(z(2.)).bg(tk(b)))
+            })
+        });
 
     let body = if compact {
         // Compact (Discord's IRC-like layout): "[time] Name" sits inline at the
@@ -478,12 +516,14 @@ fn message(
                     .flex()
                     .items_center()
                     .child(
+                        // .compact_ .timestamp_: .6875rem, --text-muted, margin-inline-end
+                        // --custom-message-meta-space.
                         div()
                             .id(("msg-time", id.0))
                             .flex_none()
                             .mr(z(4.))
                             .text_size(z(11.))
-                            .text_color(c(Palette::TEXT_MUTED))
+                            .text_color(tk(idx::TEXT_MUTED))
                             .tooltip(time_tooltip(ts))
                             .child(r.time_short.clone()),
                     )
@@ -499,8 +539,11 @@ fn message(
                 d.child(
                     div()
                         .absolute()
+                        // avatar_: inset-inline-start --custom-message-margin-horizontal,
+                        // margin-top 4px - cozy vertical padding (so 4px below the row top,
+                        // after the reply line when there is one).
                         .left(z(16.))
-                        .top(z(if msg.reply_to.is_some() { 24. } else { 2. }))
+                        .top(z(if msg.reply_to.is_some() { 26. } else { 4. }))
                         .id(("msg-avatar", id.0))
                         .cursor_pointer()
                         .on_click(message_ext::open_author(entity, msg))
@@ -514,11 +557,14 @@ fn message(
                         .child(author_name)
                         .when(is_bot, |d| d.child(bot_tag()))
                         .child(
+                            // .cozy_ .timestamp_: .75rem, --chat-text-muted, medium;
+                            // timestampInline_ margin-inline-start .25rem.
                             div()
                                 .id(("msg-time", id.0))
-                                .ml(z(8.))
+                                .ml(z(4.))
                                 .text_size(z(12.))
-                                .text_color(c(Palette::TEXT_MUTED))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(tk(idx::CHAT_TEXT_MUTED))
                                 .tooltip(time_tooltip(ts))
                                 .child(r.time_full.clone()),
                         ),
@@ -536,9 +582,10 @@ fn message(
                         .flex()
                         .items_center()
                         .justify_end()
+                        // .cozy_ .timestamp_.alt_: .6875rem, --text-muted, width 56px.
                         .text_size(z(11.))
                         .text_color(gpui::transparent_black())
-                        .group_hover("msg", |s| s.text_color(c(Palette::TEXT_MUTED)))
+                        .group_hover("msg", |s| s.text_color(tk(idx::TEXT_MUTED)))
                         .tooltip(time_tooltip(ts))
                         .child(r.time_short.clone()),
                 )
@@ -678,9 +725,13 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
 fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bool) -> AnyElement {
     match b {
         RBlock::Text(t) => rich(entity, msg, bi, t, edited),
+        // blockquoteContainer_: margin-block --space-4; blockquoteDivider_ 4px, radius 4px,
+        // --spine-default; blockquote padding-inline 12px 8px, max-width 90%.
         RBlock::Quote(t) => div()
             .flex()
-            .child(div().w(z(4.)).rounded(z(4.)).bg(c(Palette::INTERACTIVE_MUTED)).flex_none())
+            .my(z(4.))
+            .max_w(gpui::relative(0.9))
+            .child(div().w(z(4.)).rounded(z(4.)).bg(tk(idx::SPINE_DEFAULT)).flex_none())
             .child(div().flex_1().min_w_0().pl(z(12.)).pr(z(8.)).child(rich(entity, msg, bi, t, false)))
             .into_any_element(),
         RBlock::Heading(level, t) => {
@@ -689,16 +740,21 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bo
                 2 => 20.,
                 _ => 16.,
             };
+            // markup_ h1 1.5rem / h2 1.25rem / h3 1rem, margin 16px 0 8px; first child
+            // margin-top 8px (h1, h2) or 4px (h3).
+            let first = if *level <= 2 { 8. } else { 4. };
             div()
-                .mt(z(if bi == 0 { 8. } else { 16. }))
+                .mt(z(if bi == 0 { first } else { 16. }))
                 .mb(z(8.))
                 .text_size(fz(size))
                 .child(rich(entity, msg, bi, t, edited))
                 .into_any_element()
         }
+        // markup_ small: .875rem, line-height 1.20313rem, --text-subtle.
         RBlock::Subtext(t) => div()
-            .text_size(fz(13.))
-            .text_color(c(Palette::TEXT_MUTED))
+            .text_size(fz(14.))
+            .line_height(fz(19.25))
+            .text_color(tk(idx::TEXT_SUBTLE))
             .child(rich(entity, msg, bi, t, edited))
             .into_any_element(),
         RBlock::ListItem { ordered, depth, text } => {
@@ -724,18 +780,21 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bo
                 .child(div().flex_1().min_w_0().child(rich(entity, msg, bi, text, edited)))
                 .into_any_element()
         }
+        // markup_ pre: margin-top 6px, radius 4px, max-width 90%; markup_ code: .875rem /
+        // 1.125rem, 1px --border-normal; .hljs: padding .5em, --background-base-lower,
+        // --text-code.
         RBlock::Code { code, runs, .. } => div()
-            .my(z(4.))
-            .max_w(z(900.))
-            .p(z(8.))
+            .mt(z(6.))
+            .max_w(gpui::relative(0.9))
+            .p(fz(7.))
             .rounded(z(4.))
-            .bg(c(Palette::CODE_BG))
+            .bg(tk(idx::BACKGROUND_BASE_LOWER))
             .border_1()
-            .border_color(c(Palette::CODE_BORDER))
+            .border_color(tk(idx::BORDER_NORMAL))
             .font_family(FONT_MONO)
             .text_size(fz(14.))
             .line_height(fz(18.))
-            .text_color(c(0xB9BBBE))
+            .text_color(tk(idx::TEXT_CODE))
             .child(StyledText::new(code.clone()).with_runs(runs.clone()))
             .into_any_element(),
     }
@@ -1077,19 +1136,24 @@ fn embed(e: &Embed) -> AnyElement {
             .when_some(url, |d, u| d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&u)))
     });
 
+    // embed_ radius 4px; gridContainer_ max-width 516px; embedFull_ --background-surface-high,
+    // 1px --border-subtle, 4px start border (embed colour or --border-normal); grid_ padding
+    // .125rem 1rem .5rem .75rem; children embedMargin_ margin-top 8px.
     div()
         .mt(z(4.))
         .max_w(z(516.))
         .flex()
         .rounded(z(4.))
         .overflow_hidden()
-        .bg(c(Palette::EMBED_BG))
-        .child(div().w(z(4.)).flex_none().bg(c(e.color.unwrap_or(0x1E1F22))))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .child(div().w(z(4.)).flex_none().bg(e.color.map(c).unwrap_or_else(|| tk(idx::BORDER_NORMAL))))
         .child(
             div()
                 .flex_1()
                 .min_w_0()
-                .pt(z(8.))
+                .pt(z(2.))
                 .pr(z(16.))
                 .pb(z(16.))
                 .pl(z(12.))
@@ -1104,7 +1168,8 @@ fn embed(e: &Embed) -> AnyElement {
                         .gap(z(8.))
                         .pt(z(8.))
                         .when_some(e.provider.clone(), |d, p| {
-                            d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(p))
+                            // embedProvider_ .embedLink_ --interactive-text-default
+                            d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)).child(p))
                         })
                         .children(author)
                         .children(title)
@@ -1113,7 +1178,8 @@ fn embed(e: &Embed) -> AnyElement {
                         .when_some(big, |d, m| {
                             let size = media::fit(m.width, m.height, 400., 300.);
                             let original = m.url.clone();
-                            d.child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(z(4.)))
+                            // embedFull_ .embedMedia_ margin-top 16px, radius 4px.
+                            d.child(div().mt(z(8.)).child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(z(4.))))
                         })
                         .children(footer),
                 )
