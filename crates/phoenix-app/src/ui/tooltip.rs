@@ -1,5 +1,6 @@
-//! Shared Discord-style tooltip: floating black card (`--background-floating`),
-//! 8px radius, 8px 12px padding, 14px/500 text, with a 5px pointer toward the
+//! Shared Discord-style tooltip, tooltip_ZDdyhE: --background-surface-high,
+//! --radius-sm (8px), inset 1px --border-subtle + --shadow-high, padding
+//! --space-8 --space-12, max-width 200px, --text-default, 14px/500 text, with a 5px pointer toward the
 //! hovered element. gpui shows it after its hover delay (Discord: ~500ms) and
 //! places it under the cursor, so the pointer is on top.
 //!
@@ -26,7 +27,7 @@ impl Render for Tip {
             .child(pointer)
             .child(
                 div()
-                    .max_w(z(190.))
+                    .max_w(z(200.)) // tooltip_ZDdyhE max-width
                     .px(z(12.))
                     .py(z(8.))
                     .rounded(z(8.))

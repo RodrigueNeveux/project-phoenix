@@ -29,6 +29,9 @@ pub struct User {
     pub public_flags: Option<u64>,
     #[serde(default)]
     pub avatar_decoration_data: Option<serde_json::Value>,
+    /// Server tag the user chose to display ("GLAD"), if any.
+    #[serde(default)]
+    pub primary_guild: Option<Box<PrimaryGuild>>,
     // Current-user only:
     #[serde(default)]
     pub email: Option<String>,
@@ -46,6 +49,33 @@ pub struct User {
     pub flags: Option<u64>,
     #[serde(default)]
     pub bio: Option<String>,
+}
+
+/// `user.primary_guild`: the server tag shown next to a user's name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PrimaryGuild {
+    #[serde(default)]
+    pub identity_guild_id: Option<Snowflake>,
+    #[serde(default)]
+    pub identity_enabled: Option<bool>,
+    #[serde(default)]
+    pub tag: Option<String>,
+    #[serde(default)]
+    pub badge: Option<String>,
+}
+
+impl PrimaryGuild {
+    /// The tag to show, if it is enabled.
+    pub fn shown_tag(&self) -> Option<&str> {
+        (self.identity_enabled != Some(false)).then_some(())?;
+        self.tag.as_deref().filter(|t| !t.is_empty())
+    }
+
+    /// CDN URL of the tag badge.
+    pub fn badge_url(&self) -> Option<String> {
+        let (g, b) = (self.identity_guild_id?, self.badge.as_ref()?);
+        Some(format!("{CDN_BASE}/guild-tag-badges/{g}/{b}.png?size=16"))
+    }
 }
 
 impl User {

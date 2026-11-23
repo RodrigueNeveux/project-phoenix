@@ -51,6 +51,7 @@ pub fn user(u: &api::User) -> model::User {
         display_name: u.display_name().to_owned().into(),
         avatar,
         bot: u.bot || u.system,
+        tag: u.primary_guild.as_ref().and_then(|p| Some((p.shown_tag()?.to_owned().into(), p.badge_url().map(Into::into)))),
     }
 }
 
@@ -579,6 +580,7 @@ pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model:
         unread: !muted && visible.clone().any(|c| c.unread),
         mentions: channels.iter().map(|c| c.mentions).sum(),
         banner_color: None,
+        owner: g.owner_id().map(id),
     }
 }
 

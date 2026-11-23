@@ -113,6 +113,7 @@ fn user(i: usize) -> User {
         display_name: d.into(),
         avatar: ImageRef::Default((i % 5) as u8),
         bot: n.ends_with("bot") || n == "clyde",
+        tag: ["GLAD", "RUST", "PNX"].get(i % 4).map(|t| ((*t).into(), None)),
     }
 }
 
@@ -148,6 +149,7 @@ impl MockBackend {
                 unread: gi % 3 == 1,
                 mentions: if gi == 3 { 4 } else if gi == 5 { 1 } else { 0 },
                 banner_color: *banner,
+                owner: Some(Id(2)),
             });
             let layout: &[(&str, &[(&str, ChannelKind)])] = &[
                 (
@@ -425,7 +427,22 @@ impl Backend for MockBackend {
         if let Some(g) = guild {
             let members = self.inner.lock().ok().and_then(|i| i.members.get(&g).cloned());
             if let Some(members) = members {
+                let playing: Vec<Id> = members.iter().filter(|m| m.presence != Presence::Offline).map(|m| m.user).take(3).collect();
                 self.emit_later(Duration::from_millis(60), move || AppEvent::GuildMembers { guild: g, members });
+                let games = ["Hearts of Iron IV", "Fortnite", "VALORANT"];
+                for (k, user) in playing.into_iter().enumerate() {
+                    let activities = vec![crate::presence::Activity {
+                        kind: crate::presence::ActivityKind::Playing,
+                        name: games[k].into(),
+                        details: None,
+                        state: None,
+                        emoji: None,
+                        url: None,
+                        image: None,
+                        start: Some((now() - 86_400 * (2 - k as i64).max(1)) * 1000),
+                    }];
+                    self.emit_later(Duration::from_millis(80), move || AppEvent::Activities { user, activities });
+                }
             }
         }
         Box::pin(async { Ok(()) })

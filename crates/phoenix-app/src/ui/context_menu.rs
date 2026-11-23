@@ -13,7 +13,7 @@ use gpui::{
     SharedString, Styled, Window, anchored, deferred, div, prelude::*, px, svg,
 };
 
-use crate::theme::{Palette, c};
+use crate::theme::{Palette, c, ca, generated::idx, tok};
 
 pub type Handler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 pub type Dismiss = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -218,13 +218,19 @@ impl MenuItem {
     }
 }
 
-// Observed: min-width 188 / max 320, padding 6px 8px, radius 4, 1px subtle
-// border; items 32px min, padding 6px 8px, margin 2px 0, radius 2,
-// 14px/500 with 18px line height; hover brand-560.
+// menu_M3qk4j (476662): --background-surface-higher, 1px --border-subtle
+// (--menu-border-width), radius 8px, --shadow-high, min-width 188 / submenu
+// max 320; scroller_M3qk4j padding-block --menu-scroller-block-padding (8px),
+// padding-inline 8px. labelContainer_M3qk4j min-height 32, padding 8;
+// item radius 2 (4 when focused); focused bg --interactive-background-hover
+// with --text-strong; danger --text-feedback-critical on
+// --background-feedback-mod-critical; iconContainer/caret 20px;
+// separator margin --custom-menu-separator-margin (8px).
 pub const MENU_W: f32 = 220.;
-const MENU_BG: u32 = Palette::BG_FLOATING;
-const MENU_BORDER: u32 = 0x97979F1F;
-const HOVER_BG: u32 = 0x4752C4;
+const MENU_BG: u32 = tok(idx::BACKGROUND_SURFACE_HIGHER);
+const MENU_BORDER: u32 = tok(idx::BORDER_SUBTLE);
+const HOVER_BG: u32 = tok(idx::INTERACTIVE_BACKGROUND_HOVER);
+const DANGER_BG: u32 = tok(idx::BACKGROUND_FEEDBACK_MOD_CRITICAL);
 const CHEVRON: &str = "icons/chevron-right.svg";
 const CHECK: &str = "icons/check.svg";
 
@@ -238,9 +244,9 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
     let mut list = div()
         .id(id)
         .w(px(MENU_W))
-        .py(z(6.))
+        .py(z(8.))
         .px(z(8.))
-        .rounded(z(4.))
+        .rounded(z(8.))
         .border_1()
         .border_color(crate::theme::ca(MENU_BORDER))
         .bg(c(MENU_BG))
@@ -252,7 +258,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
         .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation());
     for (ix, item) in items.into_iter().enumerate() {
         list = list.child(match item {
-            MenuItem::Separator => div().mx(z(4.)).my(z(4.)).h(z(1.)).bg(c(Palette::DIVIDER)).into_any_element(),
+            MenuItem::Separator => div().m(z(8.)).h(z(1.)).bg(c(Palette::DIVIDER)).into_any_element(),
             MenuItem::Custom(el) => el,
             MenuItem::Submenu { label, items } => {
                 let open = OPEN_SUB.with(|c| c.get()) == Some(ix);
@@ -261,8 +267,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     .relative()
                     .h(z(32.))
                     .px(z(8.))
-                    .my(z(2.))
-                    .rounded(z(2.))
+                    .rounded(z(4.))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -270,8 +275,8 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     .text_size(z(14.))
                     .line_height(z(18.))
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(if open { 0xFFFFFF } else { 0xB5BAC1 }))
-                    .when(open, |d| d.bg(c(HOVER_BG)))
+                    .text_color(c(Palette::TEXT_HEADER))
+                    .when(open, |d| d.bg(ca(HOVER_BG)))
                     .on_hover(move |h, w, _| {
                         if *h {
                             set_open_sub(Some(ix), w);
@@ -280,7 +285,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         }
                     })
                     .child(label)
-                    .child(svg().path(CHEVRON).size(z(18.)).flex_none().text_color(c(if open { 0xFFFFFF } else { 0xB5BAC1 })))
+                    .child(svg().path(CHEVRON).size(z(20.)).flex_none().text_color(c(Palette::TEXT_HEADER)))
                     .when(open, |d| {
                         d.child(
                             div()
@@ -324,8 +329,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     .id(("menu-check", ix))
                     .h(z(32.))
                     .px(z(8.))
-                    .my(z(2.))
-                    .rounded(z(2.))
+                    .rounded(z(4.))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -342,8 +346,8 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                             set_hl(depth, Some(ix), w);
                         }
                     })
-                    .when(lit, |d| d.bg(c(HOVER_BG)).text_color(gpui::white()))
-                    .hover(|s| s.bg(c(HOVER_BG)).text_color(gpui::white()))
+                    .when(lit, |d| d.bg(ca(HOVER_BG)))
+                    .hover(|s| s.bg(ca(HOVER_BG)))
                     .child(label)
                     .child(mark)
                     .on_click(move |ev, w, cx| {
@@ -357,15 +361,14 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     .into_any_element()
             }
             MenuItem::Action { label, icon, danger, on_click } => {
-                let fg = if danger { Palette::RED } else { 0xB5BAC1 };
+                let fg = if danger { Palette::TEXT_CRITICAL } else { Palette::TEXT_HEADER };
                 let dismiss = dismiss.clone();
                 div()
                     .id(("menu-item", ix))
                     .group("menu-item")
                     .h(z(32.))
                     .px(z(8.))
-                    .my(z(2.))
-                    .rounded(z(2.))
+                    .rounded(z(4.))
                     .flex()
                     .items_center()
                     .justify_between()
@@ -385,18 +388,17 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         }
                     })
                     .when(hl == Some(ix), |d| {
-                        d.bg(c(if danger { Palette::RED } else { HOVER_BG })).text_color(gpui::white())
+                        d.bg(ca(if danger { DANGER_BG } else { HOVER_BG }))
                     })
-                    .hover(move |s| s.bg(c(if danger { Palette::RED } else { HOVER_BG })).text_color(gpui::white()))
+                    .hover(move |s| s.bg(ca(if danger { DANGER_BG } else { HOVER_BG })))
                     .child(label)
                     .when_some(icon, |d, path| {
                         d.child(
                             svg()
                                 .path(path)
-                                .size(z(18.))
+                                .size(z(20.))
                                 .flex_none()
-                                .text_color(if hl == Some(ix) { gpui::white() } else { c(fg) })
-                                .group_hover("menu-item", |s| s.text_color(gpui::white())),
+                                .text_color(c(fg)),
                         )
                     })
                     .on_click(move |ev, w, cx| {

@@ -285,6 +285,7 @@ impl PhoenixApp {
                 display_name: "".into(),
                 avatar: ImageRef::Default(0),
                 bot: false,
+                tag: None,
             },
             users: HashMap::new(),
             guilds: Vec::new(),

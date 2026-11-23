@@ -33,6 +33,8 @@ pub struct User {
     pub display_name: SharedString,
     pub avatar: ImageRef,
     pub bot: bool,
+    /// Server tag shown next to the name (`primary_guild.tag`) and its badge.
+    pub tag: Option<(SharedString, Option<SharedString>)>,
 }
 
 #[derive(Clone, Debug)]
@@ -45,6 +47,7 @@ pub struct Guild {
     pub unread: bool,
     pub mentions: u32,
     pub banner_color: Option<u32>,
+    pub owner: Option<Id>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
