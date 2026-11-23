@@ -30,7 +30,19 @@ pub fn on_event(app: &mut PhoenixApp, ev: AppEvent, cx: &mut Context<PhoenixApp>
                 sync_server_list(app);
             }
         }
-        AppEvent::Activities { user, activities } => app.people.on_activities(user, activities),
+        AppEvent::Activities { user, mut activities } => {
+            // Guild presences for ourselves often come without the custom status
+            // (it lives in the settings proto): keep ours like the client does.
+            use crate::presence::ActivityKind as K;
+            if user == app.me.id
+                && app.people.custom_status.is_some()
+                && !activities.iter().any(|a| a.kind == K::Custom)
+                && let Some(c) = app.people.activities.get(&user).and_then(|a| a.iter().find(|a| a.kind == K::Custom)).cloned()
+            {
+                activities.insert(0, c);
+            }
+            app.people.on_activities(user, activities)
+        }
         _ => return,
     }
     cx.notify();

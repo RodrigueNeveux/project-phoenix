@@ -148,6 +148,7 @@ fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let btn = |id: &'static str, glyph: gpui::AnyElement, close: bool| {
         div()
             .id(id)
+            .group(id)
             .size(z(m::TITLE_BAR_H))
             .flex()
             .items_center()
@@ -173,7 +174,10 @@ fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .items_center()
         .gap(z(4.))
         .child(div().mx(z(4.)).w(z(1.)).h(z(m::TITLE_BAR_H - 12.)).bg(c(tok(idx::BORDER_SUBTLE))))
-        .child(btn("win-min", div().w(z(12.)).h(z(1.)).bg(gpui::transparent_black()).border_t_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.minimize_window())))
-        .child(btn("win-max", div().size(z(12.)).border_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.zoom_window())))
+        .child(btn("win-min", div().w(z(12.)).h(z(1.)).bg(gpui::transparent_black()).border_t_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+            // `winButtonMinMax_3zSH5d:hover` color `--interactive-text-hover` (glyph stroke)
+            .group_hover("win-min", |s| s.border_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.minimize_window())))
+        .child(btn("win-max", div().size(z(12.)).border_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+            .group_hover("win-max", |s| s.border_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.zoom_window())))
         .child(btn("win-close", icon(Icon::Close, 14. * zoom(), c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), true).on_click(cx.listener(|_, _, w, _| w.remove_window())))
 }

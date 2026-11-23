@@ -158,6 +158,10 @@ pub struct Channel {
     /// Thread only: first few member ids (the threads browser facepile).
     #[serde(default, deserialize_with = "null_default")]
     pub member_ids_preview: Vec<UserId>,
+    /// Thread only: the current user's thread member object (`muted`,
+    /// `mute_config`, `flags`) when they joined the thread.
+    #[serde(default)]
+    pub member: Option<serde_json::Value>,
     #[serde(default)]
     pub message_count: Option<u32>,
     #[serde(default)]

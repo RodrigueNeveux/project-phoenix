@@ -153,6 +153,19 @@ pub fn folders_from_json(v: Option<&Value>) -> Vec<GuildFolder> {
 
 // ------------------------------------------------------- channel bits
 
+/// Thread member `muted` (+ `mute_config.end_time` not yet passed).
+fn thread_member_muted(c: &api::Channel) -> bool {
+    let Some(m) = c.member.as_ref() else { return false };
+    if !m.get("muted").and_then(Value::as_bool).unwrap_or(false) {
+        return false;
+    }
+    let end = m.get("mute_config").and_then(|c| c.get("end_time")).and_then(Value::as_str);
+    match end.and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok()) {
+        Some(t) => t.timestamp_millis() > chrono::Utc::now().timestamp_millis(),
+        None => true,
+    }
+}
+
 fn thread(c: &api::Channel) -> Option<model::Channel> {
     if !c.kind.is_thread() || c.thread_metadata.as_ref().is_some_and(|m| m.archived) {
         return None;
@@ -166,7 +179,7 @@ fn thread(c: &api::Channel) -> Option<model::Channel> {
         kind: model::ChannelKind::Text,
         position: 0,
         unread: false,
-        muted: false,
+        muted: thread_member_muted(c),
         mentions: 0,
         voice_users: Vec::new(),
     })
@@ -232,9 +245,12 @@ pub fn snapshot(cache: &Cache, ready: &Ready) -> Vec<AppEvent> {
     }
     let mut threads = Vec::new();
     let mut extras = Vec::new();
+    // Thread mutes also live in `user_guild_settings` channel_overrides.
+    let mutes = convert::parse_mutes(ready.user_guild_settings.as_ref());
     for g in cache.guilds() {
         for c in cache.guild_channels(g.id) {
-            if let Some(t) = thread(&c) {
+            if let Some(mut t) = thread(&c) {
+                t.muted |= mutes.channels.contains(&c.id.0);
                 threads.push(t);
             }
         }
