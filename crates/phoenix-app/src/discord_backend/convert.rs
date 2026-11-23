@@ -689,9 +689,17 @@ impl Adapter {
             *list = MemberList { id: l.id.clone(), items: Vec::new() };
         }
         list.apply(&l.ops);
+        // Rows past the synced ranges are placeholders, so the sidebar can scroll to them.
+        let total: usize = l.groups.iter().filter(|g| g.count > 0).map(|g| g.count as usize + 1).sum();
+        if total > 0 {
+            list.items.resize(total, None);
+        }
         let (members, users) = list.members();
         out.push(AppEvent::Users(users));
         out.push(AppEvent::GuildMembers { guild: id(l.guild_id), members });
+        let (rows, acts) = crate::presence::list_rows(list.items.iter());
+        out.extend(acts.into_iter().map(|(user, activities)| AppEvent::Activities { user, activities }));
+        out.push(AppEvent::MemberListRows { guild: id(l.guild_id), rows });
     }
 
     pub fn map(&mut self, cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
@@ -766,6 +774,8 @@ impl Adapter {
             }
             GatewayEvent::PresenceUpdate(p) => {
                 out.push(AppEvent::PresenceUpdate { user: id(p.user.id), presence: presence(&p.status) });
+                let activities = crate::presence::parse_activities(&p.activities);
+                out.push(AppEvent::Activities { user: id(p.user.id), activities });
             }
             GatewayEvent::ReadySupplemental(r) => {
                 if let Some(Value::Object(mp)) = &r.merged_presences {
@@ -776,6 +786,8 @@ impl Adapter {
                         if let Some(u) = uid {
                             let st = p.get("status").and_then(Value::as_str).unwrap_or("offline");
                             out.push(AppEvent::PresenceUpdate { user: Id(u), presence: presence(st) });
+                            let a = p.get("activities").and_then(Value::as_array).map(|a| crate::presence::parse_activities(a));
+                            out.push(AppEvent::Activities { user: Id(u), activities: a.unwrap_or_default() });
                         }
                     }
                 }

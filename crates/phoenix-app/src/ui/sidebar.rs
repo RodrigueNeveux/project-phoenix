@@ -383,16 +383,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .rounded(px(4.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(0x3D3E45)))
-                .on_click(cx.listener(|a, _, _, cx| {
-                    use crate::model::Presence::*;
-                    a.presence = match a.presence {
-                        Online => Idle,
-                        Idle => Dnd,
-                        Dnd => Offline,
-                        Offline => Online,
-                    };
-                    cx.notify();
-                }))
+                .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
                 .child(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)))
                 .child(
                     div()
@@ -413,7 +404,8 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .text_size(px(12.))
                                 .line_height(px(13.))
                                 .text_color(c(Palette::TEXT_MUTED))
-                                .child(status),
+                                .text_ellipsis()
+                                .child(app.people.custom_status.clone().unwrap_or(status.into())),
                         ),
                 ),
         )

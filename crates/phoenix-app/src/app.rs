@@ -130,6 +130,7 @@ pub struct PhoenixApp {
     pub deafened: bool,
     pub voice_channel: Option<Id>,
     pub show_members: bool,
+    pub people: crate::presence::People,
 
     pub switcher: Option<Switcher>,
     pub settings: Option<ui::settings::SettingsState>,
@@ -310,6 +311,7 @@ impl PhoenixApp {
             deafened: false,
             voice_channel: None,
             show_members: true,
+            people: Default::default(),
             switcher: None,
             revealed: HashSet::new(),
             utc_offset,
@@ -372,6 +374,7 @@ impl PhoenixApp {
         self.dms.clear();
         self.roles.clear();
         self.members.clear();
+        self.people.clear();
         self.presences.clear();
         self.messages.clear();
         self.selected_guild = None;
@@ -676,6 +679,7 @@ impl PhoenixApp {
                 }
             }
             AppEvent::PresenceUpdate { user, presence } => {
+                self.people.on_presence(user, presence);
                 self.presences.insert(user, presence);
                 for ms in self.members.values_mut() {
                     for m in ms.iter_mut().filter(|m| m.user == user) {
@@ -781,6 +785,7 @@ impl PhoenixApp {
                 }
             }
             AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
+            ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => ui::members::on_event(self, ev, cx),
             AppEvent::Disconnected(reason) => {
                 self.clear_session();
                 self.login_error = Some(reason.into());
@@ -965,6 +970,9 @@ impl PhoenixApp {
     }
 
     pub fn rebuild_members(&mut self) {
+        if ui::members::sync_server_list(self) {
+            return;
+        }
         self.member_rows.clear();
         let Some(g) = self.selected_guild else {
             self.member_list.reset(0);
@@ -1105,7 +1113,9 @@ impl PhoenixApp {
         if ui::settings::on_escape(self, cx) {
             return;
         }
-        if self.switcher.is_some() {
+        if self.people.any_overlay() {
+            self.people.close_overlays();
+        } else if self.switcher.is_some() {
             self.close_switcher(window, cx);
         } else if self.editing.take().is_some() {
             self.composer.update(cx, |s, cx| s.set_value("", window, cx));
@@ -1168,5 +1178,6 @@ impl Render for PhoenixApp {
             .child(body)
             .children(ui::settings::render(self, window, cx))
             .when_some(self.switcher.as_ref(), |d, sw| d.child(ui::switcher::render(self, sw, cx)))
+            .children(ui::profile::overlays(self, window, cx))
     }
 }

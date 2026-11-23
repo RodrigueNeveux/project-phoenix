@@ -9,6 +9,7 @@ pub mod grouping;
 pub mod markdown;
 pub mod mock;
 pub mod model;
+pub mod presence;
 pub mod notifications;
 pub mod richtext;
 pub mod theme;

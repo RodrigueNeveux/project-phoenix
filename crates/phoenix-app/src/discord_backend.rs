@@ -9,6 +9,7 @@
 pub mod convert;
 mod account;
 pub mod http;
+mod people;
 pub mod store;
 
 use std::{
@@ -482,5 +483,21 @@ impl Backend for DiscordBackend {
         // phoenix-voice isn't wired to the UI yet; announcing a voice state
         // without a media connection would show us as connected-but-silent.
         Box::pin(async { Err(err("Voice isn't available in this build yet.")) })
+    }
+
+    fn subscribe_member_ranges(&self, guild: Id, channel: Id, ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
+        self.people_ranges(guild, channel, ranges)
+    }
+    fn user_profile(&self, user: Id, guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
+        self.people_profile(user, guild)
+    }
+    fn set_note(&self, user: Id, note: String) -> BoxFuture<()> {
+        self.people_note(user, note)
+    }
+    fn set_status(&self, status: crate::model::Presence, custom: Option<String>) -> BoxFuture<()> {
+        self.people_status(status, custom)
+    }
+    fn open_dm(&self, user: Id) -> BoxFuture<Id> {
+        self.people_open_dm(user)
     }
 }

@@ -2,8 +2,10 @@ pub mod chat;
 pub mod login;
 pub mod settings;
 pub mod members;
+pub mod profile;
 pub mod server_bar;
 pub mod sidebar;
+pub mod status_picker;
 pub mod switcher;
 
 use gpui::{

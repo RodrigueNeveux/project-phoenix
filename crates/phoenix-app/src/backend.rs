@@ -77,6 +77,10 @@ pub enum AppEvent {
     DmUpsert(Channel),
     DmDelete(Id),
     Disconnected(String),
+    /// Server-ordered lazy member list of a guild (groups + members).
+    MemberListRows { guild: Id, rows: Vec<crate::presence::ListEntry> },
+    /// Rich presence of a user (empty = no activity).
+    Activities { user: Id, activities: Vec<crate::presence::Activity> },
     /// QR code login progress (see [`Backend::remote_auth`]).
     RemoteAuth(crate::auth::RemoteAuthUpdate),
 }
@@ -138,5 +142,24 @@ pub trait Backend: Send + Sync + 'static {
     /// Close the session and forget stored credentials.
     fn logout(&self) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
+    }
+    /// Op 37 member list ranges for the open channel (sidebar scrolling).
+    fn subscribe_member_ranges(&self, _guild: Id, _channel: Id, _ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// `GET /users/{id}/profile` (+ note).
+    fn user_profile(&self, _user: Id, _guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
+        Box::pin(async { Err(BackendError("Profiles aren't available.".into())) })
+    }
+    fn set_note(&self, _user: Id, _note: String) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// Own status (op 3 + settings). `custom` = custom status text.
+    fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
+    /// Open (or create) the DM with `user`; emits `DmUpsert` first.
+    fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
+        Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })
     }
 }
