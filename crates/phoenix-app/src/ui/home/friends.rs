@@ -12,7 +12,7 @@ use crate::{
     app::PhoenixApp,
     assets::Icon,
     model::{Id, Presence},
-    theme::{Palette, c, m},
+    theme::{Palette, c, generated::idx, m, tok},
     ui::{
         avatar_with_status, badge, icon,
         home::data::{FriendsTab, HomeView, NavRequest, RelAction, Relationship, RelationshipKind},
@@ -174,7 +174,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
             div()
                 .pl(z(10.))
                 .pr(z(8.))
-                .child(div().size(z(32.)).flex().items_center().justify_center().child(gpui::svg().path("icons/new-group-dm.svg").size(z(20.)).text_color(c(Palette::TEXT_MUTED)))),
+                .child(div().size(z(32.)).flex().items_center().justify_center().child(gpui::svg().path(crate::icons::path("new-group-dm")).size(z(20.)).text_color(c(Palette::TEXT_MUTED)))),
         )
 }
 
@@ -214,7 +214,8 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
     let label = match tab {
         FriendsTab::Online => crate::t!("friends.h_online"),
         FriendsTab::All => crate::t!("friends.h_all"),
-        FriendsTab::Pending => crate::t!("friends.h_pending"),
+        // The live client titles the Pending list "All friends - N" too (dump friends-pending #41).
+        FriendsTab::Pending => crate::t!("friends.h_all"),
         _ => crate::t!("friends.h_blocked"),
     };
     let search = div()
@@ -258,7 +259,7 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
                 .line_height(z(18.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(Palette::TEXT_NORMAL))
-                .child(SharedString::from(format!("{label} — {}", rows.len()))),
+                .child(crate::t!("friends.section", label = label, n = rows.len())),
         );
         for r in rows {
             col = col.child(div().flex_none().h(z(1.)).ml(z(30.)).mr(z(20.)).bg(c(Palette::DIVIDER)));
@@ -276,16 +277,25 @@ fn gpui_input_bg() -> u32 {
 fn round_button(id: (&'static str, u64), glyph: AnyElement, hover: Hsla) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .size(z(36.)) // actionButton_5GqXgh 36px circle, page bg, 20px icon #96979e
+        // actionButton_5GqXgh: 36px circle, --background-base-lower,
+        // --interactive-text-default; hover --interactive-text-hover
+        // (actionAccept_/actionDeny_: --icon-feedback-positive/-critical).
+        .size(z(36.))
+        .flex_none()
         .rounded_full()
-        .bg(c(Palette::BG_PRIMARY))
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
         .flex()
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .text_color(c(Palette::INTERACTIVE))
+        .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
         .hover(move |s| s.text_color(hover))
         .child(glyph)
+}
+
+/// 20px glyph of the row actions, tinted by the button's text colour.
+fn glyph(name: &str) -> AnyElement {
+    gpui::svg().path(crate::icons::path(name)).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element()
 }
 
 fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -297,9 +307,11 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .clone()
         .or_else(|| u.map(|u| u.display_name.clone()))
         .unwrap_or_else(|| SharedString::from(user.0.to_string()));
+    let username = u.map(|u| u.name.clone()).unwrap_or_default();
+    // Pending rows show the username as subtext (`applicationSublabel_nByiE3`,
+    // body-sm/medium --text-subtle) and no hover discriminator.
     let sub: SharedString = match r.kind {
-        RelationshipKind::Incoming => crate::t!("friends.incoming"),
-        RelationshipKind::Outgoing => crate::t!("friends.outgoing"),
+        RelationshipKind::Incoming | RelationshipKind::Outgoing => username.clone(),
         RelationshipKind::Blocked => crate::t!("friends.blocked"),
         RelationshipKind::Friend => app.nav.activities.get(&user).cloned().unwrap_or_else(|| {
             match p {
@@ -310,8 +322,9 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
             }
         }),
     };
-    let username = u.map(|u| u.name.clone()).unwrap_or_default();
-    let mut actions = div().flex().gap(z(10.));
+    let pending = matches!(r.kind, RelationshipKind::Incoming | RelationshipKind::Outgoing);
+    // actions_4Y31So gap 10; pending rows (actions_nByiE3) margin-start 8.
+    let mut actions = div().flex().gap(z(10.)).when(pending, |d| d.ml(z(8.)));
     let act = |action: RelAction| {
         cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
             // Optimistic: the gateway confirms with RELATIONSHIP_ADD/REMOVE.
@@ -328,18 +341,20 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
             cx.notify();
         })
     };
-    let check = || div().text_size(z(18.)).child("✓").into_any_element();
-    let cross = || icon(Icon::Close, 20., c(Palette::INTERACTIVE)).into_any_element();
+    let check = || glyph("check");
+    let cross = || glyph("close");
+    let (hover, positive, critical) =
+        (c(tok(idx::INTERACTIVE_TEXT_HOVER)), c(tok(idx::ICON_FEEDBACK_POSITIVE)), c(tok(idx::ICON_FEEDBACK_CRITICAL)));
     match r.kind {
         RelationshipKind::Friend => {
             actions = actions
                 .child(
-                    round_button(("fr-msg", user.0), gpui::svg().path("icons/chat.svg").size(z(20.)).text_color(c(Palette::INTERACTIVE)).into_any_element(), c(Palette::INTERACTIVE_HOVER))
+                    round_button(("fr-msg", user.0), glyph("chat"), hover)
                         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx))),
                 )
                 .child({
                     // "More options": opens the user context menu (Remove Friend lives there).
-                    round_button(("fr-more", user.0), gpui::svg().path("icons/more-vertical.svg").size(z(20.)).text_color(c(Palette::INTERACTIVE)).into_any_element(), c(Palette::INTERACTIVE_HOVER))
+                    round_button(("fr-more", user.0), glyph("more-vertical"), hover)
                         .on_click(move |ev, window, cx| {
                             cx.stop_propagation();
                             crate::ui::user_menu::open(user, None, ev.position(), window);
@@ -348,15 +363,15 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         }
         RelationshipKind::Incoming => {
             actions = actions
-                .child(round_button(("fr-ok", user.0), check(), c(Palette::GREEN)).on_click(act(RelAction::Accept)))
-                .child(round_button(("fr-no", user.0), cross(), c(Palette::RED)).on_click(act(RelAction::Remove)));
+                .child(round_button(("fr-ok", user.0), check(), positive).on_click(act(RelAction::Accept)))
+                .child(round_button(("fr-no", user.0), cross(), critical).on_click(act(RelAction::Remove)));
         }
         RelationshipKind::Outgoing => {
-            actions = actions.child(round_button(("fr-cancel", user.0), cross(), c(Palette::RED)).on_click(act(RelAction::Remove)));
+            actions = actions.child(round_button(("fr-cancel", user.0), cross(), critical).on_click(act(RelAction::Remove)));
         }
         RelationshipKind::Blocked => {
             actions = actions.child(
-                round_button(("fr-unblock", user.0), icon(Icon::Members, 20., c(Palette::INTERACTIVE)).into_any_element(), c(Palette::RED))
+                round_button(("fr-unblock", user.0), glyph("members"), critical)
                     .on_click(act(RelAction::Remove)),
             );
         }
@@ -375,7 +390,8 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .flex()
         .items_center()
         .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+        // peopleListItem_:hover --background-mod-subtle
+        .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
         // avatar_jPuNMC 32px, margin-right 12
         .child(div().mr(z(12.)).child(avatar_with_status(u, 32., p, c(Palette::BG_PRIMARY))))
@@ -402,7 +418,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                         )
                         // guildTag_PTA1Mz margin-left 4
                         .when_some(tag, |d, t| d.child(crate::ui::members::server_tag(t.0).ml(z(4.))))
-                        .child(
+                        .when(!pending, |d| d.child(
                             // discriminator_jPuNMC margin-left 5, 14/16 500, shown on hover
                             div()
                                 .ml(z(5.))
@@ -413,15 +429,15 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                                 .opacity(0.)
                                 .group_hover("friend-row", |s| s.opacity(1.))
                                 .child(username),
-                        ),
+                        )),
                 )
                 .child(
-                    // subtext_jPuNMC: 14/17.5 500 --text-muted
+                    // subtext_jPuNMC: 14/17.5 500 --text-muted (pending: 14/18 --text-subtle)
                     div()
                         .text_size(z(14.))
-                        .line_height(z(17.5))
+                        .line_height(z(if pending { 18. } else { 17.5 }))
                         .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(Palette::TEXT_MUTED))
+                        .text_color(c(if pending { tok(idx::TEXT_SUBTLE) } else { Palette::TEXT_MUTED }))
                         .text_ellipsis()
                         .child(sub),
                 ),

@@ -149,3 +149,58 @@ do NOT contain the layer (it closed before the DOM snapshot); only their .png sh
 | tooltip text | `.tooltip_ZDdyhE` | color | --text-default | tooltip.rs | ✅ |
 | modal (settings) | `.container_dvN-MP.modal__F9ieB` | box / radius / border / shadow | 1200×620 at 40,40 / 12 / 1px --border-subtle / --shadow-high | modal.rs (radius/border ✅) | — settings owned elsewhere |
 | modal close | `button[aria-label=Fermer].icon-only_F7qvhY.sm_` | size / radius / pos | 32 / 8 / top 8 right 8 | modal.rs close | ❌ top is 16 (no confirm-dialog dump yet) |
+
+## Inbox, search options, pins, threads, Friends rows — live CDP dumps (2026-11-23)
+
+Dumps (private, not committed): `inbox-unreads`, `inbox-mentions`, `inbox-saved`, `inbox-reminders`,
+`inbox-scheduled`, `search-popout`, `pins`, `pins-list-hover`, `threads`, `threads-lrer`,
+`friends-all`, `friends-pending` (viewport 1280×700, midnight theme). Node refs are dump `i`.
+Illustrations (inbox upsells, pins/threads empty art) are CDN assets: drawn as the matching icon
+in the same box. Code: ui/inbox.rs (inbox, threads, pins), ui/search.rs, ui/home/friends.rs.
+
+| element | dump node | property | live value | our code | status |
+|---|---|---|---|---|---|
+| inbox popout | unreads #5 `container_uTMZTY` | box / w / max-h | x 483..1043, y 36 (right edge = inbox button) / 560 (480–750) / 70vh | inbox.rs inbox | ✅ (was 600 at top 52) |
+| inbox popout | #5 | bg / radius / shadow | --background-surface-high / 8 / --shadow-border + --shadow-high | inbox.rs popout_shadow | ✅ (was bg-tertiary, shadow_lg) |
+| inbox header | #6 `header_LSviKk` | padding | --space-md --space-md 0 (20 cozy) | inbox.rs inbox | ✅ |
+| inbox title | #8/#9 | glyph / text | 20px --icon-strong, mr 8 / body-lg/semibold 20/24 --text-strong | inbox.rs | ✅ (was 24px icon, 20 bold) |
+| inbox controls | #10–#19 `controls_`, `button_F7qvhY sm secondary`, `friendRequestsButton_QwUPp6` | gap / button | 8 / 32px, radius 8, --control-secondary-*, 16px glyph | inbox.rs sm_icon_button | ✅ Unreads: Mark All Read; Mentions: Filter; all tabs: friend requests |
+| tab bar | #21/#22 `headerTabs_` `tabBar_ top_6zZYhF` | margin / border | 0 −16, mt 16 / 1px --border-subtle | inbox.rs tab_bar | ✅ |
+| tabs | #23–#37 `tab_LSviKk item_ brand_` | order | Unreads, Mentions, Saved, Reminders, Scheduled (no "For You") | inbox.rs TABS | ✅ (was Mentions/Unreads/Saved) |
+| tab | #23 | flex / padding / gap / margin | 1 / 0 8 16 / 8 / start --space-xs | inbox.rs tab_bar | ✅ |
+| tab label | #25/#28 | font / colour | body-sm/semibold 14px, ellipsis / --text-subtle; selected --text-brand + 2px bar radius 2 2 0 0; hover --text-strong | inbox.rs tab_bar | ✅ (was pill) |
+| unreads empty | #38–#44 `container_FgrH4y` | layout | min-h 360, padding 0 16; 80px circle --background-base-low, 36 glyph --text-muted, mb 16; 24/32 600 --text-strong mb 8; 12/16 --text-default + protip 14 500 --text-feedback-positive | inbox.rs caught_up | ✅ (protip text from dump) |
+| mention card | mentions #39 `box_0JZW4Z` | bg / border / radius / mb | --background-surface-higher / 1px --border-subtle / --radius-md / 16 | inbox.rs inbox_box | ✅ (was bg-primary row) |
+| mention head | #41 `channelHeader_8ZcKCk` | padding / gap / border | 12 / 8 / bottom --border-subtle; 32px guild icon r8, 12px chevron, 16/20 600 name with 12px type glyph, 12/16 guild line | inbox.rs channel_head | ✅ |
+| mention buttons | #53–#61 `buttonGroup_` | gap / buttons | 8 / Jump + Mark Read (sm secondary icon) | inbox.rs message_entry | ✅ (was text "Jump" + ×) |
+| mention message | #63 `singleMessage_ cozy_` | padding / avatar / name / time | 2 20 2 80 / 40 at 20 / 16/22 500 / 12 500 --chat-text-muted ml 4 | inbox.rs cozy_message | ✅ |
+| scroller | #38 `scroller_0JZW4Z` | padding | 16 16 0 | inbox.rs | ✅ |
+| saved / reminders / scheduled empty | saved #33–#73, reminders #1655, scheduled #1655 `container_jMz1Ee`/`_XzStbz` | layout | h 480, padding 16; 140×93 image mb 24; 24/32 600 --text-default mb 8; 14/18 500 --text-subtle with `strong` 600, mb 16 | inbox.rs upsell | ✅ (image drawn as icon) |
+| upsell demo | saved #41 `messages_jMz1Ee`, #57 `menu_` | box / menu | --background-base-lowest, 1px --border-normal, r12, margin 16 0, padding 8 0; menu --background-surface-highest, 1px --border-subtle, r8, padding 4, start 300 / rows 6 8 gap 8, highlighted --background-mod-normal | inbox.rs wumpus_demo | ✅ |
+| scheduled demo | scheduled #1662–#1673 | menu / input | menu ml 12 mb −5; `chatInput_` padding 8 12 gap 8 r8 --background-base-lowest, 24px plus r8 --background-mod-strong | inbox.rs scheduled_demo | ✅ |
+| reminders / scheduled data | — | list | reminders & scheduled messages API not wired | — | ❌ upsell only |
+| search options | search-popout #2 `container_cbVzxY` | box / pad / radius / border / bg / shadow | 356×auto at right 12, top header-bottom−4 / 12 8 / 8 / 1px --border-subtle / --background-surface-high / --shadow-high | search.rs options_popout | ✅ (was a 420px side panel) |
+| search groups | #3–#5 `groupWrapper_lm2_KW`, `groupHeader_` | gap / header | 4 / padding 4 8, 12/16 600 --text-subtle | search.rs group_header | ✅ (was "SEARCH OPTIONS" list) |
+| filter rows | #6–#43 `itemContainer_` `item_` | box / icon / text | r8, padding 4 8, 44px / 20px --text-muted mr 8 / label 14/18 500 --text-strong; key 14/18 600 --text-subtle + value 14/18 500 --text-muted gap 4 | search.rs option_row | ✅ From user, In channel, Has, Mentions, More filters |
+| divider | #44 `divider_lm2_KW` | margin / colour | 8 −8 / --border-subtle | search.rs | ✅ |
+| history | #45–#82 | header / rows | "History" + 18px trash; 28px rows: search glyph + query 14/18 600 --text-strong | search.rs (SearchHistory, session only) | ✅ (filter pills in history ❌) |
+| search bar | header `searchBar_` | focused | 244×32 input in place, r8, --input-border-active | search.rs options_popout | ✅ |
+| pins popout | pins #0 `messagesPopoutWrap_6bgemo` | box | 420, min-h 200, max 80vh, x 552..972 (right edge = pin button), y 81; --background-surface-high, popout shadow | inbox.rs pins_popout | ✅ (was 420 at right 16, bg-tertiary) |
+| pins header | #1/#2 | padding / border / title | 16 / bottom --border-subtle / 24px glyph gap 8, 20/24 600 --text-strong | inbox.rs | ✅ (was 48px, 16px title) |
+| pins empty | #6–#8 `emptyPlaceholder_` | layout | margin 8 0 32; 120px image; body mt 20, 16/20 500 --text-default, 2 lines | inbox.rs | ✅ |
+| pins footer | #9–#12 `footer_6bgemo` | padding / bg / text | 16 / --background-mod-subtle / protip 14/18 600 --text-feedback-positive, tip 14/16 --text-default | inbox.rs | ✅ (new) |
+| pinned message | pins-list-hover #1417 `messageGroupWrapper_6bgemo` | box | --background-surface-higher, 1px --border-subtle, r8, margin 0 4 8 0; scroller padding 8 0 0 8 | inbox.rs | ✅ |
+| pinned message | #1418 `messageGroupCozy_` | padding | 16 20 16 80, margin-start −4 | inbox.rs cozy_message | ✅ |
+| pin actions | #1438–#1443 `actionButtons_` | hover | top/right 8, gap 8, sm secondary "Jump" (+ unpin) | inbox.rs | ✅ |
+| threads popout | threads-lrer #1411 `browser_ container_c0tu5x` | box | 480×400, x 408..888 (right edge = threads button), y 81, r8, --background-surface-high | inbox.rs threads | ✅ (was 600 at right 16) |
+| threads header | #1412–#1428 `header_c0tu5x` | layout | 48px, padding 0 16, border-bottom; 24px glyph --interactive-text-default mr 8; 16/20 600 title mr 16; 1×24 divider mr 16; 248×32 sm search; primary sm "Create" ml 8 | inbox.rs threads | ✅ (search field is display-only) |
+| thread section | #1432 `sectionHeader_6_wQXw` | box / font | 24px, margin 8 0 / 14px 500 --text-default | inbox.rs | ✅ ("N joined" / "older" split ❌: no joined data) |
+| thread row | #1433 `container_yRVHqK` | box | 72px, padding 15, r8, 1px --border-subtle, --background-surface-higher, mb 8; hover --background-surface-highest + --border-normal | inbox.rs | ✅ |
+| thread row text | #1435–#1437 | name / sub | 16/20 600 --text-default / 14/18 --text-default "No recent messages • ago" | inbox.rs | ✅ (last-activity / starter ❌ no data) |
+| thread facepile | #1438 | size / overlap | 24px, −6, ml 16 | inbox.rs | ✅ |
+| threads empty | threads #25–#34 `container_0FCMV2` | layout | padding 32; 256×144 art mb 12; 24/32 600 --text-strong mb 8; 16/20 --text-default; md primary "Create Thread" mt 24 | inbox.rs | ✅ |
+| Friends title | friends-all #41, pending #41 | text | "Tous les amis - N" (hyphen), also on Pending | friends.rs list | ✅ (was em dash, Pending label) |
+| pending row | pending #46–#60 `listItemContents_nByiE3` | layout | no hover discriminator; subtext = username 14/18 500 --text-subtle; actions ml 8; outgoing: one deny X | friends.rs friend_row | ✅ (was "Outgoing request" text) |
+| row actions | all #59 `actionButton_5GqXgh` | bg / colour / hover | --background-base-lower / --interactive-text-default / --interactive-text-hover; accept --icon-feedback-positive, deny --icon-feedback-critical | friends.rs round_button | ✅ (glyphs were missing: chat/more-vertical now mapped) |
+| row hover | `peopleListItem_:hover` | bg | --background-mod-subtle | friends.rs | ✅ |
+| "Implicit" tab | friends-all header | — | client-mod (Vencord) tab, not Discord | — | — skipped |

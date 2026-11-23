@@ -131,6 +131,8 @@ pub enum InboxTab {
     Mentions,
     Unreads,
     Saved,
+    Reminders,
+    Scheduled,
 }
 
 #[derive(Default)]

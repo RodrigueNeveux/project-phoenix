@@ -264,7 +264,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
 }
 
 impl PhoenixApp {
-    fn mark_nav_read(&mut self, target: Target, cx: &mut Context<Self>) {
+    pub fn mark_nav_read(&mut self, target: Target, cx: &mut Context<Self>) {
         let req = match target {
             Target::Channel(id) => {
                 if let Some(ch) = self.channels.get_mut(&id) {

@@ -1,13 +1,13 @@
 //! Header popouts and small dialogs of the parity work:
-//! - Inbox (header button): Mentions (with filters), Unreads, Saved.
-//! - Threads list of the open channel (header button).
+//! - Inbox (title-bar button): Unreads, Mentions (with filters), Saved,
+//!   Reminders, Scheduled — the five tabs of the live client.
+//! - Threads browser and pinned messages of the open channel (header buttons).
 //! - Moderation entries of the user menu (Timeout / Kick / Ban, shown only
 //!   with the matching permission) and their dialogs.
 //! - crate::t!("groupdm.select") group DM picker (DM list "+").
 //! - Guild folder / order sync after a drag in the guild rail.
 //!
-//! Popouts are 480-600px floating cards under the header (8px radius,
-//! tertiary background, 48px title bar), like the official client.
+//! Layout and styles come from the live client dumps (see docs/parity/popouts.md).
 
 use crate::theme::z;
 use gpui::{AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Window, div, prelude::*};
@@ -15,19 +15,17 @@ use gpui_component::input::{Input, InputState};
 
 use crate::{
     app::PhoenixApp,
-    assets::Icon,
     commands::{
         FolderSync, ModAction, ParityReply, ParityRequest,
         state::{GroupDmPicker, InboxTab, ModDialog, ModKind},
     },
     model::{Id, Message},
-    theme::{Palette, c},
-    ui::{
-        avatar,
-        context_menu::MenuItem,
-        home::data::RelationshipKind,
-        icon, icon_button,
+    theme::{
+        Palette, c,
+        generated::{Shadow, idx, shadow},
+        m, space, tok,
     },
+    ui::{avatar, context_menu::MenuItem, home::data::RelationshipKind},
 };
 
 pub const KICK_MEMBERS: u64 = 1 << 1;
@@ -100,7 +98,7 @@ impl PhoenixApp {
                 }
             }
             InboxTab::Saved => ParityRequest::SavedMessages,
-            InboxTab::Unreads => return,
+            InboxTab::Unreads | InboxTab::Reminders | InboxTab::Scheduled => return,
         };
         i.loading = true;
         let tab = i.tab;
@@ -298,199 +296,536 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
 }
 
 // ------------------------------------------------------------- rendering
+//
+// Rebuilt from the live client dumps (inbox-unreads / -mentions / -saved /
+// -reminders / -scheduled, threads, threads-lrer, pins, pins-list-hover).
+// Every value names its CSS source (hashed class prefix + property or token).
 
-fn popout_frame(id: &'static str, title: gpui::SharedString, ic: Icon, header_extra: Option<AnyElement>, body: AnyElement) -> AnyElement {
-    gpui::deferred(
-        div()
-            .id(id)
-            .absolute()
-            .top(z(52.))
-            .right(z(16.))
-            .w(z(600.))
-            .max_h(z(640.))
-            .rounded(z(8.))
-            .bg(c(Palette::BG_TERTIARY))
-            .shadow_lg()
-            .occlude()
-            .flex()
-            .flex_col()
-            .overflow_hidden()
-            .child(
-                div()
-                    .px(z(16.))
-                    .pt(z(12.))
-                    .pb(z(8.))
-                    .flex()
-                    .flex_col()
-                    .gap(z(8.))
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap(z(8.))
-                            .child(icon(ic, 24., c(Palette::INTERACTIVE)))
-                            .child(
-                                div()
-                                    .flex_1()
-                                    .text_size(z(20.))
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(c(Palette::TEXT_HEADER))
-                                    .child(title),
-                            ),
-                    )
-                    .children(header_extra),
-            )
-            .child(body),
-    )
-    .with_priority(10)
-    .into_any_element()
+fn tk(i: usize) -> gpui::Hsla {
+    c(tok(i))
 }
 
-fn tab(id: &'static str, label: gpui::SharedString, on: bool) -> gpui::Stateful<gpui::Div> {
+/// A generated `--shadow-*` token for the active theme.
+fn shadow_tok(t: &[&[Shadow]; 4]) -> Vec<gpui::BoxShadow> {
+    let ix = match crate::theme::active() {
+        crate::ui::settings::AppTheme::Dark => 0,
+        crate::ui::settings::AppTheme::Light => 1,
+        crate::ui::settings::AppTheme::Ash => 2,
+        crate::ui::settings::AppTheme::Onyx => 3,
+    };
+    t[ix]
+        .iter()
+        .map(|s| gpui::BoxShadow {
+            color: gpui::rgba(s.color).into(),
+            offset: gpui::point(z(s.x), z(s.y)),
+            blur_radius: z(s.blur),
+            spread_radius: z(s.spread),
+            inset: s.inset,
+        })
+        .collect()
+}
+
+/// `box-shadow: var(--shadow-border), var(--shadow-high)` (popout containers).
+pub fn popout_shadow() -> Vec<gpui::BoxShadow> {
+    let mut v = shadow_tok(&shadow::SHADOW_BORDER);
+    v.extend(shadow_tok(&shadow::SHADOW_HIGH));
+    v
+}
+
+fn named(name: &str, size: f32, color: gpui::Hsla) -> gpui::Svg {
+    gpui::svg().path(crate::icons::path(name)).size(z(size)).flex_none().text_color(color)
+}
+
+/// `button_F7qvhY sm_ secondary_` icon-only: 32px, radius 8, 1px
+/// --control-secondary-border-default, --control-secondary-background-default,
+/// 16px glyph --control-secondary-text-default.
+fn sm_icon_button(id: impl Into<gpui::ElementId>, glyph: &str) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .px(z(8.))
-        .py(z(2.))
-        .rounded(z(4.))
+        .size(z(32.))
+        .flex_none()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::CONTROL_SECONDARY_BORDER_DEFAULT))
+        .bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+        .hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .child(named(glyph, 16., tk(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+}
+
+/// `button_F7qvhY sm_` with text: 32px, padding 3px 11px (+1px border), radius 8,
+/// label body-sm/medium 14/18.
+pub fn sm_text_button(id: impl Into<gpui::ElementId>, label: SharedString, primary: bool) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(z(32.))
+        .flex_none()
+        .px(z(12.))
+        .rounded(z(8.))
+        .border_1()
+        .when(primary, |d| {
+            // primary_F7qvhY: --control-primary-background-default / -border- / -text-default.
+            d.bg(tk(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT))
+                .border_color(tk(idx::CONTROL_PRIMARY_BORDER_DEFAULT))
+                .text_color(tk(idx::CONTROL_PRIMARY_TEXT_DEFAULT))
+                .hover(|s| s.bg(tk(idx::CONTROL_PRIMARY_BACKGROUND_HOVER)))
+        })
+        .when(!primary, |d| {
+            d.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+                .border_color(tk(idx::CONTROL_SECONDARY_BORDER_DEFAULT))
+                .text_color(tk(idx::CONTROL_SECONDARY_TEXT_DEFAULT))
+                .hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
+        })
+        .flex()
+        .items_center()
+        .justify_center()
         .cursor_pointer()
         .text_size(z(14.))
+        .line_height(z(18.))
         .font_weight(FontWeight::MEDIUM)
-        .when(on, |d| d.bg(c(Palette::BG_MOD_SELECTED)).text_color(c(Palette::TEXT_HEADER)))
-        .when(!on, |d| d.text_color(c(Palette::INTERACTIVE)).hover(|s| s.bg(c(Palette::BG_MOD_HOVER))))
+        .whitespace_nowrap()
         .child(label)
 }
 
-fn empty(text: gpui::SharedString, sub: gpui::SharedString) -> AnyElement {
+const TABS: [(InboxTab, &str, &str); 5] = [
+    (InboxTab::Unreads, "inbox-tab-unreads", "inbox.tab_unreads"),
+    (InboxTab::Mentions, "inbox-tab-mentions", "inbox.tab_mentions"),
+    (InboxTab::Saved, "inbox-tab-saved", "inbox.tab_saved"),
+    (InboxTab::Reminders, "inbox-tab-reminders", "inbox.tab_reminders"),
+    (InboxTab::Scheduled, "inbox-tab-scheduled", "inbox.tab_scheduled"),
+];
+
+/// `tabBar_LSviKk top_6zZYhF`: margin-top 16, border-bottom 1px --border-subtle;
+/// `tab_LSviKk item_6zZYhF brand_`: flex 1, padding 0 8 16, margin-start --space-xs,
+/// body-sm/semibold 14px, --text-subtle; selected --text-brand with the 2px
+/// `:after` bar (radius 2 2 0 0); hover --text-strong.
+fn tab_bar(sel: InboxTab, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let mut bar = div()
+        .mt(z(16.))
+        // headerTabs_LSviKk margin 0 -16px inside the 20px header padding.
+        .mx(z(-16.))
+        .flex()
+        .border_b_1()
+        .border_color(tk(idx::BORDER_SUBTLE));
+    for (i, (t, id, key)) in TABS.into_iter().enumerate() {
+        let on = t == sel;
+        bar = bar.child(
+            div()
+                .id(id)
+                .flex_1()
+                .min_w_0()
+                .when(i > 0, |d| d.ml(z(space::xs())))
+                .relative()
+                .px(z(8.))
+                .pb(z(16.))
+                .flex()
+                .justify_center()
+                .cursor_pointer()
+                .text_size(z(14.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(if on { idx::TEXT_BRAND } else { idx::TEXT_SUBTLE }))
+                .hover(|s| s.text_color(tk(idx::TEXT_STRONG)))
+                .on_click(cx.listener(move |a, _, _, cx| a.set_inbox_tab(t, cx)))
+                .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(crate::t!(key)))
+                .when(on, |d| {
+                    d.child(div().absolute().left_0().right_0().bottom(z(-1.)).h(z(2.)).rounded_t(z(2.)).bg(tk(idx::TEXT_BRAND)))
+                }),
+        );
+    }
+    bar.into_any_element()
+}
+
+/// `container_FgrH4y` (Unreads / Mentions empty): min-height 360, padding 0 16,
+/// centred; 80px `icon_` circle (--background-base-low, 22px padding, glyph
+/// --text-muted), heading-xl/semibold 24/32 --text-strong mb 8, body-xs 12/16
+/// --text-default with the `protip_` (14px medium, --text-feedback-positive).
+fn caught_up(tip: Option<SharedString>) -> AnyElement {
     div()
-        .p(z(32.))
+        .min_h(z(360.))
+        .px(z(16.))
         .flex()
         .flex_col()
         .items_center()
+        .justify_center()
+        .child(
+            div()
+                .mb(z(16.))
+                .size(z(80.))
+                .rounded_full()
+                .bg(tk(idx::BACKGROUND_BASE_LOW))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(named("inbox", 36., tk(idx::TEXT_MUTED))),
+        )
+        .child(
+            div()
+                .mb(z(8.))
+                .text_size(z(24.))
+                .line_height(z(32.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_STRONG))
+                .child(crate::t!("inbox.caught_up")),
+        )
+        .when_some(tip, |d, tip| {
+            d.child(
+                div()
+                    .text_center()
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    .child(
+                        gpui::StyledText::new(format!("{} {tip}", crate::t!("inbox.protip"))).with_highlights([(
+                            0..crate::t!("inbox.protip").len(),
+                            gpui::HighlightStyle { color: Some(tk(idx::TEXT_FEEDBACK_POSITIVE)), font_weight: Some(FontWeight::MEDIUM), ..Default::default() },
+                        )]),
+                    ),
+            )
+        })
+        .into_any_element()
+}
+
+/// Body text with one bold span (`body-sm/medium` 14/18 --text-subtle, `strong` 600).
+fn bold_middle(a: SharedString, b: SharedString, c2: SharedString) -> gpui::StyledText {
+    let start = a.len();
+    let end = start + b.len();
+    gpui::StyledText::new(format!("{a}{b}{c2}"))
+        .with_highlights([(start..end, gpui::HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })])
+}
+
+/// A row of the demo menus (`menuRow_jMz1Ee`): padding 6 8, gap 8, radius 4,
+/// 16px glyph, body-sm/medium label; highlighted: --background-mod-normal.
+fn demo_menu_row(glyph: &str, label: SharedString, hi: bool) -> gpui::Div {
+    div()
+        .px(z(8.))
+        .py(z(6.))
+        .rounded(z(4.))
+        .flex()
+        .items_center()
         .gap(z(8.))
-        .child(icon(Icon::Inbox, 48., c(Palette::INTERACTIVE_MUTED)))
-        .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(text))
-        .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(sub))
+        .when(hi, |d| d.bg(tk(idx::BACKGROUND_MOD_NORMAL)))
+        .child(named(glyph, 16., tk(if hi { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT })))
+        .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(label))
+}
+
+/// `menu_jMz1Ee`: --background-surface-highest, 1px --border-subtle, radius 8,
+/// padding 4, --shadow-high.
+fn demo_menu(rows: Vec<gpui::Div>) -> gpui::Div {
+    div()
+        .p(z(4.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHEST))
+        .shadow(shadow_tok(&shadow::SHADOW_HIGH))
+        .flex()
+        .flex_col()
+        .children(rows)
+}
+
+/// The Wumpus demo of `messages_jMz1Ee`: --background-base-lowest, 1px
+/// --border-normal, radius 12, margin 16 0, padding 8 0; cozy rows padding
+/// 2 30 2 80, 40px avatar at 20px, 16/22 text; the menu sits at inset-start 300,
+/// margin-top -7 under the first line.
+fn wumpus_demo(hi_second: bool) -> AnyElement {
+    let line = |t: SharedString| {
+        div().pl(z(80.)).pr(z(30.)).py(z(2.)).text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().child(t)
+    };
+    let time = crate::app::format_time_full(chrono::Local::now().timestamp());
+    div()
+        .relative()
+        .my(z(16.))
+        .py(z(8.))
+        .w_full()
+        .rounded(z(12.))
+        .border_1()
+        .border_color(tk(idx::BORDER_NORMAL))
+        .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+        .child(
+            div()
+                .relative()
+                .pl(z(80.))
+                .pr(z(30.))
+                .py(z(2.))
+                .child(div().absolute().left(z(20.)).top(z(4.)).child(avatar(None, 40.)))
+                .child(
+                    div()
+                        .flex()
+                        .items_baseline()
+                        .child(div().mr(z(4.)).text_size(z(16.)).line_height(z(22.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child("Wumpus"))
+                        // timestamp_2i8Bfm: --chat-text-muted 12px medium, margin-start 4.
+                        .child(div().ml(z(4.)).text_size(z(12.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::CHAT_TEXT_MUTED)).child(time)),
+                )
+                .child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().child(crate::t!("inbox.demo_1"))),
+        )
+        .child(line(crate::t!("inbox.demo_2")))
+        .child(line(crate::t!("inbox.demo_3")))
+        .child(
+            div().absolute().left(z(300.)).top(z(49.)).child(demo_menu(vec![
+                demo_menu_row("inbox/bookmark", crate::t!("inbox.demo_save"), !hi_second),
+                demo_menu_row("inbox/clock", crate::t!("inbox.demo_remind"), hi_second),
+            ])),
+        )
+        .into_any_element()
+}
+
+/// `container_jMz1Ee` / `container_XzStbz` upsells (Saved, Reminders, Scheduled):
+/// height 480, padding 16, centred; 140×93 image mb 24; heading-xl/semibold
+/// 24/32 --text-default mb 8; body-sm/medium 14/18 --text-subtle mb 16; demo.
+fn upsell(glyph: &str, title: SharedString, body: gpui::StyledText, demo: AnyElement) -> AnyElement {
+    div()
+        .h(z(480.))
+        .p(z(16.))
+        .flex()
+        .flex_col()
+        .justify_center()
+        .items_center()
+        .child(
+            // The illustration is a CDN asset: drawn as the matching icon in its 140×93 box.
+            div().mb(z(24.)).w(z(140.)).h(z(93.)).flex().items_center().justify_center().child(named(glyph, 72., tk(idx::TEXT_BRAND))),
+        )
+        .child(
+            div()
+                .mb(z(8.))
+                .text_center()
+                .text_size(z(24.))
+                .line_height(z(32.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_DEFAULT))
+                .child(title),
+        )
+        .child(
+            div()
+                .mb(z(16.))
+                .w_full()
+                .text_center()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tk(idx::TEXT_SUBTLE))
+                .child(body),
+        )
+        .child(demo)
+        .into_any_element()
+}
+
+/// Scheduled demo (`demo_XzStbz` margin-top 16): attach menu (margin 0 0 -5 12)
+/// over a `chatInput_` (padding 8 12, gap 8, radius 8, --background-base-lowest,
+/// 1px --border-subtle) with the 24px `plusButton_` (--background-mod-strong).
+fn scheduled_demo() -> AnyElement {
+    div()
+        .mt(z(16.))
+        .w_full()
+        .flex()
+        .flex_col()
+        .child(div().ml(z(12.)).mb(z(-5.)).flex().child(demo_menu(vec![
+            demo_menu_row("chat/upload", crate::t!("inbox.demo_upload"), false),
+            demo_menu_row("inbox/schedule", crate::t!("inbox.demo_schedule"), true),
+        ])))
+        .child(
+            div()
+                .px(z(12.))
+                .py(z(8.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(div().size(z(24.)).rounded(z(8.)).bg(tk(idx::BACKGROUND_MOD_STRONG)).flex().items_center().justify_center().child(named("plus", 16., tk(idx::INTERACTIVE_TEXT_ACTIVE))))
+                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("inbox.demo_placeholder"))),
+        )
         .into_any_element()
 }
 
 fn channel_label(app: &PhoenixApp, ch: Id) -> (SharedString, Option<SharedString>) {
     let c = app.channels.get(&ch);
-    let name = c.map(|c| if c.guild.is_some() { format!("#{}", c.name) } else { c.name.to_string() }).unwrap_or_else(|| crate::t!("common.unknown_channel").to_string());
+    let name = c.map(|c| c.name.to_string()).unwrap_or_else(|| crate::t!("common.unknown_channel").to_string());
     let guild = c.and_then(|c| c.guild).and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone());
     (name.into(), guild)
+}
+
+/// `box_0JZW4Z` channel card head (`channelHeader_8ZcKCk`): padding 12, gap 8,
+/// --background-surface-higher, border-bottom 1px --border-subtle; 32px guild
+/// icon (radius 8), 12px chevron, name body-md/semibold 16/20 --text-default with
+/// a 12px type glyph, guild line body-xs 12/16; trailing `buttonGroup_` gap 8.
+fn channel_head(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>>) -> gpui::Div {
+    let (name, guild_name) = channel_label(app, ch);
+    let channel = app.channels.get(&ch);
+    let guild = channel.and_then(|c| c.guild).and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    let glyph = match channel.map(|c| c.kind) {
+        Some(crate::model::ChannelKind::Voice) => "speaker",
+        Some(crate::model::ChannelKind::Announcement) => "megaphone",
+        Some(crate::model::ChannelKind::Forum) => "forum",
+        _ => "hash",
+    };
+    div()
+        .p(z(12.))
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .border_b_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .child(match guild {
+            Some(g) => div().size(z(32.)).rounded(z(8.)).overflow_hidden().child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 32. * crate::theme::zoom())),
+            None => div().size(z(32.)).rounded(z(8.)).overflow_hidden().child(avatar(channel.and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u)), 32.)),
+        })
+        .child(named("chevron-right", 12., tk(idx::INTERACTIVE_TEXT_DEFAULT)))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(tk(idx::TEXT_DEFAULT))
+                        .child(named(glyph, 12., tk(idx::TEXT_DEFAULT)))
+                        .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(name)),
+                )
+                .when_some(guild_name, |d, g| {
+                    d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(g))
+                }),
+        )
+        .child(div().flex().gap(z(8.)).children(buttons))
+}
+
+/// Cozy message of the inbox cards (`singleMessage_0JZW4Z wrapper_2i8Bfm cozy_`):
+/// padding 2 20 2 80, 40px avatar at 20px, username 16/22 500 --text-strong,
+/// timestamp 12px 500 --chat-text-muted (margin-start 4), content 16/22 --text-default.
+fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32) -> gpui::Div {
+    let u = app.users.get(&m.author);
+    let name_color = app.author_color(m.author).map(|c2| crate::theme::role_color(Some(c2))).unwrap_or_else(|| tk(idx::TEXT_STRONG));
+    div()
+        .relative()
+        .pl(z(80.))
+        .pr(z(20.))
+        .py(z(pad_y))
+        .min_h(z(44.))
+        .child(div().absolute().left(z(20.)).top(z(pad_y + 2.)).child(avatar(u, 40.)))
+        .child(
+            div()
+                .flex()
+                .items_baseline()
+                .child(
+                    div()
+                        .mr(z(4.))
+                        .text_size(z(16.))
+                        .line_height(z(22.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(name_color)
+                        .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
+                )
+                .when_some(u.and_then(|u| u.tag.clone()), |d, t| d.child(crate::ui::members::server_tag(t.0).ml(z(2.)).mr(z(4.))))
+                .child(div().ml(z(4.)).text_size(z(12.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::CHAT_TEXT_MUTED)).child(crate::app::format_time_full(m.timestamp))),
+        )
+        .child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown(app, &m.content)))
+}
+
+/// `box_0JZW4Z`: --background-surface-higher, 1px --border-subtle, radius
+/// --radius-md, margin-bottom 16.
+fn inbox_box() -> gpui::Div {
+    div()
+        .mb(z(16.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
 }
 
 fn message_entry(
     app: &PhoenixApp,
     m: &Message,
     cx: &mut Context<PhoenixApp>,
+    close_glyph: &'static str,
     close: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static,
 ) -> AnyElement {
-    let (name, guild) = channel_label(app, m.channel);
     let (ch, id) = (m.channel, m.id);
-    let u = app.users.get(&m.author);
-    div()
-        .flex()
-        .flex_col()
-        .gap(z(4.))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(z(6.))
-                .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(name))
-                .when_some(guild, |d, g| d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(g)))
-                .child(div().flex_1())
-                .child(
-                    div()
-                        .id(("inbox-jump", id.0))
-                        .px(z(8.))
-                        .py(z(2.))
-                        .rounded(z(4.))
-                        .bg(c(Palette::BG_MOD_HOVER))
-                        .cursor_pointer()
-                        .text_size(z(12.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(Palette::TEXT_NORMAL))
-                        .hover(|s| s.bg(c(Palette::BG_MOD_SELECTED)))
-                        .on_click(cx.listener(move |a, _, _, cx| a.jump_from_inbox(ch, id, cx)))
-                        .child(crate::t!("inbox.jump")),
-                )
-                .child(
-                    icon_button("inbox-x", Icon::Close, c(Palette::INTERACTIVE), 16.)
-                        .id(("inbox-x", id.0))
-                        .on_click(cx.listener(move |a, _, _, cx| close(a, cx))),
-                ),
-        )
-        .child(
-            div()
-                .p(z(12.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_PRIMARY))
-                .flex()
-                .gap(z(12.))
-                .child(avatar(u, 40.))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .flex()
-                                .items_baseline()
-                                .gap(z(8.))
-                                .child(
-                                    div()
-                                        .text_size(z(16.))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(crate::theme::role_color(app.author_color(m.author)))
-                                        .child(u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(z(12.))
-                                        .text_color(c(Palette::TEXT_MUTED))
-                                        .child(crate::app::format_time_full(m.timestamp)),
-                                ),
-                        )
-                        .child(crate::ui::components::markdown(app, &m.content)),
-                ),
-        )
+    inbox_box()
+        .child(channel_head(
+            app,
+            ch,
+            vec![
+                sm_icon_button(("inbox-jump", id.0), "inbox/jump").on_click(cx.listener(move |a, _, _, cx| a.jump_from_inbox(ch, id, cx))),
+                sm_icon_button(("inbox-x", id.0), close_glyph).on_click(cx.listener(move |a, _, _, cx| close(a, cx))),
+            ],
+        ))
+        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2.)))
         .into_any_element()
 }
 
-fn check_row(id: &'static str, label: gpui::SharedString, on: bool) -> gpui::Stateful<gpui::Div> {
+/// Filter dropdown of the Mentions tab (a `menu_M3qk4j` with checkbox rows).
+fn filter_menu(i: &crate::commands::state::InboxState, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let toggle = |f: fn(&mut crate::commands::state::InboxState)| {
+        cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<PhoenixApp>| {
+            f(&mut a.parity.inbox);
+            a.load_inbox_tab(true, cx);
+            cx.notify();
+        })
+    };
+    let row = |id: &'static str, label: SharedString, on: bool| {
+        div()
+            .id(id)
+            .min_h(z(32.))
+            .p(z(8.))
+            .rounded(z(4.))
+            .cursor_pointer()
+            .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap(z(8.))
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+            .child(label)
+            .child(
+                div()
+                    .size(z(18.))
+                    .rounded(z(4.))
+                    .border_1()
+                    .border_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                    .when(on, |d| d.bg(tk(idx::CONTROL_BRAND_FOREGROUND)).border_color(tk(idx::CONTROL_BRAND_FOREGROUND)))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .when(on, |d| d.child(named("check", 14., gpui::white()))),
+            )
+    };
     div()
-        .id(id)
-        .px(z(8.))
-        .py(z(6.))
-        .rounded(z(2.))
-        .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BLURPLE)))
+        .absolute()
+        .top(z(56.))
+        .right(z(56.))
+        .w(z(220.))
+        .p(z(8.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .shadow(shadow_tok(&shadow::SHADOW_HIGH))
+        .occlude()
         .flex()
-        .items_center()
-        .justify_between()
-        .gap(z(12.))
-        .text_size(z(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(c(Palette::TEXT_NORMAL))
-        .child(label)
-        .child(
-            div()
-                .size(z(18.))
-                .rounded(z(4.))
-                .border_1()
-                .border_color(c(Palette::INTERACTIVE))
-                .when(on, |d| d.bg(c(Palette::BLURPLE)).border_color(c(Palette::BLURPLE)))
-                .flex()
-                .items_center()
-                .justify_center()
-                .text_size(z(12.))
-                .text_color(gpui::white())
-                .when(on, |d| d.child("✓")),
-        )
+        .flex_col()
+        .child(row("f-everyone", crate::t!("inbox.f_everyone"), i.everyone).on_click(toggle(|i| i.everyone = !i.everyone)))
+        .child(row("f-roles", crate::t!("inbox.f_roles"), i.roles).on_click(toggle(|i| i.roles = !i.roles)))
+        .child(row("f-server", crate::t!("inbox.f_server"), i.this_server).on_click(toggle(|i| i.this_server = !i.this_server)))
+        .into_any_element()
 }
 
 fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -498,165 +833,446 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if !i.open {
         return None;
     }
-    let tabs = div()
-        .flex()
-        .items_center()
-        .gap(z(4.))
-        .child(tab("inbox-mentions", crate::t!("inbox.mentions"), i.tab == InboxTab::Mentions).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Mentions, cx))))
-        .child(tab("inbox-unreads", crate::t!("inbox.unreads"), i.tab == InboxTab::Unreads).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Unreads, cx))))
-        .child(tab("inbox-saved", crate::t!("inbox.saved"), i.tab == InboxTab::Saved).on_click(cx.listener(|a, _, _, cx| a.set_inbox_tab(InboxTab::Saved, cx))))
-        .child(div().flex_1())
-        .when(i.tab == InboxTab::Mentions, |d| {
-            d.child(
-                div()
-                    .id("inbox-filter")
-                    .px(z(8.))
-                    .py(z(2.))
-                    .rounded(z(4.))
-                    .cursor_pointer()
-                    .text_size(z(14.))
-                    .text_color(c(Palette::INTERACTIVE))
-                    .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                    .on_click(cx.listener(|a, _, _, cx| {
-                        a.parity.inbox.filter_menu = !a.parity.inbox.filter_menu;
-                        cx.notify();
-                    }))
-                    .child(crate::t!("inbox.filter")),
-            )
-        });
-    let mut header = div().flex().flex_col().gap(z(4.)).child(tabs);
-    if i.filter_menu && i.tab == InboxTab::Mentions {
-        let toggle = |f: fn(&mut crate::commands::state::InboxState)| {
-            cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<PhoenixApp>| {
-                f(&mut a.parity.inbox);
-                a.load_inbox_tab(true, cx);
+    let pending = app.nav.count(RelationshipKind::Incoming);
+    // controls_LSviKk: gap 8, margin-inline-start auto. Unreads: "Mark All Read";
+    // Mentions: "Filter"; every tab: friend requests (`friendRequestsButton_QwUPp6`).
+    let mut controls = div().ml_auto().flex().items_center().gap(z(8.));
+    match i.tab {
+        InboxTab::Unreads => {
+            controls = controls.child(sm_icon_button("inbox-read-all", "inbox/read-all").on_click(cx.listener(|a, _, _, cx| {
+                let ids: Vec<Id> = a.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).map(|c| c.id).collect();
+                for id in ids {
+                    a.mark_nav_read(crate::ui::nav_menus::Target::Channel(id), cx);
+                }
+            })))
+        }
+        InboxTab::Mentions => {
+            controls = controls.child(sm_icon_button("inbox-filter", "inbox/filter").on_click(cx.listener(|a, _, _, cx| {
+                a.parity.inbox.filter_menu = !a.parity.inbox.filter_menu;
                 cx.notify();
-            })
-        };
-        header = header.child(
-            div()
-                .p(z(8.))
-                .rounded(z(4.))
-                .bg(c(Palette::BG_FLOATING))
-                .flex()
-                .flex_col()
-                .child(check_row("f-everyone", crate::t!("inbox.f_everyone"), i.everyone).on_click(toggle(|i| i.everyone = !i.everyone)))
-                .child(check_row("f-roles", crate::t!("inbox.f_roles"), i.roles).on_click(toggle(|i| i.roles = !i.roles)))
-                .child(check_row("f-server", crate::t!("inbox.f_server"), i.this_server).on_click(toggle(|i| i.this_server = !i.this_server))),
-        );
+            })))
+        }
+        _ => {}
     }
+    controls = controls.child(
+        sm_icon_button("inbox-friend-requests", "friends")
+            .px(z(8.))
+            .w_auto()
+            .min_w(z(32.))
+            .gap(z(8.))
+            .when(pending > 0, |d| d.child(crate::ui::badge(pending as u32)))
+            .on_click(cx.listener(|a, _, _, cx| {
+                a.parity.inbox.open = false;
+                a.select_guild(None, cx);
+                a.nav.friends_tab = crate::ui::home::data::FriendsTab::Pending;
+                cx.notify();
+            })),
+    );
+    // header_LSviKk: padding --space-md --space-md 0; headerTitle_: 20px
+    // --icon-strong glyph (margin-end 8), body-lg/semibold 20/24 --text-strong.
+    let header = div()
+        .flex_none()
+        .pt(z(space::md()))
+        .px(z(space::md()))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .child(named("inbox", 20., tk(idx::ICON_STRONG)).mr(z(8.)))
+                .child(div().flex_1().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("inbox.title")))
+                .child(controls),
+        )
+        .child(tab_bar(i.tab, cx));
 
-    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).pb(z(16.)).flex().flex_col().gap(z(16.));
+    // scroller_0JZW4Z: padding 16 16 0.
+    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().flex().flex_col();
+    let scroller = |l: gpui::Stateful<gpui::Div>| l.pt(z(16.)).px(z(16.));
     match i.tab {
         InboxTab::Mentions => {
             if i.mentions.is_empty() && !i.loading {
-                list = list.child(empty(crate::t!("inbox.caught_up"), crate::t!("inbox.mentions_empty")));
+                list = list.child(caught_up(None));
+            } else {
+                list = scroller(list);
             }
             for m in &i.mentions {
                 let id = m.id;
-                list = list.child(message_entry(app, m, cx, move |a, cx| a.dismiss_mention(id, cx)));
+                list = list.child(message_entry(app, m, cx, "check", move |a, cx| a.dismiss_mention(id, cx)));
             }
             if !i.reached_end && !i.mentions.is_empty() && !i.loading {
                 list = list.child(
                     div()
                         .id("inbox-more")
-                        .py(z(8.))
+                        .pb(z(16.))
                         .flex()
                         .justify_center()
-                        .cursor_pointer()
-                        .text_color(c(Palette::TEXT_LINK))
-                        .on_click(cx.listener(|a, _, _, cx| a.load_inbox_tab(false, cx)))
-                        .child(crate::t!("common.load_more")),
+                        .child(sm_text_button("inbox-more-btn", crate::t!("common.load_more"), false).on_click(cx.listener(|a, _, _, cx| a.load_inbox_tab(false, cx)))),
                 );
             }
         }
         InboxTab::Saved => {
             if i.saved.is_empty() && !i.loading {
-                list = list.child(empty(crate::t!("inbox.saved_empty"), crate::t!("inbox.saved_empty_sub")));
+                list = list.child(upsell(
+                    "inbox/bookmark",
+                    crate::t!("inbox.saved_title"),
+                    bold_middle(crate::t!("inbox.saved_body_a"), crate::t!("inbox.saved_body_b"), crate::t!("inbox.saved_body_c")),
+                    wumpus_demo(false),
+                ));
+            } else {
+                list = scroller(list);
             }
             for m in &i.saved {
                 let (ch, id) = (m.channel, m.id);
-                list = list.child(message_entry(app, m, cx, move |a, cx| a.unsave(ch, id, cx)));
+                list = list.child(message_entry(app, m, cx, "close", move |a, cx| a.unsave(ch, id, cx)));
             }
+        }
+        InboxTab::Reminders => {
+            list = list.child(upsell(
+                "inbox/clock",
+                crate::t!("inbox.reminders_title"),
+                bold_middle(crate::t!("inbox.reminders_body_a"), crate::t!("inbox.reminders_body_b"), crate::t!("inbox.reminders_body_c")),
+                wumpus_demo(true),
+            ));
+        }
+        InboxTab::Scheduled => {
+            list = list.child(upsell(
+                "inbox/schedule",
+                crate::t!("inbox.scheduled_title"),
+                bold_middle(crate::t!("inbox.scheduled_body_a"), crate::t!("inbox.scheduled_body_b"), crate::t!("inbox.scheduled_body_c")),
+                scheduled_demo(),
+            ));
         }
         InboxTab::Unreads => {
             let mut unread: Vec<_> = app.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).collect();
             unread.sort_by_key(|c| (std::cmp::Reverse(c.mentions), c.guild, c.position));
             if unread.is_empty() {
-                list = list.child(empty(crate::t!("inbox.caught_up"), crate::t!("inbox.unreads_empty")));
+                list = list.child(caught_up(Some(crate::t!("inbox.unreads_tip"))));
+            } else {
+                list = scroller(list);
             }
             for ch in unread.into_iter().take(50) {
                 let id = ch.id;
-                let (name, guild) = channel_label(app, id);
                 list = list.child(
                     div()
                         .id(("inbox-unread", id.0))
-                        .p(z(12.))
-                        .rounded(z(8.))
-                        .bg(c(Palette::BG_PRIMARY))
                         .cursor_pointer()
-                        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                        .flex()
-                        .items_center()
-                        .gap(z(8.))
                         .on_click(cx.listener(move |a, _, _, cx| {
                             a.parity.inbox.open = false;
                             a.select_channel(id, cx);
                         }))
-                        .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(name))
-                        .when_some(guild, |d, g| d.child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(g)))
-                        .child(div().flex_1())
-                        .when(ch.mentions > 0, |d| d.child(crate::ui::badge(ch.mentions))),
+                        .child(inbox_box().child(channel_head(
+                            app,
+                            id,
+                            vec![sm_icon_button(("inbox-unread-read", id.0), "check").on_click(cx.listener(move |a, _, _, cx| {
+                                cx.stop_propagation();
+                                a.mark_nav_read(crate::ui::nav_menus::Target::Channel(id), cx);
+                            }))],
+                        ))),
                 );
             }
         }
     }
     if i.loading {
-        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
+        list = list.child(div().p(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")));
     }
-    Some(popout_frame("inbox-popout", crate::t!("inbox.title"), Icon::Inbox, Some(header.into_any_element()), list.into_any_element()))
+    let filter = (i.filter_menu && i.tab == InboxTab::Mentions).then(|| filter_menu(i, cx));
+    // container_uTMZTY: 560 wide (480–750), max-height 70vh, radius 8,
+    // --background-surface-high, --shadow-border + --shadow-high; anchored under
+    // the title-bar inbox button (right edges aligned, dump box x 483..1043, y 36).
+    Some(
+        gpui::deferred(
+            div()
+                .id("inbox-popout")
+                .absolute()
+                .top(z(m::TITLE_BAR_H))
+                .right(z(12. + 24. + 12.))
+                .w(z(560.))
+                .max_h(gpui::relative(0.7))
+                .rounded(z(8.))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .shadow(popout_shadow())
+                .occlude()
+                .flex()
+                .flex_col()
+                .child(header)
+                .child(list)
+                .children(filter),
+        )
+        .with_priority(10)
+        .into_any_element(),
+    )
 }
 
+/// Threads browser (`browser_l-3BKx container_c0tu5x`): 480×400, radius 8,
+/// --background-surface-high, popout shadow; `header_c0tu5x` 48px, padding 0 16,
+/// border-bottom --border-subtle: 24px thread glyph --interactive-text-default
+/// (margin-end 8), heading-sm/semibold "Threads" (margin-end 16), 1×24 divider
+/// (margin-end 16), sm search field, primary "Create". Right edge under the
+/// header's threads button (dump x 408..888 of 1280, y 81).
 fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if !app.parity.threads_open {
         return None;
     }
     let ch = app.selected_channel?;
     let list_src = app.nav.threads.get(&ch).cloned().unwrap_or_default();
-    let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).pb(z(16.)).flex().flex_col().gap(z(8.));
+    let header = div()
+        .flex_none()
+        .h(z(48.))
+        .px(z(16.))
+        .flex()
+        .items_center()
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .border_b_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .child(named("threads", 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)).mr(z(8.)))
+        .child(div().mr(z(16.)).text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("threads.title")))
+        .child(div().mr(z(16.)).w(z(1.)).h(z(24.)).bg(tk(idx::BORDER_SUBTLE)))
+        .child(
+            // input sm_0PLWhS: 32px, padding-start 4, gap 4, radius 8,
+            // --input-background-default, 1px --input-border-default; 22px icon box.
+            div()
+                .w(z(248.))
+                .h(z(32.))
+                .pl(z(4.))
+                .gap(z(4.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(tk(idx::INPUT_BORDER_DEFAULT))
+                .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
+                .flex()
+                .items_center()
+                .child(div().size(z(22.)).flex().items_center().justify_center().child(named("search", 16., tk(idx::TEXT_DEFAULT))))
+                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)).whitespace_nowrap().child(crate::t!("threads.search"))),
+        )
+        .child(div().flex_1())
+        .child(div().ml(z(8.)).child(sm_text_button("threads-create", crate::t!("threads.create"), true)));
+    // list_6_wQXw: padding 0 16.
+    let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).flex().flex_col();
     if list_src.is_empty() {
-        list = list.child(empty(crate::t!("threads.empty"), crate::t!("threads.empty_sub")));
-    } else {
+        // container_0FCMV2: min-height 400, padding 32, centred; 256×144
+        // illustration mb 12; heading-xl/semibold 24/32 --text-strong mb 8;
+        // body-md/normal 16/20 --text-default; cta margin-top 24 (md primary).
         list = list.child(
             div()
-                .text_size(z(12.))
-                .font_weight(FontWeight::BOLD)
-                .text_color(c(Palette::TEXT_MUTED))
+                .flex_1()
+                .p(z(32.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .text_center()
+                .child(div().mb(z(12.)).w(z(256.)).h(z(144.)).flex().items_center().justify_center().child(named("threads", 96., tk(idx::TEXT_BRAND))))
+                .child(div().mb(z(8.)).text_size(z(24.)).line_height(z(32.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("threads.empty")))
+                .child(div().text_size(z(16.)).line_height(z(20.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("threads.empty_body")))
+                .child(
+                    div().mt(z(24.)).child(
+                        sm_text_button("threads-create-cta", crate::t!("threads.create_thread"), true).h(z(40.)).px(z(16.)).text_size(z(16.)).line_height(z(20.)),
+                    ),
+                ),
+        );
+    } else {
+        // sectionHeader_6_wQXw: 24px, margin 8 0, 14px medium --text-default.
+        list = list.child(
+            div()
+                .flex_none()
+                .h(z(24.))
+                .my(z(8.))
+                .flex()
+                .items_center()
+                .text_size(z(14.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tk(idx::TEXT_DEFAULT))
                 .child(if list_src.len() == 1 { crate::t!("threads.active_one") } else { crate::t!("threads.active_many", n = list_src.len()) }),
         );
     }
+    let now = chrono::Local::now().timestamp();
     for t in list_src {
         let r = crate::model::ThreadRef { id: t.id, name: t.name.clone(), message_count: 0 };
+        let created = ((t.id.0 >> 22) / 1000 + 1_420_070_400) as i64;
+        let sub = format!("{}  •  {}", crate::t!("threads.no_recent"), crate::ui::forum::ago(now, created));
+        // container_yRVHqK: 72px, padding 15, radius 8, 1px --border-subtle,
+        // --background-surface-higher, margin-bottom 8; hover --background-surface-highest
+        // + --border-normal. threadName_ heading-sm/semibold 16/20 --text-default,
+        // subtext_ body-sm 14/18 --text-default; 24px facepile margin-start 16.
         list = list.child(
             div()
                 .id(("thread-row", t.id.0))
-                .p(z(12.))
+                .flex_none()
+                .h(z(72.))
+                .mb(z(8.))
+                .p(z(15.))
                 .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+                .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGHEST)).border_color(tk(idx::BORDER_NORMAL)))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
                 .flex()
                 .items_center()
-                .gap(z(8.))
                 .on_click(cx.listener(move |a, _, w, cx| {
                     a.parity.threads_open = false;
                     a.open_thread(r.clone(), w, cx);
                 }))
-                .child(icon(Icon::Threads, 20., c(Palette::CHANNEL_ICON)))
-                .child(div().text_size(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(t.name.clone())),
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(t.name.clone()))
+                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(sub)),
+                )
+                .when(!t.voice_users.is_empty(), |d| {
+                    d.child(div().ml(z(16.)).flex().children(t.voice_users.iter().take(3).enumerate().map(|(k, u)| {
+                        div().when(k > 0, |d| d.ml(z(-6.))).child(avatar(app.users.get(u), 24.))
+                    })))
+                }),
         );
     }
-    Some(popout_frame("threads-popout", crate::t!("threads.title"), Icon::Threads, None, list.into_any_element()))
+    Some(
+        gpui::deferred(
+            div()
+                .id("threads-popout")
+                .absolute()
+                .top(z(m::TITLE_BAR_H + m::HEADER_H - 3.))
+                .right(z(HDR_RIGHT_THREADS))
+                .w(z(480.))
+                .h(z(400.))
+                .rounded(z(8.))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .shadow(popout_shadow())
+                .occlude()
+                .overflow_hidden()
+                .flex()
+                .flex_col()
+                .child(header)
+                .child(list),
+        )
+        .with_priority(10)
+        .into_any_element(),
+    )
+}
+
+/// Distance from the window's right edge to the right edge of a channel-header
+/// button: toolbar padding-right 8 + search (244 + margin 4) + n × (32 + gap 10).
+const fn hdr_right(buttons_after: f32) -> f32 {
+    8. + 248. + buttons_after * 42.
+}
+const HDR_RIGHT_THREADS: f32 = hdr_right(3.);
+
+/// Pinned messages popout (`messagesPopoutWrap_6bgemo`): 420 wide, min-height
+/// 200, max 80vh, radius 8, --background-surface-high, popout shadow. Header
+/// padding 16, border-bottom --border-subtle, 24px pin glyph + body-lg/semibold
+/// 20/24 --text-strong (gap 8). Scroller padding 8 0 0 8. Right edge under the
+/// header pin button (dump x 552..972 of 1280, y 81).
+pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    let p = app.chat.pins.as_ref()?;
+    let ch = p.channel;
+    let is_dm = app.channels.get(&ch).is_some_and(|c| c.guild.is_none());
+    let mut list = div().id("pins-list").flex_1().min_h_0().overflow_y_scroll().pt(z(8.)).pl(z(8.)).flex().flex_col();
+    let mut footer = None;
+    if p.loading {
+        list = list.child(div().p(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")));
+    } else if p.msgs.is_empty() {
+        // emptyPlaceholder_: margin 8 0 32, centred; 120px image; body_ margin-top
+        // 20, body-md/medium 16/20 --text-default, centred (white-space: pre).
+        list = list.child(
+            div()
+                .mt(z(8.))
+                .mb(z(32.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .child(div().size(z(120.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_STRONG)).flex().items_center().justify_center().child(named("pin", 56., tk(idx::INTERACTIVE_TEXT_DEFAULT))))
+                .child(div().mt(z(20.)).text_center().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("pins.empty_line1")))
+                .child(div().text_center().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("pins.empty_line2"))),
+        );
+        // footer_6bgemo: padding 16, --background-mod-subtle, centred; protip
+        // block padding 10 0: body-sm/semibold --text-feedback-positive, then
+        // body-sm/normal 14/16 --text-default.
+        footer = Some(
+            div()
+                .flex_none()
+                .p(z(16.))
+                .bg(tk(idx::BACKGROUND_MOD_SUBTLE))
+                .child(
+                    div()
+                        .py(z(10.))
+                        .text_center()
+                        .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_FEEDBACK_POSITIVE)).child(crate::t!("inbox.protip")))
+                        .child(div().text_size(z(14.)).line_height(z(16.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("pins.tip"))),
+                ),
+        );
+    }
+    for m in &p.msgs {
+        let id = m.id;
+        // messageGroupWrapper_6bgemo: --background-surface-higher, 1px
+        // --border-subtle, radius 8, margin 0 4 8 0; messageGroupCozy_ padding
+        // 16 20 16 80 (margin-start -4). actionButtons_ on hover: top/right 8, sm
+        // secondary "Jump".
+        list = list.child(
+            div()
+                .id(("pin", id.0))
+                .group("pin")
+                .relative()
+                .flex_none()
+                .mr(z(4.))
+                .mb(z(8.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+                .overflow_hidden()
+                .child(div().ml(z(-4.)).child(cozy_message(app, m, 16.)))
+                .child(
+                    div()
+                        .absolute()
+                        .top(z(8.))
+                        .right(z(8.))
+                        .flex()
+                        .gap(z(8.))
+                        .invisible()
+                        .group_hover("pin", |s| s.visible())
+                        .child(sm_text_button(("pin-jump", id.0), crate::t!("pins.jump"), false).on_click(cx.listener(move |a, _, _, cx| a.jump_to_message(ch, id, cx))))
+                        .child(sm_icon_button(("pin-unpin", id.0), "close").on_click(cx.listener(move |a, _, _, cx| {
+                            cx.stop_propagation();
+                            a.unpin_from_popout(ch, id, cx)
+                        }))),
+                ),
+        );
+    }
+    let right = if is_dm { hdr_right(2.) } else { hdr_right(1.) };
+    Some(
+        div()
+            .id("pins-popout")
+            .absolute()
+            .top(z(m::HEADER_H - 3.))
+            .right(z(right))
+            .w(z(420.))
+            .min_h(z(200.))
+            .max_h(gpui::relative(0.8))
+            .rounded(z(8.))
+            .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+            .shadow(popout_shadow())
+            .occlude()
+            .flex()
+            .flex_col()
+            .overflow_hidden()
+            .child(
+                div()
+                    .flex_none()
+                    .p(z(16.))
+                    .border_b_1()
+                    .border_color(tk(idx::BORDER_SUBTLE))
+                    .flex()
+                    .items_center()
+                    .gap(z(8.))
+                    .child(named("pin", 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)))
+                    .child(div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("pins.title"))),
+            )
+            .child(list)
+            .children(footer)
+            .into_any_element(),
+    )
 }
 
 pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
@@ -664,6 +1280,31 @@ pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement
     out.extend(inbox(app, cx));
     out.extend(threads(app, cx));
     out
+}
+
+/// Our own fallbacks for the icons above, used when no local Discord install
+/// provides the real ones (hand-drawn, 24×24, tinted through `text_color`).
+pub fn svg_asset(path: &str) -> Option<&'static str> {
+    macro_rules! st {
+        ($b:expr) => {
+            concat!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">"#, $b, "</svg>")
+        };
+    }
+    Some(match path {
+        "icons/inbox/filter.svg" => st!(r#"<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>"#),
+        "icons/inbox/read-all.svg" => st!(r#"<path d="m2 12.5 4.5 4.5L15 8.5M11 16.5l.5.5L20 8.5"/>"#),
+        "icons/inbox/jump.svg" => st!(r#"<path d="M20 11.5a8 8 0 1 0-3.2 6.4L21 19l-1-3.6M9 12h6m-2.5-2.5L15 12l-2.5 2.5"/>"#),
+        "icons/inbox/bookmark.svg" => st!(r#"<path d="M6 3h12v18l-6-4.5L6 21z"/>"#),
+        "icons/inbox/clock.svg" => st!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>"#),
+        "icons/inbox/schedule.svg" => st!(r#"<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/>"#),
+        "icons/search/user.svg" => st!(r#"<circle cx="12" cy="8" r="4"/><path d="M4 21a8 7 0 0 1 16 0"/>"#),
+        "icons/search/attachment.svg" => st!(r#"<path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4L15 7"/>"#),
+        "icons/search/at.svg" => st!(r#"<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>"#),
+        "icons/chat.svg" => st!(r#"<path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.6A8.5 8.5 0 1 1 21 11.5z"/>"#),
+        "icons/more-vertical.svg" => st!(r#"<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>"#),
+        "icons/new-group-dm.svg" => st!(r#"<path d="M20 11.5a8 8 0 1 1-3.2-6.4M12 8v7m-3.5-3.5h7M19 2v6m-3-3h6"/>"#),
+        _ => return None,
+    })
 }
 
 /// Build the inputs that need a `Window` (group DM search).

@@ -13,7 +13,7 @@ use crate::{
     app::{PhoenixApp, format_time_full},
     assets::Icon,
     model::{ChannelKind, Id, Message},
-    theme::{Palette, c, m as layout},
+    theme::{Palette, c, generated::idx, m as layout},
     ui::{avatar, icon, icon_button},
 };
 
@@ -52,8 +52,16 @@ pub struct SearchState {
     pub loading: bool,
     pub error: Option<SharedString>,
     seq: u64,
+    /// "More filters" expanded (dates and `pinned:`).
+    more: bool,
     _sub: Subscription,
 }
+
+/// Queries run this session, newest first (the popout's "History" group).
+#[derive(Default)]
+pub struct SearchHistory(pub Vec<String>);
+
+impl gpui::Global for SearchHistory {}
 
 #[derive(Default)]
 pub struct Search(pub Option<SearchState>);
@@ -164,6 +172,7 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         loading: false,
         error: None,
         seq: 0,
+        more: false,
         _sub: sub,
     })));
     cx.notify();
@@ -189,7 +198,14 @@ fn submit(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let Some(s) = cx.global::<Search>().0.as_ref() else { return };
     let text = s.input.read(cx).value().to_string();
     match build_request(app, &text) {
-        Ok(req) => run(app, req, cx),
+        Ok(req) => {
+            let t = text.trim().to_owned();
+            let h = &mut cx.default_global::<SearchHistory>().0;
+            h.retain(|x| *x != t);
+            h.insert(0, t);
+            h.truncate(5);
+            run(app, req, cx)
+        }
         Err(e) => {
             if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
                 s.error = (!e.is_empty()).then(|| e.into());
@@ -249,13 +265,20 @@ fn add_filter(prefix: &'static str, window: &mut Window, cx: &mut Context<Phoeni
     });
 }
 
-const FILTERS: [(&str, &str); 7] = [
-    ("from:", "search.hint.user"),
-    ("mentions:", "search.hint.user"),
-    ("has:", "search.hint.has"),
-    ("in:", "search.hint.channel"),
+/// "Filters" group of the live popout (dump search-popout `groupWrapper_lm2_KW`):
+/// (inserted keyword, icon, label, shown key, shown value).
+const FILTERS: [(&str, &str, &str, &str, &str); 4] = [
+    ("from:", "search/user", "search.f_from", "search.k_from", "search.v_user"),
+    ("in:", "hash", "search.f_in", "search.k_in", "search.v_channel"),
+    ("has:", "search/attachment", "search.f_has", "search.k_has", "search.v_has"),
+    ("mentions:", "search/at", "search.f_mentions", "search.k_mentions", "search.v_user"),
+];
+
+/// Behind "More filters": dates and `pinned:`.
+const MORE: [(&str, &str); 4] = [
     ("before:", "search.hint.date"),
     ("after:", "search.hint.date"),
+    ("during:", "search.hint.date"),
     ("pinned:", "search.hint.bool"),
 ];
 
@@ -330,6 +353,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
     let error = s.error.clone();
     let page = s.page.clone();
     let req = s.request.clone();
+    let more = s.more;
     let top = layout::HEADER_H;
 
     let body: AnyElement = if let Some(page) = page.filter(|_| req.is_some()) {
@@ -394,40 +418,14 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .child(pager)
             .into_any_element()
     } else {
-        let mut help = div().flex().flex_col().p(z(16.)).gap(z(2.)).child(
-            div()
-                .pb(z(8.))
-                .text_size(z(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_MUTED))
-                .child(crate::t!("search.options")),
-        );
-        for (i, (k, hint)) in FILTERS.iter().enumerate() {
-            let k: &'static str = k;
-            help = help.child(
-                div()
-                    .id(("search-filter", i))
-                    .h(z(32.))
-                    .px(z(8.))
-                    .rounded(z(4.))
-                    .flex()
-                    .items_center()
-                    .gap(z(6.))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                    .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
-                    .child(div().text_size(z(14.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(k))
-                    .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!(hint))),
-            );
-        }
-        help.into_any_element()
+        return Some(options_popout(input, error, loading, more, cx));
     };
 
     Some(
         div()
             .id("search-popout")
             .absolute()
-            .top(px(top))
+            .top(px(top + layout::TITLE_BAR_H + 1.))
             .right_0()
             .bottom_0()
             .w(px(WIDTH))
@@ -471,6 +469,199 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
             .into_any_element(),
     )
+}
+
+fn tk(i: usize) -> gpui::Hsla {
+    c(crate::theme::tok(i))
+}
+
+fn named(name: &str, size: f32, color: gpui::Hsla) -> gpui::Svg {
+    gpui::svg().path(crate::icons::path(name)).size(z(size)).flex_none().text_color(color)
+}
+
+/// `itemContainer_lm2_KW` > `item_`: radius 8, padding 4 8; 20px `itemIcon_`
+/// (--text-muted, margin-end 8); hover --interactive-background-hover.
+fn option_row(id: (&'static str, usize)) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .px(z(8.))
+        .py(z(4.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .cursor_pointer()
+        .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+}
+
+/// `groupHeader_lm2_KW`: padding 4 8, body-xs/semibold 12/16 --text-subtle.
+fn group_header(label: SharedString) -> gpui::Div {
+    div()
+        .px(z(8.))
+        .py(z(4.))
+        .flex()
+        .items_center()
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(tk(idx::TEXT_SUBTLE))
+        .child(div().flex_1().child(label))
+}
+
+/// The search options popout (dump search-popout): the header search bar turns
+/// into the input, and a 356px dropdown opens under it (right edge 12px from
+/// the window, top = header bottom − 4): `container_cbVzxY` padding 12 8,
+/// radius 8, 1px --border-subtle, --background-surface-high, --shadow-high.
+/// Groups (`groupWrapper_lm2_KW`, gap 4): "Filters" (44px rows: label
+/// body-sm/medium --text-strong, then key body-sm/semibold --text-subtle + value
+/// body-sm/medium --text-muted, gap 4), a `divider_` (margin 8 −8, 1px
+/// --border-subtle), "History" (28px rows: search glyph + query
+/// body-sm/semibold --text-strong; 18px clear-history trash).
+fn options_popout(input: Entity<InputState>, error: Option<SharedString>, loading: bool, more: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let history = cx.try_global::<SearchHistory>().map(|h| h.0.clone()).unwrap_or_default();
+    let mut filters = div().flex().flex_col().gap(z(4.)).child(group_header(crate::t!("search.filters")));
+    for (i, (k, glyph, label, key, value)) in FILTERS.into_iter().enumerate() {
+        filters = filters.child(
+            option_row(("search-filter", i))
+                .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
+                .child(named(glyph, 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(crate::t!(label)))
+                        .child(
+                            div()
+                                .flex()
+                                .gap(z(4.))
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .child(div().font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_SUBTLE)).child(crate::t!(key)))
+                                .child(div().font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_MUTED)).child(crate::t!(value))),
+                        ),
+                ),
+        );
+    }
+    filters = filters.child(
+        option_row(("search-filter", FILTERS.len()))
+            .on_click(cx.listener(|_, _, _, cx| {
+                if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+                    s.more = !s.more;
+                }
+                cx.notify();
+            }))
+            .child(named("inbox/filter", 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(div().text_color(tk(idx::TEXT_STRONG)).child(crate::t!("search.f_more")))
+                    .child(div().text_color(tk(idx::TEXT_MUTED)).child(crate::t!("search.v_more"))),
+            ),
+    );
+    if more {
+        for (i, (k, hint)) in MORE.into_iter().enumerate() {
+            filters = filters.child(
+                option_row(("search-more", i))
+                    .gap(z(4.))
+                    .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
+                    .child(div().w(z(20.)).mr(z(4.)))
+                    .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_SUBTLE)).child(k))
+                    .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_MUTED)).child(crate::t!(hint))),
+            );
+        }
+    }
+    let mut body = div().flex().flex_col().child(filters);
+    if !history.is_empty() {
+        let mut group = div().flex().flex_col().gap(z(4.)).child(
+            group_header(crate::t!("search.history")).child(
+                div()
+                    .id("search-clear-history")
+                    .cursor_pointer()
+                    .child(named("chat/trash", 18., tk(idx::TEXT_SUBTLE)))
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        cx.default_global::<SearchHistory>().0.clear();
+                        cx.notify();
+                    })),
+            ),
+        );
+        for (i, q) in history.into_iter().enumerate() {
+            let text = q.clone();
+            group = group.child(
+                option_row(("search-history", i))
+                    .on_click(cx.listener(move |a, _, w, cx| {
+                        let Some(inp) = cx.global::<Search>().0.as_ref().map(|s| s.input.clone()) else { return };
+                        inp.update(cx, |s, cx| s.set_value(text.clone(), w, cx));
+                        submit(a, cx);
+                    }))
+                    .child(named("search", 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
+                    .child(div().mr(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(SharedString::from(q))),
+            );
+        }
+        body = body.child(div().my(z(8.)).mx(z(-8.)).h(z(1.)).bg(tk(idx::BORDER_SUBTLE))).child(group);
+    }
+    if let Some(e) = error {
+        body = body.child(div().px(z(8.)).pt(z(8.)).text_size(z(14.)).text_color(tk(idx::TEXT_FEEDBACK_CRITICAL)).child(e));
+    }
+    if loading {
+        body = body.child(div().px(z(8.)).pt(z(8.)).text_size(z(14.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("search.searching")));
+    }
+    // The header `searchBar_` (244×32, radius 8, --input-background-default,
+    // 1px --input-border-default; editor padding 0 6, 14/22 medium) as a live input.
+    let bar = div()
+        .id("search-bar-live")
+        .absolute()
+        .top(z(layout::TITLE_BAR_H + 8.))
+        .right(z(8.))
+        .w(z(244.))
+        .h(z(32.))
+        .rounded(z(8.))
+        // The input token is translucent: lay it over the header background.
+        .bg(c(Palette::BG_PRIMARY))
+        .border_1()
+        .border_color(tk(idx::INPUT_BORDER_ACTIVE))
+        .occlude()
+        .flex()
+        .items_center()
+        .child(div().flex_1().min_w_0().px(z(6.)).text_size(z(14.)).font_weight(FontWeight::MEDIUM).child(Input::new(&input).appearance(false).bordered(false)))
+        .child(
+            div()
+                .id("search-bar-close")
+                .size(z(24.))
+                .p(z(4.))
+                .flex()
+                .items_center()
+                .cursor_pointer()
+                .on_click(cx.listener(|a, _, w, cx| close(a, w, cx)))
+                .child(named("close", 16., tk(idx::ICON_DEFAULT))),
+        );
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .bottom_0()
+        .child(bar)
+        .child(
+            div()
+                .id("search-popout")
+                .absolute()
+                .top(z(layout::TITLE_BAR_H + layout::HEADER_H - 3.))
+                .right(z(12.))
+                .w(z(356.))
+                .px(z(8.))
+                .py(z(12.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .shadow(crate::ui::inbox::popout_shadow())
+                .occlude()
+                .child(body),
+        )
+        .into_any_element()
 }
 
 fn pager_button(
