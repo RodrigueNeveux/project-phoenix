@@ -475,6 +475,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     let e = entity.clone();
     div()
         .pt(z(8.)) // dump -channels-me+ #595: 8px spacer
+        .w_full() // full sidebar width so the divider and the header "+" reach the right edge (vanilla-dm #648/#649)
         .flex()
         .flex_col()
         .child(nav("friends", Icon::Friends, crate::t!("friends.title"), Some(HomeView::Friends), pending))
@@ -700,6 +701,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let name: SharedString = extra.and_then(|e| e.group_name.clone()).filter(|_| is_dm).unwrap_or_else(|| ch.name.clone());
     let members: Option<SharedString> =
         (is_dm && is_group).then(|| crate::t!("invite.members", n = extra.map(|e| e.recipients + 1).unwrap_or(1)));
+    let dm_tag = (is_dm && !is_group)
+        .then(|| ch.voice_users.first().and_then(|u| app.users.get(u)).and_then(|u| u.tag.clone()))
+        .flatten();
     let group = SharedString::from(format!("chrow{}", id.0));
     let close = is_dm.then(|| {
         let e = entity.clone();
@@ -848,8 +852,12 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                 .text_size(z(16.))
                                 .line_height(z(if is_dm { 20. } else { 28. })) // --channels-name-line-height (.density-cozy 28px)
                                 .font_weight(FontWeight::MEDIUM) // --font-weight-semibold-1x-light-theme (500)
-                                .text_ellipsis()
-                                .child(name),
+                                .flex()
+                                .items_center()
+                                .child(div().min_w_0().text_ellipsis().child(name))
+                                // 1:1 DM: server tag chiplet after the name, chipletContainerInner_ margin-left 4px
+                                // (vanilla-dm #677).
+                                .when_some(dm_tag, |d, t| d.child(crate::ui::members::server_tag(&t).ml(z(4.)))),
                         )
                         .when(connected, |d| {
                             // `linkBottom_TNyK-N` (live connected voice row): margin-left 30 from

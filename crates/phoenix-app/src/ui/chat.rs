@@ -273,6 +273,10 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let is_dm = ch.is_some_and(|c| c.guild.is_none());
     let name = ch.map(|c| c.name.clone()).unwrap_or_default();
     let topic = ch.and_then(|c| c.topic.clone());
+    // Forum channels: header has no topic and only bell + member list (vanilla-forum
+    // section "En-tête du salon": h1, Paramètres de notification, Masquer la liste des membres).
+    let is_forum = ch.is_some_and(|c| c.kind == ChannelKind::Forum);
+    let topic = topic.filter(|_| !is_forum);
     // Thread: breadcrumb parent › thread, the icon is the parent's (vanilla-thread-channel #1190).
     let thread_parent = ch.and_then(|c| app.nav.thread_parent(c.id)).and_then(|p| app.channels.get(&p));
     let kind = thread_parent.or(ch).map(|c| c.kind).unwrap_or(ChannelKind::Text);
@@ -445,7 +449,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .when(!is_dm, |d| {
                     // Guild toolbar (#1055–#1061): threads, notifications, pins, member list.
                     // Inside a thread the toolbar has no Threads button (vanilla-thread-channel #1208).
-                    d.when(thread_parent.is_none(), |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
+                    d.when(thread_parent.is_none() && !is_forum, |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
                         .map(|d| {
                             // Muted channel/thread: BellSlashIcon (compare thread-more-1713).
                             if ch.is_some_and(|c| c.muted) {
@@ -454,10 +458,12 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                                 d.child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))
                             }
                         })
-                        .child(
-                            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
-                                .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
-                        )
+                        .when(!is_forum, |d| {
+                            d.child(
+                                hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
+                                    .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
+                            )
+                        })
                         .child(
                             hdr_button("members", Icon::Members, if app.show_members { on } else { ic }, HDR_ICON).on_click(
                                 cx.listener(|a, _, _, cx| {

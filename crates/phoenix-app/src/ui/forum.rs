@@ -582,7 +582,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .text_size(z(20.))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .when_some(search_input(forum), |d, i| d.child(Input::new(&i).appearance(false).bordered(false))),
+                .when_some(search_input(forum), |d, i| d.child(Input::new(&i).appearance(false).bordered(false).text_size(z(20.)).line_height(z(24.)))),
         )
         .child(
             // button_F7qvhY sm secondary: 32x32, radius 8
