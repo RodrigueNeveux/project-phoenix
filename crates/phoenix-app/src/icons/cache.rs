@@ -10,6 +10,11 @@ const MAGIC: [u8; 8] = [0x30, 0x5c, 0x72, 0xa7, 0x1b, 0x6d, 0xfb, 0xfc];
 const EOF_MAGIC: [u8; 8] = [0xd8, 0x41, 0x0d, 0x97, 0x45, 0x6f, 0xfa, 0xf4];
 
 fn js_key(head: &[u8]) -> Option<String> {
+    asset_key(head, ".js")
+}
+
+/// File name of a cached `discord.com/assets/<name><ext>` entry (query dropped).
+fn asset_key(head: &[u8], ext: &str) -> Option<String> {
     if head.len() < 24 || head[..8] != MAGIC {
         return None;
     }
@@ -18,7 +23,27 @@ fn js_key(head: &[u8]) -> Option<String> {
     let name = key.rsplit_once("/assets/")?.1;
     // The main bundle is cached as `web.<hash>.js?cdt=1`: drop the query.
     let name = name.split_once('?').map_or(name, |(n, _)| n);
-    (name.ends_with(".js") && !name.contains('/')).then(|| name.to_owned())
+    (name.ends_with(ext) && !name.contains('/')).then(|| name.to_owned())
+}
+
+/// `(asset file name, cache entry path)` of every cached asset ending in `ext`
+/// (e.g. `".css"`, `".svg"`), in directory order.
+pub fn asset_entries(cache: &Path, ext: &str) -> Vec<(String, PathBuf)> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(cache) else { return out };
+    for e in rd.flatten() {
+        let p = e.path();
+        if !p.is_file() {
+            continue;
+        }
+        let mut head = [0u8; 1024];
+        let Ok(mut f) = std::fs::File::open(&p) else { continue };
+        let n = f.read(&mut head).unwrap_or(0);
+        if let Some(k) = asset_key(&head[..n], ext) {
+            out.push((k, p));
+        }
+    }
+    out
 }
 
 /// `(asset file name, cache entry path)` for every cached JS bundle,

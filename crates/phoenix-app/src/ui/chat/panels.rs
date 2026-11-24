@@ -510,6 +510,32 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
     )
 }
 
+/// 865429 `icons_` (100x60, relative): `wrapOne/Three_` translateY -70, `wrapTwo_` -80,
+/// each holding an absolute 100x130 `icon_` posed at its final keyframe (= the
+/// reduce-motion pose): one translate(-44,-6) rotate(-30deg), two (0,-6), three
+/// (44,-6) rotate(30deg). Painted one, three, two like the client's DOM order.
+/// The art comes from the local Discord cache ([`crate::icons::art`]); without it, one glyph.
+fn upload_icons() -> AnyElement {
+    use crate::icons::art;
+    let Some([one, two, three]) = art::upload_icons() else {
+        return icon(ChatIcon::Upload, 48., gpui::white()).into_any_element();
+    };
+    // The canvas is 10px wider than icon_ on each side (see art::UPLOAD_CANVAS_W).
+    let pad = (art::UPLOAD_CANVAS_W - 100.) / 2.;
+    let place = |p: &std::path::PathBuf, x: f32, y: f32| {
+        gpui::img(p.clone()).absolute().left(z(x - pad)).top(z(y)).w(z(art::UPLOAD_CANVAS_W)).h(z(art::UPLOAD_CANVAS_H))
+    };
+    div()
+        .relative()
+        .flex_none()
+        .w(z(100.))
+        .h(z(60.))
+        .child(place(one, -44., -70. - 6.))
+        .child(place(three, 44., -70. - 6.))
+        .child(place(two, 0., -80. - 6.))
+        .into_any_element()
+}
+
 /// Full-area overlay shown while files are dragged over the chat.
 pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
     use crate::theme::generated::idx;
@@ -528,7 +554,7 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
         .child(
             // uploadDropModal_ 310x170; bgScale_ --brand-500 radius 10; inner_ 2px dashed
             // --opacity-white-40 radius 6, centred column; title_ 22px bold white; instructions_
-            // 12/16 white, margin-top 4. (The three animated file icons are Discord art: one glyph.)
+            // 12/16 white, margin-top 4.
             div()
                 .w(z(310.))
                 .h(z(170.))
@@ -546,7 +572,7 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
                         .flex_col()
                         .items_center()
                         .justify_center()
-                        .child(icon(ChatIcon::Upload, 48., gpui::white()))
+                        .child(upload_icons())
                         .child(
                             div()
                                 .px(z(8.))

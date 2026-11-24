@@ -7,6 +7,7 @@
 //! update), and [`crate::assets::Assets`] serves those first, falling back
 //! to our hand-drawn icons. Nothing extracted is ever stored in the repo.
 
+pub mod art;
 mod cache;
 mod extract;
 mod names;
@@ -99,6 +100,7 @@ pub fn init() {
             if refresh(&dir) {
                 load_dir(&dir);
             }
+            art::init(&dir);
         })
         .ok();
 }
