@@ -10,7 +10,7 @@ use gpui::{AnyElement, App, IntoElement, ParentElement, Styled, div, img, prelud
 use crate::{
     media,
     model::{Attachment, AttachmentKind},
-    theme::{Palette, c, ca, z},
+    theme::{ca, z},
 };
 
 /// visualMediaItemContainer_ max-width 550px.
@@ -64,7 +64,8 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         .rounded_tr(radius(k.tr))
         .rounded_bl(radius(k.bl))
         .rounded_br(radius(k.br))
-        .bg(c(Palette::BG_SECONDARY))
+        // `imageContainer_` --background-mod-normal (base-lower = chat background, invisible).
+        .bg(crate::ui::chat::tk(crate::theme::generated::idx::BACKGROUND_MOD_NORMAL))
         .child(
             div()
                 .id(gpui::ElementId::Name(format!("mosaic-{src}").into()))

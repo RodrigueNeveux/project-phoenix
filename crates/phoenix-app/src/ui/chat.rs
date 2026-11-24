@@ -1498,7 +1498,10 @@ fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, o
         .rounded(z(8.))
         .object_fit(gpui::ObjectFit::Cover)
         .cursor_pointer()
-        .with_loading(|| div().size_full().rounded(z(8.)).bg(c(Palette::BG_SECONDARY)).into_any_element())
+        // `imageContainer_` --background-mod-normal while loading (base-lower is the chat
+        // background itself, so the slot looked empty); same box when the image fails.
+        .with_loading(|| div().size_full().rounded(z(8.)).bg(tk(idx::BACKGROUND_MOD_NORMAL)).into_any_element())
+        .with_fallback(|| div().size_full().rounded(z(8.)).bg(tk(idx::BACKGROUND_MOD_NORMAL)).into_any_element())
         .on_click(move |_, _, cx| media::open_viewer(viewer.clone(), cx))
 }
 
