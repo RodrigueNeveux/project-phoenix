@@ -1066,6 +1066,12 @@ fn message(
                     .min_w_0()
                     .text_color(tk(idx::TEXT_DEFAULT)) // repliedTextContent_ color: inherit
                     .hover(|s| s.text_color(tk(idx::TEXT_STRONG))) // repliedTextPreview_.clickable_:hover
+                    .id(("reply-jump", msg.id.0))
+                    .cursor_pointer()
+                    .on_click({
+                        let (e, ch) = (entity.clone(), msg.channel);
+                        move |_, _, cx| e.update(cx, |a, cx| a.jump_to_message(ch, rid, cx))
+                    })
                     .whitespace_nowrap()
                     .overflow_hidden()
                     .text_ellipsis()
@@ -1146,7 +1152,11 @@ fn message(
             // message_:hover / .selected_ --message-background-hover; .mentioned_ and
             // .replying_ have their own backgrounds, hover shades and a 2px bar
             // (--icon-feedback-warning / --brand-500) drawn over the row.
-            let (bg, hover, bar) = if replying {
+            let (bg, hover, bar) = if app.chat.flash == Some(id) {
+                // flash_[data-flash=true]: --message-highlight-background-default, overlay
+                // border-inline-start 2px --text-brand.
+                (idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, Some(idx::TEXT_BRAND))
+            } else if replying {
                 (idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, idx::BRAND_10A, Some(idx::BRAND_500))
             } else if mentioned {
                 (idx::MESSAGE_MENTIONED_BACKGROUND_DEFAULT, idx::MESSAGE_MENTIONED_BACKGROUND_HOVER, Some(idx::ICON_FEEDBACK_WARNING))

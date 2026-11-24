@@ -78,6 +78,9 @@ pub enum EmojiTarget {
     Composer,
 }
 
+/// How long a jumped-to message stays highlighted.
+const FLASH_HOLD: std::time::Duration = std::time::Duration::from_millis(2000);
+
 pub struct ChatState {
     /// `theme::style_generation()` the cached rich text was built under.
     pub style_gen: u32,
@@ -99,6 +102,9 @@ pub struct ChatState {
     pub error: Option<SharedString>,
     /// Shift held: the hover toolbar shows Delete (and skips the confirm).
     pub shift_held: bool,
+    /// Message highlighted after a jump (reply click, pins, search): flash_
+    /// `[data-flash=true]` background + 2px --text-brand overlay bar.
+    pub flash: Option<Id>,
     next_key: u64,
 }
 
@@ -120,6 +126,7 @@ impl Default for ChatState {
             emoji_target: None,
             error: None,
             shift_held: false,
+            flash: None,
             next_key: 0,
         }
     }
@@ -544,6 +551,17 @@ impl PhoenixApp {
         if let Some(ix) = self.messages.get(&channel).and_then(|e| e.msgs.iter().position(|m| m.id == id)) {
             self.message_list.scroll_to_reveal_item(ix + 1);
         }
+        self.chat.flash = Some(id);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(FLASH_HOLD).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.chat.flash == Some(id) {
+                    this.chat.flash = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
         cx.notify();
     }
 
