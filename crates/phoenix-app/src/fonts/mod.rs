@@ -303,24 +303,36 @@ pub fn styled_name<E: gpui::Styled>(el: E, user: Option<&crate::model::User>, in
 /// characters out one by one with `spacing * size` px after each, like the
 /// browser adds the tracking after every glyph. `size`: the font size in px.
 pub fn name_text(text: gpui::SharedString, user: Option<&crate::model::User>, size: f32) -> gpui::AnyElement {
-    use gpui::{IntoElement, ParentElement, Styled};
+    let stops = user.and_then(|u| u.name_style.as_ref()).and_then(|(_, _, c)| match c.as_slice() {
+        [a, b, ..] => Some([*a, *b, *a]),
+        _ => None,
+    });
+    name_text_with(text, user, size, stops)
+}
+
+/// [`name_text`] with explicit gradient stops (e.g. a gradient role's
+/// `twoColorGradient_` c1, c2, c1), tiled every 100px by `usernameGradient_`.
+pub fn name_text_with(
+    text: gpui::SharedString,
+    user: Option<&crate::model::User>,
+    size: f32,
+    stops: Option<[u32; 3]>,
+) -> gpui::AnyElement {
+    use gpui::IntoElement;
     let ls = user
         .and_then(|u| u.name_style.as_ref())
         .filter(|s| family_for_id(s.0).is_some())
         .and_then(|s| font_for_id(s.0))
         .map_or(0., |(_, ls)| ls);
-    if ls <= 0. {
+    let stops: Vec<gpui::Hsla> = stops.map(|s| s.iter().map(|&c| gpui::rgb(c).into()).collect()).unwrap_or_default();
+    if ls <= 0. && stops.is_empty() {
         return text.into_any_element();
     }
-    let gap = crate::theme::z(ls * size);
-    gpui::div()
-        .flex()
-        .flex_none()
-        .children(text.chars().map(|ch| gpui::div().flex_none().mr(gap).child(gpui::SharedString::from(ch.to_string()))))
-        .into_any_element()
+    name_paint::NameText::new(text, crate::theme::z(ls * size), stops, Some(crate::theme::z(100.))).into_any_element()
 }
 
 pub mod fallback;
+pub mod name_paint;
 pub use fallback::ui_fallbacks;
 
 #[cfg(test)]

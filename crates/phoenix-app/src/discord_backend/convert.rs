@@ -631,6 +631,10 @@ pub fn dm_channels(cache: &Cache, rc: &ReadCtx) -> Vec<model::Channel> {
 pub fn roles(g: &api::Guild) -> Vec<model::Role> {
     g.roles
         .iter()
+        .inspect(|r| {
+            let c = r.colors.as_ref();
+            crate::ui::role_gradient::set(id(r.id), c.map_or(r.color, |c| c.primary_color), c.and_then(|c| c.secondary_color), c.and_then(|c| c.tertiary_color));
+        })
         .map(|r| model::Role {
             id: id(r.id),
             name: r.name.clone().into(),

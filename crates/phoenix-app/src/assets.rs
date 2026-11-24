@@ -225,6 +225,9 @@ impl AssetSource for Assets {
         if let Some(p) = path.strip_prefix("local/") {
             return Ok(std::fs::read(p).ok().map(Cow::Owned));
         }
+        if let Some(svg) = crate::ui::status_svg::svg(path) {
+            return Ok(Some(Cow::Owned(svg.into_bytes())));
+        }
         static INIT: std::sync::Once = std::sync::Once::new();
         INIT.call_once(crate::icons::init);
         // Real icons extracted from the local Discord install win over ours.

@@ -6161,6 +6161,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "ttf-parser",
+ "unicode-segmentation",
  "wuff",
 ]
 

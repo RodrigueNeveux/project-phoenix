@@ -18,7 +18,6 @@ use crate::{
     model::{Id, Member, Presence},
     presence::{ListEntry, ranges_for},
     theme::{Palette, c, generated::idx, m, role_color, tok},
-    ui::avatar_with_status,
 };
 
 /// `AppEvent::MemberListRows` / `AppEvent::Activities`.
@@ -413,6 +412,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                     // name gets the member's role colorString (else the class
                                     // color --channels-default) and only the display name
                                     // style's FONT (displayNameStylesFont), never its colors.
+                                    // Gradient role colours (colorStrings) paint the name too.
                                     crate::fonts::styled_name(
                                         div()
                                             .min_w_0()
@@ -430,7 +430,12 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                         user,
                                         false,
                                     )
-                                    .child(crate::fonts::name_text(name, user, 14.)),
+                                    .child(crate::fonts::name_text_with(
+                                        name,
+                                        user,
+                                        14.,
+                                        mem.and_then(|m| crate::ui::role_gradient::for_member(app, g, m)),
+                                    )),
                                 ),
                         )
                         .child(
@@ -662,6 +667,7 @@ pub fn member_row_in(
                 }
             }
         })
+        .group("member-row")
         .ml(z(8.))
         // live client: member_Iy0c7A is 44px with a sub line (name 18 + sub 16),
         // 42px without (avatar 32), both including its 1px block padding.
@@ -703,7 +709,14 @@ pub fn member_row_in(
             div()
                 .relative()
                 .flex_none()
-                .child(avatar_with_status(user, 32., mem.presence, c(Palette::BG_SECONDARY)))
+                .child({
+                    // the status cut shows the row's hover / selected background like the mask
+                    let sel = app.people.popout.as_ref().is_some_and(|p| p.user == uid);
+                    crate::ui::avatar_with_status_overlay(user, 32., mem.presence, c(Palette::BG_SECONDARY), move |d| {
+                        d.group_hover("member-row", |s| s.bg(c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_HOVER))))
+                            .when(sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
+                    })
+                })
                 .when(streaming, |d| d.child(streaming_dot()))
                 .when_some(user.and_then(|u| u.decoration.clone()), |d, deco| {
                     // avatarDecorationContainer_: inset/top --custom-avatar-avatar-decoration-border-position
@@ -734,7 +747,13 @@ pub fn member_row_in(
                                 .overflow_hidden()
                                 .whitespace_nowrap()
                                 .text_ellipsis()
-                                .child(name),
+                                // name_Wo4EpK: style font letter-spacing, gradient role colours
+                                .child(crate::fonts::name_text_with(
+                                    name,
+                                    user,
+                                    16.,
+                                    g.and_then(|g| crate::ui::role_gradient::for_member(app, g, mem)),
+                                )),
                         )
                         .when_some(tag, |d, t| d.child(server_tag(&t).my(z(1.)))) // chipletContainerInner_k8jyN7 margin 1px 0 1px 4px
                         .when(user.is_some_and(|u| u.bot), |d| d.child(member_bot_tag(user.is_some_and(|u| u.verified_bot))))

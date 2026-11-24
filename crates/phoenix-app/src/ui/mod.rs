@@ -33,6 +33,8 @@ pub mod sidebar;
 pub mod sidebar_resize;
 pub mod states;
 pub mod status_picker;
+pub mod status_svg;
+pub mod role_gradient;
 pub mod switcher;
 pub mod nav_menus;
 pub mod thread_menu;
@@ -77,10 +79,18 @@ pub fn avatar(user: Option<&User>, size: f32) -> AnyElement {
     }
 }
 
-/// Avatar with the presence dot cut-out (bottom-right) like Discord.
+/// Avatar with the presence status cut-out (bottom-right) like the client's
+/// `svg-mask-avatar-status-round-<size>` + status rect (see [`status_svg`]).
+/// GPUI has no masks: the cut is painted with `ring`, the colour behind the avatar.
 pub fn avatar_with_status(user: Option<&User>, size: f32, p: Presence, ring: Hsla) -> Div {
-    let dot = (size * 0.3125).round().max(10.);
-    let border = (size / 10.).round().max(3.);
+    avatar_with_status_overlay(user, size, p, ring, |d| d)
+}
+
+/// [`avatar_with_status`] whose cut also shows the row's hover / selected
+/// background: `overlay` styles a layer over `ring` (e.g. `group_hover`), so
+/// the cut keeps matching a translucent row background like a real mask.
+pub fn avatar_with_status_overlay(user: Option<&User>, size: f32, p: Presence, ring: Hsla, overlay: impl FnOnce(Div) -> Div) -> Div {
+    let (cx, r, s) = status_svg::geometry(size);
     div()
         .relative()
         .flex_none()
@@ -89,44 +99,20 @@ pub fn avatar_with_status(user: Option<&User>, size: f32, p: Presence, ring: Hsl
         .child(
             div()
                 .absolute()
-                .right(px(-border / 2. - 1.))
-                .bottom(px(-border / 2. - 1.))
-                .size(px(dot + border))
+                .left(px(cx - r))
+                .top(px(cx - r))
+                .size(px(2. * r))
                 .rounded_full()
                 .bg(ring)
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(status_dot(p, dot, ring)),
+                .child(overlay(div().size_full().rounded_full())),
         )
+        .child(div().absolute().left(px(cx - s / 2.)).top(px(cx - s / 2.)).child(status_dot(p, s, ring)))
 }
 
-pub fn status_dot(p: Presence, size: f32, ring: Hsla) -> Div {
-    let base = div().size(px(size)).rounded_full().bg(presence_color(p)).relative();
-    match p {
-        Presence::Offline => base.child(
-            div()
-                .absolute()
-                .top(px(size * 0.25))
-                .left(px(size * 0.25))
-                .size(px(size * 0.5))
-                .rounded_full()
-                .bg(ring),
-        ),
-        Presence::Dnd => base.flex().items_center().justify_center().child(
-            div().w(px(size * 0.6)).h(px((size * 0.2).max(2.))).rounded(z(1.)).bg(ring),
-        ),
-        Presence::Idle => base.child(
-            div()
-                .absolute()
-                .top(px(-size * 0.1))
-                .left(px(-size * 0.1))
-                .size(px(size * 0.6))
-                .rounded_full()
-                .bg(ring),
-        ),
-        Presence::Online => base,
-    }
+/// The status glyph (`svg-mask-status-*` shapes) in the presence colour.
+/// `_ring` is kept for callers: the shapes are real holes now.
+pub fn status_dot(p: Presence, size: f32, _ring: Hsla) -> gpui::Svg {
+    gpui::svg().path(status_svg::path(p, false)).size(px(size)).flex_none().text_color(presence_color(p))
 }
 
 /// Red mention badge ("3").
