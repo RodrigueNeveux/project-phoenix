@@ -453,8 +453,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                         .active(|s| s.pt(z(4.5)))
                         .child(
                             icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::CHANNELS_DEFAULT))
-                                .group_hover("cat-add", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
-                                .group_active("cat-add", |s| s.text_color(t(idx::INTERACTIVE_TEXT_ACTIVE))),
+                                .group_hover("cat-add", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
                         ),
                 )
                 .into_any_element()
