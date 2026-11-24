@@ -15,7 +15,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | pill | selected | height 40px | `pill` | ✅ |
 | pill | transition | height/opacity/transform .2s ease-out | `PILL_MS` 200 | ✅ |
 | guild icon | squircle | fixed squircle mask path (`svg_hqZPsU`), no radius morph on hover in the refresh | `ICON_RADIUS` 12 | ✅ |
-| home / add / discover tile `childWrapper_JJ-hgR` | hover, selected | `--background-brand` bg, `--white` glyph, scale 1.1 (`childWrapperHoverScale`), .15s ease-out | brand bg + white glyph | ❌ scale 1.1 missing |
+| home / add / discover tile `childWrapper_JJ-hgR` | hover, selected | `--background-brand` bg, `--white` glyph, scale 1.1 (`childWrapperHoverScale`), .15s ease-out | brand bg + white glyph, `states::fade_to` 150ms; live DOM: no rail item carries `childWrapperHoverScale`, so nothing scales | ✅ |
 | folder `folderIcon_RTMSuZ` | hover | `--background-mod-subtle` bg | `--background-mod-subtle` | ✅ |
 | rail tooltip `tooltip_ZDdyhE` | position | card starts 12px right of the tile (x 72 for a 20..60 tile), vertically centred, caret left | anchor at tile right + 12 − 5 | ✅ (fixed) |
 | rail tooltip | style | `--background-surface-high`, 8px radius, inset 1px `--border-subtle` + `--shadow-high`, padding 8 12, body-md/semibold 16/20 | tokens | ✅ (fixed: was old palette) |
@@ -32,7 +32,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | thread row | hover / active | same as channel row | `.active()` | ✅ (added) |
 | DM home nav rows (Friends, Nitro, Shop, Quests) | hover / active | same link rules | `.active()` | ✅ (added) |
 | row action icons `actionIcon_Wx6SnQ` (invite, settings) | reveal on hover | `iconVisibility:hover .iconItem` display block, `.channelInfo` hidden | sidebar.rs `invite_hover` group_hover | ✅ |
-| row action icons | hover / active | `--icon-muted` → `--interactive-text-hover`; active `--interactive-text-active` + translateY(.5px) | hover colour via group_hover; no pressed nudge | ❌ active part |
+| row action icons | hover / active | `--icon-muted` → `--interactive-text-hover`; active `--interactive-text-active` + translateY(.5px) | group_hover colour; group_active colour + 0.5px offset | ✅ |
 | category `wrapper_yOdhm_` | hover | name + chevron `--interactive-text-hover` | sidebar.rs:408 | ✅ |
 
 ## Member list
@@ -47,13 +47,13 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 
 | component | state | client | ours | status |
 |---|---|---|---|---|
-| avatar `avatar_2i8Bfm.clickable` | hover | drop-shadow `--elevation-medium` (full motion) | | ❌ |
-| avatar | active | translateY(1px) (decoration too) | | ❌ |
-| username `.clickable` | hover | underline | | ❌ to verify |
-| reaction `reaction_MmKct8` | hover / active | `--reaction-background-hover/-active`, border + count colours | | ❌ to verify |
-| add-reaction button `reactionBtn_` | reveal | opacity 1 while `.reactions` hovered | | ❌ to verify |
-| reply preview `repliedTextPreview_` | hover | `--text-strong` | | ❌ to verify |
-| reply spine | hover | border `--interactive-text-default` | | ❌ |
+| avatar `avatar_2i8Bfm.clickable` | hover | drop-shadow `--elevation-medium` (0 4px 4px black 16%) | chat.rs msg-avatar `.hover(shadow)` | ✅ |
+| avatar | active | translateY(1px) (decoration too) | `.active(mt 1px)` on the avatar; decoration stays put | ✅ (decoration offset not reproduced) |
+| username `.clickable` | hover | underline | chat.rs author name `.hover(underline)` | ✅ |
+| reaction `reaction_MmKct8` | hover / active | `--reaction-background-hover/-active`, border, count `--reaction-text-hover/-active` | message_ext.rs `reactions` | ✅ (added active + count colours) |
+| add-reaction button `reactionBtn_` | reveal / hover / active | `forceShow` variant (padding 5 7, opacity 1), hover/active reaction tokens | message_ext.rs | ✅ |
+| reply preview `repliedTextPreview_` | hover | `--text-strong` | chat.rs reply line `.hover` | ✅ (added) |
+| reply spine | hover | border `--interactive-text-default` | chat.rs spine `.hover` | ✅ (added) |
 | hover toolbar `buttonsInner_` | reveal | right 14px, top −16px, 34px tall, padding 2, radius 8, `--background-surface-high` (ref-cache message-hover-toolbar.json) | chat/message_ext.rs `toolbar` | ✅ |
 | toolbar button `button_Z0MHyc` | hover | `--interactive-background-hover`, glyph `--interactive-text-hover`, icon scale 1.1 (.4s cubic-bezier(.16,1,.3,1)) | group_hover, 22px glyph (no easing) | ✅ |
 | toolbar button | active | `--interactive-background-active`, glyph `--interactive-text-active`, icon scale 1 | `.active()` + group_active | ✅ (added) |
@@ -62,19 +62,31 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 
 | component | state | client | ours | status |
 |---|---|---|---|---|
-| header icon `clickable_ybUK7Z .icon` | hover | glyph `--icon-subtle` | | ❌ to verify |
-| header tooltip | position | below the button, caret on top, body-sm/medium 14/18 | gpui tooltip under the cursor | ❌ position follows the cursor |
-| user panel button `button_Y-8oZW` | hover | `--control-secondary-background-hover`, glyph `--interactive-text-hover`, .2s ease | bg + glyph via `panel-btn` group | ✅ (added) |
+| header icon `clickable_ybUK7Z .icon` | hover / selected | no background; glyph `--icon-muted` → `--icon-subtle`, selected `--icon-strong` | states.rs `header_button` | ✅ (removed the old hover tile) |
+| header tooltip | position | shows ~50ms after hover (no delay), centred, card 11px below the button, caret up, body-sm/medium 14/18, scale-in ~100ms (ref-cache tooltip-header-appear.json) | states.rs `below_tip`: centred, card top 11px below, no delay (offscreen: card y 84 = live 84) | ✅ (scale-in not reproduced) |
+| user panel button `button_Y-8oZW` | hover | `--control-secondary-background-hover`, glyph `--interactive-text-hover`, background .2s ease (`states::fade_layer`) | bg + glyph via `panel-btn` group | ✅ (added) |
 | user panel red (muted/deafened) | rest / hover | `--opacity-red-12` → `--opacity-red-24` | voice_panel.rs | ✅ |
 | user panel | active | none in CSS | | ➖ |
 | audio button pair `audioButtonParent_` | hover | pair `--background-mod-muted`, hovered half `--control-secondary-background-hover` | voice_panel.rs | ✅ |
 | composer buttons `button_hfM7yP` (attach, gift, GIF, sticker, emoji) | hover | glyph `--interactive-text-hover`, 8px tile `--interactive-background-selected`, .2s | states.rs `composer_button` | ✅ (added) |
 | composer buttons | active | glyph `--interactive-text-active` | `group_active` | ✅ (added) |
-| app launcher button | hover | same rules | | ❌ |
+| app launcher button | hover / active | same rules | composer.rs `apps` | ✅ (added) |
 | shared tooltip (`tooltip.rs`) | style | `tooltip_ZDdyhE` tokens, 14/18 medium | ✅ | ✅ |
+
+## Transitions
+
+`states.rs` has a small colour-fade helper: `track` + `fade_layer` (a bg layer animated
+with gpui `with_animation`, keyed on the last hover change, so first paint and remounts
+don't flash) and `fade_to` for elements that already track hover.
+Per CSS: channel rows, member rows, header icons and toolbar buttons have NO transition
+(instant is correct). Faded: user panel buttons .2s, composer buttons .2s, rail tiles .15s,
+pill .2s, reactions .1s (with the pressed colour over the fading layer).
+
+Offscreen check: `cargo run -p phoenix-app --example states_shots -- <dir> x,y[,down] ...`
+renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-42 rows: 28 ✅, 1 ➖, 13 ❌ (several of them "to verify" with a live CDP hover session).
+45 rows: 43 ✅, 1 ➖, 1 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.

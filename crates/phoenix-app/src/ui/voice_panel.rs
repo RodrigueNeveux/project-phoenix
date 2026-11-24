@@ -122,8 +122,17 @@ fn asset_icon(path: &'static str, size: f32, color: Hsla) -> gpui::Svg {
 /// deafened) is `--opacity-red-12` (24 on hover) with an
 /// `--icon-feedback-critical` glyph (`redIcon__WEKcz`).
 pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
+    let id: gpui::ElementId = id.into();
+    let key = crate::ui::states::key(("panel-btn", id.to_string(), red));
+    // button_Y-8oZW transition: background-color .2s ease.
+    let (rest, hover) = if red {
+        (t(idx::OPACITY_RED_12), t(idx::OPACITY_RED_24))
+    } else {
+        (gpui::transparent_black(), t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))
+    };
+    crate::ui::states::track(div().id(id), key)
+        .relative()
+        .child(crate::ui::states::fade_layer(key, rest, hover, 200, 8.))
         .size(z(32.))
         .flex_none()
         .rounded(z(8.))
@@ -132,9 +141,7 @@ pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool
         .justify_center()
         .cursor_pointer()
         .group("panel-btn")
-        .when(red, |d| d.bg(t(idx::OPACITY_RED_12)).hover(|s| s.bg(t(idx::OPACITY_RED_24))))
-        .when(!red, |d| d.hover(|s| s.bg(t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
-        .child(glyph)
+        .child(div().relative().child(glyph))
 }
 
 /// Glyph colour of a panel button (`--icon-subtle` / `--icon-feedback-critical`).

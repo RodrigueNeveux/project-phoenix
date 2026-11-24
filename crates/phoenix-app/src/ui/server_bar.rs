@@ -480,7 +480,16 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
                         .items_center()
                         .justify_center()
                         .rounded(z(ICON_RADIUS))
-                        .bg(c(if selected || hover { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
+                        .relative()
+                        // childWrapper_JJ-hgR transition: background-color .15s ease-out
+                        .child(crate::ui::states::fade_to(
+                            crate::ui::states::key(("rail-tile", HOME_KEY)),
+                            selected || hover,
+                            c(Palette::GUILD_ICON_BG),
+                            c(Palette::BLURPLE),
+                            150,
+                            ICON_RADIUS,
+                        ))
                         .child(svg().path(crate::icons::path("discord-logo")).size(z(30.)).flex_none().text_color(if selected || hover { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
                 )
                 .when(pending > 0, |d| d.child(mention_badge(pending))),
@@ -748,7 +757,16 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedS
             div()
                 .size(z(ICON))
                 .rounded(z(ICON_RADIUS))
-                .bg(c(if hover { Palette::BLURPLE } else { Palette::GUILD_ICON_BG }))
+                .relative()
+                // circleIconButton_g8YUxD transition: background-color .15s ease-out
+                .child(crate::ui::states::fade_to(
+                    crate::ui::states::key(("rail-tile", key)),
+                    hover,
+                    c(Palette::GUILD_ICON_BG),
+                    c(Palette::BLURPLE),
+                    150,
+                    ICON_RADIUS,
+                ))
                 .flex()
                 .items_center()
                 .justify_center()

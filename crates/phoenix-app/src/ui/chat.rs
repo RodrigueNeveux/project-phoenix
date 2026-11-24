@@ -12,7 +12,7 @@ use crate::{
     model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message},
     richtext::{ClickTarget, RBlock, RenderedMessage, RichText},
     theme::{FONT_MONO, Palette, c, ca, fz, generated::idx, m, space, tok, z},
-    ui::{avatar, icon, icon_button, members, sidebar::channel_icon},
+    ui::{avatar, icon, members, sidebar::channel_icon},
 };
 
 // Messaging features live in submodules (composer moved to `composer.rs`).
@@ -247,23 +247,33 @@ pub(crate) fn msg_left() -> f32 {
 }
 
 fn hdr_button(id: &'static str, i: Icon, color: gpui::Hsla, size: f32) -> gpui::Stateful<gpui::Div> {
-    icon_button(id, i, color, size * crate::theme::zoom()).size(z(32.)).rounded(z(8.))
+    let _ = size;
+    hdr(id, i.path(), color)
 }
 
 /// Header toolbar button whose glyph comes from the runtime icon provider by name
 /// (iconWrapper_ .clickable_: 32px box, 20px svg).
 fn hdr_named(id: &'static str, name: &str, color: gpui::Hsla) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .size(z(32.))
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(z(8.))
-        .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .child(gpui::svg().path(crate::icons::path(name)).size(z(HDR_ICON)).flex_none().text_color(color))
+    hdr(id, crate::icons::path(name), color)
+}
+
+/// `.selected_ybUK7Z` buttons are drawn `--icon-strong`; the tooltip is the button's aria-label.
+fn hdr(id: &'static str, path: SharedString, color: gpui::Hsla) -> gpui::Stateful<gpui::Div> {
+    let selected = color == tk(idx::ICON_STRONG);
+    let label = match id {
+        "threads" => crate::t!("threads.title"),
+        "bell" => crate::t!("menu.notify_settings"),
+        "pin" => crate::t!("pins.title"),
+        "members" if selected => crate::t!("header.members_hide"),
+        "members" => crate::t!("header.members_show"),
+        "dm-call" => crate::t!("header.voice_call"),
+        "dm-video" => crate::t!("header.video_call"),
+        "dm-add" => crate::t!("header.add_to_dm"),
+        "dm-profile" if selected => crate::t!("header.profile_hide"),
+        "dm-profile" => crate::t!("header.profile_show"),
+        _ => crate::t!("header.more"),
+    };
+    crate::ui::states::header_button(id, path, selected, label)
 }
 
 /// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
@@ -855,7 +865,8 @@ fn message(
                     .border_l_2()
                     .border_t_2()
                     .rounded_tl(z(6.))
-                    .border_color(tk(idx::SPINE_DEFAULT)),
+                    .border_color(tk(idx::SPINE_DEFAULT))
+                    .hover(|s| s.border_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))), // repliedMessageClickableSpine_:hover
             )
             .when(!compact, |d| d.child(avatar(ru.as_deref(), 16.)))
             // vanilla-guild-text #1283: `botTagCompact_` sits before the replied username.
@@ -878,6 +889,7 @@ fn message(
                     .flex_1()
                     .min_w_0()
                     .text_color(tk(idx::TEXT_DEFAULT)) // repliedTextContent_ color: inherit
+                    .hover(|s| s.text_color(tk(idx::TEXT_STRONG))) // repliedTextPreview_.clickable_:hover
                     .whitespace_nowrap()
                     .overflow_hidden()
                     .text_ellipsis()
@@ -1006,6 +1018,19 @@ fn message(
                         .top(z(if msg.reply_to.is_some() { 26. } else { 4. })) // #2640: 2 + 18 reply + 4 + 2
                         .id(("msg-avatar", id.0))
                         .cursor_pointer()
+                        .rounded_full()
+                        // .full-motion avatar_2i8Bfm.clickable_:hover drop-shadow(--elevation-medium: 0 4px 4px --opacity-black-16)
+                        .hover(|s| {
+                            s.shadow(vec![gpui::BoxShadow {
+                                color: gpui::hsla(0., 0., 0., 0.16),
+                                offset: gpui::point(z(0.), z(4.)),
+                                blur_radius: z(4.),
+                                spread_radius: z(0.),
+                                inset: false,
+                            }])
+                        })
+                        // avatar_2i8Bfm.clickable_:active translateY(1px)
+                        .active(|s| s.mt(z(1.)))
                         .on_click(message_ext::open_author(entity, msg))
                         .child(avatar(author, m::AVATAR)),
                 )

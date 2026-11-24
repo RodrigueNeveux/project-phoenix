@@ -144,14 +144,15 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
         let rc = r.clone();
         // reaction_ .emoji 20px, margin 2px 0.
         let emoji_el = div().my(z(2.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.));
+        let fade_key = crate::ui::states::key(("reaction", msg.id.0, ix));
         row = row.child(
             // reaction_: radius 8px, 1px transparent border, --reaction-background-default;
             // :hover --reaction-background-hover / --reaction-border-hover; .reactionMe_
             // --reaction-background-reacted-default / --reaction-border-reacted-default.
             // reactionInner_ padding 2px 6px. reactionCount_ semibold --text-subtle
             // (reacted: --reaction-text-reacted-default), margin-inline-start 6px.
-            div()
-                .id(("reaction", ix))
+            crate::ui::states::track(div().id(("reaction", ix)), fade_key)
+                .relative()
                 .py(z(2.))
                 .px(z(6.))
                 .rounded(z(8.))
@@ -164,11 +165,22 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                         .border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT))
                 })
                 .when(!r.me, |d| {
-                    d.bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
-                        .border_color(gpui::transparent_black())
-                        .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
+                    // reaction_MmKct8 transition: background-color .1s ease (layer below).
+                    d.child(crate::ui::states::fade_layer_pressed(
+                        fade_key,
+                        tk(idx::REACTION_BACKGROUND_DEFAULT),
+                        tk(idx::REACTION_BACKGROUND_HOVER),
+                        Some(("reaction", tk(idx::REACTION_BACKGROUND_ACTIVE))),
+                        100,
+                        8.,
+                    ))
+                    .border_color(gpui::transparent_black())
+                    .hover(|s| s.border_color(tk(idx::REACTION_BORDER_HOVER)))
                 })
+                // reaction_MmKct8:active background / border
+                .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
                 .cursor_pointer()
+                .group("reaction")
                 .child(emoji_el)
                 .child(
                     div()
@@ -178,6 +190,10 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                         .line_height(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(tk(if r.me { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::TEXT_SUBTLE }))
+                        // reaction_:hover / :active .reactionCount_ colours
+                        .group_hover("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_HOVER)))
+                        .id("count")
+                        .group_active("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_ACTIVE)))
                         .child(SharedString::from(r.count.to_string())),
                 )
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_reaction(ch, id, &rc, cx))),
@@ -201,6 +217,7 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
             .bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
             .cursor_pointer()
             .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
+            .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE))) // reactionBtn_:active
             .child(icon(ChatIcon::AddReaction, 18., tk(idx::REACTION_TEXT_DEFAULT)))
             .on_click(move |_, _, cx| {
                 e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))

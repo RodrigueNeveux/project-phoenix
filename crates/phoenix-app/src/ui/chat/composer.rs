@@ -367,8 +367,19 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                             .items_center()
                                             .justify_center()
                                             .cursor_pointer()
-                                            .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                                            .child(gpui::svg().path(crate::icons::path("apps")).size(z(20.)).flex_none().text_color(ic)),
+                                            // button_hfM7yP states, as the other composer buttons.
+                                            .group("apps")
+                                            .hover(|s| s.bg(c(crate::theme::tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
+                                            .child(
+                                                gpui::svg()
+                                                    .path(crate::icons::path("apps"))
+                                                    .size(z(20.))
+                                                    .flex_none()
+                                                    .text_color(ic)
+                                                    .group_hover("apps", |s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_HOVER))))
+                                                    .id("g")
+                                                    .group_active("apps", |s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
+                                            ),
                                     ),
                             ),
                     ),
