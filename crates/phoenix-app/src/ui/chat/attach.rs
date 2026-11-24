@@ -11,9 +11,9 @@ use crate::{
     theme::{FONT_MONO, c, generated::{global, idx}, tok, z},
 };
 
-/// Media the chat can load: remote https, or an absolute local path (offscreen mock renders).
+/// Media the chat can load: remote https, or `local/<abs path>` (offscreen mock renders).
 pub fn loadable(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with('/')
+    url.starts_with("https://") || url.starts_with("local/")
 }
 
 fn tk(i: usize) -> gpui::Hsla {

@@ -169,7 +169,8 @@ use gpui::SharedString;
 fn media(name: &str) -> SharedString {
     let png = name.rsplit_once('.').map_or(name.to_owned(), |(b, _)| format!("{b}.png"));
     match std::env::var("PHX_MOCK_MEDIA_DIR").map(|d| format!("{d}/{png}")) {
-        Ok(p) if std::path::Path::new(&p).exists() => p.into(),
+        // `local/<abs path>`: served from disk by `Assets::load`.
+        Ok(p) if std::path::Path::new(&p).exists() => format!("local/{p}").into(),
         _ => format!("https://example.invalid/{name}").into(),
     }
 }
