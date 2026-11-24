@@ -298,7 +298,7 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
     let prev = THEME.swap(t, Ordering::Relaxed);
     let pz = ZOOM.swap(prefs.local.zoom.clamp(50, 200), Ordering::Relaxed);
     let pf = FONT_PX.swap(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
-    let pd = DENSITY.swap(prefs.local.density as u8, Ordering::Relaxed);
+    let pd = DENSITY.swap(prefs.synced.density as u8, Ordering::Relaxed);
     let ps = SATURATION.swap(prefs.local.saturation.min(100), Ordering::Relaxed);
     if ps != prefs.local.saturation.min(100) {
         STYLE_GEN.fetch_add(1, Ordering::Relaxed);
@@ -308,12 +308,15 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
     static LOCALE: std::sync::Mutex<&str> = std::sync::Mutex::new("");
     let locale = crate::i18n::locale();
     let locale_changed = LOCALE.lock().map(|mut l| std::mem::replace(&mut *l, locale) != locale).unwrap_or(false);
-    if locale_changed || prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) || pd != prefs.local.density as u8 {
+    if locale_changed || prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) || pd != prefs.synced.density as u8 {
         STYLE_GEN.fetch_add(1, Ordering::Relaxed);
     }
-    let rem = px(16. * zoom());
-    if window.rem_size() != rem {
-        window.set_rem_size(rem);
+    // Zoom is Chromium page zoom (Electron `webFrame.setZoomFactor`): the whole
+    // window is scaled by GPUI (vendor patch "page zoom"), so layout stays in
+    // CSS px and `rem` stays 16 px like the client's root font size.
+    window.set_page_zoom(page_zoom());
+    if window.rem_size() != px(16.) {
+        window.set_rem_size(px(16.));
     }
     if prev != t {
         let mode = if t == 1 { ThemeMode::Light } else { ThemeMode::Dark };
@@ -325,9 +328,18 @@ fn zoom_raw() -> u32 {
     ZOOM.load(Ordering::Relaxed)
 }
 
-/// UI zoom factor (Settings > Appearance > Zoom level), 1.0 = 100 %.
-pub fn zoom() -> f32 {
+/// Page zoom factor (Settings > Appearance > Zoom level, Ctrl+=/-/0), 1.0 = 100 %.
+/// Applied to the whole window by [`sync`]; views never multiply by it.
+pub fn page_zoom() -> f32 {
     ZOOM.load(Ordering::Relaxed) as f32 / 100.
+}
+
+/// Layout zoom multiplier for authored lengths. Always 1.0 now that zoom is a
+/// window-level page zoom (like Chromium): CSS px stay CSS px at every zoom
+/// level, so fixed and "scaled" lengths can no longer disagree. Kept so the
+/// existing `z()` / `* zoom()` call sites stay valid.
+pub fn zoom() -> f32 {
+    1.0
 }
 
 /// Chat font scale relative to Discord's 16 px default.

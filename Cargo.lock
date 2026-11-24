@@ -2810,7 +2810,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre"
 version = "0.3.12"
-source = "git+https://github.com/RoxasYTB/project-phoenix?rev=d3a3f23daaaa38a3c08a16d6bf708f6cd404e25d#d3a3f23daaaa38a3c08a16d6bf708f6cd404e25d"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=2fb4a829cfa1e3801edb835f49033dd24287c329#2fb4a829cfa1e3801edb835f49033dd24287c329"
 dependencies = [
  "accesskit",
  "anyhow",
