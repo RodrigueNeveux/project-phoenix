@@ -594,7 +594,7 @@ mod tests {
 
     #[test]
     fn every_listed_key_is_bound() {
-        let mut cx = gpui::TestAppContext::single();
+        let cx = gpui::TestAppContext::single();
         cx.update(|cx| {
             bind_keys(cx);
             crate::app::bind_keys(cx);
