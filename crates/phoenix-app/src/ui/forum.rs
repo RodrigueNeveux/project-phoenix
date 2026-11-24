@@ -317,10 +317,17 @@ fn preview_text(s: &str) -> String {
         .join(" ")
 }
 
+/// Highlighted title/preview, as the client's `isNew || hasUnreads`: never
+/// for an archived post; a post with its own read state is unread when its
+/// last message is past the ack; one never opened is "new" when its id is
+/// past the forum channel's own ack (`isNewForumThread`).
 fn is_unread(app: &PhoenixApp, p: &ForumPost) -> bool {
-    match (app.backend.last_read(p.thread), p.last_message) {
-        (Some(r), Some(l)) => l.0 > r.0,
-        _ => false,
+    if p.archived {
+        return false;
+    }
+    match app.backend.last_read(p.thread) {
+        Some(r) => p.last_message.is_some_and(|l| l.0 > r.0),
+        None => open_forum(app).and_then(|f| app.backend.last_read(f)).is_some_and(|r| p.thread.0 > r.0),
     }
 }
 
@@ -339,7 +346,8 @@ fn footer_time(now: i64, p: &ForumPost) -> String {
 
 fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let first = p.first_message.as_ref();
-    let author_id = p.owner.or(first.map(|m| m.author));
+    // The client names the first message's author (the owner can differ).
+    let author_id = first.map(|m| m.author).or(p.owner);
     let author = author_id.and_then(|u| app.users.get(&u));
     let guild = app.channels.get(&p.thread).and_then(|ch| ch.guild).or(app.selected_guild);
     let author_color = guild
