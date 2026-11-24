@@ -1161,7 +1161,8 @@ fn message(
                     .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, false)))
                     .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
                     .when(app.is_new_member(msg.author), |d| d.child(new_member_badge(msg.id)))
-                    .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot)))),
+                    .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot))))
+                    .when(crate::ui::forum::is_op(app, msg.channel, msg.author), |d| d.child(crate::ui::forum::op_tag())),
             )
             .child(content)
     } else {
@@ -1221,6 +1222,7 @@ fn message(
                         .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
                     .when(app.is_new_member(msg.author), |d| d.child(new_member_badge(msg.id)))
                         .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot))))
+                        .when(crate::ui::forum::is_op(app, msg.channel, msg.author), |d| d.child(crate::ui::forum::op_tag()))
                         .child(
                             // .cozy_ .timestamp_: .75rem, --chat-text-muted, medium;
                             // timestampInline_ margin-inline-start .25rem.

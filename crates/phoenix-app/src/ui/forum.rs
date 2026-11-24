@@ -56,6 +56,43 @@ fn open_forum(app: &PhoenixApp) -> Option<Id> {
 }
 
 /// Unix seconds of a snowflake.
+/// The author opened this forum post: the "OP" tag next to their name
+/// (owner from the loaded post lists of the post's forum).
+pub fn is_op(app: &PhoenixApp, channel: Id, author: Id) -> bool {
+    let Some(forum) = app.channels.get(&channel).and_then(|ch| ch.parent).or_else(|| app.nav.find_thread(channel).and_then(|t| t.parent))
+    else {
+        return false;
+    };
+    app.parity
+        .forums
+        .get(&forum)
+        .and_then(|v| v.posts.iter().chain(v.archived.iter()).find(|p| p.thread == channel))
+        .is_some_and(|p| p.owner == Some(author))
+}
+
+/// botTagOP_feVUtO (vanilla-thread-channel "OP"): the bot tag box
+/// (.rem_.botTag_: h .9375rem, padding 0 .275rem, radius 4px; botTagCozy_
+/// margin-inline-start .25rem; .rem_.botTag_.botTagOP_ margin-top .25em)
+/// with --brand-260 background and --brand-560 text.
+pub fn op_tag() -> gpui::Div {
+    div()
+        .flex_none()
+        .ml(z(4.))
+        .mt(z(2.5))
+        .px(z(4.4))
+        .h(z(15.))
+        .rounded(z(4.))
+        .bg(c(tok(idx::BRAND_260)))
+        .flex()
+        .items_center()
+        // botText_: .8rem / 15px, 600
+        .text_size(z(12.8))
+        .line_height(z(15.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(tok(idx::BRAND_560)))
+        .child(crate::t!("forum.op"))
+}
+
 fn snowflake_time(id: Id) -> i64 {
     (((id.0 >> 22) + 1_420_070_400_000) / 1000) as i64
 }
