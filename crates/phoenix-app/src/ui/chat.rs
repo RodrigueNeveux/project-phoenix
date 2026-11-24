@@ -888,16 +888,26 @@ fn message(
             // vanilla-guild-text #1283: `botTagCompact_` sits before the replied username.
             .when(ru.as_deref().is_some_and(|u| u.bot), |d| d.child(bot_tag(ru.as_deref().is_some_and(|u| u.verified_bot)).ml_0()))
             .child(
-                div()
-                    .flex_none()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(ru.as_deref().and_then(|u| app.author_color(u.id)).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
-                    .opacity(0.64)
-                    .child(SharedString::from(format!(
+                // repliedMessage_ username: like the message header, a display name
+                // style switches the font (live client) while the color stays the role's.
+                crate::fonts::styled_name(
+                    div()
+                        .flex_none()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(ru.as_deref().and_then(|u| app.author_color(u.id)).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
+                        .opacity(0.64),
+                    ru.as_deref(),
+                    false,
+                )
+                .child(crate::fonts::name_text(
+                    SharedString::from(format!(
                         "{}{}",
-                        if msg.reply_mentions_author { "@" } else { "" }, // repliedMessage_ username: "@" only when the reply pinged
+                        if msg.reply_mentions_author { "@" } else { "" }, // "@" only when the reply pinged
                         rnick.map(|n| n.to_string()).or_else(|| ru.as_deref().map(|u| u.display_name.to_string())).unwrap_or_else(|| crate::t!("common.unknown").to_string())
-                    ))),
+                    )),
+                    ru.as_deref(),
+                    14.,
+                )),
             )
             .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))
             .child(
