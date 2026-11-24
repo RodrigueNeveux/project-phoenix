@@ -197,17 +197,18 @@ fn option_list(raw: &Value) -> Vec<(String, u64, bool, String)> {
         .unwrap_or_default()
 }
 
+/// Same container as the other composer autocompletes (116815 autocompleteAttached_ /
+/// autocomplete_rg6La1, 790340 autocomplete_CAMiwx): inset-inline 8 / 16, radius 5,
+/// --shadow-border + --shadow-high, --background-surface-high. CSS only.
 fn popup() -> gpui::Div {
     div()
         .absolute()
-        .left(z(16.))
-        .right(z(16.))
+        .left(z(8. + crate::theme::space::xs()))
+        .right(z(16. + crate::theme::space::xs()))
         .bottom(z(8.))
-        .rounded(z(8.))
-        .bg(c(Palette::BG_SECONDARY))
-        .border_1()
-        .border_color(c(Palette::BG_TERTIARY))
-        .shadow_lg()
+        .rounded(z(5.))
+        .bg(super::tk(crate::theme::generated::idx::BACKGROUND_SURFACE_HIGH))
+        .shadow(crate::ui::inbox::popout_shadow())
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -262,13 +263,14 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             list = list.child(
                 div()
                     .id(("slash-cmd", i))
+                    // autocompleteRow_ (padding 0 8) + base_ (padding 8, radius 3);
+                    // selected / hover --interactive-background-hover. CSS only.
                     .mx(z(8.))
-                    .px(z(8.))
-                    .py(z(6.))
-                    .rounded(z(4.))
+                    .p(z(8.))
+                    .rounded(z(3.))
                     .cursor_pointer()
-                    .when(i == sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-                    .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                    .when(i == sel, |d| d.bg(super::tk(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_HOVER)))
+                    .hover(|s| s.bg(super::tk(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_HOVER)))
                     .flex()
                     .items_center()
                     .gap(z(8.))
@@ -322,17 +324,18 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             desc = Some(d.clone());
         }
         chips = chips.child(
+            // 358931 optionPill_: radius 4, 1px --background-base-lowest border,
+            // --background-mod-normal; optionPillKey_ padding 1px 8px on --background-surface-high;
+            // optionPillValue_ padding 1px 8px.
             div()
-                .px(z(6.))
-                .h(z(20.))
                 .rounded(z(4.))
+                .border_1()
+                .border_color(super::tk(crate::theme::generated::idx::BACKGROUND_BASE_LOWEST))
+                .bg(super::tk(crate::theme::generated::idx::BACKGROUND_MOD_NORMAL))
                 .flex()
-                .items_center()
-                .gap(z(4.))
-                .bg(c(if filled { Palette::BG_MOD_SELECTED } else { Palette::BG_TERTIARY }))
-                .text_size(z(12.))
-                .child(div().text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(format!("{n}:"))))
-                .child(div().text_color(c(Palette::TEXT_MUTED)).child(type_hint(*kind)))
+                .text_size(z(14.))
+                .child(div().px(z(8.)).py(z(1.)).rounded_l(z(4.)).bg(super::tk(crate::theme::generated::idx::BACKGROUND_SURFACE_HIGH)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(n.to_string())))
+                .child(div().px(z(8.)).py(z(1.)).text_color(c(Palette::TEXT_MUTED)).child(type_hint(*kind)))
                 .when(*req && !filled, |d| d.child(div().text_color(c(Palette::RED)).child("*"))),
         );
     }

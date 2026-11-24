@@ -4,11 +4,12 @@
 
 use std::time::Duration;
 
+use gpui_component::Sizable as _;
+
 use gpui::{
     Animation, AnimationExt, Context, FontWeight, IntoElement, KeyDownEvent, ParentElement, SharedString,
     Styled, Window, div, img, prelude::*, relative,
 };
-use gpui_component::input::Input;
 
 use super::{
     icons::{ChatIcon, icon},
@@ -103,7 +104,8 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
         .gap(z(24.))
         .overflow_x_scroll();
     for (ix, f) in app.chat.uploads.iter().enumerate() {
-        let preview = match &f.image {
+        let shown = if f.spoiler { f.blurred.as_ref().or(f.image.as_ref()) } else { f.image.as_ref() };
+        let preview = match shown {
             Some(i) => img(i.clone())
                 .size_full()
                 .rounded(z(12.)) // media_ border-radius --radius-sm
@@ -141,6 +143,11 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
                     .on_click(cx.listener(move |a, _, _, cx| a.toggle_upload_spoiler(ix, cx))),
             )
             .child(
+                // Client order: Spoiler, Edit (file name), Remove.
+                button(("up-edit", ix), ChatIcon::Edit, super::tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                    .on_click(cx.listener(move |a, _, _, cx| open_upload_edit(a, ix, cx))),
+            )
+            .child(
                 button(("up-remove", ix), ChatIcon::Trash, super::tk(idx::TEXT_FEEDBACK_CRITICAL))
                     .on_click(cx.listener(move |a, _, _, cx| a.remove_upload(ix, cx))),
             );
@@ -169,9 +176,10 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
                         .justify_center()
                         .overflow_hidden()
                         .rounded(z(12.))
-                        // spoiler_: blur(--custom-channel-attachment-upload-spoiler-blur-radius 44px);
-                        // GPUI has no blur filter, so the preview is dimmed instead.
-                        .when(f.spoiler, |d| d.opacity(0.15).bg(super::tk(idx::BACKGROUND_MOD_STRONG)))
+                        // spoiler_: blur(--custom-channel-attachment-upload-spoiler-blur-radius 44px),
+                        // rendered as a pre-blurred copy (ui/chat/spoiler.rs).
+                        // Until the blurred copy is ready, the raw preview is dimmed.
+                        .when(f.spoiler && f.blurred.is_none(), |d| d.opacity(0.15).bg(super::tk(idx::BACKGROUND_MOD_STRONG)))
                         .child(preview),
                 )
                 .child(
@@ -254,12 +262,16 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
     };
     let ic = c(Palette::INTERACTIVE);
     let placeholder_empty = app.composer.read(cx).value().is_empty();
-    // Discord shows the remaining count once you get near the 2000 limit.
-    let remaining = 2000 - app.composer.read(cx).value().chars().count() as i64;
+    // Client CharacterCount: max 4000 with Nitro (canUseIncreasedMessageLength), else 2000.
+    let (remaining, show_count) = char_count(app.backend.has_premium(), app.composer.read(cx).value().chars().count() as i64);
     let reply = reply_bar(app, cx);
     let has_banner = reply.is_some();
     let tray = upload_tray(app, cx);
-    let typing_active = app.selected_channel.and_then(|c| app.typing.get(&c)).is_some_and(|v| !v.is_empty());
+    let typing_active = app.selected_channel.and_then(|c| app.typing.get(&c)).is_some_and(|v| !v.is_empty())
+        || app.selected_channel.is_some_and(|c| slowmode_of(app, c) > 0);
+    // No SEND_MESSAGES: disabled text area with the client's notice, no buttons (CSS only).
+    let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
+    let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
     div()
         .flex_none()
         .relative()
@@ -289,10 +301,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .min_h(z(56.)) // #1437 56px (17px padding + 22px line)
                             .when(has_banner, |d| d.rounded_b(z(8.)))
                             .relative()
-                            // Client CharacterCount: visible once remaining <= max/10 (200 of 2000);
+                            // Client CharacterCount: see char_count;
                             // characterCount_ absolute bottom 10 / inset-inline-end 14; body-sm/semibold
                             // tabular, --text-default, --text-feedback-critical when over the limit.
-                            .when(remaining <= 200, |d| {
+                            .when(show_count, |d| {
                                 d.child(
                                     div()
                                         .absolute()
@@ -306,7 +318,9 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                 )
                             })
                             .flex()
-                            .items_center()
+                            // buttons_/attachWrapper_ are text-area-height rows pinned to the top
+                            // (position sticky, top 0) while the text grows below.
+                            .items_start()
                             .capture_key_down(cx.listener(|a, ev: &KeyDownEvent, w, cx| {
                                 let k = &ev.keystroke;
                                 if k.modifiers.number_of_modifiers() == 0 && super::slash::on_key(a, &k.key, w, cx) {
@@ -324,7 +338,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                 // -(space-xs + space-6) 10px around a 32px button.
                                 // #1438 inner_ padding-inline-start 15px; #1439 attachWrapper_ padding 12px 14px;
                                 // #1440 attachButton_ 32px, radius 8px, margin 0 10px 0 -16px, PlusLargeIcon 20px.
-                                div().pl(z(15.)).child(div().px(z(14.)).child(
+                                div().pl(z(15.)).h(z(56.)).flex().items_center().when(blocked, |d| d.invisible()).child(div().px(z(14.)).child(
                                     crate::ui::states::composer_button("attach", Icon::Plus)
                                         .ml(z(-16.))
                                         .mr(z(10.))
@@ -336,15 +350,28 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                     .flex_1()
                                     .min_w_0()
                                     .relative()
+                                    // textArea_ padding 17px 0, 16/22. gpui-component's Textarea fixes its
+                                    // line height at 1.25rem (20px): 18px padding keeps the 56px single-line box.
+                                    .py(z(18.))
                                     .text_size(z(16.))
+                                    .line_height(z(22.))
                                     .text_color(c(Palette::TEXT_NORMAL))
-                                    .child(Input::new(&app.composer).appearance(false).bordered(false))
+                                    .child(
+                                        // xsmall: no editor padding (py 0, px 4), the 4px cancelled below.
+                                        div().mx(z(-4.)).child(
+                                            gpui_component::input::Textarea::new(&app.composer)
+                                                .appearance(false)
+                                                .bordered(false)
+                                                .xsmall()
+                                                .disabled(blocked),
+                                        ),
+                                    )
                                     .when(placeholder_empty, |d| {
                                         d.child(
                                             div()
                                                 .absolute()
-                                                .top_0()
-                                                .bottom_0()
+                                                .top(z(18.))
+                                                .h(z(20.))
                                                 // #1445 placeholder_ sits at the editor's x (496 in live form, glyph at 497.3).
                                                 .left_0()
                                                 .right_0()
@@ -362,7 +389,9 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                 // #1452 buttons_ gap 8px, 12px to the right edge (#1437 ends 12px early);
                                 // order: gift, GIF, sticker, emoji, app launcher (#1457–#1480).
                                 div()
+                                    .when(blocked, |d| d.invisible())
                                     .mr(z(12.))
+                                    .h(z(56.)) // buttons_ height --custom-channel-textarea-text-area-height
                                     .flex()
                                     .gap(z(8.))
                                     .items_center()
@@ -402,6 +431,104 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         )
         // base_U9Tvvz: absolute, bottom 1px, height 24px, inset-inline --space-16 16px.
         .child(div().absolute().bottom(z(1.)).left(z(16.)).right(z(16.)).child(typing(app)))
+}
+
+/// Edit button of an upload: rename the file before sending (the client's
+/// attachment modal also has a description field and a spoiler toggle).
+fn open_upload_edit(app: &mut PhoenixApp, ix: usize, cx: &mut Context<PhoenixApp>) {
+    use crate::ui::modals::{Field, Form, Modal};
+    let Some(f) = app.chat.uploads.get(ix) else { return };
+    crate::actions::open_modal(
+        Modal::Form(Form {
+            title: f.name.clone(),
+            subtitle: None,
+            fields: vec![Field::new(crate::t!("upload.filename"), "".into(), f.name.to_string())],
+            choices: Vec::new(),
+            choice: None,
+            submit: crate::t!("common.save"),
+            danger: false,
+            on_submit: std::rc::Rc::new(move |a: &mut PhoenixApp, v: Vec<String>, _, cx: &mut Context<PhoenixApp>| {
+                let name = v.into_iter().next().unwrap_or_default();
+                if let (Some(u), false) = (a.chat.uploads.get_mut(ix), name.trim().is_empty()) {
+                    u.name = name.trim().to_string().into();
+                }
+                cx.notify();
+            }),
+        }),
+        None,
+    );
+    cx.notify();
+}
+
+/// (remaining, visible) like the client's CharacterCount: shown once
+/// remaining <= max/10, and for Nitro users as soon as the text passes 2000.
+pub fn char_count(premium: bool, len: i64) -> (i64, bool) {
+    let max = if premium { 4000 } else { 2000 };
+    let remaining = max - len;
+    (remaining, remaining <= max / 10 || (premium && len > 2000 && remaining >= 0))
+}
+
+thread_local! {
+    /// Our last send per channel (slowmode countdown).
+    static LAST_SENT: std::cell::RefCell<std::collections::HashMap<crate::model::Id, std::time::Instant>> = Default::default();
+}
+
+fn slowmode_of(app: &PhoenixApp, ch: crate::model::Id) -> u32 {
+    app.nav.extras.get(&ch).filter(|x| !x.bypass_slowmode).map_or(0, |x| x.slowmode)
+}
+
+/// Seconds left before we may send again in `ch` (0 = free).
+pub fn cooldown_left(app: &PhoenixApp, ch: crate::model::Id) -> u64 {
+    let secs = slowmode_of(app, ch) as u64;
+    LAST_SENT.with(|m| m.borrow().get(&ch).map_or(0, |t| secs.saturating_sub(t.elapsed().as_secs())))
+}
+
+/// Slowmode still running: the send is held back (the client keeps the text).
+pub fn send_held(app: &PhoenixApp, ch: crate::model::Id) -> bool {
+    cooldown_left(app, ch) > 0
+}
+
+pub fn note_sent(ch: crate::model::Id) {
+    LAST_SENT.with(|m| {
+        m.borrow_mut().insert(ch, std::time::Instant::now());
+    });
+}
+
+/// A countdown is visible somewhere (1 s redraw tick).
+pub fn cooling() -> bool {
+    LAST_SENT.with(|m| m.borrow().values().any(|t| t.elapsed().as_secs() < 6 * 3600))
+}
+
+/// "mm:ss" (or "h:mm:ss") like the client's cooldown text.
+pub fn format_cooldown(secs: u64) -> String {
+    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
+    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m:02}:{s:02}") }
+}
+
+/// cooldownWrapper_bbCgC2: right side of the typing row (margin-inline-start auto,
+/// padding 3 8, padding-inline-end 16, gap 4); countdown text, then slowModeIcon_
+/// (margin-inline-start 4). CSS only: the icon glyph (clock) and text format are assumed.
+fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
+    let ch = app.selected_channel?;
+    if slowmode_of(app, ch) == 0 {
+        return None;
+    }
+    let left = cooldown_left(app, ch);
+    Some(
+        div()
+            .ml_auto()
+            .pt(z(3.))
+            .pb(z(3.))
+            .pl(z(8.))
+            .pr(z(16.))
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .whitespace_nowrap()
+            .when(left > 0, |d| d.child(SharedString::from(format_cooldown(left))))
+            .child(div().ml(z(4.)).child(gpui::svg().path(crate::icons::path("inbox/clock")).size(z(16.)).text_color(super::tk(idx::TEXT_MUTED))))
+            .into_any_element(),
+    )
 }
 
 /// "**Name** is typing…" with bouncing dots, from real TYPING_START events.
@@ -456,4 +583,27 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
         .when_some(app.chat.error.clone(), |d, err| {
             d.child(div().flex_1()).child(div().text_color(c(Palette::RED)).text_ellipsis().child(err))
         })
+        .children(cooldown(app))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{char_count, format_cooldown};
+
+    #[test]
+    fn counter_follows_the_client() {
+        assert_eq!(char_count(false, 1799), (201, false));
+        assert_eq!(char_count(false, 1800), (200, true));
+        assert_eq!(char_count(false, 2100), (-100, true));
+        assert_eq!(char_count(true, 2000), (2000, false));
+        assert_eq!(char_count(true, 2001), (1999, true));
+        assert_eq!(char_count(true, 3600), (400, true));
+    }
+
+    #[test]
+    fn cooldown_text() {
+        assert_eq!(format_cooldown(5), "00:05");
+        assert_eq!(format_cooldown(125), "02:05");
+        assert_eq!(format_cooldown(3725), "1:02:05");
+    }
 }

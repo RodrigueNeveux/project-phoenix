@@ -1,7 +1,7 @@
 //! Offscreen renders (mock data) of the keyboard-shortcut UI at the live dump's
 //! 1536x840 viewport: `cargo run -p phoenix-app --example shortcuts_shot -- out.png <scene>`
 //! scene: modal (Ctrl+/ combos) | focus (keyboard-focused message) | thread ("Nouveau fil" sidebar)
-//! | mention / emoji / channel (composer autocomplete) | long (character counter) | upload (attachment tray)
+//! | mention / emoji / channel (composer autocomplete) | long (character counter) | multiline | slowmode | blocked | upload (attachment tray)
 
 use std::{sync::Arc, time::Duration};
 
@@ -72,12 +72,13 @@ fn main() -> anyhow::Result<()> {
                 app.focus_last_message(window, cx);
             }
             // Composer states (docs/parity/composer.md).
-            "mention" | "emoji" | "channel" | "long" => {
+            "mention" | "emoji" | "channel" | "long" | "multiline" => {
                 let text = match scene.as_str() {
                     "mention" => "@".to_string(),
                     "emoji" => ":sm".to_string(),
                     "channel" => "#".to_string(),
-                    _ => "x".repeat(1900),
+                    "multiline" => "first line\nsecond line\nthird line".to_string(),
+                    _ => "lorem ipsum dolor sit amet ".repeat(70),
                 };
                 app.composer.update(cx, |s, cx| {
                     s.set_value(text, window, cx);
@@ -85,9 +86,29 @@ fn main() -> anyhow::Result<()> {
                 });
                 phoenix_app::ui::autocomplete::refresh(app, window, cx);
             }
-            "upload" => {
+            "slowmode" | "blocked" => {
+                if let Some(ch) = app.selected_channel {
+                    let x = app.nav.extras.entry(ch).or_default();
+                    if scene == "blocked" {
+                        x.send_blocked = true;
+                    } else {
+                        x.slowmode = 30;
+                        phoenix_app::ui::chat::composer::note_sent(ch);
+                    }
+                }
+                cx.notify();
+            }
+            "upload" | "spoiler" => {
                 let icon = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png"));
                 app.add_paths(vec![icon], cx);
+                if scene == "spoiler" {
+                    // add_paths reads off-thread: toggle once the file is in.
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor().timer(Duration::from_millis(200)).await;
+                        let _ = this.update(cx, |a, cx| a.toggle_upload_spoiler(0, cx));
+                    })
+                    .detach();
+                }
             }
             "thread" => {
                 if let Some(ch) = app.selected_channel {

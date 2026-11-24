@@ -101,7 +101,7 @@ impl gpui::Global for Pickers {}
 
 /// Register the picker state, the keystroke interceptor and the composer
 /// autocomplete. Call once from `PhoenixApp::new`.
-pub fn install(composer: &Entity<InputState>, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<Subscription> {
+pub fn install(composer: &Entity<gpui_component::input::TextareaState>, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<Subscription> {
     let weak = cx.entity().downgrade();
     cx.set_global(Pickers {
         app: weak.clone(),

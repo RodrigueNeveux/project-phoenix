@@ -134,7 +134,7 @@ pub struct PhoenixApp {
     pub member_list: ListState,
 
     // Composer
-    pub composer: Entity<InputState>,
+    pub composer: Entity<gpui_component::input::TextareaState>,
     pub replying_to: Option<Id>,
     pub editing: Option<Id>,
     pub typing: HashMap<Id, Vec<(Id, Instant)>>,
@@ -221,7 +221,10 @@ impl PhoenixApp {
         let login_password = cx.new(|cx| InputState::new(window, cx).masked(true));
         let login_token = cx.new(|cx| InputState::new(window, cx).masked(true));
         let login_mfa = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("login.six_digit")));
-        let composer = cx.new(|cx| InputState::new(window, cx));
+        // scrollableContainer_: grows with the text up to --custom-channel-textarea-text-area-max-height
+        // (50vh), then scrolls; Enter sends, Shift+Enter inserts a newline. 22px lines.
+        let max_rows = ((f32::from(window.viewport_size().height) * 0.5 / 22.).floor() as usize).max(2);
+        let composer = cx.new(|cx| gpui_component::input::TextareaState::new(window, cx).auto_grow(1, max_rows).submit_on_enter(true));
 
         let mut subs = Vec::new();
         subs.extend(ui::pickers::install(&composer, window, cx));
@@ -264,7 +267,7 @@ impl PhoenixApp {
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_secs(1)).await;
-                if this.update(cx, |this, cx| { this.expire_typing(cx); if crate::voice::start_time::ticking() { cx.notify(); } }).is_err() {
+                if this.update(cx, |this, cx| { this.expire_typing(cx); if crate::voice::start_time::ticking() || crate::ui::chat::composer::cooling() { cx.notify(); } }).is_err() {
                     break;
                 }
             }
@@ -990,7 +993,7 @@ impl PhoenixApp {
         }
         let Some(ch) = self.selected_channel else { return };
         let text = self.composer.read(cx).value().trim().to_string();
-        if text.is_empty() {
+        if text.is_empty() || (self.editing.is_none() && ui::chat::composer::send_held(self, ch)) {
             return;
         }
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
@@ -1004,6 +1007,7 @@ impl PhoenixApp {
             .detach();
         } else {
             let reply = self.replying_to.take();
+            ui::chat::composer::note_sent(ch);
             let fut = self.backend.send_message(ch, text, reply);
             cx.spawn(async move |this, cx| {
                 if let Ok(m) = fut.await {
