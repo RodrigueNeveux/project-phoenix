@@ -165,10 +165,17 @@ impl Row {
 
 /// Mosaic for 2..=10 visual attachments (extra items beyond 10 are dropped, like the client's cap).
 pub fn render(items: &[&Attachment], cx: &App) -> AnyElement {
+    grid(items, MAX_W, cx).mt(z(4.)).into_any_element()
+}
+
+/// The mosaic without its top margin, at most `max_w` wide: a Components V2 media
+/// gallery (`visualMediaItemContainer_.isInAppComponentsV2_` max-width 600px) is
+/// spaced by its container's gap.
+pub fn grid(items: &[&Attachment], max_w: f32, cx: &App) -> gpui::Div {
     let items = &items[..items.len().min(10)];
     let shape = rows(items.len());
     let last_row = shape.len() - 1;
-    let mut col = div().mt(z(4.)).w_full().max_w(z(MAX_W)).flex().flex_col().gap(z(GAP));
+    let mut col = div().w_full().max_w(z(max_w)).flex().flex_col().gap(z(GAP));
     let mut at = 0;
     for (ri, r) in shape.iter().copied().enumerate() {
         let its = &items[at..at + r.len()];
@@ -250,7 +257,7 @@ pub fn render(items: &[&Attachment], cx: &App) -> AnyElement {
         };
         col = col.child(el);
     }
-    col.into_any_element()
+    col
 }
 
 #[cfg(test)]

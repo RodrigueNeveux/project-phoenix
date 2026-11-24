@@ -10,6 +10,7 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use phoenix_api::rest::search::{date_to_snowflake, parse_search};
 
 use crate::{
+    search_highlight::Highlighter,
     app::{PhoenixApp, format_time_full},
     assets::Icon,
     model::{ChannelKind, Id, Message},
@@ -331,7 +332,7 @@ const FILTERS: [(&str, &str, &str, &str, &str); 4] = [
 /// --text-muted time 4px after, content 16/22 --text-default). Hover shows "Y aller"
 /// (`buttonsContainer_` top 8 right 8: 24px, padding 4, radius 3, body-xs/medium
 /// --text-default on --background-base-lowest), which jumps to the message.
-fn result_card(app: &PhoenixApp, ix: usize, m: &Message, terms: &[String], cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn result_card(app: &PhoenixApp, ix: usize, m: &Message, hl: &Highlighter, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let author = app.users.get(&m.author);
     let channel = m.channel;
     let id = m.id;
@@ -344,6 +345,9 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, terms: &[String], cx: &
         .iter()
         .map(|a| crate::ui::chat::attachment(a, acx))
         .chain(m.embeds.iter().map(|e| crate::ui::chat::embed(app, e, acx)))
+        // Bot components (Components V2 messages have nothing else), drawn without
+        // interactions and without highlights, like the client's search results.
+        .chain(crate::ui::components::render_static(app, &cx.entity(), m, acx))
         .collect();
     let bot = author.is_some_and(|u| u.bot);
     // The guild nickname at send time, like the chat ("Loris (#1 Roxas lover)").
@@ -354,11 +358,8 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, terms: &[String], cx: &
         .or_else(|| author.map(|u| u.display_name.clone()))
         .unwrap_or_else(|| crate::t!("common.unknown"));
     let reply = m.reply_to.is_some().then(|| reply_line(app, m));
-    let text: Option<AnyElement> = rich.then(|| match highlighted(&content, terms) {
-        Some(t) => t.into_any_element(),
-        // Mentions, emoji and markdown like in the chat, not the raw `<@id>` tokens.
-        None => crate::ui::components::markdown_in(app, &content, &cx.entity(), m.id),
-    });
+    // Mentions, emoji and markdown like in the chat, with the searched words highlighted.
+    let text: Option<AnyElement> = rich.then(|| crate::ui::components::markdown_highlighted(app, &content, &cx.entity(), m.id, hl));
     div()
         .id(("search-hit", ix))
         .mb(z(8.))
@@ -438,36 +439,13 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, terms: &[String], cx: &
         .into_any_element()
 }
 
-/// Plain-text content with the searched words behind `span.highlight` (live client:
-/// rgba(253, 184, 51, .3)). `None` when the text has markdown, mentions, emoji or links
-/// (the chat renderer draws those, without the highlight).
-fn highlighted(content: &str, terms: &[String]) -> Option<gpui::StyledText> {
-    if terms.is_empty() || content.contains("http") || content.chars().any(|ch| "*_~`|<>[]#:@\\".contains(ch)) {
-        return None;
-    }
-    let lower = content.to_lowercase();
-    if lower.len() != content.len() {
-        return None;
-    }
-    let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
-    for t in terms {
-        let mut from = 0;
-        while let Some(at) = lower[from..].find(t.as_str()) {
-            let start = from + at;
-            ranges.push(start..start + t.len());
-            from = start + t.len();
-        }
-    }
-    ranges.sort_by_key(|r| r.start);
-    let mut merged: Vec<std::ops::Range<usize>> = Vec::new();
-    for r in ranges {
-        match merged.last_mut() {
-            Some(l) if r.start <= l.end => l.end = l.end.max(r.end),
-            _ => merged.push(r),
-        }
-    }
-    let style = gpui::HighlightStyle { background_color: Some(gpui::rgba(0xfdb8334d).into()), ..Default::default() };
-    Some(gpui::StyledText::new(SharedString::from(content.to_string())).with_highlights(merged.into_iter().map(|r| (r, style))))
+/// `text` with the searched words behind `span.highlight`: the client highlights the
+/// channel name of each result group too (live dump: "règlement" lit "r" + "glement"
+/// in `channelNameText_`).
+fn highlight_plain(text: SharedString, hl: &Highlighter) -> gpui::StyledText {
+    let style = gpui::HighlightStyle { background_color: Some(gpui::rgba(crate::search_highlight::HIGHLIGHT_RGBA).into()), ..Default::default() };
+    let ranges = hl.ranges(&text);
+    gpui::StyledText::new(text).with_highlights(ranges.into_iter().map(|r| (r, style)))
 }
 
 /// Reply line over a hit (`repliedMessage_ messageSpine_`, 18px, margin-bottom 4): the
@@ -691,13 +669,14 @@ fn results_panel(
     } else if page.messages.is_empty() && !loading {
         body = body.child(empty_state(crate::t!("search.no_results"), false));
     } else {
-        let terms: Vec<String> = req.content.as_deref().unwrap_or_default().split_whitespace().map(str::to_lowercase).filter(|t| !t.is_empty()).collect();
+        // The client's search highlighter (`wG(query)`), and `th(query)` for the channel names.
+        let hl = Highlighter::new(req.content.as_deref().unwrap_or_default(), false);
         let mut i = 0;
         while i < page.messages.len() {
             let ch = page.messages[i].channel;
-            let mut group = div().mb(z(24.)).flex().flex_col().child(channel_group_header(app, ch));
+            let mut group = div().mb(z(24.)).flex().flex_col().child(channel_group_header(app, ch, &hl));
             while i < page.messages.len() && page.messages[i].channel == ch {
-                group = group.child(result_card(app, i, &page.messages[i], &terms, cx));
+                group = group.child(result_card(app, i, &page.messages[i], &hl, cx));
                 i += 1;
             }
             body = body.child(group);
@@ -735,7 +714,7 @@ fn results_panel(
 /// `channelNameContainer_` (22px, margin-bottom 8): 16px channel glyph (padding-end 4),
 /// name body-md/medium --text-strong; on the right `parentChannelName_` (folder glyph
 /// 16×12 + category body-xs/medium --text-default, one line).
-fn channel_group_header(app: &PhoenixApp, ch: Id) -> gpui::Div {
+fn channel_group_header(app: &PhoenixApp, ch: Id, hl: &Highlighter) -> gpui::Div {
     let channel = app.channels.get(&ch);
     let name: SharedString = channel.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
     let glyph = channel.map(|c| crate::ui::sidebar::channel_icon(c.kind)).unwrap_or(Icon::Hash);
@@ -746,7 +725,7 @@ fn channel_group_header(app: &PhoenixApp, ch: Id) -> gpui::Div {
         .flex()
         .items_center()
         .child(div().w(z(20.)).flex_none().pr(z(4.)).child(gpui::svg().path(glyph.path()).size(z(16.)).text_color(tk(idx::TEXT_STRONG))))
-        .child(div().flex_1().min_w_0().truncate().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(name))
+        .child(div().flex_1().min_w_0().truncate().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(highlight_plain(name, hl)))
         .when_some(parent, |d, p| {
             d.child(
                 div()
@@ -1159,14 +1138,6 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
 mod history_tests {
     use super::*;
 
-    #[test]
-    fn highlights_plain_text_only() {
-        let t = vec!["merci".to_string()];
-        assert!(highlighted("MERCI HOPI", &t).is_some());
-        assert!(highlighted("merci *beaucoup*", &t).is_none());
-        assert!(highlighted("merci https://x.y", &t).is_none());
-        assert!(highlighted("merci", &[]).is_none());
-    }
 
     #[test]
     fn pager_pages() {

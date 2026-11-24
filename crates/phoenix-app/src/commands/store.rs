@@ -16,6 +16,18 @@ use serde_json::Value;
 
 use crate::model::Id;
 
+/// Message components, parsed by `phoenix_api` (types from the Discord docs).
+pub use phoenix_api::models::Component as Comp;
+
+fn snowflake(v: &Value) -> Option<u64> {
+    match v {
+        Value::String(s) => s.parse().ok(),
+        Value::Number(n) => n.as_u64(),
+        _ => None,
+    }
+}
+
+/// Emoji of a poll answer.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Emoji {
     /// Unicode emoji, or the name of a custom one.
@@ -42,156 +54,6 @@ impl Emoji {
             Some(id) => format!("<{}:{}:{}>", if self.animated { "a" } else { "" }, self.name, id),
             None => self.name.clone(),
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct SelectOption {
-    pub label: String,
-    pub value: String,
-    pub description: Option<String>,
-    pub emoji: Option<Emoji>,
-    pub default: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Media {
-    pub url: String,
-    pub description: Option<String>,
-    pub spoiler: bool,
-    /// Unfurled size (`media.width` / `media.height`), 0 when unknown.
-    pub width: u32,
-    pub height: u32,
-}
-
-/// One message component (types from the Discord docs).
-#[derive(Clone, Debug, PartialEq)]
-pub enum Comp {
-    /// 1: horizontal row of buttons or one select.
-    Row(Vec<Comp>),
-    /// 2
-    Button {
-        style: u8,
-        label: Option<String>,
-        emoji: Option<Emoji>,
-        custom_id: Option<String>,
-        url: Option<String>,
-        disabled: bool,
-    },
-    /// 3 (string), 5 (user), 6 (role), 7 (mentionable), 8 (channel).
-    Select {
-        kind: u8,
-        custom_id: String,
-        placeholder: Option<String>,
-        options: Vec<SelectOption>,
-        min: u32,
-        max: u32,
-        disabled: bool,
-    },
-    /// 9: text blocks with a button or thumbnail on the right.
-    Section { texts: Vec<Comp>, accessory: Option<Box<Comp>> },
-    /// 10: markdown.
-    Text(String),
-    /// 11
-    Thumbnail(Media),
-    /// 12
-    Gallery(Vec<Media>),
-    /// 13
-    File { url: String, spoiler: bool },
-    /// 14: `spacing` 1 = small, 2 = large.
-    Separator { divider: bool, spacing: u8 },
-    /// 17
-    Container { accent: Option<u32>, spoiler: bool, children: Vec<Comp> },
-    Unknown,
-}
-
-fn snowflake(v: &Value) -> Option<u64> {
-    match v {
-        Value::String(s) => s.parse().ok(),
-        Value::Number(n) => n.as_u64(),
-        _ => None,
-    }
-}
-
-fn s(v: &Value, k: &str) -> Option<String> {
-    v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_owned)
-}
-
-fn media(v: Option<&Value>) -> Option<Media> {
-    let v = v?;
-    let m = v.get("media").unwrap_or(v);
-    let url = m.get("proxy_url").or_else(|| m.get("url")).and_then(Value::as_str)?.to_owned();
-    Some(Media {
-        url,
-        description: s(v, "description"),
-        spoiler: v.get("spoiler").and_then(Value::as_bool).unwrap_or(false),
-        width: m.get("width").and_then(Value::as_u64).unwrap_or(0) as u32,
-        height: m.get("height").and_then(Value::as_u64).unwrap_or(0) as u32,
-    })
-}
-
-fn list(v: Option<&Value>) -> Vec<Comp> {
-    v.and_then(Value::as_array).map(|a| a.iter().map(parse_one).collect()).unwrap_or_default()
-}
-
-pub fn parse_one(v: &Value) -> Comp {
-    let b = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
-    match v.get("type").and_then(Value::as_u64).unwrap_or(0) {
-        1 => Comp::Row(list(v.get("components"))),
-        2 => Comp::Button {
-            style: v.get("style").and_then(Value::as_u64).unwrap_or(1) as u8,
-            label: s(v, "label"),
-            emoji: Emoji::from_value(v.get("emoji")),
-            custom_id: s(v, "custom_id"),
-            url: s(v, "url"),
-            disabled: b("disabled"),
-        },
-        k @ (3 | 5 | 6 | 7 | 8) => Comp::Select {
-            kind: k as u8,
-            custom_id: s(v, "custom_id").unwrap_or_default(),
-            placeholder: s(v, "placeholder"),
-            options: v
-                .get("options")
-                .and_then(Value::as_array)
-                .map(|a| {
-                    a.iter()
-                        .map(|o| SelectOption {
-                            label: s(o, "label").unwrap_or_default(),
-                            value: s(o, "value").unwrap_or_default(),
-                            description: s(o, "description"),
-                            emoji: Emoji::from_value(o.get("emoji")),
-                            default: o.get("default").and_then(Value::as_bool).unwrap_or(false),
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-            min: v.get("min_values").and_then(Value::as_u64).unwrap_or(1) as u32,
-            max: v.get("max_values").and_then(Value::as_u64).unwrap_or(1) as u32,
-            disabled: b("disabled"),
-        },
-        9 => Comp::Section {
-            texts: list(v.get("components")),
-            accessory: v.get("accessory").map(|a| Box::new(parse_one(a))),
-        },
-        10 => Comp::Text(s(v, "content").unwrap_or_default()),
-        11 => media(Some(v)).map(Comp::Thumbnail).unwrap_or(Comp::Unknown),
-        12 => Comp::Gallery(
-            v.get("items").and_then(Value::as_array).map(|a| a.iter().filter_map(|i| media(Some(i))).collect()).unwrap_or_default(),
-        ),
-        13 => Comp::File {
-            url: v.get("file").and_then(|f| f.get("url")).and_then(Value::as_str).unwrap_or_default().to_owned(),
-            spoiler: b("spoiler"),
-        },
-        14 => Comp::Separator {
-            divider: v.get("divider").and_then(Value::as_bool).unwrap_or(true),
-            spacing: v.get("spacing").and_then(Value::as_u64).unwrap_or(1) as u8,
-        },
-        17 => Comp::Container {
-            accent: v.get("accent_color").and_then(Value::as_u64).map(|c| c as u32),
-            spoiler: b("spoiler"),
-            children: list(v.get("components")),
-        },
-        _ => Comp::Unknown,
     }
 }
 
@@ -278,7 +140,7 @@ fn slot() -> &'static Mutex<HashMap<u64, Arc<Parts>>> {
 
 /// Remember components / poll of a message (no-op for plain messages).
 pub fn record(m: &api::Message) {
-    let components = list(m.components.as_ref());
+    let components = m.components.clone();
     let poll = m.poll.as_ref().and_then(PollView::from_value);
     if components.is_empty() && poll.is_none() {
         return;
@@ -312,34 +174,6 @@ pub fn insert(msg: Id, parts: Parts) {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn parses_v1_and_v2() {
-        let v = json!([
-            {"type":1,"components":[
-                {"type":2,"style":1,"label":"Go","custom_id":"go","emoji":{"name":"🔥"}},
-                {"type":2,"style":5,"label":"Site","url":"https://x"}]},
-            {"type":1,"components":[{"type":3,"custom_id":"pick","max_values":2,
-                "options":[{"label":"A","value":"a"},{"label":"B","value":"b","default":true}]}]},
-            {"type":17,"accent_color":255,"components":[
-                {"type":10,"content":"**hi**"},
-                {"type":14,"divider":false,"spacing":2},
-                {"type":9,"components":[{"type":10,"content":"x"}],
-                 "accessory":{"type":11,"media":{"url":"https://i/1.png"}}},
-                {"type":12,"items":[{"media":{"url":"https://i/2.png"},"spoiler":true}]}]}
-        ]);
-        let c = list(Some(&v));
-        assert!(matches!(&c[0], Comp::Row(b) if b.len() == 2));
-        let Comp::Row(r) = &c[0] else { panic!() };
-        assert!(matches!(&r[1], Comp::Button { style: 5, url: Some(u), .. } if u == "https://x"));
-        let Comp::Row(r) = &c[1] else { panic!() };
-        assert!(matches!(&r[0], Comp::Select { kind: 3, max: 2, options, .. } if options[1].default));
-        let Comp::Container { accent, children, .. } = &c[2] else { panic!() };
-        assert_eq!(*accent, Some(255));
-        assert_eq!(children[1], Comp::Separator { divider: false, spacing: 2 });
-        assert!(matches!(&children[2], Comp::Section { accessory: Some(a), .. } if matches!(**a, Comp::Thumbnail(_))));
-        assert!(matches!(&children[3], Comp::Gallery(g) if g[0].spoiler));
-    }
 
     #[test]
     fn poll_counts_and_votes() {

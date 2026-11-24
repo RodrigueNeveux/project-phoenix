@@ -1121,7 +1121,7 @@ fn message(
     if let Some(f) = &msg.forward {
         content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL)).child(forward::wrap(app, f, content));
     }
-    content = content.children(crate::ui::components::render(app, entity, msg)).children(crate::ui::components::render_poll(app, entity, msg));
+    content = content.children(crate::ui::components::render(app, entity, msg, cx)).children(crate::ui::components::render_poll(app, entity, msg));
     if edited_after_embeds {
         // accessories container_ row gap 4px, then timestamp_ 20px (dump: embed ends 219, timestamp_ 223).
         content = content.child(div().mt(z(4.)).h(z(20.)).flex().items_center().child(edited_marker(ts)));
@@ -1783,7 +1783,7 @@ fn media_image(url: &str, original: SharedString, filename: SharedString, size_o
 }
 
 /// [`media_image`]; `still` asks the proxy for the first frame (`format=webp`).
-fn media_image_with(
+pub(crate) fn media_image_with(
     url: &str,
     original: SharedString,
     filename: SharedString,
@@ -1822,7 +1822,7 @@ fn media_image_with(
 }
 
 /// Spoiler cover: blurred (tiny upscaled proxy image) + dark veil + pill.
-fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> Option<AnyElement> {
+pub(crate) fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> Option<AnyElement> {
     if media::is_revealed(&key, cx) {
         return None;
     }

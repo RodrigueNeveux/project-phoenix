@@ -409,8 +409,10 @@ pub struct Message {
     pub soundboard_sounds: Vec<MessageSoundboardSound>,
     #[serde(default)]
     pub thread: Option<Box<Channel>>,
-    #[serde(default)]
-    pub components: Option<serde_json::Value>,
+    /// Buttons / selects, or the whole body of a Components V2 message
+    /// (`flags & FLAG_IS_COMPONENTS_V2`).
+    #[serde(default, deserialize_with = "null_default", skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<super::Component>,
     #[serde(default)]
     pub poll: Option<serde_json::Value>,
     #[serde(default)]

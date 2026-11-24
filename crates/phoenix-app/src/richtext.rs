@@ -304,6 +304,70 @@ fn rich_text_mut(b: &mut RBlock) -> Option<&mut RichText> {
     }
 }
 
+/// Search highlights over rendered markdown (`span.highlight` of the client's
+/// search results): every block but code blocks, every text run but mentions,
+/// timestamps and sound mentions (nodes without a string content in the client's
+/// markdown tree), never over an inline emoji. Runs are split at the ranges.
+pub fn apply_highlights(parsed: &[Block], blocks: &mut [RBlock], hl: &crate::search_highlight::Highlighter) {
+    if hl.is_empty() {
+        return;
+    }
+    let bg = ca(crate::search_highlight::HIGHLIGHT_RGBA);
+    for (b, rb) in parsed.iter().zip(blocks.iter_mut()) {
+        let (Some(inl), Some(t)) = (b.inline(), rich_text_mut(rb)) else { continue };
+        let skip: Vec<Range<usize>> = inl
+            .spans
+            .iter()
+            .filter(|s| s.style.has(Style::MENTION) || s.style.has(Style::TIMESTAMP) || s.style.has(Style::SOUNDBOARD) || s.mention.is_some())
+            .map(|s| s.range.clone())
+            .chain(t.emoji.iter().map(|(r, _)| r.clone()))
+            .collect();
+        let ranges: Vec<Range<usize>> = hl
+            .ranges(&t.text)
+            .into_iter()
+            .filter(|r| !skip.iter().any(|s| s.start < r.end && r.start < s.end))
+            .collect();
+        if !ranges.is_empty() {
+            t.runs = split_runs(&t.runs, &ranges, bg);
+        }
+    }
+}
+
+/// `runs` cut at the edges of `ranges`, the pieces inside a range given `bg`.
+pub fn split_runs(runs: &[TextRun], ranges: &[Range<usize>], bg: Hsla) -> Vec<TextRun> {
+    let total: usize = runs.iter().map(|r| r.len).sum();
+    let mut cuts: Vec<usize> = Vec::with_capacity(runs.len() + ranges.len() * 2 + 1);
+    cuts.push(0);
+    let mut acc = 0;
+    for r in runs {
+        acc += r.len;
+        cuts.push(acc);
+    }
+    for r in ranges {
+        cuts.push(r.start.min(total));
+        cuts.push(r.end.min(total));
+    }
+    cuts.sort_unstable();
+    cuts.dedup();
+    let mut out = Vec::with_capacity(cuts.len());
+    let (mut ri, mut run_end) = (0, runs.first().map_or(0, |r| r.len));
+    for w in cuts.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        while run_end <= a && ri + 1 < runs.len() {
+            ri += 1;
+            run_end += runs[ri].len;
+        }
+        let Some(base) = runs.get(ri) else { break };
+        let mut r = base.clone();
+        r.len = b - a;
+        if ranges.iter().any(|x| x.start <= a && b <= x.end) {
+            r.background_color = Some(bg);
+        }
+        out.push(r);
+    }
+    out
+}
+
 /// Custom emoji tokens and Unicode emoji sequences in `text`, in order.
 /// Unicode emoji are the client's set (`media::emoji::unicode_emoji_at`),
 /// longest sequence first, so arrows, stars or math symbols stay text.
@@ -358,6 +422,38 @@ pub fn is_jumbo(blocks: &[RBlock]) -> bool {
 #[cfg(test)]
 mod emoji_tests {
     use super::*;
+
+    #[test]
+    fn highlights_split_runs_and_skip_mentions_and_emoji() {
+        struct R;
+        impl MentionResolver for R {
+            fn user(&self, _: u64) -> Option<String> {
+                Some("Serveur".into())
+            }
+            fn channel(&self, _: u64) -> Option<String> {
+                None
+            }
+        }
+        let hl = crate::search_highlight::Highlighter::new("serveur", false);
+        let (parsed, mut blocks, _, _) = build("le **serveur** <@1> [serveur](https://x.y) `serveur` <:serveur:12>\n```\nserveur\n```", &R, Id(9), &|_| true);
+        apply_highlights(&parsed, &mut blocks, &hl);
+        let lit = |b: &RBlock| -> Vec<String> {
+            let t = b.text().unwrap();
+            let mut at = 0;
+            let mut out = Vec::new();
+            for r in &t.runs {
+                if r.background_color == Some(ca(crate::search_highlight::HIGHLIGHT_RGBA)) {
+                    out.push(t.text[at..at + r.len].to_string());
+                }
+                at += r.len;
+            }
+            assert_eq!(at, t.text.len());
+            out
+        };
+        // Bold, link and inline code are highlighted; the mention and the emoji are not.
+        assert_eq!(lit(&blocks[0]), ["serveur", "serveur", "serveur"]);
+        assert!(matches!(blocks.last(), Some(RBlock::Code { .. })));
+    }
     #[test]
     fn jumbo_up_to_thirty_emoji() {
         let block = |s: String| RBlock::Text(RichText { emoji: emoji_ranges(&s), text: s.into(), runs: vec![], click_ranges: vec![], click_targets: vec![] });

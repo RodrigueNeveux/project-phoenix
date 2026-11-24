@@ -50,6 +50,7 @@ macro_rules! int_enum {
 }
 
 mod channel;
+mod component;
 mod guild;
 mod member;
 mod message;
@@ -60,6 +61,7 @@ mod user;
 mod voice;
 
 pub use channel::*;
+pub use component::*;
 pub use guild::*;
 pub use member::*;
 pub use message::*;

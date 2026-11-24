@@ -23,6 +23,7 @@ pub mod notifications;
 pub mod perf;
 pub mod presence;
 pub mod richtext;
+pub mod search_highlight;
 pub mod shortcuts;
 pub mod sounds;
 pub mod theme;

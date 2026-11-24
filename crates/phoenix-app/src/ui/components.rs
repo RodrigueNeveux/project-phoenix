@@ -2,10 +2,12 @@
 //! (containers, sections, text, thumbnails, media galleries, separators),
 //! polls, and the interaction modal a bot can open.
 //!
-//! Measurements observed in the official client (dark theme): buttons 32px
-//! high, 16px side padding, 8px radius, 14px medium text, 8px gap; selects
-//! 40px high with a 1px border; containers 8px radius with a 4px accent bar
-//! and 16px padding; polls in a 8px-radius card, 16px padding, 600px max.
+//! Layout and values from the 2026 client: the component renderer of
+//! `current-client/js/e940c8e032f54075.js` (lE / lS) and its CSS modules
+//! (243794 container_uEFz2z / section_5m-AKz / container_rc97-L, 193433
+//! button_9OQtot, 763343 content_ZMR-xe, 544242 divider_pdtj88, TZN6d8
+//! thumbnails), checked against live search-result dumps of real bot messages
+//! (2026-11-24). Polls: 8px-radius card, 16px padding, 600px max.
 //!
 //! The chat row calls [`render`] (components) and [`render_poll`] (poll)
 //! under the embeds; [`overlays`] draws the modal / dialogs / toast.
@@ -18,29 +20,20 @@ use gpui::{
 };
 use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 
+use phoenix_api::models as api;
+
 use crate::{
     app::PhoenixApp,
     commands::{
         ParityRequest,
         state::{ModalSpec, ModalView},
-        store::{self, Comp, Emoji, Media, PollView, SelectOption},
+        store::{self, Comp, Emoji, PollView},
     },
     markdown::MentionResolver,
     model::{Id, Message},
     richtext::{self, RBlock},
-    theme::{Palette, c},
+    theme::{Palette, c, fz, generated::idx, tok, z},
 };
-
-/// Discord button colours (style 1..=6).
-fn button_colors(style: u8) -> (u32, u32) {
-    match style {
-        1 => (0x5865F2, 0x4752C4),
-        3 => (0x248046, 0x1A6334),
-        4 => (0xDA373C, 0xA12828),
-        // 2 secondary, 5 link, 6 premium
-        _ => (0x4E5058, 0x6D6F78),
-    }
-}
 
 struct Names<'a>(&'a PhoenixApp);
 
@@ -58,54 +51,74 @@ impl MentionResolver for Names<'_> {
 
 /// Markdown text (text displays, section texts) without inline images.
 pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
-    markdown_sized(app, text, false, None)
+    markdown_sized(app, text, false, None, None)
 }
 
 /// [`markdown`] of a message shown outside the chat (inbox, pins): custom and
 /// unicode emoji render as images instead of their raw `<:name:id>` token.
 pub fn markdown_in(app: &PhoenixApp, text: &str, entity: &Entity<PhoenixApp>, msg: Id) -> AnyElement {
-    markdown_sized(app, text, false, Some((entity, msg)))
+    markdown_sized(app, text, false, Some((entity, msg)), None)
+}
+
+/// [`markdown_in`] with the searched words highlighted (search results).
+pub fn markdown_highlighted(
+    app: &PhoenixApp,
+    text: &str,
+    entity: &Entity<PhoenixApp>,
+    msg: Id,
+    hl: &crate::search_highlight::Highlighter,
+) -> AnyElement {
+    markdown_sized(app, text, false, Some((entity, msg)), Some(hl))
 }
 
 /// [`markdown`]; `reduced` is root_ sizeReduced_ (text inside a container):
 /// .875rem, line-height calc(--chat-markup-line-height * .875), small .75rem.
-fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool, ctx: Option<(&Entity<PhoenixApp>, Id)>) -> AnyElement {
+fn markdown_sized(
+    app: &PhoenixApp,
+    text: &str,
+    reduced: bool,
+    ctx: Option<(&Entity<PhoenixApp>, Id)>,
+    hl: Option<&crate::search_highlight::Highlighter>,
+) -> AnyElement {
     let k = if reduced { 0.875 } else { 1. };
-    let (_, blocks, _, _) = richtext::build(text, &Names(app), app.me.id, &|_| true);
+    let (parsed, mut blocks, _, _) = richtext::build(text, &Names(app), app.me.id, &|_| true);
+    if let Some(hl) = hl {
+        richtext::apply_highlights(&parsed, &mut blocks, hl);
+    }
     // --chat-markup-line-height 1.375
     let mut col = div()
         .flex()
         .flex_col()
         .min_w_0()
-        .text_size(px(16. * k))
-        .line_height(px(22. * k))
+        .text_size(fz(16. * k))
+        .line_height(fz(22. * k))
         .text_color(c(Palette::TEXT_NORMAL));
     let n = blocks.len();
     for (bi, b) in blocks.into_iter().enumerate() {
         col = col.child(match b {
             RBlock::Code { code, .. } => div()
-                .my(px(4.))
-                .p(px(8.))
-                .rounded(px(4.))
+                .my(z(4.))
+                .p(z(8.))
+                .rounded(z(4.))
                 .bg(c(Palette::CODE_BG))
                 .border_1()
                 .border_color(c(Palette::CODE_BORDER))
                 .font_family(crate::theme::FONT_MONO())
-                .text_size(px(14.))
+                .text_size(fz(14.))
                 .child(code)
                 .into_any_element(),
             RBlock::Quote(t) => div()
                 .flex()
-                .gap(px(8.))
-                .child(div().w(px(4.)).rounded(px(4.)).bg(c(Palette::INTERACTIVE_MUTED)))
+                .gap(z(8.))
+                .child(div().w(z(4.)).rounded(z(4.)).bg(c(Palette::INTERACTIVE_MUTED)))
                 .child(StyledText::new(t.text).with_runs(t.runs))
                 .into_any_element(),
             // markup_ h1/h2/h3 margin 16px 0 8px; markdownContainer_ h*:first-child margin-top 0,
             // h*:not(:has(+*)) margin-bottom 0 (vanilla-guild-chat-busy honeypot: h3 mb 8px).
             RBlock::Heading(l, t) => div()
-                .when(bi > 0, |d| d.mt(px(16.)))
-                .when(bi + 1 < n, |d| d.mb(px(8.)))
-                .text_size(px(match l {
+                .when(bi > 0, |d| d.mt(z(16.)))
+                .when(bi + 1 < n, |d| d.mb(z(8.)))
+                .text_size(fz(match l {
                     1 => 24.,
                     2 => 20.,
                     _ => 16.,
@@ -115,15 +128,15 @@ fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool, ctx: Option<(&Ent
                 .into_any_element(),
             // markup_ small: .875rem / 1.20313rem, --text-subtle; sizeReduced_ small .75rem.
             RBlock::Subtext(t) => div()
-                .text_size(px(if reduced { 12. } else { 14. }))
-                .line_height(px(if reduced { 16.5 } else { 19.25 }))
+                .text_size(fz(if reduced { 12. } else { 14. }))
+                .line_height(fz(if reduced { 16.5 } else { 19.25 }))
                 .text_color(crate::theme::c(crate::theme::tok(crate::theme::generated::idx::TEXT_SUBTLE)))
                 .child(StyledText::new(t.text).with_runs(t.runs))
                 .into_any_element(),
             RBlock::ListItem { ordered, depth, text } => div()
                 .flex()
-                .pl(px(16. * (depth as f32 + 1.)))
-                .gap(px(4.))
+                .pl(z(16. * (depth as f32 + 1.)))
+                .gap(z(4.))
                 .child(match ordered {
                     Some(n) => format!("{n}."),
                     None => "•".into(),
@@ -155,14 +168,32 @@ struct Ctx {
     flags: u64,
     /// Inside a container: text is root_ sizeReduced_.
     reduced: bool,
+    /// False in search results (`shouldDisableInteractiveComponents`): same look,
+    /// nothing is sent.
+    interactive: bool,
+}
+
+fn t(i: usize) -> gpui::Hsla {
+    c(tok(i))
 }
 
 /// Components of a bot message, or `None` when it has none.
-pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> Option<AnyElement> {
+pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, cx: &App) -> Option<AnyElement> {
+    render_with(app, entity, msg, true, cx)
+}
+
+/// [`render`] for a search result: the client draws the components with their
+/// interactions disabled (no click sends anything).
+pub fn render_static(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, cx: &App) -> Option<AnyElement> {
+    render_with(app, entity, msg, false, cx)
+}
+
+fn render_with(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, interactive: bool, cx: &App) -> Option<AnyElement> {
     let parts = store::get(msg.id)?;
     if parts.components.is_empty() {
         return None;
     }
+    let v2 = parts.flags & api::FLAG_IS_COMPONENTS_V2 != 0;
     let k = Ctx {
         entity: entity.clone(),
         guild: app.channels.get(&msg.channel).and_then(|c| c.guild),
@@ -171,167 +202,314 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> O
         app: parts.app,
         flags: parts.flags,
         reduced: false,
+        interactive,
     };
-    // accessories container_YUQhib padding-top 2px (dump: header ends -132, container -130).
-    let mut col = div().mt(px(2.)).flex().flex_col().gap(px(4.)).max_w(px(600.));
+    // container_uEFz2z: column, row-gap 6px; .isComponentsV2_: row-gap --space-8,
+    // max-width min(600px, 100%), width fit-content (243794 css). The accessories
+    // container_YUQhib above it has padding-top 2px (dump: header ends -132, container -130).
+    let mut col = div().flex().flex_col().min_w_0().gap(z(if v2 { 8. } else { 6. }));
     for (i, comp) in parts.components.iter().enumerate() {
-        col = col.child(comp_el(app, &k, comp, i));
+        col = col.child(comp_el(app, &k, comp, i, cx));
     }
-    Some(col.into_any_element())
+    Some(if v2 {
+        // fit-content: a flex row lets the column shrink to its widest child.
+        div().mt(z(2.)).flex().child(col.max_w(z(600.))).into_any_element()
+    } else {
+        col.mt(z(2.)).into_any_element()
+    })
 }
 
-fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
+fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize, cx: &App) -> AnyElement {
     match comp {
-        Comp::Row(items) => {
-            let mut row = div().flex().flex_wrap().gap(px(8.)).py(px(2.));
-            for (j, it) in items.iter().enumerate() {
-                row = row.child(comp_el(app, k, it, ix * 8 + j));
+        // container_J1RNcC (column) > children_J1RNcC: flex, wrap, gap --space-8.
+        Comp::ActionRow(r) => {
+            let mut row = div().flex().flex_wrap().gap(z(8.));
+            for (j, it) in r.components.iter().enumerate() {
+                row = row.child(comp_el(app, k, it, ix * 8 + j, cx));
             }
-            row.into_any_element()
+            div().flex().flex_col().child(row).into_any_element()
         }
-        Comp::Button { style, label, emoji, custom_id, url, disabled } => {
-            button(app, k, *style, label.as_deref(), emoji.as_ref(), custom_id.clone(), url.clone(), *disabled, ix)
-        }
-        Comp::Select { kind, custom_id, placeholder, options, min, max, disabled } => {
-            select(app, k, *kind, custom_id, placeholder.as_deref(), options, *min, *max, *disabled)
-        }
-        Comp::Text(t) => markdown_sized(app, t, k.reduced, Some((&k.entity, k.message))),
-        Comp::Section { texts, accessory } => {
-            let mut left = div().flex_1().min_w_0().flex().flex_col().gap(px(4.));
-            for (j, t) in texts.iter().enumerate() {
-                left = left.child(comp_el(app, k, t, ix * 8 + j));
-            }
-            div()
-                .flex()
-                .gap(px(12.))
-                .child(left)
-                .when_some(accessory.as_deref(), |d, a| d.child(div().flex_none().child(comp_el(app, k, a, ix * 8 + 7))))
-                .into_any_element()
-        }
-        Comp::Thumbnail(m) => img(SharedString::from(m.url.clone()))
-            .size(px(85.))
-            .rounded(px(8.))
-            .object_fit(gpui::ObjectFit::Cover)
+        Comp::Button(b) => button(app, k, b, ix),
+        Comp::Select(s) => select(app, k, s),
+        Comp::TextDisplay(d) => markdown_sized(app, &d.content, k.reduced, Some((&k.entity, k.message)), None),
+        Comp::Section(s) => section(app, k, s, ix, cx),
+        Comp::Thumbnail(th) => thumbnail(th, k.message, ix, cx),
+        Comp::MediaGallery(g) => gallery(&g.items, k.message, ix, cx),
+        Comp::File(f) => file(f, k.message, ix, cx),
+        // nF: divider_pdtj88 border-bottom 1px --background-mod-strong when `divider`,
+        // spacingLarge_pdtj88 margin --space-8 0 when spacing is large; the gap of
+        // the parent spaces a small one.
+        Comp::Separator(s) => div()
+            .when(s.spacing == api::SeparatorSpacing::Large, |d| d.my(z(8.)))
+            .when(s.divider, |d| d.h(z(1.)).bg(t(idx::BACKGROUND_MOD_STRONG)))
             .into_any_element(),
-        Comp::Gallery(items) => gallery(items, k.message, ix),
-        Comp::File { url, .. } => {
-            let name = url.rsplit('/').next().unwrap_or("file").to_owned();
-            div()
-                .p(px(16.))
-                .rounded(px(8.))
-                .bg(c(Palette::BG_SECONDARY))
-                .border_1()
-                .border_color(c(Palette::BG_TERTIARY))
-                .text_color(c(Palette::TEXT_LINK))
-                .child(name)
-                .into_any_element()
-        }
-        Comp::Separator { divider, spacing } => {
-            // divider_pdtj88 margin 0 (the container's 8px gap spaces it), spacingLarge_ 8px 0.
-            let m = if *spacing >= 2 { 8. } else { 0. };
-            div()
-                .my(px(m))
-                .h(px(if *divider { 1. } else { 0. }))
-                .bg(c(Palette::DIVIDER))
-                .into_any_element()
-        }
-        Comp::Container { accent, spoiler, children } => {
-            let k = &Ctx { reduced: true, ..k.clone() };
-            let mut inner = div().flex_1().min_w_0().p(px(16.)).flex().flex_col().gap(px(8.));
-            for (j, ch) in children.iter().enumerate() {
-                inner = inner.child(comp_el(app, k, ch, ix * 16 + j));
-            }
-            let mut card = div()
-                .flex()
-                .rounded(px(8.))
-                .overflow_hidden()
-                .bg(c(Palette::EMBED_BG))
-                .border_1()
-                .border_color(c(Palette::PANEL_BORDER))
-                .when_some(*accent, |d, a| d.child(div().w(px(4.)).flex_none().bg(c(a))))
-                .child(inner);
-            if *spoiler {
-                card = card.opacity(0.6);
-            }
-            // The container sits in a flex row: it shrinks to its content width.
-            div().flex().child(card).into_any_element()
-        }
-        Comp::Unknown => div().into_any_element(),
+        Comp::Container(ct) => container(app, k, ct, ix, cx),
+        // Modal-only components never show in a message.
+        Comp::TextInput(_) => div().into_any_element(),
+        Comp::Unknown(_) => unknown(),
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn button(
-    app: &PhoenixApp,
-    k: &Ctx,
-    style: u8,
-    label: Option<&str>,
-    emoji: Option<&Emoji>,
-    custom_id: Option<String>,
-    url: Option<String>,
-    disabled: bool,
-    ix: usize,
-) -> AnyElement {
-    let (bg, hover) = button_colors(style);
-    let pending = custom_id.as_ref().is_some_and(|id| app.parity.pending.contains(&(k.message, id.clone())));
-    let mut b = div()
-        .id(("component-button", (k.message.0 << 8) ^ ix as u64))
-        .h(px(32.))
-        .min_w(px(60.))
-        .px(px(16.))
-        .rounded(px(8.))
-        .bg(c(bg))
+/// n1: container_xAKhZr (1px --status-warning, --radius-md 12, padding 16) with
+/// body-sm/medium --text-subtle "Please update Discord to view this message".
+fn unknown() -> AnyElement {
+    div()
+        .p(z(16.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(t(idx::STATUS_WARNING))
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t(idx::TEXT_SUBTLE))
+        .child(crate::t!("components.unsupported"))
+        .into_any_element()
+}
+
+/// lA: section_5m-AKz (column, gap 4) > children_ (row, gap 12, space-between) >
+/// textChildren_ (flex 1, column, row-gap 4; centred vertically next to a button) +
+/// accessory_ (align-items flex-start, min-width 0).
+fn section(app: &PhoenixApp, k: &Ctx, s: &api::Section, ix: usize, cx: &App) -> AnyElement {
+    let button = matches!(s.accessory.as_deref(), Some(Comp::Button(_)));
+    let mut texts = div().flex_1().min_w_0().flex().flex_col().gap(z(4.)).when(button, |d| d.justify_center());
+    for (j, c) in s.components.iter().enumerate() {
+        texts = texts.child(comp_el(app, k, c, ix * 8 + j, cx));
+    }
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(4.))
+        .child(
+            div().flex().gap(z(12.)).justify_between().child(texts).when_some(s.accessory.as_deref(), |d, a| {
+                d.child(div().flex().items_start().min_w_0().flex_none().child(comp_el(app, k, a, ix * 8 + 7, cx)))
+            }),
+        )
+        .into_any_element()
+}
+
+/// lC: container_rc97-L: --background-surface-high, 1px --border-subtle,
+/// --radius-sm 8, padding --space-16, column gap --space-8, overflow hidden;
+/// .withAccentColor_:before 4px bar of the accent colour at the start; text inside
+/// is sizeReduced_. A spoiler container is blurred under the spoiler cover until clicked.
+fn container(app: &PhoenixApp, k: &Ctx, ct: &api::Container, ix: usize, cx: &App) -> AnyElement {
+    if ct.components.is_empty() {
+        return div().into_any_element();
+    }
+    let k = &Ctx { reduced: true, ..k.clone() };
+    let mut card = div()
+        .relative()
+        .flex()
+        .flex_col()
+        .min_w_0()
+        .gap(z(8.))
+        .p(z(16.))
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(t(idx::BACKGROUND_SURFACE_HIGH))
+        .border_1()
+        .border_color(t(idx::BORDER_SUBTLE));
+    for (j, ch) in ct.components.iter().enumerate() {
+        card = card.child(comp_el(app, k, ch, ix * 16 + j, cx));
+    }
+    if let Some(a) = ct.accent_color {
+        card = card.child(div().absolute().top_0().left_0().bottom_0().w(z(4.)).bg(c(a)));
+    }
+    let key: SharedString = format!("component-spoiler-{}-{ix}", k.message.0).into();
+    if ct.spoiler && !crate::media::is_revealed(&key, cx) {
+        card = card.child(spoiler_overlay(key));
+    }
+    card.into_any_element()
+}
+
+/// Spoiler cover over a component (obscured attachment wrapper): the hidden
+/// spoiler background and the SPOILER pill of `spoilerWarning_`, revealed on click.
+fn spoiler_overlay(key: SharedString) -> AnyElement {
+    div()
+        .id(gpui::ElementId::Name(key.clone()))
+        .absolute()
+        .inset_0()
+        .cursor_pointer()
+        .bg(t(idx::SPOILER_BACKGROUND_COLOR_HIDDEN))
+        .group("component-spoiler")
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(6.))
-        .text_size(px(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(gpui::white())
-        .when_some(emoji, |d, e| d.child(emoji_el(e, 18.)))
-        .when_some(label, |d, l| d.child(SharedString::from(l.to_owned())))
-        .when(style == 5, |d| d.child(div().text_size(px(12.)).child("↗")))
-        .when(pending, |d| d.child(div().text_size(px(12.)).child("…")));
-    if disabled || pending {
-        return b.opacity(0.5).cursor_not_allowed().into_any_element();
+        .child(
+            div()
+                .px(z(12.))
+                .py(z(6.))
+                .rounded(z(20.))
+                .bg(t(idx::SPOILER_WARNING_BACKGROUND_COLOR))
+                .text_size(z(15.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t(idx::SPOILER_WARNING_TEXT_COLOR))
+                .group_hover("component-spoiler", |s| {
+                    s.bg(t(idx::SPOILER_WARNING_BACKGROUND_COLOR_HOVER)).text_color(t(idx::SPOILER_WARNING_TEXT_COLOR_HOVER))
+                })
+                .child(crate::t!("chat.spoiler")),
+        )
+        .on_click(move |_, _, cx| crate::media::reveal(key.clone(), cx))
+        .into_any_element()
+}
+
+/// Colours of a component button (e940c8e: PRIMARY and PREMIUM → Button BRAND,
+/// SUCCESS → GREEN, DESTRUCTIVE → RED, SECONDARY and LINK → PRIMARY), from the
+/// `lookFilled_9OQtot.color*_` rules: (background, hover, active, border, text).
+fn button_tokens(style: api::ButtonStyle) -> [usize; 5] {
+    use api::ButtonStyle as S;
+    match style {
+        S::Primary | S::Premium => [
+            idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT,
+            idx::CONTROL_PRIMARY_BACKGROUND_HOVER,
+            idx::CONTROL_PRIMARY_BACKGROUND_ACTIVE,
+            idx::CONTROL_PRIMARY_BORDER_DEFAULT,
+            idx::CONTROL_PRIMARY_TEXT_DEFAULT,
+        ],
+        S::Success => [
+            idx::CONTROL_CONNECTED_BACKGROUND_DEFAULT,
+            idx::CONTROL_CONNECTED_BACKGROUND_HOVER,
+            idx::CONTROL_CONNECTED_BACKGROUND_ACTIVE,
+            idx::CONTROL_CONNECTED_BORDER_DEFAULT,
+            idx::WHITE,
+        ],
+        S::Danger => [
+            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT,
+            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER,
+            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_ACTIVE,
+            idx::CONTROL_CRITICAL_PRIMARY_BORDER_DEFAULT,
+            idx::WHITE,
+        ],
+        _ => [
+            idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT,
+            idx::CONTROL_SECONDARY_BACKGROUND_HOVER,
+            idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE,
+            idx::BORDER_MUTED,
+            idx::CONTROL_SECONDARY_TEXT_DEFAULT,
+        ],
     }
-    b = b.cursor_pointer().hover(move |s| s.bg(c(hover)));
+}
+
+/// What a click on a component button does.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ButtonAction {
+    /// LINK: open `url` (the client asks first for links it doesn't trust).
+    Open(String),
+    /// PREMIUM: the SKU's store page (not available in Phoenix: no store).
+    Store,
+    /// An interaction (`type: 3`) carrying `custom_id`.
+    Interact(String),
+    None,
+}
+
+pub fn button_action(b: &api::Button) -> ButtonAction {
+    match b.style {
+        api::ButtonStyle::Link => b.url.clone().filter(|u| !u.is_empty()).map_or(ButtonAction::None, ButtonAction::Open),
+        api::ButtonStyle::Premium => ButtonAction::Store,
+        _ => b.custom_id.clone().map_or(ButtonAction::None, ButtonAction::Interact),
+    }
+}
+
+/// V: Button (size SMALL) > content_ZMR-xe. button_9OQtot: 1px border, radius 8,
+/// 14px medium; sizeSmall_: height 32, line-height 18, min-width 60, padding
+/// calc(4 - 1) calc(12 - 1); disabled opacity .5 + not-allowed. Content: emoji
+/// (textEmoji_ margin-inline-end 4 when there is a label; measured 19.25px),
+/// label (ellipsis), WindowLaunchIcon xs (launchIcon_ margin-inline-start 8) on
+/// links, ShopIcon xs white (shopIcon_ margin-inline-end 4) on premium buttons,
+/// whose label is the SKU name + price, or "Product Unavailable" (disabled) when
+/// the SKU can't be shown.
+fn button(app: &PhoenixApp, k: &Ctx, b: &api::Button, ix: usize) -> AnyElement {
+    let [bg, hover, active, border, fg] = button_tokens(b.style);
+    let action = button_action(b);
+    let premium = b.style == api::ButtonStyle::Premium;
+    let label: Option<SharedString> = if premium {
+        Some(crate::t!("components.product_unavailable"))
+    } else {
+        b.label.clone().filter(|l| !l.is_empty()).map(SharedString::from)
+    };
+    let pending = match &action {
+        ButtonAction::Interact(id) => app.parity.pending.contains(&(k.message, id.clone())),
+        _ => false,
+    };
+    let disabled = b.disabled || premium;
+    let has_label = label.is_some();
+    let content = div()
+        .flex()
+        .flex_row()
+        .items_center()
+        .justify_center()
+        .min_w(z(32.))
+        .overflow_hidden()
+        .when(pending, |d| d.invisible())
+        .when(premium, |d| {
+            d.child(div().flex().items_center().mr(z(4.)).child(icon_svg("shop", 16., gpui::white())))
+        })
+        .when_some(b.emoji.as_ref(), |d, e| {
+            d.child(div().flex_none().when(has_label, |d| d.mr(z(4.))).child(crate::media::emoji::emoji_element(&e.token(), 19.25)))
+        })
+        .when_some(label, |d, l| d.child(div().min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().child(l)))
+        .when(b.style == api::ButtonStyle::Link, |d| d.child(div().flex_none().ml(z(8.)).child(icon_svg("viewer/open", 16., t(fg)))));
+    let mut el = div()
+        .id(("component-button", (k.message.0 << 8) ^ ix as u64))
+        .relative()
+        .h(z(32.))
+        .min_w(z(60.))
+        .px(z(11.))
+        .py(z(3.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(t(border))
+        .bg(t(bg))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(t(fg))
+        .child(content)
+        // loading_ZMR-xe: the dots spinner centred over the hidden content.
+        .when(pending, |d| d.child(div().absolute().inset_0().flex().items_center().justify_center().child("•••")));
+    if disabled || pending {
+        return el.opacity(0.5).cursor_not_allowed().into_any_element();
+    }
+    el = el.cursor_pointer().hover(move |s| s.bg(t(hover))).active(move |s| s.bg(t(active)));
+    if !k.interactive {
+        return el.into_any_element();
+    }
     let k = k.clone();
-    b.on_click(move |_, _, cx: &mut App| {
-        if let Some(u) = &url {
-            cx.open_url(u);
-            return;
+    el.on_click(move |_, _, cx: &mut App| match &action {
+        ButtonAction::Open(u) => cx.open_url(u),
+        ButtonAction::Interact(id) => {
+            let (k, id) = (k.clone(), id.clone());
+            k.entity.clone().update(cx, |a, cx| a.send_component(&k, id, 2, None, cx));
         }
-        let Some(id) = custom_id.clone() else { return };
-        let k = k.clone();
-        k.entity.clone().update(cx, |a, cx| a.send_component(&k, id, 2, None, cx));
+        ButtonAction::Store | ButtonAction::None => {}
     })
     .into_any_element()
 }
 
+fn icon_svg(name: &str, size: f32, color: gpui::Hsla) -> gpui::Svg {
+    gpui::svg().path(crate::icons::path(name)).flex_none().size(z(size)).text_color(color)
+}
+
 /// Options shown by user / role / channel selects (from local state).
-fn auto_options(app: &PhoenixApp, kind: u8, guild: Option<Id>) -> Vec<SelectOption> {
-    let opt = |label: String, value: u64| SelectOption {
-        label,
-        value: value.to_string(),
-        description: None,
-        emoji: None,
-        default: false,
-    };
+fn auto_options(app: &PhoenixApp, kind: api::SelectKind, guild: Option<Id>) -> Vec<api::SelectOption> {
+    use api::SelectKind as K;
+    let opt = |label: String, value: u64| api::SelectOption { label, value: value.to_string(), ..Default::default() };
     let mut out = Vec::new();
-    if matches!(kind, 5 | 7) {
+    if matches!(kind, K::User | K::Mentionable) {
         let members: Vec<Id> = match guild {
             Some(g) => app.members.get(&g).map(|m| m.iter().map(|m| m.user).collect()).unwrap_or_default(),
             None => app.users.keys().copied().collect(),
         };
         out.extend(members.iter().filter_map(|u| app.users.get(u)).map(|u| opt(u.display_name.to_string(), u.id.0)));
     }
-    if matches!(kind, 6 | 7)
+    if matches!(kind, K::Role | K::Mentionable)
         && let Some(g) = guild
     {
         out.extend(app.roles.get(&g).into_iter().flatten().map(|r| opt(format!("@{}", r.name), r.id.0)));
     }
-    if kind == 8
+    if kind == K::Channel
         && let Some(g) = guild
     {
         out.extend(
@@ -348,77 +526,90 @@ fn auto_options(app: &PhoenixApp, kind: u8, guild: Option<Id>) -> Vec<SelectOpti
     out
 }
 
-#[allow(clippy::too_many_arguments)]
-fn select(
-    app: &PhoenixApp,
-    k: &Ctx,
-    kind: u8,
-    custom_id: &str,
-    placeholder: Option<&str>,
-    options: &[SelectOption],
-    _min: u32,
-    max: u32,
-    disabled: bool,
-) -> AnyElement {
-    let key = (k.message, custom_id.to_owned());
+/// Select menus use the client's shared Select (`select_` field, 40px): the
+/// same look as [`crate::ui::controls::select_field`]; the menu lists at most 5
+/// rows before scrolling (maxVisibleItems 5).
+fn select(app: &PhoenixApp, k: &Ctx, s: &api::SelectMenu) -> AnyElement {
+    let kind = s.kind;
+    let key = (k.message, s.custom_id.clone());
     let open = app.parity.open_select.as_ref() == Some(&key);
-    let options: Vec<SelectOption> = if kind == 3 { options.to_vec() } else { auto_options(app, kind, k.guild) };
-    let picked: Vec<String> = app
-        .parity
-        .select_values
-        .get(&key)
-        .cloned()
-        .unwrap_or_else(|| options.iter().filter(|o| o.default).map(|o| o.value.clone()).collect());
-    let shown: Vec<&SelectOption> = options.iter().filter(|o| picked.contains(&o.value)).collect();
+    let options: Vec<api::SelectOption> =
+        if kind == api::SelectKind::String { s.options.clone() } else { auto_options(app, kind, k.guild) };
+    let picked: Vec<String> = app.parity.select_values.get(&key).cloned().unwrap_or_else(|| {
+        let mut v: Vec<String> = options.iter().filter(|o| o.default).map(|o| o.value.clone()).collect();
+        v.extend(s.default_values.iter().map(|d| d.id.0.to_string()));
+        v
+    });
+    let shown: Vec<&api::SelectOption> = options.iter().filter(|o| picked.contains(&o.value)).collect();
     let label: SharedString = if shown.is_empty() {
-        placeholder.map(SharedString::from).unwrap_or_else(|| crate::t!("select.placeholder"))
+        s.placeholder.clone().map(SharedString::from).unwrap_or_else(|| crate::t!("select.placeholder"))
     } else {
         shown.iter().map(|o| o.label.as_str()).collect::<Vec<_>>().join(", ").into()
     };
-    let e = k.entity.clone();
-    let key2 = key.clone();
-    let kk = k.clone();
+    let (max, disabled) = (s.max_values, s.disabled);
     let header = div()
-        .id(("select", k.message.0 ^ hash(custom_id)))
-        .h(px(40.))
-        .w(px(400.))
-        .max_w_full()
-        .px(px(12.))
-        .rounded(px(8.))
-        .bg(c(Palette::INPUT_BG))
-        .border_1()
-        .border_color(if open { c(Palette::BLURPLE) } else { c(Palette::BG_TERTIARY) })
+        .id(("select", k.message.0 ^ hash(&s.custom_id)))
+        .h(z(40.))
+        .w_full()
+        .max_w(z(400.))
+        .pl(z(12.))
         .flex()
         .items_center()
-        .justify_between()
-        .text_size(px(16.))
-        .text_color(if shown.is_empty() { c(Palette::TEXT_MUTED) } else { c(Palette::TEXT_NORMAL) })
-        .child(div().flex_1().min_w_0().text_ellipsis().child(label))
-        .child(div().text_color(c(Palette::INTERACTIVE)).child(if open { "▴" } else { "▾" }));
+        .rounded(z(8.))
+        .border_1()
+        .border_color(t(if open { idx::INPUT_BORDER_ACTIVE } else { idx::INPUT_BORDER_DEFAULT }))
+        .bg(t(idx::INPUT_BACKGROUND_DEFAULT))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(t(if shown.is_empty() { idx::TEXT_MUTED } else { idx::TEXT_STRONG }))
+                .child(label),
+        )
+        .child(
+            div()
+                .w(z(36.))
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .pr(z(4.))
+                .child(icon_svg("chevron", 20., t(idx::TEXT_STRONG)).when(open, |s| s.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))))),
+        );
     let header = if disabled {
         header.opacity(0.5).cursor_not_allowed()
     } else {
-        header.cursor_pointer().on_click(move |_, _, cx: &mut App| {
-            let (key, kk) = (key2.clone(), kk.clone());
-            e.update(cx, |a, cx| a.toggle_select(&kk, key, kind, max, cx));
-        })
+        let hover = header.cursor_pointer().hover(|s| s.border_color(t(idx::INPUT_BORDER_HOVER)));
+        if k.interactive {
+            let (e, key2, kk) = (k.entity.clone(), key.clone(), k.clone());
+            hover.on_click(move |_, _, cx: &mut App| {
+                let (key, kk) = (key2.clone(), kk.clone());
+                e.update(cx, |a, cx| a.toggle_select(&kk, key, kind.type_id(), max, cx));
+            })
+        } else {
+            hover
+        }
     };
-    let mut col = div().flex().flex_col().child(header);
-    if open {
+    let mut col = div().flex().flex_col().w_full().max_w(z(400.)).child(header);
+    if open && k.interactive {
         let mut menu = div()
-            .id(("select-menu", k.message.0 ^ hash(custom_id)))
-            .mt(px(4.))
-            .w(px(400.))
-            .max_w_full()
-            .max_h(px(320.))
+            .id(("select-menu", k.message.0 ^ hash(&s.custom_id)))
+            .mt(z(4.))
+            .w_full()
+            .max_h(z(5. * 40. + 8.))
             .overflow_y_scroll()
-            .rounded(px(8.))
-            .bg(c(Palette::BG_FLOATING))
+            .rounded(z(8.))
+            .bg(t(idx::BACKGROUND_SURFACE_HIGHER))
             .border_1()
-            .border_color(c(Palette::BG_TERTIARY))
-            .py(px(4.));
+            .border_color(t(idx::BORDER_SUBTLE))
+            .py(z(4.));
         if options.is_empty() {
-            menu = menu.child(div().p(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("select.none")));
+            menu = menu.child(div().p(z(12.)).text_color(t(idx::TEXT_MUTED)).child(crate::t!("select.none")));
         }
         for (i, o) in options.into_iter().enumerate() {
             let on = picked.contains(&o.value);
@@ -426,38 +617,157 @@ fn select(
             menu = menu.child(
                 div()
                     .id(("select-opt", i as u64))
-                    .px(px(12.))
-                    .py(px(8.))
-                    .mx(px(4.))
-                    .rounded(px(4.))
+                    .px(z(12.))
+                    .py(z(8.))
+                    .mx(z(4.))
+                    .rounded(z(4.))
                     .cursor_pointer()
-                    .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                    .hover(|s| s.bg(t(idx::BACKGROUND_MOD_SUBTLE)))
                     .flex()
                     .items_center()
-                    .gap(px(8.))
-                    .when_some(o.emoji.as_ref(), |d, em| d.child(emoji_el(em, 20.)))
+                    .gap(z(8.))
+                    .when_some(o.emoji.as_ref(), |d, em| d.child(crate::media::emoji::emoji_element(&em.token(), 20.)))
                     .child(
                         div()
                             .flex_1()
                             .min_w_0()
                             .flex()
                             .flex_col()
-                            .child(div().text_size(px(16.)).text_color(c(Palette::TEXT_NORMAL)).child(o.label.clone()))
+                            .child(div().text_size(z(16.)).line_height(z(20.)).text_color(t(idx::TEXT_STRONG)).child(o.label.clone()))
                             .when_some(o.description.clone(), |d, ds| {
-                                d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(ds))
+                                d.child(div().text_size(z(14.)).line_height(z(18.)).text_color(t(idx::TEXT_MUTED)).child(ds))
                             }),
                     )
                     .when(max > 1, |d| d.child(checkbox(on)))
-                    .when(max <= 1 && on, |d| d.child(div().text_color(c(Palette::BLURPLE)).child("✓")))
+                    .when(max <= 1 && on, |d| d.child(icon_svg("check", 20., t(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT))))
                     .on_click(move |_, _, cx: &mut App| {
                         let (kk, key, value) = (kk.clone(), key.clone(), value.clone());
-                        e.update(cx, |a, cx| a.pick_option(&kk, key, kind, value, max, cx));
+                        e.update(cx, |a, cx| a.pick_option(&kk, key, kind.type_id(), value, max, cx));
                     }),
             );
         }
         col = col.child(menu);
     }
     col.into_any_element()
+}
+
+/// A component media item as a chat attachment, so it is drawn (and opened in the
+/// viewer) like an uploaded one. A spoiler takes the SPOILER_ name the chat
+/// renderer covers.
+fn as_attachment(m: &api::UnfurledMedia, name: Option<&str>, size: u64, spoiler: bool) -> crate::model::Attachment {
+    use crate::model::AttachmentKind as K;
+    let ct = m.content_type.as_deref().unwrap_or("");
+    let sized = m.size().is_some();
+    let kind = if ct.starts_with("video/") && sized {
+        K::Video
+    } else if (ct.starts_with("image/") || ct.is_empty()) && sized {
+        K::Image
+    } else if ct.starts_with("audio/") {
+        K::Audio
+    } else {
+        K::File
+    };
+    let base = name.map(str::to_owned).unwrap_or_else(|| {
+        let path = m.url.split(['?', '#']).next().unwrap_or_default();
+        path.rsplit('/').next().unwrap_or("file").to_owned()
+    });
+    let filename = if spoiler { format!("SPOILER_{base}") } else { base };
+    let (w, h) = m.size().unwrap_or((0, 0));
+    crate::model::Attachment {
+        filename: filename.into(),
+        url: if matches!(kind, K::Image | K::Video) { m.fetch_url().to_owned() } else { m.url.clone() }.into(),
+        width: w,
+        height: h,
+        is_image: kind == K::Image,
+        size,
+        kind,
+        original: m.url.clone().into(),
+    }
+}
+
+/// nQ: imgContainer_TZN6d8: 85px square (--__thumbnail-size), --radius-sm 8,
+/// img_ object-fit cover; opens the viewer. Non-image media: the 85px placeholder.
+fn thumbnail(th: &api::Thumbnail, msg: Id, ix: usize, cx: &App) -> AnyElement {
+    let a = as_attachment(&th.media, None, 0, th.spoiler);
+    let key: SharedString = a.url.clone();
+    if th.spoiler && !crate::media::is_revealed(&key, cx) {
+        return div()
+            .id(("thumb-spoiler", (msg.0 << 8) ^ ix as u64))
+            .relative()
+            .size(z(85.))
+            .rounded(z(8.))
+            .overflow_hidden()
+            .child(spoiler_overlay(key))
+            .into_any_element();
+    }
+    let viewer = crate::media::ViewerImage {
+        url: crate::media::resized(&a.url, a.width.min(2048), a.height.min(2048)),
+        original: a.original.clone(),
+        filename: a.filename.clone(),
+        width: a.width,
+        height: a.height,
+        author: crate::media::current_author(),
+    };
+    let image = a.kind == crate::model::AttachmentKind::Image;
+    div()
+        .id(("thumb", (msg.0 << 8) ^ ix as u64))
+        .size(z(85.))
+        .flex_none()
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(t(idx::BACKGROUND_MOD_NORMAL))
+        .when(image, |d| {
+            d.cursor_pointer()
+                .child(img(crate::media::resized(&a.url, 170, 170)).size_full().object_fit(gpui::ObjectFit::Cover))
+                .on_click(move |_, _, cx| crate::media::open_viewer(viewer.clone(), cx))
+        })
+        .into_any_element()
+}
+
+/// nw: the attachments' media mosaic with isInAppComponentsV2 (max-width 600px);
+/// one item is a oneByOneGrid_ (fit-content, max-height 350px).
+fn gallery(items: &[api::GalleryItem], msg: Id, ix: usize, cx: &App) -> AnyElement {
+    let atts: Vec<crate::model::Attachment> = items.iter().map(|i| as_attachment(&i.media, None, 0, i.spoiler)).collect();
+    match atts.as_slice() {
+        [] => div().into_any_element(),
+        [a] if matches!(a.kind, crate::model::AttachmentKind::Image | crate::model::AttachmentKind::Video) => {
+            let size = crate::media::fit(a.width, a.height, 600., 350.);
+            if a.filename.starts_with("SPOILER_")
+                && let Some(cover) = crate::ui::chat::spoiler_cover(a.url.clone(), &a.url, size, cx)
+            {
+                return cover;
+            }
+            if a.kind == crate::model::AttachmentKind::Video {
+                return crate::ui::chat::attach::video_card(a, size, cx);
+            }
+            div()
+                .id(("gallery", (msg.0 << 8) ^ ix as u64))
+                .rounded(z(8.))
+                .overflow_hidden()
+                .child(crate::ui::chat::media_image_with(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size, false))
+                .into_any_element()
+        }
+        many => {
+            let refs: Vec<&crate::model::Attachment> = many.iter().collect();
+            if refs.len() >= 2 {
+                crate::ui::chat::mosaic::grid(&refs, 600., cx).into_any_element()
+            } else {
+                crate::ui::chat::attachment(refs[0], cx)
+            }
+        }
+    }
+}
+
+/// ng: fileDisplayContainer_aMNXbv (max-width 100%, min-content) around the
+/// attachments' file card (name, size, download), behind a spoiler cover if set.
+fn file(f: &api::FileComponent, msg: Id, ix: usize, cx: &App) -> AnyElement {
+    let a = as_attachment(&f.file, Some(f.file_name().as_str()), f.size.unwrap_or(0), false);
+    let key: SharedString = format!("component-file-{}-{ix}", msg.0).into();
+    let card = crate::ui::chat::attach::file_card(&a);
+    if f.spoiler && !crate::media::is_revealed(&key, cx) {
+        return div().relative().max_w_full().child(card).child(spoiler_overlay(key)).into_any_element();
+    }
+    div().max_w_full().child(card).into_any_element()
 }
 
 fn checkbox(on: bool) -> AnyElement {
@@ -494,53 +804,6 @@ fn radio(on: bool) -> AnyElement {
 
 fn hash(s: &str) -> u64 {
     s.bytes().fold(1469598103934665603u64, |h, b| (h ^ b as u64).wrapping_mul(1099511628211))
-}
-
-fn gallery(items: &[Media], msg: Id, ix: usize) -> AnyElement {
-    let n = items.len();
-    let mut grid = div().flex().flex_wrap().gap(px(4.)).max_w(px(520.)).rounded(px(8.)).overflow_hidden();
-    // One item with a known size: the column width at the media's own ratio (a
-    // 750x225 banner was cropped by a fixed 520x300 box; the client drew it 566x170).
-    if let [m] = items
-        && m.width > 0
-        && m.height > 0
-    {
-        let url: SharedString = m.url.clone().into();
-        let original = url.clone();
-        return div()
-            .id(("gallery", (msg.0 << 8) ^ ((ix * 16) as u64)))
-            .w_full()
-            .max_w(px(m.width as f32))
-            .max_h(px(350.))
-            .aspect_ratio(m.width as f32 / m.height as f32)
-            .rounded(px(8.))
-            .overflow_hidden()
-            .cursor_pointer()
-            .on_click(move |_, _, cx: &mut App| cx.open_url(&original))
-            .child(img(url).size_full().object_fit(gpui::ObjectFit::Cover))
-            .when(m.spoiler, |d| d.opacity(0.3))
-            .into_any_element();
-    }
-    for (i, m) in items.iter().take(10).enumerate() {
-        let (w, h) = match n {
-            1 => (520., 300.),
-            2 | 4 => (258., 258.),
-            _ => (170., 170.),
-        };
-        let url: SharedString = m.url.clone().into();
-        let original = url.clone();
-        grid = grid.child(
-            div()
-                .id(("gallery", (msg.0 << 8) ^ ((ix * 16 + i) as u64)))
-                .w(px(w))
-                .h(px(h))
-                .cursor_pointer()
-                .on_click(move |_, _, cx: &mut App| cx.open_url(&original))
-                .child(img(url).size_full().object_fit(gpui::ObjectFit::Cover))
-                .when(m.spoiler, |d| d.opacity(0.3)),
-        );
-    }
-    grid.into_any_element()
 }
 
 // ------------------------------------------------------------------ polls
@@ -1120,6 +1383,41 @@ pub fn overlays(app: &mut PhoenixApp, window: &mut Window, cx: &mut gpui::Contex
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn button_actions() {
+        use phoenix_api::models::{Button, ButtonStyle};
+        let link = Button { style: ButtonStyle::Link, url: Some("https://example.com/a?b=1".into()), ..Default::default() };
+        assert_eq!(button_action(&link), ButtonAction::Open("https://example.com/a?b=1".into()));
+        let go = Button { style: ButtonStyle::Success, custom_id: Some("go".into()), ..Default::default() };
+        assert_eq!(button_action(&go), ButtonAction::Interact("go".into()));
+        assert_eq!(button_action(&Button { style: ButtonStyle::Premium, ..Default::default() }), ButtonAction::Store);
+        assert_eq!(button_action(&Button { style: ButtonStyle::Link, ..Default::default() }), ButtonAction::None);
+        // Colours: primary and premium share the brand control, link and secondary the secondary one.
+        assert_eq!(button_tokens(ButtonStyle::Premium), button_tokens(ButtonStyle::Primary));
+        assert_eq!(button_tokens(ButtonStyle::Link), button_tokens(ButtonStyle::Secondary));
+        assert_eq!(button_tokens(ButtonStyle::Danger)[0], idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT);
+    }
+
+    #[test]
+    fn media_items_become_attachments() {
+        use phoenix_api::models::UnfurledMedia;
+        let m = UnfurledMedia {
+            url: "https://cdn.example/a/b.png?ex=1".into(),
+            proxy_url: Some("https://media.example/a/b.png?ex=1".into()),
+            width: Some(800),
+            height: Some(400),
+            content_type: Some("image/png".into()),
+            ..Default::default()
+        };
+        let a = as_attachment(&m, None, 0, true);
+        assert_eq!((a.filename.as_ref(), a.url.as_ref(), a.width), ("SPOILER_b.png", "https://media.example/a/b.png?ex=1", 800));
+        assert_eq!(a.kind, crate::model::AttachmentKind::Image);
+        let f = UnfurledMedia { url: "https://cdn.example/t.html".into(), width: Some(0), height: Some(0), content_type: Some("text/html".into()), ..Default::default() };
+        let a = as_attachment(&f, Some("t.html"), 40104, false);
+        assert_eq!((a.kind, a.url.as_ref(), a.size), (crate::model::AttachmentKind::File, "https://cdn.example/t.html", 40104));
+    }
+
     use super::*;
     use crate::commands::store::PollAnswer;
 
