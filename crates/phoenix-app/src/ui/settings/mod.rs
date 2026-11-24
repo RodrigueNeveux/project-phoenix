@@ -1,9 +1,14 @@
 //! Full-screen User Settings overlay (Discord layout: left nav, content,
 //! close button; Esc closes) and the settings it reads/writes.
 //!
-//! * [`SyncedSettings`]: account settings stored by Discord (settings-proto).
-//! * [`LocalPrefs`]: client-only settings (font scale, zoom, notifications),
-//!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
+//! * [`SyncedSettings`]: account settings stored by Discord (settings-proto),
+//!   exactly the ones the client keeps in `PreloadedUserSettings`: theme,
+//!   developer mode and UI density (`appearance`), compact message display
+//!   (`text_and_images`), locale (`localization`), server DMs (`privacy`).
+//! * [`LocalPrefs`]: what the client keeps per machine (localStorage stores:
+//!   AccessibilityStore `fontScale`/`saturation`/`reducedMotion`, the Electron
+//!   zoom factor, desktop notification and sound toggles), saved as JSON in
+//!   `$XDG_CONFIG_HOME/discord-phoenix/settings.json` and never sent to Discord.
 
 pub mod account;
 mod art;
@@ -77,6 +82,8 @@ pub struct SyncedSettings {
     /// Every other synced control, by settings id ([`synced_map::ENTRIES`]),
     /// as its wire value; missing = client default.
     pub proto: std::collections::HashMap<&'static str, u64>,
+    /// UI density (`appearance.ui_density`, synced like in the client).
+    pub density: crate::theme::Density,
 }
 
 impl Default for SyncedSettings {
@@ -88,6 +95,7 @@ impl Default for SyncedSettings {
             locale: "en-US".into(),
             allow_server_dms: true,
             proto: Default::default(),
+            density: crate::theme::Density::default(),
         }
     }
 }
@@ -101,6 +109,7 @@ pub enum SettingsPatch {
     AllowServerDms(bool),
     /// A [`synced_map`] entry set to a wire value.
     Proto(&'static str, u64),
+    Density(crate::theme::Density),
 }
 
 impl SyncedSettings {
@@ -121,6 +130,7 @@ impl SyncedSettings {
                     self.proto.insert(e.id, *v);
                 }
             }
+            SettingsPatch::Density(d) => self.density = *d,
         }
     }
     /// Synced switch value (client default when unset).
@@ -146,8 +156,6 @@ pub struct LocalPrefs {
     /// Accessibility "Play animated emoji" (client default on).
     pub animate_emoji: bool,
     pub saturation: u32,
-    /// UI density (`--space-*` scale), default cozy like the user's client.
-    pub density: crate::theme::Density,
     /// Windows/Linux settings "Minimize to tray" (client default on): the close
     /// button hides the window to the tray icon instead of quitting.
     pub minimize_to_tray: bool,
@@ -166,7 +174,6 @@ impl Default for LocalPrefs {
             reduced_motion: false,
             animate_emoji: true,
             saturation: 100,
-            density: crate::theme::Density::default(),
             minimize_to_tray: true,
             ui: Default::default(),
         }
@@ -201,7 +208,6 @@ impl LocalPrefs {
             reduced_motion: b("reduced_motion", d.reduced_motion),
             animate_emoji: b("animate_emoji", d.animate_emoji),
             saturation: f("saturation").map(|x| (x as u32).min(100)).unwrap_or(d.saturation),
-            density: v.get("density").and_then(Value::as_str).and_then(crate::theme::Density::from_key).unwrap_or(d.density),
             minimize_to_tray: b("minimize_to_tray", d.minimize_to_tray),
             ui: v
                 .get("ui")
@@ -219,7 +225,6 @@ impl LocalPrefs {
             "reduced_motion": self.reduced_motion,
             "animate_emoji": self.animate_emoji,
             "saturation": self.saturation,
-            "density": self.density.key(),
             "minimize_to_tray": self.minimize_to_tray,
             "ui": self.ui,
         })

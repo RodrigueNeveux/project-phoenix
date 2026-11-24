@@ -114,6 +114,9 @@ pub struct AppearanceSettings {
     pub theme: i32,
     #[prost(bool, tag = "2")]
     pub developer_mode: bool,
+    /// `UIDensity`: 0 unset, 1 compact, 2 cozy ("spacious"), 3 responsive, 4 default.
+    #[prost(int32, tag = "12")]
+    pub ui_density: i32,
 }
 
 /// The subset of `PreloadedUserSettings` Phoenix uses.
@@ -155,6 +158,10 @@ impl PreloadedUserSettings {
     pub fn developer_mode(&self) -> bool {
         self.appearance.as_ref().is_some_and(|a| a.developer_mode)
     }
+    /// Raw `appearance.ui_density` proto value (0 when unset).
+    pub fn ui_density(&self) -> i32 {
+        self.appearance.as_ref().map_or(0, |a| a.ui_density)
+    }
     pub fn compact(&self) -> bool {
         self.text_and_images.as_ref().and_then(|t| b(&t.message_display_compact)).unwrap_or(false)
     }
@@ -171,7 +178,7 @@ impl PreloadedUserSettings {
     // Patch builders (only the given field is set).
     pub fn patch_appearance(theme: Theme, developer_mode: bool) -> Self {
         Self {
-            appearance: Some(AppearanceSettings { theme: theme.to_proto(), developer_mode }),
+            appearance: Some(AppearanceSettings { theme: theme.to_proto(), developer_mode, ui_density: 0 }),
             ..Default::default()
         }
     }
@@ -208,6 +215,8 @@ pub enum SettingChange {
     Compact(bool),
     Locale(String),
     DefaultGuildsRestricted(bool),
+    /// `appearance.ui_density` proto value (see [`AppearanceSettings::ui_density`]).
+    UiDensity(i32),
     /// Any scalar at a field path of `PreloadedUserSettings` (tags, outermost
     /// first). `wrapper`: the last tag is a `google.protobuf.*Value` message
     /// whose field 1 holds the value.
@@ -353,6 +362,10 @@ impl SettingChange {
             Self::DefaultGuildsRestricted(b) => {
                 field_varint(4, *b as u64, &mut inner);
                 field_bytes(8, &inner, &mut out);
+            }
+            Self::UiDensity(v) => {
+                field_varint(12, *v as u64, &mut inner);
+                field_bytes(13, &inner, &mut out);
             }
             Self::Path { path, wrapper, value } => {
                 let Some((&last, outer)) = path.split_last() else { return out };

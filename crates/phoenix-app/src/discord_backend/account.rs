@@ -7,6 +7,7 @@ use phoenix_api::{
 };
 
 use super::*;
+use crate::theme::Density;
 use crate::{
     auth::{MfaMethod, MfaOptions, RemoteAuthUpdate},
     ui::settings::{AppTheme, SettingsPatch, SyncedSettings},
@@ -116,6 +117,7 @@ impl DiscordBackend {
                 SettingsPatch::Proto(id, v) => {
                     crate::ui::settings::synced_map::change(id, *v).ok_or_else(|| err(format!("unknown setting {id}")))?
                 }
+                SettingsPatch::Density(d) => SettingChange::UiDensity(density_to_proto(*d)),
             };
             let raw = s.rest.patch_setting_raw(&change).await.map_err(api_err)?;
             synced_raw(&raw)
@@ -160,6 +162,25 @@ pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
         locale: p.locale().filter(|l| !l.is_empty()).map(|l| l.to_owned().into()).unwrap_or(d.locale),
         allow_server_dms: !p.default_guilds_restricted(),
         proto: Default::default(),
+        density: density_from_proto(p.ui_density()).unwrap_or(d.density),
+    }
+}
+
+/// `UIDensity` proto enum (client: UNSET 0, COMPACT 1, COZY 2, RESPONSIVE 3, DEFAULT 4).
+fn density_from_proto(v: i32) -> Option<Density> {
+    match v {
+        1 => Some(Density::Compact),
+        2 => Some(Density::Cozy),
+        3 | 4 => Some(Density::Default),
+        _ => None,
+    }
+}
+
+fn density_to_proto(d: Density) -> i32 {
+    match d {
+        Density::Compact => 1,
+        Density::Cozy => 2,
+        Density::Default => 4,
     }
 }
 

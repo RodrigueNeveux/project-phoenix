@@ -1376,7 +1376,7 @@ fn slider_row(title: &'static str, desc: &'static str, s: Div) -> AnyElement {
         .into_any_element()
 }
 
-fn density_idx(p: &LocalPrefs) -> usize {
+fn density_idx(p: &SyncedSettings) -> usize {
     crate::theme::Density::ALL.iter().position(|d| *d == p.density).unwrap_or(0)
 }
 
@@ -1401,7 +1401,7 @@ static A11Y: &[B] = &[
         "settings.appearance.density",
         "sp.ac.density_d",
         &[("settings.density.compact", ""), ("settings.density.default", ""), ("settings.density.cozy", "")],
-        Pick::Local(density_idx, |p, i| p.density = crate::theme::Density::ALL[i.min(2)]),
+        Pick::Synced(density_idx, |i| SettingsPatch::Density(crate::theme::Density::ALL[i.min(2)])),
     ),
     B::Radios(
         "display",
