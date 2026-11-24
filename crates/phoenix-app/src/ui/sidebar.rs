@@ -179,7 +179,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     match app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
         None => div()
-            .h(px(m::HEADER_H))
+            .h(px(m::HEADER_H + 1.) // + the frame border, now drawn over the content)
             .flex_none()
             .px(z(10.))
             .flex()
@@ -281,7 +281,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .top_0()
                         .left_0()
                         .right_0()
-                        .h(px(m::HEADER_H))
+                        .h(px(m::HEADER_H + 1.))
                         .p(z(10.))
                         .flex()
                         .items_center()
@@ -373,7 +373,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                 ),
                         )
                 })
-                .when(banner.is_none(), |d| d.h(px(m::HEADER_H)))
+                .when(banner.is_none(), |d| d.h(px(m::HEADER_H + 1.)))
                 .into_any_element()
         }
     }
