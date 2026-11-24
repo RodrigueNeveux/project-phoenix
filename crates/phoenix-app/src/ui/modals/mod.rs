@@ -124,6 +124,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
             }
         }
     });
+    let vp = window.viewport_size();
     let mut mk = |placeholder: SharedString, initial: &str, focus: bool| {
         let i = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
         if !initial.is_empty() {
@@ -154,6 +155,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         Some(Modal::CreateChannel(s)) => create_channel::prepare(s, &mut mk),
         Some(Modal::ChannelSettings(s)) => channel_settings::prepare(s, &mut mk),
         Some(Modal::CreatePoll(s)) => poll_create::prepare(s, &mut mk),
+        Some(Modal::Report(r)) => r.viewport = Some(vp),
         _ => {}
     });
 }
@@ -164,7 +166,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Form(f) => form(f, cx),
             Modal::Forward(f) => forward::render(app, f, cx),
             Modal::Reactions(r) => reactions::render(app, r, cx),
-            Modal::Report(r) => report::render(r, cx),
+            Modal::Report(r) => report::render(app, r, cx),
             Modal::ModView { guild, user } => member::mod_view(app, *guild, *user, cx),
             Modal::Call { channel, user } => member::call_card(app, *channel, *user, cx),
             Modal::ServerSettings { guild, section } => server_settings::render(app, *guild, *section, cx),

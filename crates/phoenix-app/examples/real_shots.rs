@@ -41,6 +41,37 @@ fn voice_test_allowed(channel: Option<Id>) -> bool {
 
 const SEND_PREFIX: &str = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — ";
 
+fn report_path(path: &str) {
+    use phoenix_app::ui::modals::Modal;
+    phoenix_app::actions::with_modal(|m| {
+        let Some(Modal::Report(r)) = m else { return };
+        for tok in path.split('|').filter(|t| !t.is_empty()) {
+            let Some(node) = r.current().cloned() else { break };
+            if let Some(key) = tok.strip_prefix('+') {
+                let label = node.element("checkbox").and_then(|e| e.checkbox_options().into_iter().find(|o| o.key == key)).map(|o| o.label);
+                if let Some(label) = label {
+                    r.toggle(key, &label);
+                }
+            } else if tok == "<" {
+                r.back();
+            } else if tok == ">" {
+                if let Some(t) = node.button.as_ref().and_then(|b| b.target) {
+                    let _ = r.go(String::new(), t);
+                }
+            } else if let Some((label, target)) = node.children.iter().find(|(l, _)| l == tok).cloned() {
+                if r.menu.as_ref().and_then(|m| m.node(target)).is_some_and(|n| n.is_auto_submit) {
+                    eprintln!("real_shots: refusing {tok:?}, that step submits a report");
+                    break;
+                }
+                let _ = r.go(label, target);
+            } else {
+                eprintln!("real_shots: report step {tok:?} not found");
+                break;
+            }
+        }
+    });
+}
+
 struct ReadOnly(DiscordBackend);
 
 impl Backend for ReadOnly {
@@ -266,6 +297,7 @@ impl Backend for ReadOnly {
     fn action(&self, req: phoenix_app::actions::ActionRequest) -> BoxFuture<phoenix_app::actions::ActionReply> {
         match req {
             phoenix_app::actions::ActionRequest::Reminders => self.0.action(req),
+            phoenix_app::actions::ActionRequest::ReportMenu(_) => self.0.action(req),
             _ => denied(),
         }
     }
@@ -1059,6 +1091,17 @@ fn main() -> anyhow::Result<()> {
                         app.open_thread(r, window, cx);
                     }
                 }
+                "report" => {
+                    let pick = app.selected_channel.and_then(|c| {
+                        let msgs = &app.messages.get(&c)?.msgs;
+                        let m = arg.parse::<u64>().ok().and_then(|id| msgs.iter().find(|m| m.id.0 == id)).or(msgs.last())?;
+                        Some((c, m.id))
+                    });
+                    if let Some((c, m)) = pick {
+                        let sf = phoenix_api::models::Snowflake;
+                        app.open_report(phoenix_api::rest::reporting::ReportTarget::Message { channel: sf(c.0), message: sf(m.0) }, cx);
+                    }
+                }
                 "msgmenu" => {
                     let last = app.selected_channel.and_then(|c| Some((c, app.messages.get(&c)?.msgs.last()?.id)));
                     if let Some((c, m)) = last {
@@ -1069,6 +1112,14 @@ fn main() -> anyhow::Result<()> {
             })
         })?;
         pump(&mut cx, wait * 1000 / 3);
+        if kind == "report"
+            && let Ok(path) = std::env::var("PHX_REPORT_PATH")
+        {
+            pump(&mut cx, 1500);
+            report_path(&path);
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |_, cx| cx.notify()))?;
+            pump(&mut cx, 800);
+        }
         if kind == "emoji"
             && let Ok(row) = arg.parse::<usize>()
         {

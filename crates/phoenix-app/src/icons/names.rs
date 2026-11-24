@@ -6,6 +6,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("stage", &["StageIcon"]),
     ("chevron", &["ChevronSmallDownIcon"]),
     ("chevron-right", &["ChevronSmallRightIcon"]),
+    ("link-external", &["LinkExternalSmallIcon"]),
     ("crown", &["CrownIcon"]),
     ("new-user", &["NewUserIcon"]),
     ("chat-check", &["ChatCheckIcon"]),

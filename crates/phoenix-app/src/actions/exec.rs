@@ -74,8 +74,8 @@ pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> R
             ActionReply::Done
         }
         R::ReportMenu(t) => ActionReply::ReportMenu(Box::new(rest.get_report_menu(t).await.map_err(e)?)),
-        R::SubmitReport { menu, target, breadcrumbs } => {
-            rest.submit_report(&menu, target, &breadcrumbs).await.map_err(e)?;
+        R::SubmitReport { menu, target, steps } => {
+            rest.submit_report(&menu, target, &steps).await.map_err(e)?;
             ActionReply::Done
         }
         R::SetRole { guild, user: u, role, add } => {

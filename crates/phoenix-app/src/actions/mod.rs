@@ -9,7 +9,7 @@ pub mod user;
 use std::cell::RefCell;
 
 use gpui::{AnyElement, Context, Window};
-use phoenix_api::rest::{members::VoiceMod, reporting::{ReportMenu, ReportTarget}};
+use phoenix_api::rest::{members::VoiceMod, reporting::{ReportMenu, ReportStep, ReportTarget}};
 
 use crate::{
     app::PhoenixApp,
@@ -34,7 +34,7 @@ pub enum ActionRequest {
     Reactors { channel: Id, msg: Id, emoji: Reaction },
     RemoveReactions { channel: Id, msg: Id, emoji: Option<Reaction> },
     ReportMenu(ReportTarget),
-    SubmitReport { menu: Box<ReportMenu>, target: ReportTarget, breadcrumbs: Vec<u64> },
+    SubmitReport { menu: Box<ReportMenu>, target: ReportTarget, steps: Vec<ReportStep> },
     SetRole { guild: Id, user: Id, role: Id, add: bool },
     SetNick { guild: Id, user: Option<Id>, nick: String },
     FriendNick { user: Id, nick: String },
