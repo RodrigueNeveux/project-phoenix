@@ -282,10 +282,10 @@ the press that closes the popout never reaches what lies under it.
 
 | popout | press outside | Esc | trigger again | window blur | Phoenix | status |
 |---|---|---|---|---|---|---|
-| inbox (title bar) | closes, press swallowed | closes | closes | stays open | `inbox.rs` `click_trap` + `escape_header_popouts`; GPUI test `inbox_closes_like_the_client` | ✅ (was: never closed; Esc fell through to "mark channel read" and acked the channel) |
+| inbox (title bar) | closes, press swallowed | closes | closes | stays open | `inbox.rs` `close_on_press_outside` (capture-phase press outside the bounds, propagation stopped) + `escape_header_popouts`; GPUI test `inbox_closes_like_the_client` | ✅ (was: never closed; Esc fell through to "mark channel read" and acked the channel) |
 | inbox Mentions filter menu | closes with the inbox | closes the menu first | — | — | `escape_header_popouts` | ✅ test `inbox_filter_menu_closes_first_on_escape` |
-| pinned messages | closes, press swallowed | closes | closes | — | trap + deferred pins popout; test `pins_popout_closes_like_the_client` | ✅ (was: no outside press) |
-| threads browser | closes, press swallowed | closes | closes | — | trap; closes on channel switch; test `threads_popout_closes_like_the_client` | ✅ (was: no outside press, no Esc) |
+| pinned messages | closes, press swallowed | closes | closes | — | `close_on_press_outside` (pins now deferred); test `pins_popout_closes_like_the_client` | ✅ (was: no outside press) |
+| threads browser | closes, press swallowed | closes | closes | — | `close_on_press_outside`; closes on channel switch; test `threads_popout_closes_like_the_client` | ✅ (was: no outside press, no Esc) |
 | channel notification menu (bell) | closes, press swallowed | closes | closes | — | the header bell has no menu in Phoenix yet | ❌ not built |
 | guild header menu | closes, press swallowed | closes | closes | — | `guild_menu.rs` backdrop (already) | ✅ |
 | search options popout | closes, the press goes through (trap without `trapClicks_`) | closes and blurs | — | — | `search.rs` `on_mouse_down_out` (press outside the bar and the popout closes the search; the press reaches what is under it) | ✅ ⚠ the typed query is dropped; the client keeps it in the bar |
@@ -329,3 +329,9 @@ such cards. The list is rebuilt from the code instead (`ui/inbox_unreads.rs`, un
   `ParityRequest::Mentions`).
 - "For You": not in the 2026 client. The inbox chunk has no For You tab, and the tab bar has
   five tabs: Unreads, Mentions, Saved, Reminders, Scheduled (vanilla-inbox dumps). ➖
+
+Implementation note: a full-window "trap" element under the popouts was tried first. In GPUI
+tests it took presses meant for the deferred pins and threads popouts, and the inbox tabs lost
+theirs. The dismissal now lives on each popout: `on_mouse_down_out` (capture phase, decided from
+the popout's own bounds) closes it and stops propagation, which swallows the press like
+`trapClicks_`. It skips presses when a profile popout or menu is open over it.

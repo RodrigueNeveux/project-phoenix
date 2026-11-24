@@ -1,6 +1,6 @@
 //! GPUI tests of how the header popouts close, measured on the live client
 //! (docs/parity/popouts.md, "Dismissal"): a press outside closes and is
-//! swallowed (`clickTrapContainer_ trapClicks_`), Esc closes, the trigger
+//! swallowed (the client's `clickTrapContainer_ trapClicks_`), Esc closes, the trigger
 //! closes, a channel switch closes the channel-scoped ones, losing window focus
 //! does not. None of it may ack, and showing Inbox > Unreads must not either.
 
@@ -153,21 +153,18 @@ impl Harness {
     fn press_inside(&mut self, selector: &'static str, is_open: fn(&PhoenixApp) -> bool) {
         let pop = self.bounds(selector);
         let at = header_point(pop);
-        let trap = self.vcx.debug_bounds("popout-click-trap");
         let vp = self.vcx.update(|w, _| w.viewport_size());
         self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
         self.vcx.run_until_parked();
-        let traps = crate::ui::inbox::TRAP_PRESSES.with(|n| n.get());
         self.vcx.simulate_mouse_down(at, gpui::MouseButton::Left, Modifiers::none());
         self.vcx.run_until_parked();
         let after_down = self.read(is_open);
         self.vcx.simulate_mouse_up(at, gpui::MouseButton::Left, Modifiers::none());
         self.vcx.run_until_parked();
         let after_up = self.read(is_open);
-        let trapped = crate::ui::inbox::TRAP_PRESSES.with(|n| n.get()) - traps;
         assert!(
             after_down && after_up,
-            "press inside {selector} closed it: popout {pop:?}, press {at:?}, trap {trap:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}, trap presses {trapped}"
+            "press inside {selector} closed it: popout {pop:?}, press {at:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}"
         );
     }
 
@@ -206,21 +203,20 @@ fn inbox_closes_like_the_client(cx: &mut TestAppContext) {
     let open_after_tab = h.read(|a| a.parity.inbox.open);
     assert!(
         open_after_tab && tab == crate::commands::state::InboxTab::Saved,
-        "the Saved tab did not get its press (open {open_after_tab}, tab {tab:?}, trap presses {})",
-        crate::ui::inbox::TRAP_PRESSES.with(|n| n.get())
+        "the Saved tab did not get its press (open {open_after_tab}, tab {tab:?})"
     );
     h.press_inside("inbox-popout", |a| a.parity.inbox.open);
     h.click_outside();
     assert!(!h.read(|a| a.parity.inbox.open), "press outside did not close the inbox");
-    // The trap swallowed the press: nothing under it (user panel) reacted.
-    assert!(!h.read(|a| a.people.status_picker), "the press went through the trap");
+    // The press was swallowed: nothing under it (user panel) reacted.
+    assert!(!h.read(|a| a.people.status_picker), "the closing press went through");
 
     // Esc closes it and does not mark the channel read (Esc alone does).
     open(&mut h);
     h.escape();
     assert!(!h.read(|a| a.parity.inbox.open), "Esc did not close the inbox");
 
-    // The trigger again closes it (the trap takes the press, no reopen).
+    // The trigger again closes it (the closing press is swallowed, no reopen).
     open(&mut h);
     let btn = h.bounds("title-inbox");
     h.click(btn.center());

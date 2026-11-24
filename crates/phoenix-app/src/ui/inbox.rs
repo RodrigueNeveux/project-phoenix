@@ -1205,6 +1205,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             div()
                 .id("inbox-popout")
                 .debug_selector(|| "inbox-popout".into())
+                .map(|d| close_on_press_outside(d, cx))
                 .absolute()
                 .top(z(m::TITLE_BAR_H + 4.)) // container_uTMZTY y 36 (vanilla-inbox-1 #2620)
                 .right(z(crate::ui::title_bar::inbox_right_inset())) // right edge = inbox button's
@@ -1385,6 +1386,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
             div()
                 .id("threads-popout")
                 .debug_selector(|| "threads-popout".into())
+                .map(|d| close_on_press_outside(d, cx))
                 .absolute()
                 .top(z(m::TITLE_BAR_H + m::HEADER_H - 3.))
                 .right(z(HDR_RIGHT_THREADS))
@@ -1494,11 +1496,12 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
         );
     }
     let right = if is_dm { hdr_right(2.) } else { hdr_right(1.) };
-    // Deferred: drawn over the click trap of `popouts` like the inbox.
+    // Deferred: drawn over the chat like the inbox.
     Some(gpui::deferred(
         div()
             .id("pins-popout")
             .debug_selector(|| "pins-popout".into())
+                .map(|d| close_on_press_outside(d, cx))
             .absolute()
             .top(z(m::HEADER_H - 3.))
             .right(z(right))
@@ -1535,38 +1538,25 @@ thread_local! {
     static INBOX_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
-#[cfg(test)]
-thread_local! {
-    /// Presses the click trap handled (tests).
-    pub(crate) static TRAP_PRESSES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-}
-
-/// The client's `clickTrapContainer_ trapClicks_` under a header popout: a
-/// full-window layer that closes it on any press outside and swallows that
-/// press (the trigger button included, so a second click closes).
-fn click_trap(cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let close = |a: &mut PhoenixApp, _: &gpui::MouseDownEvent, _: &mut Window, cx: &mut Context<PhoenixApp>| {
-        #[cfg(test)]
-        TRAP_PRESSES.with(|n| n.set(n.get() + 1));
-        a.close_header_popouts(cx);
-    };
-    div()
-        .id("popout-click-trap")
-        .debug_selector(|| "popout-click-trap".into())
-        .absolute()
-        .inset_0()
-        .occlude()
-        .on_mouse_down(gpui::MouseButton::Left, cx.listener(close))
-        .on_mouse_down(gpui::MouseButton::Right, cx.listener(close))
-        .on_mouse_down(gpui::MouseButton::Middle, cx.listener(close))
-        .into_any_element()
+/// The client puts header popouts in a `clickTrapContainer_ trapClicks_`
+/// layer: a press anywhere outside closes the popout and goes no further (the
+/// trigger button included, so pressing it again closes). Done here on the
+/// popout itself, in the capture phase, from its bounds: it does not depend
+/// on how a full-window layer would stack against deferred draws.
+fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    el.on_mouse_down_out(cx.listener(|a, _: &gpui::MouseDownEvent, _, cx| {
+        // A profile popout or menu opened over the popout handles its own presses.
+        if a.people.any_overlay() {
+            return;
+        }
+        if a.close_header_popouts(cx) {
+            cx.stop_propagation();
+        }
+    }))
 }
 
 pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out = Vec::new();
-    if app.header_popout_open() {
-        out.push(click_trap(cx));
-    }
     out.extend(inbox(app, cx));
     out.extend(threads(app, cx));
     out
