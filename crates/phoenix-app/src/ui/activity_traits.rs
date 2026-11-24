@@ -58,6 +58,12 @@ pub fn traits(user: Id, game: &str) -> (bool, bool) {
     })
 }
 
+/// Seed the feed (offscreen mock renders only; never used with a real account).
+#[doc(hidden)]
+pub fn seed(v: Vec<Entry>) {
+    FEED.with(|f| *f.borrow_mut() = (Some(Instant::now()), v));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
