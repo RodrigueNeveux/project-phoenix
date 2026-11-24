@@ -20,6 +20,9 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 | 11 | Stage channel chat | Rows showed only "⋯ name time" | Stage system types (27, 28, 29, 31) were mapped to `OtherSystem` | Render stage system messages (start, end, new speaker, topic) instead of empty rows |
 | 12 | Thread | "Bienvenue dans #thread name !" with the `#` icon | The thread start reused the text channel welcome | Open threads on a thread start header instead of the channel welcome |
 | 13 | 1:1 DM | A bare "⋯ name time" row for an unknown system message | Unknown types with no content still drew a row | Hide unknown empty system messages instead of drawing a bare row |
+| 14 | Text channel join messages | The "Fais coucou !" button stretched across the whole message column | Block parent, so the button took the full width | Size the wave-to-say-hi button to its label instead of the full column |
+| 15 | Bot embeds (DraftBot rules) | `#unknown` and `@unknown-role` in place of the server's channels and roles | Embed markdown was parsed with `NoResolve` | Resolve channel, role and user mentions in embed text |
+| 16 | Channel header | The topic began with a raw `<:icon_public_channel_thread:…>` token | The topic was drawn as plain text | Render channel topics in the header with resolved mentions and custom emoji |
 
 ## Seen but not fixed (known limits)
 
@@ -27,4 +30,5 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 - Text before an inline emoji still ends its flex line. A word after the emoji starts on a new line instead of flowing on the same line, as Chromium's inline layout does. Fixing it needs inline boxes in GPUI's text layout.
 - Clamped profile bios cut a long URL on the line instead of wrapping it with `break-word` inside the 3-line clamp.
 - Reply previews draw mentions as plain text, without the mention colour.
+- Some large attachments (probably big GIFs) stay on the loading placeholder after 45 s in `real_shots`.
 - Group DM "a ajouté quelqu'un au groupe." does not name the added user, because the model does not keep message mentions.
