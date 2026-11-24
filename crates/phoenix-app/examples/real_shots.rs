@@ -10,7 +10,8 @@
 //! Location: env `PHX_GUILD` + `PHX_CHANNEL` (`PHX_GUILD` alone = its first text channel), or `PHX_DM=<channel id>`, or by
 //! default the location shown by the user's Discord (`cdp.mjs eval location.pathname`).
 //! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx), `PHX_HC`,
-//! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
+//! `PHX_DENSITY` (compact|default|cozy), `PHX_FONT` (px), otherwise read from the live Discord
+//! through CDP. `PHX_COMPACT=1` = compact message display.
 //! `PHX_AUDIO` = two digits mute/deaf (e.g. `11`), otherwise read from the live user panel.
 //! `PHX_PROFILE=<user id>|peer` opens that profile (`PHX_PROFILE_KIND` popout|modal, `PHX_PROFILE_BOX=x,y`).
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
@@ -469,7 +470,20 @@ fn main() -> anyhow::Result<()> {
         None if classes.contains("theme-dark") => AppTheme::Ash,
         None => AppTheme::Dark,
     };
-    let compact = std::env::var_os("PHX_COMPACT").is_some() || classes.contains("density-compact");
+    // Compact *message display* is a React layout, not an <html> class: only PHX_COMPACT turns it on.
+    // UI density and font size are <html> classes (`density-*`, `font-size-N`); PHX_DENSITY
+    // (compact|default|cozy) and PHX_FONT (12..24) override them.
+    let compact = std::env::var_os("PHX_COMPACT").is_some();
+    let density = std::env::var("PHX_DENSITY")
+        .ok()
+        .and_then(|d| phoenix_app::theme::Density::from_key(&d))
+        .or_else(|| classes.split(' ').find_map(|c| c.strip_prefix("density-").and_then(phoenix_app::theme::Density::from_key)))
+        .unwrap_or_default();
+    let font_px: f32 = std::env::var("PHX_FONT")
+        .ok()
+        .or_else(|| classes.split(' ').find_map(|c| c.strip_prefix("font-size-").map(str::to_owned)))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(16.);
     // Self mute / deafen are client-side state in Discord (not on the account):
     // read the user panel switches (`audioButtonWithMenu_` role=switch, aria-checked).
     let audio = env_or_cdp(
@@ -501,7 +515,7 @@ fn main() -> anyhow::Result<()> {
     let in_voice = env_or_cdp("PHX_IN_VOICE", "(!!document.querySelector('[class*=rtcConnectionStatus_]'))+''").as_deref()
         == Some("true");
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
-    println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} mute={self_mute} deaf={self_deaf}");
+    println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} density={density:?} font={font_px} mute={self_mute} deaf={self_deaf}");
 
     let t0 = std::time::Instant::now();
     let text = gpui_platform::current_platform(true).text_system();
@@ -605,6 +619,8 @@ fn main() -> anyhow::Result<()> {
             app.prefs.synced.theme = theme;
             app.prefs.local.zoom = 100;
             app.prefs.synced.compact = compact;
+            app.prefs.synced.density = density;
+            app.prefs.local.font_size = font_px;
             // In-memory only: the read-only capture never writes voice.json.
             app.mic_muted = self_mute || self_deaf;
             app.deafened = self_deaf;
@@ -1034,6 +1050,8 @@ fn main() -> anyhow::Result<()> {
         v.update(cx, |app, cx| {
             app.prefs.synced.theme = theme;
             app.prefs.synced.compact = compact;
+            app.prefs.synced.density = density;
+            app.prefs.local.font_size = font_px;
             if hc {
                 app.prefs.local.ui.insert("contrast".into(), 1);
             }
