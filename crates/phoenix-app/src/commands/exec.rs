@@ -276,6 +276,13 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                 voice_users: Vec::new(),
             })
         }
+        ParityRequest::ServerGuide { guild } => {
+            let raw = rest.guild_home_settings(sf(guild)).await.map_err(e)?;
+            let mut g = super::guide::parse_home_settings(&raw);
+            // The card is optional: the page still shows without it.
+            g.profile = rest.guild_profile(sf(guild)).await.ok().map(|p| super::guide::parse_profile(&p));
+            ParityReply::Guide(Box::new(g))
+        }
         ParityRequest::Onboarding { guild } => {
             let raw = rest.guild_onboarding(sf(guild)).await.map_err(e)?;
             ParityReply::Onboarding(super::parse_onboarding(&raw))

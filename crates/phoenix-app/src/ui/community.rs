@@ -42,12 +42,17 @@ pub fn is_open(app: &PhoenixApp, cx: &App) -> bool {
     cx.try_global::<Slot>().and_then(|s| s.0.as_ref()).is_some_and(|p| Some(p.guild) == app.selected_guild && p.from == app.selected_channel)
 }
 
+pub fn close(cx: &mut App) {
+    cx.set_global(Slot(None));
+}
+
 pub fn open(app: &mut PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) {
     open_tab(app, guild, false, cx);
 }
 
 /// Opens the page on the Customize (`browse == false`) or the Browse Channels tab.
 pub fn open_tab(app: &mut PhoenixApp, guild: Id, browse: bool, cx: &mut Context<PhoenixApp>) {
+    crate::ui::guide::close(cx);
     cx.set_global(Slot(Some(Page { guild, from: app.selected_channel, prompts: None, error: None, browse, intro_closed: false })));
     app.parity_request(ParityRequest::Onboarding { guild }, cx, move |a, r, cx| {
         let from = a.selected_channel;

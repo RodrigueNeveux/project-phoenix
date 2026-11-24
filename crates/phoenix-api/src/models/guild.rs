@@ -78,6 +78,9 @@ pub struct GuildProperties {
     pub vanity_url_code: Option<String>,
     #[serde(default)]
     pub max_members: Option<u32>,
+    /// Server Guide header art (`home-headers/{g}/{hash}`).
+    #[serde(default)]
+    pub home_header: Option<String>,
 }
 
 #[derive(Deserialize)]

@@ -101,6 +101,17 @@ impl RestClient {
         self.call(Method::GET, &format!("/guilds/{guild}/onboarding"), Body::None).await
     }
 
+    /// `GET /guilds/{g}/new-member-welcome` (Server Guide: welcome message, new member
+    /// actions and resource channels), read-only.
+    pub async fn guild_home_settings(&self, guild: GuildId) -> Result<Value> {
+        self.call(Method::GET, &format!("/guilds/{guild}/new-member-welcome"), Body::None).await
+    }
+
+    /// `GET /guilds/{g}/profile` (Server Guide sidebar card: counts, tag, traits), read-only.
+    pub async fn guild_profile(&self, guild: GuildId) -> Result<Value> {
+        self.call(Method::GET, &format!("/guilds/{guild}/profile"), Body::None).await
+    }
+
     pub async fn create_scheduled_event(&self, guild: GuildId, body: Value) -> Result<Snowflake> {
         self.post_for_id(&format!("/guilds/{guild}/scheduled-events"), body).await
     }

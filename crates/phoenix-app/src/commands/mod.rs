@@ -6,6 +6,7 @@
 //! backend runs it in [`exec`].
 
 pub mod exec;
+pub mod guide;
 pub mod slash;
 pub mod state;
 pub mod store;
@@ -142,6 +143,8 @@ pub enum ParityRequest {
     ScheduledEvents { guild: Id },
     /// `GET /guilds/{g}/onboarding` (Channels & Roles), read-only.
     Onboarding { guild: Id },
+    /// `GET /guilds/{g}/new-member-welcome` + `GET /guilds/{g}/profile` (Server Guide), read-only.
+    ServerGuide { guild: Id },
     /// `GET /channels/{id}` for a thread / forum post opened by link.
     FetchThread { id: Id },
 }
@@ -217,6 +220,7 @@ pub enum ParityReply {
     Inventory(Vec<InventoryEntry>),
     Events(Vec<GuildEvent>),
     Onboarding(Vec<OnboardingPrompt>),
+    Guide(Box<guide::GuildGuide>),
     Thread(crate::model::Channel),
 }
 

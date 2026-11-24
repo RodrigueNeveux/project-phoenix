@@ -16,7 +16,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse].
+//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse]|guide.
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
@@ -186,6 +186,10 @@ impl Backend for ReadOnly {
     fn guild_boosts(&self, g: Id) -> Option<(u32, bool)> {
         self.0.guild_boosts(g)
     }
+    // Server Guide header art (READY cache only).
+    fn guild_home_header(&self, g: Id) -> Option<String> {
+        self.0.guild_home_header(g)
+    }
     fn channel_user_limit(&self, c: Id) -> Option<u32> {
         self.0.channel_user_limit(c)
     }
@@ -239,6 +243,8 @@ impl Backend for ReadOnly {
             phoenix_app::commands::ParityRequest::ScheduledEvents { .. } => self.0.parity(req),
             // Channels & Roles page (PHX_OPEN=community): GET onboarding.
             phoenix_app::commands::ParityRequest::Onboarding { .. } => self.0.parity(req),
+            // Server Guide (PHX_OPEN=guide): GET new-member-welcome + GET profile.
+            phoenix_app::commands::ParityRequest::ServerGuide { .. } => self.0.parity(req),
             // Thread / forum post opened by id (PHX_CHANNEL of a post).
             phoenix_app::commands::ParityRequest::FetchThread { .. } => self.0.parity(req),
             // Inbox popout tabs (PHX_VIEW=inbox): GET mentions / saved / scheduled.
@@ -960,6 +966,11 @@ fn main() -> anyhow::Result<()> {
                 "community" => {
                     if let Some(g) = app.selected_guild {
                         phoenix_app::ui::community::open_tab(app, g, arg == "browse", cx);
+                    }
+                }
+                "guide" => {
+                    if let Some(g) = app.selected_guild {
+                        phoenix_app::ui::guide::open(app, g, cx);
                     }
                 }
                 "events" => {

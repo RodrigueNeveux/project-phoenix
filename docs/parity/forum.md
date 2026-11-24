@@ -38,3 +38,29 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 | Channels & Roles page (Customize tab) | vanilla-channels-roles tabBar_xTP3zy / prompt_pHGfKY / optionButton_87WSWY | tabs mt 32 mx 32 gap 24 pb 16; prompt pad 16 r8 surface-high; options 2 cols gap 8, r12, pad 12 16, emoji 22 mr 12 | | ui/community.rs | ✅ (dump) |
 | Channels & Roles: Browse Channels tab | vanilla-browse-channels (2026-11-24) | tab badge (body-xs/semibold, --badge-secondary-*); search field h40 r8 --input-*; intro card pad 16 r8 mb 24 (heading-lg title, body-md text + semibold tip); category row pad 20 0 10, body-lg/medium + "Follow Category" switch 24px apart; channel rows pad 10 16, 1px --border-subtle sides/top (bottom on the last), r 8 on the ends, icon 20 gap 10, name body-md/medium (--text-muted while the category is followed), body-xs subtitle "Last activity …" · topic, 20px checkbox | | ui/community.rs browse_body | ✅ (dump). Switches and checkboxes come from READY `channel_overrides[].flags & 4096` and are read-only; the search field is not wired; the intro illustration is not drawn (Discord artwork) |
 | Channels & Roles: "Mon profil" column, selected answers | vanilla-channels-roles | | | — | ❌ |
+
+## Server Guide (`/channels/{g}/@home`)
+
+Data: the client loads the page with two read-only GETs. `GET /guilds/{g}/profile` was seen
+in the live Network log when the page opened (2026-11-24, plus the usual `POST /science`
+telemetry, no other write). `GET /guilds/{g}/new-member-welcome` is the client's
+`GUILD_HOME_SETTINGS` route (local web bundle); it was cached from an earlier visit, so the
+live log did not show it again. The header art is the READY guild property `home_header`
+(`guilds/{g}/home-headers/{hash}.png`). The sidebar row shows only for guilds with
+COMMUNITY + GUILD_SERVER_GUIDE + GUILD_ONBOARDING. Render: `PHX_OPEN=guide` in real_shots.
+
+| element | dump source | values | our code | status |
+|---|---|---|---|---|
+| sidebar row "Server Guide" | vanilla-server-guide #643–#647 | SignPostIcon 20, selected row `--interactive-background-selected`, text and icon `--interactive-text-active` | ui/sidebar.rs guild_top | ✅ (dump) |
+| Channels & Roles row selected state | same rule (`modeSelected_TNyK-N`) | | ui/sidebar.rs | ✅ (CSS) |
+| page header bar | #1011–#1017 container_ybUK7Z | h 49, 32/20 icon `--icon-muted`, body-md/medium title | ui/guide.rs | ✅ |
+| scroller | homeContainer_MG-lb3 | padding 32, gap 32 | ui/guide.rs | ✅ |
+| header art | header_lqGeMc / headerArt_lqGeMc | margin-top -16, 16px wider each side, 25% of its width tall, radius 16, cover | ui/guide.rs header | ✅ |
+| guild icon | headerIcon_lqGeMc iconSizeXLarge | 100 + 4px `--background-base-low` border, radius 30, margin -50 0 16 | ui/guide.rs | ✅ |
+| name row | headerName_lqGeMc | heading-xxl/semibold 32/40, gap 8, discovery badge 24, md secondary "Invite" pushed right | ui/guide.rs | ✅ (Invite opens the invite modal) |
+| Resources | container_Qo6EL- / row_Qo6EL- | mt 16 gap 8, heading-lg/semibold; row pad 16 r8 1px `--border-subtle`, `--background-surface-high` → hover `-higher`; title body-md/semibold mb 8; description body-sm 2 lines with inline markdown | ui/guide.rs resource | ✅ (click opens the channel) |
+| resource with emoji / custom icon | — | no resource with an emoji or icon on the measured guild | ui/guide.rs (emoji 20 before the text) | ⚠ not measured; custom icons not drawn |
+| sidebar card | container_Xweo-z / header_E7xgJz / body_Xweo-z | 300 wide, r16, `--background-surface-highest`, 120px discovery splash, 70px icon frame at -34, name heading-sm/semibold + badge 18 + tag chiplet, 8px online/offline dots + body-sm `--text-muted` counts (gap 0 8), "depuis nov. 2024", description, trait chips pad 4 8 r16 | ui/guide.rs card | ✅ |
+| card icon mask | svg-mask-clan-icon | squircle, measured ≈22 / 19px corners on the capture | ui/guide.rs | ⚠ rounded rect approximation |
+| trait overflow "+ N en plus" | items_rw6y68 overflowMeasurement_ | the client wraps chips on one row and collapses the rest | ui/guide.rs (wraps all chips) | ❌ |
+| welcome message + new member actions ("Pour commencer") | — | parsed from new-member-welcome, not shown on the measured guild (actions already done / none) | commands/guide.rs | ❌ no dump, not rendered |

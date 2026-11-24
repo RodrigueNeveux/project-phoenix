@@ -146,6 +146,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/nav/up.svg" => s!(r#"<path d="M12 20V5m-7 6 7-7 7 7"/>"#),
         "icons/forum/tag.svg" => s!(r#"<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>"#),
         "icons/calendar.svg" => s!(r#"<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4m8-4v4"/>"#),
+        "icons/signpost.svg" => s!(r#"<path d="M12 3v18M8 21h8M5 6h12l3 3-3 3H5z"/>"#),
         "icons/channel-browse.svg" => s!(r#"<path d="M4 6h12M4 12h7M4 18h5"/><circle cx="17" cy="16" r="3"/><path d="m19.5 18.5 2 2"/>"#),
         "icons/boost.svg" => s!(r#"<path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/><path d="m12 7-3 5h6l-3 5"/>"#),
         "icons/chevron-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),

@@ -12,6 +12,7 @@ pub mod chat;
 pub mod code_copy;
 pub mod components;
 pub mod community;
+pub mod guide;
 pub mod events;
 pub mod focus_ring;
 pub mod forum;

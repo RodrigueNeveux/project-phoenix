@@ -414,6 +414,10 @@ pub trait Backend: Send + Sync + 'static {
     fn guild_boosts(&self, _guild: Id) -> Option<(u32, bool)> {
         None
     }
+    /// Server Guide header art hash (`home_header`), from READY.
+    fn guild_home_header(&self, _guild: Id) -> Option<String> {
+        None
+    }
     /// Voice channel `user_limit` (0 / None = unlimited).
     fn channel_user_limit(&self, _channel: Id) -> Option<u32> {
         None

@@ -855,6 +855,35 @@ impl Backend for MockBackend {
                     },
                 ]))
             }),
+            // Server Guide demo: two resources pointing at the first channels, a profile card.
+            ParityRequest::ServerGuide { guild } => {
+                let chans: Vec<Id> = self.inner.lock().map(|i| i.channels.iter().filter(|c| c.guild == Some(guild) && c.kind == crate::model::ChannelKind::Text).map(|c| c.id).take(2).collect()).unwrap_or_default();
+                Box::pin(async move {
+                    use crate::commands::guide::{GuideEmoji, GuideEntry, GuideTrait, GuildGuide, GuildProfile};
+                    let entry = |channel: Id, title: &str, description: &str| GuideEntry { channel, title: title.into(), description: description.into(), ..Default::default() };
+                    let mut resources = Vec::new();
+                    if let Some(&c) = chans.first() {
+                        resources.push(entry(c, "Start here", "Welcome to **Phoenix Lounge**. Read the rules and pick your roles to unlock the rest of the server."));
+                    }
+                    if let Some(&c) = chans.get(1) {
+                        resources.push(entry(c, "Frequently asked questions", "Answers to the questions newcomers ask the most."));
+                    }
+                    let tr = |label: &str, emoji: &str| GuideTrait { label: label.into(), emoji: GuideEmoji { name: Some(emoji.into()), ..Default::default() } };
+                    Ok(ParityReply::Guide(Box::new(GuildGuide {
+                        enabled: true,
+                        resources,
+                        profile: Some(GuildProfile {
+                            member_count: 12_480,
+                            online_count: 1_932,
+                            description: "A friendly place to talk about native apps, Rust and GPU user interfaces.".into(),
+                            traits: vec![tr("Rust", "🦀"), tr("Design", "🎨"), tr("Open source", "📦")],
+                            features: vec!["COMMUNITY".into(), "DISCOVERABLE".into()],
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })))
+                })
+            }
             _ => Box::pin(async { Err(crate::backend::BackendError("Not available offline.".into())) }),
         }
     }

@@ -394,7 +394,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         return if app.selected_guild.is_none() {
             dm_top(entity, cx).into_any_element()
         } else {
-            guild_top(app, entity.clone()).into_any_element()
+            guild_top(app, entity.clone(), cx).into_any_element()
         };
     }
     let Some(r) = app.sidebar_rows.get(ix - 1).copied() else {
@@ -1491,7 +1491,7 @@ fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
 /// 20px `icon_TNyK-N`, 16/28 medium `--channels-default`) for "Events", "Members"
 /// (with moderation rights) and "Server Boosts", then `sectionDivider_ysO7Gy`
 /// (1px `--border-subtle`, inset 20 / 11) and a 12px gap.
-fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
+fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     let ev_entity = entity.clone();
     let perms = app.selected_guild.map(|g| app.backend.guild_permissions(g)).unwrap_or(0);
     let mods = crate::ui::inbox::has_perm(perms, (1 << 1) | (1 << 2) | (1 << 5)); // KICK | BAN | MANAGE_GUILD
@@ -1504,7 +1504,11 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
     } else {
         None
     };
-    let item = |id: &'static str, glyph: &'static str, label: SharedString| {
+    let guide = has("COMMUNITY") && crate::ui::guide::has_guide(&features);
+    let (guide_on, page_on) = (crate::ui::guide::is_open(app, cx), crate::ui::community::is_open(app, cx));
+    // vanilla-server-guide #644: modeSelected_ row = --interactive-background-selected,
+    // name and icon --interactive-text-active.
+    let item = |id: &'static str, glyph: &'static str, label: SharedString, on: bool| {
         div().pl(z(10.)).pr(z(8.)).py(z(1.)).child(
             div()
                 .id(id)
@@ -1515,9 +1519,10 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
                 .items_center()
                 .gap(z(10.))
                 .cursor_pointer()
-                .text_color(t(idx::CHANNELS_DEFAULT))
-                .hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
-                .child(gpui::svg().path(crate::icons::path(glyph)).size(z(20.)).flex_none().text_color(t(idx::CHANNEL_ICON)))
+                .text_color(t(if on { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNELS_DEFAULT }))
+                .when(on, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
+                .when(!on, |d| d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER))))
+                .child(gpui::svg().path(crate::icons::path(glyph)).size(z(20.)).flex_none().text_color(t(if on { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNEL_ICON })))
                 .child(
                     div()
                         .flex_1()
@@ -1540,6 +1545,22 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
             let (n, on) = app.backend.guild_boosts(g)?;
             boost_goal(n, on, boost_goal_max(&app.backend.guild_features(g)))
         }))
+        // vanilla-server-guide #643: "Server Guide" (SignPostIcon) first.
+        .when(guide, |d| {
+            let ent = entity.clone();
+            d.child(
+                div()
+                    .id("g-guide-open")
+                    .on_click(move |_, _, cx| {
+                        ent.update(cx, |a, cx| {
+                            if let Some(g) = a.selected_guild {
+                                crate::ui::guide::open(a, g, cx);
+                            }
+                        })
+                    })
+                    .child(item("g-guide", "signpost", crate::t!("guild.top.guide"), guide_on)),
+            )
+        })
         .child(
             div()
                 .id("g-events-open")
@@ -1550,7 +1571,7 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
                         }
                     })
                 })
-                .child(item("g-events", "calendar", crate::t!("guild.top.events"))),
+                .child(item("g-events", "calendar", crate::t!("guild.top.events"), false)),
         )
         // vanilla-inbox-0 #629..#633: "Channels & Roles" row (ChannelListMagnifyingGlassIcon)
         // for onboarding guilds, "Browse Channels" for other community guilds.
@@ -1566,11 +1587,11 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
                             }
                         })
                     })
-                    .child(item("g-browse", "channel-browse", label)),
+                    .child(item("g-browse", "channel-browse", label, page_on)),
             )
         })
-        .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"))))
-        .child(item("g-boosts", "boost", crate::t!("guild.top.boosts")))
+        .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"), false)))
+        .child(item("g-boosts", "boost", crate::t!("guild.top.boosts"), false))
         // vanilla-inbox-0 #645 sectionDivider_: margin-top 15, inline 20 / 11, 1px.
         .child(div().mt(z(15.)).ml(z(20.)).mr(z(20.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE))) // sectionDivider_ysO7Gy 100..396 (11 + the 9px gutter from the list edge)
         .child(div().h(z(12.)))
