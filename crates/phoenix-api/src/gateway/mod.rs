@@ -104,10 +104,21 @@ pub struct GatewayConfig {
     /// Called with (event name, raw `d` JSON) for every dispatch before it is
     /// parsed, e.g. to persist READY for an instant next start.
     pub raw_dispatch: Option<RawDispatchHook>,
+    /// Session saved by a previous run: the first connect sends RESUME
+    /// instead of IDENTIFY (falls back to IDENTIFY on INVALID_SESSION).
+    pub resume: Option<ResumeState>,
 }
 
-/// See [`GatewayConfig::raw_dispatch`].
-pub type RawDispatchHook = std::sync::Arc<dyn Fn(&str, &str) + Send + Sync>;
+/// See [`GatewayConfig::raw_dispatch`]: (event name, raw `d`, sequence number).
+pub type RawDispatchHook = std::sync::Arc<dyn Fn(&str, &str, Option<u64>) + Send + Sync>;
+
+/// See [`GatewayConfig::resume`].
+#[derive(Clone)]
+pub struct ResumeState {
+    pub session_id: String,
+    pub resume_url: Option<String>,
+    pub seq: u64,
+}
 
 impl std::fmt::Debug for GatewayConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -134,6 +145,7 @@ impl GatewayConfig {
             invalid_session_delay: Duration::from_secs(1),
             hello_timeout: Duration::from_secs(20),
             raw_dispatch: None,
+            resume: None,
         }
     }
 
@@ -277,7 +289,12 @@ async fn run(
     cmd_rx: mpsc::UnboundedReceiver<GatewayCommand>,
     ev_tx: mpsc::UnboundedSender<GatewayEvent>,
 ) {
-    let mut r = Runner { config, cmd_rx, ev_tx, pending: VecDeque::new(), session: Session::default(), healthy: false };
+    let session = config
+        .resume
+        .as_ref()
+        .map(|r| Session { session_id: Some(r.session_id.clone()), resume_url: r.resume_url.clone(), seq: Some(r.seq) })
+        .unwrap_or_default();
+    let mut r = Runner { config, cmd_rx, ev_tx, pending: VecDeque::new(), session, healthy: false };
     let mut attempt: u32 = 0;
     loop {
         r.healthy = false;
@@ -514,7 +531,7 @@ impl Runner {
                             let name = p.t.as_deref().unwrap_or("");
                             let raw = p.d.map(|d| d.get()).unwrap_or("null");
                             if let Some(hook) = &self.config.raw_dispatch {
-                                hook(name, raw);
+                                hook(name, raw, p.s);
                             }
                             let ev = parse_dispatch(name, raw);
                             match &ev {

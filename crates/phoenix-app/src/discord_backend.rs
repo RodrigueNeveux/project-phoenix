@@ -37,6 +37,7 @@ use phoenix_api::{
     models as api,
     rest::{CreateMessage, LoginResponse},
 };
+use phoenix_api::gateway::events as api_ready;
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::{
@@ -216,6 +217,13 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
     let mut cfg = GatewayConfig::new(token.expose());
     cfg.properties = inner.props.clone();
     cfg.raw_dispatch = Some(snapshot::hook());
+    // Stored-session start: RESUME the previous run's gateway session when it
+    // is recent and nothing else owns it (see snapshot.rs).
+    let core = if remember { None } else { tokio::task::spawn_blocking(snapshot::take_core).await.ok().flatten() };
+    if let Some(c) = &core {
+        cfg.resume = c.resume.clone();
+        crate::perf::mark("gateway_resume_attempt");
+    }
     let (gateway, mut rx) = Gateway::spawn(cfg);
     // The token check (clear 401 for a bad token) runs during the gateway
     // handshake instead of before it; dispatches queue in `rx` meanwhile.
@@ -224,6 +232,13 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         return Err(api_err(e));
     }
     crate::perf::span("rest_get_me", t0);
+    if let Some(snapshot::Core { cache, ready, adapter, .. }) = core {
+        // Replayed events and RESUMED go through the pump like live ones; an
+        // INVALID_SESSION makes the gateway IDENTIFY and the pump resyncs on READY.
+        let data = convert::build_ready(&cache, &ready, &adapter.prefs);
+        crate::perf::span("resume_session_built", t0);
+        return Ok(start_session(&inner, rest, gateway, cache, &ready, adapter, rx, data));
+    }
     let cache = Cache::default();
 
     let ready = tokio::time::timeout(READY_TIMEOUT, async {
@@ -255,11 +270,27 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         tracing_warn(&format!("could not save token to the keyring: {e}"));
     }
 
-    crate::commands::set_session_id(&ready.session_id);
     let prefs = Prefs::from_ready(&ready);
     let data = convert::build_ready(&cache, &ready, &prefs);
     crate::perf::span("ready_built", t0);
-    let adapter = Arc::new(Mutex::new(Adapter::new(ready.user.id, prefs)));
+    let adapter = Adapter::new(ready.user.id, prefs);
+    Ok(start_session(&inner, rest, gateway, cache, &ready, adapter, rx, data))
+}
+
+/// Install the session and start the event pump.
+#[allow(clippy::too_many_arguments)]
+fn start_session(
+    inner: &Arc<Inner>,
+    rest: RestClient,
+    gateway: GatewayHandle,
+    cache: Cache,
+    ready: &api_ready::Ready,
+    adapter: Adapter,
+    rx: UnboundedReceiver<GatewayEvent>,
+    data: ReadyData,
+) -> ReadyData {
+    crate::commands::set_session_id(&ready.session_id);
+    let adapter = Arc::new(Mutex::new(adapter));
     let session = Arc::new(Session {
         rest,
         gateway,
@@ -272,13 +303,13 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready(ready.user_guild_settings.as_ref())),
     });
     *inner.session.lock() = Some(session.clone());
-    if let Some(e) = convert::self_activities(&ready) {
+    if let Some(e) = convert::self_activities(ready) {
         inner.emit(e);
     }
-    nav::snapshot(&session.cache, &ready).into_iter().for_each(|e| inner.emit(e));
-    history::warm_recent(&inner, &session);
+    nav::snapshot(&session.cache, ready).into_iter().for_each(|e| inner.emit(e));
+    history::warm_recent(inner, &session);
     tokio::spawn(pump(inner.clone(), session, rx));
-    Ok(data)
+    data
 }
 
 fn tracing_warn(msg: &str) {
