@@ -300,8 +300,9 @@ mod tests {
                 let flags = crate::model::VoiceFlags { self_mute: true, self_deaf: true, ..Default::default() };
                 app.handle_event(AppEvent::VoiceFlags { user, flags }, cx);
                 let mut live = ready();
-                for c in live.channels.iter_mut() {
-                    c.voice_users.retain(|u| *u != user);
+                // READY has no guild voice states for user accounts.
+                for c in live.channels.iter_mut().filter(|c| c.guild.is_some()) {
+                    c.voice_users.clear();
                 }
                 on_resync(app, Resync(live), cx);
                 assert!(app.channels[&vc].voice_users.contains(&user), "voice row lost by the ReadyData after READY_SUPPLEMENTAL");
