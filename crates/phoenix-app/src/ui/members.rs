@@ -150,16 +150,35 @@ fn ensure_thread_list(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) {
     .detach();
 }
 
+fn empty_thread() -> gpui::Div {
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .pt(z(16.))
+        .px(z(16.))
+        .flex()
+        .flex_col()
+        .items_center()
+        .child(div().w_full().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("members.members")))
+        .child(div().mt(z(48.)).child(crate::ui::icon(crate::assets::Icon::Members, 40., c(tok(idx::ICON_MUTED)))))
+        .child(div().mt(z(40.)).text_center().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!("thread.nobody")))
+        .child(div().mt(z(8.)).text_center().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("thread.nobody_sub")))
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     if let Some(g) = app.selected_guild {
         request_ranges(app, g, cx);
         ensure_thread_list(app, g, cx);
     }
+    let nobody = open_thread(app).and_then(|t| app.people.thread_lists.get(&t)).is_some_and(|v| v.is_empty());
     div()
         .w(z(m::member_list_w()))
         .flex_none()
         .h_full()
+        .relative()
         .flex()
         .flex_col()
         .bg(c(Palette::BG_SECONDARY))
@@ -180,6 +199,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 )
                 .children(crate::ui::chat::scrollbar::thin_fade_scrollbar(&app.member_list)),
         )
+        .when(nobody, |d| d.child(empty_thread()))
 }
 
 pub fn elapsed(start_ms: i64, now_s: i64) -> String {

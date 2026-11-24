@@ -1190,12 +1190,14 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
         return None;
     }
     let ch = app.selected_channel?;
-    let list_src = app.nav.threads.get(&ch).cloned().unwrap_or_default();
+    let search = THREAD_SEARCH.with(|s| s.borrow().clone());
+    let query = search.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default();
+    let list_src: Vec<_> = app.nav.threads.get(&ch).cloned().unwrap_or_default().into_iter().filter(|t| thread_name_matches(&t.name, &query)).collect();
     let archived: Vec<_> = app
         .parity
         .archived_threads
         .get(&ch)
-        .map(|v| v.iter().filter(|p| !list_src.iter().any(|t| t.id == p.thread)).cloned().collect())
+        .map(|v| v.iter().filter(|p| !list_src.iter().any(|t| t.id == p.thread) && thread_name_matches(&p.title, &query)).cloned().collect())
         .unwrap_or_default();
     let header = div()
         .flex_none()
@@ -1222,7 +1224,10 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .flex()
                 .items_center()
                 .child(div().size(z(22.)).flex().items_center().justify_center().child(named("search", 16., tk(idx::TEXT_DEFAULT))))
-                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)).whitespace_nowrap().child(crate::t!("threads.search"))),
+                .child(match &search {
+                    Some(i) => div().flex_1().min_w_0().text_size(z(14.)).line_height(z(18.)).child(Input::new(i).appearance(false).bordered(false)),
+                    None => div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)).whitespace_nowrap().child(crate::t!("threads.search")),
+                }),
         )
         .child(div().flex_1())
         .child(div().ml(z(8.)).child(sm_text_button("threads-create", crate::t!("threads.create"), true).on_click(cx.listener(|a, _, w, cx| {
@@ -1472,6 +1477,12 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
 
 thread_local! {
     static INBOX_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+    static THREAD_SEARCH: std::cell::RefCell<Option<Entity<InputState>>> = const { std::cell::RefCell::new(None) };
+}
+
+pub fn thread_name_matches(name: &str, query: &str) -> bool {
+    let q = query.trim().to_lowercase();
+    q.is_empty() || name.to_lowercase().contains(&q)
 }
 
 fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
@@ -1534,6 +1545,21 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
         if near {
             app.load_next_unread(cx);
         }
+    }
+    if app.parity.threads_open {
+        if THREAD_SEARCH.with(|s| s.borrow().is_none()) {
+            let i = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("threads.search")));
+            cx.subscribe(&i, |_: &mut PhoenixApp, _, ev: &gpui_component::input::InputEvent, cx| {
+                if matches!(ev, gpui_component::input::InputEvent::Change) {
+                    cx.notify();
+                }
+            })
+            .detach();
+            i.update(cx, |s, cx| s.focus(window, cx));
+            THREAD_SEARCH.with(|s| *s.borrow_mut() = Some(i));
+        }
+    } else if let Some(i) = THREAD_SEARCH.with(|s| s.borrow_mut().take()) {
+        drop(i);
     }
     if let Some(p) = app.parity.group_dm.as_mut()
         && p.search.is_none()
@@ -1928,6 +1954,13 @@ fn thread_facepile(app: &PhoenixApp, ids: &[Id], count: u32) -> Option<gpui::Div
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thread_search_is_case_insensitive() {
+        assert!(thread_name_matches("[Test Phoenix] Fil autonome", "  fil AUTO "));
+        assert!(thread_name_matches("x", ""));
+        assert!(!thread_name_matches("abc", "z"));
+    }
 
     #[test]
     fn perms() {
