@@ -157,6 +157,8 @@ pub enum HomeView {
     Dm,
     /// Shop page (`/shop`).
     Shop,
+    /// "Ton Nitro" page (/store).
+    Nitro,
 }
 
 /// Modal / popout currently shown above the main layout.
