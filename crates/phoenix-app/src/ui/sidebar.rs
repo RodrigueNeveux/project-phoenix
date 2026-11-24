@@ -1243,7 +1243,11 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(t(idx::TEXT_STRONG))
                                 .text_ellipsis()
-                                .child(crate::ui::emoji_text::label(app.me.display_name.clone(), 14.)),
+                                // vanilla-guild-text #997 `container_or4Hj- dnsFont_`: own name style font.
+                                .child(
+                                    crate::fonts::styled_name(div().text_ellipsis(), Some(&app.me), false)
+                                        .child(crate::ui::emoji_text::label(app.me.display_name.clone(), 14.)),
+                                ),
                         )
                         .child(
                             div()
