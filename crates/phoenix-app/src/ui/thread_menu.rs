@@ -14,7 +14,14 @@ thread_local! {
     static POST: RefCell<Option<(crate::commands::ForumPost, Id, Point<Pixels>)>> = const { RefCell::new(None) };
 }
 
-const MUTE_DURATIONS: [&str; 6] = ["menu.mute.15m", "menu.mute.1h", "menu.mute.3h", "menu.mute.8h", "menu.mute.24h", "menu.mute.forever"];
+const MUTE_DURATIONS: [(i64, &str); 6] = [
+    (900, "menu.mute.15m"),
+    (3600, "menu.mute.1h"),
+    (10_800, "menu.mute.3h"),
+    (28_800, "menu.mute.8h"),
+    (86_400, "menu.mute.24h"),
+    (-1, "menu.mute.forever"),
+];
 const NOTIFY: [(u8, &str); 3] = [(2, "menu.notify.all"), (4, "thread.notify_mentions"), (8, "menu.notify.nothing")];
 
 pub fn open_post(post: crate::commands::ForumPost, forum: Id, pos: Point<Pixels>, window: &mut Window) {
@@ -46,10 +53,6 @@ fn act(e: &Entity<PhoenixApp>, label: gpui::SharedString, f: impl Fn(&mut Phoeni
     MenuItem::action(label, None, move |_, w, cx: &mut App| e.update(cx, |a, cx| f(a, w, cx)))
 }
 
-fn stub(e: &Entity<PhoenixApp>, key: &'static str) -> MenuItem {
-    act(e, crate::t!(key), move |a, _, cx| a.stub(&crate::t!(key), cx))
-}
-
 fn guild_of(app: &PhoenixApp, t: Id) -> Option<Id> {
     app.channels.get(&t).and_then(|c| c.guild).or_else(|| app.nav.find_thread(t).and_then(|c| c.guild)).or(app.selected_guild)
 }
@@ -66,13 +69,26 @@ fn push_group(items: &mut Vec<MenuItem>, group: Vec<MenuItem>) {
 
 pub fn mute_item(app: &PhoenixApp, e: &Entity<PhoenixApp>, t: Id) -> MenuItem {
     let st = app.thread_state(t);
+    let (mute, unmute) = if st.forum_post { ("menu.post.mute", "menu.post.unmute") } else { ("thread.mute", "thread.unmute") };
     if !st.joined {
-        return MenuItem::disabled(crate::t!("thread.mute"), None);
+        return MenuItem::disabled(crate::t!(mute), None);
     }
     if st.member_muted {
-        return act(e, crate::t!("thread.unmute"), move |a, _, cx| a.unmute_thread(t, cx));
+        let item = act(e, crate::t!(unmute), move |a, _, cx| a.unmute_thread(t, cx));
+        return match st.mute_end.and_then(muted_until) {
+            Some(sub) => item.with_subtext(sub),
+            None => item,
+        };
     }
-    MenuItem::submenu(crate::t!("thread.mute"), MUTE_DURATIONS.iter().map(|k| stub(e, k)).collect())
+    let rows = MUTE_DURATIONS.iter().map(|&(secs, key)| act(e, crate::t!(key), move |a, _, cx| a.mute_thread_for(t, secs, cx))).collect();
+    MenuItem::submenu(crate::t!(mute), rows)
+}
+
+fn muted_until(end_ms: i64) -> Option<String> {
+    use chrono::TimeZone;
+    let dt = chrono::Local.timestamp_millis_opt(end_ms).single()?;
+    let time = if crate::i18n::locale() == "en" { dt.format("%-m/%-d, %-I:%M %p") } else { dt.format("%d/%m %H:%M") };
+    Some(crate::t!("thread.muted_until", time = time.to_string()).to_string())
 }
 
 pub fn notify_item(app: &PhoenixApp, e: &Entity<PhoenixApp>, t: Id) -> MenuItem {

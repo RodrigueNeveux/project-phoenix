@@ -347,6 +347,10 @@ impl Cache {
                     .and_then(Value::as_array)
                     .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(me.as_str())));
                 let count = data.get("member_count").and_then(Value::as_u64);
+                let preview: Option<Vec<Snowflake>> = data
+                    .get("member_ids_preview")
+                    .and_then(Value::as_array)
+                    .map(|v| v.iter().filter_map(Value::as_str).filter_map(|x| x.parse().ok()).map(Snowflake).collect());
                 let Some(ch) = s.channels.get_mut(&id) else { return false };
                 let ch = Arc::make_mut(ch);
                 if let Some(m) = added {
@@ -356,6 +360,9 @@ impl Cache {
                 }
                 if let Some(n) = count {
                     ch.member_count = Some(n as u32);
+                }
+                if let Some(p) = preview {
+                    ch.member_ids_preview = p;
                 }
             }
             GatewayEvent::ChannelDelete(c) | GatewayEvent::ThreadDelete(c) => {

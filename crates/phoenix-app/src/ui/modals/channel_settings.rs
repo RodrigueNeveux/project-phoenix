@@ -133,7 +133,11 @@ pub struct State {
 pub struct ThreadFields {
     pub auto0: u32,
     pub auto: u32,
+    pub flags0: u64,
+    pub flags: u64,
 }
+
+pub const SPOILER_CHANNEL: u64 = 1 << 21;
 
 pub const AUTO_ARCHIVE: [(u32, &str); 4] = [(60, "thread.aa_1h"), (1440, "thread.aa_24h"), (4320, "thread.aa_3d"), (10_080, "thread.aa_1w")];
 
@@ -143,6 +147,7 @@ pub fn thread_edit(name0: &str, name: &str, slow0: u32, slow: u32, t: &ThreadFie
         name: (name != name0 && !name.is_empty()).then(|| name.to_owned()),
         slowmode: (slow != slow0).then_some(slow),
         auto_archive_duration: (t.auto != t.auto0).then_some(t.auto),
+        flags: (t.flags != t.flags0).then_some(t.flags),
         ..Default::default()
     }
 }
@@ -178,7 +183,7 @@ impl State {
         let mut s = Self::new(ch);
         s.slow0 = info.slowmode;
         s.slow = info.slowmode;
-        s.thread = Some(ThreadFields { auto0: info.auto_archive, auto: info.auto_archive });
+        s.thread = Some(ThreadFields { auto0: info.auto_archive, auto: info.auto_archive, flags0: info.flags, flags: info.flags });
         s.loaded = true;
         s
     }
@@ -606,6 +611,34 @@ fn thread_overview(s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) ->
             ))
             .child(text(crate::t!("thread.hide_after_desc"), 14., idx::TEXT_SUBTLE).pt(z(8.))),
     )
+    .child(
+        div()
+            .id("ts-spoiler")
+            .mt(z(24.))
+            .flex()
+            .items_center()
+            .gap(z(16.))
+            .cursor_pointer()
+            .on_click(cx.listener(|_, _, _, cx| {
+                with_state(|s| {
+                    if let Some(t) = s.thread.as_mut() {
+                        t.flags ^= SPOILER_CHANNEL;
+                    }
+                });
+                cx.notify();
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .flex_col()
+                    .gap(z(4.))
+                    .child(text(crate::t!("thread.spoiler"), 16., idx::TEXT_STRONG).font_weight(FontWeight::MEDIUM))
+                    .child(text(crate::t!("thread.spoiler_desc"), 14., idx::TEXT_SUBTLE)),
+            )
+            .group(crate::ui::controls::SWITCH_ROW)
+            .child(switch("ts-spoiler-switch", t.flags & SPOILER_CHANNEL != 0)),
+    )
 }
 
 fn render_thread(app: &PhoenixApp, s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -630,6 +663,7 @@ fn render_thread(app: &PhoenixApp, s: &State, t: &ThreadFields, cx: &mut Context
                 s.slow = s.slow0;
                 if let Some(t) = s.thread.as_mut() {
                     t.auto = t.auto0;
+                    t.flags = t.flags0;
                 }
                 input = s.name.clone().map(|i| (i, s.name0.clone()));
             });
@@ -655,6 +689,7 @@ fn save_thread(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
             s.slow0 = s.slow;
             if let Some(t) = s.thread.as_mut() {
                 t.auto0 = t.auto;
+                t.flags0 = t.flags;
             }
             out = Some((s.channel, edit));
         }
@@ -796,11 +831,14 @@ mod tests {
 
     #[test]
     fn thread_settings_only_send_changes() {
-        let t = ThreadFields { auto0: 4320, auto: 4320 };
+        let t = ThreadFields { auto0: 4320, auto: 4320, flags0: 0, flags: 0 };
         assert_eq!(thread_edit("a", " a ", 0, 0, &t), Default::default());
-        let e = thread_edit("a", "b", 0, 30, &ThreadFields { auto0: 4320, auto: 10_080 });
+        let e = thread_edit("a", "b", 0, 30, &ThreadFields { auto0: 4320, auto: 10_080, flags0: 0, flags: 0 });
         let body = phoenix_api::rest::guild_manage::thread_body(&e);
         assert_eq!(body, serde_json::json!({"name": "b", "rate_limit_per_user": 30, "auto_archive_duration": 10_080}));
         assert_eq!(thread_edit("a", "  ", 0, 0, &t).name, None);
+        let spoiler = ThreadFields { flags0: 2, flags: 2 | SPOILER_CHANNEL, ..t };
+        let body = phoenix_api::rest::guild_manage::thread_body(&thread_edit("a", "a", 0, 0, &spoiler));
+        assert_eq!(body, serde_json::json!({"flags": 2 | (1 << 21)}));
     }
 }

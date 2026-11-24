@@ -212,6 +212,9 @@ pub struct ForumView {
     pub match_all: bool,
     pub defaults_applied: bool,
     pub compose: Option<ForumCompose>,
+    pub guidelines_open: bool,
+    pub guidelines_seen: bool,
+    pub guidelines_full: bool,
 }
 
 pub struct ModalView {

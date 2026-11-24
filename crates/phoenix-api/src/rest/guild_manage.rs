@@ -42,6 +42,7 @@ pub struct ThreadEdit {
 pub enum ThreadMemberPatch {
     Flags(u8),
     Muted(bool),
+    MuteFor { window: i64, end_time: Option<String> },
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -169,6 +170,9 @@ pub fn build(call: &AdminCall) -> ApiReq {
             Some(match patch {
                 ThreadMemberPatch::Flags(f) => json!({ "flags": f }),
                 ThreadMemberPatch::Muted(m) => json!({ "muted": m }),
+                ThreadMemberPatch::MuteFor { window, end_time } => {
+                    json!({ "muted": true, "mute_config": { "selected_time_window": window, "end_time": end_time } })
+                }
             }),
         ),
         C::Channel { channel } => req(Method::GET, format!("/channels/{channel}"), None),
@@ -358,6 +362,11 @@ mod tests {
         assert_eq!(r.body.unwrap(), json!({"flags": 4}));
         let r = build(&AdminCall::ThreadMemberSettings { thread: t, patch: ThreadMemberPatch::Muted(false) });
         assert_eq!(r.body.unwrap(), json!({"muted": false}));
+        let end = Some("2026-11-25T12:15:00.000Z".to_string());
+        let r = build(&AdminCall::ThreadMemberSettings { thread: t, patch: ThreadMemberPatch::MuteFor { window: 900, end_time: end } });
+        assert_eq!(r.body.unwrap(), json!({"muted": true, "mute_config": {"selected_time_window": 900, "end_time": "2026-11-25T12:15:00.000Z"}}));
+        let r = build(&AdminCall::ThreadMemberSettings { thread: t, patch: ThreadMemberPatch::MuteFor { window: -1, end_time: None } });
+        assert_eq!(r.body.unwrap(), json!({"muted": true, "mute_config": {"selected_time_window": -1, "end_time": null}}));
     }
 
     #[test]

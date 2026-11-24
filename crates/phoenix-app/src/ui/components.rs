@@ -53,12 +53,27 @@ pub fn markdown_highlighted(
     markdown_sized(app, text, false, Some((entity, msg)), Some(hl))
 }
 
+pub fn markdown_body_sm(app: &PhoenixApp, text: &str) -> AnyElement {
+    markdown_lines(app, text, true, None, None, Some(18.))
+}
+
 fn markdown_sized(
     app: &PhoenixApp,
     text: &str,
     reduced: bool,
     ctx: Option<(&Entity<PhoenixApp>, Id)>,
     hl: Option<&crate::search_highlight::Highlighter>,
+) -> AnyElement {
+    markdown_lines(app, text, reduced, ctx, hl, None)
+}
+
+fn markdown_lines(
+    app: &PhoenixApp,
+    text: &str,
+    reduced: bool,
+    ctx: Option<(&Entity<PhoenixApp>, Id)>,
+    hl: Option<&crate::search_highlight::Highlighter>,
+    line: Option<f32>,
 ) -> AnyElement {
     let k = if reduced { 0.875 } else { 1. };
     let (parsed, mut blocks, _, _) = richtext::build(text, &Names(app), app.me.id, &|_| true);
@@ -70,7 +85,7 @@ fn markdown_sized(
         .flex_col()
         .min_w_0()
         .text_size(fz(16. * k))
-        .line_height(fz(22. * k))
+        .line_height(fz(line.unwrap_or(22. * k)))
         .text_color(c(Palette::TEXT_NORMAL));
     let n = blocks.len();
     for (bi, b) in blocks.into_iter().enumerate() {

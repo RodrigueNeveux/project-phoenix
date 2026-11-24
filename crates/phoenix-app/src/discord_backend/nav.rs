@@ -149,16 +149,18 @@ pub fn folders_from_json(v: Option<&Value>) -> Vec<GuildFolder> {
         .collect()
 }
 
-fn thread_member_muted(c: &api::Channel) -> bool {
-    let Some(m) = c.member.as_ref() else { return false };
-    if !m.get("muted").and_then(Value::as_bool).unwrap_or(false) {
-        return false;
-    }
+pub(super) fn thread_member_mute(c: &api::Channel) -> (bool, Option<i64>) {
+    let Some(m) = c.member.as_ref() else { return (false, None) };
     let end = m.get("mute_config").and_then(|c| c.get("end_time")).and_then(Value::as_str);
-    match end.and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok()) {
-        Some(t) => t.timestamp_millis() > chrono::Utc::now().timestamp_millis(),
-        None => true,
+    let end = end.and_then(|e| chrono::DateTime::parse_from_rfc3339(e).ok()).map(|t| t.timestamp_millis());
+    if !m.get("muted").and_then(Value::as_bool).unwrap_or(false) {
+        return (false, end);
     }
+    (end.is_none_or(|t| t > chrono::Utc::now().timestamp_millis()), end)
+}
+
+fn thread_member_muted(c: &api::Channel) -> bool {
+    thread_member_mute(c).0
 }
 
 fn thread(c: &api::Channel) -> Option<model::Channel> {

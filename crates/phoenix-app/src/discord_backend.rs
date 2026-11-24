@@ -569,6 +569,7 @@ impl Backend for DiscordBackend {
         };
         let md = c.thread_metadata.clone().unwrap_or_default();
         let member = c.member.as_ref();
+        let mute = nav::thread_member_mute(&c);
         Some(crate::model::ThreadInfo {
             parent: c.parent_id.map(|p| Id(p.0)),
             owner: c.owner_id.map(|u| Id(u.0)),
@@ -576,7 +577,8 @@ impl Backend for DiscordBackend {
             forum_post: parent_forum,
             joined: member.is_some(),
             member_flags: member.and_then(|m| m.get("flags")).and_then(serde_json::Value::as_u64).unwrap_or(0) as u8,
-            member_muted: member.and_then(|m| m.get("muted")).and_then(serde_json::Value::as_bool).unwrap_or(false),
+            member_muted: mute.0,
+            mute_end: mute.1,
             archived: md.archived,
             locked: md.locked,
             invitable: md.invitable.unwrap_or(true),
@@ -586,6 +588,7 @@ impl Backend for DiscordBackend {
             unread,
             mentions,
             member_count: c.member_count.unwrap_or(0),
+            member_ids_preview: c.member_ids_preview.iter().map(|u| Id(u.0)).collect(),
             message_count: c.message_count.unwrap_or(0),
             last_message: c.last_message_id.map(|m| Id(m.0)),
         })

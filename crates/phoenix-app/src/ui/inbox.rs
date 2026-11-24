@@ -1298,6 +1298,8 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
     let now = chrono::Local::now().timestamp();
     for t in list_src {
         let tid = t.id;
+        let info = app.backend.thread_info(t.id);
+        let info = info.as_ref();
         let created = ((t.id.0 >> 22) / 1000 + 1_420_070_400) as i64;
         let recent = crate::thread_recent::get(t.id);
         let when = crate::thread_recent::ago(now - recent.as_ref().map_or(created, |r| r.ts));
@@ -1310,7 +1312,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                     .items_center()
                     .min_w_0()
                     .child(div().flex_none().mr(z(8.)).child(avatar(u.as_deref(), 16.)))
-                    .child(div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(r.name.clone()))
+                    .child(div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(app.member_nick(r.author).unwrap_or_else(|| r.name.clone())))
                     .child(div().flex_none().child(": "))
                     .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
                     .child(div().flex_none().w(z(20.)).flex().justify_center().child("•"))
@@ -1346,12 +1348,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                         .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(t.name.clone()))
                         .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().child(sub)),
                 )
-                .when(!t.voice_users.is_empty(), |d| {
-                    d.child(div().ml(z(16.)).flex().children(t.voice_users.iter().take(3).enumerate().map(|(k, u)| {
-                        let u_cow = app.member_user(app.selected_guild, *u);
-                        div().when(k > 0, |d| d.ml(z(-6.))).child(avatar(u_cow.as_deref(), 24.))
-                    })))
-                }),
+                .when_some(info.and_then(|i| thread_facepile(app, &i.member_ids_preview, i.member_count)), |d, f| d.child(f)),
         );
     }
     if !archived.is_empty() {

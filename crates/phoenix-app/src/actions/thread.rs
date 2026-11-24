@@ -56,6 +56,11 @@ pub fn pin_edit(flags: u64, archived: bool, pin: bool) -> ThreadEdit {
     ThreadEdit { flags: Some(flags), archived: (pin && archived).then_some(false), ..Default::default() }
 }
 
+pub fn mute_patch(window: i64, now: chrono::DateTime<chrono::Utc>) -> ThreadMemberPatch {
+    let end_time = (window > 0).then(|| (now + chrono::Duration::seconds(window)).to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    ThreadMemberPatch::MuteFor { window, end_time }
+}
+
 pub fn can_manage(app: &PhoenixApp, thread: Id) -> bool {
     let guild = app.channels.get(&thread).and_then(|c| c.guild).or_else(|| app.nav.find_thread(thread).and_then(|c| c.guild)).or(app.selected_guild);
     guild.is_some_and(|g| crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 34))
@@ -121,7 +126,15 @@ impl PhoenixApp {
     }
 
     pub fn set_thread_notify(&mut self, thread: Id, level: u8, cx: &mut Context<Self>) {
-        let patch = AdminCall::ThreadMemberSettings { thread: sf(thread), patch: ThreadMemberPatch::Flags(level) };
+        self.thread_member_settings(thread, ThreadMemberPatch::Flags(level), cx);
+    }
+
+    pub fn mute_thread_for(&mut self, thread: Id, window: i64, cx: &mut Context<Self>) {
+        self.thread_member_settings(thread, mute_patch(window, chrono::Utc::now()), cx);
+    }
+
+    fn thread_member_settings(&mut self, thread: Id, patch: ThreadMemberPatch, cx: &mut Context<Self>) {
+        let patch = AdminCall::ThreadMemberSettings { thread: sf(thread), patch };
         if self.thread_state(thread).joined {
             self.thread_call(patch, cx);
             return;
@@ -255,6 +268,15 @@ mod tests {
         assert_eq!(r.path, "/channels/5/thread-members/@me?location=Forum%20Toolbar");
         let r = build(&AdminCall::EditThread { thread: sf(Id(5)), edit: ThreadEdit { applied_tags: Some(vec![sf(Id(8)), sf(Id(9))]), ..Default::default() } });
         assert_eq!(r.body.unwrap(), json!({"applied_tags": ["8", "9"]}));
+    }
+
+    #[test]
+    fn timed_mute_matches_the_client_body() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-25T12:00:00Z").unwrap().with_timezone(&chrono::Utc);
+        let r = build(&AdminCall::ThreadMemberSettings { thread: sf(Id(5)), patch: mute_patch(900, now) });
+        assert_eq!(r.body.unwrap(), json!({"muted": true, "mute_config": {"selected_time_window": 900, "end_time": "2026-11-25T12:15:00.000Z"}}));
+        let r = build(&AdminCall::ThreadMemberSettings { thread: sf(Id(5)), patch: mute_patch(-1, now) });
+        assert_eq!(r.body.unwrap(), json!({"muted": true, "mute_config": {"selected_time_window": -1, "end_time": null}}));
     }
 
     #[test]

@@ -23,6 +23,10 @@ thread_local! {
 }
 
 thread_local! {
+    static GUIDE_HEIGHT: std::cell::Cell<f32> = const { std::cell::Cell::new(0.) };
+}
+
+thread_local! {
     static SORT_ANCHOR: std::cell::Cell<gpui::Point<gpui::Pixels>> = const { std::cell::Cell::new(gpui::point(gpui::px(330.), gpui::px(170.))) };
 }
 
@@ -285,6 +289,18 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    fn reset_forum_view(&mut self, forum: Id, cx: &mut Context<Self>) {
+        let d = self.backend.forum_settings(forum).unwrap_or_default();
+        let v = self.parity.forums.entry(forum).or_default();
+        let (sort, all) = (v.sort, v.match_all);
+        apply_defaults(v, &d);
+        v.sort_menu = false;
+        if v.sort != sort || (v.match_all != all && !v.tags.is_empty()) {
+            self.load_forum(forum, true, cx);
+        }
+        cx.notify();
+    }
+
     fn submit_post(&mut self, forum: Id, cx: &mut Context<Self>) {
         let Some(comp) = self.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) else { return };
         let title = comp.title.read(cx).value().trim().to_owned();
@@ -367,9 +383,157 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
             }
             s.focus(window, cx)
         });
-        app.parity.forums.entry(forum).or_default().compose =
-            Some(ForumCompose { title, body, tags: Vec::new(), sending: false, error: None });
+        let v = app.parity.forums.entry(forum).or_default();
+        v.compose = Some(ForumCompose { title, body, tags: Vec::new(), sending: false, error: None });
+        if !v.guidelines_seen {
+            v.guidelines_seen = true;
+            v.guidelines_open = true;
+        }
     }
+}
+
+fn guide_button(forum: Id, id: &'static str, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    use crate::ui::tooltip::Tipped as _;
+    div()
+        .id(id)
+        .size(z(32.))
+        .flex_none()
+        .rounded(z(8.))
+        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+        .border_1()
+        .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+        .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))).border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_HOVER))))
+        .active(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE))).border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_ACTIVE))))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_center()
+        .on_click(cx.listener(move |a, _, _, cx| {
+            let v = a.parity.forums.entry(forum).or_default();
+            v.guidelines_open = !v.guidelines_open;
+            v.guidelines_seen = true;
+            cx.notify();
+        }))
+        .child(gpui::svg().path(crate::icons::path("forum/book-check")).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+        .tip(crate::t!("forum.guide"))
+}
+
+fn guidelines(app: &PhoenixApp, forum: Id, text: &str, full: bool, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let manage = app.selected_guild.is_some_and(|g| crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 4));
+    let small_icon = |id: &'static str, path: &'static str| {
+        div().id(id).group(id).flex().cursor_pointer().child(
+            gpui::svg()
+                .path(crate::icons::path(path))
+                .size(z(16.))
+                .flex_none()
+                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                .group_hover(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
+                .id("i")
+                .group_active(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
+        )
+    };
+    let tall = GUIDE_HEIGHT.with(|h| h.get()) >= f32::from(z(220.)) - 0.5;
+    let probe = gpui::canvas(
+        |b, w, _| {
+            let h = f32::from(b.size.height);
+            if GUIDE_HEIGHT.with(|g| g.replace(h)) != h {
+                w.refresh();
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full();
+    let header = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .text_size(z(20.))
+                .line_height(z(24.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(gpui::svg().path(crate::icons::path("forum/book-check")).size(z(20.)).flex_none().text_color(c(tok(idx::TEXT_STRONG))))
+                .child(crate::t!("forum.guide"))
+                .when(manage, |d| {
+                    d.child(small_icon("forum-guide-edit", "pen").on_click(cx.listener(move |a, _, _, cx| a.open_channel_settings(forum, cx))))
+                }),
+        )
+        .child(small_icon("forum-guide-close", "close-small").on_click(cx.listener(move |a, _, _, cx| {
+            if let Some(v) = a.parity.forums.get_mut(&forum) {
+                v.guidelines_open = false;
+            }
+            cx.notify();
+        })));
+    let body = div()
+        .relative()
+        .flex_none()
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
+        .child(crate::ui::components::markdown_body_sm(app, text))
+        .child(probe);
+    let more = (tall && !full).then(|| {
+        div()
+            .absolute()
+            .bottom_0()
+            .right_0()
+            .w_full()
+            .child(div().h(z(28.)).bg(gpui::linear_gradient(
+                0.,
+                gpui::linear_color_stop(c(tok(idx::BACKGROUND_BASE_LOWER)), 0.),
+                gpui::linear_color_stop(c(tok(idx::BACKGROUND_BASE_LOWER)).opacity(0.), 1.),
+            )))
+            .child(
+                div().w_full().flex().justify_end().bg(c(tok(idx::BACKGROUND_BASE_LOWER))).child(
+                    div()
+                        .id("forum-guide-more")
+                        .cursor_pointer()
+                        .pt(z(4.))
+                        .pb(z(16.))
+                        .pr(z(16.))
+                        .flex()
+                        .items_center()
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(tok(idx::TEXT_BRAND)))
+                        .on_click(cx.listener(move |a, _, _, cx| {
+                            if let Some(v) = a.parity.forums.get_mut(&forum) {
+                                v.guidelines_full = true;
+                            }
+                            cx.notify();
+                        }))
+                        .child(crate::t!("forum.guidelines_all"))
+                        .child(gpui::svg().path(crate::icons::path("maximize")).size(z(16.)).ml(z(8.)).flex_none().text_color(c(tok(idx::TEXT_BRAND)))),
+                ),
+            )
+    });
+    div()
+        .mt(z(16.))
+        .p(z(12.))
+        .rounded(z(12.))
+        .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .child(header)
+        .child(
+            div()
+                .relative()
+                .mt(z(12.))
+                .p(z(16.))
+                .rounded(z(8.))
+                .overflow_hidden()
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                .child(div().when(!full, |d| d.max_h(z(220.))).overflow_hidden().child(body))
+                .children(more),
+        )
 }
 
 fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
@@ -454,6 +618,57 @@ fn footer_time(now: i64, p: &ForumPost) -> String {
     if now - ts > 30 * 86_400 { crate::t!("forum.over_30d").to_string() } else { ago(now, ts) }
 }
 
+fn default_emoji_token(id: Option<Id>, name: &str) -> String {
+    match id {
+        Some(id) => format!("<:{}:{}>", if name.is_empty() { "_" } else { name }, id.0),
+        None => name.to_string(),
+    }
+}
+
+fn card_reaction(r: &crate::model::Reaction, count: bool, thread: Id, msg: Option<Id>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let rc = r.clone();
+    div()
+        .id(if count { "card-reaction" } else { "card-default-reaction" })
+        .group("card-reaction")
+        .flex_none()
+        .mr(z(4.))
+        .rounded(z(8.))
+        .border_1()
+        .cursor_pointer()
+        .when(r.me, |d| d.bg(c(tok(idx::REACTION_BACKGROUND_REACTED_DEFAULT))).border_color(c(tok(idx::REACTION_BORDER_REACTED_DEFAULT))))
+        .when(!r.me, |d| {
+            d.bg(c(tok(idx::REACTION_BACKGROUND_DEFAULT)))
+                .border_color(gpui::transparent_black())
+                .hover(|s| s.bg(c(tok(idx::REACTION_BACKGROUND_HOVER))).border_color(c(tok(idx::REACTION_BORDER_HOVER))))
+        })
+        .active(|s| s.bg(c(tok(idx::REACTION_BACKGROUND_ACTIVE))).border_color(c(tok(idx::REACTION_BORDER_ACTIVE))))
+        .on_click(cx.listener(move |a, _: &gpui::ClickEvent, _, cx| {
+            cx.stop_propagation();
+            if let Some(m) = msg {
+                a.toggle_reaction(thread, m, &rc, cx);
+            }
+        }))
+        .child(
+            div()
+                .py(z(1.))
+                .px(z(6.))
+                .flex()
+                .items_center()
+                .child(div().my(z(2.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.)))
+                .when(count, |d| {
+                    d.child(
+                        div()
+                            .ml(z(6.))
+                            .text_size(z(14.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(c(tok(if r.me { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::TEXT_SUBTLE })))
+                            .group_hover("card-reaction", |s| s.text_color(c(tok(idx::REACTION_TEXT_HOVER))))
+                            .child(r.count.to_string()),
+                    )
+                }),
+        )
+}
+
 fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let first = p.first_message.as_ref();
     let author_id = first.map(|m| m.author).or(p.owner);
@@ -466,6 +681,13 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
         first.map(|m| crate::ui::chat::reply_preview_text(app, &preview_text(&m.content).into())).unwrap_or_default();
     let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
     let reaction = first.and_then(|m| m.reactions.iter().max_by_key(|r| r.count)).cloned();
+    let first_id = first.map(|m| m.id);
+    let default_reaction = first
+        .filter(|m| m.reactions.is_empty())
+        .and_then(|_| app.channels.get(&p.thread).and_then(|t| t.parent).or_else(|| open_forum(app)))
+        .and_then(|f| app.backend.forum_settings(f))
+        .and_then(|s| s.reaction)
+        .map(|(id, name)| crate::model::Reaction { emoji: default_emoji_token(id, &name).into(), count: 0, me: false, emoji_id: id });
     let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
     let unread = is_unread(app, p);
     let title_color = if unread { c(Palette::TEXT_HEADER) } else { c(Palette::TEXT_MUTED) };
@@ -580,21 +802,8 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                             .text_size(z(14.))
                             .line_height(z(18.))
                             .text_color(c(Palette::TEXT_NORMAL))
-                            .when_some(reaction, |d, re| {
-                                d.child(
-                                    div()
-                                        .h(z(20.))
-                                        .px(z(6.))
-                                        .rounded(z(8.))
-                                        .flex()
-                                        .items_center()
-                                        .gap(z(4.))
-                                        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .child(crate::media::emoji::emoji_element(&re.emoji, 14.))
-                                        .child(re.count.to_string()),
-                                )
-                            })
+                            .when_some(default_reaction, |d, re| d.child(card_reaction(&re, false, p.thread, first_id, cx)))
+                            .when_some(reaction, |d, re| d.child(card_reaction(&re, true, p.thread, first_id, cx)))
                             .child(
                                 div()
                                     .flex()
@@ -604,7 +813,7 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                                     .child(gpui::svg().path(crate::icons::path("chat")).size(z(14.)).flex_none().text_color(c(Palette::TEXT_NORMAL)))
                                     .child(p.message_count.to_string()),
                             )
-                            .child(div().size(z(4.)).rounded_full().bg(c(Palette::TEXT_MUTED)))
+                            .child(div().text_color(c(tok(idx::BORDER_SUBTLE))).child("\u{2022}"))
                             .child(footer_time(now, p)),
                     ),
             )
@@ -676,7 +885,7 @@ fn media_tile(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: 
 
 const INLINE_COMPOSER: bool = true;
 
-fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], cx: &mut Context<PhoenixApp>) -> gpui::Div {
+fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bool, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let close = cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
         if let Some(v) = a.parity.forums.get_mut(&forum) {
             v.compose = None;
@@ -703,20 +912,6 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], cx: &mut Cont
                 })),
         );
     }
-    let secondary = |id: &'static str, path: &'static str| {
-        div()
-            .id(id)
-            .size(z(32.))
-            .flex_none()
-            .rounded(z(8.))
-            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
-            .border_1()
-            .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(gpui::svg().path(crate::icons::path(path)).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
-    };
     div()
         .mt(z(24.))
         .rounded(z(12.))
@@ -815,7 +1010,7 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], cx: &mut Cont
                     ),
                 )
                 .child(div().flex_1())
-                .child(secondary("compose-guide", "file"))
+                .when(has_guide, |d| d.child(guide_button(forum, "compose-guide", cx)))
                 .child(
                     div()
                         .id("compose-post")
@@ -845,6 +1040,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let empty = Default::default();
     let v = app.parity.forums.get(&forum).unwrap_or(&empty);
     let now = chrono::Utc::now().timestamp();
+    let guide_text = app.backend.forum_settings(forum).and_then(|s| s.guidelines).filter(|t| !t.is_empty());
+    let has_guide = guide_text.is_some();
 
     let search_bar = div()
         .mt(z(24.))
@@ -866,20 +1063,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .text_color(c(Palette::TEXT_HEADER))
                 .when_some(search_input(forum), |d, i| d.child(Input::new(&i).appearance(false).bordered(false).text_size(z(20.)).line_height(z(24.)))),
         )
-        .child(
-            div()
-                .id("forum-guide")
-                .size(z(32.))
-                .flex_none()
-                .rounded(z(8.))
-                .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
-                .border_1()
-                .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
-                .flex()
-                .items_center()
-                .justify_center()
-                .child(icon(Icon::File, 16., c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))),
-        )
+        .when(has_guide, |d| d.child(guide_button(forum, "forum-guide", cx)))
         .child(
             div()
                 .id("forum-new-post")
@@ -987,10 +1171,16 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .pr(z(32.))
         .flex()
         .flex_col()
-        .child(div().pb(z(16.)).child(match v.compose.as_ref() {
-            Some(comp) => compose_card(forum, comp, &tags, cx).into_any_element(),
-            None => search_bar.into_any_element(),
-        }).child(filters));
+        .child(
+            div()
+                .pb(z(16.))
+                .child(match v.compose.as_ref() {
+                    Some(comp) => compose_card(forum, comp, &tags, has_guide, cx).into_any_element(),
+                    None => search_bar.into_any_element(),
+                })
+                .when_some(guide_text.filter(|_| v.guidelines_open), |d, t| d.child(guidelines(app, forum, &t, v.guidelines_full, cx)))
+                .child(filters),
+        );
     if let (Some(err), true) = (v.error.clone(), v.posts.is_empty() && !v.loading) {
         col = col.child(
             div()
@@ -1119,6 +1309,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(radio("forum.match_some", !v.match_all, |a, f, cx| a.set_forum_match(f, false, cx)));
             items.push(radio("forum.match_all", v.match_all, |a, f, cx| a.set_forum_match(f, true, cx)));
         }
+        items.push(MenuItem::Separator);
+        let reset = e.clone();
+        items.push(MenuItem::action(crate::t!("forum.reset_view"), None, move |_, _, cx: &mut gpui::App| reset.update(cx, |a, cx| a.reset_forum_view(forum, cx))));
         let dismiss: crate::ui::context_menu::Dismiss = std::rc::Rc::new(move |w, cx| {
             e.update(cx, |a, _| {
                 if let Some(v) = a.parity.forums.get_mut(&forum) {

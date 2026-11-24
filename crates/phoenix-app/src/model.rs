@@ -227,6 +227,7 @@ pub struct ThreadInfo {
     pub joined: bool,
     pub member_flags: u8,
     pub member_muted: bool,
+    pub mute_end: Option<i64>,
     pub archived: bool,
     pub locked: bool,
     pub invitable: bool,
@@ -236,6 +237,7 @@ pub struct ThreadInfo {
     pub unread: bool,
     pub mentions: u32,
     pub member_count: u32,
+    pub member_ids_preview: Vec<Id>,
     pub message_count: u32,
     pub last_message: Option<Id>,
 }

@@ -167,4 +167,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("folder", &["FolderIcon"]),
     ("star-outline", &["StarOutlineIcon"]),
     ("discord", &["ClydeIcon"]),
+    ("forum/book-check", &["BookCheckIcon"]),
+    ("close-small", &["XSmallIcon"]),
+    ("maximize", &["MaximizeIcon"]),
 ];
