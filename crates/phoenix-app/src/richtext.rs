@@ -236,21 +236,37 @@ pub fn build(
                 || matches!(s.mention, Some(Mention::Role(r)) if resolver.has_role(r))
         })
     });
-    let preview: String = parsed
-        .iter()
-        .map(|b| match b {
-            Block::Code { code, .. } => code.as_str(),
-            b => b.inline().map_or("", |i| i.text.as_str()),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-        .replace('\n', " ")
-        .chars()
-        .take(120)
-        .collect();
+    let (preview, _) = preview_with_mentions(&parsed);
     let mut blocks = render_blocks(&parsed, revealed, c(Palette::TEXT_NORMAL));
     color_role_mentions(&parsed, &mut blocks, resolver);
     (parsed, blocks, mentions_me, preview.into())
+}
+
+/// One-line reply preview of `parsed` (blocks joined by spaces, newlines folded, at
+/// most 120 chars) and the byte ranges of its mentions, which the client's
+/// `repliedTextContent_` still draws with the mention colours.
+pub fn preview_with_mentions(parsed: &[Block]) -> (String, Vec<Range<usize>>) {
+    let mut text = String::new();
+    let mut mentions = Vec::new();
+    for (n, b) in parsed.iter().enumerate() {
+        if n > 0 {
+            text.push(' ');
+        }
+        let at = text.len();
+        match b {
+            Block::Code { code, .. } => text.push_str(code),
+            b => {
+                if let Some(i) = b.inline() {
+                    text.push_str(&i.text);
+                    mentions.extend(i.spans.iter().filter(|s| s.mention.is_some()).map(|s| s.range.start + at..s.range.end + at));
+                }
+            }
+        }
+    }
+    let text = text.replace('\n', " ");
+    let cut = text.char_indices().nth(120).map_or(text.len(), |(i, _)| i);
+    let mentions = mentions.into_iter().filter(|r| r.start < cut).map(|r| r.start..r.end.min(cut)).collect();
+    (text[..cut].to_string(), mentions)
 }
 
 /// Role mentions take the role color: text in the color, background at 10% alpha

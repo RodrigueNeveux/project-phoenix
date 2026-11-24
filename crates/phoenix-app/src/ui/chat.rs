@@ -979,8 +979,11 @@ fn message(
 
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);
-        let (ru, preview, rnick) = match found {
-            Some(p) => (app.member_user(app.selected_guild, entry.msgs[p].author), entry.rendered[p].preview.clone(), entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author)).or_else(|| {
+        let (ru, (preview, mranges), rnick) = match found {
+            Some(p) => (app.member_user(app.selected_guild, entry.msgs[p].author), {
+                let (t, m) = crate::richtext::preview_with_mentions(&entry.rendered[p].parsed);
+                (SharedString::from(t), m)
+            }, entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(entry.msgs[p].author)).or_else(|| {
                 // referenced_message has no `member`: reuse the nick from any loaded message by that author.
                 let a = entry.msgs[p].author;
                 entry.msgs.iter().rev().filter(|m| m.author == a).find_map(|m| m.author_nick.clone())
@@ -989,10 +992,13 @@ fn message(
             None => match &msg.reply_preview {
                 Some((a, nick, text)) => (
                     app.member_user(app.selected_guild, *a),
-                    crate::ui::chat::reply_preview_text(app, text),
+                    {
+                        let (t, m) = crate::richtext::preview_with_mentions(&crate::markdown::parse(text, &app.resolver()));
+                        (SharedString::from(t), m)
+                    },
                     nick.clone().or_else(|| app.member_nick(*a)),
                 ),
-                None => (None, crate::t!("chat.reply_deleted"), None),
+                None => (None, (crate::t!("chat.reply_deleted"), Vec::new()), None),
             },
         };
         let found = found.or_else(|| msg.reply_preview.as_ref().map(|_| usize::MAX));
@@ -1067,22 +1073,42 @@ fn message(
                     .when(found.is_none() || preview.is_empty(), |d| d.italic())
                     .map(|d| {
                         let text = if found.is_some() && preview.is_empty() { crate::t!("chat.reply_click_to_see") } else { preview };
+                        // Mentions keep the message mention colours (repliedTextContent_ .mention).
+                        let seg = |a: usize, b: usize| -> gpui::AnyElement {
+                            let hl: Vec<_> = mranges
+                                .iter()
+                                .filter(|r| r.start < b && r.end > a)
+                                .map(|r| {
+                                    (
+                                        r.start.max(a) - a..r.end.min(b) - a,
+                                        gpui::HighlightStyle {
+                                            color: Some(c(Palette::MENTION_FG)),
+                                            background_color: Some(crate::theme::ca(Palette::MENTION_BG)),
+                                            font_weight: Some(FontWeight::MEDIUM),
+                                            ..Default::default()
+                                        },
+                                    )
+                                })
+                                .collect();
+                            let t = SharedString::from(text[a..b].to_string());
+                            if hl.is_empty() { t.into_any_element() } else { gpui::StyledText::new(t).with_highlights(hl).into_any_element() }
+                        };
                         let tokens = crate::media::emoji::find_custom(&text);
                         if tokens.is_empty() {
-                            return d.child(text);
+                            return d.child(seg(0, text.len()));
                         }
                         // repliedTextContent_ custom emoji: img.emoji 18×18 inline (vanilla-guild-text-groups).
                         let mut row = d.flex().items_center();
                         let mut at = 0;
                         for (r, _) in &tokens {
                             if r.start > at {
-                                row = row.child(div().flex_none().child(SharedString::from(text[at..r.start].to_string())));
+                                row = row.child(div().flex_none().child(seg(at, r.start)));
                             }
                             row = row.child(div().flex_none().size(z(18.)).child(crate::media::emoji::emoji_element(&text[r.clone()], 18. * crate::theme::zoom())));
                             at = r.end;
                         }
                         if at < text.len() {
-                            row = row.child(div().flex_none().child(SharedString::from(text[at..].to_string())));
+                            row = row.child(div().flex_none().child(seg(at, text.len())));
                         }
                         row
                     }),
