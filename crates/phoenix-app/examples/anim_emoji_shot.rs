@@ -11,7 +11,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use gpui::{AppContext, Context, HeadlessAppContext, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb, size};
+use gpui::{AppContext, InteractiveElement, Context, HeadlessAppContext, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb, size};
 use phoenix_app::{assets::Assets, media::emoji};
 
 /// "Play animated emoji" for the CPU comparison.
@@ -19,6 +19,7 @@ static PLAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(
 
 struct Shot {
     ids: Vec<String>,
+    dir: String,
 }
 
 impl Render for Shot {
@@ -42,14 +43,24 @@ impl Render for Shot {
             .child(row(22., false, &self.ids)) // inline 1.375em at 16px
             .child(row(48., false, &self.ids)) // jumbo 3em
             .child(row(40., true, &self.ids)) // picker tile, not hovered: still
+            // Control: the same GIF as a bare `img` without / with an element id
+            // (GPUI keeps the frame index in the element state of an id'd img only).
+            .child(
+                div()
+                    .flex()
+                    .gap(px(8.))
+                    .children(self.ids.first().map(|id| gpui::img(format!("local/{}/{id}.gif", self.dir)).size(px(22.))))
+                    .children(self.ids.first().map(|id| gpui::img(format!("local/{}/{id}.gif", self.dir)).id("ctl").size(px(22.)))),
+            )
     }
 }
 
 fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let out = args.next().unwrap_or_else(|| "anim".into());
-    if let Some(dir) = args.next() {
-        emoji::set_local_dir(dir);
+    let dir = args.next().unwrap_or_default();
+    if !dir.is_empty() {
+        emoji::set_local_dir(dir.clone());
     }
     let ids: Vec<String> = args.filter(|a| a.chars().all(|c| c.is_ascii_digit())).collect();
     let text = gpui_platform::current_platform(true).text_system();
@@ -57,10 +68,12 @@ fn main() -> anyhow::Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     let http = phoenix_app::discord_backend::http::CdnHttpClient::new(rt.handle().clone(), "Mozilla/5.0");
     cx.update(|cx| cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(Arc::new(http)))));
-    let win = cx.open_window(size(px(420.), px(180.)), move |_, cx| cx.new(|_| Shot { ids }))?;
+    let win = cx.open_window(size(px(420.), px(240.)), move |_, cx| cx.new(|_| Shot { ids, dir }))?;
     let pump = |cx: &mut HeadlessAppContext, n: usize| {
         for _ in 0..n {
             std::thread::sleep(Duration::from_millis(50));
+            // Image frame timers run on the scheduler clock, virtual in headless.
+            cx.advance_clock(Duration::from_millis(50));
             cx.run_until_parked();
         }
     };
@@ -80,18 +93,28 @@ fn main() -> anyhow::Result<()> {
     let at = ((16. + 11.) * scale) as u32;
     let mut last = None;
     let mut changes = 0;
+    let (mut ctl, mut ctl_last) = ((0usize, 0usize), None);
     let t0 = std::time::Instant::now();
     while t0.elapsed() < Duration::from_secs(3) {
         std::thread::sleep(Duration::from_millis(20));
+        cx.advance_clock(Duration::from_millis(20));
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
         cx.run_until_parked();
-        let px = cx.capture_screenshot(win.into())?.get_pixel(at, at).0;
+        let shot = cx.capture_screenshot(win.into())?;
+        let px = shot.get_pixel(at, at).0;
         if last.is_some_and(|l| l != px) {
             changes += 1;
         }
         last = Some(px);
+        // Control row (4th row, y = 16 + 22 + 12 + 48 + 12 + 40 + 12): without id, with id.
+        let cy = ((16. + 22. + 12. + 48. + 12. + 40. + 12. + 11.) * scale) as u32;
+        let (a, b) = (shot.get_pixel(at, cy).0, shot.get_pixel(((16. + 22. + 8. + 11.) * scale) as u32, cy).0);
+        ctl.0 += usize::from(ctl_last.is_some_and(|(la, _)| la != a));
+        ctl.1 += usize::from(ctl_last.is_some_and(|(_, lb)| lb != b));
+        ctl_last = Some((a, b));
     }
     println!("fps {:.1} ({changes} frame changes in {:.1} s)", changes as f32 / t0.elapsed().as_secs_f32(), t0.elapsed().as_secs_f32());
+    println!("control img without id: {} frame changes, with id: {}", ctl.0, ctl.1);
 
     // CPU of 5 s of 60 Hz redraws, playing then still.
     let cpu = || -> f64 {
@@ -105,6 +128,7 @@ fn main() -> anyhow::Result<()> {
         let (c0, t0) = (cpu(), std::time::Instant::now());
         while t0.elapsed() < Duration::from_secs(5) {
             std::thread::sleep(Duration::from_millis(16));
+            cx.advance_clock(Duration::from_millis(16));
             cx.update_window(win.into(), |_, window, _| window.refresh())?;
             cx.run_until_parked();
         }
