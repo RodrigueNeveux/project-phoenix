@@ -7,7 +7,8 @@ ref-cache/mention-pill-default.json, voice-user-row-default.json, voice-user-row
 |---|---|---|---|---|---|
 | mention pill default | `.mention` / `wrapper_NDaLCQ` | bg / color / radius / padding / weight | --mention-background / --mention-foreground / 3px / 0 2px / 500 | richtext.rs run_for | ✅ live computed match (radius+padding not expressible on text runs) |
 | mention pill hover | `.interactive:hover` | bg / color | --brand-500 / --white (50ms) | ui/chat/mention.rs hovered_runs | ✅ CSS (no transition) |
-| role mention | `roleMention_ku1OHH` + inline style | color / bg | role color / role color 10% | richtext.rs color_role_mentions | ❌ not verified live (no role mention on screen) |
+| role mention | `roleMention_ku1OHH wrapper_NDaLCQ interactive` + inline style | color / bg | role color / role color 10 %; a role without colour has no inline style and looks like a user mention | richtext.rs color_role_mentions | ✅ live (inbox Mentions tab, 2026-11-24): radius 3, padding 0 2, 500 16/22 |
+| role mention hover | same, transition background-color/color 0.05s | bg / color | coloured: role color 30 %, text unchanged; uncoloured: --brand-500 / white | ui/chat/mention.rs hovered_runs | ✅ live (used to skip role mentions) |
 | channel mention icon | `icon__RYHZ5` | size / margin-inline-end | 1em / --space-4 | ui/chat/message_ext.rs CHANNEL_ICON_TOKEN | ✅ CSS; always hash icon (no voice/thread variant) |
 | user mention click | live click | opens | profile popout | mention.rs click | ✅ |
 | channel mention click | live behaviour | opens | channel | mention.rs click (text chat, never voice) | ✅ |
@@ -20,7 +21,7 @@ ref-cache/mention-pill-default.json, voice-user-row-default.json, voice-user-row
 | voice row options button | `optionsButton_YUoOxm` | size / radius / hover | 24px / 4px / --interactive-background-active, hidden unless row hovered | voice_row.rs options_button | ✅ CSS; icon (more-horizontal) not verified live |
 | voice row click | live | popout position | left = row right + 8, top = row top | voice_row.rs popout_anchor | ✅ measured (415,291 vs row 118..407,290) |
 | voice row right-click | live | menu | voice menu in call, user menu otherwise | voice_panel.rs | ✅ |
-| popout "In a voice channel" card | `clickableContainer_Bu4Al8` | card metrics | activity-card padding 8 / --radius-sm / header body-xs/medium / heading-xs/semibold | voice_row.rs voice_activity_card | ❌ structure from class list only, boxes not measured |
+| popout "In a voice channel" card | `clickableContainer_Bu4Al8` | card metrics | activity-card padding 8 / --radius-sm / header body-xs/medium / heading-xs/semibold | voice_row.rs voice_activity_card | ❌ boxes not measured: on 2026-11-24 no member was in voice in the guild shown by the client, and the Active Now card opens the full profile modal, not this popout |
 
 Compare score: not available, the 2026-11-24 01:15 run was discarded (an overlay was open in Discord).
 

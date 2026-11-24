@@ -24,11 +24,12 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 | thread sidebar header toolbar (bell, pins, threads, more) | not dumped | | | — | ❌ needs a vanilla dump |
 | forum post action bar: copy link + jump to top | vanilla-thread-channel buttons_HeWz1C | sm secondary 32x32, radius 8, gap 4 | | ui/chat/panels.rs forum_post_bar | ✅ (dump) |
 | forum post action bar: reactions + Following | vanilla-thread-channel reactButtons_HeWz1C | | | — | ❌ follow state not in model |
-| opening a forum post by URL (not in active threads) | GET /channels/{id} | | | real_shots falls back to the first channel | ❌ |
+| opening a forum post by URL (not in active threads) | GET /channels/{id} (read-only) | | | ui/forum.rs open_by_id, ParityRequest::FetchThread | ✅ real_shots `PHX_CHANNEL=<post id>` opens the post with its forum breadcrumb (2026-11-24, 06081ab) |
 
 ## State coverage
-- post card: rest ✅, hover (--background-surface-high, --border-strong) ✅; pressed ❌ not measured.
-- tag pill: rest / selected ✅; hover ❌ not measured.
+- post card (live client 2026-11-24, `container_SOY5H6`, transitions 0.2s ease-out): rest --background-base-low + 1px --border-subtle, no shadow ✅; hover --background-surface-high, --border-strong, --shadow-low ✅; pressed (:active) --interactive-background-active, --border-strong, --shadow-border + --shadow-high ✅ (ui/forum.rs post_card).
+- tag pill (`pill_snX-u4 clickable_`, transition background-color 0.2s): rest --background-mod-subtle, hover --background-mod-normal, pressed --background-mod-strong, text --control-secondary-text-default unchanged ✅ (ui/forum.rs pill_states). Selected pill hover not measured (no tag selected in the live forum).
+- post card right-click (`thread-context`, dumps/vanilla-menu-thread, Manage Threads, pinned locked post): Mark As Read (disabled when read) | Add to Favorites > | Follow Post, Close Post, Unlock Post, Edit Post, Edit Tags >, Copy Link | Mute Post (disabled), Notification Settings (disabled) | Unpin Post, Delete Post | Copy Thread ID ✅ (ui/thread_menu.rs render_post; writes are stubs). Not dumped: the menu of an archived post, of a followed post (mute enabled) and without moderation rights.
 | inline new post form | vanilla-forum-new-post container_owUmX8 | title 20/600 h32, body min 80, media tile 78 r12, tag row mt16 mb12 gap 8, small pills h24, divider, controls h40 mt12 | | ui/forum.rs compose_card | ✅ (dump) / render pending |
 | announcement "Follow" button | vanilla-announcement followButton_z_gUBg | padding 4 8, mr 8; sm secondary h32 r8 14/500 | | ui/forum.rs follow_button, ui/chat.rs header | ✅ (dump); follow modal ❌ |
 | Events modal frame + header | vanilla-events-modal root__KoJTP / flex_hkRWAH | 602x400 r12, header pad 16 24 8, icon 24 mr 8, divider 1x16 mx 16, sm primary | | ui/events.rs | ✅ (dump) |

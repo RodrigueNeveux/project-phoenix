@@ -21,6 +21,14 @@ use crate::{
 thread_local! {
     /// (message, block, element seed, hovered click-range index).
     static HOVER: Cell<Option<(u64, usize, u64, usize)>> = const { Cell::new(None) };
+    /// Link of the message text under the cursor: (message, block, seed, url), for the
+    /// link rows of the message menu.
+    static HOVER_LINK: std::cell::RefCell<Option<(u64, usize, u64, gpui::SharedString)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The text link under the cursor in this block, if any.
+pub fn hovered_link(msg: Id, bi: usize, seed: u64) -> Option<gpui::SharedString> {
+    HOVER_LINK.with(|h| h.borrow().as_ref().filter(|(m, b, s, _)| *m == msg.0 && *b == bi && *s == seed).map(|(_, _, _, u)| u.clone()))
 }
 
 /// Hover listener body for an `InteractiveText`: tracks which mention range is under the mouse.
@@ -33,12 +41,16 @@ pub fn on_hover(
     ix: Option<usize>,
     window: &mut Window,
 ) {
-    let hit = ix.and_then(|i| {
-        ranges
-            .iter()
-            .position(|r| r.contains(&i))
-            .filter(|&k| matches!(targets[k], ClickTarget::Mention(_)))
+    let at = ix.and_then(|i| ranges.iter().position(|r| r.contains(&i)));
+    HOVER_LINK.with(|h| {
+        let mut h = h.borrow_mut();
+        match at.map(|k| &targets[k]) {
+            Some(ClickTarget::Link(url)) => *h = Some((msg.0, bi, seed, url.clone())),
+            _ if h.as_ref().is_some_and(|(m, b, s, _)| *m == msg.0 && *b == bi && *s == seed) => *h = None,
+            _ => {}
+        }
     });
+    let hit = at.filter(|&k| matches!(targets[k], ClickTarget::Mention(_)));
     let new = hit.map(|k| (msg.0, bi, seed, k));
     let cur = HOVER.with(Cell::get);
     let mine = cur.is_some_and(|(m, b, s, _)| m == msg.0 && b == bi && s == seed);
@@ -63,21 +75,32 @@ pub fn hovered_runs(
         return None;
     }
     let r = ranges.get(k)?.clone();
-    // Role mentions carry an inline role color which wins over `.interactive:hover`.
-    if matches!(targets.get(k), Some(ClickTarget::Mention(Mention::Role(_)))) {
-        return None;
-    }
+    let role = matches!(targets.get(k), Some(ClickTarget::Mention(Mention::Role(_))));
     let mut out = runs.to_vec();
     let mut at = 0;
     for run in &mut out {
         let span = at..at + run.len;
         if span.start < r.end && r.start < span.end {
-            run.background_color = Some(c(tok(idx::BRAND_500))); // .interactive:hover --brand-500
-            run.color = c(tok(idx::WHITE)); // .interactive:hover --white
+            match run.background_color {
+                // A coloured role mention (inline role colour, background at 10 %): the
+                // live client keeps the text colour and raises the background to 30 %
+                // (inbox Mentions tab, 2026-11-24).
+                Some(bg) if role && is_role_tint(bg, run.color) => run.background_color = Some(gpui::Hsla { a: 0.3, ..bg }),
+                // User, channel and uncoloured role mentions: `.interactive:hover`.
+                _ => {
+                    run.background_color = Some(c(tok(idx::BRAND_500))); // --brand-500
+                    run.color = c(tok(idx::WHITE)); // --white
+                }
+            }
         }
         at = span.end;
     }
     Some(out)
+}
+
+/// `bg` is the role colour `fg` at 10 % (set by `richtext::color_role_mentions`).
+fn is_role_tint(bg: gpui::Hsla, fg: gpui::Hsla) -> bool {
+    (bg.a - 0.1).abs() < 0.01 && (bg.h - fg.h).abs() < 1e-3 && (bg.s - fg.s).abs() < 1e-3 && (bg.l - fg.l).abs() < 1e-3
 }
 
 /// Click on a mention pill.
@@ -125,6 +148,26 @@ mod tests {
         assert!(out[1].background_color.is_some());
         assert!(out[2].background_color.is_none());
         assert!(hovered_runs(Id(8), 0, 0, &ranges, &targets, &[run(3)]).is_none());
+        HOVER.with(|h| h.set(None));
+    }
+
+    #[test]
+    fn coloured_role_hover_raises_the_tint() {
+        let ranges = vec![0..4, 4..8];
+        let targets = vec![ClickTarget::Mention(Mention::Role(1)), ClickTarget::Mention(Mention::Role(2))];
+        let orange: gpui::Hsla = gpui::rgb(0xe67e22).into();
+        let mut tinted = run(4);
+        tinted.color = orange;
+        tinted.background_color = Some(gpui::Hsla { a: 0.1, ..orange });
+        let runs = [tinted, run(4)];
+        HOVER.with(|h| h.set(Some((7, 0, 0, 0))));
+        let out = hovered_runs(Id(7), 0, 0, &ranges, &targets, &runs).unwrap();
+        assert_eq!(out[0].color, orange);
+        assert!((out[0].background_color.unwrap().a - 0.3).abs() < 1e-6);
+        HOVER.with(|h| h.set(Some((7, 0, 0, 1))));
+        let out = hovered_runs(Id(7), 0, 0, &ranges, &targets, &runs).unwrap();
+        // Uncoloured role: same pill hover as a user mention.
+        assert_eq!(out[1].color, c(tok(idx::WHITE)));
         HOVER.with(|h| h.set(None));
     }
 }

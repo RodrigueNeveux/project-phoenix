@@ -45,12 +45,23 @@ pub fn set_menu_media(url: SharedString) {
     MENU_MEDIA.with(|m| m.borrow_mut().0 = Some(url));
 }
 
-/// Called when a message menu opens: the pending image (if any) becomes its target.
+thread_local! {
+    /// Same pair for a link of the message text under the cursor.
+    static MENU_LINK: std::cell::RefCell<(Option<SharedString>, Option<SharedString>)> = const { std::cell::RefCell::new((None, None)) };
+}
+
+pub fn set_menu_link(url: SharedString) {
+    MENU_LINK.with(|m| m.borrow_mut().0 = Some(url));
+}
+
+/// Called when a message menu opens: the pending image and link (if any) become its targets.
 pub fn arm_menu_media() {
-    MENU_MEDIA.with(|m| {
-        let mut m = m.borrow_mut();
-        m.1 = m.0.take();
-    });
+    for slot in [&MENU_MEDIA, &MENU_LINK] {
+        slot.with(|m| {
+            let mut m = m.borrow_mut();
+            m.1 = m.0.take();
+        });
+    }
 }
 
 fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -267,6 +278,16 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.to_string()))
         }));
         items.push(MenuItem::action(crate::t!("msg.open_image_link"), Some(crate::icons::path("menu/open-link")), move |_, _, cx| cx.open_url(&url)));
+    }
+    // vanilla-menu-link (2026-11-24): a link of the message text adds | Copy Link,
+    // Open Link (`message-copy-native-link`, `message-open-native-link`, 36px icon rows).
+    if let Some(url) = MENU_LINK.with(|m| m.borrow().1.clone()) {
+        items.push(MenuItem::Separator);
+        let u = url.clone();
+        items.push(MenuItem::action(crate::t!("menu.copy_link"), Some(crate::icons::path("chat/link")), move |_, _, cx| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.to_string()))
+        }));
+        items.push(MenuItem::action(crate::t!("msg.open_link"), Some(crate::icons::path("menu/open-link")), move |_, _, cx| cx.open_url(&url)));
     }
     let ed = e.clone();
     let dismiss: context_menu::Dismiss = Rc::new(move |_, cx| {

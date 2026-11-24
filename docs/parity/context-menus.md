@@ -20,7 +20,9 @@ Renders: `PHX_OPEN=guildmenu|chanmenu[:n]|catmenu[:n]|usermenu[:n]|msgmenu int-b
 | message: Add Reaction > | vanilla-menu-message-addreaction (current-client/dumps) | 12 most used emoji (20px emoji + :name:) / View More (picker) | ✅ |
 | message: View Interaction Info (app messages) | vanilla-menu-message | missing | ❌ |
 | image (right-click on an image) | vanilla-menu-image (current-client/dumps) | message menu + / Copy Image, Save Image / Copy Image Link, Open Image Link | ✅ (copy/save image are stubs) |
-| thread, emoji, link menus | — | no dump yet (voice: wt/voicerows) | ❌ unverified |
+| forum post (thread) | vanilla-menu-thread (current-client/dumps, 2026-11-24) | Mark As Read (disabled) / Favorites > / Follow, Close, Lock-Unlock, Edit, Edit Tags >, Copy Link / Mute (disabled), Notification Settings (disabled) / Pin-Unpin, Delete (danger) / Copy Thread ID | ✅ forum post cards (ui/thread_menu.rs). Sidebar thread rows still have no right-click menu: a thread of a text channel was not dumped (no active thread on the client) |
+| custom emoji in a message | vanilla-menu-custom-emoji | the plain message menu, nothing emoji-specific | ✅ (same handler as the message) |
+| link in a message | vanilla-menu-link | message menu + / Copy Link, Open Link (ids `message-copy-native-link`, `message-open-native-link`) | ✅ (ui/chat.rs rich: right-click on a text link arms `panels::set_menu_link`; icons chat/link, menu/open-link) |
 | panel | menu_M3qk4j | radius 8, 1px --border-subtle, --background-surface-higher, --shadow-high, min 188 / max 320, scroller 8px | ✅ |
 | rows | item_M3qk4j | 34 (text) / 36 (icon) / 52 (subtext), padding 8, 14/18 medium, icon 20 + mr 8 | ✅ |
 | edge nudging | web.*.js nudgeTopAlignment | 12px window margin, max-height = window − top − 12 (was 16) | ✅ |

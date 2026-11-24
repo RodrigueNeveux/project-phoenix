@@ -1501,6 +1501,12 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
     let e = entity.clone();
     div()
         .line_height(lh)
+        // Right-click on a link: the message menu (opened by the row) gets the link rows.
+        .on_mouse_down(gpui::MouseButton::Right, move |_, _, _| {
+            if let Some(url) = mention::hovered_link(msg, bi, 0) {
+                panels::set_menu_link(url);
+            }
+        })
         .child(
             InteractiveText::new(("rt", (msg.0 << 8) | bi as u64), styled)
                 .on_hover({
