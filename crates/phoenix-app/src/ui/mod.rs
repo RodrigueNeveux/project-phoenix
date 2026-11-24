@@ -40,6 +40,7 @@ pub mod tooltip;
 pub mod channel_unread_bar;
 pub mod user_menu;
 pub mod voice_panel;
+pub mod voice_row;
 
 use crate::theme::z;
 use gpui::{

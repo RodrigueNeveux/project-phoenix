@@ -571,7 +571,20 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
     let red = t(idx::ICON_FEEDBACK_CRITICAL);
     let tag = u.and_then(|u| u.tag.clone());
     let e = entity.clone();
+    let e2 = entity.clone();
+    // selected_YUoOxm while this user's profile popout is open.
+    let selected = app.people.popout.as_ref().is_some_and(|p| p.user == user);
+    let guild = app.selected_guild;
+    let name_color = if speaking || selected { t(idx::INTERACTIVE_TEXT_ACTIVE) } else { state };
     div()
+        .id(("voice-user-row", user.0))
+        .group("voice-user-row")
+        .cursor_pointer() // clickable_YUoOxm
+        .child(
+            gpui::canvas(move |b, _, _| crate::ui::voice_row::record(user, b), |_, _, _, _| {})
+                .absolute()
+                .size_full(),
+        )
         // `list_YUoOxm` padding-left 38 (no right inset); `content_YUoOxm` 32px,
         // padding 4 10, radius 8, gap 8 (live channel list); right: scrollbar gutter.
         .ml(z(38.))
@@ -582,7 +595,15 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
         .flex()
         .items_center()
         .gap(z(8.))
-        .hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)))
+        .relative()
+        // listDefault_ .clickable_:hover / :active / .selected_ .content_ backgrounds.
+        .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
+        .when(!selected, |d| d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER))))
+        .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
+        .on_click(move |ev, window, cx| {
+            let at = crate::ui::voice_row::popout_anchor(user, ev.position());
+            e2.update(cx, |a, cx| a.open_profile(user, guild, at, window, cx));
+        })
         .child(speaking_ring(avatar(u, 24.), 24., speaking))
         .child(
             div()
@@ -593,8 +614,13 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .child(
                     div()
                         .min_w_0()
+                        // usernameFont_ body-sm/medium: 14px, 500, line-height 18px.
                         .text_size(z(14.))
-                        .text_color(if speaking { t(idx::INTERACTIVE_TEXT_ACTIVE) } else { state })
+                        .line_height(z(18.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(name_color)
+                        // listDefault_ .clickable_:hover .username_ --interactive-text-hover
+                        .group_hover("voice-user-row", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                         .text_ellipsis()
                         .child(crate::ui::sidebar::voice_user_name(app, user)),
                 )
@@ -632,11 +658,14 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
                 .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state))),
         )
-        .when(in_call, |d| {
-            d.on_mouse_down(MouseButton::Right, move |ev, _, cx| {
+        .on_mouse_down(MouseButton::Right, move |ev, window, cx| {
+            cx.stop_propagation();
+            if in_call {
                 USER_MENU.with(|m| m.set(Some((user, ev.position))));
                 e.update(cx, |_, cx| cx.notify());
-            })
+            } else {
+                crate::ui::user_menu::open(user, guild, ev.position, window);
+            }
         })
         .into_any_element()
 }
