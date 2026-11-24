@@ -349,26 +349,31 @@ fn page(app: &PhoenixApp, cx: &mut Cx) -> Div {
 /// Sidebar page icon (icons are requested by name; the provider swaps in the
 /// client's own glyphs when available).
 fn page_icon(p: Page) -> &'static str {
+    // Client *_SIDEBAR_ITEM icons (settings bundle): UserIcon, ShieldLockIcon,
+    // ChatShieldIcon, BellIcon, NitroWheelIcon, BoostGemIcon, SubscriptionIcon,
+    // GiftIcon, CreditCardIcon, MicrophoneIcon, PaintPaletteIcon,
+    // AccessibilityIcon, KeyboardIcon, LanguageIcon, GameControllerIcon,
+    // UserPlatformIcon, LinkIcon, AngleBracketsIcon.
     match p {
-        Page::MyAccount | Page::Profiles => "friends",
-        Page::DataPrivacy => "lock",
-        Page::PrivacySafety => "chat/eye",
+        Page::MyAccount | Page::Profiles => "user",
+        Page::DataPrivacy => "shield-lock",
+        Page::PrivacySafety => "chat-shield",
         Page::Devices => "image",
-        Page::Connections => "chat/link",
+        Page::Connections => "link",
         Page::Notifications => "bell",
-        Page::Keybinds | Page::System => "gear",
-        Page::Language => "compass",
-        Page::Appearance => "palette", // vanilla-settings-08 sidebar
-        Page::Accessibility => "help",
-        Page::VoiceVideo => "mic", // vanilla-settings-08 sidebar
-        Page::Advanced => "file",
-        Page::ActivityPrivacy => "user-profile",
-        Page::RegisteredGames => "apps",
+        Page::Keybinds | Page::System => "keyboard",
+        Page::Language => "language",
+        Page::Appearance => "palette",
+        Page::Accessibility => "accessibility",
+        Page::VoiceVideo => "mic",
+        Page::Advanced => "angle-brackets",
+        Page::ActivityPrivacy => "user-platform",
+        Page::RegisteredGames => "game-controller",
         Page::Nitro => "nitro",
         Page::ServerBoost => "boost",
-        Page::Subscriptions => "file",
+        Page::Subscriptions => "subscription",
         Page::GiftInventory => "gift",
-        Page::Billing => "file",
+        Page::Billing => "credit-card",
     }
 }
 
@@ -700,7 +705,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
             }
         }
         if ix == last && !searching {
-            sec = sec.child(nav_item("nav-logout", "close", crate::t!("settings.logout"), false, true).on_click(cx.listener(|a, _, _, cx| {
+            sec = sec.child(nav_item("nav-logout", "door-exit", crate::t!("settings.logout"), false, true).on_click(cx.listener(|a, _, _, cx| {
                 if let Some(s) = st(a) {
                     s.confirm_logout = true;
                 }

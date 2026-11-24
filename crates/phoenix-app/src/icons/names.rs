@@ -143,4 +143,17 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("blur", &["BlurBackgroundIcon"]),
     ("play", &["PlayIcon"]),
     ("image-plus", &["ImagePlusIcon", "ImageIcon"]),
+    // Settings sidebar items (client *_SIDEBAR_ITEM icons).
+    ("user", &["UserIcon"]),
+    ("shield-lock", &["ShieldLockIcon"]),
+    ("chat-shield", &["ChatShieldIcon"]),
+    ("credit-card", &["CreditCardIcon"]),
+    ("subscription", &["SubscriptionIcon"]),
+    ("accessibility", &["AccessibilityIcon"]),
+    ("keyboard", &["KeyboardIcon"]),
+    ("language", &["LanguageIcon"]),
+    ("user-platform", &["UserPlatformIcon"]),
+    ("link", &["LinkIcon"]),
+    ("angle-brackets", &["AngleBracketsIcon"]),
+    ("door-exit", &["DoorExitIcon"]),
 ];
