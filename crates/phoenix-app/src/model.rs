@@ -210,6 +210,9 @@ pub struct Message {
     /// The reply pinged the replied-to author (`message.mentions` holds the referenced
     /// author): the client then prefixes the replied username with "@".
     pub reply_mentions_author: bool,
+    /// The replied-to message as sent with the reply (`referenced_message`), used when
+    /// it is not in the loaded history: (author, author nick, content).
+    pub reply_preview: Option<(Id, Option<SharedString>, SharedString)>,
     /// Forwarded message (`message_snapshots`): content/attachments/embeds above are the
     /// snapshot's; this keeps where it came from.
     pub forward: Option<Forward>,

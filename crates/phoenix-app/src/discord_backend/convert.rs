@@ -175,6 +175,10 @@ pub fn message(m: &api::Message) -> model::Message {
             .referenced_message
             .as_ref()
             .is_some_and(|r| m.mentions.iter().any(|u| u.user.id == r.author.id)),
+        reply_preview: m.referenced_message.as_ref().filter(|_| reply_to.is_some()).map(|r| {
+            let nick = r.member.as_ref().and_then(|mb| mb.nick.as_deref()).filter(|n| !n.is_empty()).map(|n| collapse_ws(n).into());
+            (id(r.author.id), nick, r.content.clone().into())
+        }),
         forward: None,
         author_nick: m.member.as_ref().and_then(|mb| mb.nick.as_deref()).filter(|n| !n.is_empty()).map(|n| collapse_ws(n).into()),
         embeds: m

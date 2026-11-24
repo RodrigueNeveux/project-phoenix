@@ -834,8 +834,17 @@ fn message(
                 let a = entry.msgs[p].author;
                 entry.msgs.iter().rev().filter(|m| m.author == a).find_map(|m| m.author_nick.clone())
             })),
-            None => (None, crate::t!("chat.reply_deleted"), None),
+            // Not in the loaded history: the reply's own `referenced_message`.
+            None => match &msg.reply_preview {
+                Some((a, nick, text)) => (
+                    app.member_user(app.selected_guild, *a),
+                    crate::ui::chat::reply_preview_text(app, text),
+                    nick.clone().or_else(|| app.member_nick(*a)),
+                ),
+                None => (None, crate::t!("chat.reply_deleted"), None),
+            },
         };
+        let found = found.or_else(|| msg.reply_preview.as_ref().map(|_| usize::MAX));
         // repliedMessage_: 14px, line-height --custom-message-reply-message-preview-line-height
         // (1.125rem), cozy margin-bottom --reply-spacing (4px). Compact: margin-inline-start
         // timestamp-width + meta-space - (compact-indent - 1rem) = -24px, padding-inline-start
@@ -1776,4 +1785,10 @@ fn embed(e: &Embed) -> AnyElement {
                 }),
         )
         .into_any_element()
+}
+
+/// One-line reply preview of raw message `content` (mentions resolved, markdown stripped).
+pub(crate) fn reply_preview_text(app: &PhoenixApp, content: &SharedString) -> SharedString {
+    let m = crate::model::Message { content: content.clone(), ..Default::default() };
+    app.render_msg(&m, None).preview
 }
