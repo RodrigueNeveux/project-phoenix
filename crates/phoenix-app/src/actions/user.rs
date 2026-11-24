@@ -74,11 +74,12 @@ impl PhoenixApp {
     }
 
     /// "Edit Per-server Profile": settings > Profiles (server profile tab).
-    pub fn open_server_profile(&mut self, _guild: Id, cx: &mut Context<Self>) {
+    pub fn open_server_profile(&mut self, guild: Id, cx: &mut Context<Self>) {
         crate::ui::settings::open(self, cx);
         if let Some(s) = self.settings.as_mut() {
             s.page = crate::ui::settings::Page::Profiles;
         }
+        crate::ui::settings::profile_editor::open_scoped(self, guild, cx);
         cx.notify();
     }
 

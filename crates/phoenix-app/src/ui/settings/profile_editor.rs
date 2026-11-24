@@ -95,6 +95,8 @@ pub struct EditorState {
     /// None = main profile, Some(guild) = per-server profile.
     pub scope: Option<Id>,
     pub switcher_open: bool,
+    /// Per-server notice (`perServerNotice_cuaHiV`) dismissed.
+    pub notice_hidden: bool,
     pub tab: usize,
     pub profile: Option<Profile>,
     pub original: Draft,
@@ -132,6 +134,7 @@ impl EditorState {
         Self {
             scope,
             switcher_open: false,
+            notice_hidden: false,
             tab: 0,
             profile: None,
             original: Draft::default(),
@@ -262,6 +265,19 @@ fn switch_scope(app: &mut PhoenixApp, scope: Option<Id>, cx: &mut Cx) {
         e.generation = generation;
         e.original = orig;
     }
+    fetch(app, cx);
+    cx.notify();
+}
+
+/// "Edit Per-server Profile" (guild menu): the editor opened on `guild`.
+pub fn open_scoped(app: &mut PhoenixApp, guild: Id, cx: &mut Cx) {
+    let orig = original_for(app, Some(guild), None);
+    let Some(s) = app.settings.as_mut() else { return };
+    let generation = s.profile.as_ref().map_or(0, |e| e.generation + 1);
+    let mut e = EditorState::new(Some(guild));
+    e.generation = generation;
+    e.original = orig;
+    s.profile = Some(e);
     fetch(app, cx);
     cx.notify();
 }
@@ -498,6 +514,10 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
                     .line_height(z(20.))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(c(tok(idx::TEXT_STRONG)))
+                    // selectButton_VrghH6 > guildIcon_VrghH6 (20px, --radius-xs) before the name.
+                    .children(e.scope.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| {
+                        div().flex_none().rounded(z(4.)).overflow_hidden().child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 20.))
+                    }))
                     .child(div().max_w(z(150.)).truncate().child(scope_name(app, e.scope)))
                     .child(
                         gpui::svg()
@@ -657,7 +677,49 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
         .border_r_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
         .child(header)
-        .child(div().id("pe-styles").flex_1().min_h_0().overflow_y_scroll().child(content));
+        .child(div().id("pe-styles").flex_1().min_h_0().overflow_y_scroll().children((e.scope.is_some() && !e.notice_hidden).then(|| {
+            // perServerNotice_cuaHiV (vanilla-server-profile #1867): first child of the
+            // styles column; --background-feedback-mod-info, 1px --icon-feedback-info,
+            // --radius-sm, --space-8 padding; body-sm/normal 14/18 --text-default;
+            // dismiss 24px, margin -2 -2 0 auto, --icon-subtle.
+            let notice = div()
+                .flex()
+                .p(z(8.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(c(tok(idx::ICON_FEEDBACK_INFO)))
+                .bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_INFO)))
+                .child(
+                    div()
+                        .flex_1()
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                        .child(crate::t!("sp.pf.server_notice")),
+                )
+                .child(
+                    div()
+                        .id("pe-notice-x")
+                        .flex_none()
+                        .size(z(24.))
+                        .mt(z(-2.))
+                        .mr(z(-2.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .text_color(c(tok(idx::ICON_SUBTLE)))
+                        .hover(|s| s.text_color(c(tok(idx::ICON_STRONG))))
+                        .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::ICON_SUBTLE))))
+                        .on_click(cx.listener(|a, _, _, cx| {
+                            if let Some(e) = ed(a) {
+                                e.notice_hidden = true;
+                            }
+                            cx.notify();
+                        })),
+                );
+            div().px(z(16.)).pt(z(16.)).child(notice)
+        })).child(content));
     // The switcher popout is painted by `render` so it can overflow the panel.
     aside
 }
