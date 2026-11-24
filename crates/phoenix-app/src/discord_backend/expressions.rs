@@ -13,7 +13,7 @@ use crate::{
     model::Id,
     ui::{
         pickers::types::{GifCategoryTile, GifHome, GifItem, GuildEmoji, StickerData, StickerPackData},
-        search::{SearchPage, SearchRequest},
+        search::{SearchPage, SearchRequest, SortOrder},
     },
 };
 
@@ -155,7 +155,11 @@ pub(super) fn query_of(req: &SearchRequest) -> SearchQuery {
         max_id: req.max_id.map(sf),
         pinned: req.pinned,
         author_types: req.author_types.clone(),
-        sort: if req.oldest_first { SearchSort::Oldest } else { SearchSort::Newest },
+        sort: match req.sort {
+            SortOrder::Newest => SearchSort::Newest,
+            SortOrder::Oldest => SearchSort::Oldest,
+            SortOrder::Relevance => SearchSort::Relevance,
+        },
         offset: req.offset,
         include_nsfw: true,
     }

@@ -20,6 +20,7 @@
 //! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse]|guide.
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
+//! `PHX_SEARCH_SORT=old|rel` and `PHX_SEARCH_PAGE=<n>` with `PHX_OPEN=search:<q>`.
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
 //! `PHX_TABS=n` presses Tab n times before the capture (`-n` = Shift+Tab), for the focus rings.
 
@@ -873,7 +874,17 @@ fn main() -> anyhow::Result<()> {
                 "threads" => app.toggle_threads_popout(cx),
                 "search" => {
                     phoenix_app::ui::search::open(app, window, cx);
-                    if let Ok(req) = phoenix_app::ui::search::build_request(app, if arg.is_empty() { "a" } else { &arg }) {
+                    // The query also goes in the header bar, like the client after Enter.
+                    phoenix_app::ui::search::set_query(if arg.is_empty() { "a" } else { &arg }, window, cx);
+                    if let Ok(mut req) = phoenix_app::ui::search::build_request(app, if arg.is_empty() { "a" } else { &arg }) {
+                        // `PHX_SEARCH_SORT=old|rel`, `PHX_SEARCH_PAGE=<n>` (1-based).
+                        req.sort = match std::env::var("PHX_SEARCH_SORT").as_deref() {
+                            Ok("old") => phoenix_app::ui::search::SortOrder::Oldest,
+                            Ok("rel") => phoenix_app::ui::search::SortOrder::Relevance,
+                            _ => phoenix_app::ui::search::SortOrder::Newest,
+                        };
+                        req.offset = std::env::var("PHX_SEARCH_PAGE").ok().and_then(|p| p.parse::<u32>().ok()).unwrap_or(1).saturating_sub(1)
+                            * phoenix_app::ui::search::PAGE;
                         phoenix_app::ui::search::run(app, req, cx);
                     }
                 }

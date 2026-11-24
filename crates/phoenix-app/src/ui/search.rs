@@ -14,7 +14,7 @@ use crate::{
     assets::Icon,
     model::{ChannelKind, Id, Message},
     theme::{Palette, c, generated::idx, m as layout},
-    ui::{avatar, icon, icon_button},
+    ui::avatar,
 };
 
 pub const PAGE: u32 = 25;
@@ -38,7 +38,16 @@ pub struct SearchRequest {
     /// `authorType:` values (user / bot / webhook).
     pub author_types: Vec<String>,
     pub offset: u32,
-    pub oldest_first: bool,
+    pub sort: SortOrder,
+}
+
+/// "Trier" menu of the results header (Plus récents / Date / Pertinence in the client).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SortOrder {
+    #[default]
+    Newest,
+    Oldest,
+    Relevance,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -53,6 +62,8 @@ pub struct SearchState {
     pub page: Option<SearchPage>,
     pub loading: bool,
     pub error: Option<SharedString>,
+    /// The "Trier" menu is open.
+    sort_menu: bool,
     seq: u64,
     _sub: Subscription,
 }
@@ -179,6 +190,7 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         page: None,
         loading: false,
         error: None,
+        sort_menu: false,
         seq: 0,
         _sub: sub,
     })));
@@ -198,6 +210,9 @@ pub fn on_key(app: &mut PhoenixApp, key: &str, window: &mut Window, cx: &mut Con
         if !crate::ui::search_filters::close_popover(cx) {
             crate::ui::search_filters::close(cx);
         }
+        return true;
+    }
+    if key == "escape" && close_sort_menu(cx) {
         return true;
     }
     if key == "escape" {
@@ -266,7 +281,13 @@ fn rerun(app: &mut PhoenixApp, f: impl FnOnce(&mut SearchRequest), cx: &mut Cont
     run(app, req, cx);
 }
 
-/// Append a filter prefix to the box ("from: ").
+/// Put `q` in the search box (real_shots `PHX_OPEN=search:<q>`).
+pub fn set_query(q: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    let Some(input) = cx.try_global::<Search>().and_then(|s| s.0.as_ref()).map(|s| s.input.clone()) else { return };
+    let q = q.to_string();
+    input.update(cx, |s, cx| s.set_value(q, window, cx));
+}
+
 /// Append `tokens` (from the filters modal) to the query and run it.
 pub fn append_and_submit(app: &mut PhoenixApp, tokens: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     let Some(input) = cx.global::<Search>().0.as_ref().map(|s| s.input.clone()) else { return };
@@ -304,11 +325,16 @@ const FILTERS: [(&str, &str, &str, &str, &str); 4] = [
 ];
 
 
+/// One hit (`searchResult_`): 1px --border-subtle, radius 8, --background-base-lowest,
+/// margin-bottom 8, the message laid out cozy (padding 8 20 8 80: 40px avatar at 20,
+/// name 16/22 medium in the author colour + tag / role icon / APP, 12px medium
+/// --text-muted time 4px after, content 16/22 --text-default). Hover shows "Y aller"
+/// (`buttonsContainer_` top 8 right 8: 24px, padding 4, radius 3, body-xs/medium
+/// --text-default on --background-base-lowest), which jumps to the message.
 fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let author = app.users.get(&m.author);
-    let ch = app.channels.get(&m.channel);
-    let ch_name: SharedString = ch.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
     let channel = m.channel;
+    let id = m.id;
     let content: String = m.content.chars().take(400).collect();
     let rich = !content.is_empty();
     // Attachments and embeds like the chat (bot results are often embed-only).
@@ -319,101 +345,86 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
         .map(|a| crate::ui::chat::attachment(a, acx))
         .chain(m.embeds.iter().map(|e| crate::ui::chat::embed(app, e, acx)))
         .collect();
+    let bot = author.is_some_and(|u| u.bot);
     div()
-        .flex()
-        .flex_col()
-        .gap(z(4.))
+        .id(("search-hit", ix))
+        .mb(z(8.))
+        .rounded(z(8.))
+        .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .relative()
+        .group("search-hit")
+        .pt(z(8.))
+        .pb(z(8.))
+        .pl(z(80.))
+        .pr(z(20.))
+        .cursor_pointer()
+        .on_click(cx.listener(move |a, _, _, cx| a.jump_to_message(channel, id, cx)))
+        .child(div().absolute().left(z(20.)).top(z(10.)).child(avatar(author, 40.)))
         .child(
             div()
                 .flex()
                 .items_center()
-                .gap(z(4.))
-                .text_size(z(12.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_MUTED))
-                .child(icon(Icon::Hash, 14., c(Palette::CHANNEL_ICON)))
-                .child(ch_name),
-        )
-        .child(
-            div()
-                .id(("search-hit", ix))
-                .p(z(8.))
-                .rounded(z(8.))
-                // searchResult_N3Anbl: --background-base-lower, 1px --border-subtle, radius 8,
-                // no hover background; container_:hover shows buttonsContainer_ (Jump).
-                .bg(c(crate::theme::tok(idx::BACKGROUND_BASE_LOWER)))
-                .border_1()
-                .border_color(c(crate::theme::tok(idx::BORDER_SUBTLE)))
-                .relative()
-                .group("search-hit")
-                .flex()
-                .gap(z(12.))
-                .cursor_pointer()
-                .on_click(cx.listener(move |a, _, _, cx| a.select_channel(channel, cx)))
-                .child(
-                    // buttonsContainer_N3Anbl: top 8, right 8, display none until hovered;
-                    // button_N3Anbl 24px, padding 4, radius 3, --background-base-lowest,
-                    // --text-default → --interactive-text-hover, :active 1px down.
-                    div()
-                        .absolute()
-                        .top(z(8.))
-                        .right(z(8.))
-                        .invisible()
-                        .group_hover("search-hit", |s| s.visible())
-                        .child(
-                            div()
-                                .id(("search-jump", ix))
-                                .h(z(24.))
-                                .p(z(4.))
-                                .rounded(z(3.))
-                                .flex()
-                                .items_center()
-                                .bg(c(crate::theme::tok(idx::BACKGROUND_BASE_LOWEST)))
-                                .text_size(z(12.))
-                                .line_height(z(16.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(c(crate::theme::tok(idx::TEXT_DEFAULT)))
-                                .hover(|s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_HOVER))))
-                                .active(|s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_ACTIVE))).mt(z(1.)))
-                                .on_click(cx.listener(move |a, _, _, cx| {
-                                    cx.stop_propagation();
-                                    a.select_channel(channel, cx)
-                                }))
-                                .child(crate::t!("inbox.jump")),
-                        ),
-                )
-                .child(avatar(author, 32.))
+                .h(z(22.))
+                .min_w_0()
                 .child(
                     div()
-                        .flex_1()
                         .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(z(6.))
-                                .child(
-                                    div()
-                                        .text_size(z(15.))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(c(app.author_color(m.author).unwrap_or(Palette::TEXT_HEADER)))
-                                        .child(author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
-                                )
-                                .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(format_time_full(m.timestamp))),
-                        )
-                        .when(rich, |d| {
-                            d.child(
-                                div()
-                                    .text_size(z(15.))
-                                    .text_color(c(Palette::TEXT_NORMAL))
-                                    // Mentions, emoji and markdown like in the chat, not the raw `<@id>` tokens.
-                                    .child(crate::ui::components::markdown_in(app, &content, &cx.entity(), m.id)),
-                            )
-                        })
-                        .children(extras),
+                        .truncate()
+                        .text_size(z(16.))
+                        .line_height(z(22.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(app.author_color(m.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
+                        .child(author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
+                )
+                .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(crate::ui::chat::server_tag_chip(&tg, false)))
+                .when_some(app.author_role_icon(m.author), |d, u| d.child(crate::ui::chat::role_icon(u)))
+                .when(bot, |d| d.child(crate::ui::chat::bot_tag(author.is_some_and(|u| u.verified_bot))))
+                .child(
+                    div()
+                        .flex_none()
+                        .ml(z(4.))
+                        .text_size(z(12.))
+                        .line_height(z(22.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(tk(idx::TEXT_MUTED))
+                        .child(format_time_full(m.timestamp)),
                 ),
+        )
+        .when(rich, |d| {
+            d.child(
+                div()
+                    .text_size(z(16.))
+                    .line_height(z(22.))
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    // Mentions, emoji and markdown like in the chat, not the raw `<@id>` tokens.
+                    .child(crate::ui::components::markdown_in(app, &content, &cx.entity(), m.id)),
+            )
+        })
+        .children(extras)
+        .child(
+            div().absolute().top(z(8.)).right(z(8.)).invisible().group_hover("search-hit", |s| s.visible()).child(
+                div()
+                    .id(("search-jump", ix))
+                    .h(z(24.))
+                    .p(z(4.))
+                    .rounded(z(3.))
+                    .flex()
+                    .items_center()
+                    .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    .hover(|s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
+                    .active(|s| s.text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)).mt(z(1.)))
+                    .on_click(cx.listener(move |a, _, _, cx| {
+                        cx.stop_propagation();
+                        a.jump_to_message(channel, id, cx)
+                    }))
+                    .child(crate::t!("pins.jump")),
+            ),
         )
         .into_any_element()
 }
@@ -425,128 +436,416 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let error = s.error.clone();
     let page = s.page.clone();
     let req = s.request.clone();
-    let top = layout::HEADER_H;
+    let sort_menu = s.sort_menu;
     // The client hides the search popout while the "Plus de filtres" modal is up (the
     // header bar goes back to idle) and shows it again when the modal closes.
-    if page.is_none() || req.is_none() {
-        if let Some(modal) = crate::ui::search_filters::render(app, window, cx) {
-            return Some(modal);
-        }
+    if (page.is_none() || req.is_none())
+        && let Some(modal) = crate::ui::search_filters::render(app, window, cx)
+    {
+        return Some(modal);
     }
-
-    let body: AnyElement = if let Some(page) = page.filter(|_| req.is_some()) {
-        let req = req.unwrap_or_default();
-        let offset = req.offset;
-        let total = page.total;
-        let oldest = req.oldest_first;
-        let mut list = div().flex().flex_col().gap(z(16.)).p(z(16.));
-        for (i, m) in page.messages.iter().enumerate() {
-            list = list.child(result_card(app, i, m, cx));
-        }
-        if page.messages.is_empty() {
-            list = list.child(
-                div().py(z(40.)).flex().justify_center().text_color(c(Palette::TEXT_MUTED)).child(crate::t!("search.no_results")),
-            );
-        }
-        let pager = div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .gap(z(16.))
-            .pb(z(16.))
-            .when(offset > 0, |d| {
-                d.child(pager_button("search-prev", crate::t!("common.back"), cx.listener(move |a, _, _, cx| {
-                    rerun(a, |r| r.offset = r.offset.saturating_sub(PAGE), cx)
-                })))
-            })
-            .when(offset + PAGE < total, |d| {
-                d.child(pager_button("search-next", crate::t!("common.next"), cx.listener(move |a, _, _, cx| rerun(a, |r| r.offset += PAGE, cx))))
-            });
-        div()
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .h(z(48.))
-                    .px(z(16.))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .bg(c(Palette::BG_SECONDARY_ALT))
-                    .child(
-                        div()
-                            .text_size(z(16.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(Palette::TEXT_HEADER))
-                            .child(if total == 1 { crate::t!("search.result_one") } else { crate::t!("search.results", n = total) }),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap(z(4.))
-                            .child(sort_button("sort-new", crate::t!("search.newest"), !oldest, cx.listener(|a, _, _, cx| {
-                                rerun(a, |r| { r.oldest_first = false; r.offset = 0 }, cx)
-                            })))
-                            .child(sort_button("sort-old", crate::t!("search.oldest"), oldest, cx.listener(|a, _, _, cx| {
-                                rerun(a, |r| { r.oldest_first = true; r.offset = 0 }, cx)
-                            }))),
-                    ),
-            )
-            .child(list)
-            .child(pager)
-            .into_any_element()
-    } else {
+    let (Some(page), Some(req)) = (page, req) else {
         return Some(options_popout(app, input, error, loading, cx));
     };
+    Some(results_panel(app, input, page, req, error, loading, sort_menu, window, cx))
+}
 
-    Some(
-        div()
-            .id("search-popout")
-            .absolute()
-            .top(px(top + layout::TITLE_BAR_H + 1.))
-            .right_0()
-            .bottom_0()
-            .w(px(WIDTH))
-            .bg(c(Palette::BG_SECONDARY))
-            .border_l_1()
-            .border_color(c(Palette::BG_TERTIARY))
-            .occlude()
-            .flex()
-            .flex_col()
-            .child(
+/// Close the "Trier" menu; false when it was not open.
+fn close_sort_menu(cx: &mut App) -> bool {
+    let open = cx.try_global::<Search>().and_then(|s| s.0.as_ref()).is_some_and(|s| s.sort_menu);
+    if open {
+        if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+            s.sort_menu = false;
+        }
+        cx.refresh_windows();
+    }
+    open
+}
+
+/// "4 083" / "4,083": digit groups with the locale's separator.
+fn group_digits(n: u32) -> String {
+    let sep = if crate::i18n::locale() == "en" { ',' } else { '\u{202f}' };
+    let d = n.to_string();
+    let mut out = String::new();
+    for (i, ch) in d.chars().enumerate() {
+        if i > 0 && (d.len() - i) % 3 == 0 {
+            out.push(sep);
+        }
+        out.push(ch);
+    }
+    out
+}
+
+/// Page numbers of the pager: the first, the last and the ones around the current
+/// page (three at either end), `None` for an ellipsis (1 2 3 … 164 / 1 2 3 … 164).
+fn page_items(cur: u32, last: u32) -> Vec<Option<u32>> {
+    let mut want: Vec<u32> = vec![1, last, cur.saturating_sub(1).max(1), cur, (cur + 1).min(last)];
+    if cur <= 2 {
+        want.push(3.min(last));
+    }
+    if cur + 1 >= last {
+        want.push(last.saturating_sub(2).max(1));
+    }
+    want.sort_unstable();
+    want.dedup();
+    let mut out = Vec::new();
+    let mut prev = 0;
+    for p in want {
+        if p > prev + 1 {
+            out.push(None);
+        }
+        out.push(Some(p));
+        prev = p;
+    }
+    out
+}
+
+/// The header search bar while a search is shown: the query with its clear (x) button.
+fn live_bar(input: &Entity<InputState>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    // The header `searchBar_` (244×32, radius 8, --input-background-default,
+    // 1px --input-border-default; editor padding 0 6, 14/22 medium) as a live input.
+    div()
+        .id("search-bar-live")
+        .absolute()
+        .top(z(layout::TITLE_BAR_H + 8.))
+        .right(z(8.))
+        .w(z(244.))
+        .h(z(32.))
+        .rounded(z(8.))
+        // The input token is translucent: lay it over the header background.
+        .bg(c(Palette::BG_PRIMARY))
+        .border_1()
+        .border_color(tk(idx::INPUT_BORDER_ACTIVE))
+        .occlude()
+        .flex()
+        .items_center()
+        .child(div().flex_1().min_w_0().px(z(6.)).text_size(z(14.)).font_weight(FontWeight::MEDIUM).child(Input::new(input).appearance(false).bordered(false)))
+        .child(
+            div()
+                .id("search-bar-close")
+                .size(z(24.))
+                .p(z(4.))
+                .flex()
+                .items_center()
+                .cursor_pointer()
+                .on_click(cx.listener(|a, _, w, cx| close(a, w, cx)))
+                .child(named("close", 16., tk(idx::ICON_DEFAULT))),
+        )
+}
+
+/// `button_ sm secondary hasText`: 32px, 1px --border-subtle-ish, radius 8,
+/// --background-mod-subtle; padding 3 11, 16px glyph + 14/18 medium, gap 4.
+fn sm_secondary(id: &'static str, glyph: &str, label: SharedString) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(z(32.))
+        .px(z(12.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_MOD_SUBTLE))
+        .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_NORMAL)))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .cursor_pointer()
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(tk(idx::TEXT_STRONG))
+        .child(named(glyph, 16., tk(idx::TEXT_STRONG)))
+        .child(label)
+}
+
+/// Results panel (live CDP 2026-11-24, `searchResultsWrap_`): a 48px `searchHeader_`
+/// (padding 8 16: the total, body-md/medium --text-strong, then "Filtres" and "Trier"
+/// sm secondary buttons, gap 8), the scroller (padding 16 16 0) with the hits grouped by
+/// channel, and the 56px `paginationDock_`.
+#[allow(clippy::too_many_arguments)]
+fn results_panel(
+    app: &PhoenixApp,
+    input: Entity<InputState>,
+    page: SearchPage,
+    req: SearchRequest,
+    error: Option<SharedString>,
+    loading: bool,
+    sort_menu: bool,
+    window: &mut Window,
+    cx: &mut Context<PhoenixApp>,
+) -> AnyElement {
+    let total = page.total;
+    let title: SharedString = if loading {
+        crate::t!("search.searching")
+    } else if total == 0 {
+        crate::t!("search.no_result_title")
+    } else if total == 1 {
+        crate::t!("search.result_one")
+    } else {
+        crate::t!("search.results", n = group_digits(total))
+    };
+    let header = div()
+        .flex_none()
+        .h(z(48.))
+        .px(z(16.))
+        .py(z(8.))
+        .flex()
+        .items_center()
+        .justify_between()
+        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(title))
+        .child(
+            div()
+                .flex()
+                .gap(z(8.))
+                .child(sm_secondary("search-results-filters", "inbox/filter", crate::t!("search.filters")).on_click(cx.listener(|a, _, w, cx| {
+                    crate::ui::search_filters::open(a, w, cx);
+                })))
+                .child(sm_secondary("search-results-sort", "sort", crate::t!("search.sort")).on_mouse_down(
+                    gpui::MouseButton::Left,
+                    cx.listener(|_, _, _, cx| {
+                        // Before the panel's own mouse down (which closes the menu).
+                        cx.stop_propagation();
+                        if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+                            s.sort_menu = !s.sort_menu;
+                        }
+                        cx.notify();
+                    }),
+                )),
+        );
+    // Body: hits grouped by channel (`searchResultGroup_`, margin-bottom 24), the empty
+    // state or the error.
+    let mut body = div().flex().flex_col().pt(z(16.)).px(z(16.));
+    if let Some(e) = error.filter(|_| !loading) {
+        body = body.child(empty_state(e, true));
+    } else if page.messages.is_empty() && !loading {
+        body = body.child(empty_state(crate::t!("search.no_results"), false));
+    } else {
+        let mut i = 0;
+        while i < page.messages.len() {
+            let ch = page.messages[i].channel;
+            let mut group = div().mb(z(24.)).flex().flex_col().child(group_header(app, ch));
+            while i < page.messages.len() && page.messages[i].channel == ch {
+                group = group.child(result_card(app, i, &page.messages[i], cx));
+                i += 1;
+            }
+            body = body.child(group);
+        }
+    }
+    let pages = total.div_ceil(PAGE).max(1);
+    let cur = req.offset / PAGE + 1;
+    let pager = (pages > 1).then(|| pager(cur, pages, cx));
+    let mut panel = div()
+        .id("search-popout")
+        .absolute()
+        .top(z(layout::TITLE_BAR_H + layout::HEADER_H))
+        .right_0()
+        .bottom_0()
+        .w(px(WIDTH))
+        .bg(tk(idx::BACKGROUND_BASE_LOWER))
+        .border_l_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .occlude()
+        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
+            close_sort_menu(cx);
+        }))
+        .flex()
+        .flex_col()
+        .child(header)
+        .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
+        .children(pager);
+    if sort_menu {
+        panel = panel.child(sort_popover(req.sort, cx));
+    }
+    let modal = crate::ui::search_filters::render(app, window, cx);
+    div().absolute().top_0().left_0().right_0().bottom_0().child(live_bar(&input, cx)).child(panel).children(modal).into_any_element()
+}
+
+/// `channelNameContainer_` (22px, margin-bottom 8): 16px channel glyph (padding-end 4),
+/// name body-md/medium --text-strong; on the right `parentChannelName_` (folder glyph
+/// 16×12 + category body-xs/medium --text-default, one line).
+fn group_header(app: &PhoenixApp, ch: Id) -> gpui::Div {
+    let channel = app.channels.get(&ch);
+    let name: SharedString = channel.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
+    let glyph = channel.map(|c| crate::ui::sidebar::channel_icon(c.kind)).unwrap_or(Icon::Hash);
+    let parent = channel.and_then(|c| c.parent).and_then(|p| app.channels.get(&p)).map(|p| p.name.clone());
+    div()
+        .h(z(22.))
+        .mb(z(8.))
+        .flex()
+        .items_center()
+        .child(div().w(z(20.)).flex_none().pr(z(4.)).child(gpui::svg().path(glyph.path()).size(z(16.)).text_color(tk(idx::TEXT_STRONG))))
+        .child(div().flex_1().min_w_0().truncate().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(name))
+        .when_some(parent, |d, p| {
+            d.child(
                 div()
-                    .flex_none()
-                    .p(z(12.))
+                    .max_w(z(190.))
+                    .min_w_0()
                     .flex()
                     .items_center()
-                    .gap(z(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .h(z(32.))
-                            .px(z(8.))
-                            .rounded(z(4.))
-                            .bg(c(Palette::BG_TERTIARY))
-                            .flex()
-                            .items_center()
-                            .text_size(z(14.))
-                            .child(div().flex_1().child(Input::new(&input).appearance(false).bordered(false)))
-                            .child(icon(Icon::Search, 16., c(Palette::INTERACTIVE))),
-                    )
-                    .child(
-                        icon_button("search-close", Icon::Close, c(Palette::INTERACTIVE), 18.)
-                            .on_click(cx.listener(|a, _, w, cx| close(a, w, cx))),
-                    ),
+                    .child(named("folder", 14., tk(idx::TEXT_DEFAULT)).ml(z(4.)).mr(z(4.)))
+                    .child(div().min_w_0().truncate().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(p)),
             )
-            .when_some(error, |d, e| {
-                d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::RED)).child(e))
-            })
-            .when(loading, |d| {
-                d.child(div().px(z(16.)).pb(z(8.)).text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("search.searching")))
-            })
-            .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
-            .into_any_element(),
+        })
+}
+
+/// `emptyResultsWrap_` (padding 20) > `emptyResultsContent_` (280 wide, centred,
+/// padding-bottom 40): a 160px illustration (ours: a magnifier in a ring) and the text
+/// 16/24 medium --text-default, centred.
+fn empty_state(text: SharedString, error: bool) -> gpui::Div {
+    div().min_h(z(600.)).p(z(20.)).flex().items_center().justify_center().child(
+        div()
+            .w(z(280.))
+            .pb(z(40.))
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(z(40.))
+            .child(
+                div()
+                    .size(z(160.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(tk(idx::BORDER_SUBTLE))
+                    .bg(tk(idx::BACKGROUND_MOD_SUBTLE))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(named(if error { "warning" } else { "search" }, 72., tk(if error { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_MUTED }))),
+            )
+            .child(
+                div()
+                    .text_center()
+                    .text_size(z(16.))
+                    .line_height(z(24.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(tk(if error { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_DEFAULT }))
+                    .child(text),
+            ),
     )
+}
+
+/// `paginationDock_` (56px, padding 0 16) > `pageControl_` (padding 4 0): 40px
+/// "Précédent" / "Suivant" blank buttons (16px caret, 16/18 semibold, radius 8, padding
+/// 0 12 0 8 / 0 8 0 12), 28px round page buttons (radius 14, 16 semibold; the current one
+/// --brand-500 with white text) 8px apart and "…" (14/18 semibold).
+fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let goto = move |p: u32, cx: &mut Context<PhoenixApp>| cx.listener(move |a, _, _, cx| rerun(a, |r| r.offset = (p - 1) * PAGE, cx));
+    let caret = |next: bool| {
+        let g = named("chevron-right", 16., tk(idx::TEXT_STRONG));
+        if next { g } else { g.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))) }
+    };
+    let end = |id: &'static str, label: SharedString, next: bool, enabled: bool| {
+        div()
+            .id(id)
+            .h(z(40.))
+            .when(next, |d| d.pl(z(12.)).pr(z(8.)))
+            .when(!next, |d| d.pl(z(8.)).pr(z(12.)))
+            .rounded(z(8.))
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .text_size(z(16.))
+            .line_height(z(18.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(tk(idx::TEXT_STRONG))
+            .when(!enabled, |d| d.opacity(0.5))
+            .when(enabled, |d| d.cursor_pointer().hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE))))
+            .when(!next, |d| d.child(caret(false)))
+            .child(label)
+            .when(next, |d| d.child(caret(true)))
+    };
+    let mut nav = div().flex().items_center().gap(z(8.));
+    let mut prev = end("search-prev", crate::t!("search.prev_page"), false, cur > 1);
+    if cur > 1 {
+        prev = prev.on_click(goto(cur - 1, cx));
+    }
+    nav = nav.child(prev);
+    for (k, item) in page_items(cur, pages).into_iter().enumerate() {
+        nav = nav.child(match item {
+            None => div()
+                .id(("search-page-gap", k))
+                .w(z(28.))
+                .flex()
+                .justify_center()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_DEFAULT))
+                .child("…"),
+            Some(p) => {
+                let on = p == cur;
+                div()
+                    .id(("search-page", p as usize))
+                    .h(z(28.))
+                    .min_w(z(28.))
+                    .px(z(6.))
+                    .rounded(z(14.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(z(16.))
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .when(on, |d| d.bg(tk(idx::BRAND_500)).text_color(tk(idx::WHITE)))
+                    .when(!on, |d| d.text_color(tk(idx::TEXT_STRONG)).cursor_pointer().hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE))).on_click(goto(p, cx)))
+                    .child(p.to_string())
+            }
+        });
+    }
+    let mut next = end("search-next", crate::t!("common.next"), true, cur < pages);
+    if cur < pages {
+        next = next.on_click(goto(cur + 1, cx));
+    }
+    nav = nav.child(next);
+    div().flex_none().h(z(56.)).px(z(16.)).flex().items_center().justify_center().child(nav)
+}
+
+/// "Trier" menu (`menu_ flexible_`): 144 wide under the button, right-aligned, 1px
+/// --border-subtle, radius 8, --background-surface-higher; scroller padding 8 0 8 8;
+/// 36px `menuitemradio` rows (padding 8, radius 2): label body-sm/medium --text-strong and
+/// a 20px radio indicator on the right.
+fn sort_popover(cur: SortOrder, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let items = [(SortOrder::Newest, "search.newest"), (SortOrder::Oldest, "search.sort_date"), (SortOrder::Relevance, "search.relevance")];
+    div()
+        .id("search-sort-menu")
+        .absolute()
+        .top(z(47.))
+        .right(z(16.))
+        .w(z(144.))
+        .py(z(8.))
+        .pl(z(8.))
+        .pr(z(8.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .shadow(crate::ui::inbox::popout_shadow())
+        .occlude()
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .children(items.into_iter().map(|(o, key)| {
+            div()
+                .id(key)
+                .h(z(36.))
+                .p(z(8.))
+                .rounded(z(2.))
+                .flex()
+                .items_center()
+                .justify_between()
+                .cursor_pointer()
+                .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE)))
+                .on_click(cx.listener(move |a, _, _, cx| {
+                    close_sort_menu(cx);
+                    rerun(
+                        a,
+                        |r| {
+                            r.sort = o;
+                            r.offset = 0
+                        },
+                        cx,
+                    )
+                }))
+                .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(crate::t!(key)))
+                .child(crate::ui::controls::radio_indicator(o == cur))
+        }))
 }
 
 fn tk(i: usize) -> gpui::Hsla {
@@ -751,35 +1050,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
     if loading {
         body = body.child(div().px(z(8.)).pt(z(8.)).text_size(z(14.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("search.searching")));
     }
-    // The header `searchBar_` (244×32, radius 8, --input-background-default,
-    // 1px --input-border-default; editor padding 0 6, 14/22 medium) as a live input.
-    let bar = div()
-        .id("search-bar-live")
-        .absolute()
-        .top(z(layout::TITLE_BAR_H + 8.))
-        .right(z(8.))
-        .w(z(244.))
-        .h(z(32.))
-        .rounded(z(8.))
-        // The input token is translucent: lay it over the header background.
-        .bg(c(Palette::BG_PRIMARY))
-        .border_1()
-        .border_color(tk(idx::INPUT_BORDER_ACTIVE))
-        .occlude()
-        .flex()
-        .items_center()
-        .child(div().flex_1().min_w_0().px(z(6.)).text_size(z(14.)).font_weight(FontWeight::MEDIUM).child(Input::new(&input).appearance(false).bordered(false)))
-        .child(
-            div()
-                .id("search-bar-close")
-                .size(z(24.))
-                .p(z(4.))
-                .flex()
-                .items_center()
-                .cursor_pointer()
-                .on_click(cx.listener(|a, _, w, cx| close(a, w, cx)))
-                .child(named("close", 16., tk(idx::ICON_DEFAULT))),
-        );
+    let bar = live_bar(&input, cx);
     div()
         .absolute()
         .top_0()
@@ -807,49 +1078,19 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
         .into_any_element()
 }
 
-fn pager_button(
-    id: &'static str,
-    label: SharedString,
-    f: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .px(z(16.))
-        .py(z(6.))
-        .rounded(z(4.))
-        .bg(c(Palette::BG_MOD_SELECTED))
-        .text_size(z(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(c(Palette::TEXT_HEADER))
-        .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .on_click(f)
-        .child(label)
-}
-
-fn sort_button(
-    id: &'static str,
-    label: SharedString,
-    active: bool,
-    f: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .px(z(8.))
-        .py(z(2.))
-        .rounded(z(4.))
-        .text_size(z(14.))
-        .font_weight(FontWeight::MEDIUM)
-        .cursor_pointer()
-        .text_color(c(if active { Palette::TEXT_HEADER } else { Palette::INTERACTIVE }))
-        .when(active, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-        .on_click(f)
-        .child(label)
-}
-
 #[cfg(test)]
 mod history_tests {
     use super::*;
+
+    #[test]
+    fn pager_pages() {
+        // Live client: page 1 and 2 of 164 show "1 2 3 … 164".
+        assert_eq!(page_items(1, 164), vec![Some(1), Some(2), Some(3), None, Some(164)]);
+        assert_eq!(page_items(2, 164), vec![Some(1), Some(2), Some(3), None, Some(164)]);
+        assert_eq!(page_items(10, 164), vec![Some(1), None, Some(9), Some(10), Some(11), None, Some(164)]);
+        assert_eq!(page_items(164, 164), vec![Some(1), None, Some(162), Some(163), Some(164)]);
+        assert_eq!(page_items(1, 2), vec![Some(1), Some(2)]);
+    }
 
     #[test]
     fn splits_filters_and_text() {

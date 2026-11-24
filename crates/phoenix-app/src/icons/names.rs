@@ -166,4 +166,5 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("link", &["LinkIcon"]),
     ("angle-brackets", &["AngleBracketsIcon"]),
     ("door-exit", &["DoorExitIcon"]),
+    ("folder", &["FolderIcon"]),
 ];

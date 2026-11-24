@@ -916,7 +916,7 @@ fn time_tooltip(ts: i64) -> impl Fn(&mut Window, &mut App) -> gpui::AnyView + 's
 /// Server tag chiplet after a username: clanTagChiplet_ (--background-mod-strong, radius 4px,
 /// padding 0 4px, .72rem, margin-inline-start 6px; 2px in reply lines) holding
 /// chipletContainerInner_ (line-height 16px) with the guild badge and tag text.
-fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -> gpui::Div {
+pub(crate) fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -> gpui::Div {
     div()
         .flex_none()
         // vanilla-dm #1270 (message): margin -2 0 0 6, box h 15; #1424 (reply): margin -2 4 0 2, opacity .64.
@@ -940,7 +940,7 @@ fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_reply: bool) -
 /// roleIcon_2i8Bfm: 1rem + 4px square, margin-inline-start .25rem, top 1px (centred in the
 /// 22px header row); after the
 /// server tag (vanilla-inbox-1 headerText_ hasRoleIcon_).
-fn role_icon(url: SharedString) -> gpui::Img {
+pub(crate) fn role_icon(url: SharedString) -> gpui::Img {
     img(url).flex_none().size(z(20.)).ml(z(4.)).object_fit(gpui::ObjectFit::Contain)
 }
 
@@ -961,7 +961,7 @@ fn new_member_badge(id: Id) -> gpui::Stateful<gpui::Div> {
 
 /// Discord's "APP" tag next to bot authors (vanilla-guild-text-groups botTagCozy_ /
 /// botTagVerified_ / botText_: 15px tall, 46px wide for a verified "APP").
-fn bot_tag(verified: bool) -> gpui::Div {
+pub(crate) fn bot_tag(verified: bool) -> gpui::Div {
     div()
         .flex_none()
         .ml(z(4.)) // botTagCozy_ margin-inline-start .25rem

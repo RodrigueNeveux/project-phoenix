@@ -162,6 +162,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/user-platform.svg" => s!(r#"<circle cx="9" cy="8" r="3.5"/><path d="M2 20a7 7 0 0 1 12-4.9"/><rect x="15" y="13" width="7" height="6" rx="1"/>"#),
         "icons/link.svg" => s!(r#"<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>"#),
         "icons/angle-brackets.svg" => s!(r#"<path d="m8 6-6 6 6 6M16 6l6 6-6 6"/>"#),
+        "icons/folder.svg" => f!(r#"<path d="M3 6a2 2 0 0 1 2-2h4.5l2 2H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>"#),
         "icons/door-exit.svg" => s!(r#"<path d="M14 4H5v16h9M10 12h11m-3-3 3 3-3 3"/>"#),
         "icons/discord-logo.svg" => f!(r#"<path d="M19.7 5.4a17 17 0 0 0-4.3-1.3l-.5 1.1a15.7 15.7 0 0 0-4.8 0l-.5-1.1a17 17 0 0 0-4.3 1.3C2.6 9.5 1.9 13.5 2.2 17.4a17.2 17.2 0 0 0 5.3 2.7l1.1-1.8a11 11 0 0 1-1.7-.8l.4-.3a12.3 12.3 0 0 0 10.4 0l.4.3a11 11 0 0 1-1.7.8l1.1 1.8a17.1 17.1 0 0 0 5.3-2.7c.4-4.5-.8-8.5-3.1-12zM8.7 15c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1zm6.6 0c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z"/>"#),
         // Activity type glyphs on member rows (our own drawings): a note, a screen.
