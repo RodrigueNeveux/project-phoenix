@@ -16,6 +16,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
+//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
 
@@ -706,6 +707,60 @@ fn main() -> anyhow::Result<()> {
                 if modal {
                     app.open_profile_modal(uid, cx);
                 }
+            })
+        })?;
+        pump(&mut cx, wait * 1000 / 3);
+    }
+    // `PHX_OPEN`: an overlay over the location (read-only: nothing is sent).
+    if let Ok(what) = std::env::var("PHX_OPEN") {
+        use phoenix_app::ui::settings::Page as P;
+        let (kind, arg) = what.split_once(':').unwrap_or((what.as_str(), ""));
+        let (kind, arg) = (kind.to_string(), arg.to_string());
+        cx.update_window(win.into(), |_, window, cx| {
+            v.update(cx, |app, cx| match kind.as_str() {
+                "pins" => app.toggle_pins(cx),
+                "threads" => app.toggle_threads_popout(cx),
+                "search" => {
+                    phoenix_app::ui::search::open(app, window, cx);
+                    if let Ok(req) = phoenix_app::ui::search::build_request(app, if arg.is_empty() { "a" } else { &arg }) {
+                        phoenix_app::ui::search::run(app, req, cx);
+                    }
+                }
+                "settings" => {
+                    phoenix_app::ui::settings::open(app, cx);
+                    let pages = [
+                        P::MyAccount, P::Profiles, P::DataPrivacy, P::PrivacySafety, P::Devices, P::Connections,
+                        P::Notifications, P::Keybinds, P::Language, P::Appearance, P::Accessibility, P::VoiceVideo,
+                        P::Advanced, P::System, P::ActivityPrivacy, P::RegisteredGames, P::Nitro, P::ServerBoost,
+                        P::Subscriptions, P::GiftInventory, P::Billing,
+                    ];
+                    if let (Some(s), Some(p)) =
+                        (app.settings.as_mut(), pages.into_iter().find(|p| format!("{p:?}").eq_ignore_ascii_case(&arg)))
+                    {
+                        s.page = p;
+                    }
+                }
+                "server_settings" => {
+                    if let Some(g) = app.selected_guild {
+                        app.open_server_settings(g, arg.parse().unwrap_or(0), cx);
+                    }
+                }
+                "emoji" | "gif" | "sticker" => {
+                    use phoenix_app::ui::pickers::{EmojiTarget, Tab};
+                    let tab = match kind.as_str() {
+                        "gif" => Tab::Gif,
+                        "sticker" => Tab::Sticker,
+                        _ => Tab::Emoji,
+                    };
+                    phoenix_app::ui::pickers::open(app, tab, EmojiTarget::Composer, window, cx);
+                }
+                "msgmenu" => {
+                    let last = app.selected_channel.and_then(|c| Some((c, app.messages.get(&c)?.msgs.last()?.id)));
+                    if let Some((c, m)) = last {
+                        app.open_message_menu(c, m, gpui::point(px(700.), px(400.)), cx);
+                    }
+                }
+                _ => {}
             })
         })?;
         pump(&mut cx, wait * 1000 / 3);
