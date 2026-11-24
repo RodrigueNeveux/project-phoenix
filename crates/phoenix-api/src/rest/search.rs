@@ -142,6 +142,72 @@ impl SearchQuery {
     }
 }
 
+impl SearchQuery {
+    pub fn to_tabs_body(&self, limit: u32) -> serde_json::Value {
+        use serde_json::{Map, Value, json};
+        let ids = |v: &[Snowflake]| Value::Array(v.iter().map(|x| Value::String(x.to_string())).collect());
+        let (by, order) = match self.sort {
+            SearchSort::Newest => ("timestamp", "desc"),
+            SearchSort::Oldest => ("timestamp", "asc"),
+            SearchSort::Relevance => ("relevance", "desc"),
+        };
+        let mut tab = Map::new();
+        tab.insert("sort_by".into(), json!(by));
+        tab.insert("sort_order".into(), json!(order));
+        if let Some(c) = self.content.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+            tab.insert("content".into(), json!(c));
+        }
+        if !self.author_ids.is_empty() {
+            tab.insert("author_id".into(), ids(&self.author_ids));
+        }
+        if !self.mentions.is_empty() {
+            tab.insert("mentions".into(), ids(&self.mentions));
+        }
+        if !self.has.is_empty() {
+            tab.insert("has".into(), Value::Array(self.has.iter().map(|h| json!(h.as_str())).collect()));
+        }
+        if let Some(v) = self.min_id {
+            tab.insert("min_id".into(), json!(v.to_string()));
+        }
+        if let Some(v) = self.max_id {
+            tab.insert("max_id".into(), json!(v.to_string()));
+        }
+        if let Some(p) = self.pinned {
+            tab.insert("pinned".into(), json!(p));
+        }
+        if !self.author_types.is_empty() {
+            tab.insert("author_type".into(), json!(self.author_types));
+        }
+        tab.insert("offset".into(), json!(self.offset));
+        tab.insert("limit".into(), json!(limit));
+        let mut body = Map::new();
+        body.insert("include_nsfw".into(), json!(self.include_nsfw));
+        if !self.channel_ids.is_empty() {
+            body.insert("channel_ids".into(), ids(&self.channel_ids));
+        }
+        body.insert("tabs".into(), json!({ "messages": Value::Object(tab) }));
+        body.insert("track_exact_total_hits".into(), json!(true));
+        Value::Object(body)
+    }
+}
+
+pub fn parse_tabs_reply(status: StatusCode, bytes: &[u8]) -> Result<SearchOutcome> {
+    if status == StatusCode::ACCEPTED {
+        return parse_search_reply(status, bytes);
+    }
+    let v: serde_json::Value = serde_json::from_slice(bytes)?;
+    let tab = v.get("tabs").and_then(|t| t.get("messages")).cloned().unwrap_or_default();
+    let total_results = tab.get("total_results").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32;
+    let mut messages = Vec::new();
+    for m in tab.get("messages").and_then(serde_json::Value::as_array).into_iter().flatten() {
+        let group = if m.is_array() { serde_json::from_value::<Vec<Message>>(m.clone()) } else { serde_json::from_value::<Message>(m.clone()).map(|x| vec![x]) };
+        if let Ok(g) = group {
+            messages.push(g);
+        }
+    }
+    Ok(SearchOutcome::Results(SearchResponse { total_results, messages, doing_deep_historical_index: v.get("doing_deep_historical_index").and_then(serde_json::Value::as_bool).unwrap_or(false) }))
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ParsedSearch {
     pub content: String,
@@ -438,6 +504,11 @@ impl RestClient {
         parse_search_reply(status, &bytes)
     }
 
+    pub async fn search_dms_tabs(&self, q: &SearchQuery, limit: u32) -> Result<SearchOutcome> {
+        let (status, bytes) = self.raw(Method::POST, "/users/@me/messages/search/tabs", Body::Json(q.to_tabs_body(limit))).await?;
+        parse_tabs_reply(status, &bytes)
+    }
+
     pub async fn gif_trending(&self, locale: &str, fmt: GifFormat) -> Result<GifTrending> {
         let path = format!("/gifs/trending?{}", gif_query(&[], locale, fmt));
         self.call(Method::GET, &path, Body::None).await
@@ -530,6 +601,45 @@ mod tests {
         assert!(SearchQuery::text("  ").is_empty());
         let r = SearchQuery { sort: SearchSort::Relevance, ..Default::default() };
         assert_eq!(r.to_query(), "sort_by=relevance&sort_order=desc");
+    }
+
+    #[test]
+    fn tabs_body_matches_the_client_payload() {
+        let q = SearchQuery {
+            content: Some(" salut ".into()),
+            author_ids: vec![Snowflake(7)],
+            channel_ids: vec![Snowflake(3)],
+            has: vec![HasFilter::Link],
+            pinned: Some(true),
+            offset: 25,
+            ..Default::default()
+        };
+        let b = q.to_tabs_body(25);
+        assert_eq!(
+            b,
+            serde_json::json!({
+                "include_nsfw": false,
+                "channel_ids": ["3"],
+                "tabs": {"messages": {"sort_by": "timestamp", "sort_order": "desc", "content": "salut", "author_id": ["7"], "has": ["link"], "pinned": true, "offset": 25, "limit": 25}},
+                "track_exact_total_hits": true
+            })
+        );
+        let r = SearchQuery { sort: SearchSort::Oldest, ..Default::default() }.to_tabs_body(25);
+        assert_eq!(r["tabs"]["messages"]["sort_order"], "asc");
+        assert!(r.get("channel_ids").is_none());
+    }
+
+    #[test]
+    fn tabs_reply() {
+        let m = r#"{"id":"10","channel_id":"5","author":{"id":"1","username":"a","discriminator":"0"},"content":"hi","timestamp":"2024-01-01T00:00:00+00:00","edited_timestamp":null,"tts":false,"mention_everyone":false,"mentions":[],"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,"type":0}"#;
+        let body = format!(r#"{{"analytics_id":"x","tabs":{{"messages":{{"total_results":4,"messages":[[{m}],{m}],"cursor":{{}}}}}}}}"#);
+        match parse_tabs_reply(StatusCode::OK, body.as_bytes()).unwrap() {
+            SearchOutcome::Results(r) => {
+                assert_eq!(r.total_results, 4);
+                assert_eq!(r.hits().count(), 2);
+            }
+            _ => panic!(),
+        }
     }
 
     #[test]

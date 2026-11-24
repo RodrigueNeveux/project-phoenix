@@ -17,6 +17,7 @@ pub mod thread_create;
 pub mod content_inventory;
 pub mod collectibles;
 pub mod frecency;
+pub mod favorites;
 pub mod soundboard;
 pub mod uploads;
 

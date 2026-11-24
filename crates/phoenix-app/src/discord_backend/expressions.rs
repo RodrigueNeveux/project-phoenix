@@ -162,6 +162,7 @@ pub(super) async fn search(inner: Arc<Inner>, s: Arc<Session>, req: SearchReques
     let q = query_of(&req);
     for _ in 0..4 {
         let out = match (req.guild, req.channel) {
+            _ if req.all_dms => s.rest.search_dms_tabs(&q, crate::ui::search::PAGE).await,
             (Some(g), _) => s.rest.search_guild_messages(sf(g), &q).await,
             (None, Some(c)) => s.rest.search_channel_messages(sf(c), &q).await,
             (None, None) => return Err(BackendError(crate::t!("search.nothing").to_string())),

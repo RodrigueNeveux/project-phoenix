@@ -98,3 +98,24 @@ with the bar's clear button (route and bar text checked unchanged). No non-GET r
 | pager | paginationDock_ / pageControl_ | layout | 56px dock, padding 0 16; 40px "Précédent" / "Suivant" (caret 16, 16/18 semibold, radius 8); 28px round pages 8px apart, current --brand-500 + white; "1 2 3 … 164" | pager, page_items | ✅ |
 | empty | emptyResultsWrap_ | layout | 280px column centred, 160px illustration, text 16/24 medium --text-default | empty_state | ✅ layout (our own illustration and wording) |
 | error | — | — | not reproducible on the client with a GET | empty_state(error) | ⚠ |
+
+# DM search (live CDP 2026-11-24, 1536×840 @1.25, Onyx, cross-DM setting off)
+
+Searched inside the DM the user had open ("merci" → empty, "serveur" → 2 hits), gear menu
+opened and closed with Escape, search cleared; route unchanged, no non-GET request but `/science`.
+Client JS: `web.b63d846b329d6470.js` module 5990 (eligible tokens), 902008 (guild contexts),
+`9329220d4bdc3583.js` (`SearchFetcher`: GET for GUILD / GUILD_CHANNEL / CHANNEL, POST tabs for DMS),
+`fb74ed8e7dc14b59.js` (`createRequestPayload`, tab reply), module 768570 (tab defaults).
+
+| element | source | property | value | our code | status |
+|---|---|---|---|---|---|
+| request | network | endpoint | `GET /channels/{id}/messages/search?content=…&sort_by=timestamp&sort_order=desc&offset=0` (the client always sends `offset`) | rest/search.rs `search_channel_messages` | ✅ (Phoenix omits `offset=0`) |
+| placeholder | aria of the header combobox | text | "Rechercher staar" (`E3`: username of the 1:1 peer, group name for a group DM); "Chercher dans les MP" (`m7OrlR`) with the cross-DM setting | chat.rs `search_ph` | ✅ |
+| popout filters | screen + module 5990 | rows | de: / contient: / mentions: / Plus de filtres; `in:` only in guild contexts or cross-DM | search.rs options_popout | ✅ |
+| "Chercher dans …" row | 95de45d742273fa4.js EMPTY mode (`VGEH/0`) | row | cross-DM only: magnifier + "Chercher dans <tag>", runs `in: <tag>` | search.rs options_popout | ✅ (not seen live: setting off) |
+| results header | screen | buttons | Filtres, Trier, then a 32×32 icon-only "Paramètres" (gear) button in DM contexts only | search.rs icon_secondary | ✅ |
+| gear menu | `menu_M3qk4j flexible_M3qk4j` | box / rows | 237 wide, right edge on the gear, 7px under it; "Par défaut…" (`/tMwrA`, muted) then radios "Rechercher dans ce MP" (`jRkYAh`) / "Rechercher dans tous les MP" (`lWpJ/t`) | search.rs dm_popover | ✅ |
+| gear menu action | `transitionStateToSearchContext` | behaviour | saves `text_and_images.is_cross_dm_search_enabled` (6, 36, BoolValue, default false) and reruns the query in the new context (`in:` dropped when going back to one DM) | set_cross_dm (settings `dm-search`) | ✅ (never clicked on the account) |
+| group header | `channelNameIcon_3Zk3yP` + `channelNameText_3Zk3yP` | content | 16px AtIcon (padding-end 4) + the peer's display name, body-md/medium --text-strong | search.rs channel_group_header | ✅ 1:1 DM; group DM glyph (GroupIcon) not measured ⚠ |
+| all DMs | `SearchFetcher.DX` + `createRequestPayload` | request | `POST /users/@me/messages/search/tabs` `{include_nsfw, channel_ids, tabs: {messages: {sort_by, sort_order, …filters, offset, limit: 25}}, track_exact_total_hits: true}`; reply `tabs.messages.{total_results, messages}` | rest/search.rs `to_tabs_body`, `search_dms_tabs`, `parse_tabs_reply` | ✅ unit tests; not run on the account (setting off, POST) |
+| global DM search | Friends page | — | the 2026 client has no separate "search all DMs" field: it is the DM header search with the setting on | — | ✅ (nothing to add) |

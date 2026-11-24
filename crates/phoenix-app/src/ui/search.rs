@@ -22,6 +22,7 @@ pub const WIDTH: f32 = 420.;
 pub struct SearchRequest {
     pub guild: Option<Id>,
     pub channel: Option<Id>,
+    pub all_dms: bool,
     pub content: Option<String>,
     pub authors: Vec<Id>,
     pub mentions: Vec<Id>,
@@ -56,6 +57,7 @@ pub struct SearchState {
     pub loading: bool,
     pub error: Option<SharedString>,
     sort_menu: bool,
+    dm_menu: bool,
     seq: u64,
     _sub: Subscription,
 }
@@ -72,18 +74,67 @@ impl gpui::Global for Search {}
 
 const DAY: u64 = 86_400_000 << 22;
 
+pub fn cross_dm(app: &PhoenixApp) -> bool {
+    crate::ui::settings::synced_map::get_pick(&app.prefs.synced.proto, "dm-search") == 1
+}
+
+pub fn in_dm(app: &PhoenixApp) -> bool {
+    app.selected_guild.is_none() && app.selected_channel.is_some()
+}
+
+fn dm_peer(app: &PhoenixApp, ch: Id) -> Option<&crate::model::User> {
+    let c = app.channels.get(&ch)?;
+    if c.guild.is_some() || crate::ui::dm_profile_panel::is_group_dm(app, ch) {
+        return None;
+    }
+    c.voice_users.first().and_then(|u| app.users.get(u))
+}
+
+pub fn dm_tag(app: &PhoenixApp, ch: Id) -> SharedString {
+    dm_peer(app, ch).map(|u| u.name.clone()).or_else(|| app.channels.get(&ch).map(|c| c.name.clone())).unwrap_or_default()
+}
+
+fn dm_label(app: &PhoenixApp, ch: Id) -> SharedString {
+    dm_peer(app, ch).map(|u| u.display_name.clone()).or_else(|| app.channels.get(&ch).map(|c| c.name.clone())).unwrap_or_default()
+}
+
+fn quote(v: &str) -> String {
+    if v.contains(' ') { format!("\"{v}\"") } else { v.to_owned() }
+}
+
+pub fn strip_in(q: &str) -> String {
+    let mut out = String::new();
+    let mut rest = q;
+    while let Some(i) = rest.find("in:") {
+        let at_word = i == 0 || rest[..i].ends_with(' ');
+        if !at_word {
+            out.push_str(&rest[..i + 3]);
+            rest = &rest[i + 3..];
+            continue;
+        }
+        out.push_str(&rest[..i]);
+        let v = rest[i + 3..].trim_start();
+        let end = if let Some(stripped) = v.strip_prefix('"') { stripped.find('"').map_or(v.len(), |e| e + 2) } else { v.find(' ').unwrap_or(v.len()) };
+        rest = &v[end..];
+    }
+    out.push_str(rest);
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, String> {
     let p = parse_search(text);
+    let all_dms = in_dm(app) && cross_dm(app);
     let mut req = SearchRequest {
         guild: app.selected_guild,
-        channel: if app.selected_guild.is_none() { app.selected_channel } else { None },
+        channel: if app.selected_guild.is_none() && !all_dms { app.selected_channel } else { None },
+        all_dms,
         content: (!p.content.trim().is_empty()).then(|| p.content.trim().to_owned()),
         has: p.has.iter().map(|h| h.as_str().to_owned()).collect(),
         pinned: p.pinned,
         author_types: p.author_types.clone(),
         ..Default::default()
     };
-    if req.guild.is_none() && req.channel.is_none() {
+    if req.guild.is_none() && req.channel.is_none() && !req.all_dms {
         return Err(crate::t!("search.need_scope").into());
     }
     let find_user = |name: &str| -> Result<Id, String> {
@@ -107,6 +158,16 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
     }
     for name in &p.in_channels {
         let n = name.to_lowercase();
+        if req.all_dms {
+            let ch = app
+                .dms
+                .iter()
+                .copied()
+                .find(|d| dm_tag(app, *d).to_lowercase() == n || dm_label(app, *d).to_lowercase() == n)
+                .ok_or_else(|| crate::t!("search.no_channel", name = name).to_string())?;
+            req.channels.push(ch);
+            continue;
+        }
         let ch = app
             .guild_channels
             .get(&req.guild.unwrap_or_default())
@@ -179,6 +240,7 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         loading: false,
         error: None,
         sort_menu: false,
+        dm_menu: false,
         seq: 0,
         _sub: sub,
     })));
@@ -200,7 +262,7 @@ pub fn on_key(app: &mut PhoenixApp, key: &str, window: &mut Window, cx: &mut Con
         }
         return true;
     }
-    if key == "escape" && close_sort_menu(cx) {
+    if key == "escape" && (close_sort_menu(cx) | close_dm_menu(cx)) {
         return true;
     }
     if key == "escape" {
@@ -477,6 +539,18 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     Some(results_panel(app, input, page, req, error, loading, sort_menu, window, cx))
 }
 
+fn close_dm_menu(cx: &mut App) -> bool {
+    let Some(s) = cx.try_global::<Search>().and_then(|s| s.0.as_ref()) else { return false };
+    if !s.dm_menu {
+        return false;
+    }
+    if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+        s.dm_menu = false;
+    }
+    cx.refresh_windows();
+    true
+}
+
 fn close_sort_menu(cx: &mut App) -> bool {
     let open = cx.try_global::<Search>().and_then(|s| s.0.as_ref()).is_some_and(|s| s.sort_menu);
     if open {
@@ -587,6 +661,8 @@ fn results_panel(
     cx: &mut Context<PhoenixApp>,
 ) -> AnyElement {
     let total = page.total;
+    let dm_scope = req.all_dms || (req.guild.is_none() && req.channel.is_some());
+    let dm_menu = cx.try_global::<Search>().and_then(|s| s.0.as_ref()).is_some_and(|s| s.dm_menu);
     let title: SharedString = if loading {
         crate::t!("search.searching")
     } else if total == 0 {
@@ -618,10 +694,24 @@ fn results_panel(
                         cx.stop_propagation();
                         if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
                             s.sort_menu = !s.sort_menu;
+                            s.dm_menu = false;
                         }
                         cx.notify();
                     }),
-                )),
+                ))
+                .when(dm_scope, |d| {
+                    d.child(icon_secondary("search-results-dm-settings", "gear").on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|_, _, _, cx| {
+                            cx.stop_propagation();
+                            if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+                                s.dm_menu = !s.dm_menu;
+                                s.sort_menu = false;
+                            }
+                            cx.notify();
+                        }),
+                    ))
+                }),
         );
     let mut body = div().flex().flex_col().pt(z(16.)).px(z(16.));
     if let Some(e) = error.filter(|_| !loading) {
@@ -657,6 +747,7 @@ fn results_panel(
         .occlude()
         .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
             close_sort_menu(cx);
+            close_dm_menu(cx);
         }))
         .flex()
         .flex_col()
@@ -666,21 +757,34 @@ fn results_panel(
     if sort_menu {
         panel = panel.child(sort_popover(req.sort, cx));
     }
+    if dm_menu && dm_scope {
+        panel = panel.child(dm_popover(req.all_dms, cx));
+    }
     let modal = crate::ui::search_filters::render(app, window, cx);
     div().absolute().top_0().left_0().right_0().bottom_0().child(live_bar(&input, false, cx)).child(panel).children(modal).into_any_element()
 }
 
 fn channel_group_header(app: &PhoenixApp, ch: Id, hl: &Highlighter) -> gpui::Div {
     let channel = app.channels.get(&ch);
-    let name: SharedString = channel.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
-    let glyph = channel.map(|c| crate::ui::sidebar::channel_icon(c.kind)).unwrap_or(Icon::Hash);
+    let private = channel.is_some_and(|c| c.guild.is_none());
+    let name: SharedString = match channel {
+        Some(_) if private => dm_label(app, ch),
+        Some(c) => c.name.clone(),
+        None => crate::t!("common.unknown_lower"),
+    };
+    let glyph = match channel {
+        Some(_) if private && crate::ui::dm_profile_panel::is_group_dm(app, ch) => crate::icons::path("members"),
+        Some(_) if private => crate::icons::path("search/at"),
+        Some(c) => crate::ui::sidebar::channel_icon(c.kind).path(),
+        None => Icon::Hash.path(),
+    };
     let parent = channel.and_then(|c| c.parent).and_then(|p| app.channels.get(&p)).map(|p| p.name.clone());
     div()
         .h(z(22.))
         .mb(z(8.))
         .flex()
         .items_center()
-        .child(div().w(z(20.)).flex_none().pr(z(4.)).child(gpui::svg().path(glyph.path()).size(z(16.)).text_color(tk(idx::TEXT_STRONG))))
+        .child(div().w(z(20.)).flex_none().pr(z(4.)).child(gpui::svg().path(glyph).size(z(16.)).text_color(tk(idx::TEXT_STRONG))))
         .child(div().flex_1().min_w_0().truncate().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(highlight_plain(name, hl)))
         .when_some(parent, |d, p| {
             d.child(
@@ -801,6 +905,84 @@ fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
 
 fn go_page(app: &mut PhoenixApp, p: u32, cx: &mut Context<PhoenixApp>) {
     rerun(app, |r| r.offset = p.saturating_sub(1) * PAGE, cx);
+}
+
+fn icon_secondary(id: &'static str, glyph: &str) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .size(z(32.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_MOD_SUBTLE))
+        .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_NORMAL)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .child(named(glyph, 16., tk(idx::TEXT_STRONG)))
+}
+
+pub fn set_cross_dm(app: &mut PhoenixApp, on: bool, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    close_dm_menu(cx);
+    if cross_dm(app) == on {
+        return;
+    }
+    crate::ui::settings::save(app, crate::ui::settings::SettingsPatch::Proto("dm-search", u64::from(on)), cx);
+    let Some(input) = cx.global::<Search>().0.as_ref().map(|s| s.input.clone()) else { return };
+    if !on {
+        input.update(cx, |s, cx| {
+            let v = strip_in(&s.value());
+            s.set_value(v, window, cx);
+        });
+    }
+    submit(app, cx);
+}
+
+fn dm_popover(all: bool, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let row = |key: &'static str, on: bool, value: bool, cx: &mut Context<PhoenixApp>| {
+        div()
+            .id(key)
+            .h(z(36.))
+            .p(z(8.))
+            .rounded(z(2.))
+            .flex()
+            .items_center()
+            .justify_between()
+            .cursor_pointer()
+            .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE)))
+            .on_click(cx.listener(move |a, _, w, cx| set_cross_dm(a, value, w, cx)))
+            .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(crate::t!(key)))
+            .child(crate::ui::controls::radio_indicator(on))
+    };
+    div()
+        .id("search-dm-menu")
+        .absolute()
+        .top(z(47.))
+        .right(z(16.))
+        .w(z(237.))
+        .p(z(8.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .shadow(crate::ui::inbox::popout_shadow())
+        .occlude()
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            div()
+                .h(z(36.))
+                .p(z(8.))
+                .flex()
+                .items_center()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tk(idx::TEXT_MUTED))
+                .child(crate::t!("search.dm_default")),
+        )
+        .child(row("search.dm_this", !all, false, cx))
+        .child(row("search.dm_all", all, true, cx))
 }
 
 fn sort_popover(cur: SortOrder, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
@@ -932,7 +1114,12 @@ fn group_header(label: SharedString) -> gpui::Div {
 fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<SharedString>, loading: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let history = cx.try_global::<SearchHistory>().map(|h| h.0.clone()).unwrap_or_default();
     let mut filters = div().flex().flex_col().gap(z(4.)).child(group_header(crate::t!("search.filters")));
+    let dm = in_dm(app);
+    let all_dms = dm && cross_dm(app);
     for (i, (k, glyph, label, key, value)) in FILTERS.into_iter().enumerate() {
+        if k == "in:" && dm && !all_dms {
+            continue;
+        }
         filters = filters.child(
             option_row(("search-filter", i))
                 .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
@@ -991,6 +1178,23 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
                     ),
             )
             .child(div().my(z(8.)).mx(z(-8.)).h(z(1.)).bg(tk(idx::BORDER_SUBTLE)));
+    }
+    if all_dms && query.is_empty()
+        && let Some(cur) = app.selected_channel
+    {
+        let tag = dm_tag(app, cur);
+        let token = format!("in:{}", quote(&tag));
+        body = body.child(
+            option_row(("search-find-in", 0))
+                .on_click(cx.listener(move |a, _, w, cx| {
+                    let Some(inp) = cx.global::<Search>().0.as_ref().map(|s| s.input.clone()) else { return };
+                    let t = token.clone();
+                    inp.update(cx, |s, cx| s.set_value(t, w, cx));
+                    submit(a, cx);
+                }))
+                .child(named("search", 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
+                .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("search.find_in", name = tag))),
+        );
     }
     body = body.child(filters);
     if !history.is_empty() {
@@ -1090,5 +1294,14 @@ mod history_tests {
             ]
         );
         assert_eq!(history_segments("from:"), vec![HistorySeg::Text("from:".into())]);
+    }
+
+    #[test]
+    fn strip_in_drops_channel_filters_only() {
+        assert_eq!(strip_in("salut in:staar from:bob"), "salut from:bob");
+        assert_eq!(strip_in("in:\"HG Team\" merci"), "merci");
+        assert_eq!(strip_in("in: staar"), "");
+        assert_eq!(strip_in("main:x"), "main:x");
+        assert_eq!(quote("a b"), "\"a b\"");
     }
 }

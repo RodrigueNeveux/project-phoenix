@@ -341,7 +341,11 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     } else {
         app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone()).unwrap_or_default()
     };
-    let search_ph = SharedString::from(format!("{} {}", crate::t!("search.placeholder"), scope));
+    let search_ph = if is_dm && crate::ui::search::cross_dm(app) {
+        crate::t!("search.in_dms")
+    } else {
+        SharedString::from(format!("{} {}", crate::t!("search.placeholder"), scope))
+    };
     let pad_start = if is_group_dm { space::md() / 2. } else { space::md() };
     div()
         .relative()

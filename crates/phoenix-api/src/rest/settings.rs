@@ -224,7 +224,7 @@ fn read_varint(b: &[u8], i: &mut usize) -> Option<u64> {
     }
 }
 
-fn fields(b: &[u8]) -> Vec<(u32, u8, u64, &[u8])> {
+pub(crate) fn fields(b: &[u8]) -> Vec<(u32, u8, u64, &[u8])> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < b.len() {
@@ -299,7 +299,7 @@ fn field_varint(tag: u32, v: u64, out: &mut Vec<u8>) {
     varint(v, out);
 }
 
-fn field_bytes(tag: u32, data: &[u8], out: &mut Vec<u8>) {
+pub(crate) fn field_bytes(tag: u32, data: &[u8], out: &mut Vec<u8>) {
     varint(((tag as u64) << 3) | 2, out);
     varint(data.len() as u64, out);
     out.extend_from_slice(data);
