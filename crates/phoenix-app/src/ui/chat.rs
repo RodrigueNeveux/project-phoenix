@@ -650,6 +650,9 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                 )
             });
     }
+    // A thread opens on its own start (ThreadIcon, the thread name as the heading), not on
+    // "Welcome to #thread name!" with the text channel #.
+    let is_thread = app.nav.thread_parent(ch).is_some();
     // container_ (welcome) margin: --custom-message-margin-horizontal; header_ margin 8px 0.
     div()
         .m(z(16.))
@@ -666,7 +669,11 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                 .items_center()
                 .justify_center()
                 // the channel's own type icon (voice text chat, announcements), not always #
-                .child(icon(channel.map_or(Icon::Hash, |c| crate::ui::sidebar::channel_icon(c.kind)), 42., gpui::white())),
+                .child(icon(
+                    if is_thread { Icon::Threads } else { channel.map_or(Icon::Hash, |c| crate::ui::sidebar::channel_icon(c.kind)) },
+                    42.,
+                    gpui::white(),
+                )),
         )
         .child(
             div()
@@ -674,14 +681,16 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                 .line_height(z(40.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(c(Palette::TEXT_HEADER))
-                .child(crate::t!("chat.welcome", name = name)),
+                .child(if is_thread { name.clone() } else { crate::t!("chat.welcome", name = name) }),
         )
-        .child(
-            div()
-                .text_size(z(16.))
-                .text_color(tk(idx::TEXT_DEFAULT)) // description_ color
-                .child(crate::t!("chat.channel_start", name = name)),
-        )
+        .when(!is_thread, |d| {
+            d.child(
+                div()
+                    .text_size(z(16.))
+                    .text_color(tk(idx::TEXT_DEFAULT)) // description_ color
+                    .child(crate::t!("chat.channel_start", name = name)),
+            )
+        })
 }
 
 /// 1:1 DM intro row (vanilla-dm-start #1142..#1156): mutual servers
