@@ -362,12 +362,12 @@ impl Ctx<'_> {
                     })
                 } else if let Some(id) = inner.strip_prefix("@!").or_else(|| inner.strip_prefix('@')) {
                     id.parse().ok().map(|id| {
-                        let n = self.r.user(id).unwrap_or_else(|| "Unknown User".into());
+                        let n = self.r.user(id).unwrap_or_else(|| crate::t!("common.unknown_user").to_string());
                         (Mention::User(id), format!("@{n}"))
                     })
                 } else if let Some(id) = inner.strip_prefix('#') {
                     id.parse().ok().map(|id| {
-                        let n = self.r.channel(id).unwrap_or_else(|| "unknown".into());
+                        let n = self.r.channel(id).unwrap_or_else(|| crate::t!("common.unknown_lower").to_string());
                         (Mention::Channel(id), format!("#{n}"))
                     })
                 } else {

@@ -486,8 +486,27 @@ pub fn rich_with_emoji_scaled(
             ),
         ))
     };
+    // A segment holding a newline would be one tall flex item: the next emoji/icon then sits
+    // centred beside the whole block and every following line is indented by it (real
+    // announcements). Split at newlines and break the flex line instead, with an empty
+    // line-height row for blank lines.
+    let push_lines = |mut row: Div, range: std::ops::Range<usize>, seg: &mut usize| -> Div {
+        let mut start = range.start;
+        for (i, piece) in t.text[range.clone()].split('\n').enumerate() {
+            let r = start..start + piece.len();
+            if i > 0 {
+                row = row.child(div().w_full().h_0());
+                if piece.is_empty() && r.end < range.end {
+                    row = row.child(div().w_full().h(z(22. * k)));
+                }
+            }
+            row = push_text(row, r.clone(), seg);
+            start = r.end + 1;
+        }
+        row
+    };
     for (r, token) in &t.emoji {
-        row = push_text(row, last..r.start, &mut seg);
+        row = push_lines(row, last..r.start, &mut seg);
         if token.as_ref() == crate::richtext::CHANNEL_ICON_TOKEN {
             // icon__RYHZ5: 1em square, margin-inline-end --space-4, inside the
             // .mention pill (--mention-background, radius 3px, padding-left 2px).
@@ -507,6 +526,6 @@ pub fn rich_with_emoji_scaled(
         }
         last = r.end;
     }
-    row = push_text(row, last..t.text.len(), &mut seg);
+    row = push_lines(row, last..t.text.len(), &mut seg);
     row.into_any_element()
 }
