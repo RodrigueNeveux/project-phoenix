@@ -715,6 +715,24 @@ pub fn roles(g: &api::Guild) -> Vec<model::Role> {
         .collect()
 }
 
+/// `guild` plus the threads I joined: the client's GuildReadStateStore counts
+/// their unread / mentions too (unless the thread is muted).
+pub fn guild_with_threads(cache: &Cache, g: &api::Guild, channels: &[model::Channel], rc: &ReadCtx) -> model::Guild {
+    let muted = rc.mutes.guilds.contains(&g.id.0);
+    let mut out = guild(g, channels, muted);
+    for t in cache.guild_channels(g.id) {
+        let Some(m) = t.member.as_ref() else { continue };
+        if !t.kind.is_thread() || t.thread_metadata.as_ref().is_some_and(|m| m.archived) {
+            continue;
+        }
+        let (unread, mentions) = rc.unread(&t);
+        let thread_muted = m.get("muted").and_then(Value::as_bool).unwrap_or(false);
+        out.unread |= unread && !muted && !thread_muted;
+        out.mentions += mentions;
+    }
+    out
+}
+
 pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model::Guild {
     let visible = channels.iter().filter(|c| !c.muted);
     model::Guild {
@@ -787,7 +805,7 @@ pub fn build_ready(cache: &Cache, ready: &Ready, prefs: &Prefs) -> ReadyData {
     for gid in ids {
         let Some(g) = cache.guild(gid) else { continue };
         let chs = guild_channels(cache, gid, &rc);
-        guilds.push(guild(&g, &chs, prefs.mutes.guilds.contains(&gid.0)));
+        guilds.push(guild_with_threads(cache, &g, &chs, &prefs.ctx()));
         roles_out.push((id(gid), roles(&g)));
         channels.extend(chs);
     }
@@ -946,7 +964,7 @@ impl Adapter {
         let g = cache.channel(api::Snowflake(channel))?.guild_id?;
         let gg = cache.guild(g)?;
         let chs = guild_channels(cache, g, &self.prefs.ctx());
-        let mg = guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.0));
+        let mg = guild_with_threads(cache, &gg, &chs, &self.prefs.ctx());
         Some(AppEvent::GuildUnread { guild: mg.id, unread: mg.unread, mentions: mg.mentions })
     }
 
@@ -961,7 +979,7 @@ impl Adapter {
         let rc = self.prefs.ctx();
         let chs = guild_channels(cache, g, &rc);
         if let Some(gg) = cache.guild(g) {
-            let m = guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.0));
+            let m = guild_with_threads(cache, &gg, &chs, &self.prefs.ctx());
             out.push(AppEvent::GuildUnread { guild: m.id, unread: m.unread, mentions: m.mentions });
         }
         out.push(AppEvent::GuildChannels { guild: id(g), channels: chs });
@@ -1063,7 +1081,7 @@ impl Adapter {
                     && let Some(gg) = cache.guild(g)
                 {
                     let chs = guild_channels(cache, g, &self.prefs.ctx());
-                    let mg = guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.0));
+                    let mg = guild_with_threads(cache, &gg, &chs, &self.prefs.ctx());
                     out.push(AppEvent::GuildUnread { guild: mg.id, unread: mg.unread, mentions: mg.mentions });
                 } else if m.guild_id.is_none()
                     && let Some(c) = cache.channel(m.channel_id)
@@ -1106,7 +1124,7 @@ impl Adapter {
                     && let Some(gg) = cache.guild(g)
                 {
                     let chs = guild_channels(cache, g, &self.prefs.ctx());
-                    let mg = guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.0));
+                    let mg = guild_with_threads(cache, &gg, &chs, &self.prefs.ctx());
                     out.push(AppEvent::GuildUnread { guild: mg.id, unread: mg.unread, mentions: mg.mentions });
                 }
             }
@@ -1179,7 +1197,7 @@ impl Adapter {
                 let chs = guild_channels(cache, g.id, &rc);
                 if let Some(gg) = cache.guild(g.id) {
                     out.push(AppEvent::GuildCreate {
-                        guild: guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.id.0)),
+                        guild: guild_with_threads(cache, &gg, &chs, &self.prefs.ctx()),
                         channels: chs,
                         roles: roles(&gg),
                     });
@@ -1191,7 +1209,7 @@ impl Adapter {
                 if let Some(gg) = cache.guild(g.id) {
                     let chs = guild_channels(cache, g.id, &self.prefs.ctx());
                     out.push(AppEvent::GuildCreate {
-                        guild: guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.id.0)),
+                        guild: guild_with_threads(cache, &gg, &chs, &self.prefs.ctx()),
                         channels: chs,
                         roles: roles(&gg),
                     });

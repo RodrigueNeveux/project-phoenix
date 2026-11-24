@@ -134,3 +134,17 @@ fn presence_with_profile_updates_the_user() {
     let out = feed(&cache, &mut a, &parse_dispatch("PRESENCE_UPDATE", r#"{"user":{"id":"200000000000000002"},"status":"idle"}"#));
     assert!(!out.iter().any(|x| matches!(x, AppEvent::Users(_))));
 }
+
+#[test]
+fn joined_thread_messages_make_the_guild_unread() {
+    let (cache, mut a) = setup();
+    let th = 400000000000000090u64;
+    let raw = format!(
+        r#"{{"id":"{th}","type":11,"guild_id":"300000000000000001","parent_id":"{CH}","name":"t","last_message_id":"700000000000000050","member":{{"muted":false,"flags":1}},"thread_metadata":{{"archived":false,"locked":false,"auto_archive_duration":1440,"archive_timestamp":"2026-11-24T00:00:00+00:00"}}}}"#
+    );
+    feed(&cache, &mut a, &parse_dispatch("THREAD_CREATE", &raw));
+    a.prefs.reads.insert(th, ReadMark { last_read: 700000000000000050, mentions: 0 });
+    let out = feed(&cache, &mut a, &msg(700000000000000070, th, true, 200000000000000003, true));
+    let g = out.iter().find_map(|x| match x { AppEvent::GuildUnread { mentions, unread, .. } => Some((*unread, *mentions)), _ => None });
+    assert_eq!(g, Some((true, 1)));
+}
