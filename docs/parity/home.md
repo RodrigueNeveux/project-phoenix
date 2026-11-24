@@ -70,8 +70,8 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | DM header toolbar: voice call, video call, pins, add to DM, profile | rest, hover, tooltip | vanilla-dm #1101–#1109 | ui/chat.rs | ✅ |
 | Group DM intro (80px icon, 32/40 bold `--text-strong` title, margin 8 0, description with bold name) | rest | group-dm #1103–#1112 `container_w6h4R2` (margin 20) | ui/chat.rs `intro` | ✅ (this pass) |
 | Group DM intro buttons: Invite to Group DM (primary), Edit Group (secondary) | rest, hover, active | group-dm #1113–#1123 | ui/chat.rs `intro` | ✅ (this pass; Edit Group is a stub) |
+| 1:1 DM intro (avatar, name, description) | rest | same container | ui/chat.rs `intro` | ✅ |
 | 1:1 DM intro: username line, mutual servers row (`container_nM9YUb` gap 8, dot divider), Add/Remove Friend + Block buttons (`stack_TWWX0S` gap 8, sm secondary 32px radius 8) | rest, hover | vanilla-dm-start #1135–#1156: avatar 80, `heading-xxl/semibold` 32/40, `heading-xl/medium` 24/32, `body-sm/normal` 14/18 mutuals link | ui/chat.rs `dm_intro_actions` | ✅ values match the dump; no pixel compare yet (user awake, CDP offline) |
-| 1:1 DM intro: username line, mutual servers row (`container_nM9YUb` gap 8, dot divider), Add Friend / Block / Report Spam buttons (`stacked_Vu5YPS` gap 8) | rest, hover | CSS only, no dump (the start of a 1:1 history was never on screen) | — | ❌ |
 
 ## Coverage
 
