@@ -209,6 +209,8 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                         .group_hover("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_HOVER)))
                         .id("count")
                         .group_active("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_ACTIVE)))
+                        .w(z(12. * r.count.to_string().len() as f32)) // vanilla-guild-chat-busy: reactionCount_ is 12px per digit ("1" 12, "79" 24, "156" 36)
+                        .text_center() // reactionCount_ text-align center
                         .child(SharedString::from(r.count.to_string())),
                 )
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_reaction(ch, id, &rc, cx))),

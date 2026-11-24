@@ -935,7 +935,10 @@ fn message(
             _ => content = content.child(block(entity, id, bi, b, edited_here)),
         }
     }
-    if msg.edited && !last_text.is_some_and(|l| l + 1 == n_blocks) {
+    // A message with no text keeps its `edited_` span after the embeds
+    // (vanilla-guild-chat-busy: honeypot embed, `timestamp_ > edited_` below the embed).
+    let edited_after_embeds = msg.edited && last_text.is_none();
+    if msg.edited && !edited_after_embeds && !last_text.is_some_and(|l| l + 1 == n_blocks) {
         content = content.child(edited_marker(ts));
     }
     // Two or more images/videos share one mosaic; files follow (nonVisualMediaItem_ margin-top 8px).
@@ -952,6 +955,9 @@ fn message(
     }
     for e in &msg.embeds {
         content = content.child(embed(app, e));
+    }
+    if edited_after_embeds {
+        content = content.child(div().h(z(20.)).flex().items_center().child(edited_marker(ts))); // timestamp_ 20px
     }
     // Forward: the snapshot sits inside the quote frame; reactions/threads stay outside.
     if let Some(f) = &msg.forward {
