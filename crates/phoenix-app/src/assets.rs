@@ -127,6 +127,12 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/chat/unread-cap.svg" => concat!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 13" fill="black">"#, r#"<path d="M8 0v13H5L0 6.5 5 0z"/>"#, "</svg>"),
         "icons/chat-check.svg" => s!(r#"<path d="M21 12a9 9 0 0 1-13.5 7.8L3 21l1.2-4.5A9 9 0 1 1 21 12z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>"#),
         "icons/chat/forwarded.svg" => s!(r#"<path d="M20 8h-7a8 8 0 0 0-8 8v4M15 3l5 5-5 5"/>"#),
+        // Context menu row icons (our own drawings; the real ones come from the icon provider).
+        "icons/menu/view-reactions.svg" => s!(r#"<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>"#),
+        "icons/menu/remove-reactions.svg" => s!(r#"<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/><path d="M8 12h8"/>"#),
+        "icons/menu/remove-all-reactions.svg" => s!(r#"<circle cx="11" cy="11" r="8"/><path d="M15 19h6"/>"#),
+        "icons/menu/bookmark.svg" => s!(r#"<path d="M7 4h10v16l-5-4-5 4z"/>"#),
+        "icons/menu/speak.svg" => s!(r#"<path d="M21 12a9 9 0 1 0-16.5 5L3 21h9a9 9 0 0 0 9-9z"/><path d="M14 9a3 3 0 0 1 0 6"/>"#),
         "icons/nav/forward.svg" => s!(r#"<path d="M4 12h15m-6-7 7 7-7 7"/>"#),
         "icons/calendar.svg" => s!(r#"<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4m8-4v4"/>"#),
         "icons/channel-browse.svg" => s!(r#"<path d="M4 6h12M4 12h7M4 18h5"/><circle cx="17" cy="16" r="3"/><path d="m19.5 18.5 2 2"/>"#),
