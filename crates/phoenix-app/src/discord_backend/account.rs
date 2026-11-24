@@ -195,11 +195,13 @@ impl DiscordBackend {
                 let rest = s.rest.clone();
                 async move { rest.request_json(reqwest::Method::GET, p, None).await.ok() }
             };
-            let sources = get("/users/@me/billing/payment-sources").await.map(|v| b::parse_sources(&v)).unwrap_or_default();
+            let raw_sources = get("/users/@me/billing/payment-sources").await.unwrap_or(serde_json::Value::Null);
+            let sources = b::mark_default(b::parse_sources(&raw_sources));
             let payments = get("/users/@me/billing/payments?limit=10").await.map(|v| b::parse_payments(&v)).unwrap_or_default();
-            let country = get("/users/@me/billing/country-code")
+            let code = get("/users/@me/billing/country-code")
                 .await
                 .and_then(|v| v.get("country_code").and_then(serde_json::Value::as_str).map(str::to_owned));
+            let country = b::source_country(&raw_sources, code);
             Ok(Some(b::Billing { country, sources, payments }))
         })
     }

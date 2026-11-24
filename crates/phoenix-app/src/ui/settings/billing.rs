@@ -82,6 +82,23 @@ pub fn parse_sources(v: &Value) -> Vec<Source> {
         .collect()
 }
 
+/// Country shown under "Modes de paiement": the default source's billing
+/// address country (the client shows "États-Unis" from the PayPal address
+/// even when `country-code` says FR), else `fallback`.
+pub fn source_country(v: &Value, fallback: Option<String>) -> Option<String> {
+    let arr = v.as_array()?;
+    let pick = arr.iter().find(|p| p.get("default").and_then(Value::as_bool) == Some(true)).or(arr.first());
+    pick.and_then(|p| p.get("billing_address")?.get("country")?.as_str().map(str::to_owned)).or(fallback)
+}
+
+/// A single source is the default one (the client marks it "Par défaut").
+pub fn mark_default(mut v: Vec<Source>) -> Vec<Source> {
+    if v.len() == 1 {
+        v[0].default = true;
+    }
+    v
+}
+
 /// Thousands grouped with a narrow no-break space ("4 100").
 fn group(n: u64) -> String {
     let d = n.to_string();
