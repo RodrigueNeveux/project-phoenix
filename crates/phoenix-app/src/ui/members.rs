@@ -359,14 +359,28 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .child(SharedString::from(game.chars().next().map(String::from).unwrap_or_default()))
                 .into_any_element(),
         };
-        let badge = |ic: &'static str, t: SharedString| {
+        let badge_in = |ic: &'static str, t: SharedString, col: gpui::Hsla| {
             // badgeContainer_CTWncy: gap 4, 12px icon, body-xs/normal 12/16
             div()
                 .flex()
                 .items_center()
                 .gap(z(4.))
-                .child(gpui::svg().path(crate::icons::path(ic)).size(z(12.)).flex_none().text_color(c(Palette::TEXT_MUTED)))
-                .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(Palette::TEXT_MUTED)).text_ellipsis().child(t))
+                .child(gpui::svg().path(crate::icons::path(ic)).size(z(12.)).flex_none().text_color(col))
+                .child(div().text_size(z(12.)).line_height(z(16.)).text_color(col).text_ellipsis().child(t))
+        };
+        let badge = |ic: &'static str, t: SharedString| badge_in(ic, t, c(Palette::TEXT_MUTED));
+        // Time badge (client content badge `$`): while the author still plays it (a matching
+        // presence activity), a running timer from the activity start in
+        // --text-feedback-positive; otherwise "x ago" in the muted colors.
+        let live_start = app.people.activities.get(&uid).and_then(|acts| {
+            acts.iter()
+                .find(|a| e.game.as_deref().is_some_and(|g| a.name.eq_ignore_ascii_case(g)))
+                .and_then(|a| a.start)
+        });
+        let time_icon = if e.content_type == 8 { "apps" } else { "game-controller" };
+        let time_badge = match live_start {
+            Some(start) => badge_in(time_icon, live_timer(start, now), c(tok(idx::TEXT_FEEDBACK_POSITIVE))),
+            None => badge(time_icon, crate::ui::settings::profile_activity::ago(crate::presence::snowflake_time(e.id.0), now)),
         };
         col = col.child(
             div()
@@ -459,7 +473,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 // badgeContainer_: game-controller + "Il y a 2j" (entry id time), then
                                 // the traits: FIRST_TIME "New player", RESURRECTED, TRENDING, streak >= 3.
                                 // Time badge icon (client): AppsIcon for a launched activity, else GameControllerIcon.
-                                .child(badge(if e.content_type == 8 { "apps" } else { "game-controller" }, crate::ui::settings::profile_activity::ago(crate::presence::snowflake_time(e.id.0), now)))
+                                .child(time_badge)
                                 .when(e.first_time, |d| d.child(badge("medal", crate::t!("members.new_player"))))
                                 .when(e.resurrected, |d| d.child(badge("refresh", crate::t!("members.resurrection"))))
                                 .when(e.trending, |d| d.child(badge("fire", crate::t!("members.trending"))))
@@ -479,6 +493,14 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
         );
     }
     col.into_any_element()
+}
+
+/// Running activity timer like the client's content timer: "m:ss", or "h:mm:ss"
+/// from one hour. `start_ms` unix ms, `now_s` unix seconds.
+fn live_timer(start_ms: i64, now_s: i64) -> SharedString {
+    let s = (now_s - start_ms / 1000).max(0);
+    let (h, m, sec) = (s / 3600, s / 60 % 60, s % 60);
+    if h > 0 { format!("{h}:{m:02}:{sec:02}") } else { format!("{m}:{sec:02}") }.into()
 }
 
 /// Server tag chiplet: chipletContainerInner_k8jyN7 (--background-mod-strong,
@@ -542,7 +564,7 @@ fn group_header(app: &PhoenixApp, g: Id, id: &str, count: u32) -> AnyElement {
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(Palette::TEXT_MUTED))
                 .when_some(icon, |d, url| d.child(gpui::img(url).flex_none().size(z(16.)).mr(z(4.))))
-                .child(div().min_w_0().text_ellipsis().child(name.trim().to_string())) // HTML collapses edge spaces
+                .child(div().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(name.trim().to_string().into(), 12.))) // HTML collapses edge spaces
                 .child(div().flex_none().child(SharedString::from(format!(" — {count}")))),
         )
         .into_any_element()
@@ -878,7 +900,7 @@ fn sub_text(in_voice: bool, sub: Option<SubText>, fallback: Option<SharedString>
     } else {
         main.as_ref().filter(|m| m.1).map(|_| "game-controller")
     };
-    let text_el = |t: SharedString| div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(t);
+    let text_el = |t: SharedString| div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(crate::ui::emoji_text::label(t, 12.));
     let mut row = div()
         .mt(z(-2.))
         .h(z(16.))

@@ -90,6 +90,21 @@ fn main() -> anyhow::Result<()> {
     cx.update_window(win.into(), |_, _, cx| {
         v.update(cx, |app, _| {
             // A nameplate (palette only: no network in offscreen renders) and a long name.
+            // Nelly still plays Fortnite: live green timer on her card.
+            let now_ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
+            app.people.activities.insert(
+                Id(5),
+                vec![phoenix_app::presence::Activity {
+                    kind: phoenix_app::presence::ActivityKind::Playing,
+                    name: "Fortnite".into(),
+                    details: None,
+                    state: None,
+                    emoji: None,
+                    url: None,
+                    image: None,
+                    start: Some(now_ms - 463_000),
+                }],
+            );
             if let Some(u) = app.users.get_mut(&Id(5)) {
                 u.nameplate = Some((plate.clone().into(), Some(0x5865f2)));
             }
@@ -101,6 +116,10 @@ fn main() -> anyhow::Result<()> {
                     "memes" => ch.name = "〢🎟️・memes".into(),
                     _ => {}
                 }
+            }
+            // Emoji in names (member list, cards, messages): color emoji font.
+            if let Some(u) = app.users.get_mut(&Id(9)) {
+                u.display_name = "Mira 🌸❓".into();
             }
             if let Some(u) = app.users.get_mut(&Id(13)) {
                 u.display_name = "Quartz (a very long display name)".into();
