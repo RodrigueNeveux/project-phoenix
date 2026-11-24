@@ -83,6 +83,12 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("chat/link", &["LinkIcon"]),
     ("chat/thread", &["ThreadIcon"]),
     ("chat/eye", &["EyeIcon"]),
+    // vanilla-menu-message row icons (icon_M3qk4j).
+    ("menu/view-reactions", &["ViewReactionIcon"]),
+    ("menu/remove-reactions", &["RemoveReactionIcon"]),
+    ("menu/remove-all-reactions", &["ReactionMinusIcon"]),
+    ("menu/bookmark", &["BookmarkOutlineIcon"]),
+    ("menu/speak", &["ChatSpeakIcon"]),
     ("chat/upload", &["UploadIcon"]),
     ("chat/boost", &["BoostGemIcon"]),
     ("chat/arrow-right", &["ArrowSmallRightIcon"]),

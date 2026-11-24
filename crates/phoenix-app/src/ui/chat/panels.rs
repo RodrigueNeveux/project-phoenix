@@ -87,7 +87,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }));
     if has_reactions {
         let ee = e.clone();
-        items.push(MenuItem::action(crate::t!("msg.view_reactions"), Some(crate::icons::path("chat/eye")), move |_, _, cx| {
+        items.push(MenuItem::action(crate::t!("msg.view_reactions"), Some(crate::icons::path("menu/view-reactions")), move |_, _, cx| {
             ee.update(cx, |a, cx| {
                 a.chat.menu = None;
                 a.open_reactions(ch, id, 0, cx)
@@ -134,7 +134,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         ));
     }
     let ee = e.clone();
-    items.push(MenuItem::action(crate::t!("msg.bookmark"), Some(crate::icons::path("inbox/bookmark")), move |_, _, cx| {
+    items.push(MenuItem::action(crate::t!("msg.bookmark"), Some(crate::icons::path("menu/bookmark")), move |_, _, cx| {
         ee.update(cx, |a, cx| {
             a.chat.menu = None;
             a.save_message(ch, id, cx)
@@ -149,6 +149,12 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             })
         })
         .collect();
+    if let Some(due) = crate::actions::message::next_monday_9am(chrono::Local::now()) {
+        let ee = e.clone();
+        reminders.push(MenuItem::action(crate::t!("msg.remind.monday"), None, move |_, _, cx| {
+            ee.update(cx, |a, cx| a.remind_message(ch, id, due, cx))
+        }));
+    }
     let ee = e.clone();
     reminders.push(MenuItem::action(crate::t!("msg.remind.custom"), None, move |_, _, cx| {
         ee.update(cx, |a, cx| a.open_custom_reminder(ch, id, cx))
@@ -163,7 +169,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.copy_link"), ic(ChatIcon::Link), move |_, _, cx| {
         ee.update(cx, |a, cx| a.copy_message_link(ch, id, cx))
     }));
-    items.push(stub("msg.speak", "speaker"));
+    items.push(stub("msg.speak", "menu/speak"));
     items.push(MenuItem::Separator);
     if has_reactions && manage {
         let emojis: Vec<MenuItem> = msg
@@ -176,9 +182,9 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 MenuItem::action(label, None, move |_, _, cx| ee.update(cx, |a, cx| a.remove_reactions(ch, id, Some(r.clone()), cx)))
             })
             .collect();
-        items.push(MenuItem::submenu(crate::t!("msg.remove_emoji_reactions"), emojis));
+        items.push(MenuItem::submenu_with_icon(crate::t!("msg.remove_emoji_reactions"), "menu/remove-reactions", emojis));
         let ee = e.clone();
-        items.push(MenuItem::danger(crate::t!("msg.remove_all_reactions"), None, move |_, _, cx| {
+        items.push(MenuItem::danger(crate::t!("msg.remove_all_reactions"), Some(crate::icons::path("menu/remove-all-reactions")), move |_, _, cx| {
             ee.update(cx, |a, cx| a.remove_reactions(ch, id, None, cx))
         }));
     }

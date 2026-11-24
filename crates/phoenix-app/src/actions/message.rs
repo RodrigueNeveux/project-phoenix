@@ -35,6 +35,18 @@ pub fn tomorrow_9am(now: chrono::DateTime<chrono::Local>) -> u64 {
     chrono::Local.from_local_datetime(&t).earliest().map(|d| d.timestamp() as u64).unwrap_or(now.timestamp() as u64 + 86_400)
 }
 
+/// Next Monday 9:00 (vanilla-menu-message-reminder "Monday at 9:00 AM"); `None`
+/// on Sundays, when "Tomorrow at 9:00 AM" already is that Monday.
+pub fn next_monday_9am(now: chrono::DateTime<chrono::Local>) -> Option<u64> {
+    use chrono::{Datelike, Duration, TimeZone};
+    let ahead = 7 - now.weekday().num_days_from_monday() as i64;
+    if ahead == 1 {
+        return None;
+    }
+    let t = (now.date_naive() + Duration::days(ahead)).and_hms_opt(9, 0, 0)?;
+    chrono::Local.from_local_datetime(&t).earliest().map(|d| d.timestamp() as u64)
+}
+
 pub fn due_for(secs: Option<u64>) -> u64 {
     match secs {
         Some(s) => now_unix() + s,
