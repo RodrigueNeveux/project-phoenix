@@ -1078,7 +1078,7 @@ search.v_user: "user"
 search.v_channel: "channel"
 search.v_has: "link, embed or file"
 search.v_more: "dates, author type and more"
-friends.section: "{label} - {n}"
+friends.section: "{label} — {n}"
 # Context menus and settings pages from the vanilla client (2026-11-23 dumps)
 menu.expand_category: "Expand Category"
 menu.collapse_category: "Collapse Category"

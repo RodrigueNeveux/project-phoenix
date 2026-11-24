@@ -1078,7 +1078,7 @@ search.v_user: "utilisateur"
 search.v_channel: "salon"
 search.v_has: "lien, intégration ou fichier"
 search.v_more: "dates, type d'auteur et plus"
-friends.section: "{label} - {n}"
+friends.section: "{label} — {n}"
 # Context menus and settings pages from the vanilla client (2026-11-23 dumps)
 menu.expand_category: "Développer la catégorie"
 menu.collapse_category: "Réduire la catégorie"
