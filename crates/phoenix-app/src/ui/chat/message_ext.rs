@@ -38,19 +38,34 @@ fn bar_button(id: impl Into<gpui::ElementId>) -> gpui::Stateful<Div> {
         .active(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE))) // button_Z0MHyc:active
 }
 
-fn tool_button(id: &'static str, i: SharedString, _size: f32) -> gpui::Stateful<Div> {
-    bar_button(id).child(
-        gpui::svg()
-            .path(i)
-            .size(z(20.))
-            .flex_none()
-            .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
-            // button_Z0MHyc:hover colour; hoverBarButton_:hover .icon_ scale(1.1) (as a 22px glyph)
-            .group_hover("bar-btn", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)).size(z(22.)))
-            .id("glyph")
-            // :active colour, icon back to scale(1)
-            .group_active("bar-btn", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)).size(z(20.))),
-    )
+/// hoverBarButton_ .icon_ transition: transform .4s cubic-bezier(.16,1,.3,1).
+const ICON_EASE_MS: u64 = 400;
+
+fn tool_button(id: &'static str, msg: u64, i: SharedString, _size: f32) -> gpui::Stateful<Div> {
+    use gpui::AnimationExt;
+    let k = ui::states::key(("tb-icon", id, msg));
+    let glyph = gpui::svg()
+        .path(i)
+        .flex_none()
+        .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+        // button_Z0MHyc:hover colour
+        .group_hover("bar-btn", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
+        .id("glyph")
+        // :active colour, icon back to scale(1)
+        .group_active("bar-btn", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)).size(z(20.)));
+    // hoverBarButton_:hover .icon_ scale(1.1), drawn as a 20 -> 22px glyph, eased both ways.
+    let sized = match ui::states::state(k) {
+        Some((on, at)) if at.elapsed() < std::time::Duration::from_millis(ICON_EASE_MS) => glyph
+            .with_animation(
+                gpui::ElementId::Name(format!("tb-icon-{id}-{on}-{at:?}").into()),
+                gpui::Animation::new(std::time::Duration::from_millis(ICON_EASE_MS)).with_easing(ui::states::cubic_bezier(0.16, 1., 0.3, 1.)),
+                move |g, t| g.size(z(if on { 20. + 2. * t } else { 22. - 2. * t })),
+            )
+            .into_any_element(),
+        Some((true, _)) => glyph.size(z(22.)).into_any_element(),
+        _ => glyph.size(z(20.)).into_any_element(),
+    };
+    ui::states::track(bar_button(id), k).child(sized)
 }
 
 /// The floating hover toolbar (top-right of the hovered message).
@@ -86,16 +101,16 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
     }
     // separator_: 1px x 24px, margin 2px 4px, --border-subtle, radius 100px.
     bar = bar.child(div().w(z(1.)).h(z(24.)).my(z(2.)).mx(z(4.)).rounded_full().bg(tk(idx::BORDER_SUBTLE)));
-    bar = bar.child(tool_button("tb-react", ChatIcon::AddReaction.path(), 20.).on_click({
+    bar = bar.child(tool_button("tb-react", id.0, ChatIcon::AddReaction.path(), 20.).on_click({
         let e = e.clone();
         move |_, _, cx| e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
-    bar = bar.child(tool_button("tb-reply", Icon::Reply.path(), 20.).on_click({
+    bar = bar.child(tool_button("tb-reply", id.0, Icon::Reply.path(), 20.).on_click({
         let e = e.clone();
         move |_, w, cx| e.update(cx, |a, cx| a.start_reply(id, w, cx))
     }));
     if own {
-        bar = bar.child(tool_button("tb-edit", ChatIcon::Edit.path(), 18.).on_click({
+        bar = bar.child(tool_button("tb-edit", id.0, ChatIcon::Edit.path(), 18.).on_click({
             let e = e.clone();
             move |_, w, cx| e.update(cx, |a, cx| a.start_edit(id, w, cx))
         }));
@@ -114,7 +129,7 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
                 }),
         );
     }
-    bar.child(tool_button("tb-more", ChatIcon::More.path(), 20.).on_click(move |ev, _, cx| {
+    bar.child(tool_button("tb-more", id.0, ChatIcon::More.path(), 20.).on_click(move |ev, _, cx| {
         let pos = ev.position();
         e.update(cx, |a, cx| a.open_message_menu(ch, id, pos, cx))
     }))

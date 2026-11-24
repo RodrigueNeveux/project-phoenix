@@ -48,6 +48,36 @@ pub fn key(id: impl std::hash::Hash) -> u64 {
     h.finish()
 }
 
+/// Hover state tracked under `key` and when it last changed.
+pub fn state(key: u64) -> Option<(bool, std::time::Instant)> {
+    HOVER.with(|h| h.borrow().get(&key).copied())
+}
+
+/// CSS `cubic-bezier(x1, y1, x2, y2)` timing function (Newton then bisection on x).
+pub fn cubic_bezier(x1: f32, y1: f32, x2: f32, y2: f32) -> impl Fn(f32) -> f32 + Copy + 'static {
+    move |t: f32| {
+        let t = t.clamp(0., 1.);
+        let bez = |p1: f32, p2: f32, s: f32| 3. * (1. - s) * (1. - s) * s * p1 + 3. * (1. - s) * s * s * p2 + s * s * s;
+        let dx = |s: f32| 3. * (1. - s) * (1. - s) * x1 + 6. * (1. - s) * s * (x2 - x1) + 3. * s * s * (1. - x2);
+        let mut s = t;
+        for _ in 0..8 {
+            let d = dx(s);
+            if d.abs() < 1e-6 {
+                break;
+            }
+            s = (s - (bez(x1, x2, s) - t) / d).clamp(0., 1.);
+        }
+        let (mut lo, mut hi) = (0f32, 1f32);
+        if (bez(x1, x2, s) - t).abs() > 1e-4 {
+            for _ in 0..30 {
+                s = (lo + hi) / 2.;
+                if bez(x1, x2, s) < t { lo = s } else { hi = s }
+            }
+        }
+        bez(y1, y2, s)
+    }
+}
+
 /// Whether the element tracked under `key` is hovered.
 pub fn hovered(key: u64) -> bool {
     HOVER.with(|h| h.borrow().get(&key).is_some_and(|s| s.0))

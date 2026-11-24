@@ -55,7 +55,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | reply preview `repliedTextPreview_` | hover | `--text-strong` | chat.rs reply line `.hover` | ✅ (added) |
 | reply spine | hover | border `--interactive-text-default` | chat.rs spine `.hover` | ✅ (added) |
 | hover toolbar `buttonsInner_` | reveal | right 14px, top −16px, 34px tall, padding 2, radius 8, `--background-surface-high` (ref-cache message-hover-toolbar.json) | chat/message_ext.rs `toolbar` | ✅ |
-| toolbar button `button_Z0MHyc` | hover | `--interactive-background-hover`, glyph `--interactive-text-hover`, icon scale 1.1 (.4s cubic-bezier(.16,1,.3,1)) | group_hover, 22px glyph (no easing) | ✅ |
+| toolbar button `button_Z0MHyc` | hover | `--interactive-background-hover`, glyph `--interactive-text-hover`, icon scale 1.1 (.4s cubic-bezier(.16,1,.3,1)) | group_hover colour; 20 → 22px glyph eased both ways over 400ms with `states::cubic_bezier(.16,1,.3,1)` (`message_ext::tool_button`) | ✅ |
 | toolbar button | active | `--interactive-background-active`, glyph `--interactive-text-active`, icon scale 1 | `.active()` + group_active | ✅ (added) |
 
 ## Header, user panel, composer
