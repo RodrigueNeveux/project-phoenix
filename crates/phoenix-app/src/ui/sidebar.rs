@@ -1089,8 +1089,19 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .cursor_pointer()
                 .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
+                // The decoration plays while the panel is hovered (ui::avatar_deco).
+                .on_hover(cx.listener(|_, h: &bool, _, cx| {
+                    if crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(3, 0), *h) {
+                        cx.notify();
+                    }
+                }))
                 .overflow_hidden()
-                .child(crate::ui::avatar_deco::decorate(avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)), Some(&app.me), 32.))
+                .child(crate::ui::avatar_deco::decorate_hover(
+                    avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)),
+                    Some(&app.me),
+                    32.,
+                    Some(crate::ui::avatar_deco::hover_key(3, 0)),
+                ))
                 .child(
                     div()
                         .flex_1()

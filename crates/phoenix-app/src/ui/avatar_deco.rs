@@ -20,10 +20,16 @@ pub fn geometry(size: f32) -> (f32, f32) {
 
 /// Adds the user's decoration on top of `avatar` (a `relative` box of `size`).
 pub fn decorate(avatar: Div, user: Option<&User>, size: f32) -> Div {
+    decorate_hover(avatar, user, size, None)
+}
+
+/// [`decorate`] that plays the animation while row `key` is hovered.
+pub fn decorate_hover(avatar: Div, user: Option<&User>, size: f32, key: Option<u64>) -> Div {
     match user.and_then(|u| u.decoration.clone()) {
         Some(deco) => {
             let (off, side) = geometry(size);
-            avatar.child(img(deco).absolute().left(px(off)).top(px(off)).size(px(side)))
+            let src = key.map(|k| src_for(&deco, k)).unwrap_or(deco);
+            avatar.child(img(src).absolute().left(px(off)).top(px(off)).size(px(side)))
         }
         None => avatar,
     }
