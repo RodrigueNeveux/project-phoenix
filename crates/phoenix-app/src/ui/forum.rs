@@ -609,6 +609,188 @@ fn media_tile(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: 
 }
 
 /// Post list covering the chat column when a forum is open.
+const INLINE_COMPOSER: bool = true;
+
+/// The "Create a post" form that replaces the search bar (vanilla-forum-new-post
+/// container_owUmX8): same mainCard header box, title + message on the left,
+/// a 78px media tile on the right, the tag row, a divider and the controls.
+fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let close = cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
+        if let Some(v) = a.parity.forums.get_mut(&forum) {
+            v.compose = None;
+        }
+        cx.notify();
+    });
+    let ready = !comp.title.read(cx).value().trim().is_empty() && !comp.body.read(cx).value().trim().is_empty();
+    // tagListInner_owUmX8 gap 4; pill_snX-u4 small: h 24, padding 0 8, radius 20
+    let mut tag_list = div().flex().flex_wrap().gap(z(4.));
+    for t in tags.iter().filter(|t| !t.moderated) {
+        let on = comp.tags.contains(&t.id);
+        let id = t.id;
+        tag_list = tag_list.child(
+            div()
+                .id(("compose-tag", id.0))
+                .cursor_pointer()
+                .on_click(cx.listener(move |a, _, _, cx| {
+                    if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
+                        if let Some(i) = cmp.tags.iter().position(|x| *x == id) {
+                            cmp.tags.remove(i);
+                        } else if cmp.tags.len() < 5 {
+                            cmp.tags.push(id);
+                        }
+                    }
+                    cx.notify();
+                }))
+                .child(tag_pill(t, on).h(z(24.)).px(z(8.)).text_size(z(12.)).line_height(z(16.))),
+        );
+    }
+    let secondary = |id: &'static str, path: &'static str| {
+        // button_F7qvhY sm secondary 32x32, radius 8, 16px icon
+        div()
+            .id(id)
+            .size(z(32.))
+            .flex_none()
+            .rounded(z(8.))
+            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+            .border_1()
+            .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(gpui::svg().path(crate::icons::path(path)).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+    };
+    div()
+        .mt(z(24.)) // headerContainer_BkGrJJ margin-top 24
+        .rounded(z(12.)) // mainCard_ --radius-md
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .py(z(8.)) // container_owUmX8 padding 8 0
+        .flex()
+        .flex_col()
+        .child(
+            // formContainer_owUmX8: padding 0 8 0 12
+            div()
+                .pl(z(12.))
+                .pr(z(8.))
+                .flex()
+                .items_start()
+                .child(
+                    // prefixElement_ 26x32, margin-right 8; clear (X) icon 26
+                    div()
+                        .id("compose-close")
+                        .w(z(26.))
+                        .h(z(32.))
+                        .mr(z(8.))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .cursor_pointer()
+                        .on_click(close)
+                        .child(gpui::svg().path(crate::icons::path("close")).size(z(26.)).flex_none().text_color(c(Palette::INTERACTIVE))),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            // title_owUmX8 heading-lg/semibold 20/24, h 32, padding-top 4
+                            div()
+                                .h(z(32.))
+                                .pt(z(4.))
+                                .text_size(z(20.))
+                                .line_height(z(24.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(tok(idx::TEXT_STRONG)))
+                                .child(Input::new(&comp.title).appearance(false).bordered(false).text_size(z(20.)).line_height(z(24.))),
+                        )
+                        .child(
+                            // channelTextArea_owUmX8: min 80, textArea 16/22 --text-default
+                            div()
+                                .min_h(z(80.))
+                                .text_size(z(16.))
+                                .line_height(z(22.))
+                                .child(Textarea::new(&comp.body).appearance(false).bordered(false)),
+                        ),
+                )
+                .child(
+                    // uploadInput_YeZ5Kj: 78x78, radius 12, 1px --border-subtle
+                    div()
+                        .size(z(78.))
+                        .flex_none()
+                        .rounded(z(12.))
+                        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE)))
+                        .border_1()
+                        .border_color(c(tok(idx::BORDER_SUBTLE)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(gpui::svg().path(crate::icons::path("image-plus")).size(z(32.)).flex_none().text_color(c(Palette::INTERACTIVE))),
+                ),
+        )
+        .when_some(comp.error.clone(), |d, er| {
+            d.child(div().px(z(46.)).pt(z(4.)).text_size(z(14.)).text_color(c(Palette::TEXT_CRITICAL)).child(er))
+        })
+        .child(
+            // horizontalPadding_ 0 8; tagsContainer_owUmX8 margin 16 0 12, gap 8; tagsIcon 16 --interactive-normal
+            div().px(z(8.)).when(!tags.is_empty(), |d| {
+                d.child(
+                    div()
+                        .mt(z(16.))
+                        .mb(z(12.))
+                        .flex()
+                        .items_center()
+                        .gap(z(8.))
+                        .child(gpui::svg().path(crate::icons::path("forum/tag")).size(z(16.)).flex_none().text_color(c(Palette::INTERACTIVE)))
+                        .child(tag_list),
+                )
+            }),
+        )
+        // tagsDivider_owUmX8: 1px --border-subtle
+        .child(div().h(px(1.)).bg(c(tok(idx::BORDER_SUBTLE))))
+        .child(
+            // controlsContainer_owUmX8: margin-top 12, h 40, gap 8; controls_ gap 8
+            div()
+                .px(z(8.))
+                .mt(z(12.))
+                .h(z(40.))
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(
+                    // emojiButton_SjG8Ug 32x32, sprite 18
+                    div().size(z(32.)).flex_none().flex().items_center().justify_center().child(
+                        gpui::svg().path(crate::icons::path("emoji")).size(z(18.)).flex_none().text_color(c(Palette::INTERACTIVE)),
+                    ),
+                )
+                .child(div().flex_1())
+                .child(secondary("compose-guide", "file"))
+                .child(
+                    // button_F7qvhY sm primary: h 32, padding 3 11, radius 8; disabled opacity .5
+                    div()
+                        .id("compose-post")
+                        .h(z(32.))
+                        .px(z(12.))
+                        .flex_none()
+                        .rounded(z(8.))
+                        .bg(c(Palette::BLURPLE))
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(gpui::white())
+                        .when(!ready || comp.sending, |d| d.opacity(0.5))
+                        .when(ready && !comp.sending, |d| d.cursor_pointer().on_click(cx.listener(move |a, _, _, cx| a.submit_post(forum, cx))))
+                        .child(gpui::svg().path(crate::icons::path("chat")).size(z(16.)).flex_none().text_color(gpui::white()))
+                        .child(if comp.sending { crate::t!("forum.posting") } else { crate::t!("forum.post") }),
+                ),
+        )
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let forum = open_forum(app)?;
     let tags = app.backend.forum_tags(forum);
@@ -775,7 +957,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         .flex()
         .flex_col()
         // headerRow_BkGrJJ: padding-bottom 16
-        .child(div().pb(z(16.)).child(search_bar).child(filters));
+        .child(div().pb(z(16.)).child(match v.compose.as_ref() {
+            Some(comp) => compose_card(forum, comp, &tags, cx).into_any_element(),
+            None => search_bar.into_any_element(),
+        }).child(filters));
     if let (Some(err), true) = (v.error.clone(), v.posts.is_empty() && !v.loading) {
         // Failed load: message and a "Try again" button instead of the
         // empty state, like the client's error view.
@@ -934,7 +1119,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
 }
 
 /// crate::t!("forum.new_post") dialog (title, message, tags).
+/// Old modal composer; the client composes inline ([`compose_card`]), kept
+/// disabled until removed.
 pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if INLINE_COMPOSER {
+        return None;
+    }
     let forum = open_forum(app)?;
     let comp = app.parity.forums.get(&forum)?.compose.as_ref()?;
     let tags = app.backend.forum_tags(forum);
