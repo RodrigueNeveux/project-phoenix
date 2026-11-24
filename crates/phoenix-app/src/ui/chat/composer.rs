@@ -245,7 +245,70 @@ fn sending(app: &PhoenixApp) -> impl IntoElement {
     col
 }
 
-pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> gpui::AnyElement {
+    if let Some(notice) = blocked_dm_notice(app, cx) {
+        return notice;
+    }
+    render_text_area(app, window, cx).into_any_element()
+}
+
+/// 1:1 DM with a user we blocked: the client swaps the text area for its
+/// chat blocker ("Tu ne peux pas envoyer de message à un utilisateur que tu
+/// as bloqué." + secondary sm "Débloquer"), CSS wrapper_ST_Y69.
+fn blocked_dm_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
+    use crate::ui::home::data::{NavRequest, RelAction, RelationshipKind};
+    let user = crate::ui::dm_profile_panel::peer(app)?;
+    if app.nav.relationship(user)?.kind != RelationshipKind::Blocked {
+        return None;
+    }
+    let unblock = crate::ui::controls::button_sm("dm-unblock", crate::t!("friends.unblock"), crate::ui::controls::BtnKind::Secondary)
+        .on_click(cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
+            a.nav.relationships.retain(|x| x.user != user);
+            a.nav_request(NavRequest::Relationship { user, action: RelAction::Remove }, cx, |_, _, _| {});
+            cx.notify();
+        }));
+    Some(
+        // form_ padding-inline --space-xs, margin-bottom --custom-chat-input-margin-bottom (as the text area).
+        div()
+            .flex_none()
+            .px(z(crate::theme::space::xs()))
+            .mb(z(crate::theme::space::xs()))
+            .child(
+                // wrapper_ST_Y69: --background-base-low, 1px --border-subtle, --radius-sm,
+                // height --space-32 (border-box), padding 12px 0, margin-bottom --space-8,
+                // flex space-between, align-items center.
+                div()
+                    .h(z(32.))
+                    .mb(z(8.))
+                    .py(z(12.))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .rounded(z(8.))
+                    .border_1()
+                    .border_color(super::tk(idx::BORDER_SUBTLE))
+                    .bg(super::tk(idx::BACKGROUND_BASE_LOW))
+                    .child(
+                        // content_ST_Y69: height 20, margin-inline-start 16; title_ heading-sm/semibold, 2-line clamp.
+                        div().h(z(20.)).ml(z(16.)).min_w_0().flex().items_center().child(
+                            div()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .text_size(z(16.))
+                                .line_height(z(20.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(super::tk(idx::TEXT_STRONG))
+                                .child(crate::t!("chat.blocked_dm")),
+                        ),
+                    )
+                    // buttonContainer_ margin-inline-end 12; button_ margin-inline-start 12.
+                    .child(div().flex().flex_none().mr(z(12.)).child(div().flex().items_center().ml(z(12.)).child(unblock))),
+            )
+            .into_any_element(),
+    )
+}
+
+fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let placeholder: SharedString = match ch {
         // Group DMs read "Message <name>" (no @), like threads.

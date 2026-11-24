@@ -1723,3 +1723,4 @@ backend.profile_edit_unavailable: "La modification du profil n'est pas disponibl
 backend.dm_unavailable: "Impossible d'ouvrir des MP ici."
 search.nothing: "Rien à rechercher."
 search.indexing: "Discord indexe encore ce serveur. Réessaie dans un instant."
+chat.blocked_dm: "Tu ne peux pas envoyer de message à un utilisateur que tu as bloqué."
