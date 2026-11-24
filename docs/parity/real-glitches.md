@@ -31,15 +31,15 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 | 22 | Embeds and messages with an emoji, narrow window | The text after an emoji jumped to a new line (`🎶` alone, then "Started playing …") | Each text run between emoji was one flex item, so it could not flow on the emoji's line | Flow message and embed text word by word around inline emoji |
 | 23 | Group DMs opened right after start | Times and day dividers were in English ("11/12/2026 8:20 PM", "November 13, 2026") | Rows rendered before the synced locale arrived stayed cached | Rebuild cached message rows when the locale changes so times and day dividers follow it |
 
-## Seen but not fixed (known limits)
+## Fixed after the first pass
 
-- Lottie stickers (Discord's own "Wave") show the "Autocollant : Wave" text fallback, because Lottie is not rendered.
-- GPUI paints a text with the wrap from its last measure. When Taffy then shrinks that text as a flex item, it spills out of its box. #4, #17 and #22 work around it per site (`min-width: 0`, `flex: 1`, or no shrinking). The root fix is to re-wrap at the final width in GPUI's `TextLayout::prepaint`.
-- Clamped profile bios cut a long URL on the line instead of wrapping it with `break-word` inside the 3-line clamp.
-- Reply previews draw mentions as plain text, without the mention colour.
-- Some large attachments (probably big GIFs) stay on the loading placeholder after 45 s in `real_shots`.
-- A bot embed image (botillon.gg honeypot) is cropped on the right by `object-fit: cover`. The embed's width/height metadata probably does not match the served image. Not checked against the client yet.
-- Group DM "a ajouté quelqu'un au groupe." does not name the added user, because the model does not keep message mentions.
+- Lottie stickers: `media::lottie` turns each frame of the CDN JSON into SVG and rasterizes it with GPUI's resvg renderer into a multi-frame image (chat loops at 30 fps; pickers and the wave button show a still).
+- Big "GIF stuck on placeholder": it was a Tenor gifv. Its still thumbnail was fetched without `format=webp`, so the proxy resized every frame of the .gif. It now uses the single-frame webp, like the client.
+- Cropped bot image (botillon honeypot): it is a components-v2 media gallery. One item now uses its own `media.width/height` (the client draws 566x170 instead of our fixed 520x300). Embeds without dimensions take them from the matching attachment, or use `contain`.
+- Clamped multi-line bios: drawn as one block clamped to 3 lines, so long URLs wrap.
+- Reply previews: mentions keep the mention colours.
+- Group DM add/remove: "X a ajouté Y au groupe." / "X a retiré Y du groupe." (`message.mentions[0]`).
+- GPUI shrunk-flex wrap: patch on branch `wt/glitch2-gpui` (re-wrap in `TextLayout::prepaint`), waiting for the coordinator to push it and bump the rev.
 
 ## Overlays & pages
 
