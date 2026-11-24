@@ -9,7 +9,7 @@
 //!
 //! Location: env `PHX_GUILD` + `PHX_CHANNEL` (`PHX_GUILD` alone = its first text channel), or `PHX_DM=<channel id>`, or by
 //! default the location shown by the user's Discord (`cdp.mjs eval location.pathname`).
-//! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx),
+//! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx), `PHX_HC`,
 //! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
 //! `PHX_AUDIO` = two digits mute/deaf (e.g. `11`), otherwise read from the live user panel.
 //! `PHX_PROFILE=<user id>|peer` opens that profile (`PHX_PROFILE_KIND` popout|modal, `PHX_PROFILE_BOX=x,y`).
@@ -444,9 +444,11 @@ fn main() -> anyhow::Result<()> {
         Some("ash") => AppTheme::Ash,
         Some("onyx") => AppTheme::Onyx,
         Some(_) => AppTheme::Dark,
+        // The client's Dark is `theme-dark theme-darker`; a bare `theme-dark` is Ash.
         None if classes.contains("theme-midnight") => AppTheme::Onyx,
-        None if classes.contains("theme-darker") => AppTheme::Ash,
+        None if classes.contains("theme-darker") => AppTheme::Dark,
         None if classes.contains("theme-light") => AppTheme::Light,
+        None if classes.contains("theme-dark") => AppTheme::Ash,
         None => AppTheme::Dark,
     };
     let compact = std::env::var_os("PHX_COMPACT").is_some() || classes.contains("density-compact");
@@ -992,6 +994,21 @@ fn main() -> anyhow::Result<()> {
             }
         });
     }
+    // The account settings (`settings::on_ready`) can land after the setup above and bring
+    // the account's own theme back: re-apply the requested look right before capturing.
+    // PHX_HC=1 turns on High contrast (in memory only, like every pref here).
+    let hc = std::env::var_os("PHX_HC").is_some();
+    cx.update_window(win.into(), |_, _, cx| {
+        v.update(cx, |app, cx| {
+            app.prefs.synced.theme = theme;
+            app.prefs.synced.compact = compact;
+            if hc {
+                app.prefs.local.ui.insert("contrast".into(), 1);
+            }
+            cx.notify();
+        })
+    })?;
+    pump(&mut cx, 300);
     let mut img = None;
     for _ in 0..2 {
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
