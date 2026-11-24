@@ -421,12 +421,16 @@ mod tests {
     }
 
     #[test]
-    fn add_keeps_an_explicit_guild_visible_false() {
+    fn add_shows_a_hidden_favorites_server_again() {
         let mut f = Favorites { guild_visible: Some(BoolValue { value: false }), ..Default::default() };
         f.favorite_channels.insert(1, fav(REFERENCE_ORIGINAL, 1, 0));
-        f.add(&[(2, None)], None, true).unwrap();
-        assert_eq!(f.guild_visible, Some(BoolValue { value: false }));
         assert!(!f.guild_enabled());
+        f.add(&[(2, None)], None, true).unwrap();
+        assert_eq!(f.guild_visible, Some(BoolValue { value: true }));
+        let mut g = Favorites::default();
+        g.favorite_channels.insert(1, fav(REFERENCE_ORIGINAL, 1, 0));
+        g.add(&[(2, None)], None, true).unwrap();
+        assert_eq!(g.guild_visible, None);
     }
 
     #[test]
