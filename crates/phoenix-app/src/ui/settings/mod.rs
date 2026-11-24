@@ -350,6 +350,9 @@ pub fn on_ready(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
             if let Ok(s) = res {
                 crate::i18n::set_locale(&s.locale);
                 this.prefs.synced = s;
+                // Rows already rendered hold times / day dividers in the previous locale:
+                // force the next chat_sync_style to rebuild them.
+                this.chat.style_gen = u32::MAX;
                 cx.notify();
             }
         });
