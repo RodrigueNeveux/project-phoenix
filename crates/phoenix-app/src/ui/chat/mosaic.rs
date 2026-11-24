@@ -40,7 +40,8 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         author: media::current_author(),
     };
     let video = a.kind == AttachmentKind::Video;
-    let alt = if video { None } else { super::alt_text::description(a, spoiler) };
+    let alt = super::alt_text::description(a, spoiler);
+    let group = super::attach::video_group(&a.url);
     let alt_key = a.url.clone();
     let original = viewer.original.clone();
     let mut im = img(src.clone());
@@ -50,6 +51,7 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
     let im = im.id("frames");
     div()
         .relative()
+        .when(video, |d| d.group(group.clone()))
         .overflow_hidden()
         .rounded_tl(radius(k.tl))
         .rounded_tr(radius(k.tr))
@@ -80,7 +82,9 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
                 }),
         )
         .when(spoiler, |d| d.child(div().absolute().inset_0().bg(ca(0x000000E6))))
-        .children(alt.map(|t| super::alt_text::badge(alt_key, t)))
+        .children(alt.map(|t| {
+            if video { super::alt_text::video_badge(alt_key, t, group.clone()) } else { super::alt_text::badge(alt_key, t) }
+        }))
         .when(video, |d| {
             d.child(
                 div().absolute().inset_0().flex().items_center().justify_center().child(

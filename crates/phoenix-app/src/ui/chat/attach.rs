@@ -213,10 +213,14 @@ pub fn audio_card(a: &Attachment) -> AnyElement {
         .into_any_element()
 }
 
+pub fn video_group(url: &str) -> SharedString {
+    format!("video-{url}").into()
+}
+
 pub fn video_card(a: &Attachment, (w, h): (f32, f32), _cx: &App) -> AnyElement {
     let poster = media::video_poster(&a.url, (w * 2.) as u32, (h * 2.) as u32);
     let original = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
-    let group: SharedString = format!("video-{}", a.url).into();
+    let group = video_group(&a.url);
     div()
         .id(gpui::ElementId::Name(group.clone()))
         .group(group.clone())

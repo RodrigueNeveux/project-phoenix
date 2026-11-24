@@ -4,45 +4,66 @@ use gpui::{
 
 use crate::theme::{c, generated::idx, tok, z};
 
+pub const AUTO_HOVER_GROUP: &str = "auto-hover-scroller";
+
 pub fn auto_scrollbar(state: &ListState) -> Option<AnyElement> {
     let view = state.viewport_bounds();
     let vh = f32::from(view.size.height);
     let max = f32::from(state.max_offset_for_scrollbar().y);
-    if vh <= 0. || max <= 0. {
+    let off = -f32::from(state.scroll_px_offset_for_scrollbar().y);
+    auto(vh, max, off, f32::from(z(36.)), true)
+}
+
+pub fn auto_scrollbar_div(scroll: &ScrollHandle) -> Option<AnyElement> {
+    auto(f32::from(scroll.bounds().size.height), f32::from(scroll.max_offset().y), -f32::from(scroll.offset().y), 0., false)
+}
+
+fn auto(vh: f32, max: f32, off: f32, track_margin_bottom: f32, thumb_on_hover: bool) -> Option<AnyElement> {
+    if vh <= 0. {
         return None;
     }
-    let off = (-f32::from(state.scroll_px_offset_for_scrollbar().y)).clamp(0., max);
-    let track = vh - 2.;
+    let track = (vh - track_margin_bottom).max(0.);
+    let border = f32::from(z(4.));
+    let bar = div()
+        .absolute()
+        .top_0()
+        .right_0()
+        .bottom_0()
+        .w(z(16.))
+        .child(
+            div()
+                .absolute()
+                .top(px(border))
+                .h(px((track - 2. * border).max(0.)))
+                .left(z(4.))
+                .w(z(8.))
+                .rounded(z(4.))
+                .bg(c(tok(idx::SCROLLBAR_AUTO_TRACK))),
+        );
+    if max <= 0. {
+        return Some(bar.into_any_element());
+    }
+    let off = off.clamp(0., max);
     let thumb = (track * vh / (vh + max)).max(f32::from(z(40.))).min(track);
-    let top = 1. + (track - thumb) * off / max;
-    Some(
-        div()
-            .absolute()
-            .top_0()
-            .right_0()
-            .bottom_0()
-            .w(z(16.))
-            .child(
-                div()
-                    .absolute()
-                    .top(px(1.))
-                    .bottom(px(1.))
-                    .left(px(1.))
-                    .right(px(1.))
-                    .bg(c(tok(idx::SCROLLBAR_AUTO_TRACK))),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .top(px(top) + z(4.))
-                    .h(px(thumb) - z(8.))
-                    .left(z(4.))
-                    .w(z(8.))
-                    .rounded(z(8.))
-                    .bg(c(tok(idx::SCROLLBAR_AUTO_THUMB))),
-            )
-            .into_any_element(),
-    )
+    let top = (track - thumb) * off / max;
+    let thumb_el = div()
+        .absolute()
+        .top(px(top + border))
+        .h(px((thumb - 2. * border).max(0.)))
+        .left(z(4.))
+        .w(z(8.))
+        .rounded(z(4.))
+        .bg(c(tok(idx::SCROLLBAR_AUTO_THUMB)));
+    let thumb_el = if thumb_on_hover {
+        thumb_el.opacity(0.).group_hover(AUTO_HOVER_GROUP, |s| s.opacity(1.))
+    } else {
+        thumb_el
+    };
+    Some(bar.child(thumb_el).into_any_element())
+}
+
+pub fn thin_scrollbar_div(scroll: &ScrollHandle) -> Option<AnyElement> {
+    thin(f32::from(scroll.bounds().size.height), f32::from(scroll.max_offset().y), -f32::from(scroll.offset().y), false)
 }
 
 pub const THIN_FADE_GROUP: &str = "thin-fade-scroller";
@@ -50,7 +71,7 @@ pub const THIN_FADE_GROUP: &str = "thin-fade-scroller";
 pub fn thin_fade_scrollbar(state: &ListState) -> Option<AnyElement> {
     let vh = f32::from(state.viewport_bounds().size.height);
     let measured = f32::from(state.max_offset_for_scrollbar().y);
-    thin_fade(vh, estimated_max_offset(state, vh, measured), -f32::from(state.scroll_px_offset_for_scrollbar().y))
+    thin(vh, estimated_max_offset(state, vh, measured), -f32::from(state.scroll_px_offset_for_scrollbar().y), true)
 }
 
 fn estimated_max_offset(state: &ListState, vh: f32, measured: f32) -> f32 {
@@ -69,29 +90,20 @@ fn estimated_max_offset(state: &ListState, vh: f32, measured: f32) -> f32 {
 }
 
 pub fn thin_fade_scrollbar_div(scroll: &ScrollHandle) -> Option<AnyElement> {
-    thin_fade(
-        f32::from(scroll.bounds().size.height),
-        f32::from(scroll.max_offset().y),
-        -f32::from(scroll.offset().y),
-    )
+    thin(f32::from(scroll.bounds().size.height), f32::from(scroll.max_offset().y), -f32::from(scroll.offset().y), true)
 }
 
-fn thin_fade(vh: f32, max: f32, off: f32) -> Option<AnyElement> {
+fn thin(vh: f32, max: f32, off: f32, fade: bool) -> Option<AnyElement> {
     if vh <= 0. || max <= 0. {
         return None;
     }
     let off = off.clamp(0., max);
     let thumb = (vh * vh / (vh + max)).max(f32::from(z(40.))).min(vh);
     let top = (vh - thumb) * off / max;
+    let bar = div().absolute().top_0().right_0().bottom_0().w(z(8.)).bg(c(tok(idx::SCROLLBAR_THIN_TRACK)));
+    let bar = if fade { bar.opacity(0.).group_hover(THIN_FADE_GROUP, |s| s.opacity(1.)) } else { bar };
     Some(
-        div()
-            .absolute()
-            .top_0()
-            .right_0()
-            .bottom_0()
-            .w(z(8.))
-            .opacity(0.)
-            .group_hover(THIN_FADE_GROUP, |s| s.opacity(1.))
+        bar
             .child(
                 div()
                     .absolute()

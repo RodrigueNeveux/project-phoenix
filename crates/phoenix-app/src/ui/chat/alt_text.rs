@@ -31,8 +31,36 @@ pub fn close() -> bool {
 
 pub fn badge(key: SharedString, text: SharedString) -> AnyElement {
     let open = is_open(&key);
+    div()
+        .absolute()
+        .bottom(z(4.))
+        .left(z(4.5))
+        .child(button(key.clone()))
+        .when(open, |d| d.child(div().absolute().top_0().left(gpui::relative(1.)).child(popout(key, text))))
+        .into_any_element()
+}
+
+pub fn video_badge(key: SharedString, text: SharedString, controls_group: SharedString) -> AnyElement {
+    let open = is_open(&key);
+    div()
+        .absolute()
+        .top(z(4.))
+        .left(z(4.5))
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left(z(4.5))
+                .when(!open, |d| d.opacity(0.).group_hover(controls_group, |s| s.opacity(1.)))
+                .child(button(key.clone()))
+                .when(open, |d| d.child(div().absolute().top_0().left(gpui::relative(1.)).child(popout(key, text)))),
+        )
+        .into_any_element()
+}
+
+fn button(key: SharedString) -> gpui::Stateful<gpui::Div> {
     let k = key.clone();
-    let button = div()
+    div()
         .id(ElementId::Name(format!("alt-{key}").into()))
         .occlude()
         .rounded(z(4.))
@@ -51,14 +79,7 @@ pub fn badge(key: SharedString, text: SharedString) -> AnyElement {
             cx.stop_propagation();
             OPEN.with_borrow_mut(|o| *o = if o.as_ref() == Some(&k) { None } else { Some(k.clone()) });
             window.refresh();
-        });
-    div()
-        .absolute()
-        .bottom(z(4.))
-        .left(z(4.5))
-        .child(button)
-        .when(open, |d| d.child(div().absolute().top_0().left(gpui::relative(1.)).child(popout(key, text))))
-        .into_any_element()
+        })
 }
 
 fn popout(key: SharedString, text: SharedString) -> AnyElement {

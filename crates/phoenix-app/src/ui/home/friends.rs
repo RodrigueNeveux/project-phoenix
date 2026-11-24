@@ -247,7 +247,9 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
         .when_some(app.nav.friends_search.clone(), |d, i| {
             d.child(div().flex_1().child(Input::new(&i).appearance(false).bordered(false).pl(z(0.)).text_size(z(16.)).line_height(z(20.))))
         });
-    let mut col = div().id("friends-list").flex_1().min_h_0().overflow_y_scroll().pb(z(8.)).flex().flex_col();
+    let scroll = FRIENDS_SCROLL.with(|h| h.clone());
+    let mut col =
+        div().id("friends-list").size_full().overflow_y_scroll().track_scroll(&scroll).pb(z(8.)).pr(z(16.)).flex().flex_col();
     if rows.is_empty() {
         let msg = if !q.is_empty() {
             crate::t!("friends.empty_search")
@@ -325,7 +327,25 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
             }
         }
     }
-    div().size_full().flex().flex_col().child(search).child(col).into_any_element()
+    div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .child(search)
+        .child(
+            div()
+                .relative()
+                .flex_1()
+                .min_h_0()
+                .child(col)
+                .children(crate::ui::chat::scrollbar::auto_scrollbar_div(&scroll)),
+        )
+        .into_any_element()
+}
+
+thread_local! {
+    static FRIENDS_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+    static ACTIVE_NOW_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
 fn gpui_input_bg() -> u32 {
@@ -571,6 +591,16 @@ fn add_friend(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 }
 
 fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let scroll = ACTIVE_NOW_SCROLL.with(|h| h.clone());
+    div()
+        .relative()
+        .flex_none()
+        .h_full()
+        .child(active_now_column(app, cx).track_scroll(&scroll))
+        .children(crate::ui::chat::scrollbar::thin_scrollbar_div(&scroll))
+}
+
+fn active_now_column(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     let mut active: Vec<(Id, SharedString)> = app
         .nav
         .relationships

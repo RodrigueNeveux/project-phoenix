@@ -87,6 +87,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                 .min_h_0()
                                 .relative()
                                 .pr(z(16.))
+                                .group(scrollbar::AUTO_HOVER_GROUP)
                                 .child(
                                     list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                                         .size_full(),
@@ -1677,7 +1678,13 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 return div().mt(z(4.)).child(cover).into_any_element();
             }
             if a.kind == AttachmentKind::Video {
-                return div().mt(z(4.)).child(attach::video_card(a, size, cx)).into_any_element();
+                let alt = alt_text::description(a, false);
+                return div()
+                    .mt(z(4.))
+                    .relative()
+                    .child(attach::video_card(a, size, cx))
+                    .children(alt.map(|t| alt_text::video_badge(a.url.clone(), t, attach::video_group(&a.url))))
+                    .into_any_element();
             }
             let link = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
             let alt = alt_text::description(a, false);

@@ -1054,7 +1054,8 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         )
         .child(tab_bar(i.tab, cx));
 
-    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&INBOX_SCROLL.with(|h| h.clone())).flex().flex_col();
+    let inbox_scroll = INBOX_SCROLL.with(|h| h.clone());
+    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&inbox_scroll).flex().flex_col();
     let scroller = |l: gpui::Stateful<gpui::Div>| l.pt(z(16.)).px(z(16.));
     match i.tab {
         InboxTab::Mentions => {
@@ -1167,7 +1168,16 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                 .flex()
                 .flex_col()
                 .child(header)
-                .child(list)
+                .child(
+                    div()
+                        .relative()
+                        .flex_1()
+                        .min_h_0()
+                        .flex()
+                        .flex_col()
+                        .child(list)
+                        .children(crate::ui::chat::scrollbar::thin_scrollbar_div(&inbox_scroll)),
+                )
                 .children(filter),
         )
         .with_priority(10)
