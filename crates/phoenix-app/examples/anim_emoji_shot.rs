@@ -56,6 +56,8 @@ fn main() -> anyhow::Result<()> {
             cx.run_until_parked();
         }
     };
+    // GPUI only advances GIF frames in the active window.
+    cx.update_window(win.into(), |_, window, _| window.activate_window())?;
     pump(&mut cx, 60);
     for n in 0..6 {
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
