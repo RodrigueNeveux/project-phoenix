@@ -1283,6 +1283,10 @@ impl Adapter {
                     self.statuses.insert(self.me.0, p);
                     out.push(AppEvent::PresenceUpdate { user: id(self.me), presence: p });
                 }
+                // Custom status / games set elsewhere live in the same pseudo-session.
+                if let Some(acts) = all.and_then(|s| s.get("activities")).and_then(Value::as_array) {
+                    out.push(AppEvent::Activities { user: id(self.me), activities: crate::presence::parse_activities(acts) });
+                }
             }
             // Mute / suppress / opt-in changed from another client: one guild's entry.
             GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => {

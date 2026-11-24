@@ -152,7 +152,9 @@ fn joined_thread_messages_make_the_guild_unread() {
 #[test]
 fn sessions_replace_sets_my_status() {
     let (cache, mut a) = setup();
-    let d = serde_json::json!([{"session_id": "abc", "status": "online"}, {"session_id": "all", "status": "dnd"}]);
+    let d = serde_json::json!([{"session_id": "abc", "status": "online"}, {"session_id": "all", "status": "dnd", "activities": [{"type": 4, "name": "Custom Status", "state": "busy"}]}]);
     let out = feed(&cache, &mut a, &GatewayEvent::Unknown { name: "SESSIONS_REPLACE".into(), data: d });
     assert!(out.iter().any(|x| matches!(x, AppEvent::PresenceUpdate { user, presence: model::Presence::Dnd } if user.0 == ME)));
+    let acts = out.iter().find_map(|x| match x { AppEvent::Activities { user, activities } if user.0 == ME => Some(activities), _ => None }).expect("own activities");
+    assert_eq!(acts[0].state.as_deref(), Some("busy"));
 }

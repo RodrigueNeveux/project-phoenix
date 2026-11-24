@@ -944,7 +944,15 @@ impl PhoenixApp {
                 }
             }
             AppEvent::Nav(e) => self.on_nav_event(e, cx),
-            ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => ui::members::on_event(self, ev, cx),
+            ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => {
+                // Own custom status changed from another client (SESSIONS_REPLACE).
+                if let AppEvent::Activities { user, activities } = &ev
+                    && *user == self.me.id
+                {
+                    self.people.custom_status = activities.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom).and_then(|x| x.state.clone());
+                }
+                ui::members::on_event(self, ev, cx)
+            }
             AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
             AppEvent::Resync(r) => crate::commands::on_resync(self, r, cx),
             AppEvent::Parity(e) => crate::commands::on_event(self, e, cx),
