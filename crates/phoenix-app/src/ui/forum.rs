@@ -23,7 +23,7 @@ thread_local! {
 }
 
 thread_local! {
-    static SORT_ANCHOR: std::cell::Cell<gpui::Point<gpui::Pixels>> = std::cell::Cell::new(gpui::point(gpui::px(330.), gpui::px(170.)));
+    static SORT_ANCHOR: std::cell::Cell<gpui::Point<gpui::Pixels>> = const { std::cell::Cell::new(gpui::point(gpui::px(330.), gpui::px(170.))) };
 }
 
 fn menu_group_label(t: SharedString) -> AnyElement {
