@@ -11,5 +11,6 @@ Regenerated 2026-11-24: the base tables match the CSS exactly (no diff).
 | page border | `.theme-midnight .page_pog62O`, `.high-contrast-mode .page_pog62O` | border-inline-start | 1px `--border-subtle` | ui/home/mod.rs main_pane | ✅ |
 | channel header | `.theme-midnight .container_ybUK7Z` | border-bottom | 1px `--border-subtle` (same as base) | chat header | ✅ |
 | call container | `.theme-midnight .callContainer_hbKzX7` | border-top | 1px `--app-frame-border` | — | ❌ |
-| HC component borders | 38 `.high-contrast-mode .x` rules (reactions, nav buttons, radio items…) | border | `--border-*` | — | ❌ |
+| HC reaction borders | `.high-contrast-mode .reaction_MmKct8`, `.reactionBtn_` | border | `--border-subtle`, hover `--border-strong` | ui/chat/message_ext.rs | ✅ |
+| HC other component borders | ~34 `.high-contrast-mode .x` rules (nav buttons, radio items, slider…) | border | `--border-*` | — | ❌ |
 | light component rules | 369 `.theme-light .x` rules (mostly niche, hard-coded colours) | various | — | not audited | ❌ |

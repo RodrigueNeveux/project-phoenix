@@ -198,6 +198,10 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                     ))
                     .border_color(gpui::transparent_black())
                     .hover(|s| s.border_color(tk(idx::REACTION_BORDER_HOVER)))
+                    // `.high-contrast-mode .reaction_MmKct8`: --border-subtle, hover --border-strong.
+                    .when(crate::theme::high_contrast(), |d| {
+                        d.border_color(tk(idx::BORDER_SUBTLE)).hover(|s| s.border_color(tk(idx::BORDER_STRONG)))
+                    })
                 })
                 // reaction_MmKct8:active background / border
                 .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
@@ -242,6 +246,10 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
             .cursor_pointer()
             .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
             .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE))) // reactionBtn_:active
+            // `.high-contrast-mode .reactionBtn_MmKct8.forceShow_`: --border-subtle, hover --border-strong.
+            .when(crate::theme::high_contrast(), |d| {
+                d.border_color(tk(idx::BORDER_SUBTLE)).hover(|s| s.border_color(tk(idx::BORDER_STRONG)))
+            })
             .child(icon(ChatIcon::AddReaction, 18., tk(idx::REACTION_TEXT_DEFAULT)))
             .on_click(move |_, _, cx| {
                 e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
