@@ -498,7 +498,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                 .child(action_button("voice-camera", CAMERA, crate::t!("voice.camera_on"), cx))
                 .child(action_button("voice-screen", SCREEN, crate::t!("voice.share_screen"), cx))
                 .child(action_button("voice-activity", ACTIVITY, crate::t!("voice.start_activity"), cx))
-                .child(action_button("voice-soundboard", SOUNDBOARD, crate::t!("voice.soundboard"), cx)),
+                .child(crate::ui::pickers::soundboard::panel_button(app, cx)),
         )
 }
 

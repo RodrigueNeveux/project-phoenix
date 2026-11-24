@@ -160,12 +160,23 @@ impl GatewayHandle {
         self_mute: bool,
         self_deaf: bool,
     ) -> crate::Result<()> {
+        self.update_voice_state_video(guild, channel, self_mute, self_deaf, false)
+    }
+
+    pub fn update_voice_state_video(
+        &self,
+        guild: Option<GuildId>,
+        channel: Option<ChannelId>,
+        self_mute: bool,
+        self_deaf: bool,
+        self_video: bool,
+    ) -> crate::Result<()> {
         self.send(GatewayCommand::UpdateVoiceState(UpdateVoiceState {
             guild_id: guild,
             channel_id: channel,
             self_mute,
             self_deaf,
-            self_video: false,
+            self_video,
         }))
     }
 

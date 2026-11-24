@@ -49,6 +49,8 @@ pub enum VoiceControl {
     SetPttKey(Option<String>),
     SetPttPressed(bool),
     SetPttDelay(u32),
+    SetCamera(bool),
+    SetCameraDevice(Option<String>),
 }
 
 pub const PING_HISTORY: usize = 40;

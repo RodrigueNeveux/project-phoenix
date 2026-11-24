@@ -1,4 +1,7 @@
+pub mod camera;
+pub mod ffmpeg;
 pub mod mock;
+pub mod testsrc;
 #[cfg(feature = "opus")]
 pub mod opus;
 pub mod video;

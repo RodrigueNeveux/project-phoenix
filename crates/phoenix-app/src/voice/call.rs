@@ -39,6 +39,9 @@ struct State {
     muted: bool,
     deafened: bool,
     ptt_key: Option<String>,
+    camera_on: bool,
+    camera_device: Option<String>,
+    camera: Option<phoenix_voice::media::camera::Camera>,
     #[cfg(target_os = "linux")]
     ptt_portal: Option<phoenix_voice::hotkey::GlobalPtt>,
 }
@@ -79,7 +82,86 @@ fn ui(emit: &Emit, e: VoiceUiEvent) {
     emit(AppEvent::Voice(e));
 }
 
+pub const CAMERA_SIZE: (u32, u32, u32) = (1280, 720, 30);
+
+fn remote() -> &'static Mutex<std::collections::HashMap<u64, phoenix_voice::media::ffmpeg::FfmpegDecoder>> {
+    static R: OnceLock<Mutex<std::collections::HashMap<u64, phoenix_voice::media::ffmpeg::FfmpegDecoder>>> = OnceLock::new();
+    R.get_or_init(Default::default)
+}
+
+pub fn remote_frame(user: u64) -> Option<phoenix_voice::media::VideoFrame> {
+    let r = remote().lock();
+    r.get(&user)?.latest.lock().ok()?.clone()
+}
+
+pub fn remote_video_active() -> bool {
+    !remote().lock().is_empty()
+}
+
+fn on_remote_video(user: u64, frame: &[u8]) {
+    let mut r = remote().lock();
+    if !r.contains_key(&user) {
+        match phoenix_voice::media::ffmpeg::FfmpegDecoder::spawn() {
+            Ok(d) => {
+                r.insert(user, d);
+            }
+            Err(e) => {
+                eprintln!("discord-phoenix: video decoder unavailable: {e}");
+                return;
+            }
+        }
+    }
+    if let Some(d) = r.get_mut(&user)
+        && d.push(frame).is_err()
+    {
+        r.remove(&user);
+    }
+}
+
+pub fn camera_preview() -> Option<phoenix_voice::media::VideoFrame> {
+    let st = manager().state.lock();
+    let cam = st.camera.as_ref()?;
+    cam.preview.lock().ok()?.clone()
+}
+
+pub fn camera_active() -> bool {
+    manager().state.lock().camera.is_some()
+}
+
+fn stop_camera(st: &mut State) {
+    if let Some(c) = st.camera.take() {
+        std::thread::spawn(move || c.stop());
+    }
+    if let Some(r) = st.running.as_ref() {
+        r.conn.video(phoenix_voice::connection::VideoOut::Stop);
+    }
+}
+
+fn start_camera(st: &mut State) {
+    if st.camera.is_some() {
+        return;
+    }
+    let Some(r) = st.running.as_ref() else { return };
+    let conn = r.conn.clone();
+    let (w, h, fps) = CAMERA_SIZE;
+    conn.video(phoenix_voice::connection::VideoOut::Start { width: w, height: h, fps });
+    let input = phoenix_voice::media::camera::Input::from_name(st.camera_device.as_deref());
+    let sink = conn.clone();
+    match phoenix_voice::media::camera::Camera::start(input, w, h, fps, move |e| sink.video(phoenix_voice::connection::VideoOut::Frame(e))) {
+        Ok(c) => st.camera = Some(c),
+        Err(e) => {
+            eprintln!("discord-phoenix: camera unavailable: {e}");
+            conn.video(phoenix_voice::connection::VideoOut::Stop);
+        }
+    }
+}
+
 fn stop(st: &mut State) {
+    st.camera_on = false;
+    remote().lock().clear();
+    if let Some(c) = st.camera.take() {
+        std::thread::spawn(move || c.stop());
+    }
     if let Some(r) = st.running.take() {
         r.conn.close();
         if let Some(e) = r.engine {
@@ -223,6 +305,16 @@ impl VoiceManager {
                     VoiceEvent::Speaking { user_id, speaking } => VoiceUiEvent::Speaking { user: Id(user_id), speaking },
                     VoiceEvent::Encryption { e2ee, .. } => VoiceUiEvent::Encryption(e2ee),
                     VoiceEvent::Reconnecting => VoiceUiEvent::Status(VoiceStatus::Reconnecting),
+                    VoiceEvent::Video { user_id, frame } => {
+                        on_remote_video(user_id, &frame);
+                        continue;
+                    }
+                    VoiceEvent::VideoState { user_id, active } => {
+                        if !active {
+                            remote().lock().remove(&user_id);
+                        }
+                        continue;
+                    }
                     VoiceEvent::Disconnected { reason } => {
                         {
                             let mut st = manager().state.lock();
@@ -275,6 +367,17 @@ impl VoiceManager {
             }
             VoiceControl::SetPttPressed(v) => self.control.set_ptt_pressed(v),
             VoiceControl::SetPttDelay(ms) => self.control.set_ptt_release_ms(ms),
+            VoiceControl::SetCameraDevice(d) => st.camera_device = d,
+            VoiceControl::SetCamera(on) => {
+                st.camera_on = on && st.target.is_some();
+                if st.camera_on {
+                    start_camera(&mut st);
+                    st.camera_on = st.camera.is_some();
+                } else {
+                    stop_camera(&mut st);
+                }
+                resend = true;
+            }
             VoiceControl::SetPttKey(k) => {
                 if st.ptt_key != k {
                     st.ptt_key = k.clone();
@@ -285,7 +388,7 @@ impl VoiceManager {
         if resend
             && let (Some(gw), Some(t)) = (gw, st.target)
         {
-            let _ = gw.update_voice_state(t.guild.map(Snowflake), Some(Snowflake(t.channel)), st.muted, st.deafened);
+            let _ = gw.update_voice_state_video(t.guild.map(Snowflake), Some(Snowflake(t.channel)), st.muted, st.deafened, st.camera_on);
         }
         if restart && st.running.is_some() {
             let Some(r) = st.running.as_ref() else { return };

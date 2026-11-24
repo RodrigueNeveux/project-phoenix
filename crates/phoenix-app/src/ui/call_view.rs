@@ -144,6 +144,7 @@ fn named(name: &str, size: f32, color: Hsla) -> gpui::Svg {
 struct Tile {
     user: Id,
     stream: bool,
+    invite: bool,
 }
 
 pub fn grid(n: usize, w: f32, h: f32, gap: f32) -> (usize, f32) {
@@ -172,9 +173,14 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     for &u in &ch.voice_users {
         let f = crate::ui::voice_panel::flags(u);
         if f.stream {
-            tiles.push(Tile { user: u, stream: true });
+            tiles.push(Tile { user: u, stream: true, invite: false });
         }
-        tiles.push(Tile { user: u, stream: false });
+        tiles.push(Tile { user: u, stream: false, invite: false });
+    }
+    if let [only] = tiles.as_slice()
+        && !only.stream
+    {
+        tiles.push(Tile { user: only.user, stream: false, invite: true });
     }
 
     let vp = window.viewport_size();
@@ -188,8 +194,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         Focus::Tile(u, s) => tiles.iter().position(|t| t.user == u && t.stream == s),
         Focus::Auto => tiles.iter().position(|t| t.stream),
     };
-        let (fade, fading) = overlay_opacity();
-    if fading {
+    let (fade, fading) = overlay_opacity();
+    if fading || crate::voice::call::camera_active() || crate::voice::call::remote_video_active() || crate::ui::voice_effects::has_effects() {
         window.request_animation_frame();
     }
 
@@ -395,7 +401,124 @@ fn tile_color(app: &PhoenixApp, user: Id) -> Hsla {
     }
 }
 
+thread_local! {
+    static CAMERA_FRAME: std::cell::RefCell<Option<(u64, std::sync::Arc<gpui::RenderImage>)>> = const { std::cell::RefCell::new(None) };
+}
+
+pub fn camera_image() -> Option<std::sync::Arc<gpui::RenderImage>> {
+    let Some(f) = crate::voice::call::camera_preview() else {
+        CAMERA_FRAME.with(|c| c.borrow_mut().take());
+        return None;
+    };
+    if let Some((pts, img)) = CAMERA_FRAME.with(|c| c.borrow().clone())
+        && pts == f.pts_us
+    {
+        return Some(img);
+    }
+    let (w, h) = (f.width / 2, f.height / 2);
+    let mut buf = Vec::with_capacity((w * h * 4) as usize);
+    for y in 0..h {
+        let row = (y * 2 * f.width * 4) as usize;
+        for x in 0..w {
+            let i = row + (x * 2 * 4) as usize;
+            let p = f.data.get(i..i + 4)?;
+            buf.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+        }
+    }
+    let frame = image::Frame::new(image::RgbaImage::from_raw(w, h, buf)?);
+    let img = std::sync::Arc::new(gpui::RenderImage::new(vec![frame]));
+    CAMERA_FRAME.with(|c| *c.borrow_mut() = Some((f.pts_us, img.clone())));
+    Some(img)
+}
+
+const SOLO_ART: &str = "https://discord.com/assets/664390de11a80444.svg";
+
+fn solo_button(id: &'static str, icon: &str, label: SharedString) -> AnyElement {
+    div()
+        .id(id)
+        .flex_none()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(t(idx::CONTROL_SECONDARY_BORDER_DEFAULT))
+        .bg(t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+        .hover(|s| s.bg(t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)))
+        .px(z(15.))
+        .py(z(7.))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .cursor_pointer()
+        .text_color(t(idx::CONTROL_SECONDARY_TEXT_DEFAULT))
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::MEDIUM)
+        .child(named(icon, 20., t(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+        .child(label)
+        .into_any_element()
+}
+
+fn solo_tile(w: f32, h: f32) -> AnyElement {
+    let lower = t(idx::BACKGROUND_BASE_LOWER);
+    div()
+        .relative()
+        .w(z(w))
+        .h(z(h))
+        .flex_none()
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(lower)
+        .child(div().absolute().inset_0().bg(gpui::linear_gradient(
+            270.,
+            gpui::linear_color_stop(t(idx::BACKGROUND_TILE_GRADIENT_PINK_END), 0.),
+            gpui::linear_color_stop(t(idx::BACKGROUND_TILE_GRADIENT_PINK_START), 0.8),
+        )))
+        .child(div().absolute().inset_0().bg(gpui::linear_gradient(
+            0.,
+            gpui::linear_color_stop(lower, 0.6),
+            gpui::linear_color_stop(lower.opacity(0.), 1.),
+        )))
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .p(z(16.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .child(gpui::img(SOLO_ART).w(z(400f32.min((w - 32.).max(0.)))).h(z(210f32.min((h - 32. - 40. - 24.).max(0.)))).mb(z(24.)))
+                .child(
+                    div()
+                        .flex()
+                        .gap(z(8.))
+                        .child(solo_button("call-solo-invite", "invite", crate::t!("call.invite_voice")))
+                        .child(solo_button("call-solo-activity", "apps", crate::t!("call.choose_activity"))),
+                ),
+        )
+        .into_any_element()
+}
+
+thread_local! {
+    static REMOTE_FRAMES: std::cell::RefCell<std::collections::HashMap<u64, (u64, std::sync::Arc<gpui::RenderImage>)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+pub fn remote_image(user: Id) -> Option<std::sync::Arc<gpui::RenderImage>> {
+    let f = crate::voice::call::remote_frame(user.0)?;
+    if let Some((pts, img)) = REMOTE_FRAMES.with(|c| c.borrow().get(&user.0).cloned())
+        && pts == f.pts_us
+    {
+        return Some(img);
+    }
+    let frame = image::Frame::new(image::RgbaImage::from_raw(f.width, f.height, f.data.to_vec())?);
+    let img = std::sync::Arc::new(gpui::RenderImage::new(vec![frame]));
+    REMOTE_FRAMES.with(|c| c.borrow_mut().insert(user.0, (f.pts_us, img.clone())));
+    Some(img)
+}
+
 fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    if tile.invite {
+        return solo_tile(w, h);
+    }
     let u = app.users.get(&tile.user);
     let me = tile.user == app.me.id;
     let mut f = crate::ui::voice_panel::flags(tile.user);
@@ -481,7 +604,11 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
             .flex()
             .items_center()
             .justify_center()
-            .child(avatar(u, 80. * crate::theme::zoom()))
+            .map(|d| match f.video.then(|| if me { camera_image() } else { remote_image(tile.user) }).flatten() {
+                Some(img) => d.child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)),
+                None => d.child(avatar(u, 80. * crate::theme::zoom())),
+            })
+            .children(crate::ui::voice_effects::overlay(tile.user, w, h))
             .child(
                 div()
                     .absolute()
@@ -647,8 +774,12 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             glyph(if me.video { "icons/voice/camera.svg" } else { CAMERA_OFF }, 20., icon_color(cam_look)),
                             cam_look,
                             true,
-                            crate::t!("voice.camera_on"),
-                            |_, _| {},
+                            if me.video { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") },
+                            |a, cx| {
+                                let on = !crate::ui::voice_panel::flags(a.me.id).video;
+                                drop(a.backend.voice_control(crate::voice::VoiceControl::SetCamera(on)));
+                                cx.notify();
+                            },
                             cx,
                         )),
                 )

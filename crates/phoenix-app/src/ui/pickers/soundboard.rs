@@ -25,10 +25,30 @@ pub const GAP_ABOVE_BUTTON: f32 = 16.;
 
 thread_local! {
     static ANCHOR: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
+    static PANEL_ANCHOR: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
+    static FROM_PANEL: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn anchor_probe() -> impl IntoElement {
     gpui::canvas(|b, _, _| ANCHOR.set(Some(b)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+}
+
+pub fn panel_anchor_probe() -> impl IntoElement {
+    gpui::canvas(|b, _, _| PANEL_ANCHOR.set(Some(b)), |_, _, _, _| {}).absolute().top_0().left_0().size_full()
+}
+
+fn current_anchor() -> Option<Bounds<Pixels>> {
+    if FROM_PANEL.get() { PANEL_ANCHOR.get().or(ANCHOR.get()) } else { ANCHOR.get().or(PANEL_ANCHOR.get()) }
+}
+
+pub fn toggle_from_panel(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    FROM_PANEL.set(true);
+    toggle(app, window, cx);
+}
+
+pub fn toggle_from_call(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    FROM_PANEL.set(false);
+    toggle(app, window, cx);
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -676,7 +696,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         FAVORITES.with(|x| *x.borrow_mut() = set);
     }
     let vp = window.viewport_size();
-    let (left, top, h) = geometry(f32::from(vp.width), f32::from(vp.height), ANCHOR.get());
+    let (left, top, h) = geometry(f32::from(vp.width), f32::from(vp.height), current_anchor());
     let st = &cx.global::<Pickers>().soundboard;
     let input = st.input.clone()?;
     let rail_el = rail(app, st);
@@ -765,7 +785,36 @@ pub fn call_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
         .child(anchor_probe())
         .on_click(cx.listener(move |app, _, window, cx| {
             if !off {
-                toggle(app, window, cx);
+                toggle_from_call(app, window, cx);
+            }
+        }))
+        .into_any_element()
+}
+
+pub fn panel_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::theme::z;
+    let off = disabled(app);
+    div()
+        .id("voice-soundboard")
+        .relative()
+        .flex_1()
+        .min_w_0()
+        .h(z(32.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_MUTED))
+        .bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT))
+        .when(!off, |d| d.hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))).cursor_pointer())
+        .when(off, |d| d.opacity(0.3).cursor_not_allowed())
+        .flex()
+        .items_center()
+        .justify_center()
+        .tip(disabled_reason(app).unwrap_or_else(|| crate::t!("voice.soundboard")))
+        .child(gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(tk(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+        .child(panel_anchor_probe())
+        .on_click(cx.listener(move |app, _, window, cx| {
+            if !off {
+                toggle_from_panel(app, window, cx);
             }
         }))
         .into_any_element()

@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 use tokio::sync::mpsc;
 
-use crate::codec::{Codec, LocalCapabilities};
+use crate::codec::Codec;
 use crate::crypto::{EncryptionMode, TransportCipher};
 use crate::dave::frame::OPUS_SILENCE;
 use crate::dave::openmls_session::OpenMlsSession;
@@ -42,6 +42,8 @@ pub enum VoiceEvent {
     Stats(ConnStats),
     Reconnecting,
     Disconnected { reason: String },
+    VideoState { user_id: u64, active: bool },
+    Video { user_id: u64, frame: Vec<u8> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -50,6 +52,9 @@ pub struct ConnStats {
     pub packets_received: u64,
     pub packets_lost: u64,
     pub outbound_loss_pct: Option<f32>,
+    pub video_packets_sent: u64,
+    pub video_rtcp_received: u64,
+    pub video_frames_received: u64,
 }
 
 pub struct VoiceConfig {
@@ -58,8 +63,16 @@ pub struct VoiceConfig {
     pub user_id: u64,
 }
 
+#[derive(Debug)]
+pub enum VideoOut {
+    Start { width: u32, height: u32, fps: u32 },
+    Frame(crate::media::EncodedVideo),
+    Stop,
+}
+
 enum Cmd {
     Close,
+    Video(VideoOut),
 }
 
 #[derive(Clone)]
@@ -70,6 +83,10 @@ pub struct VoiceConnection {
 impl VoiceConnection {
     pub fn close(&self) {
         let _ = self.tx.send(Cmd::Close);
+    }
+
+    pub fn video(&self, v: VideoOut) {
+        let _ = self.tx.send(Cmd::Video(v));
     }
 }
 
@@ -97,6 +114,37 @@ struct Media {
     timestamp: u32,
     transmitting: bool,
     silence_left: u8,
+    video_ssrc: u32,
+    rtx_ssrc: u32,
+    video: Option<VideoTx>,
+}
+
+struct VideoTx {
+    sender: RtpSender,
+    packetizer: crate::rtp::h264::H264Packetizer,
+    base: u32,
+}
+
+pub fn video_payload(audio_ssrc: u32, video_ssrc: u32, rtx_ssrc: u32, active: Option<(u32, u32, u32)>) -> gateway::protocol::VideoPayload {
+    use gateway::protocol::{Resolution, StreamDescriptor, VideoPayload};
+    let stream = StreamDescriptor {
+        kind: "video".into(),
+        rid: "100".into(),
+        ssrc: video_ssrc,
+        rtx_ssrc,
+        active: active.is_some(),
+        quality: 100,
+        max_bitrate: active.map(|_| 2_500_000),
+        max_framerate: active.map(|(_, _, fps)| fps),
+        max_resolution: active.map(|(width, height, _)| Resolution { kind: "fixed".into(), width, height }),
+    };
+    VideoPayload {
+        user_id: None,
+        audio_ssrc,
+        video_ssrc: if active.is_some() { video_ssrc } else { 0 },
+        rtx_ssrc: if active.is_some() { rtx_ssrc } else { 0 },
+        streams: vec![stream],
+    }
 }
 
 fn send_dave_actions(gw: &GatewayHandle, actions: Vec<DaveAction>) {
@@ -134,6 +182,8 @@ async fn run(
     let mut last_seq: HashMap<u32, u16> = HashMap::new();
     let mut last_code: Option<String> = None;
     let mut ticks = 0u32;
+    let mut video_users: HashMap<u32, u64> = HashMap::new();
+    let mut depack: HashMap<u32, crate::rtp::h264::H264Depacketizer> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -149,8 +199,9 @@ async fn run(
                             let socket = MediaSocket::connect(addr).await?;
                             let (ip, port) = socket.discover(r.ssrc).await?;
                             let mode = EncryptionMode::choose(&r.modes).ok_or(Error::Unsupported("no common encryption mode".into()))?;
-                            let caps = LocalCapabilities::default();
+                            let caps = crate::media::video::probe_capabilities();
                             gw.select_protocol(&ip, port, mode.name(), &caps.offer())?;
+                            let vs = r.streams.iter().find(|s| s.kind == "video").map_or((0, 0), |s| (s.ssrc, s.rtx_ssrc));
                             media = Some(Media {
                                 socket,
                                 ssrc: r.ssrc,
@@ -158,6 +209,9 @@ async fn run(
                                 timestamp: rand::random(),
                                 transmitting: false,
                                 silence_left: 0,
+                                video_ssrc: vs.0,
+                                rtx_ssrc: vs.1,
+                                video: None,
                             });
                         }
                         ServerMessage::SessionDescription(sd) => {
@@ -180,11 +234,16 @@ async fn run(
                             }
                         }
                         ServerMessage::Video(v) => {
-                            if let Some(uid) = v.user_id.as_deref().and_then(|u| u.parse::<u64>().ok())
-                                && v.audio_ssrc != 0
-                            {
-                                ssrc_users.insert(v.audio_ssrc, uid);
-                                dave.add_users([uid]);
+                            if let Some(uid) = v.user_id.as_deref().and_then(|u| u.parse::<u64>().ok()) {
+                                if v.audio_ssrc != 0 {
+                                    ssrc_users.insert(v.audio_ssrc, uid);
+                                    dave.add_users([uid]);
+                                }
+                                video_users.retain(|_, u| *u != uid);
+                                if v.video_ssrc != 0 {
+                                    video_users.insert(v.video_ssrc, uid);
+                                }
+                                let _ = events.send(VoiceEvent::VideoState { user_id: uid, active: v.video_ssrc != 0 });
                             }
                         }
                         ServerMessage::ClientsConnect { user_ids } => {
@@ -233,6 +292,12 @@ async fn run(
                     Ok(Incoming::Rtp(p)) => p,
                     Ok(Incoming::Rtcp(r)) => {
                         if let Some(m) = media.as_ref()
+                            && m.video.is_some()
+                            && r.windows(4).any(|w| w == m.video_ssrc.to_be_bytes())
+                        {
+                            stats.video_rtcp_received += 1;
+                        }
+                        if let Some(m) = media.as_ref()
                             && let Some((_, frac)) = rtp::rtcp::report_blocks(&r).into_iter().find(|(ssrc, _)| *ssrc == m.ssrc)
                         {
                             stats.outbound_loss_pct = Some(frac as f32 * 100.0 / 256.0);
@@ -249,6 +314,23 @@ async fn run(
                     }
                 };
                 let Ok((h, payload)) = rtp::parse_packet(&pkt) else { continue };
+                if h.payload_type == Codec::H264.payload_type() {
+                    let Some(&uid) = video_users.get(&h.ssrc) else { continue };
+                    let d = depack.entry(h.ssrc).or_default();
+                    let au = match rtp::Depacketizer::push(d, payload, h.marker) {
+                        Ok(Some(au)) => au,
+                        Ok(None) => continue,
+                        Err(_) => {
+                            *d = Default::default();
+                            continue;
+                        }
+                    };
+                    stats.video_frames_received += 1;
+                    if let Ok(frame) = dave.decrypt(uid, &au) {
+                        let _ = events.send(VoiceEvent::Video { user_id: uid, frame });
+                    }
+                    continue;
+                }
                 if h.payload_type != Codec::Opus.payload_type() {
                     continue;
                 }
@@ -333,7 +415,61 @@ async fn run(
                     let _ = gw.close();
                     return Ok(());
                 }
+                Some(Cmd::Video(v)) => {
+                    let Some(m) = media.as_mut() else { continue };
+                    match v {
+                        VideoOut::Start { width, height, fps } => {
+                            if m.video_ssrc == 0 {
+                                tracing::warn!("voice: no video ssrc from ready");
+                                continue;
+                            }
+                            gw.video(&video_payload(m.ssrc, m.video_ssrc, m.rtx_ssrc, Some((width, height, fps))))?;
+                            m.video = Some(VideoTx {
+                                sender: RtpSender::new(m.video_ssrc, Codec::H264.payload_type()),
+                                packetizer: crate::rtp::h264::H264Packetizer::new(),
+                                base: rand::random(),
+                            });
+                        }
+                        VideoOut::Stop => {
+                            if m.video.take().is_some() {
+                                gw.video(&video_payload(m.ssrc, m.video_ssrc, m.rtx_ssrc, None))?;
+                            }
+                        }
+                        VideoOut::Frame(e) => {
+                            let Some(vt) = m.video.as_mut() else { continue };
+                            let au = vt.packetizer.prepare_access_unit(&e.data);
+                            let Ok(au) = dave.encrypt(Codec::H264, &au) else { continue };
+                            let Ok(payloads) = vt.packetizer.packetize_prepared(&au, rtp::DEFAULT_MAX_PAYLOAD) else { continue };
+                            let ts = vt.base.wrapping_add((e.pts_us.wrapping_mul(90) / 1000) as u32);
+                            for p in vt.sender.wrap(payloads, ts) {
+                                match m.socket.send_rtp(&p).await {
+                                    Ok(()) => stats.video_packets_sent += 1,
+                                    Err(e) => tracing::debug!(error = %e, "voice: video send failed"),
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod video_tests {
+    use super::*;
+
+    #[test]
+    fn camera_op12_active_and_stopped() {
+        let on = video_payload(1, 2, 3, Some((1280, 720, 30)));
+        assert_eq!((on.video_ssrc, on.rtx_ssrc), (2, 3));
+        let s = &on.streams[0];
+        assert!(s.active);
+        assert_eq!(s.max_framerate, Some(30));
+        assert_eq!(s.max_resolution.as_ref().map(|r| (r.width, r.height)), Some((1280, 720)));
+        let off = video_payload(1, 2, 3, None);
+        assert_eq!(off.video_ssrc, 0);
+        assert!(!off.streams[0].active);
+        assert_eq!(off.streams[0].ssrc, 2);
     }
 }

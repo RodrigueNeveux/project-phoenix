@@ -1,0 +1,64 @@
+use std::sync::Arc;
+
+use super::VideoFrame;
+
+const BARS: [[u8; 3]; 7] = [[191, 191, 191], [191, 191, 0], [0, 191, 191], [0, 191, 0], [191, 0, 191], [191, 0, 0], [0, 0, 191]];
+
+pub struct TestPattern {
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    n: u64,
+}
+
+impl TestPattern {
+    pub fn new(width: u32, height: u32, fps: u32) -> Self {
+        Self { width, height, fps: fps.max(1), n: 0 }
+    }
+
+    pub fn pixel(&self, x: u32, y: u32, n: u64) -> [u8; 4] {
+        let (w, h) = (self.width.max(1), self.height.max(1));
+        let side = (h / 4).max(4);
+        let travel = w.saturating_sub(side).max(1) as u64;
+        let pos = (n * 6) % (travel * 2);
+        let bx = (if pos < travel { pos } else { travel * 2 - pos }) as u32;
+        let by = h / 2 - side / 2;
+        if x >= bx && x < bx + side && y >= by && y < by + side {
+            return [255, 255, 255, 255];
+        }
+        if y >= h - h / 8 {
+            let bit = (x * 16 / w) as u64;
+            let on = (n >> (15 - bit)) & 1 == 1;
+            return if on { [235, 235, 235, 255] } else { [16, 16, 16, 255] };
+        }
+        let c = BARS[((x * 7 / w) as usize).min(6)];
+        [c[0], c[1], c[2], 255]
+    }
+
+    pub fn frame(&mut self) -> VideoFrame {
+        let mut data = Vec::with_capacity((self.width * self.height * 4) as usize);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                data.extend_from_slice(&self.pixel(x, y, self.n));
+            }
+        }
+        let pts_us = self.n * 1_000_000 / self.fps as u64;
+        self.n += 1;
+        VideoFrame { width: self.width, height: self.height, pts_us, data: Arc::from(data) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frames_have_rgba_size_and_move() {
+        let mut t = TestPattern::new(64, 36, 30);
+        let a = t.frame();
+        let b = t.frame();
+        assert_eq!(a.data.len(), 64 * 36 * 4);
+        assert_ne!(a.data, b.data);
+        assert_eq!(b.pts_us, 33_333);
+    }
+}

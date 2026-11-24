@@ -320,6 +320,7 @@ fn shapes(items_: &[Value], f: f64, out: &mut String) {
 
 struct Ctx<'a> {
     assets: HashMap<&'a str, &'a [Value]>,
+    images: HashMap<&'a str, (f64, f64, &'a str)>,
     ids: u32,
 }
 
@@ -357,6 +358,15 @@ fn layer(cx: &mut Ctx, l: &Value, by: &HashMap<i64, &Value>, f: f64, depth: u32)
             let sr = g("sr", 1.);
             let lf = (f - g("st", 0.)) / if sr == 0. { 1. } else { sr };
             body = layers(cx, sub, lf, Some((g("w", 0.), g("h", 0.))), depth + 1);
+        }
+        Some(2) => {
+            let Some(&(w, h, href)) = l.get("refId").and_then(Value::as_str).and_then(|r| cx.images.get(r)) else {
+                return String::new();
+            };
+            if href.is_empty() {
+                return String::new();
+            }
+            let _ = write!(body, r#"<image width="{w}" height="{h}" preserveAspectRatio="none" href="{href}"/>"#);
         }
         Some(1) => {
             let sc = l.get("sc").and_then(Value::as_str).unwrap_or("#000000");
@@ -411,10 +421,13 @@ fn layers(cx: &mut Ctx, ls: &[Value], f: f64, clip: Option<(f64, f64)>, depth: u
 }
 
 pub fn frame_svg(root: &Value, f: f64, px: u32) -> String {
-    let mut cx = Ctx { assets: HashMap::new(), ids: 0 };
+    let mut cx = Ctx { assets: HashMap::new(), images: HashMap::new(), ids: 0 };
     for a in items(root.get("assets")) {
         if let (Some(id), Some(ls)) = (a.get("id").and_then(Value::as_str), a.get("layers").and_then(Value::as_array)) {
             cx.assets.insert(id, ls.as_slice());
+        } else if let (Some(id), Some(p)) = (a.get("id").and_then(Value::as_str), a.get("p").and_then(Value::as_str)) {
+            let d = |k: &str| a.get(k).and_then(Value::as_f64).unwrap_or(0.);
+            cx.images.insert(id, (d("w"), d("h"), p));
         }
     }
     let w = root.get("w").and_then(Value::as_f64).unwrap_or(512.);
@@ -435,10 +448,30 @@ fn timeline(root: &Value) -> (f64, f64, usize, u32) {
 
 fn rasterize(bytes: &[u8], renderer: &SvgRenderer, px: u32, still: bool) -> Option<RenderImage> {
     let root: Value = serde_json::from_slice(bytes).ok()?;
-    let (ip, step, count, delay) = timeline(&root);
+    rasterize_value(&root, renderer, px, still)
+}
+
+pub fn duration(root: &Value) -> std::time::Duration {
+    let fr = root.get("fr").and_then(Value::as_f64).filter(|v| *v > 0.).unwrap_or(30.);
+    let ip = root.get("ip").and_then(Value::as_f64).unwrap_or(0.);
+    let op = root.get("op").and_then(Value::as_f64).unwrap_or(ip + fr);
+    std::time::Duration::from_secs_f64(((op - ip) / fr).max(0.))
+}
+
+pub fn rasterize_value(root: &Value, renderer: &SvgRenderer, px: u32, still: bool) -> Option<RenderImage> {
+    frames_of(root, renderer, px, still, 1.)
+}
+
+pub fn rasterize_speed(root: &Value, renderer: &SvgRenderer, px: u32, speed: f64) -> Option<RenderImage> {
+    frames_of(root, renderer, px, false, speed)
+}
+
+fn frames_of(root: &Value, renderer: &SvgRenderer, px: u32, still: bool, speed: f64) -> Option<RenderImage> {
+    let (ip, step, count, delay) = timeline(root);
+    let delay = ((delay as f64) / speed.max(0.01)).round().max(1.) as u32;
     let mut frames = Vec::new();
     for n in 0..if still { 1 } else { count } {
-        let svg = frame_svg(&root, ip + n as f64 * step, (px / 2).max(1));
+        let svg = frame_svg(root, ip + n as f64 * step, (px / 2).max(1));
         let one = renderer.render_single_frame(svg.as_bytes(), 1.0).ok()?;
         let size = one.size(0);
         let (w, h) = (u32::try_from(size.width.0).ok()?, u32::try_from(size.height.0).ok()?);

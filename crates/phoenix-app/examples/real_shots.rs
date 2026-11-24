@@ -127,6 +127,7 @@ impl Backend for ReadOnly {
             V::SetInputDevice(_) => V::SetInputDevice(Some(phoenix_voice::audio::device::SYNTHETIC_INPUT.into())),
             V::SetMute(_) => V::SetMute(true),
             V::SetPttKey(_) => return Box::pin(async { Ok(()) }),
+            V::SetCameraDevice(_) => V::SetCameraDevice(Some(phoenix_voice::media::camera::TEST_PATTERN.into())),
             c => c,
         };
         self.0.voice_control(control)
@@ -1187,6 +1188,26 @@ fn main() -> anyhow::Result<()> {
                 a.voice_channel.map(|c| c.0)
             );
         });
+        if std::env::var_os("PHX_VOICE_CAMERA").is_some() {
+            cx.update_window(win.into(), |_, _, cx| {
+                v.update(cx, |app, _| {
+                    drop(app.backend.voice_control(V::SetCameraDevice(None)));
+                    drop(app.backend.voice_control(V::SetCamera(true)));
+                })
+            })?;
+            pump(&mut cx, 6000);
+            cx.update(|cx| {
+                let a = v.read(cx);
+                let f = phoenix_app::ui::voice_panel::flags(a.me.id);
+                println!(
+                    "camera active={} self_video={} video_sent={} video_rtcp={}",
+                    phoenix_app::voice::call::camera_active(),
+                    f.video,
+                    a.voice.stats.video_packets_sent,
+                    a.voice.stats.video_rtcp_received
+                );
+            });
+        }
         if std::env::var("PHX_VOICE_OPEN").as_deref() == Ok("soundboard") {
             cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| phoenix_app::ui::pickers::soundboard::toggle(app, window, cx)))?;
             pump(&mut cx, 4000);
@@ -1238,6 +1259,8 @@ fn main() -> anyhow::Result<()> {
     }
     let shot = shoot(&mut cx, &out);
     if voice_test {
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::SetCamera(false)))))?;
+        pump(&mut cx, 500);
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.join_voice(None, cx)))?;
         pump(&mut cx, 2500);
         let status = cx.update(|cx| v.read(cx).voice.status);

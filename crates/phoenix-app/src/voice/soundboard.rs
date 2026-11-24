@@ -68,6 +68,7 @@ pub fn is_sound_playing(sound: Id) -> bool {
 }
 
 pub fn stop_all() {
+    crate::ui::voice_effects::clear();
     let mut p = playing().lock();
     for h in p.handles.drain(..) {
         h.stop();
@@ -205,6 +206,10 @@ pub fn on_effect(app: &mut PhoenixApp, e: Effect, cx: &mut Context<PhoenixApp>) 
     if Some(e.channel) != app.voice_channel {
         return;
     }
+    if std::env::var_os("PHOENIX_SOUND_LOG").is_some() {
+        eprintln!("phoenix-soundboard: effect {e:?}");
+    }
+    crate::ui::voice_effects::start(app, &e, cx);
     if let Some(sound) = e.sound
         && e.user != app.me.id
     {

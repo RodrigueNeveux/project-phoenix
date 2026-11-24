@@ -64,5 +64,18 @@ Live reference: official client joined to the test voice channel `〢🔊・phoe
 | playing | `.soundButtonInteractive.playing` border `--brand-500` | | `is_sound_playing` | ✅ |
 | locked | other guild without Nitro: lock icon 20 over the overlay background | | `locked` | ✅ |
 | tile while playing | `border_7NOr2f.voiceChannelEffect_7NOr2f`: inset 2px `--brand-500` + inset 3px `--black`, `transition: box-shadow .1s ease-out` (pass3 #1505) | | `render_tile` `sb` ring | ✅ |
-| emoji effect on the tile | `VOICE_CHANNEL_EFFECT_SEND` with `animation_type/id` → Lottie `FrameEffect_*` (module 716365) with the emoji as image asset, 60 fps | seen in pass3 (emoji rises over the avatar ~0.4–1.4 s) | — | ❌ needs a Lottie transform player (next lot) |
+| emoji effect on the tile | `VOICE_CHANNEL_EFFECT_SEND` with `animation_type/id` (enum 194486: PREMIUM 0, BASIC 1) → module 716365 `Bf`: BASIC `[FrameEffect_10-1_Out]`, PREMIUM 21 `FrameEffect_*`; the emoji (`getEmojiURL` / twemoji, 32·dpr) replaces `assets[0].p`; lottie-web svg, `preserveAspectRatio: xMidYMax slice`, PREMIUM `setSpeed(.8)`, at most 50 at once, nothing with reduced motion | seen in pass3 (emoji rises over the avatar ~0.4–1.4 s) | `ui::voice_effects` (animations extracted at runtime from the cached `web.*.js`, never committed), `media::lottie` image layers (ty 2) + `rasterize_speed` | ⚠ implemented, waiting for a live check |
 | voice panel button | the sidebar panel's Soundboard button | | still a stub | ❌ next lot |
+
+## Solo call tile
+
+`root_vXFZs9 singleUserRoot_vXFZs9` (pass1 #1425): when you are alone the grid gets a second 16:9 tile: `--background-base-lower` under `radial-gradient(110.79% 100% at 50% 100%, --background-base-lower 60%, transparent)` and `linear-gradient(270deg, --background-tile-gradient-pink-end 0, --background-tile-gradient-pink-start 80%)`, padding 16, gap 16; art `https://discord.com/assets/664390de11a80444.svg` (max 400x210, margin-bottom 24, loaded at runtime); `stack_TWWX0S` gap 8 with two secondary md buttons (padding 7 15, radius 8, 20px icon + 4 gap, 16/500/20): UserPlusIcon "Inviter dans le salon vocal", AppsIcon "Choisis une Activité". Phoenix: `call_view::solo_tile`; the radial gradient is approximated by a vertical fade (gpui has no radial gradient) ⚠.
+
+## Camera (lot 2, in progress)
+
+| element | source | Phoenix | status |
+|---|---|---|---|
+| send | voice gateway op 12 `VIDEO` with the Ready `streams` ssrc/rtx_ssrc (rid "100", quality 100, max 2.5 Mbps, fixed 1280x720@30), main gateway op 4 `self_video: true`, H.264 RTP (PT 101) through DAVE | `connection::VideoOut`, `media::camera` (test pattern or v4l2 through ffmpeg), `media::ffmpeg::FfmpegH264` (libx264 baseline, zerolatency, AUD-split access units), `voice::call` `SetCamera` | ⚠ waiting for the live check (op 12 payload still to be compared with the official client's frames) |
+| own preview | own tile shows the local camera | `call_view::camera_image` (half-size BGRA RenderImage, object-fit cover) | ⚠ |
+| receive | other members' video RTP | not decoded yet | ❌ only one account is available: the official client and Phoenix are the same user, so nobody else can send video into the test channel |
+| test sources | brief: never the real webcam | `phoenix-test-pattern` (colour bars, moving square, frame counter); `/dev/video0` is a v4l2loopback (OBS Virtual Camera) fed by `~/discord-phoenix-ref/voice/mire.sh` for the official client | ✅ |
