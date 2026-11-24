@@ -768,6 +768,12 @@ fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement {
         .children(cooldown(app))
 }
 
+/// slateTextArea_ padding-block: `(text-area-height - 1.375rem) / 2`, so the 56px row keeps
+/// its height and the text stays centred at every font size (17px at 16px).
+fn text_pad_y() -> f32 {
+    ((56. - 22. * crate::theme::font_scale()) / 2.).max(0.)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{char_count, dot_frame, format_cooldown, should_show_send_button};
@@ -806,10 +812,4 @@ mod tests {
         assert_eq!(format_cooldown(125), "2:05");
         assert_eq!(format_cooldown(3725), "1:02:05");
     }
-}
-
-/// slateTextArea_ padding-block: `(text-area-height - 1.375rem) / 2`, so the 56px row keeps
-/// its height and the text stays centred at every font size (17px at 16px).
-fn text_pad_y() -> f32 {
-    ((56. - 22. * crate::theme::font_scale()) / 2.).max(0.)
 }
