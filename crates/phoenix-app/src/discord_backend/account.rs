@@ -96,13 +96,17 @@ impl DiscordBackend {
 
     pub(super) fn load_settings_impl(&self) -> BoxFuture<SyncedSettings> {
         self.with_session(move |_, s| async move {
-            match s.rest.get_settings_proto_raw().await {
+            let r = match s.rest.get_settings_proto_raw().await {
                 Ok(raw) => synced_raw(&raw),
                 Err(_) => {
                     let v = s.rest.get_settings_json().await.map_err(api_err)?;
                     Ok(synced(&api_settings::from_json(&v)))
                 }
+            };
+            if let Ok(set) = &r {
+                s.rest.set_locale(&set.locale);
             }
+            r
         })
     }
 
@@ -120,7 +124,11 @@ impl DiscordBackend {
                 SettingsPatch::Density(d) => SettingChange::UiDensity(density_to_proto(*d)),
             };
             let raw = s.rest.patch_setting_raw(&change).await.map_err(api_err)?;
-            synced_raw(&raw)
+            let r = synced_raw(&raw);
+            if let Ok(set) = &r {
+                s.rest.set_locale(&set.locale);
+            }
+            r
         })
     }
 }

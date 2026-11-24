@@ -188,6 +188,11 @@ struct Inner {
     super_props: String,
     limiter: RateLimiter,
     max_retries: u32,
+    /// Discord locale code of the account (`fr`, `en-US`…), sent as
+    /// `X-Discord-Locale` / `Accept-Language` like the official client.
+    locale: parking_lot::RwLock<String>,
+    /// IANA zone sent as `X-Discord-Timezone`.
+    timezone: Option<String>,
 }
 
 /// Cheaply cloneable REST client.
@@ -226,7 +231,10 @@ impl RestClient {
             .expect("reqwest client");
         let super_props = props.to_header();
         Self {
-            inner: Arc::new(Inner { http, base, token, props, super_props, limiter: RateLimiter::new(), max_retries: 3 }),
+            inner: Arc::new(Inner { http, base, token, props, super_props, limiter: RateLimiter::new(), max_retries: 3,
+                locale: parking_lot::RwLock::new(crate::props::os_discord_locale()),
+                timezone: crate::props::os_timezone(),
+            }),
         }
     }
 
@@ -236,6 +244,18 @@ impl RestClient {
 
     pub fn properties(&self) -> &ClientProperties {
         &self.inner.props
+    }
+
+    /// Account locale (user settings), used for the locale headers so that
+    /// server-side strings (billing products, errors…) come back translated.
+    pub fn set_locale(&self, locale: &str) {
+        if !locale.is_empty() {
+            *self.inner.locale.write() = locale.to_owned();
+        }
+    }
+
+    pub fn locale(&self) -> String {
+        self.inner.locale.read().clone()
     }
 
     fn headers(&self) -> HeaderMap {
@@ -248,8 +268,18 @@ impl RestClient {
         if let Ok(v) = HeaderValue::from_str(&self.inner.super_props) {
             h.insert("x-super-properties", v);
         }
-        if let Ok(v) = HeaderValue::from_str(&self.inner.props.system_locale) {
+        let locale = self.inner.locale.read().clone();
+        if let Ok(v) = HeaderValue::from_str(&crate::props::accept_language(&locale, &crate::props::os_locale_tag()))
+        {
+            h.insert(reqwest::header::ACCEPT_LANGUAGE, v);
+        }
+        if let Ok(v) = HeaderValue::from_str(&locale) {
             h.insert("x-discord-locale", v);
+        }
+        if let Some(tz) = &self.inner.timezone
+            && let Ok(v) = HeaderValue::from_str(tz)
+        {
+            h.insert("x-discord-timezone", v);
         }
         h.insert("x-debug-options", HeaderValue::from_static("bugReporterEnabled"));
         h

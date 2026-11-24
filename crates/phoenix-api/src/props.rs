@@ -107,9 +107,78 @@ impl ClientProperties {
     }
 }
 
+/// OS locale as a BCP-47 tag (`fr_FR.UTF-8` → `fr-FR`), `en-US` if unset.
+pub fn os_locale_tag() -> String {
+    let raw = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .find(|v| !v.is_empty() && v != "C" && v != "POSIX")
+        .unwrap_or_default();
+    let base = raw.split(['.', '@']).next().unwrap_or("");
+    if base.len() < 2 {
+        return "en-US".into();
+    }
+    base.replace('_', "-")
+}
+
+/// Discord locale code closest to the OS locale (Discord uses bare `fr`,
+/// `de`… except for a few regional codes).
+pub fn os_discord_locale() -> String {
+    discord_locale_for(&os_locale_tag())
+}
+
+pub fn discord_locale_for(tag: &str) -> String {
+    const REGIONAL: [&str; 8] = ["en-US", "en-GB", "es-ES", "es-419", "pt-BR", "sv-SE", "zh-CN", "zh-TW"];
+    if REGIONAL.contains(&tag) {
+        return tag.into();
+    }
+    let lang = tag.split('-').next().unwrap_or("en");
+    match lang {
+        "en" => "en-US".into(),
+        "es" => "es-ES".into(),
+        "pt" => "pt-BR".into(),
+        "sv" => "sv-SE".into(),
+        "zh" => "zh-CN".into(),
+        l => l.into(),
+    }
+}
+
+/// `Accept-Language` as Chromium builds it from `navigator.languages`
+/// (app locale first, then the OS locale): `fr,fr-FR;q=0.9`.
+pub fn accept_language(locale: &str, os_tag: &str) -> String {
+    if locale.eq_ignore_ascii_case(os_tag) {
+        locale.into()
+    } else {
+        format!("{locale},{os_tag};q=0.9")
+    }
+}
+
+/// IANA time zone from `$TZ` or the `/etc/localtime` symlink.
+pub fn os_timezone() -> Option<String> {
+    if let Ok(tz) = std::env::var("TZ") {
+        let tz = tz.trim_start_matches(':');
+        if tz.contains('/') && !tz.starts_with('/') {
+            return Some(tz.into());
+        }
+    }
+    let target = std::fs::read_link("/etc/localtime").ok()?;
+    let s = target.to_string_lossy();
+    let i = s.find("zoneinfo/")?;
+    Some(s[i + "zoneinfo/".len()..].to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn locale_headers() {
+        assert_eq!(discord_locale_for("fr-FR"), "fr");
+        assert_eq!(discord_locale_for("en-GB"), "en-GB");
+        assert_eq!(discord_locale_for("pt-PT"), "pt-BR");
+        assert_eq!(accept_language("fr", "fr-FR"), "fr,fr-FR;q=0.9");
+        assert_eq!(accept_language("en-US", "en-US"), "en-US");
+    }
 
     #[test]
     fn header_roundtrip() {
