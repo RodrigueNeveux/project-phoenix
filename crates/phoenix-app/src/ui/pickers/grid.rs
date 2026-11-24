@@ -190,7 +190,16 @@ use super::{idx, section_header, tk};
 pub fn item_element(item: &PickItem, tone: u8, size: f32) -> AnyElement {
     match item {
         PickItem::Unicode(ix) => emoji_element(&emoji::toned(*ix, tone), size),
-        PickItem::Custom(e) => img(e.url((size * 2.) as u32)).size(px(size)).flex_none().into_any_element(),
+        PickItem::Custom(e) => crate::media::emoji::emoji_element(&e.token(), size),
+    }
+}
+
+/// Picker grid tile: the client renders it with `shouldAnimate: false`, so
+/// animated custom emoji only play while hovered.
+pub fn item_element_hover(item: &PickItem, tone: u8, size: f32) -> AnyElement {
+    match item {
+        PickItem::Unicode(ix) => emoji_element(&emoji::toned(*ix, tone), size),
+        PickItem::Custom(e) => crate::media::emoji::emoji_element_hover(&e.token(), size),
     }
 }
 
@@ -261,7 +270,7 @@ fn render_row(ix: usize, cx: &mut App) -> AnyElement {
                                 }
                             })
                         })
-                        .child(div().when(locked, |d| d.opacity(0.3)).child(item_element(&item, tone, EMOJI_PX)))
+                        .child(div().when(locked, |d| d.opacity(0.3)).child(item_element_hover(&item, tone, EMOJI_PX)))
                         .when(locked, |d| d.child(lock_badge())),
                 );
             }

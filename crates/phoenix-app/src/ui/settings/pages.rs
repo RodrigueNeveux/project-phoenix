@@ -1224,7 +1224,7 @@ static A11Y: &[B] = &[
     B::Switch("reduced-motion", "sp.ac.motion", "sp.ac.motion_d", Bind::Local(|p| p.reduced_motion, |p, v| p.reduced_motion = v)),
     B::Switch("motion-sync", "sp.ac.motion_sync", "", Bind::Ui(true)),
     B::Switch("gifs", "sp.ac.gifs", "", Bind::Ui(true)),
-    B::Switch("anim-emoji", "sp.ac.anim_emoji", "", Bind::Ui(true)),
+    B::Switch("anim-emoji", "sp.ac.anim_emoji", "", Bind::Local(|p| p.animate_emoji, |p, v| p.animate_emoji = v)),
     B::Radios(
         "stickers",
         "sp.ac.stickers",

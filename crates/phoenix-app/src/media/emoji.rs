@@ -3,7 +3,9 @@
 //! Inc. and contributors, maintained at github.com/jdecked/twemoji), served
 //! by jsDelivr.
 
-use gpui::{AnyElement, ParentElement, SharedString, Styled, StyledImage, div, img, prelude::*, px};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, StyledImage, Window, div, img, prelude::*, px};
 
 pub const TWEMOJI_BASE: &str = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72";
 
@@ -24,9 +26,82 @@ pub fn cdn_size(want: u32) -> u32 {
 }
 
 impl CustomEmoji {
+    /// Playing URL, as the client builds it (`getEmojiURL`, web bundle): always
+    /// `.webp?size=N`, plus `&animated=true` for animated emoji (dumps:
+    /// `emojis/<id>.webp?size=60&animated=true`).
     pub fn url(&self, size: u32) -> SharedString {
-        let ext = if self.animated { "gif" } else { "webp" };
-        format!("https://cdn.discordapp.com/emojis/{}.{ext}?size={}&quality=lossless", self.id, cdn_size(size)).into()
+        let anim = if self.animated { "&animated=true" } else { "" };
+        format!("https://cdn.discordapp.com/emojis/{}.webp?size={}{anim}", self.id, cdn_size(size)).into()
+    }
+
+    /// First frame only: the same URL without `animated=true`.
+    pub fn static_url(&self, size: u32) -> SharedString {
+        format!("https://cdn.discordapp.com/emojis/{}.webp?size={}", self.id, cdn_size(size)).into()
+    }
+}
+
+/// "Play animated emoji" (Accessibility) and whether the window has focus; the
+/// client only requests the animated URL while `isWindowFocused`.
+static ANIMATE_EMOJI: AtomicBool = AtomicBool::new(true);
+static WINDOW_FOCUSED: AtomicBool = AtomicBool::new(true);
+
+/// Called once per app render with the current setting and window focus.
+pub fn sync_motion(animate_emoji: bool, focused: bool) {
+    ANIMATE_EMOJI.store(animate_emoji, Ordering::Relaxed);
+    WINDOW_FOCUSED.store(focused, Ordering::Relaxed);
+}
+
+/// Client rule (emoji component, web bundle): animated URL when the window is
+/// focused and either `shouldAnimate && animateEmoji` or the emoji is hovered.
+pub fn should_play(auto: bool, hovered: bool) -> bool {
+    WINDOW_FOCUSED.load(Ordering::Relaxed) && ((auto && ANIMATE_EMOJI.load(Ordering::Relaxed)) || hovered)
+}
+
+/// Custom emoji image. Animated ones play per [`should_play`]: `auto` for
+/// message content, reactions, statuses…; `false` in the picker grid, which
+/// passes `shouldAnimate: false` and only plays the hovered emoji. GPUI decodes
+/// frames on the background executor and only advances them while painted, so
+/// emoji scrolled out of view stop.
+#[derive(IntoElement)]
+pub struct CustomEmojiImage {
+    emoji: CustomEmoji,
+    size: f32,
+    auto: bool,
+}
+
+impl CustomEmojiImage {
+    pub fn new(emoji: CustomEmoji, size: f32, auto: bool) -> Self {
+        Self { emoji, size, auto }
+    }
+}
+
+impl RenderOnce for CustomEmojiImage {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let Self { emoji, size, auto } = self;
+        let px_size = (size * 2.) as u32;
+        let fb: SharedString = format!(":{}:", emoji.name).into();
+        let fallback = move || div().text_size(px(size * 0.9)).child(fb.clone()).into_any_element();
+        if !emoji.animated {
+            return img(emoji.url(px_size)).size(px(size)).flex_none().with_fallback(fallback).into_any_element();
+        }
+        let key = ("phx-emoji", emoji.id as usize);
+        let hovered = window.use_keyed_state(key, cx, |_, _| false);
+        let play = should_play(auto, *hovered.read(cx));
+        let src = if play { emoji.url(px_size) } else { emoji.static_url(px_size) };
+        div()
+            .id(key)
+            .flex_none()
+            .size(px(size))
+            .on_hover(move |h, _, cx| {
+                hovered.update(cx, |s, cx| {
+                    if *s != *h {
+                        *s = *h;
+                        cx.notify();
+                    }
+                })
+            })
+            .child(img(src).size(px(size)).with_fallback(fallback))
+            .into_any_element()
     }
 }
 
@@ -90,11 +165,21 @@ pub fn twemoji_url(e: &str) -> Option<SharedString> {
 /// an id, or a Unicode emoji. Falls back to the text when nothing matches or
 /// the image fails to load.
 pub fn emoji_element(token: &str, size: f32) -> AnyElement {
-    let url = parse_custom(token).map(|e| e.url((size * 2.) as u32)).or_else(|| twemoji_url(token));
-    let text: SharedString = match parse_custom(token) {
-        Some(e) => format!(":{}:", e.name).into(),
-        None => token.to_owned().into(),
-    };
+    emoji_element_with(token, size, true)
+}
+
+/// [`emoji_element`] whose animated custom emoji only play while hovered
+/// (emoji picker grid).
+pub fn emoji_element_hover(token: &str, size: f32) -> AnyElement {
+    emoji_element_with(token, size, false)
+}
+
+fn emoji_element_with(token: &str, size: f32, auto: bool) -> AnyElement {
+    if let Some(e) = parse_custom(token) {
+        return CustomEmojiImage::new(e, size, auto).into_any_element();
+    }
+    let url = twemoji_url(token);
+    let text: SharedString = token.to_owned().into();
     match url {
         Some(u) => {
             let fb = text.clone();
@@ -120,6 +205,15 @@ mod tests {
         let found = find_custom("hi <:a:1> and <a:b:2> <#3>");
         assert_eq!(found.len(), 2);
         assert_eq!(found[0].0, 3..9);
+    }
+
+    #[test]
+    fn client_cdn_urls() {
+        let e = CustomEmoji { name: "dance".into(), id: 9, animated: true };
+        assert_eq!(e.url(48).as_ref(), "https://cdn.discordapp.com/emojis/9.webp?size=48&animated=true");
+        assert_eq!(e.static_url(48).as_ref(), "https://cdn.discordapp.com/emojis/9.webp?size=48");
+        let s = CustomEmoji { animated: false, ..e };
+        assert_eq!(s.url(60).as_ref(), "https://cdn.discordapp.com/emojis/9.webp?size=60");
     }
 
     #[test]

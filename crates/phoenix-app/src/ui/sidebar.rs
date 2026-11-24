@@ -1220,7 +1220,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
                                 .text_ellipsis()
-                                .child(
+                                .child(crate::ui::emoji_text::label_with_custom(
                                     // vanilla-guild-text user panel: the custom status replaces "Online".
                                     // Emoji + text from the own custom-status activity while it matches.
                                     {
@@ -1234,7 +1234,8 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                             _ => status,
                                         }
                                     },
-                                ),
+                                    14. * crate::theme::zoom() / 1.375,
+                                )),
                         ),
                 ),
         )

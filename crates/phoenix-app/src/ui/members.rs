@@ -920,7 +920,8 @@ fn sub_text(in_voice: bool, sub: Option<SubText>, fallback: Option<SharedString>
                 row = row.child(div().flex_none().font_weight(FontWeight::NORMAL).text_color(c(Palette::TEXT_NORMAL)).child("•"));
             }
             if let Some(e) = emoji {
-                row = row.child(div().flex_none().text_size(z(14.)).child(e)); // emoji_HigqCD 14px
+                // emoji_HigqCD 14px; custom (animated) emoji as images
+                row = row.child(div().flex_none().text_size(z(14.)).child(crate::ui::emoji_text::label_with_custom(e, 14. * crate::theme::zoom() / 1.375)));
             }
             if let Some(t) = state {
                 row = row.child(text_el(t));

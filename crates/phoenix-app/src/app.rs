@@ -1279,6 +1279,7 @@ impl Render for PhoenixApp {
         crate::perf::on_render(self.selected_channel.map(|c| c.0), true);
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
+        crate::media::emoji::sync_motion(self.prefs.local.animate_emoji, window.is_window_active());
         self.chat_sync_style();
         let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),

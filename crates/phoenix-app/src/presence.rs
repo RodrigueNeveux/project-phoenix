@@ -95,8 +95,14 @@ pub fn parse_activity(a: &Value) -> Option<Activity> {
         5 => ActivityKind::Competing,
         _ => ActivityKind::Playing,
     };
-    let emoji = a.get("emoji").and_then(|e| {
-        if e.get("id").is_some_and(|i| !i.is_null()) { None } else { s(e, "name") }
+    // Custom emoji become a `<a:name:id>` / `<:name:id>` token so labels draw (and play) them.
+    let emoji = a.get("emoji").and_then(|e| match e.get("id").and_then(|i| i.as_str().map(str::to_owned).or_else(|| i.as_u64().map(|n| n.to_string()))) {
+        Some(id) => {
+            let anim = if e.get("animated").and_then(Value::as_bool).unwrap_or(false) { "a" } else { "" };
+            let name = e.get("name").and_then(Value::as_str).filter(|n| !n.is_empty()).unwrap_or("emoji");
+            Some(format!("<{anim}:{name}:{id}>").into())
+        }
+        None => s(e, "name"),
     });
     let act = Activity {
         kind,
@@ -419,6 +425,14 @@ impl People {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn custom_status_custom_emoji_become_tokens() {
+        let a = parse_activities(&[json!({"type": 4, "name": "Custom Status", "emoji": {"name": "dance", "id": "42", "animated": true}})]);
+        assert_eq!(a[0].emoji.as_deref(), Some("<a:dance:42>"));
+        let a = parse_activities(&[json!({"type": 4, "name": "Custom Status", "state": "x", "emoji": {"name": "blob", "id": "7"}})]);
+        assert_eq!(a[0].emoji.as_deref(), Some("<:blob:7>"));
+    }
 
     #[test]
     fn activities() {
