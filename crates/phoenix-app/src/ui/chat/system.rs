@@ -126,10 +126,70 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
                     .child(crate::t!("sys.see_threads")),
             )
         });
+    let cta = (msg.kind == MessageKind::Join).then(|| welcome_cta(app, entity, msg)).flatten();
+    let line: AnyElement = match cta {
+        Some(b) => div().child(line).child(b).into_any_element(),
+        None => line.into_any_element(),
+    };
     Some(match r.day_divider.clone() {
         Some(label) => div().child(super::day_divider(label)).child(line).into_any_element(),
-        None => line.into_any_element(),
+        None => line,
     })
+}
+
+/// Greeting stickers the client cycles through for "Wave to say hi!"
+/// (id, is APNG); the rest are Lottie, which we can't draw yet.
+const WAVE_STICKERS: [(u64, bool); 6] = [
+    (749054660769218631, false),
+    (751606379340365864, false),
+    (754108890559283200, false),
+    (781291131828699156, true),
+    (816087792291282944, false),
+    (819128604311027752, false),
+];
+
+/// Client pick: (our snowflake timestamp + message timestamp) % 6.
+fn wave_sticker(me: u64, msg: u64) -> (u64, bool) {
+    WAVE_STICKERS[((me >> 22) + (msg >> 22)) as usize % WAVE_STICKERS.len()]
+}
+
+/// welcomeCTA_eZQ1Gc (margin-bottom 2) under a join line: secondary button
+/// with the greeting sticker as its icon. Hidden for bots, ourselves and
+/// channels where we can't send.
+fn welcome_cta(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> Option<AnyElement> {
+    let bot = app.users.get(&msg.author).is_some_and(|u| u.bot);
+    let blocked = app.nav.extras.get(&msg.channel).is_some_and(|x| x.send_blocked);
+    if bot || blocked || msg.author == app.me.id {
+        return None;
+    }
+    let (sticker, apng) = wave_sticker(app.me.id.0, msg.id.0);
+    let label = crate::t!("sys.wave");
+    let button = if apng {
+        let url = SharedString::from(format!("https://media.discordapp.net/stickers/{sticker}.png?size=40"));
+        crate::ui::controls::button(("wave-cta", msg.id.0), SharedString::default(), crate::ui::controls::BtnKind::Secondary)
+            .h(z(32.))
+            .px(z(12.))
+            .text_size(z(14.))
+            .gap(z(4.))
+            .child(gpui::img(url).flex_none().size(z(20.)))
+            .child(label)
+    } else {
+        crate::ui::controls::button_icon(("wave-cta", msg.id.0), "sticker", label, crate::ui::controls::BtnKind::Secondary)
+            .h(z(32.))
+            .px(z(12.))
+            .text_size(z(14.))
+    };
+    let (e, channel) = (entity.clone(), msg.channel);
+    Some(
+        div()
+            .pl(z(80.))
+            .pt(z(4.))
+            .mb(z(2.)) // welcomeCTA_eZQ1Gc margin-bottom 2px
+            .child(button.on_click(move |_, _, cx| {
+                e.update(cx, |a, cx| crate::ui::pickers::detach(a.backend.send_sticker(channel, crate::model::Id(sticker)), cx));
+            }))
+            .into_any_element(),
+    )
 }
 
 #[cfg(test)]
@@ -140,5 +200,7 @@ mod tests {
         assert_eq!(join_text(1 << 22), join_text(1 << 22));
         assert!(is_system(MessageKind::Join));
         assert!(!is_system(MessageKind::Reply));
+        assert_eq!(wave_sticker(0, 0).0, 749054660769218631);
+        assert_eq!(wave_sticker(3 << 22, 0), (781291131828699156, true));
     }
 }

@@ -46,7 +46,7 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | System: join, boost, pin, thread, call | `systemMessage_SY_P2T` content at +80, `iconContainer_bLMKT5` 72x22 at +8, text 16/22 | | ui/chat/system.rs | ✅ (live dump; the join welcome card `systemMessageContainer_g2fiji` with its wave button is not done) |
 | `(edited)` label | `edited_2i8Bfm` .625rem, line-height 1, normal weight, --text-muted | | ui/chat.rs `edited_marker` | ✅ (live dump: 10px / 10px, 400) |
 
-Coverage: 38 ✅ / 0 ⚠ / 0 ❌ of 38 rows (spoiler image from CSS only: none found in 16 scanned channels). Open: join welcome card with wave button.
+Coverage: 38 ✅ / 0 ⚠ / 0 ❌ of 38 rows (spoiler image from CSS only: none found in 16 scanned channels). The join welcome CTA ("Wave to say hi!", welcomeCTA_eZQ1Gc, secondary sm button with the greeting sticker, client sticker pick) is done in `chat::system::welcome_cta`.
 Live dumps (2026-11-24, user asleep, read-only, view restored): ref-cache/message-content-<channel>.json.
 Colours are not compared from the dumps: the user's theme differs from the generated dark tokens.
 Still "✅ (CSS)": `<t:…>` timestamps and inline code (no example in the scanned channels). No real-data compare score for these
