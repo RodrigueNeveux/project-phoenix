@@ -172,7 +172,8 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> O
         flags: parts.flags,
         reduced: false,
     };
-    let mut col = div().mt(px(4.)).flex().flex_col().gap(px(4.)).max_w(px(600.));
+    // accessories container_YUQhib padding-top 2px (dump: header ends -132, container -130).
+    let mut col = div().mt(px(2.)).flex().flex_col().gap(px(4.)).max_w(px(600.));
     for (i, comp) in parts.components.iter().enumerate() {
         col = col.child(comp_el(app, &k, comp, i));
     }
