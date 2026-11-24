@@ -861,6 +861,13 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 "switcher" => phoenix_app::ui::switcher::open(app, window, cx),
+                // Server notification settings modal (open only).
+                "guildnotify" => {
+                    if let Some(g) = app.selected_guild {
+                        let st = phoenix_app::ui::modals::guild_notify::State::new(app, g);
+                        phoenix_app::actions::open_modal(phoenix_app::ui::modals::Modal::GuildNotify(st), None);
+                    }
+                }
                 // User panel avatar popout (`statuspicker:sub` with the status submenu).
                 "statuspicker" => {
                     app.toggle_status_picker(window, cx);
