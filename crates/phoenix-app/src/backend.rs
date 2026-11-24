@@ -60,7 +60,7 @@ pub enum AppEvent {
     MessageUpdate(Message),
     MessageDelete { channel: Id, id: Id },
     /// `nick`: `member.nick` of the TYPING_START payload (guild channels).
-    TypingStart { channel: Id, user: Id, nick: Option<SharedString> },
+    TypingStart { channel: Id, user: Id, nick: Option<gpui::SharedString> },
     PresenceUpdate { user: Id, presence: Presence },
     GuildMembers { guild: Id, members: Vec<Member> },
     ChannelUnread { channel: Id, unread: bool, mentions: u32 },
