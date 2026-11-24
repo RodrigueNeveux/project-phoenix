@@ -578,7 +578,11 @@ fn main() -> anyhow::Result<()> {
                     .find(|c| c.guild.is_some() && c.voice_users.contains(&app.me.id))
                     .map(|c| c.id);
             }
-            let view = std::env::var("PHX_VIEW").unwrap_or_default();
+            // Discord on the Friends page (`/channels/@me`): render it too.
+            let view = std::env::var("PHX_VIEW").unwrap_or_else(|_| {
+                let home = guild.is_none() && channel.is_none() && cdp("location.pathname").as_deref() == Some("/channels/@me");
+                if home { "friends".into() } else { String::new() }
+            });
             let tab = std::env::var("PHX_TAB").unwrap_or_default();
             if view == "friends" {
                 use phoenix_app::ui::home::data::FriendsTab as F;
