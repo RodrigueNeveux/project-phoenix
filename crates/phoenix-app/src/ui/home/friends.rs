@@ -338,9 +338,12 @@ fn gpui_input_bg() -> u32 {
     crate::theme::tok(crate::theme::generated::idx::INPUT_BACKGROUND_DEFAULT)
 }
 
-fn round_button(id: (&'static str, u64), glyph: AnyElement, hover: Hsla) -> gpui::Stateful<gpui::Div> {
+fn round_button(id: (&'static str, u64), name: &str, hover: Hsla, tip: SharedString) -> gpui::Stateful<gpui::Div> {
+    // The glyph follows the button's hover through a per-button group.
+    let g = SharedString::from(format!("{}-{}", id.0, id.1));
     div()
         .id(id)
+        .group(g.clone())
         // actionButton_5GqXgh: 36px circle, --background-base-lower,
         // --interactive-text-default; hover --interactive-text-hover
         // (actionAccept_/actionDeny_: --icon-feedback-positive/-critical).
@@ -352,14 +355,15 @@ fn round_button(id: (&'static str, u64), glyph: AnyElement, hover: Hsla) -> gpui
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-        .hover(move |s| s.text_color(hover))
-        .child(glyph)
-}
-
-/// 20px glyph of the row actions, tinted by the button's text colour.
-fn glyph(name: &str) -> AnyElement {
-    gpui::svg().path(crate::icons::path(name)).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element()
+        // tooltips from the client bundle: Message, More, Accept, Ignore, Cancel, Unblock
+        .tooltip(crate::ui::tooltip::tip(tip))
+        .child(
+            gpui::svg()
+                .path(crate::icons::path(name))
+                .size(z(20.))
+                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                .group_hover(g, move |s| s.text_color(hover)),
+        )
 }
 
 fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -405,20 +409,18 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
             cx.notify();
         })
     };
-    let check = || glyph("check");
-    let cross = || glyph("close");
     let (hover, positive, critical) =
         (c(tok(idx::INTERACTIVE_TEXT_HOVER)), c(tok(idx::ICON_FEEDBACK_POSITIVE)), c(tok(idx::ICON_FEEDBACK_CRITICAL)));
     match r.kind {
         RelationshipKind::Friend => {
             actions = actions
                 .child(
-                    round_button(("fr-msg", user.0), glyph("chat"), hover)
+                    round_button(("fr-msg", user.0), "chat", hover, crate::t!("profile.message"))
                         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx))),
                 )
                 .child({
                     // "More options": opens the user context menu (Remove Friend lives there).
-                    round_button(("fr-more", user.0), glyph("more-vertical"), hover)
+                    round_button(("fr-more", user.0), "more-vertical", hover, crate::t!("header.more"))
                         .on_click(move |ev, window, cx| {
                             cx.stop_propagation();
                             crate::ui::user_menu::open(user, None, ev.position(), window);
@@ -427,15 +429,15 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         }
         RelationshipKind::Incoming => {
             actions = actions
-                .child(round_button(("fr-ok", user.0), check(), positive).on_click(act(RelAction::Accept)))
-                .child(round_button(("fr-no", user.0), cross(), critical).on_click(act(RelAction::Remove)));
+                .child(round_button(("fr-ok", user.0), "check", positive, crate::t!("friends.accept")).on_click(act(RelAction::Accept)))
+                .child(round_button(("fr-no", user.0), "close", critical, crate::t!("menu.ignore")).on_click(act(RelAction::Remove)));
         }
         RelationshipKind::Outgoing => {
-            actions = actions.child(round_button(("fr-cancel", user.0), cross(), critical).on_click(act(RelAction::Remove)));
+            actions = actions.child(round_button(("fr-cancel", user.0), "close", critical, crate::t!("common.cancel")).on_click(act(RelAction::Remove)));
         }
         RelationshipKind::Blocked => {
             actions = actions.child(
-                round_button(("fr-unblock", user.0), glyph("members"), critical)
+                round_button(("fr-unblock", user.0), "members", critical, crate::t!("friends.unblock"))
                     .on_click(act(RelAction::Remove)),
             );
         }
