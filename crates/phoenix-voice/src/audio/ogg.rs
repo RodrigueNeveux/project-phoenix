@@ -87,7 +87,18 @@ pub fn write_opus(packets: &[Vec<u8>], frame_samples: u64, total_samples: u64, s
         w.page(&[], end, 0x04);
         return w.out;
     }
-    let chunks: Vec<&[Vec<u8>]> = packets.chunks(PACKETS_PER_PAGE).collect();
+    let mut chunks: Vec<&[Vec<u8>]> = Vec::new();
+    let (mut start, mut segs) = (0usize, 0usize);
+    for (i, p) in packets.iter().enumerate() {
+        let n = p.len() / 255 + 1;
+        if i > start && (segs + n > 255 || i - start >= PACKETS_PER_PAGE) {
+            chunks.push(&packets[start..i]);
+            start = i;
+            segs = 0;
+        }
+        segs += n;
+    }
+    chunks.push(&packets[start..]);
     let mut done = 0u64;
     for (i, chunk) in chunks.iter().enumerate() {
         done += chunk.len() as u64;
@@ -203,6 +214,20 @@ mod tests {
         }
         assert_eq!(pages, 3);
         assert_eq!(file[file.len() - (27 + 1 + 3 + 3 + 600)..][5], 0x04);
+    }
+
+    #[test]
+    fn big_packets_split_pages_under_255_segments() {
+        let packets: Vec<Vec<u8>> = (0..60).map(|_| vec![9u8; 1275]).collect();
+        let file = write_opus(&packets, 960, 60 * 960, 3);
+        let mut pos = 0;
+        while pos < file.len() {
+            let n = file[pos + 26] as usize;
+            let body: usize = file[pos + 27..pos + 27 + n].iter().map(|&s| s as usize).sum();
+            pos += 27 + n + body;
+        }
+        assert_eq!(pos, file.len());
+        assert_eq!(read_opus(&file).unwrap().packets, packets);
     }
 
     #[test]
