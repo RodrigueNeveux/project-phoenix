@@ -91,3 +91,28 @@ platform scale factor and content size; the effective `scale_factor` becomes
 input positions (and pixel scroll deltas) by the zoom, and the values going back to the
 platform (window menu position, client inset, input region, IME bounds, character index
 lookups) are multiplied by it. Search `PHOENIX PATCH (page zoom)`.
+
+## 4. Chromium-style ellipsis (`src/elements/text.rs`, `src/text_system/line_wrapper.rs`)
+
+**Problem.** Phoenix cut truncated labels one character before the client at the same
+width ("Happy 03…" against "Happy 03/1…" in the member list). Two causes: upstream trims
+spaces and ASCII punctuation before the "…", and it decides the cut on a sum of
+per-character advances, which ignores kerning and overestimates the shaped width.
+
+**Reference.** Chromium 152 (the client's engine), probed in headless Chrome with a
+monospace font so every cut is readable:
+- `white-space: nowrap; text-overflow: ellipsis` keeps the longest prefix whose width
+  plus the ellipsis fits, spaces and punctuation included ("Happy …", "ab, …", "ab.…").
+- `-webkit-line-clamp` ends the last line at its own soft wrap, drops the collapsible
+  space, then appends "…" ("bbbb…", "cccc, dddd.…"). It cuts inside a word only when the
+  word plus the ellipsis does not fit. Punctuation is kept.
+
+**Patch.** `LineWrapper::truncate_line_end_shaped` cuts one shaped line at the last whole
+grapheme whose shaped advance (`LineLayout::x_for_index`) plus the affix fits. `Text`
+uses it for single-line end truncation (it already shaped the text to test the fit).
+The per-character fallback and `truncate_wrapped_line` no longer trim punctuation, and
+the last clamped line stops at its last word break when one fits. Search
+`PHOENIX PATCH (ellipsis)`.
+
+The commit is kept on the `gpui-ellipsis` branch of origin so the pinned `rev` stays
+reachable.
