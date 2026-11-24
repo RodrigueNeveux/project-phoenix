@@ -112,12 +112,46 @@ pub struct Embed {
     pub kind: Option<SharedString>,
     pub thumbnail: Option<EmbedMedia>,
     pub image: Option<EmbedMedia>,
+    /// Images of the following embeds that share this embed's `url` (multi-image
+    /// posts from X/Twitter, Bluesky…), this embed's own image first. Empty
+    /// unless at least two were merged; see [`merge_embeds_on_url`].
+    pub images: Vec<EmbedMedia>,
     pub video: Option<EmbedMedia>,
     pub author: Option<EmbedAuthor>,
     pub fields: Vec<EmbedField>,
     pub footer: Option<EmbedFooter>,
     /// Unix seconds, shown next to the footer.
     pub timestamp: Option<i64>,
+}
+
+/// The client merges embeds that share a `url` (live client, embed utils): the
+/// first one is kept, and every later one only adds its image to the first's
+/// image list, which then renders as a media mosaic. Embeds without a url stay.
+pub fn merge_embeds_on_url(embeds: Vec<Embed>) -> Vec<Embed> {
+    let mut out: Vec<Embed> = Vec::with_capacity(embeds.len());
+    let mut first: std::collections::HashMap<SharedString, usize> = Default::default();
+    for e in embeds {
+        let Some(url) = e.url.clone() else {
+            out.push(e);
+            continue;
+        };
+        match first.get(&url) {
+            None => {
+                first.insert(url, out.len());
+                out.push(e);
+            }
+            Some(&i) => {
+                if let Some(img) = e.image {
+                    let head = &mut out[i];
+                    if head.images.is_empty() {
+                        head.images.extend(head.image.clone());
+                    }
+                    head.images.push(img);
+                }
+            }
+        }
+    }
+    out
 }
 
 #[derive(Clone, Debug, Default)]
@@ -316,6 +350,24 @@ mod tests {
         assert_eq!(acronym("gpui").as_ref(), "g");
         assert_eq!(acronym("La Retaudière").as_ref(), "LRèr");
         assert_eq!(acronym("Roxas's World").as_ref(), "RW");
+    }
+
+    #[test]
+    fn embeds_sharing_a_url_merge_their_images() {
+        let media = |u: &str| EmbedMedia { url: u.to_string().into(), width: 10, height: 10 };
+        let post = |img: &str, title: Option<&str>| Embed {
+            url: Some("https://x.com/a/status/1".into()),
+            title: title.map(|t| t.to_string().into()),
+            image: Some(media(img)),
+            ..Default::default()
+        };
+        let other = Embed { url: Some("https://example.com".into()), image: Some(media("o")), ..Default::default() };
+        let bare = Embed { title: Some("no url".into()), ..Default::default() };
+        let out = merge_embeds_on_url(vec![post("1", Some("post")), bare, post("2", None), other, post("3", None)]);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].images.iter().map(|m| m.url.as_ref()).collect::<Vec<_>>(), ["1", "2", "3"]);
+        assert_eq!(out[1].title.as_deref(), Some("no url"));
+        assert!(out[2].images.is_empty(), "a lone embed keeps its single image");
     }
 }
 

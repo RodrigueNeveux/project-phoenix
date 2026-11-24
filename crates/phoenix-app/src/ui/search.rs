@@ -317,7 +317,7 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
         .attachments
         .iter()
         .map(|a| crate::ui::chat::attachment(a, acx))
-        .chain(m.embeds.iter().map(|e| crate::ui::chat::embed(app, e)))
+        .chain(m.embeds.iter().map(|e| crate::ui::chat::embed(app, e, acx)))
         .collect();
     div()
         .flex()

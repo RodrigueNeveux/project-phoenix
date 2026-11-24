@@ -91,6 +91,25 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
         },
         &mut out,
     );
+    // A multi-image social post: one embed per image sharing the url, merged into a mosaic.
+    let post = |img: &str, text: bool| Embed {
+        color: Some(0x1D9BF0),
+        provider: text.then(|| "SocialSite".into()),
+        description: text.then(|| "A post with three pictures: the client merges the embeds that share a url into one.".into()),
+        url: Some("https://example.com/post/1".into()),
+        kind: Some("rich".into()),
+        image: Some(EmbedMedia { url: media(img), width: 1280, height: 720 }),
+        ..Default::default()
+    };
+    push(
+        6,
+        Message {
+            content: "https://example.com/post/1".into(),
+            embeds: crate::model::merge_embeds_on_url(vec![post("photo.png", true), post("video.png", false), post("thumb.png", false)]),
+            ..Default::default()
+        },
+        &mut out,
+    );
     push(3, Message { attachments: vec![at(AttachmentKind::Image, "photo.png", 1280, 720, 345_678)], ..Default::default() }, &mut out);
     push(3, Message { attachments: vec![at(AttachmentKind::Image, "SPOILER_photo.png", 1280, 720, 345_678)], ..Default::default() }, &mut out);
     push(

@@ -1037,7 +1037,7 @@ fn message(
         }
     }
     for e in msg.embeds.iter().filter(show_embed) {
-        content = content.child(embed(app, e));
+        content = content.child(embed(app, e, cx));
     }
     media::set_current_author(None);
     // Forward: the snapshot sits inside the quote frame; reactions/threads stay outside.
@@ -1950,7 +1950,7 @@ fn embed_text(t: &RichText, size: f32) -> gpui::Div {
     push(row, last..t.text.len())
 }
 
-pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
+pub(crate) fn embed(app: &PhoenixApp, e: &Embed, cx: &App) -> AnyElement {
     let has_text = e.title.is_some() || e.description.is_some() || e.author.is_some() || !e.fields.is_empty();
     // gifv embeds always render as bare media, even with a provider/title (Tenor).
     let media_only = e.kind.as_deref() == Some("gifv") || (e.kind.as_deref() == Some("image") && !has_text);
@@ -1995,6 +1995,22 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
     let side_thumb = e.image.is_none() && e.kind.as_deref() != Some("video");
     let thumb = e.thumbnail.clone().filter(|_| side_thumb);
     let big = e.image.clone().or_else(|| e.thumbnail.clone().filter(|_| !side_thumb));
+    // Merged multi-image posts (model::merge_embeds_on_url) draw their images in
+    // the attachment media mosaic, like the client's embed `renderImages`.
+    let gallery: Vec<crate::model::Attachment> = e
+        .images
+        .iter()
+        .map(|m| crate::model::Attachment {
+            filename: "image.png".into(),
+            url: m.url.clone(),
+            width: m.width,
+            height: m.height,
+            is_image: true,
+            kind: crate::model::AttachmentKind::Image,
+            ..Default::default()
+        })
+        .collect();
+    let big = big.filter(|_| gallery.len() < 2);
 
     // Fields: inline ones share a row (up to 3, or 2 with a side thumbnail).
     let per_row = if thumb.is_some() { 2 } else { 3 };
@@ -2152,6 +2168,10 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
                                     .child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(z(4.)))
                                     .children(video.map(attach::video_embed_actions)),
                             )
+                        })
+                        .when(gallery.len() >= 2, |d| {
+                            let refs: Vec<&crate::model::Attachment> = gallery.iter().collect();
+                            d.child(div().mt(z(4.)).child(mosaic::render(&refs, cx)))
                         })
                         .children(footer),
                 )

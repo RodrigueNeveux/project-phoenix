@@ -192,7 +192,7 @@ pub fn message(m: &api::Message) -> model::Message {
         }),
         forward: None,
         author_nick: m.member.as_ref().and_then(|mb| mb.nick.as_deref()).filter(|n| !n.is_empty()).map(|n| collapse_ws(n).into()),
-        embeds: m
+        embeds: model::merge_embeds_on_url(m
             .embeds
             .iter()
             .filter(|e| e.title.is_some() || e.description.is_some() || e.image.is_some() || e.thumbnail.is_some() || e.author.is_some() || !e.fields.is_empty())
@@ -205,6 +205,7 @@ pub fn message(m: &api::Message) -> model::Message {
                 kind: e.kind.clone().map(Into::into),
                 thumbnail: embed_media(&e.thumbnail, &m.attachments),
                 image: embed_media(&e.image, &m.attachments),
+                images: Vec::new(),
                 video: embed_media(&e.video, &m.attachments),
                 author: e.author.as_ref().map(|a| model::EmbedAuthor {
                     name: a.name.clone().into(),
@@ -226,7 +227,7 @@ pub fn message(m: &api::Message) -> model::Message {
                     .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
                     .map(|d| d.timestamp()),
             })
-            .collect(),
+            .collect()),
         attachments: m
             .attachments
             .iter()
