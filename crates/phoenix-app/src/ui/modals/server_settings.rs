@@ -160,8 +160,20 @@ pub fn render(app: &PhoenixApp, guild: Id, section: usize, cx: &mut Context<Phoe
             .size_full()
             .occlude()
             .flex()
-            .child(div().id("gs-side").flex_1().flex().justify_end().overflow_y_scroll().bg(c(tok(idx::BACKGROUND_BASE_LOWER))).child(side))
-            .child(div().id("gs-main").flex_1().flex().overflow_y_scroll().bg(c(tok(idx::BACKGROUND_BASE_LOW))).child(body).child(close)),
+            .child(
+                crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
+                    .flex_1()
+                    .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+                    .child(div().id("gs-side").flex_1().min_h_0().flex().justify_end().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("gs-side")).child(side))
+                    .children(crate::ui::chat::scrollbar::bar_for("gs-side", crate::ui::chat::scrollbar::Bar::ThinFade)),
+            )
+            .child(
+                crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto)
+                    .flex_1()
+                    .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+                    .child(div().id("gs-main").flex_1().min_h_0().flex().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("gs-main")).child(body).child(close))
+                    .children(crate::ui::chat::scrollbar::bar_for("gs-main", crate::ui::chat::scrollbar::Bar::Auto)),
+            ),
     )
     .with_priority(20)
     .into_any_element()

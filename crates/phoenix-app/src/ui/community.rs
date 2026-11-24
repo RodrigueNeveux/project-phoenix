@@ -347,7 +347,13 @@ fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>
         .flex()
         .flex_col()
         .child(search)
-        .child(div().id("community-browse-scroll").flex_1().min_h_0().overflow_y_scroll().pr(z(24.)).child(list))
+        .child(
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto)
+                .flex_1()
+                .min_h_0()
+                .child(div().id("community-browse-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("community-browse-scroll")).pr(z(24.)).child(list))
+                .children(crate::ui::chat::scrollbar::bar_for("community-browse-scroll", crate::ui::chat::scrollbar::Bar::Auto)),
+        )
         .into_any_element()
 }
 
@@ -592,14 +598,21 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             .child(header)
             .child(tabs)
             .child(
-                div()
-                    .id("community-scroll")
+                crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
                     .flex_1()
                     .min_h_0()
-                    .overflow_y_scroll()
-                    .pt(z(32.))
-                    .px(z(32.))
-                    .child(div().flex().items_start().gap(z(16.)).child(body.pb(z(32.))).child(profile_column(app, page.guild))),
+                    .child(
+                        div()
+                            .id("community-scroll")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .track_scroll(&crate::ui::chat::scrollbar::handle("community-scroll"))
+                            .pt(z(32.))
+                            .px(z(32.))
+                            .child(div().flex().items_start().gap(z(16.)).child(body.pb(z(32.))).child(profile_column(app, page.guild))),
+                    )
+                    .children(crate::ui::chat::scrollbar::bar_for("community-scroll", crate::ui::chat::scrollbar::Bar::ThinFade)),
             )
             .into_any_element(),
     )

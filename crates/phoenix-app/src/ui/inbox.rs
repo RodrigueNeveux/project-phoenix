@@ -1257,7 +1257,15 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 a.open_create_thread(ch, w, cx);
             }
         }))));
-    let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).flex().flex_col();
+    let mut list = div()
+        .id("threads-list")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .track_scroll(&crate::ui::chat::scrollbar::handle("threads-list"))
+        .px(z(16.))
+        .flex()
+        .flex_col();
     if list_src.is_empty() && archived.is_empty() {
         list = list.child(
             div()
@@ -1377,7 +1385,13 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .flex()
                 .flex_col()
                 .child(header)
-                .child(list),
+                .child(
+                    crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
+                        .flex_1()
+                        .min_h_0()
+                        .child(list)
+                        .children(crate::ui::chat::scrollbar::bar_for("threads-list", crate::ui::chat::scrollbar::Bar::ThinFade)),
+                ),
         )
         .with_priority(10)
         .into_any_element(),
@@ -1393,7 +1407,16 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
     let p = app.chat.pins.as_ref()?;
     let ch = p.channel;
     let is_dm = app.channels.get(&ch).is_some_and(|c| c.guild.is_none());
-    let mut list = div().id("pins-list").flex_1().min_h_0().overflow_y_scroll().pt(z(8.)).pl(z(8.)).flex().flex_col();
+    let mut list = div()
+        .id("pins-list")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .track_scroll(&crate::ui::chat::scrollbar::handle("pins-list"))
+        .pt(z(8.))
+        .pl(z(8.))
+        .flex()
+        .flex_col();
     let mut footer = None;
     if p.loading {
         list = list.child(div().p(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")));
@@ -1487,7 +1510,13 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                     .child(named("pin", 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)))
                     .child(div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("pins.title"))),
             )
-            .child(list)
+            .child(
+                crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin)
+                    .flex_1()
+                    .min_h_0()
+                    .child(list)
+                    .children(crate::ui::chat::scrollbar::bar_for("pins-list", crate::ui::chat::scrollbar::Bar::Thin)),
+            )
             .children(footer),
     )
     .with_priority(10)

@@ -565,7 +565,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .flex_col()
             .bg(t(idx::BACKGROUND_BASE_LOWER))
             .child(bar)
-            .child(div().id("guide-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
+            .child(
+                crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto)
+                    .flex_1()
+                    .min_h_0()
+                    .child(div().id("guide-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("guide-scroll")).child(body))
+                    .children(crate::ui::chat::scrollbar::bar_for("guide-scroll", crate::ui::chat::scrollbar::Bar::Auto)),
+            )
             .into_any_element(),
     )
 }

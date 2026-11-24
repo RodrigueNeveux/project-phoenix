@@ -147,7 +147,7 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     let inspected = p.stickers.inspected.clone().or_else(|| sections.first().and_then(|s| s.2.first().map(|d| (d.clone(), s.0.clone()))));
     let insp_id = inspected.as_ref().map(|(d, _)| d.id);
 
-    let scroll = gpui::ScrollHandle::new();
+    let scroll = crate::ui::chat::scrollbar::handle("sticker-scroll");
     let mut body = div().id("sticker-scroll").track_scroll(&scroll).size_full().overflow_y_scroll().pl(px(8.));
     let mut rail = grid::rail();
     for (si, (title, gicon, st, locked)) in sections.iter().enumerate() {
@@ -198,7 +198,7 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
         .size_full()
         .flex()
         .child(grid::rail_shell(rail, shortcut))
-        .child(div().flex_1().min_w_0().flex().flex_col().child(div().flex_1().min_h_0().child(body)).child(footer))
+        .child(div().flex_1().min_w_0().flex().flex_col().child(crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin).flex_1().min_h_0().child(body).children(crate::ui::chat::scrollbar::bar_for("sticker-scroll", crate::ui::chat::scrollbar::Bar::Thin))).child(footer))
         .into_any_element()
 }
 

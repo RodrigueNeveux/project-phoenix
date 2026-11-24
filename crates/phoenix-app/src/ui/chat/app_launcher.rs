@@ -488,17 +488,24 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                     .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .child(div().flex_none().p(px(16.)).flex().child(crate::ui::pickers::search_box(&input)))
                     .child(
-                        div()
-                            .id("launcher-scroll")
+                        crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
                             .flex_1()
                             .min_h_0()
-                            .overflow_y_scroll()
-                            .px(px(16.))
-                            .pb(px(16.))
-                            .flex()
-                            .flex_col()
-                            .gap(px(32.))
-                            .children(content),
+                            .child(
+                                div()
+                                    .id("launcher-scroll")
+                                    .flex_1()
+                                    .min_h_0()
+                                    .overflow_y_scroll()
+                                    .track_scroll(&crate::ui::chat::scrollbar::handle("launcher-scroll"))
+                                    .px(px(16.))
+                                    .pb(px(16.))
+                                    .flex()
+                                    .flex_col()
+                                    .gap(px(32.))
+                                    .children(content),
+                            )
+                            .children(crate::ui::chat::scrollbar::bar_for("launcher-scroll", crate::ui::chat::scrollbar::Bar::ThinFade)),
                     ),
             )
             .into_any_element(),

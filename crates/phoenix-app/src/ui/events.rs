@@ -300,7 +300,7 @@ pub fn modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
                 .into_any_element()
         }
         Some(list) => {
-            let mut col = div().id("events-list").size_full().overflow_y_scroll().flex().flex_col().gap(z(16.));
+            let mut col = div().id("events-list").size_full().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("events-list")).flex().flex_col().gap(z(16.));
             for ev in list {
                 col = col.child(card(app, guild, ev));
             }
@@ -324,6 +324,12 @@ pub fn modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
         .flex()
         .flex_col()
         .child(header)
-        .child(div().flex_1().min_h_0().pt(z(8.)).pr(z(16.)).pb(z(16.)).pl(z(24.)).child(body));
+        .child(
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin)
+                .flex_1()
+                .min_h_0()
+                .child(div().flex_1().min_h_0().pt(z(8.)).pr(z(16.)).pb(z(16.)).pl(z(24.)).child(body))
+                .children(crate::ui::chat::scrollbar::bar_for("events-list", crate::ui::chat::scrollbar::Bar::Thin)),
+        );
     Some(crate::ui::modal::frame("events-modal", on_close, card))
 }

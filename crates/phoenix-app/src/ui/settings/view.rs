@@ -670,17 +670,24 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
         .flex_col()
         .child(fixed)
         .child(
-            div()
-                .id("settings-nav")
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
                 .flex_1()
                 .min_h_0()
-                .overflow_y_scroll()
-                .pt(z(12.))
-                .pb(z(16.))
-                .pl(z(4.))
-                .pr(z(12.))
                 .mr(z(4.))
-                .child(list),
+                .child(
+                    div()
+                        .id("settings-nav")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .track_scroll(&crate::ui::chat::scrollbar::handle("settings-nav"))
+                        .pt(z(12.))
+                        .pb(z(16.))
+                        .pl(z(4.))
+                        .pr(z(12.))
+                        .child(list),
+                )
+                .children(crate::ui::chat::scrollbar::bar_for("settings-nav", crate::ui::chat::scrollbar::Bar::ThinFade)),
         )
 }
 
@@ -846,7 +853,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
                 .flex_col()
                 .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
                 .child(content_header(page_label, cx))
-                .child(body),
+                .child(crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto).flex_1().min_h_0().child(body).children(crate::ui::chat::scrollbar::auto_scrollbar_div(&s.scroll))),
         );
     Some(
         div()

@@ -56,17 +56,24 @@ pub fn render(app: &PhoenixApp, ch: Id, cx: &mut Context<PhoenixApp>) -> AnyElem
                 ),
         )
         .child(
-            div()
-                .id("topic-text")
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto)
                 .mt(z(16.))
                 .mb(z(8.))
-                .pl(z(24.))
-                .pr(z(16.))
-                .overflow_y_scroll()
-                .text_size(z(16.))
-                .line_height(z(22.))
-                .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .child(crate::ui::components::markdown(app, &topic)),
+                .min_h_0()
+                .child(
+                    div()
+                        .id("topic-text")
+                        .min_h_0()
+                        .pl(z(24.))
+                        .pr(z(16.))
+                        .overflow_y_scroll()
+                        .track_scroll(&crate::ui::chat::scrollbar::handle("topic-text"))
+                        .text_size(z(16.))
+                        .line_height(z(22.))
+                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                        .child(crate::ui::components::markdown(app, &topic)),
+                )
+                .children(crate::ui::chat::scrollbar::bar_for("topic-text", crate::ui::chat::scrollbar::Bar::Auto)),
         )
         .child(
             div()

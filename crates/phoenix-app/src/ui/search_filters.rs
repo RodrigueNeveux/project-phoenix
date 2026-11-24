@@ -910,7 +910,13 @@ pub fn render(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -
                 .child(crate::t!("search.filters")),
         )
         .child(div().mt(z(16.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))))
-        .child(div().id("search-filters-body").flex_1().min_h_0().overflow_y_scroll().pl(z(24.)).pr(z(8.)).child(div().pr(z(16.)).child(body)))
+        .child(
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto)
+                .flex_1()
+                .min_h_0()
+                .child(div().id("search-filters-body").flex_1().min_h_0().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("search-filters-body")).pl(z(24.)).pr(z(8.)).child(div().pr(z(16.)).child(body)))
+                .children(crate::ui::chat::scrollbar::bar_for("search-filters-body", crate::ui::chat::scrollbar::Bar::Auto)),
+        )
         .child(div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))))
         .child(
             div()

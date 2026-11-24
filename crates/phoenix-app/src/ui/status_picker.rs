@@ -327,6 +327,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .track_scroll(&crate::ui::chat::scrollbar::handle("acct-body"))
         .pt(z(4.))
         .pr(z(8.))
         .pb(z(16.))
@@ -381,7 +382,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .flex_col()
                 .gap(z(8.))
                 .child(header.children(bubble))
-                .child(body),
+                .child(crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin).flex_1().min_h_0().child(body).children(crate::ui::chat::scrollbar::bar_for("acct-body", crate::ui::chat::scrollbar::Bar::Thin))),
         );
 
     div().absolute().left(px(10.)).bottom(px(76.)).child(card).into_any_element()

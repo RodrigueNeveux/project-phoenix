@@ -306,7 +306,8 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
         .py(z(8.))
         .px(z(8.))
         .max_h(z(max_h - 2.))
-        .overflow_y_scroll();
+        .overflow_y_scroll()
+        .track_scroll(&crate::ui::chat::scrollbar::handle(id));
     let mut sub_panel = None;
     let mut y = 0.;
     for (ix, item) in items.into_iter().enumerate() {
@@ -504,7 +505,11 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
         .occlude()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
-        .child(list)
+        .child(
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin)
+                .child(list)
+                .children(crate::ui::chat::scrollbar::bar_for(id, crate::ui::chat::scrollbar::Bar::Thin)),
+        )
         .children(sub_panel)
 }
 

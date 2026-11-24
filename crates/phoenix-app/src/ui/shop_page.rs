@@ -390,7 +390,13 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
         .flex_col()
         .bg(tk(idx::BACKGROUND_BASE_LOWEST))
         .child(head)
-        .child(div().id("shop-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
+        .child(
+            crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin)
+                .flex_1()
+                .min_h_0()
+                .child(div().id("shop-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("shop-scroll")).child(body))
+                .children(crate::ui::chat::scrollbar::bar_for("shop-scroll", crate::ui::chat::scrollbar::Bar::Thin)),
+        )
         .into_any_element()
 }
 

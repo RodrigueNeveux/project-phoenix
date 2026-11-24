@@ -529,7 +529,7 @@ fn more_you_can_do(app: &PhoenixApp, r: &Report, n: &ReportNode, cx: &mut Contex
     let name = user_name(app, user, channel);
     let blocked = app.nav.is_blocked(user);
     let ignored = app.nav.is_ignored(user) || crate::actions::user::is_ignored(user);
-    let done = |k: &str| r.done.iter().any(|d| *d == k);
+    let done = |k: &'static str| r.done.contains(&k);
     let ignore = n.has("ignore_users");
     let mut rows: Vec<MoreRow> = Vec::new();
     if ignore {

@@ -99,7 +99,17 @@ pub fn overlay(id: &'static str, side_items: Vec<SideItem>, selected: usize, pic
         .flex_1()
         .flex()
         .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
-        .child(div().id(SharedString::from(format!("{id}-scroll"))).flex_1().flex().overflow_y_scroll().child(body).child(close))
+        .child(
+            div()
+                .id(SharedString::from(format!("{id}-scroll")))
+                .flex_1()
+                .flex()
+                .overflow_y_scroll()
+                .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 1))
+                .child(body)
+                .child(close),
+        )
+        .children(crate::ui::chat::scrollbar::bar_for_n(id, 1, crate::ui::chat::scrollbar::Bar::Auto))
         .children(notice.map(|n| div().absolute().bottom(z(20.)).left(z(40.)).w(z(700.)).child(n)));
     deferred(
         div()
@@ -110,7 +120,23 @@ pub fn overlay(id: &'static str, side_items: Vec<SideItem>, selected: usize, pic
             .size_full()
             .occlude()
             .flex()
-            .child(div().id(SharedString::from(format!("{id}-side"))).flex_1().flex().justify_end().overflow_y_scroll().bg(c(tok(idx::BACKGROUND_BASE_LOWER))).child(side))
+            .child(
+                crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
+                    .flex_1()
+                    .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("{id}-side")))
+                            .flex_1()
+                            .min_h_0()
+                            .flex()
+                            .justify_end()
+                            .overflow_y_scroll()
+                            .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 2))
+                            .child(side),
+                    )
+                    .children(crate::ui::chat::scrollbar::bar_for_n(id, 2, crate::ui::chat::scrollbar::Bar::ThinFade)),
+            )
             .child(main),
     )
     .with_priority(20)

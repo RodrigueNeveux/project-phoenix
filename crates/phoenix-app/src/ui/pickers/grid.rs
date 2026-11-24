@@ -535,7 +535,12 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let grid_el = if empty {
         super::empty_state(crate::t!("picker.no_emoji"))
     } else {
-        list(list_state, |ix, _w, cx| render_row(ix, cx)).size_full().into_any_element()
+        div()
+            .relative()
+            .size_full()
+            .child(list(list_state.clone(), |ix, _w, cx| render_row(ix, cx)).size_full())
+            .children(crate::ui::chat::scrollbar::thin_list_scrollbar(&list_state))
+            .into_any_element()
     };
 
     let footer = match preview {

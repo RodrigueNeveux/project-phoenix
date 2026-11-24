@@ -235,7 +235,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .flex_col()
             .items_center()
             .gap(z(8.));
-        let mut list = div().id("slash-list").flex_1().min_w_0().h_full().overflow_y_scroll().pt(z(8.)).px(z(8.)).flex().flex_col();
+        let mut list = div().id("slash-list").flex_1().min_w_0().h_full().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("slash-list")).pt(z(8.)).px(z(8.)).flex().flex_col();
         let mut last_app: Option<&str> = None;
         for (i, cmd) in items.iter().enumerate() {
             if last_app != Some(cmd.app_name.as_str()) {
@@ -313,6 +313,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .on_click(cx.listener(move |a, _, w, cx| fill(a, &c2, w, cx))),
             );
         }
+        let list = crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Thin).flex_1().min_w_0().h_full().child(list).children(crate::ui::chat::scrollbar::bar_for("slash-list", crate::ui::chat::scrollbar::Bar::Thin));
         return Some(anchor(popup().h(z(420.)).flex_row().child(rail).child(list)));
     }
     let (name, args) = slash::split_invocation(t.trim_start())?;

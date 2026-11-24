@@ -1334,6 +1334,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .occlude()
             .bg(c(Palette::BG_PRIMARY))
             .child(col)
+            .children(crate::ui::chat::scrollbar::auto_scrollbar_div(&LIST_SCROLL.with(|h| h.clone())))
             .children(sort_menu)
             .into_any_element(),
     )

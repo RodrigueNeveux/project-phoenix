@@ -140,6 +140,7 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, _cx: &mut Context<Phoe
     let grid = div().flex().flex_wrap().gap_x(z(24.)).gap_y(z(20.)).children(cards);
     div()
         .id("nitro-home")
+        .relative()
         .size_full()
         .flex()
         .flex_col()
@@ -150,6 +151,7 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, _cx: &mut Context<Phoe
                 .flex_1()
                 .min_h_0()
                 .overflow_y_scroll()
+                .track_scroll(&crate::ui::chat::scrollbar::handle("nitro-scroll"))
                 .flex()
                 .flex_col()
                 .child(
@@ -174,5 +176,6 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, _cx: &mut Context<Phoe
                         .child(grid),
                 ),
         )
+        .children(crate::ui::chat::scrollbar::bar_for("nitro-scroll", crate::ui::chat::scrollbar::Bar::Auto))
         .into_any_element()
 }

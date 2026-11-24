@@ -136,6 +136,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         .id("gn-body")
         .max_h(z(560.))
         .overflow_y_scroll()
+        .track_scroll(&crate::ui::chat::scrollbar::handle("gn-body"))
         .flex()
         .flex_col()
         .child(mute)
@@ -151,6 +152,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         let close = close_action(cx);
         move |_, w, cx| close(w, cx)
     });
+    let body = crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto).mr(z(-24.)).pr(z(24.)).child(body).children(crate::ui::chat::scrollbar::bar_for("gn-body", crate::ui::chat::scrollbar::Bar::Auto));
     card(480., crate::t!("menu.notify_settings"), None, body.into_any_element(), Some(footer.into_any_element()), cx)
 }
 

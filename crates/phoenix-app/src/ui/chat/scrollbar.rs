@@ -6,6 +6,43 @@ use crate::theme::{c, generated::idx, tok, z};
 
 pub const AUTO_HOVER_GROUP: &str = "auto-hover-scroller";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bar {
+    Thin,
+    ThinFade,
+    Auto,
+}
+
+thread_local! {
+    static HANDLES: std::cell::RefCell<std::collections::HashMap<(&'static str, u8), ScrollHandle>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+pub fn handle(key: &'static str) -> ScrollHandle {
+    handle_n(key, 0)
+}
+
+pub fn handle_n(key: &'static str, part: u8) -> ScrollHandle {
+    HANDLES.with(|h| h.borrow_mut().entry((key, part)).or_default().clone())
+}
+
+pub fn bar_for(key: &'static str, bar: Bar) -> Option<AnyElement> {
+    bar_for_n(key, 0, bar)
+}
+
+pub fn bar_for_n(key: &'static str, part: u8, bar: Bar) -> Option<AnyElement> {
+    let h = handle_n(key, part);
+    match bar {
+        Bar::Thin => thin_scrollbar_div(&h),
+        Bar::ThinFade => thin_fade_scrollbar_div(&h),
+        Bar::Auto => auto_scrollbar_div(&h),
+    }
+}
+
+pub fn host(bar: Bar) -> gpui::Div {
+    let d = div().relative().flex().flex_col();
+    if bar == Bar::ThinFade { d.group(THIN_FADE_GROUP) } else { d }
+}
+
 pub fn auto_scrollbar(state: &ListState) -> Option<AnyElement> {
     let view = state.viewport_bounds();
     let vh = f32::from(view.size.height);
@@ -87,6 +124,12 @@ fn estimated_max_offset(state: &ListState, vh: f32, measured: f32) -> f32 {
         return measured;
     }
     measured.max(sum / k as f32 * n as f32 - vh)
+}
+
+pub fn thin_list_scrollbar(state: &ListState) -> Option<AnyElement> {
+    let vh = f32::from(state.viewport_bounds().size.height);
+    let measured = f32::from(state.max_offset_for_scrollbar().y);
+    thin(vh, estimated_max_offset(state, vh, measured), -f32::from(state.scroll_px_offset_for_scrollbar().y), false)
 }
 
 pub fn thin_fade_scrollbar_div(scroll: &ScrollHandle) -> Option<AnyElement> {
