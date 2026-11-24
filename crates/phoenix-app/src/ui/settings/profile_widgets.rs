@@ -334,36 +334,6 @@ fn progress_row((pct, it): &(f32, WidgetItem), col: &WidgetColors) -> Div {
         )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn builds_card_from_config_and_identity() {
-        let widgets = vec![json!({"data": {"type": "application", "application_id": "42"}}), json!({"data": {"type": "favorite_games"}})];
-        assert_eq!(app_ids(&widgets), vec![42]);
-        let ident = json!({"identities": [{"application_id": "42", "profile": {"data": {"dynamic": [
-            {"type": 1, "name": "title", "value": "Hello"}, {"type": 1, "name": "users", "value": "12"}]}}}]});
-        let data = identity_data(&ident, 42);
-        let cfg = json!([{"status": "published", "application": {"name": "Bot", "icon": "abc"},
-            "resolved_assets": [{"key": "img", "asset_id": "7"}],
-            "surfaces": {
-                "widget_top": {"components": {"title": {"fields": {"text": {"value_type": "data", "value": "title"}}},
-                    "subtitle_1": {"fields": {"text": {"value_type": "custom_string", "value": "Sub"}}},
-                    "hero_image": {"fields": {"image": {"value_type": "application_asset", "value": "img"}}}}},
-                "widget_bottom": {"components": {
-                    "item_2": {"fields": {"name": {"value_type": "custom_string", "value": "B"}, "description": {"value_type": "data", "value": "nope", "fallback": {"value_type": "custom_string", "value": "-"}}}},
-                    "item_1": {"fields": {"name": {"value_type": "custom_string", "value": "A"}, "description": {"value_type": "data", "value": "users"}}}}}}}]);
-        let w = build(42, &cfg, &data).unwrap();
-        assert_eq!(w.title, "Hello");
-        assert_eq!(w.subtitle, "Sub");
-        assert_eq!(w.name, "Bot");
-        assert_eq!(w.hero.as_deref(), Some("https://cdn.discordapp.com/app-assets/42/7.png?size=512"));
-        assert_eq!(w.items.iter().map(|i| (i.name.to_string(), i.value.to_string())).collect::<Vec<_>>(), vec![("A".into(), "12".into()), ("B".into(), "-".into())]);
-    }
-}
-
 /// Compact card in the profile popout (live popout, ref-cache
 /// profile-popout-app-widget.json): `overlay_P1YEjQ` radius 8, 1px border,
 /// --user-profile-overlay-background; `root_CPqUlz` row, gap 4; `body_CPqUlz`
@@ -413,4 +383,34 @@ pub fn render_compact(w: &AppWidget, col: &WidgetColors) -> Div {
         .bg(col.card)
         .child(div().flex_1().min_w_0().p(z(8.)).flex().flex_col().gap(z(8.)).child(header).child(content))
         .children(hero)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn builds_card_from_config_and_identity() {
+        let widgets = vec![json!({"data": {"type": "application", "application_id": "42"}}), json!({"data": {"type": "favorite_games"}})];
+        assert_eq!(app_ids(&widgets), vec![42]);
+        let ident = json!({"identities": [{"application_id": "42", "profile": {"data": {"dynamic": [
+            {"type": 1, "name": "title", "value": "Hello"}, {"type": 1, "name": "users", "value": "12"}]}}}]});
+        let data = identity_data(&ident, 42);
+        let cfg = json!([{"status": "published", "application": {"name": "Bot", "icon": "abc"},
+            "resolved_assets": [{"key": "img", "asset_id": "7"}],
+            "surfaces": {
+                "widget_top": {"components": {"title": {"fields": {"text": {"value_type": "data", "value": "title"}}},
+                    "subtitle_1": {"fields": {"text": {"value_type": "custom_string", "value": "Sub"}}},
+                    "hero_image": {"fields": {"image": {"value_type": "application_asset", "value": "img"}}}}},
+                "widget_bottom": {"components": {
+                    "item_2": {"fields": {"name": {"value_type": "custom_string", "value": "B"}, "description": {"value_type": "data", "value": "nope", "fallback": {"value_type": "custom_string", "value": "-"}}}},
+                    "item_1": {"fields": {"name": {"value_type": "custom_string", "value": "A"}, "description": {"value_type": "data", "value": "users"}}}}}}}]);
+        let w = build(42, &cfg, &data).unwrap();
+        assert_eq!(w.title, "Hello");
+        assert_eq!(w.subtitle, "Sub");
+        assert_eq!(w.name, "Bot");
+        assert_eq!(w.hero.as_deref(), Some("https://cdn.discordapp.com/app-assets/42/7.png?size=512"));
+        assert_eq!(w.items.iter().map(|i| (i.name.to_string(), i.value.to_string())).collect::<Vec<_>>(), vec![("A".into(), "12".into()), ("B".into(), "-".into())]);
+    }
 }
