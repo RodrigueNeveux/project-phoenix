@@ -340,3 +340,111 @@ pub fn stage_audience(app: &crate::app::PhoenixApp, channel: Id) -> AnyElement {
         )
         .into_any_element()
 }
+
+thread_local! {
+    static STREAM_HOVER: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Voice row hover → stream preview card (only for users that are live).
+pub fn set_stream_hover(user: Id, hovered: bool) -> bool {
+    STREAM_HOVER.with(|h| {
+        let before = h.get();
+        if hovered {
+            h.set(Some(user.0));
+        } else if before == Some(user.0) {
+            h.set(None);
+        }
+        before != h.get()
+    })
+}
+
+/// Stream preview card shown right of a live user's voice row while hovered
+/// (`streamPreviewWrapper_30W6Js`: slides in from translate 8px / scale .98 with
+/// opacity 0 → 1 over 150ms). `previewContainer_` 142px tall, --background-mod-normal;
+/// `previewHover_` overlay --opacity-black-60, semibold 18px line, shown on hover;
+/// `body_` padding 10 with the `liveIcon_` badge (margin-inline-end 8) and the name.
+/// The preview image itself (GET /streams/{key}/preview) is not fetched yet.
+pub fn stream_preview(app: &crate::app::PhoenixApp, user: Id) -> Option<AnyElement> {
+    use gpui::{AnimationExt, FontWeight};
+    if STREAM_HOVER.with(|h| h.get()) != Some(user.0) || !crate::ui::voice_panel::flags(user).stream {
+        return None;
+    }
+    let b = ROWS.with(|r| r.borrow().get(&user.0).copied())?;
+    let name = crate::ui::sidebar::voice_user_name(app, user);
+    let card = div()
+        .id(("stream-preview", user.0))
+        .occlude()
+        .w(z(252.)) // 142 * 16/9
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow_lg()
+        .child(
+            div()
+                .id(("stream-preview-img", user.0))
+                .group("stream-preview-img")
+                .relative()
+                .w_full()
+                .h(z(142.))
+                .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .bg(c(tok(idx::OPACITY_BLACK_60)))
+                        .opacity(0.)
+                        .group_hover("stream-preview-img", |s| s.opacity(1.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .line_height(z(18.))
+                        .text_size(z(14.))
+                        .text_color(c(tok(idx::WHITE)))
+                        .child(crate::t!("voice.watch_stream")),
+                ),
+        )
+        .child(
+            div()
+                .p(z(10.))
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .mr(z(8.))
+                        .h(z(16.))
+                        .px(z(6.))
+                        .rounded_full()
+                        .bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
+                        .flex()
+                        .items_center()
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(c(tok(idx::WHITE)))
+                        .child(crate::t!("voice.live")),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_ellipsis()
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                        .child(name),
+                ),
+        )
+        .with_animation(
+            ("stream-preview-in", user.0),
+            gpui::Animation::new(std::time::Duration::from_millis(150)),
+            |d, t| d.opacity(t).ml(z(8. * (1. - t))),
+        );
+    Some(
+        gpui::deferred(gpui::anchored().position(point(b.right() + px(8.), b.top())).child(card))
+            .with_priority(1)
+            .into_any_element(),
+    )
+}

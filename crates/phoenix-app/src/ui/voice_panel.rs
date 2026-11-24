@@ -623,6 +623,15 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
             let at = crate::ui::voice_row::popout_anchor(user, ev.position());
             e2.update(cx, |a, cx| a.open_profile(user, guild, at, window, cx));
         })
+        .on_hover({
+            let e = entity.clone();
+            move |h: &bool, _, cx| {
+                if crate::ui::voice_row::set_stream_hover(user, *h) {
+                    e.update(cx, |_, cx| cx.notify());
+                }
+            }
+        })
+        .children(crate::ui::voice_row::stream_preview(app, user))
         .child(speaking_ring(avatar(u, 24.), 24., speaking))
         .child(
             div()
