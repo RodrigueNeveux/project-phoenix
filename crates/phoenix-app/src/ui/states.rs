@@ -39,8 +39,10 @@ pub fn composer_button_ext(id: &'static str, i: Icon, glyph: f32, hover_bg: bool
                 .id("glyph")
                 .group_active(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))), // :active color
         );
-    // Tab focus ring (live: 32x24 box 4px inside the 32px button, radius 8; 4 on the gift button).
-    crate::ui::focus_ring::ring_inset(el, k, if hover_bg { 8. } else { 4. }, 0., 4.)
+    // Tab focus ring (live: 32x24 box 4px inside the 32px button, radius 8; 4 on the gift
+    // button; the emoji button's ring is 40x24, 4px wider on each side).
+    let dx = if id == "emoji" { -4. } else { 0. };
+    crate::ui::focus_ring::ring_inset(el, k, if hover_bg { 8. } else { 4. }, dx, 4.)
 }
 
 thread_local! {

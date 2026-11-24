@@ -168,7 +168,7 @@ pickers and menus had their turn; Enter / Space click through GPUI's keyboard cl
 |---|---|---|---|
 | composer text area | the 830x57 input box, radius 8 | gpui-component input (own focus, no ring) | ❌ no ring on the text field yet |
 | composer buttons (gift, GIF, sticker) | 32x24, 4px inside the 32px button vertically, radius 8 (gift 4) | `states::composer_button_ext` `ring_inset(0, 4)` | ✅ |
-| emoji / apps buttons | 40x24 (4px wider than the button) | same helper (32x24) | ⚠ 8px narrower |
+| emoji / apps buttons | 40x24 (4px wider than the button on each side) | emoji: same helper with `dx -4`; apps: own button, no ring yet | ✅ emoji / ❌ apps |
 | member rows | 244x36, 4px inside the 252x44 row, radius 8 | `members.rs` `ring_inset(4, 3)` | ✅ |
 | channel rows | not measured (the user was typing in the client) | `sidebar.rs` chrow `ring_inset(4, 4)`, same rule as the member rows | ⚠ |
 | rail tiles | not measured | `server_bar.rs` `row`, around the 40px tile, radius 12 | ⚠ |
