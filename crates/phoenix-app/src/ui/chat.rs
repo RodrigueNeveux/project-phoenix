@@ -1203,7 +1203,7 @@ fn edited_marker(ts: i64) -> impl IntoElement {
         .text_size(z(10.)) // edited_ font-size .625rem
         .line_height(z(10.)) // edited_ line-height 1
         .font_weight(FontWeight::NORMAL) // edited_ --font-weight-normal
-        .text_color(c(Palette::TEXT_MUTED))
+        .text_color(tk(idx::TEXT_MUTED))
         .child(crate::t!("chat.edited"))
 }
 
@@ -1420,7 +1420,7 @@ fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> 
 }
 
 fn attachment(a: &Attachment, cx: &App) -> AnyElement {
-    let remote = a.url.starts_with("https://");
+    let remote = attach::loadable(&a.url);
     let spoiler = a.filename.starts_with("SPOILER_");
     match a.kind {
         AttachmentKind::Sticker(fmt) => {

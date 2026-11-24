@@ -20,6 +20,21 @@ fn main() -> anyhow::Result<()> {
     let scene = args.next().unwrap_or_else(|| "appearance".into());
     let login_only = false;
 
+    // Mock media generated here (gradients), never Discord assets: offscreen renders have no network.
+    let dir = std::env::temp_dir().join("phoenix-mock-media");
+    std::fs::create_dir_all(&dir)?;
+    for (i, (name, w, h)) in [("photo", 1280, 720), ("one", 800, 600), ("two", 800, 600), ("three", 800, 600), ("clip", 1280, 720), ("thumb", 400, 400), ("video", 1280, 720)].into_iter().enumerate() {
+        let hue = i as f32 / 7.;
+        image::RgbaImage::from_fn(w, h, |x, y| {
+            let t = (x as f32 / w as f32 + y as f32 / h as f32) / 2.;
+            let r = (60. + 150. * ((hue + t) * std::f32::consts::TAU).sin().abs()) as u8;
+            let g = (50. + 120. * ((hue * 2. + t) * std::f32::consts::PI).cos().abs()) as u8;
+            image::Rgba([r, g, (200. - 120. * t) as u8, 255])
+        })
+        .save(dir.join(format!("{name}.png")))?;
+    }
+    // SAFETY: set before any thread is spawned.
+    unsafe { std::env::set_var("PHX_MOCK_MEDIA_DIR", &dir) };
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
         gpui_platform::current_headless_renderer()

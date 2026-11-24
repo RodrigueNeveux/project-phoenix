@@ -11,6 +11,11 @@ use crate::{
     theme::{FONT_MONO, c, generated::{global, idx}, tok, z},
 };
 
+/// Media the chat can load: remote https, or an absolute local path (offscreen mock renders).
+pub fn loadable(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with('/')
+}
+
 fn tk(i: usize) -> gpui::Hsla {
     c(tok(i))
 }
@@ -66,7 +71,7 @@ fn hover_download(group: SharedString, url: SharedString) -> AnyElement {
 pub fn file_card(a: &Attachment) -> AnyElement {
     let url = a.url.clone();
     let group: SharedString = format!("file-{}", a.url).into();
-    let remote = url.starts_with("https://");
+    let remote = loadable(&url);
     let link = url.clone();
     div()
         .group(group.clone())

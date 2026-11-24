@@ -101,7 +101,8 @@ fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
         background_color = Some(c(tok(idx::BACKGROUND_MOD_NORMAL)));
     }
     if style.has(Style::LINK) {
-        color = c(Palette::TEXT_LINK);
+        // anchor_: --text-link
+        color = c(tok(idx::TEXT_LINK));
     }
     let underline = style.has(Style::UNDERLINE).then(|| UnderlineStyle {
         thickness: px(1.),
@@ -110,10 +111,12 @@ fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
     });
     if style.has(Style::SPOILER) {
         if revealed {
-            background_color = Some(ca(Palette::SPOILER_REVEALED));
+            // spoilerContent_: --__spoiler-background-color--revealed = --spoiler-revealed-background
+            background_color = Some(c(tok(idx::SPOILER_REVEALED_BACKGROUND)));
         } else {
-            color = c(Palette::SPOILER_BG);
-            background_color = Some(c(Palette::SPOILER_BG));
+            // .hidden_: text and background --spoiler-hidden-background
+            color = c(tok(idx::SPOILER_HIDDEN_BACKGROUND));
+            background_color = Some(c(tok(idx::SPOILER_HIDDEN_BACKGROUND)));
         }
     }
     TextRun {

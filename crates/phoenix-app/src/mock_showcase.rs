@@ -11,7 +11,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
     let text = |s: &str| Message { content: s.to_owned().into(), ..Default::default() };
     let at = |kind: AttachmentKind, name: &str, w: u32, h: u32, size: u64| Attachment {
         filename: name.to_owned().into(),
-        url: format!("https://example.invalid/{name}").into(),
+        url: media(name),
         width: w,
         height: h,
         is_image: kind == AttachmentKind::Image,
@@ -42,7 +42,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
                 description: Some("Link previews show the provider, a linked title, a short description and a small thumbnail on the right.".into()),
                 url: Some("https://example.com/article".into()),
                 kind: Some("article".into()),
-                thumbnail: Some(EmbedMedia { url: "https://example.invalid/thumb.png".into(), width: 400, height: 400 }),
+                thumbnail: Some(EmbedMedia { url: media("thumb.png"), width: 400, height: 400 }),
                 ..Default::default()
             }],
             ..Default::default()
@@ -83,7 +83,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
                 title: Some("A video embed".into()),
                 url: Some("https://example.com/watch?v=phoenix".into()),
                 kind: Some("video".into()),
-                thumbnail: Some(EmbedMedia { url: "https://example.invalid/video.jpg".into(), width: 1280, height: 720 }),
+                thumbnail: Some(EmbedMedia { url: media("video.png"), width: 1280, height: 720 }),
                 video: Some(EmbedMedia { url: "https://example.invalid/embed".into(), width: 1280, height: 720 }),
                 ..Default::default()
             }],
@@ -163,3 +163,13 @@ trait Tap: Sized {
 impl<T> Tap for T {}
 
 use gpui::SharedString;
+
+/// Mock media URL: a local PNG from `PHX_MOCK_MEDIA_DIR` when the render example generated one
+/// (offscreen renders have no network), else an unreachable placeholder URL.
+fn media(name: &str) -> SharedString {
+    let png = name.rsplit_once('.').map_or(name.to_owned(), |(b, _)| format!("{b}.png"));
+    match std::env::var("PHX_MOCK_MEDIA_DIR").map(|d| format!("{d}/{png}")) {
+        Ok(p) if std::path::Path::new(&p).exists() => p.into(),
+        _ => format!("https://example.invalid/{name}").into(),
+    }
+}

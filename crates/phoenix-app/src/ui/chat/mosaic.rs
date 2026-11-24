@@ -24,7 +24,7 @@ const INNER_R: f32 = 2.;
 
 /// Image or video attachment that takes part in the mosaic.
 pub fn is_visual(a: &Attachment) -> bool {
-    matches!(a.kind, AttachmentKind::Image | AttachmentKind::Video) && a.url.starts_with("https://")
+    matches!(a.kind, AttachmentKind::Image | AttachmentKind::Video) && super::attach::loadable(&a.url)
 }
 
 #[derive(Clone, Copy, Default)]

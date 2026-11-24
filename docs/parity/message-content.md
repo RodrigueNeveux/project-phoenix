@@ -2,7 +2,7 @@
 
 Values come from `~/discord-phoenix-ref/current-client/css/` (2026 client) and the Text
 variants named in the client JS bundles of the local Discord cache (only values are recorded).
-Mock render: `content_shots out.png dark` (mock `#showcase` channel of the first guild, filled
+Mock render: `content_shots out.png dark` (generates local gradient PNGs and points the mock media at them via `PHX_MOCK_MEDIA_DIR`, so images load offline) (mock `#showcase` channel of the first guild, filled
 by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS values,
 ⚠ = rendered but not yet checked against a live dump, ❌ = missing.
 
@@ -11,13 +11,13 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Bold / italic / underline / strike | `markup_` | strong 700, em italic, u, s | markdown.rs `DELIMS` | ✅ |
 | `***bold italic***`, `__*u+i*__` | – | nested emphasis | markdown.rs `find_close` (run end) | ✅ (was rendering `*…*` literally) |
 | Headers `#`/`##`/`###`, `-#` subtext | `markup_ h1/h2/h3`, `small` | 24/20/16, subtext 12 --text-subtle | markdown.rs `line_block`, ui/components.rs | ✅ (see text.md) |
-| Lists (nested, ordered) | `markup_ ul/ol` | | markdown.rs `ListItem` | ⚠ |
-| Block quotes | `blockquoteContainer_` | 4px bar --border-normal radius 4, padding 0 8 0 12 | ui/chat.rs `block` | ⚠ |
-| Spoilers (text, click to reveal) | `spoilerContent_` | --spoiler-hidden-background | richtext.rs | ⚠ |
-| Masked links + hover underline | `anchor_ anchorUnderlineOnHover_` | --text-link, underline on hover | richtext.rs | ⚠ |
-| `<t:…>` timestamps | `timestamp_` pill | --background-mod-normal | markdown.rs `format_timestamp` | ⚠ |
-| Inline code | `markup_ code.inline` | --font-code .85em, --background-code | richtext.rs | ⚠ |
-| Code block + highlighting | `codeContainer_`, `hljs` | --font-code 14/18 | richtext/highlight.rs | ⚠ |
+| Lists (nested, ordered) | `markup_ ul/ol` margin-inline 16, nested `ul ul` circle; `li` margin-bottom 4 | | markdown.rs `ListItem`, ui/chat.rs `block` | ✅ (CSS) |
+| Block quotes | `blockquoteContainer_` margin-block --space-4; `blockquoteDivider_` 4px radius 4 --spine-default; `blockquote` padding-inline 12 8, --text-subtle, max 90% | | ui/chat.rs `block`, richtext.rs | ✅ (CSS) |
+| Spoilers (text, click to reveal) | `spoilerContent_` hidden: --spoiler-hidden-background (text + bg); revealed --spoiler-revealed-background | | richtext.rs | ✅ (CSS) |
+| Masked links + hover underline | `anchor_ anchorUnderlineOnHover_` | --text-link, underline on hover | richtext.rs | ✅ (CSS) |
+| `<t:…>` timestamps | `timestamp_ku1OHH` --background-mod-normal, radius 3, padding 0 2 | | markdown.rs `format_timestamp`, richtext.rs | ✅ (CSS; radius/padding approximated by the text run background) |
+| Inline code | `markup_ code.inline` --font-code 85%, --background-code, radius 4 | | richtext.rs | ✅ (CSS) |
+| Code block + highlighting | `markup_ pre` mt 6 radius 4 max 90%; `code` .875rem/1.125rem 1px --border-normal; `.hljs` padding .5em --background-base-lower --text-code | | ui/chat.rs `block`, richtext/highlight.rs | ✅ (CSS) |
 | Rich embed frame | `embedFull_ grid_` | 4px start border, radius 4, padding 2 16 16 12, max 516 | ui/chat.rs `embed` | ✅ |
 | Embed provider | `embedProvider_` body-xs/normal | 12/16 --interactive-text-default | ui/chat.rs `embed` | ✅ |
 | Embed author | `embedAuthorName_` .875rem semibold --text-strong; icon 24 + 8 | | ui/chat.rs `embed` | ✅ |
@@ -31,7 +31,7 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Video embed (YouTube) | `embedVideoActions_` centred; `wrapper_lj7V-K` --opacity-black-60, radius 24, h 48, p 12; `iconWrapper_` opacity .6 → 1, 24px play + external | | ui/chat/attach.rs `video_embed_actions` | ✅ |
 | Image attachment | `visualMediaItemContainer_` max 550x350, radius 8 | | ui/chat.rs `media_image` | ✅ |
 | Image mosaic (2–10) | `mosaicItem_` rows | | ui/chat/mosaic.rs | ✅ |
-| Spoiler image | blurred + "SPOILER" pill | | ui/chat.rs `spoiler_cover` | ⚠ |
+| Spoiler image | blurred + "SPOILER" pill | | ui/chat.rs `spoiler_cover` | ⚠ (no CSS check yet) |
 | Video attachment chrome | `wrapper_FJ99sr` radius, `playPausePop_` --opacity-black-60 p12 icon 24, `videoControls_` 32px --opacity-black-60 on hover | | ui/chat/attach.rs `video_card` | ✅ |
 | Audio player | `wrapperAudio_ newMosaicStyle_` 432, p16, radius 8, --background-base-lower, 1px --border-subtle; `audioControls_` --opacity-black-28 radius-sm mt 4; `controlIcon_` 24+4; duration --font-code 12/12 500; seek `mediaBarWrapper_` 6px | | ui/chat/attach.rs `audio_card` | ✅ |
 | Generic file card | `fileWrapper_` 432; `file_` --background-surface-high, 1px --border-subtle, radius 8, --shadow-low, p16; icon 30x40 mr 8; name 16/20 --text-link hover underline; size body-xs 12/16 --text-muted (dump vanilla-thread-channel node fileWrapper_) | | ui/chat/attach.rs `file_card` | ✅ |
@@ -44,7 +44,9 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Poll bottom bar | `bottomBar_` gap 16, min-h --custom-button-button-md-height; details body-sm/normal muted | | ui/components.rs | ✅ |
 | Forwarded messages | `container_4dy_KE` | | ui/chat/forward.rs | ✅ (forward agent) |
 | System: join, boost, pin, thread, call | `systemMessage_` | | ui/chat/system.rs | ⚠ |
-| `(edited)` label | `edited_` --text-muted .625rem | | ui/chat.rs `edited_marker` | ⚠ |
+| `(edited)` label | `edited_2i8Bfm` .625rem, line-height 1, normal weight, --text-muted | | ui/chat.rs `edited_marker` | ✅ (CSS) |
 
-Coverage: 27 ✅ / 11 ⚠ / 0 ❌ of 38 rows. No real-data compare score for these
+Coverage: 35 ✅ / 3 ⚠ / 0 ❌ of 38 rows (spoiler image, stickers, system lines still need a live dump).
+"✅ (CSS)" rows are traced to the CSS rule but no live message of that kind was on screen to dump
+(read-only CDP scan 2026-11-24: none of blockquote/code/spoiler/system classes present). No real-data compare score for these
 components yet (none of them is on the live channel the user shows).
