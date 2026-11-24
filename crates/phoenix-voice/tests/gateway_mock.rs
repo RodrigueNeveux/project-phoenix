@@ -86,6 +86,7 @@ async fn identify_heartbeat_dave_binary_resume() {
         session_id: "sess".into(),
         token: "tok".into(),
         max_dave_protocol_version: 1,
+        stream: false,
     };
     let (h, mut rx, task) = gateway::spawn(
         info,
@@ -157,6 +158,7 @@ async fn non_resumable_close_ends_task() {
         session_id: "s".into(),
         token: "bad".into(),
         max_dave_protocol_version: 0,
+        stream: false,
     };
     let (_h, mut rx, task) = gateway::spawn(info, Some(format!("ws://{addr}")), ReconnectPolicy::default());
     assert!(matches!(next_event(&mut rx).await, GatewayEvent::Closed { code: Some(4004), .. }));

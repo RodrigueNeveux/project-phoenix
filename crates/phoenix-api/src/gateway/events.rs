@@ -311,6 +311,9 @@ pub enum GatewayEvent {
     VoiceServerUpdate(VoiceServerUpdate),
     SoundboardSounds(Box<SoundboardSounds>),
     VoiceChannelEffectSend(Box<VoiceChannelEffectSend>),
+    StreamCreate(Box<StreamCreate>),
+    StreamServerUpdate(Box<StreamServerUpdate>),
+    StreamDelete(Box<StreamDelete>),
 
     Unknown { name: String, data: Value },
 }
@@ -346,6 +349,9 @@ pub fn parse_dispatch(name: &str, raw: &str) -> GatewayEvent {
         "GUILD_EMOJIS_UPDATE" => GuildEmojisUpdate,
         "SOUNDBOARD_SOUNDS" => SoundboardSounds(Box::new),
         "VOICE_CHANNEL_EFFECT_SEND" => VoiceChannelEffectSend(Box::new),
+        "STREAM_CREATE" => StreamCreate(Box::new),
+        "STREAM_SERVER_UPDATE" => StreamServerUpdate(Box::new),
+        "STREAM_DELETE" => StreamDelete(Box::new),
         "CHANNEL_CREATE" => ChannelCreate(Box::new),
         "CHANNEL_UPDATE" => ChannelUpdate(Box::new),
         "CHANNEL_DELETE" => ChannelDelete(Box::new),
@@ -429,6 +435,33 @@ pub struct VoiceChannelEffectSend {
     pub sound_volume: Option<f64>,
     #[serde(default)]
     pub source_guild_id: Option<GuildId>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+pub struct StreamCreate {
+    pub stream_key: String,
+    #[serde(default)]
+    pub rtc_server_id: Option<String>,
+    #[serde(default)]
+    pub viewer_ids: Vec<UserId>,
+    #[serde(default)]
+    pub paused: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+pub struct StreamServerUpdate {
+    pub stream_key: String,
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    #[serde(default)]
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+pub struct StreamDelete {
+    pub stream_key: String,
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Default)]

@@ -41,6 +41,7 @@ pub struct VoiceConnectInfo {
     pub session_id: String,
     pub token: String,
     pub max_dave_protocol_version: u16,
+    pub stream: bool,
 }
 
 impl VoiceConnectInfo {
@@ -247,10 +248,7 @@ pub fn identify(info: &VoiceConnectInfo) -> String {
             "session_id": info.session_id,
             "token": info.token,
             "video": true,
-            "streams": [
-                { "type": "video", "rid": "100", "quality": 100 },
-                { "type": "screen", "rid": "100", "quality": 100 },
-            ],
+            "streams": [{ "type": if info.stream { "screen" } else { "video" }, "rid": "100", "quality": 100 }],
             "max_dave_protocol_version": info.max_dave_protocol_version,
         }),
     )
@@ -354,6 +352,7 @@ mod tests {
             session_id: "s".into(),
             token: "t".into(),
             max_dave_protocol_version: 0,
+            stream: false,
         };
         assert_eq!(i.url(), "wss://c-abc.discord.media:443/?v=8");
     }

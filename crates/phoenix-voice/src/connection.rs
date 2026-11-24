@@ -126,9 +126,19 @@ struct VideoTx {
 }
 
 pub fn video_payload(audio_ssrc: u32, video_ssrc: u32, rtx_ssrc: u32, active: Option<(u32, u32, u32)>) -> gateway::protocol::VideoPayload {
+    stream_payload("video", audio_ssrc, video_ssrc, rtx_ssrc, active)
+}
+
+pub fn stream_payload(
+    kind: &str,
+    audio_ssrc: u32,
+    video_ssrc: u32,
+    rtx_ssrc: u32,
+    active: Option<(u32, u32, u32)>,
+) -> gateway::protocol::VideoPayload {
     use gateway::protocol::{Resolution, StreamDescriptor, VideoPayload};
     let stream = StreamDescriptor {
-        kind: "video".into(),
+        kind: kind.into(),
         rid: "100".into(),
         ssrc: video_ssrc,
         rtx_ssrc,
@@ -205,7 +215,8 @@ async fn run(
                             let mode = EncryptionMode::choose(&r.modes).ok_or(Error::Unsupported("no common encryption mode".into()))?;
                             let caps = crate::media::video::probe_capabilities();
                             gw.select_protocol(&ip, port, mode.name(), &caps.offer())?;
-                            let vs = r.streams.iter().find(|s| s.kind == "video").map_or((0, 0), |s| (s.ssrc, s.rtx_ssrc));
+                            let want = if cfg.info.stream { "screen" } else { "video" };
+                            let vs = r.streams.iter().find(|s| s.kind == want).map_or((0, 0), |s| (s.ssrc, s.rtx_ssrc));
                             media = Some(Media {
                                 socket,
                                 ssrc: r.ssrc,
@@ -427,7 +438,7 @@ async fn run(
                                 tracing::warn!("voice: no video ssrc from ready");
                                 continue;
                             }
-                            gw.video(&video_payload(m.ssrc, m.video_ssrc, m.rtx_ssrc, Some((width, height, fps))))?;
+                            gw.video(&stream_payload(if cfg.info.stream { "screen" } else { "video" }, m.ssrc, m.video_ssrc, m.rtx_ssrc, Some((width, height, fps))))?;
                             m.video = Some(VideoTx {
                                 sender: RtpSender::new(m.video_ssrc, Codec::H264.payload_type()),
                                 packetizer: crate::rtp::h264::H264Packetizer::new(),
@@ -436,7 +447,7 @@ async fn run(
                         }
                         VideoOut::Stop => {
                             if m.video.take().is_some() {
-                                gw.video(&video_payload(m.ssrc, m.video_ssrc, m.rtx_ssrc, None))?;
+                                gw.video(&stream_payload(if cfg.info.stream { "screen" } else { "video" }, m.ssrc, m.video_ssrc, m.rtx_ssrc, None))?;
                             }
                         }
                         VideoOut::Frame(e) => {

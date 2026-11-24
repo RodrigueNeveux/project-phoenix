@@ -285,6 +285,7 @@ impl VoiceManager {
             session_id,
             token,
             max_dave_protocol_version: phoenix_voice::dave::MAX_PROTOCOL_VERSION,
+            stream: false,
         };
         let endpoint = info.endpoint.split(':').next().unwrap_or_default().to_string();
         let s2 = sink.clone();

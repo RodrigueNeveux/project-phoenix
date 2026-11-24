@@ -327,6 +327,7 @@ mod tests {
             session_id: "s".into(),
             token: "t".into(),
             max_dave_protocol_version: 1,
+            stream: false,
         }
     }
 
