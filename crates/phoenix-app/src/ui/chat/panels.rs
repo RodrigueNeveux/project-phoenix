@@ -579,38 +579,57 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
     if !scrolled_up {
         return None;
     }
+    use crate::theme::{generated::idx, tok};
     Some(
+        // jumpToPresentBar_ bottomBar_ barBase_: centred max-content pill (min 284x44),
+        // --background-surface-highest, 1px --border-normal, --radius-lg, --shadow-medium,
+        // padding-block --space-8, padding-inline --space-16 --space-8, margin-bottom --space-8,
+        // color --text-default.
         div()
-            .id("jump-present")
             .absolute()
-            .bottom(z(0.))
-            .left(z(16.))
+            .bottom(z(8.))
+            .left_0()
             .right(z(16.))
-            .h(z(32.))
-            .px(z(12.))
-            .rounded_t(z(8.))
-            .bg(c(Palette::BG_SECONDARY_ALT))
             .flex()
-            .items_center()
-            .justify_between()
-            .text_size(z(14.))
-            .text_color(c(Palette::TEXT_NORMAL))
-            .child(crate::t!("chat.older"))
+            .justify_center()
             .child(
                 div()
-                    .id("jump-present-btn")
-                    .px(z(8.))
-                    .h(z(24.))
-                    .rounded(z(4.))
-                    .bg(c(Palette::BLURPLE))
+                    .id("jump-present")
+                    .min_w(z(284.))
+                    .min_h(z(44.))
+                    .py(z(8.))
+                    .pl(z(16.))
+                    .pr(z(8.))
+                    .rounded(z(16.))
+                    .border_1()
+                    .border_color(c(tok(idx::BORDER_NORMAL)))
+                    .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
+                    .shadow(crate::ui::inbox::shadow_medium())
+                    .cursor_pointer()
                     .flex()
                     .items_center()
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(gpui::white())
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(0x4752C4)))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
                     .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
-                    .child(crate::t!("chat.jump_present")),
+                    // barButtonMain_ barButtonBase_ body-sm/medium, padding-inline-start --space-4, end 12.
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .pl(z(4.))
+                            .pr(z(12.))
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .whitespace_nowrap()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .child(crate::t!("chat.older")),
+                    )
+                    // Button variant primary, size sm: "Revenir aux messages les plus récents".
+                    .child(
+                        crate::ui::controls::button_sm("jump-present-btn", crate::t!("chat.jump_present"), crate::ui::controls::BtnKind::Primary)
+                            .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx))),
+                    ),
             )
             .into_any_element(),
     )
