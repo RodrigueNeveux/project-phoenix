@@ -20,7 +20,7 @@ use std::{
 
 use gpui::{
     AppContext, Entity, HeadlessAppContext, ListOffset, Modifiers, MouseMoveEvent, PlatformInput, ScrollDelta,
-    ScrollWheelEvent, TouchPhase, point, px, size,
+    ScrollEvent, ScrollSource, TouchPhase, point, px, size,
 };
 use gpui_component::Root;
 use phoenix_app::{app::PhoenixApp, assets::Assets, mock::MockBackend};
@@ -100,11 +100,12 @@ impl Probe<'_> {
 }
 
 fn wheel(x: f32, y: f32, dy: f32) -> PlatformInput {
-    PlatformInput::ScrollWheel(ScrollWheelEvent {
+    PlatformInput::Scroll(ScrollEvent {
         position: point(px(x), px(y)),
         delta: ScrollDelta::Pixels(point(px(0.), px(dy))),
         modifiers: Modifiers::default(),
         touch_phase: TouchPhase::Moved,
+        source: ScrollSource::Pointer,
     })
 }
 
