@@ -40,24 +40,28 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
     Some(
         // replyBar_: transparent (background-color unset), top radius 8px; text_ margin-inline-start
         // --space-16; closeButton_ / mentionButton_ padding 8px 12px; actions_ margin-end --space-4.
+        // vanilla-reply-bar: 34px row (mentionButton_ 18 + 8+8 padding); replyLabel_
+        // body-sm/normal --text-default, name_ semibold, white-space pre.
         div()
-            .h(z(32.))
+            .h(z(34.))
             .pl(z(16.))
             .pr(z(4.))
             .rounded_t(z(8.))
             .flex()
             .items_center()
             .text_size(z(14.))
-            .text_color(c(Palette::TEXT_MUTED))
-            .child(div().child(crate::t!("chat.replying_to")))
+            .line_height(z(18.))
+            .text_color(super::tk(idx::TEXT_DEFAULT))
             .child(
                 div()
-                    .ml(z(4.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(Palette::INTERACTIVE_HOVER))
-                    .child(name),
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .flex()
+                    .child(crate::t!("chat.replying_to"))
+                    .child(div().font_weight(FontWeight::SEMIBOLD).overflow_hidden().text_ellipsis().child(name)),
             )
-            .child(div().flex_1())
             .when(!own, |d| {
                 d.child(
                     div()
@@ -66,11 +70,11 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
                         .h(z(32.))
                         .flex()
                         .items_center()
-                        .gap(z(2.))
                         .cursor_pointer()
-                        .font_weight(FontWeight::BOLD)
+                        // mentionButton_ body-sm/semibold; mentionIcon_ 16px, margin-inline-end 4.
+                        .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(if mention { Palette::TEXT_LINK } else { Palette::TEXT_MUTED }))
-                        .child("@")
+                        .child(gpui::svg().path(crate::icons::path("search/at")).size(z(16.)).mr(z(4.)).flex_none().text_color(c(if mention { Palette::TEXT_LINK } else { Palette::TEXT_MUTED })))
                         .child(if mention { crate::t!("chat.on") } else { crate::t!("chat.off") })
                         .on_click(cx.listener(|a, _, _, cx| {
                             a.chat.reply_mention = !a.chat.reply_mention;
