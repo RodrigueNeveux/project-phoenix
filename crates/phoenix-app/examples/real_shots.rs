@@ -404,6 +404,10 @@ impl Backend for ReadOnly {
 fn env_favorites() -> Option<phoenix_api::rest::favorites::Favorites> {
     let spec = std::env::var("PHX_FAVORITES").ok().filter(|v| !v.trim().is_empty())?;
     let mut f = phoenix_api::rest::favorites::Favorites::default();
+    if spec.trim() == "empty" {
+        f.guild_visible = Some(phoenix_api::rest::settings::BoolValue { value: true });
+        return Some(f);
+    }
     for (n, group) in spec.split('|').enumerate() {
         let (name, ids) = match group.split_once(':') {
             Some((name, ids)) => (Some(name.trim()), ids),
@@ -1151,6 +1155,12 @@ fn main() -> anyhow::Result<()> {
                         phoenix_app::ui::guide::open(app, g, cx);
                     }
                 }
+                "guidelines" => {
+                    if let Some(f) = app.selected_channel {
+                        app.parity.forums.entry(f).or_default().guidelines_open = true;
+                    }
+                }
+                "favadd" => phoenix_app::ui::favorites::open_add_modal(),
                 "events" => {
                     if let Some(g) = app.selected_guild {
                         phoenix_app::ui::events::open(app, g, cx);
