@@ -112,6 +112,14 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         })
 }
 
+/// A full-width box `1 / ar` as tall as it is wide, capped at `max_h`, keeping its
+/// width (CSS `width: 100%; aspect-ratio; max-height`). Taffy narrows a box whose
+/// aspect-ratio height hits max-height (three squares came out 525 instead of 566
+/// wide), so the height comes from a percentage top padding instead.
+fn ratio_box(ar: f32, max_h: f32) -> gpui::Div {
+    div().relative().w_full().max_h(z(max_h)).overflow_hidden().child(div().w_full().pt(gpui::relative(1. / ar.max(0.01))))
+}
+
 /// Width/height of the tallest item (min aspect), so a row is as tall as Discord's.
 fn row_aspect(items: &[&Attachment]) -> f32 {
     if items.iter().any(|a| a.width == 0 || a.height == 0) {
@@ -184,29 +192,25 @@ pub fn grid(items: &[&Attachment], max_w: f32, cx: &App) -> gpui::Div {
         let el: AnyElement = match r {
             Row::One => {
                 let k = Corners { tl: top, tr: top, bl: bottom, br: bottom };
-                cell(its[0], k, cx).w_full().aspect_ratio(row_aspect(its)).max_h(z(280.)).into_any_element()
+                ratio_box(row_aspect(its), 280.).child(cell(its[0], k, cx).absolute().inset_0()).into_any_element()
             }
             Row::Two => {
                 let ar = row_aspect(its) * 2.;
-                div()
-                    .w_full()
-                    .flex()
-                    .flex_row()
-                    .gap(z(GAP))
-                    .aspect_ratio(ar)
-                    .max_h(z(280.))
-                    .child(cell(its[0], Corners { tl: top, bl: bottom, ..Default::default() }, cx).flex_1().min_w_0().h_full())
-                    .child(cell(its[1], Corners { tr: top, br: bottom, ..Default::default() }, cx).flex_1().min_w_0().h_full())
+                ratio_box(ar, 280.)
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .flex()
+                            .flex_row()
+                            .gap(z(GAP))
+                            .child(cell(its[0], Corners { tl: top, bl: bottom, ..Default::default() }, cx).flex_1().min_w_0().h_full())
+                            .child(cell(its[1], Corners { tr: top, br: bottom, ..Default::default() }, cx).flex_1().min_w_0().h_full()),
+                    )
                     .into_any_element()
             }
-            Row::Three => div()
-                .w_full()
-                .flex()
-                .flex_row()
-                .gap(z(GAP))
-                .aspect_ratio(row_aspect(&its[..1]) * 1.5)
-                .max_h(z(350.))
-                .child({
+            Row::Three => ratio_box(row_aspect(&its[..1]) * 1.5, 350.)
+                .child(div().absolute().inset_0().flex().flex_row().gap(z(GAP)).child({
                     let mut solo = cell(its[0], Corners { tl: true, bl: true, ..Default::default() }, cx).flex_basis(gpui::relative(0.)).min_w_0().h_full();
                     solo.style().flex_grow = Some(2.); // oneByTwoSoloItem_ flex 2
                     solo
@@ -222,7 +226,7 @@ pub fn grid(items: &[&Attachment], max_w: f32, cx: &App) -> gpui::Div {
                         .gap(z(GAP))
                         .child(cell(its[1], Corners { tr: true, ..Default::default() }, cx).w_full().flex_1().min_h_0())
                         .child(cell(its[2], Corners { br: true, ..Default::default() }, cx).w_full().flex_1().min_h_0()),
-                )
+                ))
                 .into_any_element(),
             Row::Four => div()
                 .w_full()
