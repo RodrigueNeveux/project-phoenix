@@ -21,7 +21,7 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | Group DM row | face pile 32px, "N members" | group-dm #800 | ui/sidebar.rs, ui/group_dm.rs | ✅ |
 | Close button | display:none until the row is hovered; 24px, padding 3, margin-right 6, opacity .7 → 1 on hover | #680–#698 `closeButton_zln_tS` | ui/sidebar.rs `close` | ✅ (this pass; it used to take room with opacity 0) |
 | Close button, plated | opacity 1, plate behind the glyph, glyph white .9 | `closeButtonPlated_`, `innerCloseButtonPlated_` | ui/sidebar.rs `close` | ⚠ the plate colour `--custom-nameplate-neutral` is set from JS and does not appear in any dump: approximated with black 50/60 % |
-| Close tooltip "Close DM" / "Leave Group" | hover | aria-label #681 / #806 | ui/sidebar.rs | ⚠ group rows still say "Close DM" |
+| Close tooltip "Close DM" / "Leave Group" | hover | aria-label #681 / #806 | ui/sidebar.rs | ✅ |
 | Unread pill (left 4×8) | unread, not selected | `unread_TNyK-N` | ui/sidebar.rs | ✅ |
 | Mention badge | mentions > 0 | `numberBadge` | ui/sidebar.rs | ✅ |
 
@@ -75,7 +75,7 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 
 ## Coverage
 
-- 44 component × state rows: 34 ✅ (77 %), 6 ⚠, 4 ❌.
+- 44 component × state rows: 35 ✅ (80 %), 5 ⚠, 4 ❌.
 - Shipped in this pass: DM header hover and More button, close button, Friends tab states, em dash, group DM intro.
 - Still to do:
   - a 1:1 DM start dump, then the mutual servers row and its buttons;

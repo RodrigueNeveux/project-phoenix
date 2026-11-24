@@ -803,7 +803,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     .p(z(3.))
                     .mr(z(6.))
                     .when(!plated, |d| d.opacity(0.7).hover(|s| s.opacity(1.)))
-                    .tooltip(crate::ui::tooltip::tip(crate::t!("menu.close_dm")))
+                    // aria-label "Close DM" / "Leave Group" (#681 / #806)
+                    .tooltip(crate::ui::tooltip::tip(if is_group { crate::t!("menu.leave_group") } else { crate::t!("menu.close_dm") }))
                     .on_click(move |_, _, cx| {
                         cx.stop_propagation();
                         e.update(cx, |a, cx| a.close_dm(id, cx));
