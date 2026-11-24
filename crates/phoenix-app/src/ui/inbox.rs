@@ -1541,18 +1541,31 @@ thread_local! {
 /// The client puts header popouts in a `clickTrapContainer_ trapClicks_`
 /// layer: a press anywhere outside closes the popout and goes no further (the
 /// trigger button included, so pressing it again closes). Done here on the
-/// popout itself, in the capture phase, from its bounds: it does not depend
-/// on how a full-window layer would stack against deferred draws.
+/// popout itself, in the capture phase, from the bounds it was painted at: it
+/// depends neither on a full-window layer nor on hitbox stacking.
 fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
-    el.on_mouse_down_out(cx.listener(|a, _: &gpui::MouseDownEvent, _, cx| {
-        // A profile popout or menu opened over the popout handles its own presses.
-        if a.people.any_overlay() {
-            return;
-        }
-        if a.close_header_popouts(cx) {
-            cx.stop_propagation();
-        }
-    }))
+    let app = cx.entity().downgrade();
+    // A canvas covering the popout: its paint bounds are the popout's drawn box.
+    el.child(
+        gpui::canvas(
+            |_, _, _| {},
+            move |bounds, (), window, _| {
+                window.on_mouse_event(move |ev: &gpui::MouseDownEvent, phase, _, cx| {
+                    if phase != gpui::DispatchPhase::Capture || bounds.contains(&ev.position) {
+                        return;
+                    }
+                    let Some(app) = app.upgrade() else { return };
+                    // A profile popout or menu opened over the popout handles its own presses.
+                    let closed = app.update(cx, |a, cx| !a.people.any_overlay() && a.close_header_popouts(cx));
+                    if closed {
+                        cx.stop_propagation();
+                    }
+                });
+            },
+        )
+        .absolute()
+        .inset_0(),
+    )
 }
 
 pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {

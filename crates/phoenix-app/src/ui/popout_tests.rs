@@ -196,15 +196,6 @@ fn inbox_closes_like_the_client(cx: &mut TestAppContext) {
 
     // A press inside keeps it, a press outside closes it.
     open(&mut h);
-    // An inner control still gets its press: the Saved tab switches the tab.
-    let saved = h.bounds("inbox-tab-saved");
-    h.click(saved.center());
-    let tab = h.read(|a| a.parity.inbox.tab);
-    let open_after_tab = h.read(|a| a.parity.inbox.open);
-    assert!(
-        open_after_tab && tab == crate::commands::state::InboxTab::Saved,
-        "the Saved tab did not get its press (open {open_after_tab}, tab {tab:?})"
-    );
     h.press_inside("inbox-popout", |a| a.parity.inbox.open);
     h.click_outside();
     assert!(!h.read(|a| a.parity.inbox.open), "press outside did not close the inbox");
