@@ -486,7 +486,7 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
     .on_action(cx.listener(|a, _: &MarkInboxRead, _, cx| a.mark_inbox_read(cx)))
     .on_action(cx.listener(|a, _: &CallDm, _, cx| a.call_current_dm(cx)))
     .on_action(cx.listener(|a, _: &JumpToCall, _, cx| a.jump_to_call(cx)))
-    .on_action(cx.listener(|a, _: &CreateThread, _, cx| a.create_thread_shortcut(cx)))
+    .on_action(cx.listener(|a, _: &CreateThread, w, cx| a.create_thread_shortcut(w, cx)))
     // UI-only placeholders (the same stub the voice panel's buttons open): nothing is recorded or sent.
     .on_action(cx.listener(|a, _: &RecordVoiceMessage, _, cx| a.stub(&crate::t!("shortcuts.voice_message"), cx)))
     .on_action(cx.listener(|a, _: &ToggleSoundboard, _, cx| a.stub(&crate::t!("voice.soundboard"), cx)))
@@ -566,13 +566,13 @@ fn combo(keys: &str) -> gpui::Div {
 }
 
 /// `keybindGroup_jCEr5v`: label then the combos (each `keybindKey_` 8px below).
-fn keybind_card(label: SharedString, keys: &[&str]) -> impl IntoElement {
+fn keybind_card(label: SharedString, keys: &[&str], width: Pixels) -> impl IntoElement {
     let mut combos = div().flex().flex_wrap().mb(z(8.)); // keybindKey_ margin-bottom 8px
     for (i, k) in keys.iter().enumerate() {
         combos = combos.child(combo(k).when(i > 0, |d| d.ml(z(8.)))); // combo + combo margin-left 8px
     }
     div()
-        .min_w(z(180.)) // grid minmax(180px, max-content)
+        .w(width) // its grid column's width (minmax(180px, max-content))
         .p(z(12.)) // keybindGroup_ padding 12px
         .rounded(z(8.)) // keybindGroup_ border-radius 8px
         .bg(c(tok(idx::BACKGROUND_MOD_MUTED))) // --background-mod-muted
@@ -584,7 +584,7 @@ fn keybind_card(label: SharedString, keys: &[&str]) -> impl IntoElement {
 }
 
 /// `keyboardShortcutSection_jCEr5v`: heading, optional description, wrapped cards.
-fn section(title: SharedString, desc: Option<SharedString>, cards: Vec<gpui::AnyElement>) -> impl IntoElement {
+fn section(title: SharedString, desc: Option<SharedString>, rows: Vec<gpui::AnyElement>) -> impl IntoElement {
     div()
         .ml(z(16.)) // margin-inline-start 16px
         .px(z(8.)) // padding 24px 8px
@@ -602,20 +602,91 @@ fn section(title: SharedString, desc: Option<SharedString>, cards: Vec<gpui::Any
         .when_some(desc, |d, t| {
             d.child(div().mt(z(8.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(t))
         })
-        // keyboardShortcutListGroup_: margin-top 8, padding 8px 0, gap 24 (grid auto-fill -> wrap).
-        .child(div().mt(z(8.)).py(z(8.)).flex().flex_wrap().gap(z(24.)).children(cards))
+        // keyboardShortcutListGroup_: margin-top 8, padding 8px 0, gap 24.
+        .child(div().mt(z(8.)).py(z(8.)).flex().flex_col().gap(z(24.)).children(rows))
 }
 
-/// The modal's card (without backdrop), sized for a `vp` viewport.
-pub fn help_card(vp: gpui::Size<Pixels>) -> gpui::AnyElement {
+/// CSS grid `repeat(auto-fill, minmax(min, max-content))` with `gap`: the column
+/// count comes from the min track size, then each column is as wide as its
+/// widest item (never below `min`). Returns the column widths.
+pub fn grid_columns(content: &[f32], avail: f32, min: f32, gap: f32) -> Vec<f32> {
+    let n = (((avail + gap) / (min + gap)).floor() as usize).max(1);
+    let mut cols = vec![min; n.min(content.len().max(1))];
+    let mut limits = cols.clone();
+    for (i, w) in content.iter().enumerate() {
+        let c = &mut limits[i % n];
+        *c = c.max(*w);
+    }
+    // "Maximize tracks": grow every track from its base toward its max-content
+    // limit, sharing the free space equally (text wraps in capped tracks).
+    let mut free = avail - gap * (cols.len() as f32 - 1.) - cols.iter().sum::<f32>();
+    while free > 0.5 {
+        let growing: Vec<usize> = (0..cols.len()).filter(|&i| limits[i] - cols[i] > 0.01).collect();
+        if growing.is_empty() {
+            break;
+        }
+        let share = free / growing.len() as f32;
+        for i in growing {
+            let d = share.min(limits[i] - cols[i]);
+            cols[i] += d;
+            free -= d;
+        }
+    }
+    cols
+}
+
+fn text_width(window: &gpui::Window, text: &str, size: Pixels, weight: FontWeight) -> f32 {
+    let mut font = gpui::font(crate::theme::FONT_UI());
+    font.weight = weight;
+    let run = gpui::TextRun { len: text.len(), font, color: gpui::black(), background_color: None, underline: None, strikethrough: None };
+    f32::from(window.text_system().layout_line(text, size, &[run], None).width)
+}
+
+/// max-content width of a keybind card: max(label, combos) + 2 x 12px padding.
+fn card_content_width(window: &gpui::Window, label: &str, keys: &[&str]) -> f32 {
+    let label_w = text_width(window, label, z(14.), FontWeight::NORMAL);
+    let combos: f32 = keys
+        .iter()
+        .map(|k| {
+            let caps = key_caps(k);
+            // key_: padding-inline 6+6, border 1+1, 3px between caps.
+            caps.iter().map(|c| text_width(window, c, z(12.), FontWeight::SEMIBOLD).max(2.) + 14.).sum::<f32>() + 3. * (caps.len() as f32 - 1.)
+        })
+        .sum::<f32>()
+        + 8. * (keys.len() as f32 - 1.);
+    label_w.max(combos).ceil() + 24.
+}
+
+fn grid_rows(window: &gpui::Window, items: Vec<(SharedString, &[&str])>, avail: f32) -> Vec<gpui::AnyElement> {
+    let widths: Vec<f32> = items.iter().map(|(l, k)| card_content_width(window, l, k)).collect();
+    let cols = grid_columns(&widths, avail, 180., 24.);
+    let n = cols.len();
+    let mut rows = Vec::new();
+    let mut it = items.into_iter().enumerate().peekable();
+    while it.peek().is_some() {
+        let mut row = div().flex().gap(z(24.)); // grid gap 24px; rows stretch to the tallest card
+        for _ in 0..n {
+            let Some((i, (label, keys))) = it.next() else { break };
+            row = row.child(keybind_card(label, keys, px(cols[i % n])));
+        }
+        rows.push(row.into_any_element());
+    }
+    rows
+}
+
+/// The modal's card (without backdrop), sized for the window's viewport.
+pub fn help_card(window: &gpui::Window) -> gpui::AnyElement {
+    let vp = window.viewport_size();
     // keyboardShortcutsModal_: width 80vw, min 800, max 950; max-height 80vh.
     let w = (vp.width * 0.8).clamp(px(800.), px(950.));
+    // Grid width: card - list padding-right 16 - section margin 16 - section padding 2x8.
+    let avail = f32::from(w) - 48.;
     let mut list = div().id("shortcuts-list").flex_1().min_h_0().overflow_y_scroll().pr(z(16.));
-    let msg_cards = MESSAGE_SHORTCUTS.iter().map(|(k, l)| keybind_card(crate::t!(l), &[k]).into_any_element()).collect();
-    list = list.child(section(crate::t!("shortcuts.group.messages"), Some(crate::t!("shortcuts.group.messages_desc")), msg_cards));
+    let msg: Vec<(SharedString, &[&str])> = MESSAGE_SHORTCUTS.iter().map(|(k, l)| (crate::t!(l), std::slice::from_ref(k))).collect();
+    list = list.child(section(crate::t!("shortcuts.group.messages"), Some(crate::t!("shortcuts.group.messages_desc")), grid_rows(window, msg, avail)));
     for g in [Group::Navigation, Group::Voice, Group::Chat, Group::Misc] {
-        let cards = SHORTCUTS.iter().filter(|s| s.group == g).map(|s| keybind_card(crate::t!(s.label), s.keys).into_any_element()).collect();
-        list = list.child(section(g.title(), None, cards));
+        let items = SHORTCUTS.iter().filter(|s| s.group == g).map(|s| (crate::t!(s.label), s.keys)).collect();
+        list = list.child(section(g.title(), None, grid_rows(window, items, avail)));
     }
     div()
         .rounded(z(12.)) // root_ border-radius 12px, 1px border, 0 4px 8px rgba(0,0,0,.16)
@@ -675,7 +746,7 @@ pub fn render_help(_app: &PhoenixApp, window: &mut gpui::Window, cx: &mut Contex
         with(|s| s.help_open = false);
         let _ = entity.update(cx, |_, cx| cx.notify());
     });
-    Some(ui::modal::frame("shortcuts-modal", close, help_card(window.viewport_size())))
+    Some(ui::modal::frame("shortcuts-modal", close, help_card(window)))
 }
 
 #[cfg(test)]
@@ -745,6 +816,18 @@ mod tests {
                 }
             }
         });
+    }
+
+    #[test]
+    fn grid_columns_follow_auto_fill_max_content() {
+        // Live modal: 902px track area -> 4 columns of 180 / 245 / 180 / 180.
+        let cols = grid_columns(&[150., 245., 120., 180., 90., 100., 170., 160.], 902., 180., 24.);
+        assert_eq!(cols, vec![180., 245., 180., 180.]);
+        assert_eq!(grid_columns(&[300.], 902., 180., 24.), vec![300.]);
+        // Too wide for the row: tracks share the free space and stay in the box.
+        let cols = grid_columns(&[220., 220., 400., 400.], 902., 180., 24.);
+        assert!((cols.iter().sum::<f32>() + 72. - 902.).abs() < 1., "{cols:?}");
+        assert_eq!(&cols[..2], &[220., 220.]);
     }
 
     #[test]
