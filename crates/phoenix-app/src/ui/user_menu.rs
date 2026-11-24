@@ -69,7 +69,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         ));
     }
     if !me {
-        items.push(act(crate::t!("profile.message"), Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
+        items.push(act(crate::t!("menu.send_message"), Rc::new(move |a, _, _, cx| a.message_user(u, cx))));
     }
     let rel = app.nav.relationship(u).map(|r| r.kind);
     let friend = rel == Some(crate::ui::home::data::RelationshipKind::Friend);
