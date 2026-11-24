@@ -569,7 +569,7 @@ fn group_header(app: &PhoenixApp, g: Id, id: &str, count: u32) -> AnyElement {
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(Palette::TEXT_MUTED))
                 .when_some(icon, |d, url| d.child(gpui::img(url).flex_none().size(z(16.)).mr(z(4.))))
-                .child(div().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(name.trim().to_string().into(), 12.))) // HTML collapses edge spaces
+                .child(div().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(name.trim().to_string().into(), 14.))) // HTML collapses edge spaces
                 .child(div().flex_none().child(SharedString::from(format!(" — {count}")))),
         )
         .into_any_element()
@@ -706,7 +706,7 @@ pub fn member_row_in(
         .ml(z(8.))
         // live client: member_Iy0c7A is 44px with a sub line (name 18 + sub 16),
         // 42px without (avatar 32), both including its 1px block padding.
-        .h(px(if two_lines { m::MEMBER_ROW_H } else { m::MEMBER_ROW_H - 2. }))
+        .h(z(if two_lines { m::MEMBER_ROW_H } else { m::MEMBER_ROW_H - 2. }))
         .pl(z(space::xs())) // childContainer_J1Adu_ padding-inline-start --space-xs
         // childContainer_J1Adu_ padding-right 8px, 32px with `nameplated_J1Adu_`
         // (vanilla-members row at y 718): names ellipsize before the nameplate art.
@@ -729,7 +729,23 @@ pub fn member_row_in(
         .when_some(
             user.and_then(|u| {
                 let sel = app.people.popout.as_ref().is_some_and(|p| p.user == uid);
-                crate::ui::nameplate::layer(u, m::MEMBER_ROW_H - 2., crate::ui::nameplate::Place::Member, false, sel)
+                // Estimate text content width to match the live client's dynamic
+                // `mask-image: linear-gradient(to right, rgba(0,0,0,0.3) <fade>px, rgb(0,0,0) <fade+50>px)`.
+                let name_w = name.chars().count() as f32 * 9.0
+                    + if tag.is_some() { 56.0 } else { 0.0 }
+                    + if u.bot { 50.0 } else { 0.0 }
+                    + if owner || mem.premium_since.is_some() { 18.0 } else { 0.0 };
+                let sub_chars = sub
+                    .as_ref()
+                    .map(|s| {
+                        s.custom.as_ref().and_then(|c| c.1.as_ref()).map_or(0, |t| t.chars().count())
+                            + s.main.as_ref().map_or(0, |(t, _)| t.chars().count())
+                    })
+                    .unwrap_or(0);
+                let sub_w = if two_lines { sub_chars as f32 * 6.5 + 16.0 } else { 0.0 };
+                let fade_start = (26.0 + name_w.max(sub_w) + 30.0).clamp(120.0, 220.0);
+                let row_h = if two_lines { m::MEMBER_ROW_H } else { m::MEMBER_ROW_H - 2. };
+                crate::ui::nameplate::layer_with_fade(u, row_h, crate::ui::nameplate::Place::Member, false, sel, fade_start)
             }),
             |d, l| d.child(l),
         )
@@ -809,7 +825,7 @@ pub fn member_row_in(
                                 )),
                         )
                         .when_some(tag, |d, t| d.child(server_tag(&t).my(z(1.)))) // chipletContainerInner_k8jyN7 margin 1px 0 1px 4px
-                        .when(user.is_some_and(|u| u.bot), |d| d.child(bot_tag_px(user.is_some_and(|u| u.verified_bot)).ml(z(4.))))
+                        .when(user.is_some_and(|u| u.bot), |d| d.child(bot_tag_px(user.is_some_and(|u| u.verified_bot))))
                         .when(owner, |d| {
                             // ownerIcon_Iy0c7A: 14px (icon_Iy0c7A), --text-feedback-warning
                             d.child(gpui::svg().path(crate::icons::path("crown")).size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
