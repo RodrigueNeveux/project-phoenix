@@ -481,7 +481,7 @@ fn footer() -> Div {
     static INFO: std::sync::OnceLock<phoenix_api::build_info::BuildInfo> = std::sync::OnceLock::new();
     let b = INFO.get_or_init(phoenix_api::build_info::BuildInfo::detect_fast);
     let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
-    let line = format!("{} {} {} {arch}", b.release_channel, b.build_number, b.client_version);
+    let line = format!("{} {} • {} {arch}", b.release_channel, b.build_number, b.client_version);
     let note = |t: SharedString, col: usize| div().text_size(z(10.)).line_height(z(12.)).text_color(c(tok(col))).child(t);
     let bullet = || note("•".into(), idx::TEXT_MUTED);
     div()
