@@ -106,3 +106,18 @@ fn guild_update_renames_the_guild() {
     assert_eq!(name.as_ref(), "Renamed");
     assert!(chans > 0, "channels kept across GUILD_UPDATE");
 }
+
+#[test]
+fn guild_settings_update_from_another_client_mutes_live() {
+    let (cache, mut a) = setup();
+    let upd = |muted: bool| {
+        let d = serde_json::json!({"guild_id": "300000000000000001", "muted": muted,
+            "channel_overrides": [{"channel_id": CH.to_string(), "muted": muted}]});
+        GatewayEvent::Unknown { name: "USER_GUILD_SETTINGS_UPDATE".into(), data: d }
+    };
+    let out = feed(&cache, &mut a, &upd(true));
+    let ch = out.iter().find_map(|x| match x { AppEvent::GuildChannels { channels, .. } => channels.iter().find(|c| c.id.0 == CH).cloned(), _ => None });
+    assert!(ch.expect("channel listed").muted);
+    feed(&cache, &mut a, &upd(false));
+    assert!(!a.prefs.mutes.guilds.contains(&300000000000000001) && !a.prefs.mutes.channels.contains(&CH));
+}

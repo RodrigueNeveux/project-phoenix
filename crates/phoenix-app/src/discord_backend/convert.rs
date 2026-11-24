@@ -376,6 +376,26 @@ pub struct MuteSettings {
     pub opt_in: HashSet<u64>,
 }
 
+impl MuteSettings {
+    /// Replace guild `g`'s settings with a live USER_GUILD_SETTINGS_UPDATE entry.
+    pub fn apply_guild_entry(&mut self, g: u64, entry: &Value) {
+        for set in [&mut self.guilds, &mut self.suppress_everyone, &mut self.suppress_roles, &mut self.opt_in] {
+            set.remove(&g);
+        }
+        if let Some(Value::Array(ovs)) = entry.get("channel_overrides") {
+            for c in ovs.iter().filter_map(|o| o.get("channel_id").and_then(snowflake_value)) {
+                self.channels.remove(&c);
+            }
+        }
+        let new = parse_mutes(Some(&Value::Array(vec![entry.clone()])));
+        self.guilds.extend(new.guilds);
+        self.channels.extend(new.channels);
+        self.suppress_everyone.extend(new.suppress_everyone);
+        self.suppress_roles.extend(new.suppress_roles);
+        self.opt_in.extend(new.opt_in);
+    }
+}
+
 pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
     let mut out = MuteSettings::default();
     let entries = match v {
@@ -1207,6 +1227,13 @@ impl Adapter {
                 }
                 out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id) });
                 out.push(AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) });
+            }
+            // Mute / suppress / opt-in changed from another client: one guild's entry.
+            GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => {
+                if let Some(g) = data.get("guild_id").and_then(snowflake_value) {
+                    self.prefs.mutes.apply_guild_entry(g, data);
+                    self.guild_state(cache, api::Snowflake(g), &mut out);
+                }
             }
             GatewayEvent::Fatal { code, reason } => {
                 out.push(AppEvent::Disconnected(fatal_message(*code, reason)));
