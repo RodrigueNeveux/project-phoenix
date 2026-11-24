@@ -23,3 +23,4 @@ CSS: ~/discord-phoenix-ref/current-client/css/300559.*.css. Dump: vanilla-guild-
 | maximized | — | resize strips | none when maximized/tiled/fullscreen | resize_handles | ✅ |
 
 State coverage: default, hover, active (min/max), close hover. No focus/tooltip on window buttons in the client.
+| close button | client "Minimize to tray" (default on) | behaviour | hide to tray | title_bar win-close → minimize when tray is up (Wayland cannot unmap); tray.rs SNI Open/Quit | ✅ (needs live check) |

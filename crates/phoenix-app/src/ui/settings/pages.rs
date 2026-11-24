@@ -1261,7 +1261,7 @@ static A11Y: &[B] = &[
 static SYSTEM: &[B] = &[
     B::Title("sp.sy.t1"),
     B::Switch("startup", "sp.sy.startup", "", Bind::Ui(false)),
-    B::Switch("tray", "sp.sy.tray", "sp.sy.tray_d", Bind::Ui(true)),
+    B::Switch("tray", "sp.sy.tray", "sp.sy.tray_d", Bind::Local(|p| p.minimize_to_tray, |p, v| p.minimize_to_tray = v)),
     B::Switch("hwaccel", "sp.sy.hwaccel", "sp.sy.hwaccel_d", Bind::Ui(true)),
     B::Custom("sp.sy.hwaccel", hwaccel_banner),
     B::Divider,

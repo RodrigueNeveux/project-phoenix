@@ -122,6 +122,9 @@ pub struct LocalPrefs {
     pub saturation: u32,
     /// UI density (`--space-*` scale), default cozy like the user's client.
     pub density: crate::theme::Density,
+    /// Windows/Linux settings "Minimize to tray" (client default on): the close
+    /// button hides the window to the tray icon instead of quitting.
+    pub minimize_to_tray: bool,
 }
 
 impl Default for LocalPrefs {
@@ -135,6 +138,7 @@ impl Default for LocalPrefs {
             animate_emoji: true,
             saturation: 100,
             density: crate::theme::Density::default(),
+            minimize_to_tray: true,
         }
     }
 }
@@ -160,6 +164,7 @@ impl LocalPrefs {
             animate_emoji: b("animate_emoji", d.animate_emoji),
             saturation: f("saturation").map(|x| (x as u32).min(100)).unwrap_or(d.saturation),
             density: v.get("density").and_then(Value::as_str).and_then(crate::theme::Density::from_key).unwrap_or(d.density),
+            minimize_to_tray: b("minimize_to_tray", d.minimize_to_tray),
         }
     }
     pub fn to_json(&self) -> Value {
@@ -172,6 +177,7 @@ impl LocalPrefs {
             "animate_emoji": self.animate_emoji,
             "saturation": self.saturation,
             "density": self.density.key(),
+            "minimize_to_tray": self.minimize_to_tray,
         })
     }
     pub fn load() -> Self {

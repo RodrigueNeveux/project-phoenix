@@ -268,6 +268,13 @@ fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .text_color(fg)
                         .group_hover("win-close", |s| s.text_color(c(tok(idx::CONTROL_CRITICAL_PRIMARY_ICON_DEFAULT)))),
                 )
-                .on_click(cx.listener(|_, _, w, _| w.remove_window())),
+                // Settings > Windows "Minimize to tray": close hides to the tray icon.
+                .on_click(cx.listener(|a, _, w, _| {
+                    if a.prefs.local.minimize_to_tray && crate::tray::running() {
+                        w.minimize_window();
+                    } else {
+                        w.remove_window();
+                    }
+                })),
         )
 }

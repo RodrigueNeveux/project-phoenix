@@ -23,6 +23,15 @@ pub mod presence;
 pub mod richtext;
 pub mod shortcuts;
 pub mod theme;
+#[cfg(target_os = "linux")]
+pub mod tray;
+#[cfg(not(target_os = "linux"))]
+pub mod tray {
+    pub fn running() -> bool {
+        false
+    }
+    pub fn spawn(_: &mut gpui::App) {}
+}
 pub mod ui;
 pub mod voice;
 
@@ -70,6 +79,7 @@ pub fn init(cx: &mut App) {
 }
 
 pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {
+    tray::spawn(cx);
     let opts = window_options(cx);
     cx.open_window(opts, move |window, cx| {
         window.set_window_title("Discord Phoenix");
