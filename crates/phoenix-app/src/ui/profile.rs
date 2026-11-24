@@ -519,8 +519,10 @@ fn bio_block(bio: SharedString, clamp: bool) -> Div {
         )
         .when(long, |d| {
             d.child(
+                // section_NcvRRg gap 8 + viewFullBio_ margin-top 8, then the text button
+                // sits 2px down its 17.33px line box (live vanilla-dm: clamp 454 → text 471).
                 div()
-                    .mt(z(8.))
+                    .mt(z(18.))
                     .text_size(z(12.))
                     .line_height(z(16.))
                     .text_color(c(tok(idx::TEXT_DEFAULT)))
