@@ -156,6 +156,7 @@ impl Harness {
         let vp = self.vcx.update(|w, _| w.viewport_size());
         self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
         self.vcx.run_until_parked();
+        crate::ui::inbox::PRESS_LOG.with(|l| l.borrow_mut().clear());
         self.vcx.simulate_mouse_down(at, gpui::MouseButton::Left, Modifiers::none());
         self.vcx.run_until_parked();
         let after_down = self.read(is_open);
@@ -164,7 +165,8 @@ impl Harness {
         let after_up = self.read(is_open);
         assert!(
             after_down && after_up,
-            "press inside {selector} closed it: popout {pop:?}, press {at:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}"
+            "press inside {selector} closed it: popout {pop:?}, press {at:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}, seen {:?}",
+            crate::ui::inbox::PRESS_LOG.with(|l| l.borrow().clone())
         );
     }
 
