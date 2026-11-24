@@ -949,7 +949,8 @@ impl PhoenixApp {
             }
             AppEvent::Nav(e) => self.on_nav_event(e, cx),
             AppEvent::SettingsChanged => ui::settings::on_ready(self, cx),
-            AppEvent::SoundboardSounds { guild, sounds } => ui::pickers::soundboard::on_sounds(guild, sounds, cx),
+            AppEvent::SoundboardSounds { guild, sounds } => ui::pickers::soundboard::on_sounds(self, guild, sounds, cx),
+            AppEvent::VoiceEffect(e) => crate::voice::soundboard::on_effect(self, e, cx),
             ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => {
                 if let AppEvent::Activities { user, activities } = &ev
                     && *user == self.me.id
@@ -1113,6 +1114,7 @@ impl PhoenixApp {
     }
 
     pub fn join_voice(&mut self, ch: Option<Id>, cx: &mut Context<Self>) {
+        crate::voice::soundboard::stop_all();
         self.backend.join_voice(ch).detach_ok();
         crate::voice::on_join_clicked(self, ch);
         cx.notify();

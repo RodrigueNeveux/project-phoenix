@@ -118,6 +118,8 @@ pub(super) async fn frecency(s: Arc<Session>) -> Result<crate::ui::pickers::type
             .map(|(url, g)| GifItem { url: url.into(), preview: tenor_still(&g.src).into(), width: g.width, height: g.height })
             .collect(),
         applications: f.applications_ranked(),
+        favorite_sounds: f.favorite_sounds(),
+        played_sounds: f.played_sounds_ranked(),
     })
 }
 

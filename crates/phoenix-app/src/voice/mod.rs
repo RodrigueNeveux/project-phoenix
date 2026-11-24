@@ -1,5 +1,6 @@
 pub mod call;
 pub mod prefs;
+pub mod soundboard;
 pub mod start_time;
 pub mod ptt;
 

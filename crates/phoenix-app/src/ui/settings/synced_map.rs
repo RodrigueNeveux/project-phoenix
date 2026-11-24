@@ -86,6 +86,7 @@ pub static ENTRIES: &[Entry] = &[
     en("time-format", &[13, 9], false, &[0, 1, 2], 0),
     b("favs", &[15, 3], false),
     b("data-clips", &[19, 1], true),
+    en("sb-volume", &[5, 9, 1], false, &[], 0),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

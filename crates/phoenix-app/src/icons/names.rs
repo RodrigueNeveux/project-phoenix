@@ -164,4 +164,6 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("angle-brackets", &["AngleBracketsIcon"]),
     ("door-exit", &["DoorExitIcon"]),
     ("folder", &["FolderIcon"]),
+    ("star-outline", &["StarOutlineIcon"]),
+    ("discord", &["ClydeIcon"]),
 ];

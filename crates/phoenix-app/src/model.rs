@@ -265,6 +265,8 @@ pub struct SoundboardSound {
     pub name: Option<SharedString>,
     pub emoji_id: Option<Id>,
     pub emoji_name: Option<SharedString>,
+    pub volume: f32,
+    pub available: bool,
 }
 
 #[derive(Clone, Debug, Default)]

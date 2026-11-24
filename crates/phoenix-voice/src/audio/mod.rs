@@ -10,6 +10,8 @@ pub mod effects;
 pub mod ogg;
 #[cfg(feature = "audio")]
 pub mod voice_message;
+#[cfg(feature = "audio")]
+pub mod ogg_opus;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};

@@ -404,6 +404,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
         f.self_deaf = app.deafened;
     }
     let speaking = !tile.stream && app.voice.is_speaking(tile.user);
+    let sb = !tile.stream && crate::voice::soundboard::is_user_playing(tile.user);
     let name = crate::ui::sidebar::voice_user_name(app, tile.user);
     let key = (tile.user, tile.stream);
     let base = div()
@@ -491,14 +492,14 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
                     .opacity(fade)
                     .child(pill(state_icon, Some(name))),
             )
-            .when(speaking, |d| {
+            .when(speaking || sb, |d| {
                 d.child(
                     div()
                         .absolute()
                         .inset_0()
                         .rounded(z(8.))
                         .border(z(2.))
-                        .border_color(t(idx::STATUS_POSITIVE))
+                        .border_color(t(if sb { idx::BRAND_500 } else { idx::STATUS_POSITIVE }))
                         .child(div().size_full().rounded(z(6.)).border(z(1.)).border_color(t(idx::BLACK))),
                 )
             })
@@ -671,15 +672,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             |_, _| {},
                             cx,
                         ))
-                        .child(center_button(
-                            "call-soundboard",
-                            glyph("icons/voice/soundboard.svg", 20., white),
-                            Look::Dark,
-                            false,
-                            crate::t!("voice.soundboard"),
-                            |_, _| {},
-                            cx,
-                        ))
+                        .child(crate::ui::pickers::soundboard::call_button(app, cx))
                         .child(center_button(
                             "call-more",
                             named("more-horizontal", 20., white),

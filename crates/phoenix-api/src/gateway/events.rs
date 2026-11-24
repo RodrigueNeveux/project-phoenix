@@ -310,6 +310,7 @@ pub enum GatewayEvent {
     VoiceStateUpdate(Box<VoiceState>),
     VoiceServerUpdate(VoiceServerUpdate),
     SoundboardSounds(Box<SoundboardSounds>),
+    VoiceChannelEffectSend(Box<VoiceChannelEffectSend>),
 
     Unknown { name: String, data: Value },
 }
@@ -344,6 +345,7 @@ pub fn parse_dispatch(name: &str, raw: &str) -> GatewayEvent {
         "GUILD_ROLE_DELETE" => GuildRoleDelete,
         "GUILD_EMOJIS_UPDATE" => GuildEmojisUpdate,
         "SOUNDBOARD_SOUNDS" => SoundboardSounds(Box::new),
+        "VOICE_CHANNEL_EFFECT_SEND" => VoiceChannelEffectSend(Box::new),
         "CHANNEL_CREATE" => ChannelCreate(Box::new),
         "CHANNEL_UPDATE" => ChannelUpdate(Box::new),
         "CHANNEL_DELETE" => ChannelDelete(Box::new),
@@ -397,6 +399,36 @@ pub struct SoundboardSounds {
     pub guild_id: GuildId,
     #[serde(default, deserialize_with = "null_default")]
     pub soundboard_sounds: Vec<SoundboardSound>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+pub struct EffectEmoji {
+    #[serde(default)]
+    pub id: Option<crate::models::EmojiId>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub animated: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+pub struct VoiceChannelEffectSend {
+    pub channel_id: ChannelId,
+    #[serde(default)]
+    pub guild_id: Option<GuildId>,
+    pub user_id: UserId,
+    #[serde(default)]
+    pub emoji: Option<EffectEmoji>,
+    #[serde(default)]
+    pub animation_type: Option<u8>,
+    #[serde(default)]
+    pub animation_id: Option<u32>,
+    #[serde(default)]
+    pub sound_id: Option<crate::models::Snowflake>,
+    #[serde(default)]
+    pub sound_volume: Option<f64>,
+    #[serde(default)]
+    pub source_guild_id: Option<GuildId>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Default)]
@@ -461,5 +493,20 @@ impl GuildSubscription {
             s.channels.insert(c, vec![[0, 99]]);
         }
         s
+    }
+}
+
+#[cfg(test)]
+mod voice_effect_tests {
+    use super::*;
+
+    #[test]
+    fn parses_soundboard_effect() {
+        let raw = r#"{"user_id":"7","sound_volume":0.5,"sound_id":"42","source_guild_id":"9","guild_id":"9","emoji":{"name":"🦆","id":null},"channel_id":"5","animation_type":null,"animation_id":null}"#;
+        let GatewayEvent::VoiceChannelEffectSend(e) = parse_dispatch("VOICE_CHANNEL_EFFECT_SEND", raw) else { panic!("not parsed") };
+        assert_eq!(e.sound_id, Some(Snowflake(42)));
+        assert_eq!(e.sound_volume, Some(0.5));
+        assert_eq!(e.emoji.and_then(|e| e.name).as_deref(), Some("🦆"));
+        assert_eq!(e.channel_id, Snowflake(5));
     }
 }

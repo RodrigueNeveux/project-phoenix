@@ -1031,6 +1031,8 @@ impl Backend for DiscordBackend {
                     name: Some(x.name.into()),
                     emoji_id: x.emoji_id.map(|e| Id(e.0)),
                     emoji_name: x.emoji_name.map(Into::into),
+                    volume: x.volume as f32,
+                    available: x.available,
                 })
                 .collect())
         })
@@ -1042,5 +1044,25 @@ impl Backend for DiscordBackend {
         let Ok(s) = self.inner.session() else { return };
         let ids = guilds.into_iter().map(sf).collect();
         let _ = s.gateway.request_soundboard_sounds(ids);
+    }
+    fn top_soundboard_sounds(&self, guild: Id) -> BoxFuture<Vec<Id>> {
+        self.with_session(move |_, s| async move {
+            let top = s.rest.top_soundboard_sounds(sf(guild)).await.map_err(api_err)?;
+            Ok(top.ranked().into_iter().map(|x| Id(x.0)).collect())
+        })
+    }
+    fn send_soundboard_sound(&self, channel: Id, sound: crate::model::SoundboardSound) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            s.rest
+                .send_soundboard_sound(
+                    sf(channel),
+                    sf(sound.id),
+                    sound.guild.map(sf),
+                    sound.emoji_id.map(sf),
+                    sound.emoji_name.as_deref(),
+                )
+                .await
+                .map_err(api_err)
+        })
     }
 }

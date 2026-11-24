@@ -84,6 +84,7 @@ pub enum AppEvent {
     Nav(crate::ui::home::data::NavEvent),
     SettingsChanged,
     SoundboardSounds { guild: Id, sounds: Vec<crate::model::SoundboardSound> },
+    VoiceEffect(crate::voice::soundboard::Effect),
     MemberListRows { guild: Id, rows: Vec<crate::presence::ListEntry> },
     Activities { user: Id, activities: Vec<crate::presence::Activity> },
     RemoteAuth(crate::auth::RemoteAuthUpdate),
@@ -377,4 +378,10 @@ pub trait Backend: Send + Sync + 'static {
         Box::pin(async { Ok(Vec::new()) })
     }
     fn request_soundboard_sounds(&self, _guilds: Vec<Id>) {}
+    fn top_soundboard_sounds(&self, _guild: Id) -> BoxFuture<Vec<Id>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn send_soundboard_sound(&self, _channel: Id, _sound: crate::model::SoundboardSound) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("soundboard unavailable".into())) })
+    }
 }

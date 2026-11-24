@@ -126,11 +126,20 @@ impl AudioEngine {
             std::thread::Builder::new()
                 .name("phoenix-audio-io".into())
                 .spawn(move || {
-                    let (istream, ifmt) = open_input(input.as_deref(), cap_tx).unzip();
+                    let synthetic = input.as_deref() == Some(SYNTHETIC_INPUT);
+                    let tone_stop = Arc::new(AtomicBool::new(false));
+                    let (istream, ifmt) = if synthetic {
+                        let ts = tone_stop.clone();
+                        let _ = std::thread::Builder::new().name("phoenix-audio-tone".into()).spawn(move || synthetic_tone(cap_tx, ts));
+                        (None, Some((RATE, 1)))
+                    } else {
+                        open_input(input.as_deref(), cap_tx).unzip()
+                    };
                     let (ostream, ofmt) = open_output(output.as_deref(), oq).unzip();
                     let _ = ready_tx.send((ifmt, ofmt));
                     let _keep = (istream, ostream);
                     let _ = io_stop_rx.recv();
+                    tone_stop.store(true, Ordering::Relaxed);
                 })
                 .map_err(Error::Io)?,
         );
@@ -184,6 +193,28 @@ impl AudioEngine {
 impl Drop for AudioEngine {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+pub const SYNTHETIC_INPUT: &str = "phoenix-synthetic-tone";
+
+pub fn synthetic_frame(start: usize, len: usize) -> Vec<f32> {
+    (start..start + len).map(|i| (i as f32 * 440.0 * std::f32::consts::TAU / RATE as f32).sin() * 0.03).collect()
+}
+
+fn synthetic_tone(tx: std_mpsc::Sender<Vec<f32>>, stop: Arc<AtomicBool>) {
+    let mut n = 0usize;
+    let mut next = Instant::now();
+    while !stop.load(Ordering::Relaxed) {
+        if tx.send(synthetic_frame(n, FRAME_SAMPLES)).is_err() {
+            return;
+        }
+        n += FRAME_SAMPLES;
+        next += Duration::from_millis(20);
+        let now = Instant::now();
+        if next > now {
+            std::thread::sleep(next - now);
+        }
     }
 }
 

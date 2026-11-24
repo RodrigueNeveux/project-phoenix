@@ -274,6 +274,8 @@ pub fn message(m: &api::Message) -> model::Message {
             name: s.name.clone().filter(|n| !n.is_empty()).map(Into::into),
             emoji_id: s.emoji_id.map(id),
             emoji_name: s.emoji_name.clone().filter(|n| !n.is_empty()).map(Into::into),
+            volume: 1.0,
+            available: true,
         }).collect(),
         reactions: m
             .reactions
@@ -1189,6 +1191,16 @@ impl Adapter {
                 self.emit_members(cache, c.guild_id, &mut out);
             }
             GatewayEvent::UserUpdate(u) => out.push(AppEvent::Users(vec![user(u)])),
+            GatewayEvent::VoiceChannelEffectSend(e) => out.push(AppEvent::VoiceEffect(crate::voice::soundboard::Effect {
+                channel: Id(e.channel_id.0),
+                user: Id(e.user_id.0),
+                sound: e.sound_id.map(|x| Id(x.0)),
+                sound_volume: e.sound_volume.unwrap_or(1.0) as f32,
+                emoji_id: e.emoji.as_ref().and_then(|x| x.id).map(|x| Id(x.0)),
+                emoji_name: e.emoji.as_ref().and_then(|x| x.name.clone()).map(Into::into),
+                emoji_animated: e.emoji.as_ref().is_some_and(|x| x.animated),
+                animation: e.animation_type.zip(e.animation_id),
+            })),
             GatewayEvent::SoundboardSounds(s) => {
                 let sounds = s
                     .soundboard_sounds
@@ -1199,6 +1211,8 @@ impl Adapter {
                         name: Some(x.name.clone().into()),
                         emoji_id: x.emoji_id.map(|e| Id(e.0)),
                         emoji_name: x.emoji_name.clone().map(Into::into),
+                        volume: x.volume as f32,
+                        available: x.available,
                     })
                     .collect();
                 out.push(AppEvent::SoundboardSounds { guild: Id(s.guild_id.0), sounds });

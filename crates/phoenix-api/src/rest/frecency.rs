@@ -59,6 +59,20 @@ pub struct ApplicationFrecency {
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
+pub struct FavoriteSoundboardSounds {
+    #[prost(fixed64, repeated, tag = "1")]
+    pub sound_ids: Vec<u64>,
+    #[prost(fixed64, repeated, tag = "2")]
+    pub ordered_sound_ids: Vec<u64>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct PlayedSoundFrecency {
+    #[prost(map = "string, message", tag = "1")]
+    pub played_sounds: HashMap<String, FrecencyItem>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
 pub struct FrecencyUserSettings {
     #[prost(message, optional, tag = "2")]
     pub favorite_gifs: Option<FavoriteGifs>,
@@ -66,8 +80,12 @@ pub struct FrecencyUserSettings {
     pub sticker_frecency: Option<StickerFrecency>,
     #[prost(message, optional, tag = "6")]
     pub emoji_frecency: Option<EmojiFrecency>,
+    #[prost(message, optional, tag = "8")]
+    pub favorite_soundboard_sounds: Option<FavoriteSoundboardSounds>,
     #[prost(message, optional, tag = "9")]
     pub application_frecency: Option<ApplicationFrecency>,
+    #[prost(message, optional, tag = "11")]
+    pub played_sound_frecency: Option<PlayedSoundFrecency>,
 }
 
 fn rank(it: &FrecencyItem) -> (i32, u32, u64) {
@@ -75,6 +93,21 @@ fn rank(it: &FrecencyItem) -> (i32, u32, u64) {
 }
 
 impl FrecencyUserSettings {
+    pub fn favorite_sounds(&self) -> Vec<u64> {
+        self.favorite_soundboard_sounds.as_ref().map(|f| f.sound_ids.clone()).unwrap_or_default()
+    }
+
+    pub fn played_sounds_ranked(&self) -> Vec<u64> {
+        let mut v: Vec<(u64, &FrecencyItem)> = self
+            .played_sound_frecency
+            .iter()
+            .flat_map(|p| p.played_sounds.iter())
+            .filter_map(|(k, it)| k.parse::<u64>().ok().map(|id| (id, it)))
+            .collect();
+        v.sort_by(|a, b| rank(b.1).cmp(&rank(a.1)).then_with(|| a.0.cmp(&b.0)));
+        v.into_iter().map(|(id, _)| id).collect()
+    }
+
     pub fn decode_base64(s: &str) -> Result<Self> {
         let bytes = STANDARD.decode(s.trim()).map_err(|e| Error::Protocol(format!("frecency base64: {e}")))?;
         <Self as prost::Message>::decode(bytes.as_slice()).map_err(|e| Error::Protocol(format!("frecency proto: {e}")))

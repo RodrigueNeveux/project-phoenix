@@ -33,6 +33,12 @@ fn denied<T: Send + 'static>() -> BoxFuture<T> {
 }
 
 const SEND_TEST_CHANNEL: u64 = 1403447573389381652;
+const VOICE_TEST_CHANNEL: u64 = 1574900893613039696;
+
+fn voice_test_allowed(channel: Option<Id>) -> bool {
+    std::env::var_os("PHX_VOICE").is_some() && channel.is_none_or(|c| c.0 == VOICE_TEST_CHANNEL)
+}
+
 const SEND_PREFIX: &str = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — ";
 
 struct ReadOnly(DiscordBackend);
@@ -106,8 +112,39 @@ impl Backend for ReadOnly {
     fn trigger_typing(&self, _: Id) -> BoxFuture<()> {
         denied()
     }
-    fn join_voice(&self, _: Option<Id>) -> BoxFuture<()> {
-        denied()
+    fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
+        if !voice_test_allowed(channel) {
+            return denied();
+        }
+        self.0.join_voice(channel)
+    }
+    fn voice_control(&self, control: phoenix_app::voice::VoiceControl) -> BoxFuture<()> {
+        use phoenix_app::voice::VoiceControl as V;
+        if std::env::var_os("PHX_VOICE").is_none() {
+            return Box::pin(async { Ok(()) });
+        }
+        let control = match control {
+            V::SetInputDevice(_) => V::SetInputDevice(Some(phoenix_voice::audio::device::SYNTHETIC_INPUT.into())),
+            V::SetMute(_) => V::SetMute(true),
+            V::SetPttKey(_) => return Box::pin(async { Ok(()) }),
+            c => c,
+        };
+        self.0.voice_control(control)
+    }
+    fn send_soundboard_sound(&self, channel: Id, sound: phoenix_app::model::SoundboardSound) -> BoxFuture<()> {
+        if std::env::var_os("PHX_VOICE").is_none() || channel.0 != VOICE_TEST_CHANNEL {
+            return denied();
+        }
+        self.0.send_soundboard_sound(channel, sound)
+    }
+    fn soundboard_default_sounds(&self) -> BoxFuture<Vec<phoenix_app::model::SoundboardSound>> {
+        self.0.soundboard_default_sounds()
+    }
+    fn request_soundboard_sounds(&self, guilds: Vec<Id>) {
+        self.0.request_soundboard_sounds(guilds)
+    }
+    fn top_soundboard_sounds(&self, guild: Id) -> BoxFuture<Vec<Id>> {
+        self.0.top_soundboard_sounds(guild)
     }
     fn set_reaction(&self, _: Id, _: Id, _: Reaction, _: bool) -> BoxFuture<()> {
         denied()
@@ -1109,6 +1146,81 @@ fn main() -> anyhow::Result<()> {
         println!("wrote {path} ({}x{})", img.width(), img.height());
         Ok(())
     };
+    let voice_test = std::env::var_os("PHX_VOICE").is_some();
+    if voice_test {
+        use phoenix_app::voice::VoiceControl as V;
+        let deaf = std::env::var("PHX_VOICE_DEAF").as_deref() == Ok("1");
+        cx.update_window(win.into(), |_, _, cx| {
+            v.update(cx, |app, cx| {
+                drop(app.backend.voice_control(V::SetInputDevice(None)));
+                drop(app.backend.voice_control(V::SetMute(true)));
+                drop(app.backend.voice_control(V::SetDeaf(deaf)));
+                app.mic_muted = true;
+                app.deafened = deaf;
+                app.select_channel(Id(VOICE_TEST_CHANNEL), cx);
+            })
+        })?;
+        let mut connected = false;
+        for _ in 0..40 {
+            pump(&mut cx, 500);
+            connected = cx.update(|cx| v.read(cx).voice.status == phoenix_app::voice::VoiceStatus::Connected);
+            if connected {
+                break;
+            }
+        }
+        pump(&mut cx, 1500);
+        cx.update(|cx| {
+            let a = v.read(cx);
+            let vs = &a.voice;
+            println!(
+                "voice status={:?} connected={connected} e2ee={} mode={:?} endpoint_set={} ping={:?} privacy_code={} sent={} received={} lost={} error={:?} channel={:?}",
+                vs.status,
+                vs.e2ee,
+                vs.mode,
+                vs.endpoint.is_some(),
+                vs.ping_ms,
+                vs.privacy_code.is_some(),
+                vs.stats.packets_sent,
+                vs.stats.packets_received,
+                vs.stats.packets_lost,
+                vs.last_error,
+                a.voice_channel.map(|c| c.0)
+            );
+        });
+        if std::env::var("PHX_VOICE_OPEN").as_deref() == Ok("soundboard") {
+            cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| phoenix_app::ui::pickers::soundboard::toggle(app, window, cx)))?;
+            pump(&mut cx, 4000);
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| phoenix_app::ui::pickers::soundboard::rebuild(app, cx)))?;
+            pump(&mut cx, 500);
+        }
+        if let Some(name) = std::env::var("PHX_VOICE_SOUND").ok().filter(|n| !n.is_empty()) {
+            let found = cx.update_window(win.into(), |_, _, cx| {
+                v.update(cx, |app, cx| {
+                    let st = &cx.global::<phoenix_app::ui::pickers::Pickers>().soundboard;
+                    let sound = st.sections.iter().flat_map(|s| s.sounds.iter()).find(|x| x.name.as_deref() == Some(name.as_str())).cloned();
+                    match sound {
+                        Some(sound) => {
+                            phoenix_app::voice::soundboard::play_own(app, sound, cx);
+                            true
+                        }
+                        None => false,
+                    }
+                })
+            })?;
+            println!("soundboard play {name:?} found={found}");
+            for (i, ms) in [700u64, 900, 1200].iter().enumerate() {
+                pump(&mut cx, *ms);
+                cx.update_window(win.into(), |_, window, _| window.refresh())?;
+                pump(&mut cx, 100);
+                let img = cx.capture_screenshot(win.into())?;
+                let (cw, ch) = (((w * scale).round() as u32).min(img.width()), ((h * scale).round() as u32).min(img.height()));
+                let img = image::imageops::crop_imm(&img, 0, 0, cw, ch).to_image();
+                let path = format!("{}-play{i}.png", out.trim_end_matches(".png"));
+                img.save(&path)?;
+                println!("wrote {path} playing={}", phoenix_app::voice::soundboard::is_user_playing(cx.update(|cx| v.read(cx).me.id)));
+            }
+        }
+    }
     if let Some(what) = std::env::var("PHX_SEND").ok().filter(|w| !w.trim().is_empty()) {
         anyhow::ensure!(channel.map(|c| c.0) == Some(SEND_TEST_CHANNEL), "PHX_SEND only works in the test channel");
         let text = format!("{SEND_PREFIX}{}", what.trim());
@@ -1124,5 +1236,12 @@ fn main() -> anyhow::Result<()> {
         let hold: u64 = std::env::var("PHX_SEND_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(4000);
         pump(&mut cx, hold + 3000);
     }
-    shoot(&mut cx, &out)
+    let shot = shoot(&mut cx, &out);
+    if voice_test {
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.join_voice(None, cx)))?;
+        pump(&mut cx, 2500);
+        let status = cx.update(|cx| v.read(cx).voice.status);
+        println!("voice left status={status:?}");
+    }
+    shot
 }
