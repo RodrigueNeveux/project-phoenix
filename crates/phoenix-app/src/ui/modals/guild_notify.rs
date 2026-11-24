@@ -80,7 +80,8 @@ fn row(id: impl Into<gpui::ElementId>, title: SharedString, desc: Option<SharedS
                 .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(title))
                 .children(desc.map(|d| div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(d))),
         )
-        .child(switch(on))
+        .group(crate::ui::controls::SWITCH_ROW)
+        .child(switch("notify-switch", on))
 }
 
 fn label(s: SharedString) -> gpui::Div {

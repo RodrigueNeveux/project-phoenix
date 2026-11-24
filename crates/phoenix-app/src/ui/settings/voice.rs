@@ -84,8 +84,8 @@ fn divider() -> Div {
 }
 
 
-fn knob(on: bool, disabled: bool) -> Div {
-    crate::ui::controls::switch(on).when(disabled, |d| d.opacity(0.5))
+fn knob(id: ElementId, on: bool, disabled: bool) -> gpui::Stateful<Div> {
+    crate::ui::controls::switch(id, on).when(disabled, |d| d.opacity(0.5))
 }
 
 
@@ -103,6 +103,7 @@ fn switch_row(
     div().child(
         div()
             .id(eid(format!("vs-switch-{id}")))
+            .when(!disabled, |d| d.group(crate::ui::controls::SWITCH_ROW))
             .flex()
             .gap(z(12.))
             .mx(z(-12.))
@@ -133,7 +134,7 @@ fn switch_row(
                     )
                     .when(!desc.is_empty(), |d| d.child(note(desc))),
             )
-            .child(knob(on, disabled)),
+            .child(knob(eid(format!("vs-knob-{id}")), on, disabled)),
     )
 }
 
@@ -614,6 +615,7 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
         .child(
             div()
                 .id("vs-auto-sens")
+                .group(crate::ui::controls::SWITCH_ROW)
                 .mb(z(16.))
                 .flex()
                 .items_center()
@@ -626,7 +628,7 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
                         .text_color(c(Palette::TEXT_NORMAL))
                         .child(crate::t!("voice.auto_sensitivity")),
                 )
-                .child(knob(auto, false))
+                .child(knob("vs-auto-knob".into(), auto, false))
                 .on_click(cx.listener(move |_, _, _, cx| {
                     update(|p| p.auto_sensitivity = !auto, true);
                     cx.notify();

@@ -139,7 +139,8 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
                     .text_color(c(tok(idx::TEXT_STRONG)))
                     .child(crate::t!(if cat { "admin.private_category" } else { "admin.private_channel" })),
             )
-            .child(switch(private)),
+            .group(crate::ui::controls::SWITCH_ROW)
+            .child(switch("private-switch", private)),
     );
     body = body.child(div().mt(z(-12.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(crate::t!(if cat {
         "admin.private_category_desc"

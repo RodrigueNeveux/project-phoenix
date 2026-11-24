@@ -144,10 +144,18 @@ pub fn nearest(values: &[f32], value: f32) -> usize {
         .unwrap_or(0)
 }
 
+/// Group name a clickable row sets so pressing it shows the switch :active.
+pub const SWITCH_ROW: &str = "phx-switch-row";
+
 /// Mana switch (switchIndicator_9AraPt, live settings-accessibility dump):
 /// 48x24, 1px border, --radius-lg (16); thumb is a 24px box (margin -1) holding
 /// a 16px white disc, at left 1 off / 24 on.
-pub fn switch(on: bool) -> Div {
+///
+/// `id` is a per-caller element id so the switch tracks its own pressed state.
+/// Pressed (`--switch-background-active`, set from JS in the client while the
+/// pointer is down) applies both on the switch itself and when the enclosing
+/// row carries `.group(SWITCH_ROW)`.
+pub fn switch(id: impl Into<ElementId>, on: bool) -> gpui::Stateful<Div> {
     // Hover (ref-cache settings-switch-states): on #5865F2 → #4452BB, off border .2 → .4 alpha.
     let (bg, border, hbg, hborder) = if on {
         (
@@ -160,6 +168,7 @@ pub fn switch(on: bool) -> Div {
         (idx::SWITCH_BACKGROUND_DEFAULT, idx::SWITCH_BORDER_DEFAULT, idx::SWITCH_BACKGROUND_HOVER, idx::SWITCH_BORDER_HOVER)
     };
     div()
+        .id(id.into())
         .relative()
         .flex_none()
         .w(z(48.))
@@ -170,6 +179,10 @@ pub fn switch(on: bool) -> Div {
         .bg(c(tok(bg)))
         .cursor_pointer()
         .hover(move |d| d.bg(c(tok(hbg))).border_color(c(tok(hborder))))
+        .when(on, |d| {
+            d.active(|d| d.bg(c(tok(idx::SWITCH_BACKGROUND_ACTIVE))))
+                .group_active(SWITCH_ROW, |d| d.bg(c(tok(idx::SWITCH_BACKGROUND_ACTIVE))))
+        })
         .child(
             div()
                 .absolute()

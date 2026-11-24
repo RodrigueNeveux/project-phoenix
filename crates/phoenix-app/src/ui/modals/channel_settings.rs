@@ -289,7 +289,8 @@ fn overview(s: &State, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                         .child(text(crate::t!("admin.nsfw"), 16., idx::TEXT_STRONG).font_weight(FontWeight::MEDIUM))
                         .child(text(crate::t!("admin.nsfw_desc"), 14., idx::TEXT_SUBTLE)),
                 )
-                .child(switch(s.nsfw)),
+                .group(crate::ui::controls::SWITCH_ROW)
+                .child(switch("nsfw-switch", s.nsfw)),
         );
     }
     d

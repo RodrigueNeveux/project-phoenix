@@ -68,7 +68,8 @@ fn row(id: &'static str, title: SharedString, desc: SharedString, on: bool) -> g
                 .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(title))
                 .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(desc)),
         )
-        .child(switch(on))
+        .group(crate::ui::controls::SWITCH_ROW)
+        .child(switch("privacy-switch", on))
 }
 
 pub fn render_privacy(app: &PhoenixApp, p: &Privacy, cx: &mut Context<PhoenixApp>) -> AnyElement {

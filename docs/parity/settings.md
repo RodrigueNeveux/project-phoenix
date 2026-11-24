@@ -105,7 +105,7 @@ Added rows:
 | marker slider grabber | hover | 16 → 20 | `controls::marker_slider` (grabber painted above the hit zones, non-blocking hitbox) | ✅ |
 | select field | open / focus | `selectField_vWC4bk:focus-within` 2px outline --input-border-active, offset -2 | `pages::dropdown` overlay ring | ✅ |
 | input / select | hover | `wrapper_UcGqzv:hover` border --input-border-hover | `controls::select_field` `.hover` | ✅ |
-| switch / button | pressed | not measured (pressing a switch would toggle it); buttons use the CSS `:active` tokens | `controls::button` | ✅ buttons, ❌ switch :active (`--switch-background-active` blurple-65 exists but no CSS rule uses it: driven by JS; `switch()` has no element id, so it needs per-caller keys) |
+| switch / button | pressed | not measured (pressing a switch would toggle it); buttons use the CSS `:active` tokens; the switch uses `--switch-background-active` (blurple-65, set from JS while the pointer is down) | `controls::button`, `controls::switch(id, on)` with `.active` + `group_active(SWITCH_ROW)` on the 7 call sites | ✅ |
 
 ## Billing pages (vanilla-settings-16-1/2/3, 2026-11-24)
 

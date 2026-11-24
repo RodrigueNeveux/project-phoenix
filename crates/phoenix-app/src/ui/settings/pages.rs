@@ -154,8 +154,9 @@ fn set_pick(app: &mut PhoenixApp, id: &'static str, p: Pick, v: usize, cx: &mut 
 
 fn switch_row(app: &PhoenixApp, id: &'static str, title: SharedString, desc: Option<AnyElement>, b: Bind, cx: &mut Cx) -> AnyElement {
     let on = get_bool(app, id, b);
-    item(title, desc, Some(controls::switch(on).into_any_element()), true)
+    item(title, desc, Some(controls::switch(eid(format!("sw-knob-{id}")), on).into_any_element()), true)
         .id(eid(format!("sw-{id}")))
+        .group(controls::SWITCH_ROW)
         .cursor_pointer()
         .on_click(cx.listener(move |a, _, _, cx| set_bool(a, id, b, !on, cx)))
         .into_any_element()
