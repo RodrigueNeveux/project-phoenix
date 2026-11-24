@@ -78,6 +78,7 @@ fn main() -> anyhow::Result<()> {
                         member_count: if id == 1_250_000_000_000_000_000 { 3 } else { 0 },
                         pinned: false,
                         archived: true,
+                        locked: false,
                     };
                     app.parity.archived_threads.insert(ch, vec![post(1_250_000_000_000_000_000, "Weekend plans"), post(1_200_000_000_000_000_000, "Old bug report")]);
                     app.parity.threads_open = true;

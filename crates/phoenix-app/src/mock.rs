@@ -786,6 +786,7 @@ impl Backend for MockBackend {
                             member_count: 3 - k as u32,
                             pinned: false,
                             archived: true,
+                            locked: false,
                         });
                     }
                     ParityReply::ForumPosts { posts, has_more: false }

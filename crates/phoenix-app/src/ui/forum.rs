@@ -419,7 +419,7 @@ fn preview_text(s: &str) -> String {
 /// for an archived post; a post with its own read state is unread when its
 /// last message is past the ack; one never opened is "new" when its id is
 /// past the forum channel's own ack (`isNewForumThread`).
-fn is_unread(app: &PhoenixApp, p: &ForumPost) -> bool {
+pub(crate) fn is_unread(app: &PhoenixApp, p: &ForumPost) -> bool {
     if p.archived {
         return false;
     }
@@ -490,6 +490,10 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
             .flex()
             .items_start()
             .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
+            .when_some(open_forum(app), |d, forum| {
+                let post = p.clone();
+                d.on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| crate::ui::thread_menu::open_post(post.clone(), forum, ev.position, w))
+            })
             .child(
                 // body_SOY5H6: padding-bottom 8
                 div()

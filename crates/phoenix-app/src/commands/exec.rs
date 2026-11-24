@@ -218,6 +218,7 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     member_count: t.member_count.unwrap_or(0),
                     pinned: t.flags & 2 != 0,
                     archived,
+                    locked: t.thread_metadata.as_ref().is_some_and(|m| m.locked),
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more: r.has_more }
@@ -296,6 +297,7 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     member_count: t.member_count.unwrap_or(0),
                     pinned: false,
                     archived: true,
+                    locked: t.thread_metadata.as_ref().is_some_and(|m| m.locked),
                 })
                 .collect();
             ParityReply::ForumPosts { posts, has_more }

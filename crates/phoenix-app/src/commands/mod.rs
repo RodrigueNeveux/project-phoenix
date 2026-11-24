@@ -67,6 +67,8 @@ pub struct ForumPost {
     pub pinned: bool,
     /// Came from the archived search (forum "Older posts" section).
     pub archived: bool,
+    /// `thread_metadata.locked`: only moderators can reopen or reply.
+    pub locked: bool,
 }
 
 /// Tag of a forum / media channel (`available_tags`).
