@@ -29,6 +29,7 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 | 20 | Rich text that opens on a blank line next to an emoji | The blank line was lost after #5 | The newline split dropped an empty first line | Keep blank lines that open a rich text block |
 | 21 | Announcement, after #4 | The `#` icon ended one line and the channel name started the next | Icon and name were separate flex items | Keep a channel mention's icon and name together when the line wraps |
 | 22 | Embeds and messages with an emoji, narrow window | The text after an emoji jumped to a new line (`🎶` alone, then "Started playing …") | Each text run between emoji was one flex item, so it could not flow on the emoji's line | Flow message and embed text word by word around inline emoji |
+| 23 | Group DMs opened right after start | Times and day dividers were in English ("11/12/2026 8:20 PM", "November 13, 2026") | Rows rendered before the synced locale arrived stayed cached | Rebuild cached message rows when the locale changes so times and day dividers follow it |
 
 ## Seen but not fixed (known limits)
 
