@@ -168,6 +168,8 @@ fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> An
 
 fn title(t: impl Into<SharedString>) -> gpui::Div {
     div()
+        // Clear of the top-right close button on both sides (stays centred).
+        .px(z(28.))
         .text_size(z(24.))
         .font_weight(FontWeight::BOLD)
         .text_color(c(Palette::TEXT_HEADER))
