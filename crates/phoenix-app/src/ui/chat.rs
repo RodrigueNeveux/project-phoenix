@@ -543,7 +543,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let Some(ch_id) = app.selected_channel else { return div().into_any_element() };
     let Some(entry) = app.messages.get(&ch_id) else { return div().into_any_element() };
     if ix == 0 {
-        return row_wrapper().child(intro(app, ch_id, entry.reached_start, entry.loading)).into_any_element();
+        return row_wrapper().child(intro(app, entity, ch_id, entry.reached_start, entry.loading)).into_any_element();
     }
     let i = ix - 1;
     let (Some(msg), Some(r)) = (entry.msgs.get(i), entry.rendered.get(i)) else {
@@ -560,7 +560,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     el
 }
 
-fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl IntoElement {
+fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: bool, loading: bool) -> gpui::Div {
     let channel = app.channels.get(&ch);
     let name = channel.map(|c| c.name.clone()).unwrap_or_default();
     if !reached_start {
@@ -576,27 +576,56 @@ fn intro(app: &PhoenixApp, ch: Id, reached_start: bool, loading: bool) -> impl I
     if let Some(chan) = channel.filter(|c| c.guild.is_none()) {
         let group = crate::ui::dm_profile_panel::is_group_dm(app, chan.id);
         let peer = chan.voice_users.first().filter(|_| !group).and_then(|u| app.users.get(u));
+        let strong = name.clone();
+        let desc = if group { crate::t!("chat.group_start", name = strong) } else { crate::t!("chat.dm_start", name = strong) };
+        // the recipient / group name is a `<strong>` inside the description (vanilla-group-dm #1112)
+        let bold = desc.find(&*name).filter(|_| !name.is_empty()).map(|i| i..i + name.len());
+        let desc_el = gpui::StyledText::new(desc.clone()).with_highlights(
+            bold.map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() })),
+        );
+        let e1 = entity.clone();
+        let e2 = entity.clone();
+        // `container_w6h4R2` (vanilla-group-dm #1103): column, margin 20.
         return div()
-            .m(z(16.))
+            .m(z(20.))
             .flex()
             .flex_col()
-            .gap(z(8.))
             // vanilla-group-dm #1104 editableGdmIcon_5yEg41 80px.
             .child(if group { crate::ui::group_dm::group_avatar(app, chan.id, 80., c(Palette::BG_PRIMARY)) } else { avatar(peer, 80.) })
             .child(
+                // `header_w6h4R2 heading-xxl/semibold` (#1110): 32/40, --font-weight-bold,
+                // margin 8 0, --text-strong.
                 div()
+                    .my(z(8.))
                     .text_size(z(32.))
                     .line_height(z(40.))
                     .font_weight(FontWeight::BOLD)
-                    .text_color(c(Palette::TEXT_HEADER))
+                    .text_color(tk(idx::TEXT_STRONG))
                     .child(name.clone()),
             )
             .child(
-                div()
-                    .text_size(z(16.))
-                    .text_color(tk(idx::TEXT_DEFAULT)) // container_ .description_ color
-                    .child(if group { crate::t!("chat.group_start", name = name) } else { crate::t!("chat.dm_start", name = name) }),
-            );
+                // `description_w6h4R2 body-md/normal` (#1111): 16/20 --text-default.
+                div().text_size(z(16.)).line_height(z(20.)).text_color(tk(idx::TEXT_DEFAULT)).child(desc_el),
+            )
+            .when(group, |d| {
+                // `stack_ buttonContainer_KT4tG0` (#1113): margin-top 16, gap 8; md
+                // primary "Invite to Group DM" (UserPlusIcon) and secondary "Edit Group".
+                use crate::ui::controls::{BtnKind, button_icon};
+                d.child(
+                    div()
+                        .mt(z(16.))
+                        .flex()
+                        .gap(z(8.))
+                        .child(
+                            button_icon("gdm-intro-invite", "invite", crate::t!("header.add_to_gdm"), BtnKind::Primary)
+                                .on_click(move |_, _, cx| e1.update(cx, |a, cx| a.open_group_dm_picker(cx))),
+                        )
+                        .child(
+                            button_icon("gdm-intro-edit", "pen", crate::t!("menu.edit_group"), BtnKind::Secondary)
+                                .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("Edit Group", cx))),
+                        ),
+                )
+            });
     }
     // container_ (welcome) margin: --custom-message-margin-horizontal; header_ margin 8px 0.
     div()
