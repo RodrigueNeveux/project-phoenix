@@ -295,6 +295,20 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
             }));
         }
         GatewayEvent::ThreadDelete(c) => out.push(AppEvent::Nav(NavEvent::ThreadDelete(id(c.id)))),
+        // Sent when a channel is opened: active threads plus my thread members. The
+        // sidebar lists only the threads I joined (those with a member entry).
+        GatewayEvent::Unknown { name, data } if name == "THREAD_LIST_SYNC" => {
+            let joined: Vec<u64> =
+                data.get("members").and_then(Value::as_array).into_iter().flatten().filter_map(|m| m.get("id").and_then(snowflake)).collect();
+            for t in data.get("threads").and_then(Value::as_array).into_iter().flatten() {
+                if let Ok(c) = serde_json::from_value::<api::Channel>(t.clone())
+                    && joined.contains(&c.id.0)
+                    && let Some(t) = thread(&c)
+                {
+                    out.push(AppEvent::Nav(NavEvent::ThreadUpsert(t)));
+                }
+            }
+        }
         GatewayEvent::ChannelCreate(c) | GatewayEvent::ChannelUpdate(c) => {
             out.push(AppEvent::Nav(NavEvent::Extras(vec![(id(c.id), extra(cache, c))])));
         }
@@ -481,6 +495,17 @@ fn settings_body(channel: Option<Id>, fields: Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn thread_list_sync_lists_only_joined_threads() {
+        let t = |i: u64| json!({"id": i.to_string(), "type": 11, "guild_id": "1", "parent_id": "2", "name": format!("t{i}"),
+            "thread_metadata": {"archived": false, "locked": false, "auto_archive_duration": 1440, "archive_timestamp": "2026-11-24T00:00:00+00:00"}});
+        let data = json!({"guild_id": "1", "threads": [t(10), t(11)], "members": [{"id": "11", "user_id": "5", "flags": 1, "join_timestamp": "2026-11-24T00:00:00+00:00"}]});
+        let ev = GatewayEvent::Unknown { name: "THREAD_LIST_SYNC".into(), data };
+        let out = on_gateway(&Cache::default(), &ev);
+        let ids: Vec<Id> = out.iter().filter_map(|e| match e { AppEvent::Nav(NavEvent::ThreadUpsert(c)) => Some(c.id), _ => None }).collect();
+        assert_eq!(ids, vec![Id(11)]);
+    }
 
     #[test]
     fn folder_proto() {
