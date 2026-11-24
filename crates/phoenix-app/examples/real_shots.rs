@@ -308,6 +308,8 @@ struct Scroll {
     /// Message scroller distance from the bottom (fallback when the anchor
     /// message is not in our loaded history).
     from_bottom: f32,
+    /// Server rail (`scroller_5dqHTG`) scrollTop, CSS px.
+    rail: f32,
 }
 
 /// Activity cards shown by Discord: "author id ¦ game" records joined by ¶ (kept verbatim in the JSON output).
@@ -322,7 +324,8 @@ const b=(e.closest('li')||e).getBoundingClientRect();if(b.bottom>r.top+1){ct=e.g
 if(ms){const r=ms.getBoundingClientRect();fb=ms.scrollHeight-ms.scrollTop-ms.clientHeight;
 for(const li of ms.querySelectorAll('li[id^=chat-messages-]')){const b=li.getBoundingClientRect();
 if(b.bottom>r.top+1){top=li.id.split('-').pop();off=r.top-b.top;break}}}
-return [ch?ch.scrollTop:0,mb?mb.scrollTop:0,top,off,fb,ct,co].join(' ')})()";
+const rl=q('nav[class*=guilds_] [class*=scroller_]');
+return [ch?ch.scrollTop:0,mb?mb.scrollTop:0,top,off,fb,ct,co,rl?rl.scrollTop:0].join(' ')})()";
 
 fn read_scroll() -> Option<Scroll> {
     if std::env::var_os("PHX_NO_SCROLL").is_some() {
@@ -338,6 +341,7 @@ fn read_scroll() -> Option<Scroll> {
         members: num(1),
         top_message: f.get(2).and_then(|v| parse_id(v)).map(|id| (id, num(3))),
         from_bottom: num(4),
+        rail: num(7),
     })
 }
 
@@ -380,6 +384,7 @@ fn apply_scroll(
             None => app.sidebar_list.scroll_to(top),
         }
         app.member_list.scroll_to(top);
+        phoenix_app::ui::server_bar::scroll_rail_to(sc.rail);
         match anchor {
             Some((ix, off)) => app.message_list.scroll_to(ListOffset { item_ix: ix, offset_in_item: px(off.max(0.)) }),
             None => app.message_list.scroll_to_end(),

@@ -135,6 +135,13 @@ thread_local! {
     static RAIL_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
+/// Scrolls the server rail to `y` px from the top (offscreen compares copy the
+/// client's `scroller_5dqHTG` scrollTop).
+#[doc(hidden)]
+pub fn scroll_rail_to(y: f32) {
+    RAIL_SCROLL.with(|h| h.set_offset(gpui::point(gpui::px(0.), gpui::px(-y.max(0.)))));
+}
+
 /// One unread guild row inside a rail child (see `render`).
 struct Span {
     ix: usize,
