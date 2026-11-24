@@ -45,7 +45,7 @@ fn send(app: &mut PhoenixApp, id: crate::model::Id, window: &mut gpui::Window, c
     close(app, window, cx);
 }
 
-fn sticker_graphic(s: &StickerData, size: f32) -> AnyElement {
+pub(crate) fn sticker_graphic(s: &StickerData, size: f32) -> AnyElement {
     match sticker_url(s.id.0, s.format) {
         Some(u) => img(u).size(px(size)).flex_none().into_any_element(),
         // Lottie stickers can't be drawn yet: show the name.

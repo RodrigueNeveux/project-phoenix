@@ -15,7 +15,7 @@ pub mod emoji_data;
 mod gif;
 pub mod grid;
 mod prefs;
-mod sticker;
+pub(crate) mod sticker;
 pub mod types;
 
 use std::time::Duration;

@@ -21,7 +21,7 @@ use crate::{
             Pickers,
             emoji::{self, name_score},
             grid::{PickItem, item_element},
-            types::GuildEmoji,
+            types::{GuildEmoji, StickerData},
         },
         sidebar::channel_icon,
     },
@@ -43,6 +43,9 @@ pub enum Item {
     Role { id: Id, name: SharedString, color: Option<u32> },
     Everyone(&'static str),
     Channel(Id),
+    /// Sticker suggestion under the emoji results (Autocomplete.Sticker): `source` is
+    /// the pack or server name, `similar` the matched tag when it isn't the name.
+    Sticker { data: StickerData, source: Option<SharedString>, similar: Option<SharedString> },
 }
 
 #[derive(Default)]
@@ -185,6 +188,44 @@ pub fn suggestions(app: &PhoenixApp, kind: Kind, q: &str) -> Vec<Item> {
     }
 }
 
+/// Sendable stickers matching `q` (the client's `queryStickers` with the SENDABLE
+/// filter): the open server's stickers (every server's with Nitro), then the
+/// standard packs. Matches on the name first, then on a tag starting with `q`.
+fn sticker_matches(app: &PhoenixApp, q: &str, cx: &App) -> Vec<Item> {
+    let q = q.to_lowercase();
+    let premium = app.backend.has_premium();
+    let mut pool: Vec<(StickerData, Option<SharedString>)> = Vec::new();
+    for g in &app.guilds {
+        if premium || Some(g.id) == app.selected_guild {
+            pool.extend(app.backend.guild_stickers(g.id).into_iter().map(|s| (s, Some(g.name.clone()))));
+        }
+    }
+    if let Some(packs) = cx.try_global::<Pickers>().and_then(|p| p.stickers.packs.as_ref()) {
+        for pack in packs {
+            pool.extend(pack.stickers.iter().cloned().map(|s| (s, Some(pack.name.clone()))));
+        }
+    }
+    let mut by_name = Vec::new();
+    let mut by_tag = Vec::new();
+    for (data, source) in pool {
+        if data.name.to_lowercase().contains(&q) {
+            by_name.push(Item::Sticker { data, source, similar: None });
+        } else if let Some(tag) = data.tags.to_lowercase().split([',', ' ']).find(|t| !t.is_empty() && t.starts_with(&q)).map(|t| SharedString::from(t.to_owned())) {
+            by_tag.push(Item::Sticker { data, source, similar: Some(tag) });
+        }
+    }
+    by_name.extend(by_tag);
+    by_name
+}
+
+/// Emoji results followed by stickers, with the client's counts: up to
+/// max(4, 8 - emojis) stickers, then max(6, 10 - stickers) emojis.
+fn with_stickers(emojis: Vec<Item>, stickers: Vec<Item>) -> Vec<Item> {
+    let n_st = stickers.len().min(4.max(8usize.saturating_sub(emojis.len())));
+    let n_em = emojis.len().min(6.max(10usize.saturating_sub(n_st)));
+    emojis.into_iter().take(n_em).chain(stickers.into_iter().take(n_st)).collect()
+}
+
 /// Recompute after a composer edit.
 pub fn refresh(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) {
     if !cx.has_global::<Autocomplete>() {
@@ -195,9 +236,17 @@ pub fn refresh(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoe
         (s.value().to_string(), s.cursor())
     };
     let next = token_at(&text, cursor).and_then(|(kind, query, start)| {
-        let items = suggestions(app, kind, &query);
+        let mut items = suggestions(app, kind, &query);
+        if kind == Kind::Emoji {
+            items = with_stickers(items, sticker_matches(app, &query, cx));
+        }
         (!items.is_empty()).then_some(Active { kind, query, start, end: cursor, items, selected: 0 })
     });
+    // The standard sticker packs are fetched on the first emoji query (the client's
+    // queryStickers reads the sticker store, filled the same way).
+    if next.as_ref().is_some_and(|a| a.kind == Kind::Emoji) && cx.has_global::<Pickers>() {
+        crate::ui::pickers::sticker::load_packs(app, cx);
+    }
     let had = cx.global::<Autocomplete>().active.is_some();
     if had || next.is_some() {
         cx.global_mut::<Autocomplete>().active = next;
@@ -216,6 +265,8 @@ pub fn insertion(app: &PhoenixApp, item: &Item, tone: u8) -> String {
             let _ = app;
             format!("<#{}>", id.0)
         }
+        // Picking a sticker sends it (options.sendSticker) and drops the typed query.
+        Item::Sticker { .. } => String::new(),
     }
 }
 
@@ -227,7 +278,13 @@ pub fn accept(app: &mut PhoenixApp, index: usize, window: &mut Window, cx: &mut 
     if let (Item::Emoji(pi), true) = (&item, cx.has_global::<Pickers>()) {
         cx.global_mut::<Pickers>().prefs.record(pi);
     }
-    let text = format!("{} ", insertion(app, &item, tone));
+    if let (Item::Sticker { data, .. }, Some(ch)) = (&item, app.selected_channel) {
+        crate::ui::pickers::detach(app.backend.send_sticker(ch, data.id), cx);
+    }
+    let text = match &item {
+        Item::Sticker { .. } => String::new(),
+        _ => format!("{} ", insertion(app, &item, tone)),
+    };
     cx.global_mut::<Autocomplete>().active = None;
     app.composer.update(cx, |s, cx| {
         s.set_selected_range(range, cx);
@@ -276,9 +333,36 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     // 790340 autocompleteInner_ padding-bottom 8; rows are base_ (padding 8, radius 3)
     // inside autocompleteRow_ (padding 0 8, 14/16 medium).
     let mut rows = div().flex().flex_col().pb(z(8.));
+    let mut stickers_started = false;
     for (i, item) in a.items.iter().enumerate() {
         let selected = i == a.selected;
+        let mut similar: Option<SharedString> = None;
+        if matches!(item, Item::Sticker { .. }) && !stickers_started {
+            stickers_started = true;
+            if i > 0 {
+                // Autocomplete.Divider: dividerContainer_ (base_ padding-block 0 in a 0 8 row),
+                // divider_:after 1px --border-subtle.
+                rows = rows.child(div().px(z(16.)).py(z(8.)).child(div().h(z(1.)).bg(tk(idx::BORDER_SUBTLE))));
+            }
+            // Title "Stickers matching <query>" (locale uferGG): same Title component as the top one.
+            rows = rows.child(
+                div()
+                    .px(z(8.))
+                    .py(z(12.))
+                    .text_size(z(14.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                    .child(crate::t!("ac.stickers", q = a.query)),
+            );
+        }
+        // Emoji and Sticker rows use autocompleteRowVerticalSmall_: base_ padding 4px 8px.
+        let small = matches!(item, Item::Emoji(_) | Item::Sticker { .. });
         let (lead, main, hint): (AnyElement, SharedString, Option<SharedString>) = match item {
+            Item::Sticker { data, source, similar: sim } => {
+                similar = sim.clone();
+                // renderSticker: the sticker at size 40.
+                (crate::ui::pickers::sticker::sticker_graphic(data, 40.), data.name.clone(), source.clone())
+            }
             Item::Emoji(pi) => (item_element(pi, tone, 20.), format!(":{}:", pi.name()).into(), None), // emojiImage_ 20px
             Item::User(id) => {
                 let u = app.users.get(id);
@@ -318,7 +402,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             div().px(z(8.)).child(
                 div()
                     .id(("ac", i))
-                    .p(z(8.)) // base_ padding 8, radius 3
+                    .when(small, |d| d.px(z(8.)).py(z(4.)))
+                    .when(!small, |d| d.p(z(8.))) // base_ padding 8, radius 3
                     .rounded(z(3.))
                     .flex()
                     .items_center()
@@ -333,7 +418,19 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)) // autocompleteRowContent_
                     .child(div().flex_none().mr(z(8.)).child(lead)) // autocompleteRowIcon_ margin-inline-end 8
-                    .child(div().flex_shrink(1.).min_w_0().overflow_hidden().whitespace_nowrap().child(main)) // ContentPrimary
+                    // ContentPrimary: the name, and for a sticker matched on a tag the
+                    // autocompleteRowSubheading_ "Similar to: <tag>" (locale PAutaQ).
+                    .child(
+                        div()
+                            .flex_shrink(1.)
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .child(main)
+                            .when_some(similar, |d, t| {
+                                d.child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::NORMAL).child(crate::t!("ac.similar", q = t)))
+                            }),
+                    )
                     .when_some(hint, |d, h| {
                         // autocompleteRowContentSecondary_: grows, margin-inline-start 16, text-align end
                         d.child(div().flex_1().ml(z(16.)).min_w_0().overflow_hidden().whitespace_nowrap().flex().justify_end().child(h))
@@ -378,6 +475,30 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sticker_and_emoji_counts() {
+        let st = |n: u64| Item::Sticker {
+            data: StickerData {
+                id: Id(n),
+                name: "s".into(),
+                description: "".into(),
+                tags: "".into(),
+                format: crate::media::StickerFormat::Png,
+                guild: None,
+            },
+            source: None,
+            similar: None,
+        };
+        let em = |n: u64| Item::Channel(Id(n));
+        let count = |v: &[Item]| v.iter().filter(|i| matches!(i, Item::Sticker { .. })).count();
+        // 10 emojis, 6 stickers: max(4, 8 - 10) = 4 stickers, max(6, 10 - 4) = 6 emojis.
+        let v = with_stickers((0..10).map(em).collect(), (0..6).map(st).collect());
+        assert_eq!((v.len() - count(&v), count(&v)), (6, 4));
+        // 2 emojis: up to 6 stickers.
+        let v = with_stickers((0..2).map(em).collect(), (0..9).map(st).collect());
+        assert_eq!((v.len() - count(&v), count(&v)), (2, 6));
+    }
 
     #[test]
     fn tokens() {
