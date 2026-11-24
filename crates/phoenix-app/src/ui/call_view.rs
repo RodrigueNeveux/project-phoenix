@@ -793,7 +793,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             "call-screen",
                             glyph("icons/voice/screen.svg", 20., icon_color(screen_look)),
                             screen_look,
-                            true,
+                            false,
                             crate::t!("voice.share_screen"),
                             |_, _| {},
                             cx,
