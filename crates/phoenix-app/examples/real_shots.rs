@@ -16,7 +16,8 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu.
+//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite.
+//! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
 
@@ -722,7 +723,21 @@ fn main() -> anyhow::Result<()> {
     }
     // `PHX_PROFILE=peer`: the other user of the open DM.
     let peer = cx.update(|cx| phoenix_app::ui::dm_profile_panel::peer(v.read(cx)));
-    let profile = std::env::var("PHX_PROFILE").ok().and_then(|v| if v == "peer" { peer } else { parse_id(&v) });
+    // `PHX_PROFILE=member:<n>`: the nth member of the guild's member list.
+    let want = std::env::var("PHX_PROFILE").ok();
+    let nth = want.as_deref().and_then(|v| v.strip_prefix("member:")).and_then(|n| n.parse::<usize>().ok());
+    let member = nth.and_then(|n| {
+        cx.update(|cx| {
+            let app = v.read(cx);
+            app.selected_guild.and_then(|g| app.members.get(&g)?.get(n).map(|m| m.user))
+        })
+    });
+    let profile = match want.as_deref() {
+        Some("peer") => peer,
+        Some(_) if nth.is_some() => member,
+        Some(v) => parse_id(v),
+        None => None,
+    };
     if let Some(uid) = profile {
         let modal = std::env::var("PHX_PROFILE_KIND").is_ok_and(|k| k == "modal");
         let at = std::env::var("PHX_PROFILE_BOX").ok().and_then(|b| {
@@ -785,6 +800,49 @@ fn main() -> anyhow::Result<()> {
                     };
                     phoenix_app::ui::pickers::open(app, tab, EmojiTarget::Composer, window, cx);
                 }
+                // Context menus at (700, 300): channel / category (nth in the sidebar), server.
+                "chanmenu" | "catmenu" => {
+                    use phoenix_app::app::SidebarRow;
+                    let n: usize = arg.parse().unwrap_or(0);
+                    let cat = kind == "catmenu";
+                    let id = app
+                        .sidebar_rows
+                        .iter()
+                        .filter_map(|r| match r {
+                            SidebarRow::Category(c) if cat => Some(*c),
+                            SidebarRow::Channel(c) if !cat => Some(*c),
+                            _ => None,
+                        })
+                        .nth(n);
+                    if let Some(id) = id {
+                        phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Channel(id), gpui::point(px(300.), px(300.)), window);
+                    }
+                }
+                "guildmenu" => {
+                    if let Some(g) = app.selected_guild {
+                        phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Guild(g), gpui::point(px(80.), px(200.)), window);
+                    }
+                }
+                "guilddrop" => app.nav.guild_menu = true,
+                // nth member of the guild's member list: right-click menu.
+                "usermenu" => {
+                    let u = app.selected_guild.and_then(|g| app.members.get(&g)?.get(arg.parse().unwrap_or(0)).map(|m| m.user));
+                    if let Some(u) = u {
+                        phoenix_app::ui::user_menu::open(u, app.selected_guild, gpui::point(px(900.), px(250.)), window);
+                    }
+                }
+                "switcher" => phoenix_app::ui::switcher::open(app, window, cx),
+                "leave" => {
+                    if let Some(g) = app.selected_guild {
+                        app.show_overlay(phoenix_app::ui::home::data::Overlay::LeaveGuild(g), cx);
+                    }
+                }
+                // Invite dialog without creating an invite (read-only).
+                "invite" => {
+                    if let Some(guild) = app.selected_guild {
+                        app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink { guild, link: None }, cx);
+                    }
+                }
                 "msgmenu" => {
                     let last = app.selected_channel.and_then(|c| Some((c, app.messages.get(&c)?.msgs.last()?.id)));
                     if let Some((c, m)) = last {
@@ -795,6 +853,16 @@ fn main() -> anyhow::Result<()> {
             })
         })?;
         pump(&mut cx, wait * 1000 / 3);
+    }
+    if std::env::var_os("PHX_DEBUG_GIF").is_some() {
+        cx.update(|cx| {
+            if let Some(h) = cx.try_global::<phoenix_app::ui::pickers::Pickers>().and_then(|p| p.gifs.home.as_ref()) {
+                println!("gif trending_preview={:?}", h.trending_preview);
+                println!("gif first category={:?}", h.categories.first().map(|c| c.preview.clone()));
+            } else {
+                println!("gif home not loaded");
+            }
+        });
     }
     let mut img = None;
     for _ in 0..2 {
