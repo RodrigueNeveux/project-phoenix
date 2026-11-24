@@ -685,18 +685,54 @@ pub fn format_cooldown(secs: u64) -> String {
     if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
 }
 
-/// cooldownWrapper_bbCgC2 / cooldownText_bbCgC2 (ee411b7c20ef82cb.js + 56501.cc2ece064d14c9ca.css):
-/// right side of the typing row (margin-inline-start auto, padding 3 8, padding-inline-end 16, gap 4);
-/// TimerIcon xxs (12px, ml 4) before the body-xs/medium (12/16) text, `--text-muted` or
-/// `--text-feedback-critical` for 1s after a held send.
+thread_local! {
+    /// EMPHASIZE_SLOWMODE_COOLDOWN: the cooldown text turns --text-feedback-critical for 1 s.
+    static EMPHASIZED: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// A send was refused by slowmode (client: SLOWMODE_COOLDOWN failure dispatches SHAKE_APP
+/// {duration 200, intensity 2} and EMPHASIZE_SLOWMODE_COOLDOWN; the text is kept).
+pub fn emphasize_cooldown() {
+    EMPHASIZED.with(|e| e.set(Some(std::time::Instant::now())));
+    crate::ui::shake::start(200, 2.);
+}
+
+fn emphasized() -> bool {
+    EMPHASIZED.with(|e| e.get().is_some_and(|t| t.elapsed().as_millis() < 1000))
+}
+
+/// The cooldown tooltip (module 960850 `VI`): "Mode lent activé. Les membres peuvent envoyer
+/// un message toutes les …" with hours/minutes/seconds; zero parts are dropped ("=0": []),
+/// the seconds-only form ends with "." (IWntYg) and the others don't (sY3wlG, 3hz51F).
+pub fn slowmode_tip(secs: u32) -> String {
+    let (h, m, s) = (secs / 3600, secs % 3600 / 60, secs % 60);
+    // CLDR "one": French covers 0 and 1, English only 1.
+    let one = |n: u32| if crate::i18n::locale() == "fr" { n < 2 } else { n == 1 };
+    let part = |n: u32, k: &str| -> String {
+        if n == 0 { String::new() } else { crate::i18n::t(&format!("chat.slowmode_{k}{}", if one(n) { "_one" } else { "" }), &[("n", &n.to_string())]).to_string() }
+    };
+    let prefix = crate::t!("chat.slowmode_tip");
+    if h > 0 {
+        format!("{prefix}{} {} {}", part(h, "h"), part(m, "m"), part(s, "s"))
+    } else if m > 0 {
+        format!("{prefix}{} {}", part(m, "m"), part(s, "s"))
+    } else {
+        let k = if one(secs) { "chat.slowmode_s_alone_one" } else { "chat.slowmode_s_alone" };
+        format!("{prefix}{}.", crate::i18n::t(k, &[("n", &secs.to_string())]))
+    }
+}
+
+/// Slowmode cooldown (module ee411b7c `j`): cooldownWrapper_bbCgC2 (padding 3 16 3 8, measured
+/// live 2026-11-24 in the sandbox channel at 10 s / 60 s) under a tooltip with the rate, holding
+/// cooldownText_ (body-xs/medium 12/16 500, tabular-nums, flex gap 4, --text-muted or
+/// --text-feedback-critical while emphasized) = TimerIcon "xxs" 12px (slowModeIcon_, margin-inline-start 4)
+/// THEN the text: "Immunité au mode lent" with BYPASS_SLOWMODE, the countdown while it runs,
+/// else "Mode lent activé.".
 fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
+    use crate::ui::tooltip::Tipped as _;
     let ch = app.selected_channel?;
     let x = app.nav.extras.get(&ch).filter(|x| x.slowmode > 0)?;
     let left = cooldown_left(app, ch);
-    let flash = SLOWMODE_FLASH.with(|f| f.get().is_some_and(|until| std::time::Instant::now() < until));
-    let fg = super::tk(if flash { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_MUTED });
-    // Client text: "Immunité au mode lent" when we bypass it, the countdown
-    // while it runs, else "Mode lent activé.".
     let text: SharedString = if x.bypass_slowmode {
         crate::t!("chat.slowmode_immune")
     } else if left > 0 {
@@ -704,8 +740,10 @@ fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
     } else {
         crate::t!("chat.slowmode_on")
     };
+    let color = super::tk(if emphasized() { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_MUTED });
     Some(
         div()
+            .id("slowmode-cooldown")
             .ml_auto()
             .pt(z(3.))
             .pb(z(3.))
@@ -713,14 +751,20 @@ fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
             .pr(z(16.))
             .flex()
             .items_center()
-            .gap(z(4.))
-            .whitespace_nowrap()
-            .text_size(z(12.))
-            .line_height(z(16.))
-            .font_weight(gpui::FontWeight::MEDIUM)
-            .text_color(fg)
-            .child(div().ml(z(4.)).child(gpui::svg().path(crate::icons::path("inbox/clock")).size(z(12.)).text_color(fg)))
-            .child(text)
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z(4.))
+                    .whitespace_nowrap()
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(color)
+                    .child(div().ml(z(4.)).child(gpui::svg().path(crate::icons::path("chat/timer")).size(z(12.)).text_color(color)))
+                    .child(text),
+            )
+            .tip(slowmode_tip(x.slowmode))
             .into_any_element(),
     )
 }
@@ -878,5 +922,20 @@ mod tests {
         assert_eq!(format_cooldown(5), "0:05");
         assert_eq!(format_cooldown(125), "2:05");
         assert_eq!(format_cooldown(3725), "1:02:05");
+    }
+
+    #[test]
+    fn slowmode_tooltip_follows_the_client_strings() {
+        // Live 2026-11-24 (fr): "…toutes les 10\u{a0}secondes." and "…toutes les 1\u{a0}minute ".
+        if crate::i18n::locale() == "fr" {
+            assert!(slowmode_tip(10).ends_with("toutes les 10\u{a0}secondes."));
+            assert!(slowmode_tip(60).ends_with("toutes les 1\u{a0}minute "));
+            assert!(slowmode_tip(1).ends_with("toutes les secondes."));
+            assert!(slowmode_tip(3725).ends_with("1\u{a0}heure 2\u{a0}minutes 5\u{a0}secondes"));
+        } else {
+            assert_eq!(slowmode_tip(10), "Slowmode is enabled. Members can send one message every 10 seconds.");
+            assert_eq!(slowmode_tip(60), "Slowmode is enabled. Members can send one message every 1 minute ");
+            assert!(slowmode_tip(7200).ends_with("every 2 hours  "));
+        }
     }
 }

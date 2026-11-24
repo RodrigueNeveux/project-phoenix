@@ -925,6 +925,8 @@ impl PhoenixApp {
         // Slowmode: the send is held back and the text stays (submit_composer's check
         // never ran for sends since this hook always handles them).
         if super::composer::send_held(self, ch) {
+            super::composer::emphasize_cooldown();
+            cx.notify();
             return true;
         }
         super::composer::note_sent(ch);

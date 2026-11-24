@@ -221,7 +221,8 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
     let send_bit = if c.kind.is_thread() { api::Permissions::SEND_MESSAGES_IN_THREADS } else { api::Permissions::SEND_MESSAGES };
     ChannelExtra {
         slowmode: c.rate_limit_per_user.unwrap_or(0),
-        bypass_slowmode: perms.intersects(api::Permissions::MANAGE_MESSAGES | api::Permissions::MANAGE_CHANNELS),
+        // Client: isBypassSlowmode = can(BYPASS_SLOWMODE) only (module 960850 `c`).
+        bypass_slowmode: perms.contains(api::Permissions::BYPASS_SLOWMODE),
         // Empty = roles not cached yet: don't lock the composer on missing data.
         // A locked thread only takes messages from MANAGE_THREADS holders.
         send_blocked: c.guild_id.is_some()

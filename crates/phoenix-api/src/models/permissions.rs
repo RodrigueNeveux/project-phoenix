@@ -56,6 +56,8 @@ bitflags! {
         const SEND_VOICE_MESSAGES = 1 << 46;
         const SEND_POLLS = 1 << 49;
         const USE_EXTERNAL_APPS = 1 << 50;
+        /// The client's slowmode check (`can(BYPASS_SLOWMODE)`, module 960850); admins hold it.
+        const BYPASS_SLOWMODE = 1 << 52;
         // Keep unknown future bits instead of dropping them.
         const _ = !0;
     }

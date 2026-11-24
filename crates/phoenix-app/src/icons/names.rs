@@ -120,6 +120,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("inbox/jump", &["ChatArrowRightIcon"]),
     ("inbox/bookmark", &["BookmarkIcon"]),
     ("inbox/clock", &["ClockIcon"]),
+    // Slowmode cooldown (slowModeIcon_, measured live 2026-11-24).
+    ("chat/timer", &["TimerIcon"]),
     ("inbox/schedule", &["CalendarPlusIcon", "CalendarIcon"]),
     ("search/user", &["UserIcon"]),
     ("search/attachment", &["AttachmentIcon", "PaperclipIcon"]),

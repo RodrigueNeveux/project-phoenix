@@ -1113,7 +1113,12 @@ impl PhoenixApp {
         }
         let Some(ch) = self.selected_channel else { return };
         let text = self.composer.read(cx).value().trim().to_string();
-        if text.is_empty() || (self.editing.is_none() && ui::chat::composer::send_held(self, ch)) {
+        if text.is_empty() {
+            return;
+        }
+        if self.editing.is_none() && ui::chat::composer::send_held(self, ch) {
+            ui::chat::composer::emphasize_cooldown();
+            cx.notify();
             return;
         }
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
@@ -1469,6 +1474,9 @@ impl Render for PhoenixApp {
                 .child(ui::home::main_pane(self, window, cx)))
                 .into_any_element(),
         };
+        // SHAKE_APP moves the whole app layer (slowmode refusal).
+        let (sx, sy) = ui::shake::offset(window, self.prefs.local.reduced_motion || cx.reduce_motion()).unwrap_or((0., 0.));
+        let body = div().size_full().relative().left(px(sx)).top(px(sy)).child(body).into_any_element();
         div()
             .id("phoenix-root")
             .key_context(CONTEXT)
