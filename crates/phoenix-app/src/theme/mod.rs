@@ -279,7 +279,12 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
     let pz = ZOOM.swap(prefs.local.zoom.clamp(50, 200), Ordering::Relaxed);
     let pf = FONT_PX.swap(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
     let pd = DENSITY.swap(prefs.local.density as u8, Ordering::Relaxed);
-    if prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) || pd != prefs.local.density as u8 {
+    // The locale too: messages rendered before the synced settings arrived kept English
+    // times and day dividers ("November 13, 2026") in the French UI.
+    static LOCALE: std::sync::Mutex<&str> = std::sync::Mutex::new("");
+    let locale = crate::i18n::locale();
+    let locale_changed = LOCALE.lock().map(|mut l| std::mem::replace(&mut *l, locale) != locale).unwrap_or(false);
+    if locale_changed || prev != t || pz != zoom_raw() || pf != FONT_PX.load(Ordering::Relaxed) || pd != prefs.local.density as u8 {
         STYLE_GEN.fetch_add(1, Ordering::Relaxed);
     }
     let rem = px(16. * zoom());
