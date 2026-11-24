@@ -76,6 +76,8 @@ pub struct SearchQuery {
     pub min_id: Option<Snowflake>,
     pub max_id: Option<Snowflake>,
     pub pinned: Option<bool>,
+    /// `author_type`: user / bot / webhook (a leading `-` excludes).
+    pub author_types: Vec<String>,
     pub sort: SearchSort,
     /// Results to skip (pages of 25).
     pub offset: u32,
@@ -96,6 +98,7 @@ impl SearchQuery {
             && self.min_id.is_none()
             && self.max_id.is_none()
             && self.pinned.is_none()
+            && self.author_types.is_empty()
     }
 
     /// URL query string (without the leading `?`).
@@ -124,6 +127,9 @@ impl SearchQuery {
         }
         if let Some(p) = self.pinned {
             s.append_pair("pinned", if p { "true" } else { "false" });
+        }
+        for t in &self.author_types {
+            s.append_pair("author_type", t);
         }
         match self.sort {
             SearchSort::Newest => {
@@ -166,6 +172,8 @@ pub struct ParsedSearch {
     pub after: Option<String>,
     pub during: Option<String>,
     pub pinned: Option<bool>,
+    /// `authorType:user|bot|webhook` (the "More filters" modal's author type).
+    pub author_types: Vec<String>,
 }
 
 /// Split `hello from:bob in:#general has:image` into filters and free text.
@@ -218,6 +226,14 @@ pub fn parse_search(input: &str) -> ParsedSearch {
             "pinned" => {
                 out.pinned = Some(val.eq_ignore_ascii_case("true") || val == "yes");
                 true
+            }
+            "authortype" | "author_type" => {
+                let v = val.to_ascii_lowercase();
+                let ok = matches!(v.trim_start_matches('-'), "user" | "bot" | "webhook");
+                if ok && !out.author_types.contains(&v) {
+                    out.author_types.push(v);
+                }
+                ok
             }
             _ => false,
         };

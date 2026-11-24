@@ -154,6 +154,7 @@ pub(super) fn query_of(req: &SearchRequest) -> SearchQuery {
         min_id: req.min_id.map(sf),
         max_id: req.max_id.map(sf),
         pinned: req.pinned,
+        author_types: req.author_types.clone(),
         sort: if req.oldest_first { SearchSort::Oldest } else { SearchSort::Newest },
         offset: req.offset,
         include_nsfw: true,

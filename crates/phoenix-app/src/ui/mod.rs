@@ -34,6 +34,7 @@ pub mod profile_bg;
 pub mod profile_note;
 pub mod profile_bio;
 pub mod search;
+pub mod search_filters;
 pub mod server_bar;
 pub mod sidebar;
 pub mod sidebar_resize;

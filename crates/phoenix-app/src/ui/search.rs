@@ -35,6 +35,8 @@ pub struct SearchRequest {
     pub min_id: Option<Id>,
     pub max_id: Option<Id>,
     pub pinned: Option<bool>,
+    /// `authorType:` values (user / bot / webhook).
+    pub author_types: Vec<String>,
     pub offset: u32,
     pub oldest_first: bool,
 }
@@ -52,8 +54,6 @@ pub struct SearchState {
     pub loading: bool,
     pub error: Option<SharedString>,
     seq: u64,
-    /// "More filters" expanded (dates and `pinned:`).
-    more: bool,
     _sub: Subscription,
 }
 
@@ -79,6 +79,7 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
         content: (!p.content.trim().is_empty()).then(|| p.content.trim().to_owned()),
         has: p.has.iter().map(|h| h.as_str().to_owned()).collect(),
         pinned: p.pinned,
+        author_types: p.author_types.clone(),
         ..Default::default()
     };
     if req.guild.is_none() && req.channel.is_none() {
@@ -134,7 +135,8 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
         && req.has.is_empty()
         && req.min_id.is_none()
         && req.max_id.is_none()
-        && req.pinned.is_none();
+        && req.pinned.is_none()
+        && req.author_types.is_empty();
     if empty {
         return Err(String::new());
     }
@@ -178,7 +180,6 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         loading: false,
         error: None,
         seq: 0,
-        more: false,
         _sub: sub,
     })));
     cx.notify();
@@ -193,6 +194,10 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
 }
 
 pub fn on_key(app: &mut PhoenixApp, key: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) -> bool {
+    if key == "escape" && crate::ui::search_filters::is_open(cx) {
+        crate::ui::search_filters::close(cx);
+        return true;
+    }
     if key == "escape" {
         close(app, window, cx);
         return true;
@@ -260,6 +265,22 @@ fn rerun(app: &mut PhoenixApp, f: impl FnOnce(&mut SearchRequest), cx: &mut Cont
 }
 
 /// Append a filter prefix to the box ("from: ").
+/// Append `tokens` (from the filters modal) to the query and run it.
+pub fn append_and_submit(app: &mut PhoenixApp, tokens: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    let Some(input) = cx.global::<Search>().0.as_ref().map(|s| s.input.clone()) else { return };
+    if !tokens.is_empty() {
+        input.update(cx, |s, cx| {
+            let v = s.value().trim_end().to_string();
+            let sep = if v.is_empty() { "" } else { " " };
+            s.set_value(format!("{v}{sep}{tokens}"), window, cx);
+        });
+    }
+    submit(app, cx);
+}
+
+/// Keys set by the "Filtres" modal (dates, `pinned:`, `authorType:`).
+const MORE_KEYS: [&str; 5] = ["before:", "after:", "during:", "pinned:", "authorType:"];
+
 fn add_filter(prefix: &'static str, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     let Some(s) = cx.global::<Search>().0.as_ref() else { return };
     let input = s.input.clone();
@@ -280,13 +301,6 @@ const FILTERS: [(&str, &str, &str, &str, &str); 4] = [
     ("mentions:", "search/at", "search.f_mentions", "search.k_mentions", "search.v_user"),
 ];
 
-/// Behind "More filters": dates and `pinned:`.
-const MORE: [(&str, &str); 4] = [
-    ("before:", "search.hint.date"),
-    ("after:", "search.hint.date"),
-    ("during:", "search.hint.date"),
-    ("pinned:", "search.hint.bool"),
-];
 
 fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let author = app.users.get(&m.author);
@@ -409,7 +423,6 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
     let error = s.error.clone();
     let page = s.page.clone();
     let req = s.request.clone();
-    let more = s.more;
     let top = layout::HEADER_H;
 
     let body: AnyElement = if let Some(page) = page.filter(|_| req.is_some()) {
@@ -474,7 +487,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
             .child(pager)
             .into_any_element()
     } else {
-        return Some(options_popout(app, input, error, loading, more, cx));
+        return Some(options_popout(app, input, error, loading, cx));
     };
 
     Some(
@@ -545,7 +558,7 @@ enum HistorySeg {
 }
 
 fn history_segments(q: &str) -> Vec<HistorySeg> {
-    let keys: Vec<&'static str> = FILTERS.iter().map(|f| f.0).chain(MORE.iter().map(|m| m.0)).collect();
+    let keys: Vec<&'static str> = FILTERS.iter().map(|f| f.0).chain(MORE_KEYS).collect();
     let mut out: Vec<HistorySeg> = Vec::new();
     for word in q.split_whitespace() {
         let lower = word.to_lowercase();
@@ -627,7 +640,7 @@ fn group_header(label: SharedString) -> gpui::Div {
 /// body-sm/medium --text-muted, gap 4), a `divider_` (margin 8 −8, 1px
 /// --border-subtle), "History" (28px rows: search glyph + query
 /// body-sm/semibold --text-strong; 18px clear-history trash).
-fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<SharedString>, loading: bool, more: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<SharedString>, loading: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let history = cx.try_global::<SearchHistory>().map(|h| h.0.clone()).unwrap_or_default();
     let mut filters = div().flex().flex_col().gap(z(4.)).child(group_header(crate::t!("search.filters")));
     for (i, (k, glyph, label, key, value)) in FILTERS.into_iter().enumerate() {
@@ -654,11 +667,9 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
     }
     filters = filters.child(
         option_row(("search-filter", FILTERS.len()))
-            .on_click(cx.listener(|_, _, _, cx| {
-                if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
-                    s.more = !s.more;
-                }
-                cx.notify();
+            // The client opens the "Filtres" modal (live dump search-more-filters).
+            .on_click(cx.listener(|a, _, w, cx| {
+                crate::ui::search_filters::open(a, w, cx);
             }))
             .child(named("inbox/filter", 20., tk(idx::TEXT_MUTED)).mr(z(8.)))
             .child(
@@ -672,18 +683,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
                     .child(div().text_color(tk(idx::TEXT_MUTED)).child(crate::t!("search.v_more"))),
             ),
     );
-    if more {
-        for (i, (k, hint)) in MORE.into_iter().enumerate() {
-            filters = filters.child(
-                option_row(("search-more", i))
-                    .gap(z(4.))
-                    .on_click(cx.listener(move |_, _, w, cx| add_filter(k, w, cx)))
-                    .child(div().w(z(20.)).mr(z(4.)))
-                    .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_SUBTLE)).child(k))
-                    .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_MUTED)).child(crate::t!(hint))),
-            );
-        }
-    }
+    let modal = crate::ui::search_filters::render(app, cx);
     let mut body = div().flex().flex_col();
     // Typed query: a 28px "Search for: <query>" row (dump search-popout-vanilla
     // #3369–#3375 `itemContainer_` > `labelWithElements_` body-sm/medium gap 4,
@@ -796,6 +796,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
                 .occlude()
                 .child(body),
         )
+        .children(modal)
         .into_any_element()
 }
 
