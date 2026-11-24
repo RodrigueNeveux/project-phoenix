@@ -888,7 +888,7 @@ fn text_pad_y() -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{char_count, dot_frame, format_cooldown, should_show_send_button};
+    use super::{char_count, dot_frame, format_cooldown, should_show_send_button, slowmode_tip};
 
     #[test]
     fn send_button_requires_enabled_nonempty_sendable_draft() {
