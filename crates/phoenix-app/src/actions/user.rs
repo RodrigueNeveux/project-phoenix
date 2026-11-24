@@ -26,6 +26,11 @@ pub fn is_ignored(u: Id) -> bool {
     IGNORED.with(|s| s.borrow().contains(&u))
 }
 
+/// "Add Note" / "Edit Note" (vanilla-menu-member-5) depending on whether a note is stored.
+pub fn note_label(app: &PhoenixApp, u: Id) -> &'static str {
+    if app.people.profiles.get(&u).is_some_and(|p| !p.note.is_empty()) { "menu.edit_note" } else { "menu.add_note" }
+}
+
 fn text_form(title: gpui::SharedString, label: gpui::SharedString, initial: String, on: impl Fn(&mut PhoenixApp, String, &mut Context<PhoenixApp>) + 'static) -> Modal {
     Modal::Form(Form {
         title,

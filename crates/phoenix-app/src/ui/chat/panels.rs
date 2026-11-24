@@ -122,12 +122,17 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             ee.update(cx, |a, cx| a.copy_message_text(ch, id, cx))
         }));
     }
-    let ee = e.clone();
-    items.push(MenuItem::action(
-        if pinned { crate::t!("msg.unpin") } else { crate::t!("msg.pin") },
-        Some(Icon::Pin.path()),
-        move |_, _, cx| ee.update(cx, |a, cx| a.toggle_pin(ch, id, cx)),
-    ));
+    // Pin needs Manage Messages or Pin Messages (1 << 51) in a server; always in DMs.
+    let guild = app.channels.get(&ch).and_then(|c| c.guild);
+    let manage = crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES);
+    if guild.is_none() || crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | (1 << 51)) {
+        let ee = e.clone();
+        items.push(MenuItem::action(
+            if pinned { crate::t!("msg.unpin") } else { crate::t!("msg.pin") },
+            Some(Icon::Pin.path()),
+            move |_, _, cx| ee.update(cx, |a, cx| a.toggle_pin(ch, id, cx)),
+        ));
+    }
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.bookmark"), Some(crate::icons::path("inbox/bookmark")), move |_, _, cx| {
         ee.update(cx, |a, cx| {
@@ -160,8 +165,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }));
     items.push(stub("msg.speak", "speaker"));
     items.push(MenuItem::Separator);
-    let guild = app.channels.get(&ch).and_then(|c| c.guild);
-    if has_reactions && crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | crate::actions::ADMINISTRATOR) {
+    if has_reactions && manage {
         let emojis: Vec<MenuItem> = msg
             .map(|m| m.reactions.clone())
             .unwrap_or_default()
@@ -178,13 +182,16 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             ee.update(cx, |a, cx| a.remove_reactions(ch, id, None, cx))
         }));
     }
-    if own {
+    // vanilla-menu-message (someone else's message, Manage Messages): Delete
+    // Message then Report Message.
+    if own || manage {
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |ev, _, cx| {
             let skip = ev.modifiers().shift;
             ee.update(cx, |a, cx| a.request_delete(ch, id, skip, cx))
         }));
-    } else {
+    }
+    if !own {
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.report"), Some(crate::icons::path("flag")), move |_, _, cx| {
             ee.update(cx, |a, cx| a.report_message(ch, id, cx))

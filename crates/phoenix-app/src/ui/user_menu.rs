@@ -78,10 +78,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     if !me && friend {
         items.push(act(crate::t!("menu.call"), Rc::new(move |a, _, _, cx| a.open_call_ui(u, cx))));
     }
-    items.push(
-        act(crate::t!("menu.add_note"), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx)))
-            .with_subtext(crate::t!("menu.note_subtext")),
-    );
+    // vanilla-menu-member-1 (own user): no note row; member-5: "Edit Note" once one exists.
+    if !me {
+        items.push(
+            act(crate::t!(crate::actions::user::note_label(app, u)), Rc::new(move |a, ev, w, cx| a.open_profile(u, g, ev.position(), w, cx)))
+                .with_subtext(crate::t!("menu.note_subtext")),
+        );
+    }
     let voice = if me { crate::actions::user::VoiceItems::default() } else { crate::actions::user::voice_items(app, u, g, &e) };
     items.extend(voice.watch);
     if !me && friend {

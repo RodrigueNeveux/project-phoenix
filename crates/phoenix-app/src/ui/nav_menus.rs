@@ -303,7 +303,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     if let Some(u) = peer {
                         items.push(act(&e, crate::t!("menu.profile"), move |a, _, cx| a.open_profile_modal(u, cx)));
                         items.push(act(&e, crate::t!("menu.call"), move |a, _, cx| a.open_call_ui(u, cx)));
-                        items.push(act(&e, crate::t!("menu.add_note"), move |a, _, cx| a.open_profile_modal(u, cx)).with_subtext(crate::t!("menu.note_subtext")));
+                        items.push(act(&e, crate::t!(crate::actions::user::note_label(app, u)), move |a, _, cx| a.open_profile_modal(u, cx)).with_subtext(crate::t!("menu.note_subtext")));
                         if app.nav.relationship(u).is_some() {
                             items.push(act(&e, crate::t!("menu.friend_nickname"), move |a, _, cx| a.open_friend_nickname(u, cx)));
                         }
