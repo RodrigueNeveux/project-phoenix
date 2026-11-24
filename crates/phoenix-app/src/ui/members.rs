@@ -193,6 +193,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             list(app.member_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                 .flex_1()
                 .w_full()
+                // live client: content_tqapBM is 260px of the 268px list, the thin
+                // scroller keeps an 8px gutter on the right.
+                .pr(z(8.))
                 .pb(z(10.)), // members_86es0b padding-bottom 10px
         )
 }
@@ -331,7 +334,6 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
         let user_cow = app.member_user(Some(g), uid);
         let user = user_cow.as_deref();
         let mem = app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == uid));
-        let color = mem.and_then(|m| app.member_color(g, m));
         let name = mem
             .and_then(|m| m.nick.clone())
             .or_else(|| user.map(|u| u.display_name.clone()))
@@ -392,18 +394,29 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                             div()
                                 .h(z(18.))
                                 .mb(z(2.))
+                                .min_w_0()
+                                .overflow_hidden()
                                 .flex()
                                 .items_center()
                                 .child(div().mr(z(6.)).child(crate::ui::avatar(user, 16.)))
                                 .child(
-                                    div()
-                                        .min_w_0()
-                                        .text_size(z(14.))
-                                        .line_height(z(18.))
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(role_color(color))
-                                        .text_ellipsis()
-                                        .child(name),
+                                    // userName_g7esM5: --channels-default, 14px / 1.2857, 500,
+                                    // ellipsis, max-width 85%; a display name style paints its
+                                    // gradient (first stop) in its font, never the role color.
+                                    crate::fonts::styled_name(
+                                        div()
+                                            .min_w_0()
+                                            .max_w(gpui::relative(0.85))
+                                            .overflow_hidden()
+                                            .text_size(z(14.))
+                                            .line_height(z(18.))
+                                            .font_weight(FontWeight::MEDIUM)
+                                            .text_color(c(crate::theme::tok(crate::theme::generated::idx::CHANNELS_DEFAULT)))
+                                            .text_ellipsis(),
+                                        user,
+                                        true,
+                                    )
+                                    .child(crate::fonts::name_text(name, user, 14.)),
                                 ),
                         )
                         .child(
@@ -620,13 +633,16 @@ pub fn member_row_in(
             .is_some_and(|ids| ids.iter().filter_map(|i| app.channels.get(i)).any(|ch| ch.voice_users.contains(&uid))),
         None => app.channels.values().any(|ch| ch.guild.is_some() && ch.voice_users.contains(&uid)),
     };
+    let two_lines = !offline && (in_voice || mem.activity.is_some() || sub.is_some());
     // Dump `-channels-N-N+` node 1643: member_Iy0c7A margin-left 8px,
     // padding 1px 0, radius 8 (44px); childContainer_J1Adu_ padding 0 8px 0 10px;
     // memberInner_Iy0c7A padding 4px 0 (42px); avatar 32 + margin-right 12.
     div().py(z(1.)).child(div()
         .id(("member", mem.user.0))
         .ml(z(8.))
-        .h(px(m::MEMBER_ROW_H))
+        // live client: member_Iy0c7A is 44px with a sub line (name 18 + sub 16),
+        // 42px without (avatar 32), both including its 1px block padding.
+        .h(px(if two_lines { m::MEMBER_ROW_H } else { m::MEMBER_ROW_H - 2. }))
         .pl(z(10.))
         .pr(z(8.))
         .py(z(4.))
@@ -718,7 +734,7 @@ pub fn member_row_in(
                             )
                         }),
                 )
-                .when(!offline && (in_voice || mem.activity.is_some() || sub.is_some()), |d| d.child(sub_text(in_voice, sub, mem.activity.clone()))),
+                .when(two_lines, |d| d.child(sub_text(in_voice, sub, mem.activity.clone()))),
         ))
         .into_any_element()
 }

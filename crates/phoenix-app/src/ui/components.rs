@@ -58,12 +58,12 @@ impl MentionResolver for Names<'_> {
 
 /// Markdown text (text displays, section texts) without inline images.
 pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
-    markdown_sized(app, text, false)
+    markdown_sized(app, text, false, None)
 }
 
 /// [`markdown`]; `reduced` is root_ sizeReduced_ (text inside a container):
 /// .875rem, line-height calc(--chat-markup-line-height * .875), small .75rem.
-fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool) -> AnyElement {
+fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool, ctx: Option<(&Entity<PhoenixApp>, Id)>) -> AnyElement {
     let k = if reduced { 0.875 } else { 1. };
     let (_, blocks, _, _) = richtext::build(text, &Names(app), app.me.id, &|_| true);
     // --chat-markup-line-height 1.375
@@ -121,6 +121,10 @@ fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool) -> AnyElement {
                 })
                 .child(StyledText::new(text.text).with_runs(text.runs))
                 .into_any_element(),
+            RBlock::Text(t) if !t.emoji.is_empty() && ctx.is_some() => {
+                let (e, msg) = ctx.unwrap();
+                crate::ui::chat::message_ext::rich_with_emoji_scaled(e, msg, 0, &t, k)
+            }
             RBlock::Text(t) => div().child(StyledText::new(t.text).with_runs(t.runs)).into_any_element(),
         });
     }
@@ -181,7 +185,7 @@ fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
         Comp::Select { kind, custom_id, placeholder, options, min, max, disabled } => {
             select(app, k, *kind, custom_id, placeholder.as_deref(), options, *min, *max, *disabled)
         }
-        Comp::Text(t) => markdown_sized(app, t, k.reduced),
+        Comp::Text(t) => markdown_sized(app, t, k.reduced, Some((&k.entity, k.message))),
         Comp::Section { texts, accessory } => {
             let mut left = div().flex_1().min_w_0().flex().flex_col().gap(px(4.));
             for (j, t) in texts.iter().enumerate() {

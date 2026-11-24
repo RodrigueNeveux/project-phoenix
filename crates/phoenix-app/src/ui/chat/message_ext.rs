@@ -388,9 +388,22 @@ pub fn rich_with_emoji(
     bi: usize,
     t: &crate::richtext::RichText,
 ) -> AnyElement {
+    rich_with_emoji_scaled(entity, msg, bi, t, 1.)
+}
+
+/// [`rich_with_emoji`] with the text and emoji scaled by `k` (0.875 in a
+/// root_ sizeReduced_ container: 14px text, emoji 1.375em = 19.25px).
+pub fn rich_with_emoji_scaled(
+    entity: &Entity<PhoenixApp>,
+    msg: crate::model::Id,
+    bi: usize,
+    t: &crate::richtext::RichText,
+    k: f32,
+) -> AnyElement {
     let jumbo = crate::richtext::is_jumbo(&[crate::richtext::RBlock::Text(t.clone())]);
-    let size = if jumbo { 48. } else { 22. };
-    let mut row = div().flex().flex_wrap().items_center().text_size(z(16.)).line_height(z(22.));
+    // markup_ .emoji 1.375em, jumbo 3em
+    let size = k * if jumbo { 48. } else { 22. };
+    let mut row = div().flex().flex_wrap().items_center().text_size(z(16. * k)).line_height(z(22. * k));
     let mut last = 0;
     let mut seg = 0usize;
     let push_text = |row: Div, range: std::ops::Range<usize>, seg: &mut usize| -> Div {
