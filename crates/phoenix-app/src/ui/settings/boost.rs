@@ -209,7 +209,7 @@ fn perks_table() -> Div {
         for v in vals {
             r = r.child(match v {
                 None => tier().child(icon("check", 24., idx::TEXT_STRONG)),
-                Some(s) if s.is_empty() => tier(),
+                Some("") => tier(),
                 Some(s) => tier().child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, value(s))),
             });
         }
