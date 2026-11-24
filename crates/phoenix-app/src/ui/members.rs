@@ -318,11 +318,16 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                         cx.notify();
                                     });
                                 })
+                                // toggleExpandIcon_ 24x18; the 24-unit glyph keeps its aspect
+                                // (SVG "meet": 18x18 centred), GPUI svg would stretch it.
+                                .w(z(24.))
+                                .h(z(18.))
+                                .flex()
+                                .justify_center()
                                 .child(
                                     gpui::svg()
                                         .path(crate::icons::path(if expanded { "chevron" } else { "chevron-right" }))
-                                        .w(z(24.))
-                                        .h(z(18.))
+                                        .size(z(18.))
                                         .text_color(c(Palette::INTERACTIVE)),
                                 ),
                         )
