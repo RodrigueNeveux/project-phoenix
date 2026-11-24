@@ -456,15 +456,21 @@ pub fn rich_with_emoji_scaled(
             }
         }
         *seg += 1;
+        // Each segment is a flex item of the wrapping row. Taffy may shrink a segment that
+        // follows an emoji / channel icon to the rest of the line, but the text keeps the
+        // wrap of its wider intrinsic measure and spills past the message column (real
+        // announcements with a #channel mention). Never shrink: a segment that doesn't fit
+        // wraps to the next flex line, at most the full column wide.
+        let cell = || div().flex_none().max_w_full();
         if ranges.is_empty() {
-            return row.child(gpui::StyledText::new(text).with_runs(seg_runs));
+            return row.child(cell().child(gpui::StyledText::new(text).with_runs(seg_runs)));
         }
         let sd = *seg as u64;
         let seg_runs = super::mention::hovered_runs(msg, bi, sd, &ranges, &targets, &seg_runs).unwrap_or(seg_runs);
         let styled = gpui::StyledText::new(text).with_runs(seg_runs);
         let e = entity.clone();
         let (hr, ht) = (ranges.clone(), targets.clone());
-        row.child(
+        row.child(cell().child(
             gpui::InteractiveText::new(("rte", (msg.0 << 12) | ((bi as u64) << 6) | *seg as u64), styled)
                 .on_hover(move |ix, _ev, w, _cx| super::mention::on_hover(msg, bi, sd, &hr, &ht, ix, w))
                 .on_click(
@@ -478,7 +484,7 @@ pub fn rich_with_emoji_scaled(
                     crate::richtext::ClickTarget::Mention(m) => super::mention::click(&e, m, w, cx),
                 },
             ),
-        )
+        ))
     };
     for (r, token) in &t.emoji {
         row = push_text(row, last..r.start, &mut seg);
