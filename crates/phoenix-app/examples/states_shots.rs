@@ -2,7 +2,7 @@
 //! `cargo run -p phoenix-app --example states_shots -- out_dir x,y[,down] ...`
 //! writes one PNG per point with the mouse moved there (left-pressed with `,down`,
 //! right-clicked with `,right`; a later point can then hover the open menu).
-//! Env: `PHX_SETTINGS=1` opens settings; `PHX_OPEN=pins|inbox|threads|groupdm|search[:query]` a popout.
+//! Env: `PHX_SETTINGS=1` opens settings; `PHX_OPEN=pins|inbox|threads|groupdm|privacy|server_profile|search[:query]` a popout.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -71,6 +71,17 @@ fn main() -> anyhow::Result<()> {
                     "inbox" => app.toggle_inbox(cx),
                     "threads" => app.toggle_threads_popout(cx),
                     "groupdm" => app.open_group_dm_picker(cx),
+                    // Guild menu entries any member sees (first mock guild).
+                    "privacy" => {
+                        if let Some(g) = app.guilds.first().map(|g| g.id) {
+                            app.open_privacy_settings(g, cx)
+                        }
+                    }
+                    "server_profile" => {
+                        if let Some(g) = app.guilds.first().map(|g| g.id) {
+                            app.open_server_profile(g, cx)
+                        }
+                    }
                     "search" => {
                         phoenix_app::ui::search::open(app, window, cx);
                         let q = what.split_once(':').map_or("rust", |w| w.1);
