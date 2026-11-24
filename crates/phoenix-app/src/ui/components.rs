@@ -1028,21 +1028,48 @@ fn modal_el(app: &PhoenixApp, cx: &mut gpui::Context<PhoenixApp>) -> Option<AnyE
 }
 
 fn toast(app: &PhoenixApp) -> Option<AnyElement> {
+    use crate::theme::{generated::idx, tok, z};
+    use gpui::{Animation, AnimationExt as _};
     let t = app.parity.toast.clone()?;
+    // Toast container_W6gbBa top_W6gbBa (default position "top"): centred, top --space-8,
+    // padding-inline --space-8; toast-slide-in from translateY(-100%) + fade, 300ms linear
+    // (modules.toast.ANIMATION_DURATION_MS).
+    let card = div()
+        // wrapper_O41c2-: --background-surface-highest, --radius-md, --shadow-high, padding
+        // --space-12, max-width --toast-max-width 280; baselayer_ default: 1px --border-normal.
+        .max_w(z(280.))
+        .p(z(12.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_NORMAL)))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
+        .shadow(crate::ui::inbox::shadow_high())
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        // content_: inline-flex, gap --space-8; text body-md/normal --text-strong, 2 lines max.
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(div().line_clamp(2).child(t.clone())),
+        );
     Some(
         gpui::deferred(
-            div().absolute().bottom(px(88.)).left_0().w_full().flex().justify_center().child(
-                div()
-                    .px(px(16.))
-                    .py(px(10.))
-                    .rounded(px(8.))
-                    .bg(c(Palette::BG_FLOATING))
-                    .shadow_lg()
-                    .text_size(px(14.))
-                    .text_color(c(Palette::TEXT_NORMAL))
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .child(t),
-            ),
+            div()
+                .absolute()
+                .top(z(8.))
+                .left_0()
+                .w_full()
+                .px(z(8.))
+                .flex()
+                .justify_center()
+                .child(card)
+                .with_animation(gpui::ElementId::Name(format!("toast-{t}").into()), Animation::new(std::time::Duration::from_millis(300)), |d, p| {
+                    d.opacity(p).mt(z(-40. * (1. - p)))
+                }),
         )
         .with_priority(30)
         .into_any_element(),

@@ -354,6 +354,11 @@ pub fn shadow_medium() -> Vec<gpui::BoxShadow> {
     shadow_tok(&shadow::SHADOW_MEDIUM)
 }
 
+/// `box-shadow: var(--shadow-high)` (toasts `wrapper_O41c2-`).
+pub fn shadow_high() -> Vec<gpui::BoxShadow> {
+    shadow_tok(&shadow::SHADOW_HIGH)
+}
+
 /// `box-shadow: var(--shadow-border), var(--shadow-high)` (popout containers).
 pub fn popout_shadow() -> Vec<gpui::BoxShadow> {
     let mut v = shadow_tok(&shadow::SHADOW_BORDER);
