@@ -84,12 +84,6 @@ impl PhoenixApp {
     /// true when one was open (Esc, a click outside, a channel switch).
     pub fn close_header_popouts(&mut self, cx: &mut Context<Self>) -> bool {
         let open = self.header_popout_open();
-        #[cfg(test)]
-        if open {
-            let bt = std::backtrace::Backtrace::force_capture().to_string();
-            let frames: Vec<&str> = bt.lines().filter(|l| l.contains("phoenix_app::")).take(8).collect();
-            PRESS_LOG.with(|l| l.borrow_mut().push(format!("closed by {frames:?}")));
-        }
         self.parity.inbox.open = false;
         self.parity.inbox.filter_menu = false;
         self.parity.threads_open = false;
@@ -1544,17 +1538,10 @@ thread_local! {
     static INBOX_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
-#[cfg(test)]
-thread_local! {
-    /// Presses seen by `close_on_press_outside` (tests).
-    pub(crate) static PRESS_LOG: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
-}
-
 /// The client puts header popouts in a `clickTrapContainer_ trapClicks_`
 /// layer: a press anywhere outside closes the popout and goes no further (the
 /// trigger button included, so pressing it again closes). Done here on the
-/// popout itself, in the capture phase, from the bounds it was painted at: it
-/// depends neither on a full-window layer nor on hitbox stacking.
+/// popout itself, in the capture phase, from the bounds it was painted at.
 fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     let app = cx.entity().downgrade();
     // A canvas covering the popout: its paint bounds are the popout's drawn box.
@@ -1563,10 +1550,6 @@ fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<Phoeni
             |_, _, _| {},
             move |bounds, (), window, _| {
                 window.on_mouse_event(move |ev: &gpui::MouseDownEvent, phase, _, cx| {
-                    #[cfg(test)]
-                    if phase == gpui::DispatchPhase::Capture {
-                        PRESS_LOG.with(|l| l.borrow_mut().push(format!("canvas {bounds:?} press {:?}", ev.position)));
-                    }
                     if phase != gpui::DispatchPhase::Capture || bounds.contains(&ev.position) {
                         return;
                     }

@@ -330,10 +330,10 @@ such cards. The list is rebuilt from the code instead (`ui/inbox_unreads.rs`, un
 - "For You": not in the 2026 client. The inbox chunk has no For You tab, and the tab bar has
   five tabs: Unreads, Mentions, Saved, Reminders, Scheduled (vanilla-inbox dumps). ➖
 
-Implementation note: a full-window "trap" element under the popouts was tried first, then
-`on_mouse_down_out`. In the GPUI test harness, hitboxes of deferred elements did not contain
-presses that fell inside their painted bounds, so both closed the popout on a press inside it
-(the same reason inner controls of a deferred popout cannot be clicked in those tests). The
-dismissal now registers a capture-phase mouse-down listener from a canvas covering each popout:
-a press outside the painted bounds closes it and stops propagation, which swallows the press
-like `trapClicks_`. It skips presses while a profile popout or menu is open over it.
+Implementation note: each popout registers a capture-phase mouse-down listener from a canvas
+covering it. A press outside the painted bounds closes the popout and stops propagation, which
+swallows the press like `trapClicks_`. Presses are skipped while a profile popout or menu is open
+over it. In GPUI tests, simulated input positions are device-independent pixels: the page zoom
+patch divides them by the zoom (1.25 by default). Points taken from `debug_bounds` must therefore
+be multiplied by `window.page_zoom()` first (`Harness::device`). Without that, a press "inside"
+lands 20 % up-left of its target.

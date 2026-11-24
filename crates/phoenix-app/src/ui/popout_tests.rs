@@ -135,7 +135,16 @@ impl Harness {
         self.vcx.debug_bounds(selector).unwrap_or_else(|| panic!("{selector} not drawn"))
     }
 
+    /// Logical point (layout, `debug_bounds`) to the device-independent point
+    /// the platform reports: the page zoom patch divides input positions by
+    /// the zoom (docs/gpui-patches.md).
+    fn device(&mut self, at: Point<Pixels>) -> Point<Pixels> {
+        let k = self.vcx.update(|w, _| w.page_zoom());
+        point(at.x * k, at.y * k)
+    }
+
     fn click(&mut self, at: Point<Pixels>) {
+        let at = self.device(at);
         // A real pointer moves there first: GPUI hit-tests on mouse moves.
         self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
         self.vcx.run_until_parked();
@@ -152,11 +161,10 @@ impl Harness {
     /// Press inside a popout; on failure, say where everything was.
     fn press_inside(&mut self, selector: &'static str, is_open: fn(&PhoenixApp) -> bool) {
         let pop = self.bounds(selector);
-        let at = header_point(pop);
+        let at = self.device(header_point(pop));
         let vp = self.vcx.update(|w, _| w.viewport_size());
         self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
         self.vcx.run_until_parked();
-        crate::ui::inbox::PRESS_LOG.with(|l| l.borrow_mut().clear());
         self.vcx.simulate_mouse_down(at, gpui::MouseButton::Left, Modifiers::none());
         self.vcx.run_until_parked();
         let after_down = self.read(is_open);
@@ -165,8 +173,7 @@ impl Harness {
         let after_up = self.read(is_open);
         assert!(
             after_down && after_up,
-            "press inside {selector} closed it: popout {pop:?}, press {at:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}, seen {:?}",
-            crate::ui::inbox::PRESS_LOG.with(|l| l.borrow().clone())
+            "press inside {selector} closed it: popout {pop:?}, press {at:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}"
         );
     }
 
@@ -198,6 +205,11 @@ fn inbox_closes_like_the_client(cx: &mut TestAppContext) {
 
     // A press inside keeps it, a press outside closes it.
     open(&mut h);
+    // An inner control still gets its press: the Saved tab switches the tab.
+    let saved = h.bounds("inbox-tab-saved");
+    h.click(saved.center());
+    let (open_after_tab, tab) = h.read(|a| (a.parity.inbox.open, a.parity.inbox.tab));
+    assert!(open_after_tab && tab == crate::commands::state::InboxTab::Saved, "the Saved tab did not get its press (open {open_after_tab}, tab {tab:?})");
     h.press_inside("inbox-popout", |a| a.parity.inbox.open);
     h.click_outside();
     assert!(!h.read(|a| a.parity.inbox.open), "press outside did not close the inbox");
