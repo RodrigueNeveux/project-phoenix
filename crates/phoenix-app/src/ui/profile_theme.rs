@@ -282,3 +282,14 @@ mod tests {
         assert!(near(button_color(0), 0x55_55_55), "{:06x}", button_color(0));
     }
 }
+
+#[cfg(test)]
+mod resolve_tests {
+    #[test]
+    fn primary_button_resolves_inside_scope() {
+        use crate::theme::{generated::idx, resolve, tok};
+        let v = super::scoped(Some((0xFF_D7_00, 0xFF_99_99)), || resolve(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT)));
+        assert_eq!(v & 0xFF, 0xFF);
+        assert_ne!(v, resolve(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT)));
+    }
+}

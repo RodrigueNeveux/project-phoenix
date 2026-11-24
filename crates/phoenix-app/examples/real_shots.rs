@@ -12,6 +12,7 @@
 //! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx),
 //! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
 //! `PHX_AUDIO` = two digits mute/deaf (e.g. `11`), otherwise read from the live user panel.
+//! `PHX_PROFILE=<user id>` opens that profile (`PHX_PROFILE_KIND` popout|modal, `PHX_PROFILE_BOX=x,y`).
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
@@ -623,6 +624,28 @@ fn main() -> anyhow::Result<()> {
     if let Some(sc) = scroll {
         apply_scroll(&mut cx, win.into(), &v, &sc, &pump)?;
         eprintln!("[{:.1}s] scrolled", t0.elapsed().as_secs_f32());
+    }
+    // PHX_PROFILE=<user id> opens that user's profile over the location, like the
+    // overlay open in Discord: PHX_PROFILE_KIND=popout (default; PHX_PROFILE_BOX=x,y
+    // is the popout's top-left in Discord, CSS px) or modal. Read-only GET of the profile.
+    if let Some(uid) = std::env::var("PHX_PROFILE").ok().and_then(|v| parse_id(&v)) {
+        let modal = std::env::var("PHX_PROFILE_KIND").is_ok_and(|k| k == "modal");
+        let at = std::env::var("PHX_PROFILE_BOX").ok().and_then(|b| {
+            let (x, y) = b.split_once(',')?;
+            Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))
+        });
+        cx.update_window(win.into(), |_, window, cx| {
+            v.update(cx, |app, cx| {
+                let g = app.selected_guild;
+                // open_profile places the popout at (at.x - 316, at.y - 60).
+                let (x, y) = at.unwrap_or((900., 200.));
+                app.open_profile(uid, g, gpui::point(px(x + 316.), px(y + 60.)), window, cx);
+                if modal {
+                    app.open_profile_modal(uid, cx);
+                }
+            })
+        })?;
+        pump(&mut cx, wait * 1000 / 3);
     }
     let mut img = None;
     for _ in 0..2 {

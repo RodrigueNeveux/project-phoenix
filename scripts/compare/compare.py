@@ -49,6 +49,36 @@ def release_lock(env):
     subprocess.run(["node", str(CDP), "release"], capture_output=True, text=True, env=env)
 
 
+# Open profile overlay in Discord: kind, box and the user id (from React props).
+OVERLAY_JS = r"""(()=>{const o=document.querySelector('.user-profile-modal-v2')||document.querySelector('.user-profile-popout');
+if(!o)return null;const b=o.getBoundingClientRect();let id=null;
+for(const e of o.querySelectorAll('*')){const k=Object.keys(e).find(k=>k.startsWith('__reactFiber'));let f=k&&e[k];
+for(let i=0;i<8&&f&&!id;i++,f=f.return){const p=f.memoizedProps;if(p&&p.user&&p.user.id)id=p.user.id;else if(p&&p.userId)id=p.userId}if(id)break}
+return {kind:o.classList.contains('user-profile-modal-v2')?'modal':'popout',box:[b.x,b.y,b.width,b.height].map(Math.round),user:id}})()"""
+
+# Click the n-th visible member row (opens its popout); optional click on its avatar (full profile).
+OPEN_MEMBER_JS = r"""(n=>{const l=[...document.querySelectorAll('div[class^=member_]')].filter(e=>{const b=e.getBoundingClientRect();return b.y>0&&b.y<innerHeight});
+if(!l[n])return false;l[n].dataset.phxcmp=1;return true})(%d)"""
+
+
+def open_overlay(env, member, modal):
+    """Drive Discord (read-only): open member `member`'s popout, then its full profile."""
+    if json.loads(cdp("eval", OPEN_MEMBER_JS % member)) is not True:
+        sys.exit("member row not found")
+    subprocess.run(["node", str(CDP), "click", '[data-phxcmp="1"]'], check=True, capture_output=True, env=env)
+    time.sleep(1.5)
+    if modal:
+        cdp("eval", "(()=>{const a=document.querySelector('.user-profile-popout [class*=avatar_WRLIGC]');if(a)a.dataset.phxcmpa=1})()")
+        subprocess.run(["node", str(CDP), "click", '[data-phxcmpa="1"]'], check=True, capture_output=True, env=env)
+        time.sleep(2)
+
+
+def close_overlay(env, n):
+    for _ in range(n):
+        subprocess.run(["node", str(CDP), "key", "Escape"], capture_output=True, env=env)
+        time.sleep(0.4)
+
+
 def regions_from(b):
     W, H = b["vw"], b["vh"]
     g = b.get("guilds") or [0, 32, 72, H - 32]
@@ -84,13 +114,22 @@ def main():
     ap.add_argument("--discord"); ap.add_argument("--phoenix"); ap.add_argument("--regions")
     ap.add_argument("--out")
     ap.add_argument("--lock-wait", type=float, default=300, help="seconds to wait for the CDP lock")
+    ap.add_argument("--overlay", action="store_true", help="score the profile popout/modal open in Discord")
+    ap.add_argument("--open-member", type=int, help="open the n-th visible member's popout first (implies --overlay); Escape after")
+    ap.add_argument("--modal", action="store_true", help="with --open-member: open the full profile from the popout")
     a = ap.parse_args()
     live = not (a.regions and a.discord and a.phoenix)
     env = take_lock(a.lock_wait) if live else None
+    opened = 0
     try:
+        if env and a.open_member is not None:
+            open_overlay(env, a.open_member, a.modal)
+            opened = 2 if a.modal else 1
+            a.overlay = True
         return run(a)
     finally:
         if env:
+            close_overlay(env, opened)
             release_lock(env)
 
 
@@ -101,6 +140,12 @@ def run(a):
         boxes = json.load(open(a.regions))
     else:
         boxes = json.loads(cdp("eval", BOXES_JS))
+        if a.overlay:
+            ov = json.loads(cdp("eval", OVERLAY_JS))
+            if not ov or not ov.get("user"):
+                sys.exit("no profile popout/modal open in Discord")
+            boxes["overlay"] = ov
+            boxes.setdefault("extra", {})[f"profile {ov['kind']}"] = ov["box"]
         (out / "boxes.json").write_text(json.dumps(boxes))
     d_path = Path(a.discord) if a.discord else out / "discord.png"
     if not a.discord:
@@ -109,7 +154,11 @@ def run(a):
     if not a.phoenix:
         if not BIN.exists():
             sys.exit(f"build first: cargo rustc -p phoenix-app --example real_shots -- -L ~/.local/lib/devlinks")
-        subprocess.run([str(BIN), str(p_path)], check=True, cwd=out)
+        env = dict(os.environ)
+        ov = boxes.get("overlay")
+        if ov:
+            env.update(PHX_PROFILE=str(ov["user"]), PHX_PROFILE_KIND=ov["kind"], PHX_PROFILE_BOX=f"{ov['box'][0]},{ov['box'][1]}")
+        subprocess.run([str(BIN), str(p_path)], check=True, cwd=out, env=env)
 
     W, H = boxes["vw"], boxes["vh"]
     s = float(boxes.get("dpr") or 2)  # compare at the device scale: real_shots renders at Discord's devicePixelRatio

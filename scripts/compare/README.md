@@ -42,3 +42,11 @@ It is strictly read-only:
 ## Privacy
 
 The images and `boxes.json` contain private conversations. Keep them on /mnt/windata only. Never commit them, and never attach them to the dashboard. Post only the scores.
+
+### Profile popouts and modals
+
+    compare.py --overlay                      # score the popout/modal already open in Discord
+    compare.py --open-member 3 [--modal]      # open the 4th visible member's popout (and full profile), Escape after
+
+Adds a `profile popout` / `profile modal` region. `real_shots` opens the same user's
+profile (`PHX_PROFILE`, `PHX_PROFILE_KIND`, `PHX_PROFILE_BOX`) at Discord's position.
