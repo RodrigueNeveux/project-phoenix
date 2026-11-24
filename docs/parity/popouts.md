@@ -60,6 +60,16 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | modal header buttons | 315513 `headerInner_NxZlvf`, `headerButtons_` | min-h / gap / pt | 52 / 8 / 16 | ui/profile.rs modal_card | ✅ |
 | modal tabs | 291103 `tabBar_OpoUmC`, a94a5b `tabPanelScroller_y4ZEM5` | gap / pad / border / item h; panel pad | 32 / 0 16 / --user-profile-border / 25; top 20 bottom 32 | ui/profile.rs modal_card | ✅ (new) |
 | modal close | f4f30b `modalHeaderButtons_ZhNJfE` | top / end | --space-8 / --space-8 | ui/profile.rs modal_card | ✅ |
+| modal system bar | f4f30b `.platform-* .root_ZhNJfE` | --custom-modal-v2-system-bar-padding | app top bar (32px), 0px from `min-height:785px` | ui/profile.rs modal_card | ✅ (was always 32: content 32px too low; modal 29.5% → 15.2%) |
+| modal profile buttons | vanilla-profile-modal-board #2065 `profileButtons_s3DB6Y` | children | primary sm ChatIcon 16 + "Send Message" (gap 4), secondary 32px Friend (UserCheckIcon), More | ui/profile.rs modal_card | ✅ (was "Message" text only) |
+| modal close button | #2065 `modalHeaderButtons_ZhNJfE` button | style | secondary sm Mana button, 16px icon | ui/profile.rs modal_card | ✅ (was icon-only 20px) |
+| modal member since | `memberSince_EhAvF-`, `discordIcon_EhAvF-` | icon | 16px ClydeIcon --text-subtle before the account date, gap 4 | ui/profile.rs modal_card | ✅ |
+| modal backdrop image | `backgroundImage_s3DB6Y` (bundle `db()`) | layer | static banner, background-size 100%, saturate(.5), blur(15px), opacity .3, mask to transparent at 280px | ui/profile_bg.rs (CPU-baked: no GPUI filters/masks) | ✅ approx. (modal 15.2% → 9.7%) |
+| modal tab panel scroller | `tabPanelScroller_y4ZEM5 thin_ fade_ scrollbarGutterStable_` | gutter / thumb | 8px stable gutter; thumb --scrollbar-thin-thumb, 2px border, r4, min 40, hover only | ui/profile.rs modal_card | ✅ |
+| modal tab bar overflow | live capture | clip | tabs that don't fit are clipped at the bar end | ui/profile.rs modal_card | ✅ |
+| popout View Full Bio | vanilla-dm `viewFullBio_BcddaK` | offset | section gap 8 + margin-top 8 + 2px in its line box = 18px under the clamp | ui/profile.rs bio_block | ✅ (was 8) |
+| popout message input (themed) | live 03:45 capture | bg | app theme --input-background-default (black/.08), not the card's light token | ui/profile.rs popout_card | ✅ |
+| popout voice card | `overlay_P1YEjQ`, `clickableContainer_Bu4Al8:hover`, `container_vg4rr1` | bg / border / art | --user-profile-overlay-background, hover -hover; 1px --border-muted on light only; art box 60px r8 1px --border-subtle, card bg + mod-subtle | ui/voice_row.rs | ✅ CSS (art content still the guild acronym: not measured live) |
 | Mana button | 384209 `button_F7qvhY` sm/md, primary/secondary/critical-primary | h / pad / radius / min-w / colours | 32: 4 12, 40: 8 16 / --radius-sm / 60, 100 / --control-* | ui/profile.rs mana_button | ✅ (new) |
 | confirm modal | 776412 `container_dvN-MP` | bg / border / radius / width | --background-surface-high / 1px --border-subtle / --radius-md / size-md 480 | ui/modal.rs confirm | ✅ (was 440, BG_PRIMARY, radius 8) |
 | confirm modal | `padding-size-sm_dvN-MP`, `section_dvN-MP` | padding | top 8 bottom 16; sections 16 24 8 | ui/modal.rs confirm | ✅ (was grey footer 16) |
