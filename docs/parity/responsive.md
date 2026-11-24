@@ -52,3 +52,38 @@ tall emulated viewport so the whole list is in the DOM, Phoenix with `real_shots
 | "Afficher plus" | not found in this guild's list | — | ❌ not observed live |
 | Activity section | Live 2026-11-24 (wt/sweep): the section only exists when at least one card is shown, and its header counts the cards shown. Guild PGE: feed with 6 matching entries, 5 by non-members → "Activité — 1", one card. Aperture Sciences: no card → no section | Phoenix counted the entries whose author was not loaded (pending op 8); non-members never resolve, so it kept "Activité — 6" (and "— 7" on Aperture). Now count = cards | ✅ (wt/sweep) |
 | Activity card timer | entry with trait 3 `is_live: true`: green timer = now − `started_at` ("12:08" measured to the second), even when the author's presence has no matching start | timer from `started_at` while `is_live` and `expires_at` is in the future; presence start as fallback; "x ago" otherwise | ✅ (wt/sweep) |
+
+## Density and font size (live, 2026-11-24)
+
+Method: one synchronous CDP `Runtime.evaluate` on the live client (1536×840 CSS px, zoom 125 %,
+guild text channel already open, nothing clicked). It swapped the `<html>` classes the client sets
+itself (`density-compact|default|cozy`, `font-size-N`, plus `a11y-font-scaled-down` under 16px
+and `a11y-font-scaled-up` above, as the client's `fontScaleClass` does) and the root
+`font-size: N/16 %`, forced a layout, read boxes and computed styles, then restored the exact class
+string and style attribute (checked: `restored: true`, same route and active element). No frame was
+painted in between and the Settings were never opened. Configs: cozy/default/compact at 16px,
+cozy at 12/14/18/24px, compact at 12/24px.
+
+Zoom is not a CSS class: it is Chromium page zoom, so a zoom level is just another CSS width (see
+"How zoom works" above); the font size is what changes the layout at a given CSS width.
+
+| Area | compact / default / cozy (16px) | font 12 / 14 / 18 / 24px (cozy) | Phoenix | State |
+|---|---|---|---|---|
+| `--space-xxs…xxl` | 4 6 10 12 16 20 26 / 4 8 12 16 20 24 32 / 4 10 16 20 24 30 40 | unchanged | `theme::Density::scale` | ✅ |
+| Header section | padding-left 12 / 16 / 20 (`--space-md`), height 49 | unchanged (header is px, not rem) | chat.rs `header` | ✅ (was 20 fixed) |
+| Header toolbar | gap and padding-left 6 / 8 / 10 (`--space-xs`); buttons 32, icons 20 | unchanged | chat.rs `header` | ✅ (was 10 fixed) |
+| Header search | 244 × 28 / 32 / 32 | unchanged | chat.rs `header` | ✅ (was 32) |
+| Guild rail | 64 / 72 / 80 (40 + 2 × `--space-md`); the channel list widens by the same amount (rail + list stays 415.8) | unchanged | `m::server_bar_w`, `m::sidebar_extra_w`, server_bar.rs gap `--space-xs` | ✅ (was 80 fixed) |
+| Message row (group start) | padding 2 20 2 64 / 2 24 2 72 / 2 30 2 80 (`--space-xl`, 40 + 2 × `--space-md`), margin-top 17 | padding-block .125rem (1.5 / 1.75 / 2.25 / 3), margin-top 1.0625rem (12.75 / 14.875 / 19.125 / 25.5); padding-left 54 / 63 at 12 / 14 (`a11y-font-scaled-down` 4.5rem), 80 at 18 / 24 | chat.rs `message`, `msg_left` | ✅ (gap, padding and the scaled-down indent were fixed px) |
+| Avatar | 40, margin-top 2 | 30 / 35 at 12 / 14 (2.5rem, left 1rem), 40 at 18 / 24 (margin-top 4px − .125rem) | chat.rs `msg_avatar` | ✅ (was always 40 at 20px) |
+| Username / content | 16 / 22 | 1rem / 1.375rem (12/16.5, 14/19.25, 18/24.75, 24/33) | `fz` | ✅ |
+| Cozy timestamp | 12 / 22 | .75rem (9, 10.5, 13.5, 18) | chat.rs `message` | ✅ (was 12 fixed) |
+| Composer | text area 56 tall, margin-bottom 6 / 8 / 10 (`--space-xs`), form padding-inline `--space-xs`; attach 32 (margin 0 10 0 −16), buttons 32 | slate 1rem / 1.375rem, padding-block (56 − 1.375rem) / 2 = 19.75 / 18.375 / 15.625 / 11.5; box stays 56 | composer.rs `text_pad_y` | ✅ (text was 16px fixed) |
+| Member list | width 256 / 264 / 268; group header padding 16 4 4 12 / 20 4 4 16 / 24 4 4 20 (`--space-lg`, `--space-md`), 14/18 | unchanged (member list is px) | `m::member_list_w`, members.rs | ✅ (was 268 / 24 4 4 20 fixed) |
+| Member row | 44 tall, padding 1 0, ml 8, width list − 16; child padding-left `--space-xs` | unchanged | members.rs | ✅ |
+| Channel list rows | category row padding-top 8 compact, 16 otherwise; channel name 14/18 | unchanged | sidebar.rs | ❌ not changed here (navigation area): Phoenix keeps the cozy spacing, `--channels-name-line-height` 20/24/28 and spine offsets 20/24/28 are still cozy-only |
+| Compact message display | not an `<html>` class (React renders another layout), so it was not injected | — | chat.rs compact branch: 5rem indent, .6875rem timestamp and .125rem padding now follow `fz` | ⚠ CSS only; needs the real setting to compare |
+
+Offscreen check: `real_shots` now reads the density and font size from the client's `<html>` classes,
+or `PHX_DENSITY=compact|default|cozy` and `PHX_FONT=12..24`. `PHX_COMPACT=1` is compact message
+display only: it used to be turned on by `density-compact`.
