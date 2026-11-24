@@ -1014,7 +1014,8 @@ fn message(
     // Discord exposes `display_compact_avatars` only as an option for compact
     // message display. Cozy mode always shows its normal group avatar.
     let compact_avatars = compact && app.prefs.synced.flag("avatars");
-    let compact_header_left = if compact_avatars { 64. } else { 16. };
+    // Compact first line starts 1rem in (contents_ text-indent -(5rem - 1rem)).
+    let compact_header_left = if compact_avatars { 64. } else { 16. * crate::theme::font_scale() };
     // Compact: the absolute "[time] Name" header overlaps the first line by
     // `overflow` px; pad the first text line with thin spaces to clear it.
     let is_bot = author.is_some_and(|a| a.bot);
@@ -1501,7 +1502,7 @@ fn text_width(cx: &App, font: &gpui::Font, size: gpui::Pixels, s: &str) -> f32 {
 fn compact_header_overflow(time: &str, name: &str, bot: bool, tag: Option<&str>, left: f32, cx: &App) -> f32 {
     let mut name_font = crate::richtext::ui_font();
     name_font.weight = FontWeight::MEDIUM;
-    let mut w = text_width(cx, &crate::richtext::ui_font(), z(11.), time) + f32::from(z(4.));
+    let mut w = text_width(cx, &crate::richtext::ui_font(), fz(11.), time) + f32::from(fz(4.));
     w += text_width(cx, &name_font, fz(16.), name);
     if bot {
         let mut f = name_font.clone();
@@ -1514,7 +1515,7 @@ fn compact_header_overflow(time: &str, name: &str, bot: bool, tag: Option<&str>,
         w += text_width(cx, &f, fz(11.52), tg) + f32::from(z(14.)); // ml 6 + px 4*2
     }
     w += f32::from(z(4.));
-    (f32::from(z(left)) + w - f32::from(z(80.))).max(0.)
+    (f32::from(z(left)) + w - f32::from(fz(80.))).max(0.)
 }
 
 /// Prefix `t` with transparent thin spaces at least `width` px wide.

@@ -129,3 +129,17 @@ Scores (Phoenix real data vs dump png, no scroll sync): title bar 3.2%, composer
 | thread header title | dump breadcrumb parent › thread | no "Mode Découverte" chip in threads since 36c1126 (`thread_parent.is_none()` gate), so the title gets the freed width | chat.rs header | ✅ (code, 36c1126); thread-more-1713 compare predates the fix |
 | reactions in thread | dump top message (scrolled off in Phoenix) | same reaction row code as channel messages (chat.md reaction rows ✅); thread shot has no visible reaction to compare | message_ext.rs | ⛔ no comparable data: the only vanilla thread dump has its reacted message scrolled off in the offline render (no scroll sync offline); needs a live compare on a thread with reactions |
 | NEW divider in thread | not present in the dump | — | message_ext.rs | n/a |
+
+### DM, group DM and forum headers (dumps `vanilla-dm`, `vanilla-group-dm`, `vanilla-forum`, 2026-11-24)
+
+| element | dump node | values | our code | status |
+|---|---|---|---|---|
+| DM header | vanilla-dm #1122–#1149 | section padding 8 8 8 20 (--space-md), avatar 20 mr 8, title 16/20 medium in the recipient's name font (`dnsFont_`), toolbar gap 10 / pl 10, voice, video, pins, add to DM, profile (selected), search 244×32 | chat.rs `header` | ✅ |
+| group DM header | vanilla-group-dm #1059–#1068 | section padding-left 10 (half --space-md); `hoverableContainer_` h 32, r 8, padding-inline and gap --custom-message-margin-horizontal / 2 (10), hover --background-mod-subtle; gdmIcon 24 mr 4 (name at +38 from the box); name 16/20 medium; 16px pencil `editIcon_` only on hover (display none, no space reserved) | chat.rs `header` (`gdm-name`) | ✅ (was pl 20 + ml 10: icon and name 10px too far right; no hover box) |
+| group DM toolbar | vanilla-group-dm #1070–#1080 | voice, video, pins, invite to group, member list (selected), search | chat.rs `header` | ✅ |
+| forum header | vanilla-forum #1280–#1294 | channel icon 20 in 20×32 (ml -1, mr 11), title 16/20 medium, no topic; toolbar bell + member list + search only | chat.rs `header` (`is_forum`) | ✅ |
+| DM pins unread badge | vanilla-dm #1141 `iconBadge_ iconBadgeBottom_ iconBadgeStyleUnread_` | 8px --background-brand dot at the pin button's bottom-right, pin glyph then drawn --interactive-text-default, while the channel's `last_pin_timestamp` is newer than the read state's | — | ❌ not done: needs the read state's `last_pin_timestamp` (READY `read_state`), which Phoenix does not keep yet |
+| channel topic bar | vanilla-guild-text #1060–#1068 (see rows above) | dot 4px / leading bar 1×16 after "Mode Découverte", topic 14/18 medium --text-muted, ellipsized, flex 1 | chat.rs `header` | ✅ |
+| topic popout | vanilla-topic-modal #2176–#2205 | card 480, padding 8 0 16, r 12; header padding 16 24 8, "Sujet du salon" 20/24 semibold; close 40px icon-only (headerTrailing_ margin -16 -16 0 12); subtitle 18px glyph (`--text-subtle` fill) gap 4 + name 16/20 --text-subtle; body spacer 16, inner padding 0 8 0 24, markdown 16/22 --text-default, bottom spacer 8 | ui/home/topic.rs | ✅ (every value above matches; checked on the dump, no live click needed) |
+
+Toolbar gap and padding are `--space-xs`, the section's padding-inline-start is `--custom-message-margin-horizontal` (`--space-md`), and `.density-compact .searchBar_` is 28px tall: see the density section of `responsive.md`.
