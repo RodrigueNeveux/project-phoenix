@@ -300,7 +300,8 @@ fn read_scroll() -> Option<Scroll> {
     if std::env::var_os("PHX_NO_SCROLL").is_some() {
         return None;
     }
-    let raw = cdp(SCROLL_JS)?;
+    // `PHX_SCROLL`: the SCROLL_JS result taken from a dump, to replay it without CDP.
+    let raw = std::env::var("PHX_SCROLL").ok().or_else(|| cdp(SCROLL_JS))?;
     let f: Vec<&str> = raw.split(' ').collect();
     let num = |i: usize| f.get(i).and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.);
     Some(Scroll {
