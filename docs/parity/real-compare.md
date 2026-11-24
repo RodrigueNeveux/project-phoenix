@@ -1,0 +1,61 @@
+# Real-data compare sweep (Discord client vs `real_shots`)
+
+Scores only: the captures show the user's real account and stay in
+`/mnt/windata/project-phoenix/compare/sweep/` (never in git).
+
+## Method (2026-11-24, wt/sweep)
+
+- Client: the live 2026 client over CDP, Onyx, cozy, font 16, page zoom 125 %. Each view is
+  one short CDP pass (2–9 s) under `flock /tmp/discord-cdp-driver.lock`:
+  `Emulation.setDeviceMetricsOverride` to W×H **CSS px** at dpr 1.5 (width/height × zoom,
+  device scale 1.5 / zoom, because the emulated size is in DIP), open the view, read the region
+  boxes and the state `real_shots` needs (scroll anchors, sidebar width, audio, folders),
+  screenshot, undo our own actions, `Emulation.clearDeviceMetricsOverride`.
+  `Network.enable` logs every non-GET request of the pass.
+- Phoenix: int-bin `real_shots` at the same W×H, `PHX_SCALE=1.5`, rendered after the pass
+  from the saved state (`PHX_SCROLL`, `PHX_SIDEBAR_W`, …) so the client is not held.
+- Score: `scripts/compare/compare.py --discord … --phoenix … --regions boxes.json`,
+  `mismatch_pct` = share of pixels whose difference exceeds 24/255, per region.
+- Skipped: a pass is skipped when the route changed since the previous pass (the user is
+  using Discord: 5 min pause), when the user is typing, or when a modal of someone else is
+  open. Views that did not open as expected are discarded.
+
+Caveats: the two sides are a few seconds apart, so new messages, typing indicators, live
+timers and presence changes count as mismatch. The messages region also counts scroll
+offsets (when the client sits above the history Phoenix has loaded). Rows are for the route
+the client showed at that time (guild A = 18-member text channel, guild B = 44-member text
+channel).
+
+Views not measured:
+- Home / DMs: the client was never on `/channels/@me`, and the sweep does not navigate.
+- Profile popout: dropped after one pass, because an `ack` POST left the client while the
+  popout was open. It was the client's own read ack for a message that arrived in the open
+  channel, but the brief says to close such a view and not reopen it.
+- Search at 1536×788: discarded (the search did not open, another agent's modal was on top).
+
+## Before (int-bin 2f62f74)
+
+Mismatch % per region.
+
+| Size | View | Title bar | Rail | Channels | Header | Messages | Composer | Members | User panel | Inbox | Search | Overall |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1280×720 | channel (B) | 1.8 | 4.6 | 3.1 | 4.2 | 26.0 | 4.8 | 19.0 | 8.0 | — | — | **14.6** |
+| 1280×720 | inbox (B) | 1.9 | 4.6 | 3.1 | 4.6 | 15.3 | 4.8 | 16.5 | 8.0 | 9.4 | — | **10.3** |
+| 1280×720 | search (B) | 1.8 | 4.6 | 3.1 | 4.1 | 28.6 | 4.5 | — | 8.0 | — | 15.3 | **17.4** |
+| 1536×788 | channel (A) | 2.5 | 30.7 | 2.9 | 3.6 | 8.0 | 2.5 | 7.5 | 8.2 | — | — | **7.2** |
+| 1536×788 | inbox (B) | 1.5 | 4.6 | 3.0 | 3.3 | 12.3 | 5.9 | — | 8.2 | 9.4 | 15.0 | **9.0** |
+| 1920×1080 | channel (B) | 1.2 | 31.6 | 3.2 | 2.4 | 4.3 | 2.3 | 17.9 | 8.1 | — | — | **6.7** |
+| 1920×1080 | inbox (B) | 1.2 | 31.6 | 3.2 | 2.7 | 7.8 | 2.3 | 16.6 | 8.1 | 11.6 | — | **8.5** |
+| 1920×1080 | search (B) | 1.2 | 31.6 | 3.2 | 2.1 | 9.5 | 2.8 | — | 8.1 | — | 23.9 | **9.1** |
+
+## Gaps found, by visibility
+
+| Gap | Cause (observed) | State |
+|---|---|---|
+| Server rail 30 % off whenever the client rail is scrolled | `real_shots` did not copy the rail `scrollTop` (91 px measured) | ✅ compare tool fixed (rail field in `SCROLL_JS`) |
+| Member list "Activité — 6/7" vs "Activité — 1" / none | Phoenix counted feed entries by non-members as pending; see `responsive.md` | ✅ |
+| Activity card "il y a 11min" vs green "12:08" timer | live entry (trait 3 `is_live`) times from `started_at` | ✅ |
+| User panel "Ne pas déranger" vs the custom status; own member row without it | the member list sync sends our own row with `activities: []` (checked on the gateway: READY and SESSIONS_REPLACE carry the custom status), and that reset the own activities | ✅ |
+| Header bell: the client shows the slashed bell on guild A's channel, Phoenix the plain bell | Phoenix slashes only when `channel.muted`; the client's reason (guild or category mute) was not observed, because reading it would need a menu on a route the user was not on | ❌ open |
+| Member list nameplate differs on one member (another image), one name ellipsized early (combining marks) | member list zone | ❌ handed to wt/members2 |
+| Channel list "Nouveaux messages non lus" pill missing | compare artefact: with `NO_ACKS` the selected channel stays unread in `real_shots`, which hides the pill | — (not a product bug) |
