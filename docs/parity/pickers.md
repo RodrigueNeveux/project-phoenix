@@ -25,3 +25,26 @@ Source: dumps `vanilla-picker-emoji`, `vanilla-picker-gif`, `vanilla-picker-stic
 | sticker cell | sticker_5z8c5P | size / gap | 98 / 13 | sticker.rs | ✅ |
 | sticker frequent | stickerCategoryGeneric (#2731) | rail + section | clock, first | sticker.rs | ✅ |
 | soundboard | official guide + local client bundle `current-client/js/web.b63d846b329d6470.js`; UI still needs a safe visual reference | read path | default sounds: `GET /soundboard-default-sounds`; guild sounds: Gateway `REQUEST_SOUNDBOARD_SOUNDS {guild_ids}` → `SOUNDBOARD_SOUNDS {guild_id, soundboard_sounds[]}`. Observed sound fields: `name`, `sound_id`, `emoji_name`, `emoji_id`, `user_id`, `volume`, `available`; REST route registry also names `/guilds/{id}/soundboard-sounds`, top sounds, and sound metadata routes but method/use not yet proven here | no backend/model/picker | ⚠ read contract partly traced; no voice call, sound playback, upload, or account setting mutation. Picker UI/geometry and send payload remain unmeasured |
+
+# Search filters: date rows and calendar
+
+Source: live dumps (private) `search-date`, `search-date-operator`, `search-date-calendar`
+(2026-11-24, opened from the search popout's "Plus de filtres" row and closed without applying)
++ CSS `calendarPicker_7yAVe6`, `dateFilter_R726Px`. Note: the older `search-add-date` dump
+shows the quick switcher, not this modal.
+
+| element | CSS / dump source | property | value | our code | status |
+|---|---|---|---|---|---|
+| add date button | button_F7qvhY md secondary, full width | content | 20px plus + "Ajouter une date", 8px under the label, 12px under a row, stays for more dates | search_filters.rs date_section | ✅ |
+| date row | dateFilter_R726Px | layout | 40px, gap 8: 120px type select, date field (254 in a 430 column), 40px remove | date_row | ✅ |
+| type select | selectField_vWC4bk + listBox_b5PEJH | options | "Avant le…" / "Après le…" / "Le…" (en Before / After / During) → `before:` / `after:` / `during:` | DateOp | ✅ |
+| date field | container_tafmhI | style | padding 8 12, gap 8, "24 nov. 2026" 16/20 --text-default, 18px calendar glyph | date_row | ✅ |
+| remove | removeDateFilterButton_R726Px | icon | 24px trash, --icon-muted | date_row | ✅ |
+| clear count | textButton_nJgowo | text | "Effacer les filtres (n)" once something is set | render | ✅ |
+| calendar shell | .calendarPicker_7yAVe6 .react-datepicker | box | 322 wide (280 + 2×20 + border), --background-surface-higher, 1px --border-subtle, radius .3rem, legacy elevation border + high, 8px under the field | calendar | ✅ |
+| month title | __current-month | text | uppercase 13/20 semibold --text-strong, padding-bottom 20 + 1px rule (Dark --primary-800 30%), margin-bottom 10 | calendar | ✅ |
+| nav | __navigation--previous / --next | box | 18x18 at 20,20, 1px --primary-800, radius 2; no "next" on the current month (future days disabled) | calendar | ✅ (chevron glyph instead of the 6x12 background arrow) |
+| day names | __day-name | text | 13px medium uppercase, --primary-100 60%, 40 wide, 10px under; Monday first (Sunday first in English) | calendar | ✅ |
+| day cells | __day | box | 40x40, 1px --border-subtle left/top, last column/row closed in --primary-800, corner radius 3 | calendar | ✅ |
+| day states | __day--outside-month / --disabled / --today / --selected / :hover | colour | 500 at 30%; disabled on --primary-630; today bold; selected 3px --brand-500 bar; hover --brand-500 + white | calendar | ✅ |
+| Escape | — | behaviour | closes the calendar / type list before the modal | search.rs on_key | ✅ |
