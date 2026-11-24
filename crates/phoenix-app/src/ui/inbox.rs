@@ -61,6 +61,27 @@ impl PhoenixApp {
                     a.parity.archived_threads.insert(ch, posts);
                 }
             });
+            let missing: Vec<Id> = self.nav.threads.get(&ch).into_iter().flatten().map(|t| t.id).filter(|t| crate::thread_recent::get(*t).is_none()).collect();
+            for t in missing {
+                let fut = self.backend.load_messages(t, None, 1);
+                cx.spawn(async move |this, cx| {
+                    let Ok(msgs) = fut.await else { return };
+                    let _ = this.update(cx, |a, cx| {
+                        if let Some(m) = msgs.iter().max_by_key(|m| m.id.0) {
+                            let user = a.users.get(&m.author);
+                            let name = m
+                                .author_nick
+                                .clone()
+                                .or_else(|| user.map(|u| if u.display_name.is_empty() { u.name.clone() } else { u.display_name.clone() }))
+                                .unwrap_or_default();
+                            let avatar = user.map(|u| u.avatar.clone()).unwrap_or(crate::model::ImageRef::Default(0));
+                            crate::thread_recent::set(t, crate::thread_recent::Recent { author: m.author, name, avatar, content: m.content.clone(), ts: m.timestamp });
+                            cx.notify();
+                        }
+                    });
+                })
+                .detach();
+            }
         }
         cx.notify();
     }

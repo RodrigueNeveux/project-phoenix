@@ -344,6 +344,7 @@ impl Backend for ReadOnly {
                 })
             }
             phoenix_app::commands::ParityRequest::FetchThread { .. } => self.0.parity(req),
+            phoenix_app::commands::ParityRequest::ArchivedThreads { .. } => self.0.parity(req),
             phoenix_app::commands::ParityRequest::Mentions { .. }
             | phoenix_app::commands::ParityRequest::SavedMessages
             | phoenix_app::commands::ParityRequest::ScheduledMessages => self.0.parity(req),
