@@ -932,6 +932,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     // wrapper_TNyK-N:active .link_TNyK-N background
                     .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 })
+                // Hover warms the message cache so the click paints at once (docs/perf.md).
+                .on_hover({
+                    let e = e.clone();
+                    move |hovered: &bool, _, cx| {
+                        if *hovered {
+                            e.read(cx).backend.prefetch_messages(id);
+                        }
+                    }
+                })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_channel(id, cx)))
                 .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
                     crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(id), ev.position, w)

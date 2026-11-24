@@ -17,6 +17,9 @@ mod profile_widgets;
 pub(crate) mod profile_games;
 mod collectibles_shop;
 mod thread_members;
+mod history;
+mod msg_cache;
+mod snapshot;
 #[cfg(test)]
 pub(crate) use profile_edit::bodies as profile_edit_bodies;
 pub mod store;
@@ -32,7 +35,7 @@ use phoenix_api::{
     Cache, ClientProperties, Error as ApiError, Gateway, GatewayConfig, GatewayEvent, GatewayHandle, RestClient,
     gateway::GuildSubscription,
     models as api,
-    rest::{CreateMessage, LoginResponse, MessageQuery},
+    rest::{CreateMessage, LoginResponse},
 };
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -210,6 +213,7 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
 
     let mut cfg = GatewayConfig::new(token.expose());
     cfg.properties = inner.props.clone();
+    cfg.raw_dispatch = Some(snapshot::hook());
     let (gateway, mut rx) = Gateway::spawn(cfg);
     let cache = Cache::default();
 
@@ -263,6 +267,7 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         inner.emit(e);
     }
     nav::snapshot(&session.cache, &ready).into_iter().for_each(|e| inner.emit(e));
+    history::warm_recent(&inner, &session);
     tokio::spawn(pump(inner.clone(), session, rx));
     Ok(data)
 }
@@ -279,6 +284,7 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             return;
         }
         s.cache.apply(&ev);
+        msg_cache::on_gateway(&ev);
         if matches!(ev, GatewayEvent::VoiceStateUpdate(_) | GatewayEvent::VoiceServerUpdate(_)) {
             let i = inner.clone();
             let emit: crate::voice::call::Emit = Arc::new(move |e| i.emit(e));
@@ -533,6 +539,11 @@ impl Backend for DiscordBackend {
             if let Some(s) = inner.session.lock().take() {
                 s.gateway.shutdown();
             }
+            let _ = tokio::task::spawn_blocking(|| {
+                snapshot::clear();
+                msg_cache::clear();
+            })
+            .await;
             store_op(&inner.store, |s| s.clear()).await.map_err(err)
         })
     }
@@ -576,60 +587,27 @@ impl Backend for DiscordBackend {
     }
 
     fn load_messages(&self, channel: Id, before: Option<Id>, limit: u32) -> BoxFuture<Vec<Message>> {
-        self.with_session(move |inner, s| async move {
+        self.load_messages_impl(channel, before, limit)
+    }
+
+    fn prefetch_messages(&self, channel: Id) {
+        self.prefetch_impl(channel)
+    }
+
+    fn restore_cached(&self) -> Option<BoxFuture<ReadyData>> {
+        if !snapshot::exists() {
+            return None;
+        }
+        Some(self.spawn(move |inner| async move {
             let t0 = Instant::now();
-            let limit = limit.clamp(1, 100) as u8;
-            let q = match before {
-                Some(b) => MessageQuery::before(sf(b), limit),
-                None => MessageQuery::latest(limit),
-            };
-            let mut msgs = s.rest.get_messages(sf(channel), q).await.map_err(api_err)?;
-            crate::perf::span(if before.is_none() { "rest_messages_latest" } else { "rest_messages_older" }, t0);
-            msgs.sort_by_key(|m| m.id);
-            let mut users = Vec::new();
-            for m in &msgs {
-                convert::message_users(m, &mut users);
+            let loaded = tokio::task::spawn_blocking(snapshot::load).await.ok().flatten();
+            let (data, events) = loaded.ok_or_else(|| err(""))?;
+            crate::perf::span("snapshot_loaded", t0);
+            if inner.session.lock().is_none() {
+                events.into_iter().for_each(|e| inner.emit(e));
             }
-            // Delivered before the page so author names resolve on first render.
-            inner.emit(AppEvent::Users(users));
-            // Like the official client: op 8 for authors / reply targets whose guild member
-            // (server nick, roles) we don't have yet; GUILD_MEMBERS_CHUNK fills the cache.
-            if let Some(g) = s.cache.channel(sf(channel)).and_then(|c| c.guild_id) {
-                let mut ids: Vec<phoenix_api::models::Snowflake> = Vec::new();
-                for m in &msgs {
-                    let refd = m.referenced_message.as_deref().map(|r| r.author.id);
-                    for u in std::iter::once(m.author.id).chain(refd) {
-                        if !ids.contains(&u) && s.cache.member(g, u).is_none() {
-                            ids.push(u);
-                        }
-                    }
-                }
-                // Voice users in the channel list show their server nick too.
-                for v in s.cache.voice_states(Some(g)) {
-                    if !ids.contains(&v.user_id) && s.cache.member(g, v.user_id).is_none() {
-                        ids.push(v.user_id);
-                    }
-                }
-                if !ids.is_empty() {
-                    ids.truncate(100);
-                    let _ = s.gateway.request_guild_members(phoenix_api::gateway::RequestGuildMembers {
-                        guild_id: vec![g],
-                        user_ids: Some(ids),
-                        presences: true,
-                        ..Default::default()
-                    });
-                }
-            }
-            let out = msgs.iter().map(convert::message).collect();
-            if before.is_none() {
-                let ev = s.adapter.lock().recount_mentions(&s.cache, channel.0, &msgs);
-                if let Some(ev) = ev {
-                    inner.emit(ev);
-                }
-            }
-            s.cache.insert_messages(sf(channel), msgs);
-            Ok(out)
-        })
+            Ok(data)
+        }))
     }
 
     fn send_message(&self, channel: Id, content: String, reply_to: Option<Id>) -> BoxFuture<Message> {

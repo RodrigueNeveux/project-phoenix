@@ -70,6 +70,8 @@ pub enum AppEvent {
     Voice(crate::voice::VoiceUiEvent),
     /// New or updated user objects (message authors, member list entries...).
     Users(Vec<User>),
+    /// Background refresh of a channel's latest page that differs from the cached one shown.
+    HistoryRefresh { channel: Id, messages: Vec<Message> },
     /// Replace the whole (ordered) channel list of a guild.
     GuildChannels { guild: Id, channels: Vec<Channel> },
     GuildRoles { guild: Id, roles: Vec<Role> },
@@ -165,6 +167,12 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// Log in from a stored session at startup, if the backend has one.
     /// The future fails with an empty message when nothing is stored.
+    /// Last session from the disk cache, to draw the UI before the gateway answers.
+    fn restore_cached(&self) -> Option<BoxFuture<ReadyData>> {
+        None
+    }
+    /// Warm the message cache for a channel the user is likely to open (read-only, never acks).
+    fn prefetch_messages(&self, _channel: Id) {}
     fn restore_session(&self) -> Option<BoxFuture<ReadyData>> {
         None
     }

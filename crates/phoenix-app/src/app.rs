@@ -286,17 +286,44 @@ impl PhoenixApp {
         // Auto-login from the stored session (keyring), if any.
         let restore = backend.restore_session();
         let logging_in = restore.is_some();
+        // Draw the last session from disk while the gateway connects (docs/perf.md).
+        if let Some(fut) = restore.is_some().then(|| backend.restore_cached()).flatten() {
+            cx.spawn(async move |this, cx| {
+                if let Ok(ready) = fut.await {
+                    let _ = this.update(cx, |this, cx| {
+                        if this.logging_in && this.screen == Screen::Login {
+                            this.apply_ready(ready, cx);
+                            crate::perf::mark("snapshot_applied");
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .detach();
+        }
         if let Some(fut) = restore {
             cx.spawn(async move |this, cx| {
                 let res = fut.await;
                 let _ = this.update(cx, |this, cx| {
                     this.logging_in = false;
                     match res {
+                        // Already showing the disk snapshot: rebuild in place, keep the selection.
+                        Ok(ready) if this.screen == Screen::Main => {
+                            crate::commands::on_resync(this, crate::commands::Resync(ready), cx)
+                        }
                         Ok(ready) => this.apply_ready(ready, cx),
-                        // Empty message = nothing stored: stay quietly on the login screen.
-                        Err(e) if e.0.is_empty() => {}
-                        Err(e) => this.login_error = Some(e.0.into()),
+                        Err(e) => {
+                            if this.screen == Screen::Main {
+                                this.clear_session();
+                                this.screen = Screen::Login;
+                            }
+                            // Empty message = nothing stored: stay quietly on the login screen.
+                            if !e.0.is_empty() {
+                                this.login_error = Some(e.0.into());
+                            }
+                        }
                     }
+                    crate::perf::mark("ready_applied");
                     cx.notify();
                 });
             })
@@ -776,6 +803,13 @@ impl PhoenixApp {
             AppEvent::Ready => {}
             AppEvent::MessageCreate(m) => self.append_message(m, cx),
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
+            AppEvent::HistoryRefresh { channel, messages } => {
+                // Only a still-first page shown from the cache is replaced.
+                if self.messages.get(&channel).is_some_and(|e| e.loaded_once && !e.loading && e.msgs.len() <= 50) {
+                    self.messages.remove(&channel);
+                    self.insert_history(channel, messages, false, cx);
+                }
+            }
             AppEvent::MessageDelete { channel, id } => {
                 if let Some(e) = self.messages.get_mut(&channel)
                     && let Some(ix) = e.index_of(id)

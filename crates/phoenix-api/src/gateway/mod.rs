@@ -101,7 +101,13 @@ pub struct GatewayConfig {
     pub invalid_session_delay: Duration,
     /// Max wait for HELLO after connecting.
     pub hello_timeout: Duration,
+    /// Called with (event name, raw `d` JSON) for every dispatch before it is
+    /// parsed, e.g. to persist READY for an instant next start.
+    pub raw_dispatch: Option<RawDispatchHook>,
 }
+
+/// See [`GatewayConfig::raw_dispatch`].
+pub type RawDispatchHook = std::sync::Arc<dyn Fn(&str, &str) + Send + Sync>;
 
 impl std::fmt::Debug for GatewayConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -127,6 +133,7 @@ impl GatewayConfig {
             max_backoff: Duration::from_secs(60),
             invalid_session_delay: Duration::from_secs(1),
             hello_timeout: Duration::from_secs(20),
+            raw_dispatch: None,
         }
     }
 
@@ -506,6 +513,9 @@ impl Runner {
                             if let Some(s) = p.s { self.session.seq = Some(s); }
                             let name = p.t.as_deref().unwrap_or("");
                             let raw = p.d.map(|d| d.get()).unwrap_or("null");
+                            if let Some(hook) = &self.config.raw_dispatch {
+                                hook(name, raw);
+                            }
                             let ev = parse_dispatch(name, raw);
                             match &ev {
                                 GatewayEvent::Ready(r) => {

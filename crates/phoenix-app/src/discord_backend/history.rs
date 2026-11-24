@@ -1,0 +1,158 @@
+//! Message history: cache-first loading, background refresh and prefetch.
+//! Strictly read-only on the account: GET /channels/{id}/messages never acks.
+
+use std::{
+    sync::{Arc, LazyLock},
+    time::Instant,
+};
+
+use phoenix_api::{models as api, rest::MessageQuery};
+use tokio::sync::Semaphore;
+
+use super::{DiscordBackend, Inner, Session, api_err, convert, convert::sf, msg_cache};
+use crate::{
+    backend::{AppEvent, BackendError, BoxFuture},
+    model::{Id, Message},
+};
+
+/// The app pages history by 50.
+const PAGE: u32 = 50;
+/// Background fetches (prefetch / refresh) running at once; extra hovers are dropped.
+static BG: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(2));
+
+async fn fetch(s: &Session, channel: Id, before: Option<Id>, limit: u32) -> Result<Vec<api::Message>, BackendError> {
+    let t0 = Instant::now();
+    let limit = limit.clamp(1, 100) as u8;
+    let q = match before {
+        Some(b) => MessageQuery::before(sf(b), limit),
+        None => MessageQuery::latest(limit),
+    };
+    let mut msgs = s.rest.get_messages(sf(channel), q).await.map_err(api_err)?;
+    crate::perf::span(if before.is_none() { "rest_messages_latest" } else { "rest_messages_older" }, t0);
+    msgs.sort_by_key(|m| m.id);
+    Ok(msgs)
+}
+
+fn emit_users(inner: &Inner, msgs: &[api::Message]) {
+    let mut users = Vec::new();
+    for m in msgs {
+        convert::message_users(m, &mut users);
+    }
+    // Delivered before the page so author names resolve on first render.
+    inner.emit(AppEvent::Users(users));
+}
+
+/// Side effects of showing a page: users, missing guild members (op 8), mention recount.
+fn after_page(inner: &Inner, s: &Session, channel: Id, msgs: &[api::Message], latest: bool) {
+    emit_users(inner, msgs);
+    // Like the official client: op 8 for authors / reply targets whose guild member
+    // (server nick, roles) we don't have yet; GUILD_MEMBERS_CHUNK fills the cache.
+    if let Some(g) = s.cache.channel(sf(channel)).and_then(|c| c.guild_id) {
+        let mut ids: Vec<api::Snowflake> = Vec::new();
+        for m in msgs {
+            let refd = m.referenced_message.as_deref().map(|r| r.author.id);
+            for u in std::iter::once(m.author.id).chain(refd) {
+                if !ids.contains(&u) && s.cache.member(g, u).is_none() {
+                    ids.push(u);
+                }
+            }
+        }
+        // Voice users in the channel list show their server nick too.
+        for v in s.cache.voice_states(Some(g)) {
+            if !ids.contains(&v.user_id) && s.cache.member(g, v.user_id).is_none() {
+                ids.push(v.user_id);
+            }
+        }
+        if !ids.is_empty() {
+            ids.truncate(100);
+            let _ = s.gateway.request_guild_members(phoenix_api::gateway::RequestGuildMembers {
+                guild_id: vec![g],
+                user_ids: Some(ids),
+                presences: true,
+                ..Default::default()
+            });
+        }
+    }
+    if latest {
+        let ev = s.adapter.lock().recount_mentions(&s.cache, channel.0, msgs);
+        if let Some(ev) = ev {
+            inner.emit(ev);
+        }
+    }
+}
+
+/// Fetch the latest page into the cache; if it differs from what was cached,
+/// tell the UI (`AppEvent::HistoryRefresh`, ignored for channels it hasn't loaded).
+async fn refresh(inner: Arc<Inner>, s: Arc<Session>, channel: Id) {
+    let Ok(_permit) = BG.acquire().await else { return };
+    if !msg_cache::begin_fetch(channel.0) {
+        return;
+    }
+    let old = msg_cache::peek(channel.0);
+    let res = fetch(&s, channel, None, PAGE).await;
+    msg_cache::end_fetch(channel.0);
+    let Ok(msgs) = res else { return };
+    msg_cache::put(channel.0, &msgs);
+    if old.as_ref().is_some_and(|o| *o != msgs) {
+        after_page(&inner, &s, channel, &msgs, true);
+        inner.emit(AppEvent::HistoryRefresh { channel, messages: msgs.iter().map(convert::message).collect() });
+    }
+    s.cache.insert_messages(sf(channel), msgs);
+}
+
+/// After READY: warm the channels the user viewed last time.
+pub(super) fn warm_recent(inner: &Arc<Inner>, s: &Arc<Session>) {
+    let (inner, s) = (inner.clone(), s.clone());
+    tokio::spawn(async move {
+        let recent = tokio::task::spawn_blocking(|| msg_cache::recent_on_disk(6)).await.unwrap_or_default();
+        for c in recent {
+            if s.cache.channel(api::Snowflake(c)).is_some() && !msg_cache::has_fresh(c) {
+                refresh(inner.clone(), s.clone(), Id(c)).await;
+            }
+        }
+    });
+}
+
+impl DiscordBackend {
+    pub(super) fn load_messages_impl(&self, channel: Id, before: Option<Id>, limit: u32) -> BoxFuture<Vec<Message>> {
+        self.spawn(move |inner| async move {
+            let t0 = Instant::now();
+            if before.is_none() && limit == PAGE {
+                let c = channel.0;
+                let cached = tokio::task::spawn_blocking(move || msg_cache::get(c)).await.ok().flatten();
+                if let Some((msgs, fresh)) = cached {
+                    crate::perf::span(if fresh { "messages_cache_fresh" } else { "messages_cache_stale" }, t0);
+                    match inner.session() {
+                        Ok(s) => {
+                            after_page(&inner, &s, channel, &msgs, true);
+                            if !fresh {
+                                tokio::spawn(refresh(inner.clone(), s, channel));
+                            }
+                        }
+                        // Drawn from the disk snapshot before the gateway is up.
+                        Err(_) => emit_users(&inner, &msgs),
+                    }
+                    return Ok(msgs.iter().map(convert::message).collect::<Vec<Message>>());
+                }
+            }
+            let s = inner.session()?;
+            let msgs = fetch(&s, channel, before, limit).await?;
+            after_page(&inner, &s, channel, &msgs, before.is_none());
+            if before.is_none() && limit == PAGE {
+                msg_cache::put(channel.0, &msgs);
+            }
+            let out: Vec<Message> = msgs.iter().map(convert::message).collect();
+            s.cache.insert_messages(sf(channel), msgs);
+            Ok(out)
+        })
+    }
+
+    /// Warm a channel the pointer is on (or likely to be opened). Never acks.
+    pub(super) fn prefetch_impl(&self, channel: Id) {
+        let Ok(s) = self.inner.session() else { return };
+        if msg_cache::has_fresh(channel.0) || BG.available_permits() == 0 {
+            return;
+        }
+        self.inner.rt.spawn(refresh(self.inner.clone(), s, channel));
+    }
+}
