@@ -92,6 +92,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
         &mut out,
     );
     push(3, Message { attachments: vec![at(AttachmentKind::Image, "photo.png", 1280, 720, 345_678)], ..Default::default() }, &mut out);
+    push(3, Message { attachments: vec![at(AttachmentKind::Image, "SPOILER_photo.png", 1280, 720, 345_678)], ..Default::default() }, &mut out);
     push(
         3,
         Message {

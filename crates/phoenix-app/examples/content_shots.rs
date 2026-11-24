@@ -23,8 +23,8 @@ fn main() -> anyhow::Result<()> {
     // Mock media generated here (gradients), never Discord assets: offscreen renders have no network.
     let dir = std::env::temp_dir().join("phoenix-mock-media");
     std::fs::create_dir_all(&dir)?;
-    for (i, (name, w, h)) in [("photo", 1280, 720), ("one", 800, 600), ("two", 800, 600), ("three", 800, 600), ("clip", 1280, 720), ("thumb", 400, 400), ("video", 1280, 720)].into_iter().enumerate() {
-        let hue = i as f32 / 7.;
+    for (i, (name, w, h)) in [("photo", 1280, 720), ("one", 800, 600), ("two", 800, 600), ("three", 800, 600), ("clip", 1280, 720), ("thumb", 400, 400), ("video", 1280, 720), ("SPOILER_photo", 1280, 720)].into_iter().enumerate() {
+        let hue = i as f32 / 8.;
         image::RgbaImage::from_fn(w, h, |x, y| {
             let t = (x as f32 / w as f32 + y as f32 / h as f32) / 2.;
             let r = (60. + 150. * ((hue + t) * std::f32::consts::TAU).sin().abs()) as u8;
