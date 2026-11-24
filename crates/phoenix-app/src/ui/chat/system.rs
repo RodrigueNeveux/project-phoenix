@@ -27,6 +27,14 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
     if !is_system(msg.kind) {
         return None;
     }
+    // Types we don't know with no text: the client draws nothing for them, not a bare
+    // "⋯ name time" row (seen in real DMs).
+    if msg.kind == MessageKind::OtherSystem && msg.content.is_empty() {
+        return Some(match r.day_divider.clone() {
+            Some(label) => super::day_divider(label).into_any_element(),
+            None => div().into_any_element(),
+        });
+    }
     let name: SharedString = app
         .users
         .get(&msg.author)
