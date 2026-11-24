@@ -100,7 +100,7 @@ impl FrecencyUserSettings {
     pub fn favorite_gifs(&self) -> Vec<(String, FavoriteGif)> {
         let mut v: Vec<(String, FavoriteGif)> =
             self.favorite_gifs.iter().flat_map(|f| f.gifs.iter()).map(|(k, g)| (k.clone(), g.clone())).collect();
-        v.sort_by(|a, b| b.1.order.cmp(&a.1.order));
+        v.sort_by_key(|g| std::cmp::Reverse(g.1.order));
         v
     }
 }
