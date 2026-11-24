@@ -385,7 +385,7 @@ pub fn rich_with_emoji(
             return row;
         }
         let text: SharedString = t.text[range.clone()].to_owned().into();
-        let styled = gpui::StyledText::new(text).with_runs(slice_runs(&t.runs, range.clone()));
+        let seg_runs = slice_runs(&t.runs, range.clone());
         // Click ranges fully inside this segment, shifted.
         let mut ranges = Vec::new();
         let mut targets = Vec::new();
@@ -397,19 +397,25 @@ pub fn rich_with_emoji(
         }
         *seg += 1;
         if ranges.is_empty() {
-            return row.child(styled);
+            return row.child(gpui::StyledText::new(text).with_runs(seg_runs));
         }
+        let sd = *seg as u64;
+        let seg_runs = super::mention::hovered_runs(msg, bi, sd, &ranges, &targets, &seg_runs).unwrap_or(seg_runs);
+        let styled = gpui::StyledText::new(text).with_runs(seg_runs);
         let e = entity.clone();
+        let (hr, ht) = (ranges.clone(), targets.clone());
         row.child(
-            gpui::InteractiveText::new(("rte", (msg.0 << 12) | ((bi as u64) << 6) | *seg as u64), styled).on_click(
+            gpui::InteractiveText::new(("rte", (msg.0 << 12) | ((bi as u64) << 6) | *seg as u64), styled)
+                .on_hover(move |ix, _ev, w, _cx| super::mention::on_hover(msg, bi, sd, &hr, &ht, ix, w))
+                .on_click(
                 ranges,
-                move |ix, _w, cx| match &targets[ix] {
+                move |ix, w, cx| match &targets[ix] {
                     crate::richtext::ClickTarget::Link(url) => cx.open_url(url),
                     crate::richtext::ClickTarget::Spoiler(sp) => {
                         let sp = *sp;
                         e.update(cx, |a, cx| a.reveal_spoiler(msg, sp, cx));
                     }
-                    crate::richtext::ClickTarget::Mention(_) => {}
+                    crate::richtext::ClickTarget::Mention(m) => super::mention::click(&e, m, w, cx),
                 },
             ),
         )

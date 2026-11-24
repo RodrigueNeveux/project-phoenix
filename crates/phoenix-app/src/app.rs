@@ -162,8 +162,20 @@ pub struct PhoenixApp {
 struct Resolver<'a> {
     users: &'a HashMap<Id, User>,
     channels: &'a HashMap<Id, Channel>,
+    roles: &'a HashMap<Id, Vec<Role>>,
+}
+impl Resolver<'_> {
+    fn find_role(&self, id: u64) -> Option<&Role> {
+        self.roles.values().flatten().find(|r| r.id.0 == id)
+    }
 }
 impl MentionResolver for Resolver<'_> {
+    fn role(&self, id: u64) -> Option<String> {
+        self.find_role(id).map(|r| r.name.to_string())
+    }
+    fn role_color(&self, id: u64) -> Option<u32> {
+        self.find_role(id).and_then(|r| r.color)
+    }
     fn user(&self, id: u64) -> Option<String> {
         self.users.get(&Id(id)).map(|u| u.display_name.to_string())
     }
@@ -606,7 +618,7 @@ impl PhoenixApp {
     }
 
     fn resolver(&self) -> Resolver<'_> {
-        Resolver { users: &self.users, channels: &self.channels }
+        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles }
     }
 
     pub(crate) fn render_msg(&self, m: &Message, prev: Option<&Message>) -> RenderedMessage {

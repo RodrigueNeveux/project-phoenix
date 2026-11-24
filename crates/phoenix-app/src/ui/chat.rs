@@ -18,6 +18,7 @@ use crate::{
 // Messaging features live in submodules (composer moved to `composer.rs`).
 pub mod composer;
 pub mod icons;
+pub mod mention;
 pub mod forward;
 pub mod message_ext;
 pub mod mosaic;
@@ -1183,6 +1184,7 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
             .into_any_element();
     }
     let (text, runs) = if edited { with_edited(t) } else { (t.text.clone(), t.runs.clone()) };
+    let runs = mention::hovered_runs(msg, bi, 0, &t.click_ranges, &t.click_targets, &runs).unwrap_or(runs);
     let styled = StyledText::new(text).with_runs(runs);
     let lh = gpui::relative(1.375);
     if t.click_ranges.is_empty() {
@@ -1193,15 +1195,20 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
     div()
         .line_height(lh)
         .child(
-            InteractiveText::new(("rt", (msg.0 << 8) | bi as u64), styled).on_click(
+            InteractiveText::new(("rt", (msg.0 << 8) | bi as u64), styled)
+                .on_hover({
+                    let (hr, ht) = (t.click_ranges.clone(), t.click_targets.clone());
+                    move |ix, _ev, w, _cx| mention::on_hover(msg, bi, 0, &hr, &ht, ix, w)
+                })
+                .on_click(
                 t.click_ranges.clone(),
-                move |ix, _w, cx| match &targets[ix] {
+                move |ix, w, cx| match &targets[ix] {
                     ClickTarget::Link(url) => cx.open_url(url),
                     ClickTarget::Spoiler(sp) => {
                         let sp = *sp;
                         e.update(cx, |a, cx| a.reveal_spoiler(msg, sp, cx));
                     }
-                    ClickTarget::Mention(_) => {}
+                    ClickTarget::Mention(m) => mention::click(&e, m, w, cx),
                 },
             ),
         )

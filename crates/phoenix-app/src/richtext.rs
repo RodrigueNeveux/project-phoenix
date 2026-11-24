@@ -233,8 +233,35 @@ pub fn build(
         .chars()
         .take(120)
         .collect();
-    let blocks = render_blocks(&parsed, revealed, c(Palette::TEXT_NORMAL));
+    let mut blocks = render_blocks(&parsed, revealed, c(Palette::TEXT_NORMAL));
+    color_role_mentions(&parsed, &mut blocks, resolver);
     (parsed, blocks, mentions_me, preview.into())
+}
+
+/// Role mentions take the role color: text in the color, background at 10% alpha
+/// (live client: inline `color` + `background-color` on `.roleMention_`). `rich_inline`
+/// emits one run per span, so span `i` is run `i`.
+fn color_role_mentions(parsed: &[Block], blocks: &mut [RBlock], r: &dyn MentionResolver) {
+    for (b, rb) in parsed.iter().zip(blocks.iter_mut()) {
+        let (Some(inl), Some(t)) = (b.inline(), rich_text_mut(rb)) else { continue };
+        for (s, run) in inl.spans.iter().zip(t.runs.iter_mut()) {
+            if let Some(Mention::Role(id)) = s.mention
+                && let Some(rgb) = r.role_color(id).filter(|&v| v != 0)
+            {
+                let col: Hsla = gpui::rgb(rgb).into();
+                run.color = col;
+                run.background_color = Some(Hsla { a: 0.1, ..col });
+            }
+        }
+    }
+}
+
+fn rich_text_mut(b: &mut RBlock) -> Option<&mut RichText> {
+    match b {
+        RBlock::Text(t) | RBlock::Quote(t) | RBlock::Heading(_, t) | RBlock::Subtext(t) => Some(t),
+        RBlock::ListItem { text, .. } => Some(text),
+        RBlock::Code { .. } => None,
+    }
 }
 
 fn is_emoji_modifier(c: char) -> bool {

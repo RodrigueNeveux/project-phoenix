@@ -141,6 +141,10 @@ pub trait MentionResolver {
     fn role(&self, _id: u64) -> Option<String> {
         None
     }
+    /// Role color 0xRRGGBB for role mentions (inline color + 10% alpha background).
+    fn role_color(&self, _id: u64) -> Option<u32> {
+        None
+    }
 }
 
 pub struct NoResolve;
