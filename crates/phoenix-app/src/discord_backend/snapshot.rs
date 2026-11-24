@@ -78,8 +78,11 @@ pub fn clear() {
 /// plus the nav events (folders, relationships, threads) sent before it.
 /// Blocking: call it off the UI thread.
 pub fn load() -> Option<(ReadyData, Vec<AppEvent>)> {
+    let t0 = std::time::Instant::now();
     let raw = fs::read_to_string(file("READY")?).ok()?;
+    crate::perf::span("snapshot_read", t0);
     let GatewayEvent::Ready(ready) = parse_dispatch("READY", &raw) else { return None };
+    crate::perf::span("snapshot_parsed", t0);
     drop(raw);
     let cache = Cache::default();
     let ev = GatewayEvent::Ready(ready);
@@ -93,7 +96,33 @@ pub fn load() -> Option<(ReadyData, Vec<AppEvent>)> {
     }
     let prefs = convert::Prefs::from_ready(&ready);
     let data = convert::build_ready(&cache, &ready, &prefs);
+    crate::perf::span("snapshot_built", t0);
     let mut events: Vec<AppEvent> = convert::self_activities(&ready).into_iter().collect();
     events.extend(nav::snapshot(&cache, &ready));
     Some((data, events))
+}
+
+type Loaded = Option<(ReadyData, Vec<AppEvent>)>;
+static PRELOAD: std::sync::Mutex<Option<std::sync::mpsc::Receiver<Loaded>>> = std::sync::Mutex::new(None);
+
+/// Start [`load`] on its own thread at backend creation, before the window exists.
+pub fn preload() {
+    if !exists() {
+        return;
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    if std::thread::Builder::new().name("phoenix-snapshot-load".into()).spawn(move || {
+        let _ = tx.send(load());
+    }).is_ok() {
+        *PRELOAD.lock().unwrap_or_else(|e| e.into_inner()) = Some(rx);
+    }
+}
+
+/// The preloaded snapshot (waits for it), or a fresh [`load`]. Blocking.
+pub fn take() -> Loaded {
+    let rx = PRELOAD.lock().unwrap_or_else(|e| e.into_inner()).take();
+    match rx {
+        Some(rx) => rx.recv().ok().flatten(),
+        None => load(),
+    }
 }

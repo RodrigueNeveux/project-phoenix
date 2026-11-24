@@ -6,7 +6,7 @@ use std::{
     time::Instant,
 };
 
-use phoenix_api::{models as api, rest::MessageQuery};
+use phoenix_api::{RestClient, models as api, rest::MessageQuery};
 use tokio::sync::Semaphore;
 
 use super::{DiscordBackend, Inner, Session, api_err, convert, convert::sf, msg_cache};
@@ -20,14 +20,14 @@ const PAGE: u32 = 50;
 /// Background fetches (prefetch / refresh) running at once; extra hovers are dropped.
 static BG: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(2));
 
-async fn fetch(s: &Session, channel: Id, before: Option<Id>, limit: u32) -> Result<Vec<api::Message>, BackendError> {
+async fn fetch(rest: &RestClient, channel: Id, before: Option<Id>, limit: u32) -> Result<Vec<api::Message>, BackendError> {
     let t0 = Instant::now();
     let limit = limit.clamp(1, 100) as u8;
     let q = match before {
         Some(b) => MessageQuery::before(sf(b), limit),
         None => MessageQuery::latest(limit),
     };
-    let mut msgs = s.rest.get_messages(sf(channel), q).await.map_err(api_err)?;
+    let mut msgs = rest.get_messages(sf(channel), q).await.map_err(api_err)?;
     crate::perf::span(if before.is_none() { "rest_messages_latest" } else { "rest_messages_older" }, t0);
     msgs.sort_by_key(|m| m.id);
     Ok(msgs)
@@ -89,7 +89,7 @@ async fn refresh(inner: Arc<Inner>, s: Arc<Session>, channel: Id) {
         return;
     }
     let old = msg_cache::peek(channel.0);
-    let res = fetch(&s, channel, None, PAGE).await;
+    let res = fetch(&s.rest, channel, None, PAGE).await;
     msg_cache::end_fetch(channel.0);
     let Ok(msgs) = res else { return };
     msg_cache::put(channel.0, &msgs);
@@ -100,17 +100,59 @@ async fn refresh(inner: Arc<Inner>, s: Arc<Session>, channel: Id) {
     s.cache.insert_messages(sf(channel), msgs);
 }
 
-/// After READY: warm the channels the user viewed last time.
+/// After READY: warm the channels with unread mentions, then the ones the
+/// user viewed last time.
 pub(super) fn warm_recent(inner: &Arc<Inner>, s: &Arc<Session>) {
     let (inner, s) = (inner.clone(), s.clone());
     tokio::spawn(async move {
+        let mut todo: Vec<u64> = {
+            let a = s.adapter.lock();
+            let mut m: Vec<(u64, u64)> =
+                a.prefs.reads.iter().filter(|(_, r)| r.mentions > 0).map(|(c, _)| (*c, s.cache.channel(api::Snowflake(*c)).and_then(|ch| ch.last_message_id).map_or(0, |l| l.0))).collect();
+            // Most recent activity first.
+            m.sort_by_key(|x| std::cmp::Reverse(x.1));
+            m.into_iter().take(8).map(|x| x.0).collect()
+        };
         let recent = tokio::task::spawn_blocking(|| msg_cache::recent_on_disk(6)).await.unwrap_or_default();
         for c in recent {
+            if !todo.contains(&c) {
+                todo.push(c);
+            }
+        }
+        crate::perf::mark(&format!("warm_channels {}", todo.len()));
+        for c in todo {
             if s.cache.channel(api::Snowflake(c)).is_some() && !msg_cache::has_fresh(c) {
                 refresh(inner.clone(), s.clone(), Id(c)).await;
             }
         }
     });
+}
+
+/// History before READY. Waits briefly for the keyring; the page is cached
+/// stale (gateway events may be missed until the session starts).
+async fn pre_session(inner: &Arc<Inner>, channel: Id, before: Option<Id>, limit: u32) -> Option<Vec<Message>> {
+    let mut rest = None;
+    for _ in 0..100 {
+        if inner.session.lock().is_some() {
+            break;
+        }
+        rest = inner.pre_rest.lock().clone();
+        if rest.is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let rest = match rest {
+        Some(r) => r,
+        None => inner.session().ok()?.rest.clone(),
+    };
+    let msgs = fetch(&rest, channel, before, limit).await.ok()?;
+    crate::perf::mark("messages_pre_session");
+    emit_users(inner, &msgs);
+    if before.is_none() && limit == PAGE {
+        msg_cache::put_with(channel.0, &msgs, false);
+    }
+    Some(msgs.iter().map(convert::message).collect())
 }
 
 impl DiscordBackend {
@@ -135,8 +177,12 @@ impl DiscordBackend {
                     return Ok(msgs.iter().map(convert::message).collect::<Vec<Message>>());
                 }
             }
-            let s = inner.session()?;
-            let msgs = fetch(&s, channel, before, limit).await?;
+            let s = match inner.session() {
+                Ok(s) => s,
+                // Disk snapshot on screen, gateway not up yet: plain REST with the stored token.
+                Err(e) => return pre_session(&inner, channel, before, limit).await.ok_or(e),
+            };
+            let msgs = fetch(&s.rest, channel, before, limit).await?;
             after_page(&inner, &s, channel, &msgs, before.is_none());
             if before.is_none() && limit == PAGE {
                 msg_cache::put(channel.0, &msgs);

@@ -102,7 +102,12 @@ fn insert(channel: u64, msgs: Vec<api::Message>, fresh: bool) {
 
 /// Store a freshly fetched latest page (oldest first) in memory and on disk.
 pub fn put(channel: u64, msgs: &[api::Message]) {
-    insert(channel, msgs.to_vec(), true);
+    put_with(channel, msgs, true);
+}
+
+/// `fresh = false` for pages fetched before the gateway is up (events may be missed).
+pub fn put_with(channel: u64, msgs: &[api::Message], fresh: bool) {
+    insert(channel, msgs.to_vec(), fresh);
     let Ok(json) = serde_json::to_vec(msgs) else { return };
     let _ = std::thread::Builder::new().name("phoenix-msgcache".into()).spawn(move || write(channel, &json));
 }

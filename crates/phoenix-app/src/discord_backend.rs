@@ -96,6 +96,9 @@ struct Inner {
     mfa_ticket: Mutex<Option<Secret>>,
     mfa_opts: Mutex<crate::auth::MfaOptions>,
     remote_auth: Mutex<Option<tokio::task::AbortHandle>>,
+    /// REST client from the stored token, usable before READY (history while
+    /// the disk snapshot is shown).
+    pre_rest: Mutex<Option<RestClient>>,
     store: Arc<dyn TokenStore>,
     props: ClientProperties,
 }
@@ -140,6 +143,8 @@ impl DiscordBackend {
         let _ = std::thread::Builder::new().name("phoenix-buildinfo".into()).spawn(|| {
             phoenix_api::BuildInfo::refresh_cache();
         });
+        // Parse last session's READY while the window is being built.
+        snapshot::preload();
         Self {
             inner: Arc::new(Inner {
                 rt,
@@ -148,6 +153,7 @@ impl DiscordBackend {
                 mfa_ticket: Mutex::new(None),
                 mfa_opts: Mutex::new(Default::default()),
                 remote_auth: Mutex::new(None),
+                pre_rest: Mutex::new(None),
                 store,
                 props: ClientProperties::current(),
             }),
@@ -406,6 +412,7 @@ impl Backend for DiscordBackend {
             })?;
             let Some(tok) = tok else { return Err(err("")) };
             crate::perf::mark("keyring_loaded");
+            *inner.pre_rest.lock() = Some(RestClient::new(tok.expose(), inner.props.clone()));
             let res = connect(inner.clone(), tok, false).await;
             if let Err(e) = &res
                 && e.0 == "Invalid token."
@@ -540,6 +547,7 @@ impl Backend for DiscordBackend {
     fn logout(&self) -> BoxFuture<()> {
         self.spawn(move |inner| async move {
             inner.mfa_ticket.lock().take();
+            inner.pre_rest.lock().take();
             if let Some(s) = inner.session.lock().take() {
                 s.gateway.shutdown();
             }
@@ -604,7 +612,7 @@ impl Backend for DiscordBackend {
         }
         Some(self.spawn(move |inner| async move {
             let t0 = Instant::now();
-            let loaded = tokio::task::spawn_blocking(snapshot::load).await.ok().flatten();
+            let loaded = tokio::task::spawn_blocking(snapshot::take).await.ok().flatten();
             let (data, events) = loaded.ok_or_else(|| err(""))?;
             crate::perf::span("snapshot_loaded", t0);
             if inner.session.lock().is_none() {

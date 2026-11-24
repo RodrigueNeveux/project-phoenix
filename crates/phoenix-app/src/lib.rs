@@ -8,6 +8,7 @@ pub mod backend;
 pub mod commands;
 pub mod discord_backend;
 pub mod grouping;
+pub mod history_ui;
 pub mod i18n;
 pub mod fonts;
 pub mod icons;

@@ -803,13 +803,7 @@ impl PhoenixApp {
             AppEvent::Ready => {}
             AppEvent::MessageCreate(m) => self.append_message(m, cx),
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
-            AppEvent::HistoryRefresh { channel, messages } => {
-                // Only a still-first page shown from the cache is replaced.
-                if self.messages.get(&channel).is_some_and(|e| e.loaded_once && !e.loading && e.msgs.len() <= 50) {
-                    self.messages.remove(&channel);
-                    self.insert_history(channel, messages, false, cx);
-                }
-            }
+            AppEvent::HistoryRefresh { channel, messages } => crate::history_ui::on_refresh(self, channel, messages, cx),
             AppEvent::MessageDelete { channel, id } => {
                 if let Some(e) = self.messages.get_mut(&channel)
                     && let Some(ix) = e.index_of(id)
