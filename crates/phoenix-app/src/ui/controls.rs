@@ -135,7 +135,8 @@ pub fn marker_slider(
                     .rounded_full()
                     .bg(gpui::white())
                     .border_1()
-                    .border_color(c(tok(idx::BORDER_NORMAL))) // slider_ .grabber_ border --border-normal
+                    // slider_ .grabber_ border --border-normal; `.high-contrast-mode` --border-strong.
+                    .border_color(c(tok(if crate::theme::high_contrast() { idx::BORDER_STRONG } else { idx::BORDER_NORMAL })))
                     .shadow_sm()
                     .cursor_pointer()
                     .hover(|d| d.size(z(20.)).m(z(-2.))),

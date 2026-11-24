@@ -403,8 +403,8 @@ fn gif_query(extra: &[(&str, &str)], locale: &str, fmt: GifFormat) -> String {
     for (k, v) in extra {
         s.append_pair(k, v);
     }
+    // The client sends no `provider` since the switch to Klipy (GIFS_* calls, bundle 3ad442).
     s.append_pair("media_format", fmt.as_str());
-    s.append_pair("provider", "tenor");
     s.append_pair("locale", locale);
     s.finish()
 }
@@ -504,7 +504,6 @@ impl RestClient {
         let mut s = Serializer::new(String::new());
         s.append_pair("q", query);
         s.append_pair("limit", &limit.clamp(1, 20).to_string());
-        s.append_pair("provider", "tenor");
         s.append_pair("locale", locale);
         let path = format!("/gifs/suggest?{}", s.finish());
         self.call(Method::GET, &path, Body::None).await
@@ -611,7 +610,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(g[0].width, 220);
-        assert_eq!(gif_query(&[("q", "cat dog")], "en-US", GifFormat::Mp4), "q=cat+dog&media_format=mp4&provider=tenor&locale=en-US");
+        assert_eq!(gif_query(&[("q", "cat dog")], "en-US", GifFormat::Mp4), "q=cat+dog&media_format=mp4&locale=en-US");
     }
 
     #[test]

@@ -5,7 +5,7 @@
 //!
 //! CSS (current client):
 //! - `callContainer_hbKzX7`: background --black, flex 1 1 auto, overflow hidden;
-//!   midnight theme adds a 1px --app-frame-border top border.
+//!   Onyx and High contrast add a 1px --app-frame-border top border.
 //! - `wrapper_NdapwK.ringingIncoming_NdapwK:after`: 3px --interactive-text-active
 //!   circle around the avatar, `incoming-call-pulse` over
 //!   --custom-call-avatar-incoming-duration (5.407s = 4 pulses: opacity 1 → 0 while
@@ -15,6 +15,7 @@
 
 use std::time::Duration;
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{AnimationExt, AnyElement, Context, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled, div};
 
 use crate::{
@@ -94,6 +95,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             // The client's call area is resizable; this is its default open height.
             .h(z(240.))
             .bg(c(tok(idx::BLACK)))
+            .when(crate::theme::frame_borders(), |d| d.border_t_1().border_color(c(tok(idx::APP_FRAME_BORDER))))
             .overflow_hidden()
             .flex()
             .flex_col()

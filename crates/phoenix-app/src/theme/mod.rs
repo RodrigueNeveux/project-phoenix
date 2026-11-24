@@ -294,6 +294,12 @@ pub fn active() -> AppTheme {
     }
 }
 
+/// The frame borders that `.theme-midnight` and `.high-contrast-mode` both add
+/// (`.page_pog62O` border-inline-start, `.callContainer_hbKzX7` border-top, ...).
+pub fn frame_borders() -> bool {
+    active() == AppTheme::Onyx || high_contrast()
+}
+
 pub fn is_light() -> bool {
     active() == AppTheme::Light
 }

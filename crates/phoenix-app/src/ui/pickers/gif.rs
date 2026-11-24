@@ -112,6 +112,11 @@ fn send(app: &mut PhoenixApp, gif: &GifItem, window: &mut gpui::Window, cx: &mut
 /// Category tile: image + categoryFade_d2GpC2 (--background-scrim, radius 4px; the
 /// Favorites tile uses categoryFadeBlurple: --background-brand at 80%) + centered
 /// categoryText (16px semibold white, optional 20px icon with 4px margin).
+/// `.high-contrast-mode .result_H8nOze`: 1px --border-strong around every tile and result.
+fn hc_outline<E: Styled>(d: E) -> E {
+    d.border_1().border_color(c(tok(idx::BORDER_STRONG)))
+}
+
 fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedString>, w: f32, blurple: bool, icon: Option<&'static str>) -> gpui::Stateful<gpui::Div> {
     let fade = if blurple { c(tok(idx::BACKGROUND_BRAND)).opacity(0.8) } else { c(tok(idx::BACKGROUND_SCRIM)) };
     div()
@@ -123,6 +128,7 @@ fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedStr
         .rounded(px(5.))
         .overflow_hidden()
         .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+        .when(crate::theme::high_contrast(), hc_outline)
         .cursor_pointer()
         .when_some(preview, |d, u| d.child(img(u).absolute().inset_0().size_full().object_fit(ObjectFit::Cover)))
         .child(div().absolute().inset_0().rounded(px(4.)).bg(fade).hover(|s| s.bg(fade.opacity(0.5))))
@@ -203,6 +209,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                     .rounded(px(5.))
                     .overflow_hidden()
                     .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                    .when(crate::theme::high_contrast(), hc_outline)
                     .cursor_pointer()
                     // result_H8nOze[data-focused]: 2px --border-focus ring
                     .hover(|s| s.border_2().border_color(c(tok(idx::BORDER_FOCUS))))

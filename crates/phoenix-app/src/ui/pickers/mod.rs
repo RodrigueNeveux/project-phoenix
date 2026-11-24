@@ -215,7 +215,7 @@ pub fn open(app: &mut PhoenixApp, tab: Tab, target: EmojiTarget, window: &mut Wi
 
 fn placeholder(tab: Tab) -> SharedString {
     match tab {
-        Tab::Gif => crate::t!("picker.search_tenor"),
+        Tab::Gif => crate::t!("picker.search_klipy"),
         Tab::Sticker => crate::t!("picker.search_stickers"),
         Tab::Emoji => crate::t!("picker.search_emoji"),
     }
@@ -524,7 +524,13 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
                     .rounded(px(8.))
                     .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
                     .border_1()
-                    .border_color(tk(idx::BORDER_SUBTLE))
+                    // Without tabs (reaction picker) the shell is the bare wrapper_-sZhZn, which
+                    // `.high-contrast-mode` outlines with 1px --border-normal.
+                    .border_color(tk(if nav.is_none() && crate::theme::high_contrast() {
+                        idx::BORDER_NORMAL
+                    } else {
+                        idx::BORDER_SUBTLE
+                    }))
                     .shadow(vec![gpui::BoxShadow {
                         color: gpui::hsla(0., 0., 0., 0.24),
                         offset: gpui::point(px(0.), px(12.)),
@@ -616,6 +622,11 @@ fn tab_button(label: SharedString, tab: Tab, current: Tab, cx: &mut Context<Phoe
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(tk(if active { idx::TEXT_STRONG } else { idx::TEXT_DEFAULT }))
         .when(active, |d| d.bg(tk(idx::BACKGROUND_MOD_NORMAL)).hover(|s| s.bg(tk(idx::BACKGROUND_MOD_STRONG))))
+        // `.high-contrast-mode .navButton_58b0l2` 1px --border-subtle, `.navButtonActive_58b0l2`
+        // 1px --border-normal (box-sizing border-box).
+        .when(crate::theme::high_contrast(), |d| {
+            d.border_1().border_color(tk(if active { idx::BORDER_NORMAL } else { idx::BORDER_SUBTLE }))
+        })
         .when(!active, |d| {
             d.hover(|s| s.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_HOVER)).text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
         })

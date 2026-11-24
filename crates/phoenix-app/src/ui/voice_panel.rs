@@ -137,6 +137,11 @@ pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool
         .size(z(32.))
         .flex_none()
         .rounded(z(8.))
+        // `.high-contrast-mode button.button_Y-8oZW`: 1px border (border-box), transparent
+        // except on redGlow (--opacity-red-52).
+        .when(crate::theme::high_contrast(), |d| {
+            d.border_1().border_color(if red { t(idx::OPACITY_RED_52) } else { gpui::transparent_black() })
+        })
         .flex()
         .items_center()
         .justify_center()
@@ -280,7 +285,14 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
             )
             .child(
                 div().absolute().top(z(4.)).left(gpui::relative(frac)).ml(z(-8.)).child(
-                    div().size(z(16.)).rounded_full().bg(gpui::white()).border_1().border_color(t(idx::BORDER_NORMAL)).shadow_sm(),
+                    div()
+                        .size(z(16.))
+                        .rounded_full()
+                        .bg(gpui::white())
+                        .border_1()
+                        // `.high-contrast-mode .mini_p3RiOL .grabber_p3RiOL`: --border-strong.
+                        .border_color(t(if crate::theme::high_contrast() { idx::BORDER_STRONG } else { idx::BORDER_NORMAL }))
+                        .shadow_sm(),
                 ),
             ),
         )

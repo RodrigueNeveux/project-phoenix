@@ -21,7 +21,7 @@ pub fn main_pane(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Pho
     let page = page_content(app, window, cx);
     // `.theme-midnight .page_pog62O` (and `.high-contrast-mode`): border-inline-start
     // 1px `--border-subtle` between the channel list and the page (box-sizing border-box).
-    if crate::theme::active() == crate::ui::settings::AppTheme::Onyx || crate::theme::high_contrast() {
+    if crate::theme::frame_borders() {
         use gpui::{ParentElement, Styled};
         return gpui::div()
             .flex_1()

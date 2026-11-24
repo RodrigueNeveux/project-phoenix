@@ -292,7 +292,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     };
 
     let call = div()
-        // callContainer_hbKzX7: --black, border-top 1px --app-frame-border.
+        // callContainer_hbKzX7: --black. `.theme-midnight` / `.high-contrast-mode` add
+        // border-top 1px --app-frame-border (none in Dark, Light and Ash: CDP computed styles).
         .id("call-view")
         .flex_1()
         .min_w_0()
@@ -301,8 +302,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .flex()
         .flex_col()
         .bg(t(idx::BLACK))
-        .border_t_1()
-        .border_color(t(idx::APP_FRAME_BORDER))
+        .when(crate::theme::frame_borders(), |d| d.border_t_1().border_color(t(idx::APP_FRAME_BORDER)))
         .on_mouse_move(cx.listener(|_, _, _, cx| {
             let was_idle = idle();
             if was_idle {
@@ -340,8 +340,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .h_full()
                 .flex()
                 .bg(t(idx::BACKGROUND_BASE_LOWEST))
-                .border_l_1()
-                .border_color(t(idx::APP_FRAME_BORDER))
+                // `.wrapper_hbKzX7.sidebarOpen_hbKzX7 .callContainer_hbKzX7` border-inline-end,
+                // only in Onyx / High contrast.
+                .when(crate::theme::frame_borders(), |d| d.border_l_1().border_color(t(idx::APP_FRAME_BORDER)))
                 .overflow_hidden()
                 .child(div().w(z(CHAT_W)).h_full().flex().flex_col().child(crate::ui::chat::render(app, window, cx))),
         )

@@ -347,6 +347,8 @@ pub(crate) fn rail_shell(list: impl IntoElement, shortcut: impl IntoElement) -> 
         .h_full()
         .rounded_bl(px(8.))
         .bg(tk(idx::BACKGROUND_BASE_LOWER))
+        // `.high-contrast-mode .wrapper_6AvvhR`: border-inline-end 1px --border-subtle.
+        .when(crate::theme::high_contrast(), |d| d.border_r_1().border_color(tk(idx::BORDER_SUBTLE)))
         .flex()
         .flex_col()
         .child(list)
