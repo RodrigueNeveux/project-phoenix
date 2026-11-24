@@ -12,7 +12,7 @@
 //! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx),
 //! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
 //! `PHX_AUDIO` = two digits mute/deaf (e.g. `11`), otherwise read from the live user panel.
-//! `PHX_PROFILE=<user id>` opens that profile (`PHX_PROFILE_KIND` popout|modal, `PHX_PROFILE_BOX=x,y`).
+//! `PHX_PROFILE=<user id>|peer` opens that profile (`PHX_PROFILE_KIND` popout|modal, `PHX_PROFILE_BOX=x,y`).
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
@@ -720,7 +720,10 @@ fn main() -> anyhow::Result<()> {
     if std::env::var_os("PHX_NO_FX").is_some() {
         phoenix_app::ui::profile_fx::DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-    if let Some(uid) = std::env::var("PHX_PROFILE").ok().and_then(|v| parse_id(&v)) {
+    // `PHX_PROFILE=peer`: the other user of the open DM.
+    let peer = cx.update(|cx| phoenix_app::ui::dm_profile_panel::peer(v.read(cx)));
+    let profile = std::env::var("PHX_PROFILE").ok().and_then(|v| if v == "peer" { peer } else { parse_id(&v) });
+    if let Some(uid) = profile {
         let modal = std::env::var("PHX_PROFILE_KIND").is_ok_and(|k| k == "modal");
         let at = std::env::var("PHX_PROFILE_BOX").ok().and_then(|b| {
             let (x, y) = b.split_once(',')?;
