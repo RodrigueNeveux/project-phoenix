@@ -1,0 +1,25 @@
+# Mentions and voice channel member rows: states
+
+Sources: ~/discord-phoenix-ref/current-client/css + live vanilla client (2026-11-24), cached in
+ref-cache/mention-pill-default.json, voice-user-row-default.json, voice-user-row-click.json.
+
+| element / state | CSS source | property | CSS value | our code | status |
+|---|---|---|---|---|---|
+| mention pill default | `.mention` / `wrapper_NDaLCQ` | bg / color / radius / padding / weight | --mention-background / --mention-foreground / 3px / 0 2px / 500 | richtext.rs run_for | ✅ live computed match (radius+padding not expressible on text runs) |
+| mention pill hover | `.interactive:hover` | bg / color | --brand-500 / --white (50ms) | ui/chat/mention.rs hovered_runs | ✅ CSS (no transition) |
+| role mention | `roleMention_ku1OHH` + inline style | color / bg | role color / role color 10% | richtext.rs color_role_mentions | ❌ not verified live (no role mention on screen) |
+| channel mention icon | `icon__RYHZ5` | size / margin-inline-end | 1em / --space-4 | ui/chat/message_ext.rs CHANNEL_ICON_TOKEN | ✅ CSS; always hash icon (no voice/thread variant) |
+| user mention click | live click | opens | profile popout | mention.rs click | ✅ |
+| channel mention click | live behaviour | opens | channel | mention.rs click (text chat, never voice) | ✅ |
+| mentioned message | `mentioned_SY_P2T` | bg / hover / bar | --message-mentioned-background-default / -hover / 2px --icon-feedback-warning | ui/chat.rs | ✅ |
+| role-mention highlight | same | trigger | my role mentioned | richtext.rs build has_role | ✅ (needs my member entry loaded) |
+| voice row hover | `listDefault_ .clickable_:hover .content_` | bg | --interactive-background-hover | voice_panel.rs voice_user_row | ✅ |
+| voice row active | `:active .content_` | bg | --interactive-background-active | voice_panel.rs | ✅ |
+| voice row selected (popout open) | `.selected_ .content_` / `.username_` | bg / color | --interactive-background-selected / --interactive-text-active | voice_panel.rs | ✅ live class seen |
+| voice row username | `usernameFont_ body-sm/medium`, hover | font / hover color | 14px 500 18px / --interactive-text-hover | voice_panel.rs | ✅ |
+| voice row options button | `optionsButton_YUoOxm` | size / radius / hover | 24px / 4px / --interactive-background-active, hidden unless row hovered | voice_row.rs options_button | ✅ CSS; icon (more-horizontal) not verified live |
+| voice row click | live | popout position | left = row right + 8, top = row top | voice_row.rs popout_anchor | ✅ measured (415,291 vs row 118..407,290) |
+| voice row right-click | live | menu | voice menu in call, user menu otherwise | voice_panel.rs | ✅ |
+| popout "In a voice channel" card | `clickableContainer_Bu4Al8` | card metrics | activity-card padding 8 / --radius-sm / header body-xs/medium / heading-xs/semibold | voice_row.rs voice_activity_card | ❌ structure from class list only, boxes not measured |
+
+Compare score: not available, the 2026-11-24 01:15 run was discarded (an overlay was open in Discord).
