@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
     let out = args.next().unwrap_or_else(|| "anim".into());
     let ids: Vec<String> = args.filter(|a| a.chars().all(|c| c.is_ascii_digit())).collect();
     let text = gpui_platform::current_platform(true).text_system();
-    let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || gpui_platform::current_headless_renderer());
+    let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), gpui_platform::current_headless_renderer);
     let rt = tokio::runtime::Runtime::new()?;
     let http = phoenix_app::discord_backend::http::CdnHttpClient::new(rt.handle().clone(), "Mozilla/5.0");
     cx.update(|cx| cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(Arc::new(http)))));
