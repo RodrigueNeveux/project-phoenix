@@ -30,7 +30,9 @@ pub fn get() -> Option<Vec<AuthorizedApp>> {
     APPS.read().clone()
 }
 
-pub fn set(v: Vec<AuthorizedApp>) {
+pub fn set(mut v: Vec<AuthorizedApp>) {
+    // Newest authorization first, like the client.
+    v.sort_by(|a, b| b.token_id.cmp(&a.token_id));
     *APPS.write() = Some(v);
 }
 
