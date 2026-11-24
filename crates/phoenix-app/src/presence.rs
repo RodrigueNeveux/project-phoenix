@@ -250,7 +250,7 @@ pub fn snowflake_time(id: u64) -> i64 {
     (((id >> 22) + 1_420_070_400_000) / 1000) as i64
 }
 
-fn iso_to_unix(s: &str) -> Option<i64> {
+pub(crate) fn iso_to_unix(s: &str) -> Option<i64> {
     chrono::DateTime::parse_from_rfc3339(s).ok().map(|d| d.timestamp())
 }
 

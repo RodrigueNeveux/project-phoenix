@@ -493,6 +493,7 @@ impl Backend for MockBackend {
                         _ => crate::ui::home::data::RelationshipKind::Friend,
                     },
                     nickname: None,
+                    since: Some(1_700_000_000),
                 })
                 .collect();
             self.emit_later(Duration::from_millis(30), move || {

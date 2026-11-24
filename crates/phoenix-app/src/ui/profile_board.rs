@@ -27,6 +27,7 @@ pub struct Board {
     pub widgets: Vec<AppWidget>,
     pub games: Vec<GameWidget>,
     pub recent: Vec<RecentGame>,
+    pub wishlist: Vec<crate::ui::profile_wishlist::WishItem>,
 }
 
 impl Board {
@@ -46,14 +47,15 @@ pub fn get(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> Board {
         return b.clone();
     }
     s.0.insert(user, Board::default());
-    let (w, g, r) = (app.backend.profile_widgets(user), app.backend.game_widgets(user), app.backend.recent_activity(user));
+    let (w, g, r, l) = (app.backend.profile_widgets(user), app.backend.game_widgets(user), app.backend.recent_activity(user), app.backend.wishlist(user));
     cx.spawn(async move |this, cx| {
-        let (w, g, r) = futures::join!(w, g, r);
+        let (w, g, r, l) = futures::join!(w, g, r, l);
         let _ = this.update(cx, |_, cx| {
             let b = cx.default_global::<Store>().0.entry(user).or_default();
             b.widgets = w.unwrap_or_default();
             b.games = g.unwrap_or_default();
             b.recent = r.unwrap_or_default();
+            b.wishlist = l.unwrap_or_default();
             cx.notify();
         });
     })
@@ -88,10 +90,36 @@ fn cover(g: &crate::ui::profile_games::Game, col: &Colors) -> Div {
         .children(g.cover.clone().map(|u| img(u).size_full()))
 }
 
+thread_local! {
+    /// Open widget "More" menu position.
+    static MENU: std::cell::Cell<Option<gpui::Point<gpui::Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+/// The widget "More" menu: one red "Report Widget" row (live menu, 168px, ref-cache
+/// profile-widget-menu.json). Reporting is not wired (it would send a report): the
+/// row only closes the menu.
+pub fn menu() -> Option<gpui::AnyElement> {
+    let pos = MENU.with(|m| m.get())?;
+    let close: crate::ui::context_menu::Dismiss = std::rc::Rc::new(|w: &mut gpui::Window, _: &mut gpui::App| {
+        MENU.with(|m| m.set(None));
+        w.refresh();
+    });
+    let c2 = close.clone();
+    let items = vec![crate::ui::context_menu::MenuItem::danger(crate::t!("board.report_widget"), Some("flag".into()), move |_, w, cx| c2(w, cx))];
+    Some(crate::ui::context_menu::render(pos, items, close))
+}
+
 /// `actions_ltNcM4` (gap 8) `button_rOupvJ`: 24px "More" button at the end of a
 /// widget header (MoreHorizontalIcon).
-pub fn more_button(color: Hsla) -> Div {
+pub fn more_button(color: Hsla) -> gpui::Stateful<Div> {
+    static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let id = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     div()
+        .id(("widget-more", id))
+        .on_click(|ev: &gpui::ClickEvent, window, _| {
+            MENU.with(|m| m.set(Some(ev.position())));
+            window.refresh();
+        })
         .size(z(24.))
         .flex_none()
         .flex()

@@ -170,6 +170,9 @@ pub struct Relationship {
     pub user_id: Option<UserId>,
     #[serde(default)]
     pub nickname: Option<String>,
+    /// ISO timestamp the relationship started (friends: "Friends Since").
+    #[serde(default)]
+    pub since: Option<String>,
 }
 
 #[cfg(test)]

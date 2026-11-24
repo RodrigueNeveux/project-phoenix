@@ -3,6 +3,7 @@ pub mod avatar_deco;
 pub mod profile_theme;
 pub mod profile_games;
 pub mod profile_board;
+pub mod profile_wishlist;
 pub mod call_view;
 pub mod chat;
 pub mod components;

@@ -46,3 +46,17 @@ pub(crate) fn shape_of(v: &Value) -> String {
         x => format!("{x}"),
     }
 }
+
+impl DiscordBackend {
+    pub(super) fn wishlist_impl(&self, user: Id) -> BoxFuture<Vec<crate::ui::profile_wishlist::WishItem>> {
+        self.with_session(move |_, s| async move {
+            let prof = s.rest.request_json(Method::GET, &format!("/users/{}/profile", user.0), None).await.map_err(api_err)?;
+            let Some(id) = crate::ui::profile_wishlist::first_id(&prof) else { return Ok(Vec::new()) };
+            let v = s.rest.request_json(Method::GET, &format!("/wishlists/{id}?source=user_profile"), None).await.map_err(api_err)?;
+            if std::env::var_os("PHX_DEBUG_WISHLIST").is_some() {
+                eprintln!("wishlist shape {}", shape_of(&v));
+            }
+            Ok(crate::ui::profile_wishlist::items(&v))
+        })
+    }
+}

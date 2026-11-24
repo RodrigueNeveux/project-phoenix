@@ -246,6 +246,8 @@ pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
                     ))
             }))
     });
+    // root_jlRl3z with a contained image: 216 tall (content_rafRmG 180 = 152 + 2 * 14).
+    let content = if w.contained { content.min_h(z(180.)) } else { content };
     let top = div().relative().pt(z(12.)).px(z(16.)).children(hero).children(contained).child(header).child(content);
     let item = |i: &WidgetItem| {
         div()

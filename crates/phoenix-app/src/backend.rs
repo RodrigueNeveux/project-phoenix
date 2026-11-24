@@ -283,6 +283,10 @@ pub trait Backend: Send + Sync + 'static {
     fn profile_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Profile wishlist (`wishlist_settings` + `GET /wishlists/{id}`).
+    fn wishlist(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_wishlist::WishItem>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     /// Profile Board game widgets (`widgets[]` + `GET /games/{id}`).
     fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
         Box::pin(async { Ok(Vec::new()) })

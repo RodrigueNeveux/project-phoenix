@@ -147,6 +147,9 @@ impl Backend for ReadOnly {
     fn profile_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_widgets::AppWidget>> {
         self.0.profile_widgets(u)
     }
+    fn wishlist(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::profile_wishlist::WishItem>> {
+        self.0.wishlist(u)
+    }
     fn game_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::profile_games::GameWidget>> {
         self.0.game_widgets(u)
     }

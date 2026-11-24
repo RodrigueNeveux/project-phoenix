@@ -36,6 +36,7 @@ fn relationship(r: &api::Relationship) -> Option<Relationship> {
         user: id(r.user.as_ref().map(|u| u.id).or(r.user_id).unwrap_or(r.id)),
         kind: rel_kind(r.kind)?,
         nickname: r.nickname.clone().filter(|n| !n.is_empty()).map(Into::into),
+        since: r.since.as_deref().and_then(crate::presence::iso_to_unix),
     })
 }
 

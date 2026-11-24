@@ -93,6 +93,8 @@ impl PhoenixApp {
 /// Everything floating owned by this module, appended to the root.
 pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out: Vec<AnyElement> = crate::ui::user_menu::render(app, cx).into_iter().collect();
+    // Drawn after the profile overlays below (menu over the modal).
+    let widget_menu = crate::ui::profile_board::menu();
     out.extend(crate::ui::nav_menus::render(app, cx));
     out.extend(crate::ui::thread_menu::render(app, cx));
     if !app.people.any_overlay() {
@@ -157,6 +159,7 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
     if app.people.status_picker {
         out.push(status_picker::render(app, window, cx));
     }
+    out.extend(widget_menu);
     out
 }
 
@@ -790,11 +793,18 @@ fn popout_card_inner(
         body = body.child(crate::ui::settings::profile_widgets::render_compact(w, &col));
     }
     // container_M2WrKU (padding-bottom 8px): activity cards
-    body = body.children(crate::ui::voice_row::voice_activity_card(app, uid, cx.entity()));
-    for a in i.acts {
+    // Client rule (activity cards hook): nothing for an offline / invisible user;
+    // live activities first, then the voice card, which needs a voice state the
+    // viewer can discover in the popout's guild (any guild outside one).
+    let offline = matches!(i.presence, crate::model::Presence::Offline);
+    let voice_here = guild.is_none_or(|g| app.channels.values().any(|c| c.guild == Some(g) && c.voice_users.contains(&uid)));
+    for a in i.acts.iter().filter(|_| !offline) {
         if let Some(b) = activity_block(a, false) {
             body = body.child(div().pb(z(8.)).child(b));
         }
+    }
+    if !offline && voice_here {
+        body = body.children(crate::ui::voice_row::voice_activity_card(app, uid, cx.entity()));
     }
     if guild.is_some() && !i.roles.is_empty() {
         body = body.child(roles_block(i.roles.clone()));
@@ -1036,6 +1046,17 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
                         .child(div().flex().items_center().gap(z(4.)).children(gicon).child(format_date(j)))
                 });
             pbody = pbody.child(div().flex().flex_col().gap(z(8.)).child(section_heading(crate::t!("profile.member_since"))).child(since));
+            // "Friends Since" (wlTO8v): same section, the relationship's `since` date.
+            if let Some(t) = app.nav.relationship(uid).filter(|r| r.kind == crate::ui::home::data::RelationshipKind::Friend).and_then(|r| r.since) {
+                pbody = pbody.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(z(8.))
+                        .child(section_heading(crate::t!("profile.friends_since")))
+                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(format_date(t))),
+                );
+            }
         }
     }
     if guild.is_some() && !i.roles.is_empty() {
@@ -1138,7 +1159,33 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
                 .children(board.games.iter().filter_map(|w| crate::ui::profile_board::card(w, &gcol)));
         }
         TAB_WISHLIST => {
-            panel = panel.child(empty(crate::t!("profile.empty_wishlist")));
+            // headerRow_AI9GeR (32 high): "{n} Items" body-xs/semibold --text-subtle and a
+            // secondary sm "Browse the Shop" button; grid_wsmVvi (padding 12 0, gap 16) of
+            // 133px tiles (card_D1PiH5 radius 12, --user-profile-overlay-background).
+            // Live: ref-cache profile-modal-wishlist.json.
+            let items = &board.wishlist;
+            if items.is_empty() {
+                panel = panel.child(empty(crate::t!("profile.empty_wishlist")));
+            } else {
+                panel = panel
+                    .child(
+                        div()
+                            .h(z(32.))
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_SUBTLE))).child(crate::t!("profile.wishlist_items", n = items.len())))
+                            .child(mana_button("profile-wishlist-shop", crate::t!("profile.browse_shop"), false, false)),
+                    )
+                    .child(div().py(z(12.)).flex().flex_wrap().gap(z(16.)).children(items.iter().map(|it| {
+                        div()
+                            .size(z(133.))
+                            .rounded(z(12.))
+                            .overflow_hidden()
+                            .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)))
+                            .children(it.image.clone().map(|u| img(u).size_full().object_fit(gpui::ObjectFit::Contain)))
+                    })));
+            }
         }
         1 => {
             panel = panel.gap(z(12.));

@@ -22,6 +22,8 @@ pub struct Relationship {
     pub user: Id,
     pub kind: RelationshipKind,
     pub nickname: Option<SharedString>,
+    /// Unix seconds the relationship started (`since`).
+    pub since: Option<i64>,
 }
 
 /// One entry of `guild_folders`. `id == None` means a lone guild that is not

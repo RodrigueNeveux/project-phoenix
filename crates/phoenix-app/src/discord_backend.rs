@@ -785,6 +785,9 @@ impl Backend for DiscordBackend {
     fn set_note(&self, user: Id, note: String) -> BoxFuture<()> {
         self.people_note(user, note)
     }
+    fn wishlist(&self, user: Id) -> BoxFuture<Vec<crate::ui::profile_wishlist::WishItem>> {
+        self.wishlist_impl(user)
+    }
     fn game_widgets(&self, user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
         self.game_widgets_impl(user)
     }
