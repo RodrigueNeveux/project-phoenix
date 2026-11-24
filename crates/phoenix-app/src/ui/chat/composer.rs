@@ -363,6 +363,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                                 .appearance(false)
                                                 .bordered(false)
                                                 .xsmall()
+                                                .text_size(z(16.)) // textArea_ 16px (xsmall would impose its own size)
                                                 .line_height(z(22.)) // textArea_ line-height 22px
                                                 .disabled(blocked),
                                         ),
