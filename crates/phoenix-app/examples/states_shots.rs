@@ -2,6 +2,7 @@
 //! `cargo run -p phoenix-app --example states_shots -- out_dir x,y[,down] ...`
 //! writes one PNG per point with the mouse moved there (left-pressed with `,down`,
 //! right-clicked with `,right`; a later point can then hover the open menu).
+//! Env: `PHX_SETTINGS=1` opens settings; `PHX_OPEN=pins|inbox|threads|search[:query]` a popout.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -62,6 +63,25 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 30);
         // `PHX_SETTINGS=1`: start on the settings modal (nav rows).
+        // `PHX_OPEN=pins|inbox|threads|search[:query]`: start with that popout open.
+        if let Ok(what) = std::env::var("PHX_OPEN") {
+            cx.update_window(win.into(), |_, window, cx| {
+                v.update(cx, |app, cx| match what.split_once(':').map_or(what.as_str(), |w| w.0) {
+                    "pins" => app.toggle_pins(cx),
+                    "inbox" => app.toggle_inbox(cx),
+                    "threads" => app.toggle_threads_popout(cx),
+                    "search" => {
+                        phoenix_app::ui::search::open(app, window, cx);
+                        let q = what.split_once(':').map_or("rust", |w| w.1);
+                        if let Ok(req) = phoenix_app::ui::search::build_request(app, q) {
+                            phoenix_app::ui::search::run(app, req, cx);
+                        }
+                    }
+                    _ => {}
+                })
+            })?;
+            pump(&mut cx, 20);
+        }
         if std::env::var_os("PHX_SETTINGS").is_some() {
             cx.update_window(win.into(), |_, _, cx| v.update(cx, phoenix_app::ui::settings::open))?;
             pump(&mut cx, 10);

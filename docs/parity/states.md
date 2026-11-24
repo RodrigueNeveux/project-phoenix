@@ -126,8 +126,10 @@ Source: CSS `_M3qk4j` rules + dumps vanilla-menu-{channel,guild,dm,member,messag
 | confirm modal (leave server, delete…) `container_dvN-MP` | layout / close hover | 400px, header 16 24 8, close 40px `--control-icon-only-background-hover`, equal-width footer buttons (ref-cache modal-confirm-leave.json) | modal.rs `confirm` | ✅ |
 | search result `searchResult_N3Anbl` | rest / hover | `--background-base-lower`, 1px `--border-subtle`, radius 8, no hover tint; hover shows the Jump button top-right | search.rs | ✅ (was the old palette + hover tint) |
 | search Jump `button_N3Anbl` | hover / active | 24px, `--background-base-lowest`, `--text-default` → `--interactive-text-hover`, active 1px down | search.rs | ✅ (added) |
-| pins / inbox popouts | all | owned by the mentions/inbox agent (inbox.rs) | | ➖ not touched |
-| thread list rows | hover | the only dump (vanilla-threads) shows the empty state | | ➖ no reference yet |
+| pinned message card `messageGroupWrapper_6bgemo` | rest / hover | `--background-surface-higher`, 1px `--border-subtle`, radius 8; hover shows Jump + unpin (top/right 8) | inbox.rs `pins_popout` | ✅ |
+| popout sm buttons (Jump, Mark As Read, icon buttons) | hover / active | `secondary_`/`primary_F7qvhY` hover + active background, border, text | inbox.rs `sm_text_button` / `sm_icon_button` | ✅ (active + border/text added) |
+| inbox tabs `item_6zZYhF brand_` (top) | rest / hover / active / selected | `--text-subtle`; hover + active `--text-strong`; selected `--text-brand` + 2px bar; no hover bar (`border-bottom: none !important`) | inbox.rs `tab_bar` | ✅ |
+| thread card `container_yRVHqK` | rest / hover | 72px, padding 15, radius 8, `--background-surface-higher`, 1px `--border-subtle`; hover `--background-surface-highest` + `--border-normal` (live dump ref-cache threads-popout-live.json, 3 cards) | inbox.rs thread rows | ✅ |
 
 ## Transitions
 
@@ -138,11 +140,12 @@ Per CSS: channel rows, member rows, header icons and toolbar buttons have NO tra
 (instant is correct). Faded: user panel buttons .2s, composer buttons .2s, rail tiles .15s,
 pill .2s, reactions .1s (with the pressed colour over the fading layer).
 
-Offscreen check: `cargo run -p phoenix-app --example states_shots -- <dir> x,y[,down] ...`
+Offscreen check: `phoenix-build <out> build -p phoenix-app --example states_shots`, then `<out>/states_shots <dir> x,y[,down|,right] ...`
+(`PHX_SETTINGS=1` for settings, `PHX_OPEN=pins|inbox|threads|search[:q]` for popouts)
 renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-75 rows: 72 ✅, 3 ➖, 0 ❌.
+77 rows: 76 ✅, 1 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.
