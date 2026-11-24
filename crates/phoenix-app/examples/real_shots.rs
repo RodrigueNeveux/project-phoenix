@@ -16,7 +16,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite.
+//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n].
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
@@ -842,6 +842,22 @@ fn main() -> anyhow::Result<()> {
                 "invite" => {
                     if let Some(guild) = app.selected_guild {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink { guild, link: None }, cx);
+                    }
+                }
+                // Forum post n (0 = first, active then older) in the thread sidebar.
+                "post" => {
+                    let n: usize = arg.parse().unwrap_or(0);
+                    let post = app
+                        .selected_channel
+                        .and_then(|f| app.parity.forums.get(&f))
+                        .and_then(|v| v.posts.iter().chain(v.archived.iter()).nth(n))
+                        .map(|p| phoenix_app::model::ThreadRef {
+                            id: p.thread,
+                            name: p.title.clone().into(),
+                            message_count: p.message_count,
+                        });
+                    if let Some(r) = post {
+                        app.open_thread(r, window, cx);
                     }
                 }
                 "msgmenu" => {
