@@ -1546,7 +1546,11 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bo
             .text_size(fz(14.))
             .line_height(fz(18.))
             .text_color(tk(idx::TEXT_CODE))
+            // codeContainer_: relative, shows codeActions_ (copy button) on hover
+            .relative()
+            .group(crate::ui::code_copy::GROUP)
             .child(StyledText::new(code.clone()).with_runs(runs.clone()))
+            .child(crate::ui::code_copy::CodeCopy::new(code.clone()))
             .into_any_element(),
     }
 }

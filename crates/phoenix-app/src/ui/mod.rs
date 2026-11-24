@@ -7,6 +7,7 @@ pub mod profile_wishlist;
 pub mod call_view;
 pub mod incoming_call;
 pub mod chat;
+pub mod code_copy;
 pub mod components;
 pub mod forum;
 pub mod group_dm;
