@@ -200,6 +200,7 @@ impl PhoenixApp {
                 fields: Vec::new(),
                 choices: Vec::new(),
                 choice: None,
+                check: None,
                 submit: crate::t!(if cat { "menu.delete_category" } else { "menu.delete_channel" }),
                 danger: true,
                 on_submit: Rc::new(move |a, _, _, cx| a.delete_channel(channel, cx)),

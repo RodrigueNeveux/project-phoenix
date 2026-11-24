@@ -66,6 +66,7 @@ impl PhoenixApp {
                 fields: vec![Field::new(crate::t!("clone.name"), gpui::SharedString::default(), name.clone())],
                 choices: Vec::new(),
                 choice: None,
+                check: None,
                 submit: crate::t!("clone.create"),
                 danger: false,
                 on_submit: Rc::new(move |a, v, _, cx| {
@@ -112,6 +113,7 @@ impl PhoenixApp {
                 ],
                 choices: EVENT_STARTS.iter().map(|(k, _)| crate::t!(k)).collect(),
                 choice: Some(0),
+                check: None,
                 submit: crate::t!("event.create"),
                 danger: false,
                 on_submit: Rc::new(move |a, v, choice, cx| {

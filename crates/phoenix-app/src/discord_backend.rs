@@ -680,7 +680,7 @@ impl Backend for DiscordBackend {
                         filename: f.filename,
                         bytes: f.bytes,
                         content_type: None,
-                        description: None,
+                        description: f.description,
                         spoiler: f.spoiler,
                     })
                     .collect();

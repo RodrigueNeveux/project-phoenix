@@ -48,6 +48,9 @@ pub struct Form {
     pub fields: Vec<Field>,
     pub choices: Vec<SharedString>,
     pub choice: Option<usize>,
+    /// Optional checkbox under the fields: its state is passed to `on_submit`
+    /// as one more value after the fields' ("1" / "0").
+    pub check: Option<(SharedString, bool)>,
     pub submit: SharedString,
     pub danger: bool,
     pub on_submit: Submit,
@@ -207,7 +210,11 @@ pub fn label(t: SharedString) -> gpui::Div {
 }
 
 pub fn values(f: &Form, cx: &gpui::App) -> Vec<String> {
-    f.fields.iter().map(|fl| fl.input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default()).collect()
+    let mut v: Vec<String> = f.fields.iter().map(|fl| fl.input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default()).collect();
+    if let Some((_, on)) = &f.check {
+        v.push(if *on { "1" } else { "0" }.to_string());
+    }
+    v
 }
 
 fn form(f: &Form, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -225,6 +232,18 @@ fn form(f: &Form, cx: &mut Context<PhoenixApp>) -> AnyElement {
             with_modal(|m| {
                 if let Some(Modal::Form(f)) = m {
                     f.choice = Some(n);
+                }
+            });
+            cx.notify();
+        })));
+    }
+    if let Some((text, on)) = f.check.clone() {
+        body = body.child(crate::ui::controls::checkbox_option("aform-check", text, on).on_click(cx.listener(move |_, _, _, cx| {
+            with_modal(|m| {
+                if let Some(Modal::Form(f)) = m
+                    && let Some((_, v)) = &mut f.check
+                {
+                    *v = !*v;
                 }
             });
             cx.notify();

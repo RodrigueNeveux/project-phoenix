@@ -57,6 +57,8 @@ pub struct PendingFile {
     pub spoiler: bool,
     /// Blurred preview shown while `spoiler` is on (`spoiler::blurred_image`).
     pub blurred: Option<Arc<Image>>,
+    /// Alt text set in the attachment modal (sent as `attachments[].description`).
+    pub description: String,
 }
 
 pub struct Sending {
@@ -180,7 +182,7 @@ fn is_image_name(name: &str) -> Option<gpui::ImageFormat> {
 
 pub fn pending_file(name: String, bytes: Vec<u8>) -> PendingFile {
     let image = is_image_name(&name).map(|f| Arc::new(Image::from_bytes(f, bytes.clone())));
-    PendingFile { name: name.into(), bytes: Arc::new(bytes), image, spoiler: false, blurred: None }
+    PendingFile { name: name.into(), bytes: Arc::new(bytes), image, spoiler: false, blurred: None, description: String::new() }
 }
 
 impl PhoenixApp {
@@ -735,6 +737,7 @@ impl PhoenixApp {
                 filename: if f.spoiler { format!("SPOILER_{}", f.name) } else { f.name.to_string() },
                 bytes: Arc::unwrap_or_clone(f.bytes),
                 spoiler: f.spoiler,
+                description: Some(f.description).filter(|d| !d.trim().is_empty()),
             })
             .collect();
         let key = self.chat.next_key;

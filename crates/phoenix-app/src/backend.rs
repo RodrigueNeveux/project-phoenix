@@ -101,6 +101,8 @@ pub struct Upload {
     pub filename: String,
     pub bytes: Vec<u8>,
     pub spoiler: bool,
+    /// Alt text (`attachments[].description`).
+    pub description: Option<String>,
 }
 
 impl std::fmt::Debug for Upload {

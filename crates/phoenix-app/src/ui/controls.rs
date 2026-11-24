@@ -209,6 +209,53 @@ pub fn radio_indicator(selected: bool) -> Div {
         .when(selected, |d| d.child(div().size(z(8.)).rounded_full().bg(c(tok(idx::RADIO_THUMB_BACKGROUND_ACTIVE)))))
 }
 
+/// checkboxOption_vTUVyc: 20px indicator (1px border, --radius-xs 4px), label at
+/// 20 + --space-12, body-md 16/20. Selected: --checkbox-background/border-selected-default
+/// with the --checkbox-icon-active check; hover recolours the indicator.
+pub fn checkbox_option(id: impl Into<ElementId>, label: impl Into<SharedString>, selected: bool) -> gpui::Stateful<Div> {
+    let (bg, border, hbg, hborder) = if selected {
+        (
+            idx::CHECKBOX_BACKGROUND_SELECTED_DEFAULT,
+            idx::CHECKBOX_BORDER_SELECTED_DEFAULT,
+            idx::CHECKBOX_BACKGROUND_SELECTED_HOVER,
+            idx::CHECKBOX_BORDER_SELECTED_HOVER,
+        )
+    } else {
+        (idx::CHECKBOX_BACKGROUND_DEFAULT, idx::CHECKBOX_BORDER_DEFAULT, idx::CHECKBOX_BACKGROUND_HOVER, idx::CHECKBOX_BORDER_HOVER)
+    };
+    div()
+        .id(id.into())
+        .group("checkbox-option")
+        .flex()
+        .items_start()
+        .gap(z(12.)) // --custom-checkbox-gap: --space-12
+        .rounded(z(8.)) // --radius-sm
+        .cursor_pointer()
+        .child(
+            div()
+                .size(z(20.)) // --custom-checkbox-size
+                .flex_none()
+                .rounded(z(4.)) // --radius-xs
+                .border_1()
+                .border_color(c(tok(border)))
+                .bg(c(tok(bg)))
+                .group_hover("checkbox-option", |s| s.bg(c(tok(hbg))).border_color(c(tok(hborder))))
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(selected, |d| {
+                    d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(c(tok(idx::CHECKBOX_ICON_ACTIVE))))
+                }),
+        )
+        .child(
+            div()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .child(label.into()),
+        )
+}
+
 /// radioGroupOption_oJuRbG: 20px indicator, label at 20 + --space-12,
 /// body-md 16/20, radius 8. Selected/hover recolour the indicator only.
 pub fn radio_option(id: impl Into<ElementId>, label: impl Into<SharedString>, selected: bool) -> gpui::Stateful<Div> {

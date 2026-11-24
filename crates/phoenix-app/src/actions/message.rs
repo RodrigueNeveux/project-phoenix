@@ -73,6 +73,7 @@ impl PhoenixApp {
                 fields: vec![Field::new(crate::t!("thread.name"), crate::t!("thread.name_placeholder"), initial)],
                 choices: Vec::new(),
                 choice: None,
+                check: None,
                 submit: crate::t!("thread.create"),
                 danger: false,
                 on_submit: Rc::new(move |a, v, _, cx| {
@@ -106,6 +107,7 @@ impl PhoenixApp {
                 fields: Vec::new(),
                 choices: CUSTOM_REMINDERS.iter().map(|(k, _)| crate::t!(k)).collect(),
                 choice: Some(0),
+                check: None,
                 submit: crate::t!("msg.remind_save"),
                 danger: false,
                 on_submit: Rc::new(move |a, _, choice, cx| {

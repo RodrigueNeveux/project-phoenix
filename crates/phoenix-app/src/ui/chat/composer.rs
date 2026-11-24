@@ -434,24 +434,39 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
         .child(div().absolute().bottom(z(1.)).left(z(16.)).right(z(16.)).child(typing(app)))
 }
 
-/// Edit button of an upload: rename the file before sending (the client's
-/// attachment modal also has a description field and a spoiler toggle).
+/// Edit button of an upload: the client's "Modify Attachment" modal (JS
+/// `onSubmit({name, description, spoiler})`): Filename, Description (Alt
+/// Text) with "Add a description", the "Mark as spoiler" checkbox, Save.
 fn open_upload_edit(app: &mut PhoenixApp, ix: usize, cx: &mut Context<PhoenixApp>) {
     use crate::ui::modals::{Field, Form, Modal};
     let Some(f) = app.chat.uploads.get(ix) else { return };
     crate::actions::open_modal(
         Modal::Form(Form {
-            title: f.name.clone(),
+            title: crate::t!("upload.modify"),
             subtitle: None,
-            fields: vec![Field::new(crate::t!("upload.filename"), "".into(), f.name.to_string())],
+            fields: vec![
+                Field::new(crate::t!("upload.filename"), "".into(), f.name.to_string()),
+                Field::new(crate::t!("upload.description"), crate::t!("upload.description_ph"), f.description.clone()),
+            ],
             choices: Vec::new(),
             choice: None,
-            submit: crate::t!("common.save"),
+            check: Some((crate::t!("upload.mark_spoiler"), f.spoiler)),
+            submit: crate::t!("upload.save"),
             danger: false,
             on_submit: std::rc::Rc::new(move |a: &mut PhoenixApp, v: Vec<String>, _, cx: &mut Context<PhoenixApp>| {
-                let name = v.into_iter().next().unwrap_or_default();
-                if let (Some(u), false) = (a.chat.uploads.get_mut(ix), name.trim().is_empty()) {
-                    u.name = name.trim().to_string().into();
+                let mut v = v.into_iter();
+                let (name, description, spoiler) = (v.next().unwrap_or_default(), v.next().unwrap_or_default(), v.next().is_some_and(|s| s == "1"));
+                let toggle = if let Some(u) = a.chat.uploads.get_mut(ix) {
+                    if !name.trim().is_empty() {
+                        u.name = name.trim().to_string().into();
+                    }
+                    u.description = description.trim().to_string();
+                    u.spoiler != spoiler
+                } else {
+                    false
+                };
+                if toggle {
+                    a.toggle_upload_spoiler(ix, cx);
                 }
                 cx.notify();
             }),
