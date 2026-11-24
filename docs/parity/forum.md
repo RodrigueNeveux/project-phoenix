@@ -68,3 +68,56 @@ COMMUNITY + GUILD_SERVER_GUIDE + GUILD_ONBOARDING. Render: `PHX_OPEN=guide` in r
 > On 2026-11-24 the client sent `PUT /guilds/{g}/onboarding-responses` by itself while the page
 > was open (Customize → Browse tab, search typed, then left), seen in the CDP Network log. The
 > earlier dumps of this page were probably taken the same way. Phoenix never sends it.
+
+
+## Thread actions (wt/threads, 2026-11-24)
+
+Sources: live `thread-context` menus in the sandbox channel `〢💬・phoenix` (CDP, 1280×800, zoom 125 %),
+the requests the client sent there (Network log), and the thread actions module of the cached web bundle
+(`web.b63d846b329d6470.js`, object with `archiveThread`, `lockThread`, `joinThread`, `addMember`,
+`setNotificationSettings`…). Locations from `9b3cd218fe829ac6.js` (`Toolbar Overflow`, `Sidebar Overflow`)
+and `d4030cd60f4ad310.js` (`Context Menu`).
+
+| action | client request (captured or bundle) | Phoenix | status |
+|---|---|---|---|
+| close thread | `PATCH /channels/{t}` `{"archived":true}` (captured) | actions/thread.rs `archive_edit` | ✅ unit test + live API 200 |
+| open (unarchive) | `{"archived":false}` (captured) | `unarchive_edit` | ✅ |
+| lock / unlock | `{"locked":L,"archived":A}`, an archived thread is unarchived first (captured unlock `{"locked":false,"archived":false}`, bundle `lockThread`/`unlockThread`) | `lock_steps` | ✅ unit test + live API on an archived private thread |
+| join | `POST /channels/{t}/thread-members/@me?location=…` (captured, `Toolbar Overflow`) | AdminCall::JoinThread | ✅ |
+| leave | `DELETE …/thread-members/@me?location=…` (captured) | AdminCall::LeaveThread | ✅ live API 204 |
+| add a member | `POST …/thread-members/{user}?location=…` (bundle `addMember`) | AdminCall::AddThreadMember, only offered for yourself | ✅ live API 204 (re-added myself to a private test thread) |
+| notification level | `PATCH …/thread-members/@me/settings` `{"flags":2|4|8}`, joins first (bundle) | AdminCall::ThreadMemberSettings, radios read the member `flags` | ⚠ wired but never run live (read only by request); radio state ✅ (menu showed « Tous les messages » for flags 1) |
+| unmute | same route `{"muted":false}` (bundle) | ✅ wired | ⚠ not run |
+| mute for a duration | body built by a module missing from the local cache | menu rows are stubs | ❌ |
+| edit thread (rename, slowmode, Hide After Inactivity) | settings save sent the full channel object; Phoenix sends only changed fields `{name, rate_limit_per_user, auto_archive_duration}` | modals/channel_settings.rs thread page | ✅ live API 200 (restored the test thread name and 4320 with this body) |
+| Hide After Inactivity options | live select: 1 heure, 24 heures, 3 jours, 1 semaine | AUTO_ARCHIVE | ✅ |
+| spoiler channel toggle in thread settings | live, flag bit not captured | — | ❌ |
+| delete | `DELETE /channels/{t}`; modal « Supprimer le fil » / « Tu es sûr(e) de vouloir supprimer "{name}" ? Cette action est irréversible. » (live) | confirm_delete_thread | ✅ (not run: the test threads are kept) |
+| private thread | `POST /channels/{c}/threads` type 12 | thread_create.rs | ✅ live API 201 |
+| forum post: follow, close, lock, edit tags, pin, delete | same routes; pin = `flags | 2` (+ `archived:false` when archived), tags = `applied_tags` (bundle `pin`/`updateFlags`) | thread_menu.rs render_post | ✅ unit tests, never run (no test forum) |
+
+### Menus (live dumps)
+- Sidebar right click (`Context Menu`): Mark As Read | Favorites › | Close, Lock, Edit, Copy Link | Mute ›, Notification Settings › | Delete | Leave (Join when not joined, assumed) | Copy ID. ✅
+- Full view `Plus` (`Toolbar Overflow`): [Join when not joined] | Jump To Top, Edit, Open in Split View | Favorites › | Close/Open, Lock/Unlock, Delete | Leave | Copy Link, Copy ID. ✅ (joined, left and archived variants dumped)
+- Split view `Plus` (`Sidebar Overflow`): from the bundle: [Join] Open in Full View | … | Search ⧉, Pins ⧉ | … | Leave | Copy Link, Copy ID. ⚠ Search/Pins rows not built; French label « Ouvrir en plein écran » not confirmed.
+- Notification submenu values 2 / 4 / 8 (« Tous les messages », « @mentions seulement », « Aucun message »). Mute submenu 15 min … « Jusqu'à ce que je le change ». ✅
+
+### Views
+- Full view toolbar of a text channel thread: Threads, bell, pins, member list, More (live). The member list button is hidden on an archived thread (live). The bell is slashed when the thread is not joined (live after leaving), muted or not on all messages. ✅
+- Threads browser rows: « Nom : message • Il y a 6 h » with a 16px avatar; archived rows « Commencé par … • Dernière activité : Il y a 6 h »; clicking opens the full view (live). ✅ code, render pending. Facepile of active rows and the search field are still static. ❌
+- Sidebar thread rows take unread and mentions from the joined thread's read state. ✅ code.
+
+## Forum settings (GET `/guilds/{g}/channels`, 2026-11-24)
+Aperture Sciences forums: `bugs` and `aide-membres` default to the gallery (`default_forum_layout` 2), `to-do` and `bugs`
+require a tag (`flags` 16), `absence` sorts by creation (`default_sort_order` 1) and matches all tags
+(`default_tag_setting` `match_all`), several have a default reaction (✅, 👍, a custom emoji).
+
+| element | source | Phoenix | status |
+|---|---|---|---|
+| default sort / layout / tag matching | channel fields above | ForumSettings + apply_defaults | ✅ unit test |
+| Sort and View menu | bundle `sort-and-view`: Sort by (Recently Active, Date Posted) / View as (List, Gallery, not for media) / Tag Matching (Match Some, Match All, only with tags) | forum.rs sort_menu | ✅ structure; ⚠ French labels « Afficher en », « Correspondance des tags/partielle/totale » not confirmed |
+| tag filter request | `tag=a,b&tag_setting=match_some|match_all` (bundle `loadArchivedThreads`) | threads_search_path | ✅ unit test |
+| gallery view | client grid cards | media tiles reused | ⚠ card layout not compared |
+| required tag on new post | flag 16 | local check before POST | ✅ (never posted) |
+| guidelines, default reaction button | `topic`, `default_reaction_emoji` parsed into ForumSettings | not shown yet | ❌ |
+| live forum compare | opening a forum in the real client acks it: not done | | ⛔ |
