@@ -58,8 +58,22 @@ impl MentionResolver for Names<'_> {
 
 /// Markdown text (text displays, section texts) without inline images.
 pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
+    markdown_sized(app, text, false)
+}
+
+/// [`markdown`]; `reduced` is root_ sizeReduced_ (text inside a container):
+/// .875rem, line-height calc(--chat-markup-line-height * .875), small .75rem.
+fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool) -> AnyElement {
+    let k = if reduced { 0.875 } else { 1. };
     let (_, blocks, _, _) = richtext::build(text, &Names(app), app.me.id, &|_| true);
-    let mut col = div().flex().flex_col().min_w_0().text_size(px(16.)).line_height(px(22.)).text_color(c(Palette::TEXT_NORMAL));
+    // --chat-markup-line-height 1.375
+    let mut col = div()
+        .flex()
+        .flex_col()
+        .min_w_0()
+        .text_size(px(16. * k))
+        .line_height(px(22. * k))
+        .text_color(c(Palette::TEXT_NORMAL));
     for b in blocks {
         col = col.child(match b {
             RBlock::Code { code, .. } => div()
@@ -79,8 +93,9 @@ pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
                 .child(div().w(px(4.)).rounded(px(4.)).bg(c(Palette::INTERACTIVE_MUTED)))
                 .child(StyledText::new(t.text).with_runs(t.runs))
                 .into_any_element(),
+            // Headings keep their size in sizeReduced_ text (h2 20px / 27.5px, margin 0).
             RBlock::Heading(l, t) => div()
-                .mt(px(8.))
+                .when(!reduced, |d| d.mt(px(8.)))
                 .text_size(px(match l {
                     1 => 24.,
                     2 => 20.,
@@ -89,7 +104,13 @@ pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
                 .line_height(gpui::relative(1.375))
                 .child(StyledText::new(t.text).with_runs(t.runs))
                 .into_any_element(),
-            RBlock::Subtext(t) => div().text_size(px(13.)).child(StyledText::new(t.text).with_runs(t.runs)).into_any_element(),
+            // markup_ small: .875rem / 1.20313rem, --text-subtle; sizeReduced_ small .75rem.
+            RBlock::Subtext(t) => div()
+                .text_size(px(if reduced { 12. } else { 14. }))
+                .line_height(px(if reduced { 16.5 } else { 19.25 }))
+                .text_color(crate::theme::c(crate::theme::tok(crate::theme::generated::idx::TEXT_SUBTLE)))
+                .child(StyledText::new(t.text).with_runs(t.runs))
+                .into_any_element(),
             RBlock::ListItem { ordered, depth, text } => div()
                 .flex()
                 .pl(px(16. * (depth as f32 + 1.)))
@@ -119,6 +140,8 @@ struct Ctx {
     message: Id,
     app: Id,
     flags: u64,
+    /// Inside a container: text is root_ sizeReduced_.
+    reduced: bool,
 }
 
 /// Components of a bot message, or `None` when it has none.
@@ -134,6 +157,7 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> O
         message: msg.id,
         app: parts.app,
         flags: parts.flags,
+        reduced: false,
     };
     let mut col = div().mt(px(4.)).flex().flex_col().gap(px(4.)).max_w(px(600.));
     for (i, comp) in parts.components.iter().enumerate() {
@@ -157,7 +181,7 @@ fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
         Comp::Select { kind, custom_id, placeholder, options, min, max, disabled } => {
             select(app, k, *kind, custom_id, placeholder.as_deref(), options, *min, *max, *disabled)
         }
-        Comp::Text(t) => markdown(app, t),
+        Comp::Text(t) => markdown_sized(app, t, k.reduced),
         Comp::Section { texts, accessory } => {
             let mut left = div().flex_1().min_w_0().flex().flex_col().gap(px(4.));
             for (j, t) in texts.iter().enumerate() {
@@ -197,6 +221,7 @@ fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
                 .into_any_element()
         }
         Comp::Container { accent, spoiler, children } => {
+            let k = &Ctx { reduced: true, ..k.clone() };
             let mut inner = div().flex_1().min_w_0().p(px(16.)).flex().flex_col().gap(px(8.));
             for (j, ch) in children.iter().enumerate() {
                 inner = inner.child(comp_el(app, k, ch, ix * 16 + j));
@@ -213,7 +238,8 @@ fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
             if *spoiler {
                 card = card.opacity(0.6);
             }
-            card.into_any_element()
+            // The container sits in a flex row: it shrinks to its content width.
+            div().flex().child(card).into_any_element()
         }
         Comp::Unknown => div().into_any_element(),
     }
