@@ -52,7 +52,7 @@ Found on offscreen `real_shots` renders of the real account (scale 1.25, `PHX_OP
 | Inbox mentions, pinned messages | Custom emoji shown as the raw `<:name:id>` token | `components::markdown_in` passes the message context so emoji render as images (a10c2a5) |
 | Expression picker (DM) | Drawn over the DM profile panel, flush with the window edge | Right offset accounts for the 320px DM panel and the 268px member list, not a fixed 240 (5171e81) |
 | Picker / search errors | English backend strings in the French UI ("Search isn't available.", "Discord is still indexing…") | Backend errors go through i18n (`backend.*`, `search.nothing`, `search.indexing`) (3c50aaa) |
-| GIF picker home | "GIF à la une" tile without its preview image | Preview falls back to `gif_src` when Tenor's `src` is a video (1f12e76); still empty on the real account, cause not found yet |
+| GIF picker home | "GIF à la une" tile without its preview image | Preview falls back to `gif_src` when Tenor's `src` is a video (1f12e76); root cause below (round 2) |
 | Search results | Sidebar overlaid the chat: messages and composer buttons (GIF, emoji…) cut off | The chat reserves the 420px column instead of the member list / DM panel (d1c5e0d) |
 | Profile modal | Last tab "17 serveurs en con" cut mid-word | The mutual servers tab shrinks with an ellipsis like the client ("9 s…") |
 | Search results | Raw message text (`<@id>`, markdown, emoji tokens) | Results rendered with `markdown_in` (7a40a6a) |
@@ -64,5 +64,27 @@ Checked, not bugs: Friends "Tous les amis - N" vs "Envoyée(s) — N" (client st
 (client string), server settings fully black (user's Midnight theme overrides `PHX_THEME` once the synced
 settings arrive), inbox tab ellipsis (client also ellipsizes at this width).
 
-Open: trending GIF tile preview (see above); search results don't render embeds (embed-only messages show an empty card); GIF "Favoris" tile has no
+Open items of round 1 (search embeds, Favoris preview, trending tile) are fixed on main.
 preview of a favourite.
+
+### Overlays & pages, round 2
+
+| Where | Glitch | Fix |
+|---|---|---|
+| GIF picker "GIF à la une" | Tile blank: `/gifs/trending` returns a direct `static.klipy.com` URL and the image client only allowed Discord hosts | GIF provider hosts (klipy, Tenor, Giphy) allowed; this also unblocks the Tenor/Giphy renditions `gifv_animated` produces for gifv embeds |
+| Guild header dropdown | Old 8-item menu ("Inviter des gens"), not the client's | Rebuilt with the client's items and order (Boost, Inviter sur le serveur, Analyses, Fils actifs, Répertoire, Signaler un raid…) in the shared menu panel |
+| Server menu | "Afficher tous les salons" | "Montrer tous les salons" (client string) |
+| Member menu | voice "Se déconnecter" | "Déconnecter" |
+| Boost page | Literal ` ` shown in "18 boosts • Niveau 2" | Real no-break spaces in fr.yml |
+| Quick switcher | Query/placeholder drawn at 16px | 22px on the input itself |
+| Profile voice card | Guild acronym "AS" instead of the guild icon | Icon when the guild has one |
+| Accessibility preview | Card fixed at 175px, sample button cut off | max-height 25vh of the real window |
+
+Harness: `PHX_OPEN` chanmenu/catmenu/guildmenu/guilddrop/usermenu/switcher/statuspicker/leave/invite,
+`emoji:<row>`, `PHX_PROFILE=member:<n>`, `PHX_GUILD` alone, `PHX_DEBUG_GIF`.
+
+Checked OK: channel and category context menus (labels match `vanilla-menu-channel/category`), leave dialog.
+
+Open: invite dialog has no friend list/search and no close button; Devices page lists only this device (no
+`/auth/sessions`); Connections page doesn't list the account's connections; streaming activity card on bots
+("En direct sur <status text>", empty art); popouts of some members stay on "Chargement du profil…".
