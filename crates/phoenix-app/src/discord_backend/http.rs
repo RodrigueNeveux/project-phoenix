@@ -8,7 +8,19 @@
 use futures::{AsyncReadExt, FutureExt, future::BoxFuture};
 use gpui::http_client::{self, AsyncBody, HttpClient, Request, Response, Url, http::HeaderValue};
 
-const ALLOWED_HOSTS: &[&str] = &["cdn.discordapp.com", "media.discordapp.net", "images-ext-1.discordapp.net", "images-ext-2.discordapp.net", "cdn.jsdelivr.net"];
+const ALLOWED_HOSTS: &[&str] = &[
+    "cdn.discordapp.com",
+    "media.discordapp.net",
+    "images-ext-1.discordapp.net",
+    "images-ext-2.discordapp.net",
+    "cdn.jsdelivr.net",
+    // GIF providers, loaded directly like the official client does: the GIF picker's
+    // "GIF à la une" preview (`/gifs/trending` is not proxied) and the gifv embeds that
+    // `media::gifv_animated` rewrites to Tenor's gif / Giphy's webp renditions.
+    "static.klipy.com",
+    "media.tenor.com",
+    "media.giphy.com",
+];
 
 pub fn host_allowed(url: &str) -> bool {
     Url::parse(url).ok().is_some_and(|u| {
@@ -100,6 +112,7 @@ mod tests {
         assert!(host_allowed("https://media.discordapp.net/attachments/1/2/x.png?width=10&height=10"));
         assert!(!host_allowed("http://cdn.discordapp.com/x.png"));
         assert!(!host_allowed("https://evil.example/x.png"));
+        assert!(host_allowed("https://static.klipy.com/ii/abc/80/03/X.gif"));
         assert!(!host_allowed("https://cdn.discordapp.com.evil.example/x.png"));
     }
 }
