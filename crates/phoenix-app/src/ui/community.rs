@@ -172,8 +172,10 @@ fn browse_groups(app: &PhoenixApp, guild: Id) -> Vec<(Option<Id>, Vec<Id>)> {
     browse_groups_matching(app, guild, "")
 }
 
-/// [`browse_groups`] keeping the channels whose name, or category name, contains
-/// `query` (case-insensitive; empty = all).
+/// [`browse_groups`] keeping the channels whose name contains `query`
+/// (case-insensitive; empty = all). Like the client (checked live 2026-11-24 with
+/// "general"), a category name alone matches nothing: its header shows only above
+/// matching channels.
 fn browse_groups_matching(app: &PhoenixApp, guild: Id, query: &str) -> Vec<(Option<Id>, Vec<Id>)> {
     let q = query.trim().to_lowercase();
     let hit = |id: Option<Id>| id.and_then(|id| app.channels.get(&id)).is_some_and(|c| c.name.to_lowercase().contains(&q));
@@ -190,7 +192,7 @@ fn browse_groups_matching(app: &PhoenixApp, guild: Id, query: &str) -> Vec<(Opti
             continue;
         }
         let parent = app.channels.get(&id).and_then(|c| c.parent);
-        if !q.is_empty() && !hit(Some(id)) && !hit(parent) {
+        if !q.is_empty() && !hit(Some(id)) {
             continue;
         }
         let at = parent.and_then(|p| out.iter().position(|(cat, _)| *cat == Some(p))).unwrap_or(0);
@@ -224,11 +226,31 @@ fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>
         .flex()
         .items_center()
         .gap(z(4.))
+        // icon_0PLWhS: 16px magnifier in a 30px box (vanilla-browse-channels-noresult #1030).
         .child(div().size(z(30.)).flex().items_center().justify_center().child(
-            gpui::svg().path(crate::icons::path("search")).size(z(20.)).flex_none().text_color(t(idx::TEXT_DEFAULT)),
+            gpui::svg().path(crate::icons::path("search")).size(z(16.)).flex_none().text_color(t(idx::TEXT_DEFAULT)),
         ))
-        .when_some(input, |d, i| {
+        .when_some(input.clone(), |d, i| {
             d.child(div().flex_1().min_w_0().child(Input::new(&i).appearance(false).bordered(false).pl(z(0.)).text_size(z(16.)).line_height(z(20.))))
+        })
+        // clearButton_0PLWhS (#1033): 30px, 16px cross, shown while the field has text.
+        .when_some(input.filter(|i| !i.read(cx).value().is_empty()), |d, i| {
+            d.child(
+                div()
+                    .id("cr-search-clear")
+                    .size(z(30.))
+                    .flex_none()
+                    .mr(z(4.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(t(idx::INTERACTIVE_ICON_DEFAULT)))
+                    .on_click(cx.listener(move |_, _, window, cx| {
+                        i.update(cx, |s, cx| s.set_value("", window, cx));
+                        cx.notify();
+                    })),
+            )
         });
     // browser_fTKmdS starts 8px in, its content_ adds 8 each side, then a 16px scrollbar gutter:
     // rows span page-left + 16 to page-right - 32 like the search field.
@@ -359,7 +381,9 @@ fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>
                         )
                         .when(last.is_some() || ch.topic.is_some(), |d| d.child(sub)),
                 );
-            row = row.child(checkbox(on));
+            // A followed category locks its channels: the checkbox (checkboxOption_vTUVyc
+            // in a disabled_ row) drops to opacity .5 with a not-allowed cursor.
+            row = row.child(checkbox(on).when(followed, |d| d.opacity(0.5).cursor(gpui::CursorStyle::OperationNotAllowed)));
             list = list.child(row);
         }
     }
@@ -484,7 +508,8 @@ fn checkbox(on: bool) -> gpui::Div {
         .flex()
         .items_center()
         .justify_center()
-        .when(on, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(t(idx::CHECKBOX_ICON_ACTIVE))))
+        // checkmark_vTUVyc: 18px inside the 1px border.
+        .when(on, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(18.)).text_color(t(idx::CHECKBOX_ICON_ACTIVE))))
 }
 
 /// The Browse Channels search input of `guild`, created on first use.
