@@ -294,6 +294,7 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
     let ch_name: SharedString = ch.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
     let channel = m.channel;
     let mut content: String = m.content.chars().take(400).collect();
+    let rich = !content.is_empty();
     if content.is_empty() && !m.attachments.is_empty() {
         content = m.attachments.iter().map(|a| a.filename.to_string()).collect::<Vec<_>>().join(", ");
     }
@@ -381,7 +382,12 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
                                 )
                                 .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(format_time_full(m.timestamp))),
                         )
-                        .child(div().text_size(z(15.)).text_color(c(Palette::TEXT_NORMAL)).child(SharedString::from(content))),
+                        .child(div().text_size(z(15.)).text_color(c(Palette::TEXT_NORMAL)).child(if rich {
+                            // Mentions, emoji and markdown like in the chat, not the raw `<@id>` tokens.
+                            crate::ui::components::markdown_in(app, &content, &cx.entity(), m.id)
+                        } else {
+                            SharedString::from(content).into_any_element()
+                        })),
                 ),
         )
         .into_any_element()
