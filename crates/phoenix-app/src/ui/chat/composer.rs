@@ -331,7 +331,7 @@ fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Pho
     let has_banner = reply.is_some();
     let tray = upload_tray(app, cx);
     let typing_active = app.selected_channel.and_then(|c| app.typing.get(&c)).is_some_and(|v| !v.is_empty())
-        || app.selected_channel.is_some_and(|c| slowmode_of(app, c) > 0);
+        || app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.slowmode > 0);
     // No SEND_MESSAGES: disabled text area with the client's notice, no buttons (CSS only).
     let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
     let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
@@ -582,7 +582,8 @@ pub fn cooling() -> bool {
 /// "mm:ss" (or "h:mm:ss") like the client's cooldown text.
 pub fn format_cooldown(secs: u64) -> String {
     let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
-    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m:02}:{s:02}") }
+    // Client: hours "h:mm:ss", else minutes unpadded "m:ss".
+    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
 }
 
 /// cooldownWrapper_bbCgC2: right side of the typing row (margin-inline-start auto,
@@ -590,10 +591,17 @@ pub fn format_cooldown(secs: u64) -> String {
 /// (margin-inline-start 4). CSS only: the icon glyph (clock) and text format are assumed.
 fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
     let ch = app.selected_channel?;
-    if slowmode_of(app, ch) == 0 {
-        return None;
-    }
+    let x = app.nav.extras.get(&ch).filter(|x| x.slowmode > 0)?;
     let left = cooldown_left(app, ch);
+    // Client text: "Immunité au mode lent" when we bypass it, the countdown
+    // while it runs, else "Mode lent activé.".
+    let text: SharedString = if x.bypass_slowmode {
+        crate::t!("chat.slowmode_immune")
+    } else if left > 0 {
+        format_cooldown(left).into()
+    } else {
+        crate::t!("chat.slowmode_on")
+    };
     Some(
         div()
             .ml_auto()
@@ -605,7 +613,7 @@ fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
             .items_center()
             .gap(z(4.))
             .whitespace_nowrap()
-            .when(left > 0, |d| d.child(SharedString::from(format_cooldown(left))))
+            .child(text)
             .child(div().ml(z(4.)).child(gpui::svg().path(crate::icons::path("inbox/clock")).size(z(16.)).text_color(super::tk(idx::TEXT_MUTED))))
             .into_any_element(),
     )
@@ -682,8 +690,8 @@ mod tests {
 
     #[test]
     fn cooldown_text() {
-        assert_eq!(format_cooldown(5), "00:05");
-        assert_eq!(format_cooldown(125), "02:05");
+        assert_eq!(format_cooldown(5), "0:05");
+        assert_eq!(format_cooldown(125), "2:05");
         assert_eq!(format_cooldown(3725), "1:02:05");
     }
 }
