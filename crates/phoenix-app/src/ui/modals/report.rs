@@ -199,7 +199,8 @@ fn section_title(t: SharedString) -> gpui::Div {
 
 fn message_preview(app: &PhoenixApp, channel: Id, message: Id) -> Option<gpui::Div> {
     let m = app.messages.get(&channel)?.msgs.iter().find(|m| m.id == message)?;
-    let u = app.users.get(&m.author);
+    let author = app.member_user(app.selected_guild, m.author);
+    let u = author.as_deref();
     let name: SharedString = m
         .author_nick
         .clone()
@@ -214,8 +215,16 @@ fn message_preview(app: &PhoenixApp, channel: Id, message: Id) -> Option<gpui::D
         .gap(z(4.))
         .min_w_0()
         .child(
-            crate::fonts::styled_name(div().text_size(z(16.)).line_height(z(22.)).font_weight(FontWeight::MEDIUM).text_color(crate::theme::role_color(app.author_color(m.author))), u, false)
-                .child(crate::fonts::name_text(name, u, 16.)),
+            crate::fonts::styled_name(div(), u, false)
+                .flex_none()
+                .text_size(z(16.))
+                .line_height(z(22.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(app.author_color(m.author).map(c).unwrap_or_else(|| c(tok(idx::TEXT_STRONG))))
+                .child(match crate::ui::role_gradient::for_author(app, m.author) {
+                    Some(stops) => crate::fonts::name_text_with(name, u, 16., Some(stops)),
+                    None => crate::fonts::name_text(name, u, 16.),
+                }),
         )
         .children(u.and_then(|u| u.tag.as_ref()).map(crate::ui::members::server_tag))
         .child(div().ml(z(4.)).text_size(z(12.)).line_height(z(22.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_MUTED))).child(when));
