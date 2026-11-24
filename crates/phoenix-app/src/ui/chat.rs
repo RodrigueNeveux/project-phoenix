@@ -1732,9 +1732,10 @@ fn embed_text(t: &RichText, size: f32) -> gpui::Div {
             if i > 0 {
                 row = row.child(div().w_full().h_0());
             }
-            if !r.is_empty() {
-                let runs = message_ext::slice_runs(&t.runs, r.clone());
-                let text: SharedString = t.text[r.clone()].to_owned().into();
+            // one item per word so the text flows after an inline emoji
+            for w in message_ext::words(&t.text, r.clone()) {
+                let runs = message_ext::slice_runs(&t.runs, w.clone());
+                let text: SharedString = t.text[w].to_owned().into();
                 row = row.child(div().flex_none().max_w_full().child(StyledText::new(text).with_runs(runs)));
             }
             start = r.end + 1;

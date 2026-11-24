@@ -400,6 +400,27 @@ pub fn open_author(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&gpui:
     }
 }
 
+/// `range` of `text` cut after each run of whitespace ("a b  c" -> "a ", "b  ", "c").
+pub(crate) fn words(text: &str, range: std::ops::Range<usize>) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = range.start;
+    let mut in_space = false;
+    for (i, ch) in text[range.clone()].char_indices() {
+        let i = range.start + i;
+        if ch.is_whitespace() {
+            in_space = true;
+        } else if in_space {
+            out.push(start..i);
+            start = i;
+            in_space = false;
+        }
+    }
+    if start < range.end {
+        out.push(start..range.end);
+    }
+    out
+}
+
 /// Text runs covering `range` of a run list that covers the whole text.
 pub(crate) fn slice_runs(runs: &[gpui::TextRun], range: std::ops::Range<usize>) -> Vec<gpui::TextRun> {
     let mut out = Vec::new();
@@ -475,7 +496,7 @@ pub fn rich_with_emoji_scaled(
         let e = entity.clone();
         let (hr, ht) = (ranges.clone(), targets.clone());
         row.child(cell().child(
-            gpui::InteractiveText::new(("rte", (msg.0 << 12) | ((bi as u64) << 6) | *seg as u64), styled)
+            gpui::InteractiveText::new(("rte", msg.0.wrapping_mul(31).wrapping_add(((bi as u64) << 32) | *seg as u64)), styled)
                 .on_hover(move |ix, _ev, w, _cx| super::mention::on_hover(msg, bi, sd, &hr, &ht, ix, w))
                 .on_click(
                 ranges,
@@ -506,7 +527,11 @@ pub fn rich_with_emoji_scaled(
             if piece.is_empty() && r.end < range.end && (i > 0 || range.start == 0) {
                 row = row.child(div().w_full().h(z(22. * k)));
             }
-            row = push_text(row, r.clone(), seg);
+            // One flex item per word, so text after an emoji keeps flowing on the same line
+            // like Chromium's inline layout instead of starting a new one.
+            for w in words(&t.text, r.clone()) {
+                row = push_text(row, w, seg);
+            }
             start = r.end + 1;
         }
         row
