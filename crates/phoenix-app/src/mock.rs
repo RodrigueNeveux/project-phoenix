@@ -665,4 +665,73 @@ impl Backend for MockBackend {
     fn guild_features(&self, _guild: Id) -> Vec<String> {
         vec!["COMMUNITY".into()]
     }
+
+    /// A few pinned messages per channel, so the pins popout renders filled offscreen.
+    fn load_pins(&self, channel: Id) -> BoxFuture<Vec<Message>> {
+        let inner = self.inner.clone();
+        self.delayed(move || {
+            let Ok(mut i) = inner.lock() else { return vec![] };
+            if !i.history.contains_key(&channel) {
+                let h = Self::generate_history(&mut i, channel);
+                i.history.insert(channel, h);
+            }
+            let h = &i.history[&channel];
+            h.iter()
+                .rev()
+                .filter(|m| !m.content.is_empty())
+                .step_by(4)
+                .take(3)
+                .map(|m| Message { pinned: true, ..m.clone() })
+                .collect()
+        })
+    }
+
+    /// Substring search over the mock histories (content filter only).
+    fn search_messages(&self, req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
+        let inner = self.inner.clone();
+        self.delayed(move || {
+            let Ok(i) = inner.lock() else { return Default::default() };
+            let q = req.content.unwrap_or_default().to_lowercase();
+            let mut hits: Vec<Message> =
+                i.history.values().flatten().filter(|m| q.is_empty() || m.content.to_lowercase().contains(&q)).cloned().collect();
+            hits.sort_by_key(|m| std::cmp::Reverse(m.id.0));
+            let total = hits.len() as u32;
+            hits.truncate(25);
+            crate::ui::search::SearchPage { total, messages: hits }
+        })
+    }
+
+    /// Archived threads for the threads browser (other parity requests stay offline).
+    fn parity(&self, req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
+        use crate::commands::{ForumPost, ParityReply, ParityRequest};
+        match req {
+            ParityRequest::ArchivedThreads { .. } => {
+                let inner = self.inner.clone();
+                self.delayed(move || {
+                    let Ok(mut i) = inner.lock() else { return ParityReply::ForumPosts { posts: vec![], has_more: false } };
+                    let users: Vec<Id> = i.users.iter().map(|u| u.id).collect();
+                    let titles = ["wayland fractional scaling", "release checklist", "gpui text rendering"];
+                    let mut posts = Vec::new();
+                    for (k, title) in titles.iter().enumerate() {
+                        i.next_id += 1;
+                        posts.push(ForumPost {
+                            thread: Id(i.next_id),
+                            title: (*title).to_string(),
+                            tags: vec![],
+                            message_count: 12 - 4 * k as u32,
+                            first_message: None,
+                            owner: users.get(k + 1).copied(),
+                            last_message: None,
+                            member_ids_preview: users.iter().skip(k).take(3 - k).copied().collect(),
+                            member_count: 3 - k as u32,
+                            pinned: false,
+                            archived: true,
+                        });
+                    }
+                    ParityReply::ForumPosts { posts, has_more: false }
+                })
+            }
+            _ => Box::pin(async { Err(crate::backend::BackendError("Not available offline.".into())) }),
+        }
+    }
 }

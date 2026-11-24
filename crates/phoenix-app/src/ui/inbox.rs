@@ -1533,22 +1533,33 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
     let left = GROUP_DM_MAX.saturating_sub(p.picked.len());
     let mut list = div().id("gdm-list").h(z(240.)).overflow_y_scroll().flex().flex_col();
     if friends.is_empty() {
-        list = list.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("groupdm.none")));
+        list = list.child(div().p(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("groupdm.none")));
     }
     for u in friends {
         let on = p.picked.contains(&u);
         let user = app.users.get(&u);
         list = list.child(
-            div()
-                .id(("gdm-friend", u.0))
-                .px(z(8.))
-                .py(z(6.))
-                .rounded(z(4.))
+            // friend_45OTue: 48px, padding 8, --radius-sm, gap 8, --text-muted;
+            // friendSelected_ (mouse/keyboard highlight): --background-mod-subtle +
+            // --text-strong, background-color .2s ease.
+            crate::ui::states::track(div().id(("gdm-friend", u.0)), crate::ui::states::key(("gdm-friend", u.0)))
+                .relative()
+                .child(crate::ui::states::fade_layer(
+                    crate::ui::states::key(("gdm-friend", u.0)),
+                    gpui::transparent_black(),
+                    tk(idx::BACKGROUND_MOD_SUBTLE),
+                    200,
+                    8.,
+                ))
+                .h(z(48.))
+                .p(z(8.))
+                .rounded(z(8.))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                .text_color(tk(idx::TEXT_MUTED))
+                .hover(|s| s.text_color(tk(idx::TEXT_STRONG)))
                 .flex()
                 .items_center()
-                .gap(z(12.))
+                .gap(z(8.))
                 .on_click(cx.listener(move |a, _, _, cx| {
                     if let Some(p) = a.parity.group_dm.as_mut() {
                         if let Some(i) = p.picked.iter().position(|x| *x == u) {
@@ -1566,16 +1577,17 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                         .flex()
                         .gap(z(6.))
                         .items_baseline()
-                        .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_NORMAL)).child(user.map(|u| u.display_name.clone()).unwrap_or_default()))
-                        .child(div().text_size(z(14.)).text_color(c(Palette::TEXT_MUTED)).child(user.map(|u| u.name.clone()).unwrap_or_default())),
+                        // nickname_ inherits the row colour; discordTag_ --text-muted.
+                        .child(div().text_size(z(16.)).child(user.map(|u| u.display_name.clone()).unwrap_or_default()))
+                        .child(div().text_size(z(14.)).text_color(tk(idx::TEXT_MUTED)).child(user.map(|u| u.name.clone()).unwrap_or_default())),
                 )
                 .child(
                     div()
                         .size(z(22.))
                         .rounded(z(4.))
                         .border_1()
-                        .border_color(c(Palette::INTERACTIVE_MUTED))
-                        .when(on, |d| d.bg(c(Palette::BLURPLE)).border_color(c(Palette::BLURPLE)))
+                        .border_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                        .when(on, |d| d.bg(tk(idx::CONTROL_BRAND_FOREGROUND)).border_color(tk(idx::CONTROL_BRAND_FOREGROUND)))
                         .flex()
                         .items_center()
                         .justify_center()

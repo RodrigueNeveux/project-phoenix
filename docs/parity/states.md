@@ -131,6 +131,18 @@ Source: CSS `_M3qk4j` rules + dumps vanilla-menu-{channel,guild,dm,member,messag
 | inbox tabs `item_6zZYhF brand_` (top) | rest / hover / active / selected | `--text-subtle`; hover + active `--text-strong`; selected `--text-brand` + 2px bar; no hover bar (`border-bottom: none !important`) | inbox.rs `tab_bar` | ✅ |
 | thread card `container_yRVHqK` | rest / hover | 72px, padding 15, radius 8, `--background-surface-higher`, 1px `--border-subtle`; hover `--background-surface-highest` + `--border-normal` (live dump ref-cache threads-popout-live.json, 3 cards) | inbox.rs thread rows | ✅ |
 
+## Group DM picker (`inbox.rs` group DM create)
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| friend row `friend_45OTue` | rest | 48px, padding 8, `--radius-sm`, gap 8, `--text-muted`; discordTag `--text-muted` | inbox.rs gdm-friend | ✅ (was the old palette, 6/8px padding) |
+| friend row | highlighted (`friendSelected_`, follows the mouse) | `--background-mod-subtle`, `--text-strong`, background-color .2s ease | `states::fade_layer` 200ms + hover text | ✅ (added) |
+| friend checkbox | checked | brand fill | `--control-brand-foreground` | ✅ |
+| moderation radio rows (timeout / ban) | rest / hover / selected | not inventoried (no dump) | old palette | ➖ no reference |
+
+Mock data: `MockBackend` now returns 3 pins per channel, 3 archived threads and substring search results, so
+`PHX_OPEN=pins|threads|search` renders filled popouts.
+
 ## Transitions
 
 `states.rs` has a small colour-fade helper: `track` + `fade_layer` (a bg layer animated
@@ -146,6 +158,6 @@ renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-77 rows: 76 ✅, 1 ➖, 0 ❌.
+81 rows: 79 ✅, 2 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.
