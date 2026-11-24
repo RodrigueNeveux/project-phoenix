@@ -199,7 +199,7 @@ pub fn format_time_full(ts: i64) -> SharedString {
     crate::i18n::calendar(dt, Local::now())
 }
 
-fn format_time_short(ts: i64) -> SharedString {
+pub(crate) fn format_time_short(ts: i64) -> SharedString {
     Local
         .timestamp_opt(ts, 0)
         .single()
@@ -207,7 +207,7 @@ fn format_time_short(ts: i64) -> SharedString {
         .unwrap_or_default()
 }
 
-fn format_day(ts: i64) -> SharedString {
+pub(crate) fn format_day(ts: i64) -> SharedString {
     Local
         .timestamp_opt(ts, 0)
         .single()
@@ -629,16 +629,8 @@ impl PhoenixApp {
         }
         if !entry.loaded_once && !entry.loading {
             entry.loading = true;
-            let fut = self.backend.load_messages(id, None, 50);
-            cx.spawn(async move |this, cx| {
-                let res = fut.await;
-                let _ = this.update(cx, |this, cx| {
-                    let msgs = res.unwrap_or_default();
-                    this.insert_history(id, msgs, false, cx);
-                    crate::commands::state::apply_read_mark(this, id);
-                });
-            })
-            .detach();
+            // Rows are laid out on the background executor (docs/perf.md).
+            crate::history_ui::load_first_page(self, id, cx);
         }
         cx.notify();
     }
