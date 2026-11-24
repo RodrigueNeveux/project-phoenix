@@ -18,7 +18,7 @@ use super::{
 use crate::{
     app::PhoenixApp,
     assets::Icon,
-    theme::{Palette, c, generated::idx, z},
+    theme::{Palette, c, fz, generated::idx, z},
     ui::icon_button,
 };
 
@@ -421,11 +421,13 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     .flex_1()
                                     .min_w_0()
                                     .relative()
-                                    // textArea_ padding 17px 0, 16/22. gpui-component's Input sets 1.25rem on its
-                                    // frame, then applies our refinement: the line height set on the Textarea wins.
-                                    .py(z(17.))
-                                    .text_size(z(16.))
-                                    .line_height(z(22.))
+                                    // textArea_ 1rem/1.375rem; slateTextArea_ padding-block
+                                    // (--custom-channel-textarea-text-area-height 56px - 1.375rem) / 2 = 17px at a
+                                    // 16px font. gpui-component's Input sets 1.25rem on its frame, then applies our
+                                    // refinement: the line height set on the Textarea wins.
+                                    .py(z(text_pad_y()))
+                                    .text_size(fz(16.))
+                                    .line_height(fz(22.))
                                     .text_color(c(Palette::TEXT_NORMAL))
                                     .child(
                                         // xsmall: no editor padding (py 0, px 4), the 4px cancelled below.
@@ -434,8 +436,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                                 .appearance(false)
                                                 .bordered(false)
                                                 .xsmall()
-                                                .text_size(z(16.)) // textArea_ 16px (xsmall would impose its own size)
-                                                .line_height(z(22.)) // textArea_ line-height 22px
+                                                .text_size(fz(16.)) // textArea_ 1rem (xsmall would impose its own size)
+                                                .line_height(fz(22.)) // textArea_ line-height 1.375rem
                                                 .disabled(blocked),
                                         ),
                                     )
@@ -443,8 +445,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                         d.child(
                                             div()
                                                 .absolute()
-                                                .top(z(17.))
-                                                .h(z(22.))
+                                                .top(z(text_pad_y()))
+                                                .h(fz(22.))
                                                 // #1445 placeholder_ sits at the editor's x (496 in live form, glyph at 497.3).
                                                 .left_0()
                                                 .right_0()
@@ -804,4 +806,10 @@ mod tests {
         assert_eq!(format_cooldown(125), "2:05");
         assert_eq!(format_cooldown(3725), "1:02:05");
     }
+}
+
+/// slateTextArea_ padding-block: `(text-area-height - 1.375rem) / 2`, so the 56px row keeps
+/// its height and the text stays centred at every font size (17px at 16px).
+fn text_pad_y() -> f32 {
+    ((56. - 22. * crate::theme::font_scale()) / 2.).max(0.)
 }
