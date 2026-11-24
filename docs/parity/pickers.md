@@ -82,6 +82,7 @@ with the bar's clear button (route and bar text checked unchanged). No non-GET r
 
 | element | source | property | value | our code | status |
 |---|---|---|---|---|---|
+| sizes | compare 1536×788 and 1280×720 @1.25 (client emulated in DIP: w×1.25, dsf 1, its page zoom is 125%) | — | header, groups, cards and pager line up | — | ✅ |
 | panel | searchResultsWrap_ | box | 419 wide under the header, black in Onyx (all base tokens are black there) | search.rs results_panel (--background-base-lower, 1px --border-subtle left) | ⚠ token not separable in Onyx |
 | header | searchHeader_ | layout | 48px, padding 8 16; total body-md/medium --text-strong ("4 083 résultats", "Pas de résultat") | results_panel, group_digits | ✅ |
 | header buttons | button_ sm secondary hasText | style | 32px, radius 8, 1px border, --background-mod-subtle, padding 3 11, 16px glyph + 14/18 medium, gap 8: "Filtres" (opens the modal), "Trier" | sm_secondary | ✅ |
@@ -89,7 +90,10 @@ with the bar's clear button (route and bar text checked unchanged). No non-GET r
 | scroller | scroller_ thin | padding | 16 16 0 | results_panel | ✅ |
 | channel group | searchResultGroup_ / channelNameContainer_ | layout | group margin-bottom 24; 22px header (16px glyph + padding 4, name 16/20 medium --text-strong, margin-bottom 8); right: folder glyph + category 12/16 medium --text-default | group_header | ✅ |
 | hit card | searchResult_ | box | 1px --border-subtle, radius 8, margin-bottom 8; cozy message: 40px avatar at 20, text at 80, name 16/22 medium + tag / role icon / APP, time 12 medium --text-muted ("14:58", "Hier à 13:23", "19/11/2026 18:52") | result_card | ✅ |
-| match highlight | span.highlight | colour | rgba(253, 184, 51, .3) behind the matched words | — | ❌ not drawn (markdown renderer has no highlight run yet) |
+| match highlight | span.highlight | colour | rgba(253, 184, 51, .3) behind the matched words | highlighted() | ✅ plain-text hits; ❌ hits with markdown / mentions / emoji / links (the chat renderer has no highlight run) |
+| reply | repliedMessage_ messageSpine_ | layout | spine + 16px avatar + name + preview, or the italic "Le message n'a pas pu être chargé" placeholder | reply_line | ✅ |
+| components v2 | container isComponentsV2_ | content | bot cards (title, text, dividers) | — | ❌ the model has no `components` (also missing in the chat) |
+| header bar | searchBar_ | border | idle border while results show, active while typing | live_bar | ✅ |
 | Jump | buttonsContainer_ > button_ | hover | "Y aller", 24px, padding 4, radius 3, 12/16 medium, top-right on hover; jumps to the message | result_card (jump_to_message) | ✅ |
 | pager | paginationDock_ / pageControl_ | layout | 56px dock, padding 0 16; 40px "Précédent" / "Suivant" (caret 16, 16/18 semibold, radius 8); 28px round pages 8px apart, current --brand-500 + white; "1 2 3 … 164" | pager, page_items | ✅ |
 | empty | emptyResultsWrap_ | layout | 280px column centred, 160px illustration, text 16/24 medium --text-default | empty_state | ✅ layout (our own illustration and wording) |

@@ -331,7 +331,7 @@ const FILTERS: [(&str, &str, &str, &str, &str); 4] = [
 /// --text-muted time 4px after, content 16/22 --text-default). Hover shows "Y aller"
 /// (`buttonsContainer_` top 8 right 8: 24px, padding 4, radius 3, body-xs/medium
 /// --text-default on --background-base-lowest), which jumps to the message.
-fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn result_card(app: &PhoenixApp, ix: usize, m: &Message, terms: &[String], cx: &mut Context<PhoenixApp>) -> AnyElement {
     let author = app.users.get(&m.author);
     let channel = m.channel;
     let id = m.id;
@@ -346,6 +346,19 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
         .chain(m.embeds.iter().map(|e| crate::ui::chat::embed(app, e, acx)))
         .collect();
     let bot = author.is_some_and(|u| u.bot);
+    // The guild nickname at send time, like the chat ("Loris (#1 Roxas lover)").
+    let shown: SharedString = m
+        .author_nick
+        .clone()
+        .or_else(|| app.member_nick(m.author))
+        .or_else(|| author.map(|u| u.display_name.clone()))
+        .unwrap_or_else(|| crate::t!("common.unknown"));
+    let reply = m.reply_to.is_some().then(|| reply_line(app, m));
+    let text: Option<AnyElement> = rich.then(|| match highlighted(&content, terms) {
+        Some(t) => t.into_any_element(),
+        // Mentions, emoji and markdown like in the chat, not the raw `<@id>` tokens.
+        None => crate::ui::components::markdown_in(app, &content, &cx.entity(), m.id),
+    });
     div()
         .id(("search-hit", ix))
         .mb(z(8.))
@@ -361,7 +374,8 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
         .pr(z(20.))
         .cursor_pointer()
         .on_click(cx.listener(move |a, _, _, cx| a.jump_to_message(channel, id, cx)))
-        .child(div().absolute().left(z(20.)).top(z(10.)).child(avatar(author, 40.)))
+        .children(reply)
+        .child(div().absolute().left(z(20.)).top(z(if m.reply_to.is_some() { 32. } else { 10. })).child(avatar(author, 40.)))
         .child(
             div()
                 .flex()
@@ -369,14 +383,18 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
                 .h(z(22.))
                 .min_w_0()
                 .child(
-                    div()
-                        .min_w_0()
-                        .truncate()
-                        .text_size(z(16.))
-                        .line_height(z(22.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(app.author_color(m.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG)))
-                        .child(author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown"))),
+                    crate::fonts::styled_name(
+                        div()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(z(16.))
+                            .line_height(z(22.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(app.author_color(m.author).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG))),
+                        author,
+                        false,
+                    )
+                    .child(crate::fonts::name_text(shown, author, 16.)),
                 )
                 .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(crate::ui::chat::server_tag_chip(&tg, false)))
                 .when_some(app.author_role_icon(m.author), |d, u| d.child(crate::ui::chat::role_icon(u)))
@@ -392,16 +410,7 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
                         .child(format_time_full(m.timestamp)),
                 ),
         )
-        .when(rich, |d| {
-            d.child(
-                div()
-                    .text_size(z(16.))
-                    .line_height(z(22.))
-                    .text_color(tk(idx::TEXT_DEFAULT))
-                    // Mentions, emoji and markdown like in the chat, not the raw `<@id>` tokens.
-                    .child(crate::ui::components::markdown_in(app, &content, &cx.entity(), m.id)),
-            )
-        })
+        .when_some(text, |d, t| d.child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(t)))
         .children(extras)
         .child(
             div().absolute().top(z(8.)).right(z(8.)).invisible().group_hover("search-hit", |s| s.visible()).child(
@@ -427,6 +436,68 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
             ),
         )
         .into_any_element()
+}
+
+/// Plain-text content with the searched words behind `span.highlight` (live client:
+/// rgba(253, 184, 51, .3)). `None` when the text has markdown, mentions, emoji or links
+/// (the chat renderer draws those, without the highlight).
+fn highlighted(content: &str, terms: &[String]) -> Option<gpui::StyledText> {
+    if terms.is_empty() || content.contains("http") || content.chars().any(|ch| "*_~`|<>[]#:@\\".contains(ch)) {
+        return None;
+    }
+    let lower = content.to_lowercase();
+    if lower.len() != content.len() {
+        return None;
+    }
+    let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
+    for t in terms {
+        let mut from = 0;
+        while let Some(at) = lower[from..].find(t.as_str()) {
+            let start = from + at;
+            ranges.push(start..start + t.len());
+            from = start + t.len();
+        }
+    }
+    ranges.sort_by_key(|r| r.start);
+    let mut merged: Vec<std::ops::Range<usize>> = Vec::new();
+    for r in ranges {
+        match merged.last_mut() {
+            Some(l) if r.start <= l.end => l.end = l.end.max(r.end),
+            _ => merged.push(r),
+        }
+    }
+    let style = gpui::HighlightStyle { background_color: Some(gpui::rgba(0xfdb8334d).into()), ..Default::default() };
+    Some(gpui::StyledText::new(SharedString::from(content.to_string())).with_highlights(merged.into_iter().map(|r| (r, style))))
+}
+
+/// Reply line over a hit (`repliedMessage_ messageSpine_`, 18px, margin-bottom 4): the
+/// spine from the avatar, then 16px avatar + name (64%) + preview, or the italic
+/// "could not be loaded" placeholder with the reply glyph when the reply has no preview.
+fn reply_line(app: &PhoenixApp, m: &Message) -> gpui::Div {
+    let spine = div()
+        .absolute()
+        .left(z(-41.))
+        .top(z(9.))
+        .w(z(37.))
+        .h(z(13.))
+        .border_l_2()
+        .border_t_2()
+        .rounded_tl(z(6.))
+        .border_color(tk(idx::SPINE_DEFAULT));
+    let row = div().relative().h(z(18.)).mb(z(4.)).flex().items_center().gap(z(4.)).text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).child(spine);
+    match &m.reply_preview {
+        Some((a, nick, text)) => {
+            let ru = app.users.get(a);
+            let name: SharedString = nick.clone().or_else(|| app.member_nick(*a)).or_else(|| ru.map(|u| u.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown"));
+            let preview: String = text.chars().take(200).collect::<String>().replace('\n', " ");
+            row.child(avatar(ru, 16.))
+                .child(div().flex_none().font_weight(FontWeight::MEDIUM).opacity(0.64).text_color(app.author_color(*a).map(c).unwrap_or_else(|| tk(idx::TEXT_STRONG))).child(name))
+                .child(div().flex_1().min_w_0().truncate().child(preview))
+        }
+        None => row
+            .child(div().size(z(16.)).flex().items_center().justify_center().child(named("reply", 12., tk(idx::TEXT_DEFAULT))))
+            .child(div().italic().truncate().child(crate::t!("search.reply_unloaded"))),
+    }
 }
 
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -501,7 +572,7 @@ fn page_items(cur: u32, last: u32) -> Vec<Option<u32>> {
 }
 
 /// The header search bar while a search is shown: the query with its clear (x) button.
-fn live_bar(input: &Entity<InputState>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+fn live_bar(input: &Entity<InputState>, active: bool, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     // The header `searchBar_` (244×32, radius 8, --input-background-default,
     // 1px --input-border-default; editor padding 0 6, 14/22 medium) as a live input.
     div()
@@ -515,7 +586,8 @@ fn live_bar(input: &Entity<InputState>, cx: &mut Context<PhoenixApp>) -> gpui::S
         // The input token is translucent: lay it over the header background.
         .bg(c(Palette::BG_PRIMARY))
         .border_1()
-        .border_color(tk(idx::INPUT_BORDER_ACTIVE))
+        // Typing (popout open): --input-border-active; results shown: the idle border.
+        .border_color(tk(if active { idx::INPUT_BORDER_ACTIVE } else { idx::INPUT_BORDER_DEFAULT }))
         .occlude()
         .flex()
         .items_center()
@@ -619,12 +691,13 @@ fn results_panel(
     } else if page.messages.is_empty() && !loading {
         body = body.child(empty_state(crate::t!("search.no_results"), false));
     } else {
+        let terms: Vec<String> = req.content.as_deref().unwrap_or_default().split_whitespace().map(str::to_lowercase).filter(|t| !t.is_empty()).collect();
         let mut i = 0;
         while i < page.messages.len() {
             let ch = page.messages[i].channel;
             let mut group = div().mb(z(24.)).flex().flex_col().child(channel_group_header(app, ch));
             while i < page.messages.len() && page.messages[i].channel == ch {
-                group = group.child(result_card(app, i, &page.messages[i], cx));
+                group = group.child(result_card(app, i, &page.messages[i], &terms, cx));
                 i += 1;
             }
             body = body.child(group);
@@ -656,7 +729,7 @@ fn results_panel(
         panel = panel.child(sort_popover(req.sort, cx));
     }
     let modal = crate::ui::search_filters::render(app, window, cx);
-    div().absolute().top_0().left_0().right_0().bottom_0().child(live_bar(&input, cx)).child(panel).children(modal).into_any_element()
+    div().absolute().top_0().left_0().right_0().bottom_0().child(live_bar(&input, false, cx)).child(panel).children(modal).into_any_element()
 }
 
 /// `channelNameContainer_` (22px, margin-bottom 8): 16px channel glyph (padding-end 4),
@@ -1054,7 +1127,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
     if loading {
         body = body.child(div().px(z(8.)).pt(z(8.)).text_size(z(14.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("search.searching")));
     }
-    let bar = live_bar(&input, cx);
+    let bar = live_bar(&input, true, cx);
     div()
         .absolute()
         .top_0()
@@ -1085,6 +1158,15 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
 #[cfg(test)]
 mod history_tests {
     use super::*;
+
+    #[test]
+    fn highlights_plain_text_only() {
+        let t = vec!["merci".to_string()];
+        assert!(highlighted("MERCI HOPI", &t).is_some());
+        assert!(highlighted("merci *beaucoup*", &t).is_none());
+        assert!(highlighted("merci https://x.y", &t).is_none());
+        assert!(highlighted("merci", &[]).is_none());
+    }
 
     #[test]
     fn pager_pages() {
