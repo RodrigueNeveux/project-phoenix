@@ -308,6 +308,12 @@ pub fn message(m: &api::Message) -> model::Message {
             name: t.name.clone().unwrap_or_default().into(),
             message_count: t.message_count.unwrap_or(0),
         }),
+        nonce: m.nonce.as_ref().and_then(|n| match n {
+            api::Nonce::Int(i) => u64::try_from(*i).ok(),
+            api::Nonce::Str(s) => s.parse().ok(),
+        }),
+        send_state: model::SendState::Sent,
+        flags: m.flags,
     }
 }
 

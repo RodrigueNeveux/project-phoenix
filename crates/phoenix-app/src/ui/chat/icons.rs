@@ -19,6 +19,7 @@ pub enum ChatIcon {
     Join,
     Boost,
     ArrowRight,
+    Retry,
 }
 
 impl ChatIcon {
@@ -38,6 +39,7 @@ impl ChatIcon {
             ChatIcon::Join => "icons/chat/join.svg",
             ChatIcon::Boost => "icons/chat/boost.svg",
             ChatIcon::ArrowRight => "icons/chat/arrow-right.svg",
+            ChatIcon::Retry => "icons/chat/retry.svg",
         })
     }
 }
@@ -73,6 +75,8 @@ pub fn svg(path: &str) -> Option<&'static str> {
         "icons/chat/join.svg" => s!(r#"<path d="M4 12h14m-5-5 5 5-5 5"/>"#),
         "icons/chat/boost.svg" => f!(r#"<path d="M12 2 19 8v8l-7 6-7-6V8zm0 4L8 9.5v5L12 18l4-3.5v-5z"/>"#),
         "icons/chat/arrow-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
+        // Circular arrow, drawn for Phoenix: open ring with an arrow head at the top right.
+        "icons/chat/retry.svg" => s!(r#"<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v5h-5"/>"#),
         _ => return None,
     })
 }
@@ -88,7 +92,7 @@ mod tests {
     #[test]
     fn every_chat_icon_has_svg() {
         use ChatIcon::*;
-        for i in [Edit, Trash, More, AddReaction, Copy, IdBadge, Unread, Link, Thread, Eye, Upload, Join, Boost, ArrowRight] {
+        for i in [Edit, Trash, More, AddReaction, Copy, IdBadge, Unread, Link, Thread, Eye, Upload, Join, Boost, ArrowRight, Retry] {
             assert!(svg(&i.path()).is_some(), "{i:?}");
         }
     }

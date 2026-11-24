@@ -57,6 +57,9 @@ fn err(s: impl Into<String>) -> BackendError {
     BackendError(s.into())
 }
 
+/// Waits between network retries of a message send (first one measured on the client).
+const SEND_RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(1500), Duration::from_millis(3000)];
+
 /// Human-readable login/API error. Never includes the token (the API error
 /// types don't carry it).
 fn api_err(e: ApiError) -> BackendError {
@@ -727,28 +730,45 @@ impl Backend for DiscordBackend {
         content: String,
         reply: Option<(Id, bool)>,
         files: Vec<crate::backend::Upload>,
+        nonce: u64,
     ) -> BoxFuture<Message> {
         self.with_session(move |_, s| async move {
             let mut msg = CreateMessage::text(content);
+            // enforce_nonce makes the network retries below idempotent.
+            msg.nonce = Some(nonce.to_string());
+            msg.enforce_nonce = Some(true);
             if let Some((r, mention)) = reply {
                 msg = msg.reply_to(sf(channel), sf(r), mention);
             }
-            let m = if files.is_empty() {
-                s.rest.send_message(sf(channel), msg).await
-            } else {
-                let files = files
-                    .into_iter()
-                    .map(|f| phoenix_api::rest::FileUpload {
-                        filename: f.filename,
-                        bytes: f.bytes,
-                        content_type: None,
-                        description: f.description,
-                        spoiler: f.spoiler,
-                    })
-                    .collect();
-                s.rest.send_message_with_files(sf(channel), msg, files).await
-            }
-            .map_err(api_err)?;
+            let files: Vec<phoenix_api::rest::FileUpload> = files
+                .into_iter()
+                .map(|f| phoenix_api::rest::FileUpload {
+                    filename: f.filename,
+                    bytes: f.bytes,
+                    content_type: None,
+                    description: f.description,
+                    spoiler: f.spoiler,
+                })
+                .collect();
+            // The client retries a send the network dropped (measured: second POST
+            // ~1.5 s after the first) and only marks it failed after that.
+            let mut retries = SEND_RETRY_DELAYS.iter();
+            let m = loop {
+                let res = if files.is_empty() {
+                    s.rest.send_message(sf(channel), msg.clone()).await
+                } else {
+                    s.rest.send_message_with_files(sf(channel), msg.clone(), files.clone()).await
+                };
+                match res {
+                    Ok(m) => break m,
+                    Err(ApiError::Http(e)) => match retries.next() {
+                        Some(d) => tokio::time::sleep(*d).await,
+                        None => return Err(api_err(ApiError::Http(e))),
+                    },
+                    Err(e @ ApiError::Api { status: 400..=499, .. }) => return Err(BackendError::rejected(api_err(e))),
+                    Err(e) => return Err(api_err(e)),
+                }
+            };
             s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             Ok(convert::message(&m))
         })

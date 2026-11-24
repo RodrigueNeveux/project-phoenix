@@ -144,3 +144,28 @@ Scores (Phoenix real data vs dump png, no scroll sync): title bar 3.2%, composer
 | topic popout | vanilla-topic-modal #2176–#2205 | card 480, padding 8 0 16, r 12; header padding 16 24 8, "Sujet du salon" 20/24 semibold; close 40px icon-only (headerTrailing_ margin -16 -16 0 12); subtitle 18px glyph (`--text-subtle` fill) gap 4 + name 16/20 --text-subtle; body spacer 16, inner padding 0 8 0 24, markdown 16/22 --text-default, bottom spacer 8 | ui/home/topic.rs | ✅ (every value above matches; checked on the dump, no live click needed) |
 
 Toolbar gap and padding are `--space-xs`, the section's padding-inline-start is `--custom-message-margin-horizontal` (`--space-md`), and `.density-compact .searchBar_` is 28px tall: see the density section of `responsive.md`.
+
+## Send lifecycle: pending, echo, failure (live client, 2026-11-24)
+
+Measured in the user's test channel (Aperture Sciences #général, the only channel where test sends are allowed), with the official client driven over CDP. To keep the pending state on screen the message `POST` was held for 6 s with `Fetch.requestPaused`, then released. Failures were simulated **locally**: `Fetch.failRequest` (network error) or `Fetch.fulfillRequest` (HTTP 500 / 400). Nothing reached the server in the failure tests. Network latency emulation alone is not enough: it delays only the HTTP answer, and the gateway echo replaces the copy in under 800 ms.
+
+| step | live client | Phoenix | status |
+|---|---|---|---|
+| optimistic copy | inserted at Enter, id = the send `nonce` | `ui::chat::pending::send_optimistic`, `Message { id: nonce, send_state: Sending }` | ✅ |
+| nonce | time snowflake, zero low 22 bits (`1574791082821025792` → 15:17:32.348, low bits 0) | `pending::make_nonce` = `Snowflake::now()`, sent as `nonce` + `enforce_nonce` | ✅ (unit test) |
+| grouping | groups with my previous message (no header) | normal `starts_group` | ✅ |
+| pending style | `messageContent_.isSending_`: content `opacity: .5`, colour unchanged; header/avatar at 1 | `content.opacity(0.5)` in chat.rs `message()` | ✅ |
+| pending hover bar | not measured (the hold was too short to hover) | empty | ⚠ |
+| replacement | id changes nonce → server id in the same `<li>` slot; row height 26 → 26, `scrollTop` unchanged | `take_echo` swaps the row in place (`splice(ix+1..ix+2, 1)`) from MESSAGE_CREATE or the POST answer, whichever comes first | ✅ |
+| network error | retried: second POST ~1.5 s after the first, still pending | `SEND_RETRY_DELAYS` 1.5 s, 3 s (only the first delay is measured) | ✅ / ⚠ later delays |
+| failed style (HTTP 500) | `messageContent_.isFailed_`: colour `--text-feedback-critical` (#eb5f5e in midnight), opacity 1, no system message | `render_msg` re-renders the blocks in `TEXT_FEEDBACK_CRITICAL` | ✅ |
+| failed hover bar | only "Réessayer" then "Supprimer", 28px `hoverBarButton_`, bar 61.6×33.6 | `message_ext::toolbar` local branch, `ChatIcon::Retry` (hand-drawn) + Trash | ✅ |
+| failed menu | quick reactions, Add Reaction, Create Thread, Copy Text, Bookmark, Remind, Apps, **Resend Message**, Mark Unread, Copy Link, Speak, **Delete Message** (red), Copy ID | Copy Text, Resend Message, Delete Message only: every other item would hit the API with a local id | ⚠ subset, on purpose |
+| delete a failed copy | removed locally, no request (checked: no non-GET left) | `discard_local` → local MessageDelete; `request_delete`/`delete_message` never call the API for local ids | ✅ |
+| HTTP 4xx | failed copy + local ephemeral notice from the system bot ("Clyde", APP tag with check): "Ton message n'a pas pu être envoyé." / reasons link; footer "Toi seul(e) peux voir celui-ci — Rejeter le message" (12px/16px `--text-muted`, margin-top 4px, 16px icon, link `--text-link`) | `insert_system_notice` (id nonce+1, `FLAG_EPHEMERAL`), `ephemeral_footer` | ✅ text / ⚠ avatar is a default avatar, not the client's mascot art (not copied) |
+| ephemeral row | `ephemeral_` background `--brand-05a`, 2px `--brand-500` bar | same tokens; hover `--brand-10a` is assumed | ✅ / ⚠ hover |
+| dismiss | "Rejeter le message" removes it locally (no request) | `discard_local` | ✅ |
+| slowmode | not observable: the test channel has `rate_limit_per_user = 0` (GET) | the cooldown check `send_held` was skipped for every send (chat_submit always handled them); now applied | ⚠ not compared |
+| attachment upload | progress card belongs to wt/upload; the pending copy is shown above it | `Sending` card removed when the copy settles | ⚠ see wt/upload |
+
+Phoenix check: `PHX_SEND=<what> PHX_SEND_HOLD=4000 real_shots out.png` posts `[Test Phoenix] envoyé depuis le client Rust (Phoenix) — <what>` in the test channel only (hard-coded guard in the example's backend). It writes `out-pending.png` while the POST is held, then `out.png` once it settles. `PHX_SEND_FAIL=400` answers with a local 400 and sends nothing.

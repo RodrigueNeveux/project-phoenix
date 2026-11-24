@@ -23,6 +23,12 @@
 //! `PHX_SEARCH_SORT=old|rel` and `PHX_SEARCH_PAGE=<n>` with `PHX_OPEN=search:<q>`.
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
 //! `PHX_TABS=n` presses Tab n times before the capture (`-n` = Shift+Tab), for the focus rings.
+//! `PHX_SEND=<what>` (send-lifecycle test, ONLY in the hard-coded test channel
+//! [`SEND_TEST_CHANNEL`], refused anywhere else): types
+//! "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — <what>" and presses Enter.
+//! The POST is held `PHX_SEND_HOLD` ms (default 4000) so the pending copy can be shot to
+//! `<out>-pending.png`; the settled state goes to `<out>`. `PHX_SEND_FAIL=400` answers
+//! with a local 400 instead of sending (nothing leaves the machine).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -59,7 +65,12 @@ fn denied<T: Send + 'static>() -> BoxFuture<T> {
     Box::pin(async { Err(BackendError("read-only capture".into())) })
 }
 
-/// Delegates reads to the real backend; every write is refused.
+/// The only channel `PHX_SEND` may post to (user-granted test channel).
+const SEND_TEST_CHANNEL: u64 = 1403447573389381652;
+/// Every test message starts with this, so readers know where it came from.
+const SEND_PREFIX: &str = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — ";
+
+/// Delegates reads to the real backend; every write is refused (except the guarded test send).
 struct ReadOnly(DiscordBackend);
 
 impl Backend for ReadOnly {
@@ -95,8 +106,28 @@ impl Backend for ReadOnly {
     fn send_message(&self, _: Id, _: String, _: Option<Id>) -> BoxFuture<Message> {
         denied()
     }
-    fn send_message_ex(&self, _: Id, _: String, _: Option<(Id, bool)>, _: Vec<Upload>) -> BoxFuture<Message> {
-        denied()
+    fn send_message_ex(&self, ch: Id, content: String, reply: Option<(Id, bool)>, files: Vec<Upload>, nonce: u64) -> BoxFuture<Message> {
+        // Hard guard: PHX_SEND set, the test channel, our prefix, no reply. Anything else is refused.
+        if std::env::var_os("PHX_SEND").is_none() || ch.0 != SEND_TEST_CHANNEL || !content.starts_with(SEND_PREFIX) || reply.is_some() {
+            return denied();
+        }
+        let hold = std::env::var("PHX_SEND_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(4000u64);
+        let fail = std::env::var("PHX_SEND_FAIL").ok();
+        let (tx, rx) = futures::channel::oneshot::channel::<()>();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(hold));
+            let _ = tx.send(());
+        });
+        // The real backend starts its request as soon as it is called: call it only after the hold.
+        let real = self.0.clone();
+        Box::pin(async move {
+            let _ = rx.await;
+            eprintln!("send released after {hold} ms (fail={fail:?})");
+            match fail {
+                None => real.send_message_ex(ch, content, None, files, nonce).await,
+                Some(_) => Err(BackendError::rejected("HTTP 400 (simulated locally, not sent)")),
+            }
+        })
     }
     fn edit_message(&self, _: Id, _: Id, _: String) -> BoxFuture<Message> {
         denied()
@@ -1110,23 +1141,41 @@ fn main() -> anyhow::Result<()> {
             pump(&mut cx, 100);
         }
     }
-    let mut img = None;
-    for _ in 0..2 {
-        cx.update_window(win.into(), |_, window, _| window.refresh())?;
-        pump(&mut cx, 200);
-        // Headless time is virtual: advance it so enter animations (modals, popouts) finish.
-        cx.advance_clock(std::time::Duration::from_secs(2));
-        img = Some(cx.capture_screenshot(win.into())?);
+    let shoot = |cx: &mut HeadlessAppContext, path: &str| -> anyhow::Result<()> {
+        let mut img = None;
+        for _ in 0..2 {
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            pump(cx, 200);
+            // Headless time is virtual: advance it so enter animations (modals, popouts) finish.
+            cx.advance_clock(std::time::Duration::from_secs(2));
+            img = Some(cx.capture_screenshot(win.into())?);
+        }
+        eprintln!("[{:.1}s] captured", t0.elapsed().as_secs_f32());
+        // The test window's framebuffer is always sized at its 2x default; the scene
+        // is drawn at `scale`, so keep only the top-left w*scale x h*scale.
+        let mut img = img.expect("frame");
+        let (cw, ch) = (((w * scale).round() as u32).min(img.width()), ((h * scale).round() as u32).min(img.height()));
+        if (cw, ch) != (img.width(), img.height()) {
+            img = image::imageops::crop_imm(&img, 0, 0, cw, ch).to_image();
+        }
+        img.save(path)?;
+        println!("wrote {path} ({}x{})", img.width(), img.height());
+        Ok(())
+    };
+    if let Some(what) = std::env::var("PHX_SEND").ok().filter(|w| !w.trim().is_empty()) {
+        anyhow::ensure!(channel.map(|c| c.0) == Some(SEND_TEST_CHANNEL), "PHX_SEND only works in the test channel");
+        let text = format!("{SEND_PREFIX}{}", what.trim());
+        cx.update_window(win.into(), |_, window, cx| {
+            v.update(cx, |app, cx| {
+                app.composer.update(cx, |s, cx| s.set_value(text.clone(), window, cx));
+                app.submit_composer(window, cx);
+            })
+        })?;
+        println!("submitted: {text}");
+        pump(&mut cx, 600);
+        shoot(&mut cx, &format!("{}-pending.png", out.trim_end_matches(".png")))?;
+        let hold: u64 = std::env::var("PHX_SEND_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(4000);
+        pump(&mut cx, hold + 3000);
     }
-    eprintln!("[{:.1}s] captured", t0.elapsed().as_secs_f32());
-    // The test window's framebuffer is always sized at its 2x default; the scene
-    // is drawn at `scale`, so keep only the top-left w*scale x h*scale.
-    let mut img = img.expect("frame");
-    let (cw, ch) = (((w * scale).round() as u32).min(img.width()), ((h * scale).round() as u32).min(img.height()));
-    if (cw, ch) != (img.width(), img.height()) {
-        img = image::imageops::crop_imm(&img, 0, 0, cw, ch).to_image();
-    }
-    img.save(&out)?;
-    println!("wrote {out} ({}x{})", img.width(), img.height());
-    Ok(())
+    shoot(&mut cx, &out)
 }

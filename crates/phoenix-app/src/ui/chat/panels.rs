@@ -73,6 +73,45 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     let pinned = msg.is_some_and(|x| x.pinned);
     let has_text = msg.is_some_and(|x| !x.content.is_empty());
     let ic = |i: ChatIcon| Some(i.path());
+    // A message that only exists locally (pending/failed send, local ephemeral) has no
+    // server id: every API action would target a fake id, so only local ones are offered.
+    // Live failed-send menu (20261124): ... Copy Text, ..., Resend Message, ..., Delete Message.
+    if let Some(local) = msg.filter(|x| super::pending::is_local(x)) {
+        let mut items = Vec::new();
+        if has_text {
+            let ee = e.clone();
+            items.push(MenuItem::action(crate::t!("msg.copy_text"), ic(ChatIcon::Copy), move |_, _, cx| {
+                ee.update(cx, |a, cx| a.copy_message_text(ch, id, cx))
+            }));
+        }
+        if local.send_state == crate::model::SendState::Failed {
+            let ee = e.clone();
+            items.push(MenuItem::action(crate::t!("msg.resend"), ic(ChatIcon::Retry), move |_, _, cx| {
+                ee.update(cx, |a, cx| {
+                    a.chat.menu = None;
+                    a.retry_send(ch, id, cx)
+                })
+            }));
+        }
+        if local.send_state != crate::model::SendState::Sending {
+            items.push(MenuItem::Separator);
+            let ee = e.clone();
+            items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |_, _, cx| {
+                ee.update(cx, |a, cx| {
+                    a.chat.menu = None;
+                    a.discard_local(ch, id, cx)
+                })
+            }));
+        }
+        let ed = e.clone();
+        let dismiss: context_menu::Dismiss = Rc::new(move |_, cx| {
+            ed.update(cx, |a, cx| {
+                a.chat.menu = None;
+                cx.notify();
+            })
+        });
+        return context_menu::render(m.pos, items, dismiss);
+    }
 
     // Vanilla order (vanilla-menu-message dump, 2026-11-23): 4 quick reactions
     // as 44px tiles, Add Reaction, View Reactions | Edit (own), Reply, Forward,

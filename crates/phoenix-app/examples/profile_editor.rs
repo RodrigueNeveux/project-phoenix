@@ -82,6 +82,7 @@ impl Backend for ReadOnly {
         _: String,
         _: Option<(Id, bool)>,
         _: Vec<Upload>,
+        _: u64,
     ) -> BoxFuture<Message> {
         denied()
     }

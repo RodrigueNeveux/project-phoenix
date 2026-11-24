@@ -69,10 +69,11 @@ fn tool_button(id: &'static str, msg: u64, i: SharedString, _size: f32) -> gpui:
 }
 
 /// The floating hover toolbar (top-right of the hovered message).
-pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shift: bool) -> impl IntoElement {
+pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shift: bool) -> gpui::AnyElement {
     let (ch, id) = (msg.channel, msg.id);
     let own = msg.author == app.me.id;
     let e = entity.clone();
+    let local = super::pending::is_local(msg);
     let mut bar = div()
         .absolute()
         .right(z(14.)) // buttons_ right 0 + padding-inline-end 14px (msg-hover-toolbar #1443)
@@ -90,6 +91,18 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         .border_color(tk(idx::BORDER_MUTED))
         .rounded(z(8.))
         .shadow_sm();
+    if local {
+        // Live failed send (20261124): the bar holds only "Réessayer" then "Supprimer"
+        // (28px hoverBarButton_, --interactive-text-default icons). Nothing while sending.
+        if msg.send_state != crate::model::SendState::Failed {
+            return div().into_any_element();
+        }
+        let e2 = e.clone();
+        return bar
+            .child(tool_button("tb-retry", id.0, ChatIcon::Retry.path(), 20.).on_click(move |_, _, cx| e2.update(cx, |a, cx| a.retry_send(ch, id, cx))))
+            .child(tool_button("tb-discard", id.0, ChatIcon::Trash.path(), 20.).on_click(move |_, _, cx| e.update(cx, |a, cx| a.discard_local(ch, id, cx))))
+            .into_any_element();
+    }
     // Quick reactions (Discord shows frequent emoji first).
     for (i, q) in QUICK_REACTIONS.iter().take(3).enumerate() {
         let e = e.clone();
@@ -140,6 +153,7 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         let pos = ev.position();
         e.update(cx, |a, cx| a.open_message_menu(ch, id, pos, cx))
     }))
+    .into_any_element()
 }
 
 pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {

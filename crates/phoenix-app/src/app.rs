@@ -681,8 +681,12 @@ impl PhoenixApp {
 
     pub(crate) fn render_msg(&self, m: &Message, prev: Option<&Message>) -> RenderedMessage {
         let revealed = |i: usize| self.revealed.contains(&(m.id, i));
-        let (parsed, blocks, mentions_me, preview) =
+        let (parsed, mut blocks, mentions_me, preview) =
             richtext::build(&m.content, &self.resolver_with_sounds(&m.soundboard_sounds), self.me.id, &revealed);
+        // messageContent_.isFailed_: the whole text in --text-feedback-critical.
+        if m.send_state == crate::model::SendState::Failed {
+            blocks = richtext::render_blocks(&parsed, &revealed, ui::chat::tk(crate::theme::generated::idx::TEXT_FEEDBACK_CRITICAL));
+        }
         RenderedMessage {
             group_start: grouping::starts_group(prev, m, self.utc_offset),
             day_divider: (prev.is_none() || grouping::day_divider(prev, m, self.utc_offset))
@@ -748,6 +752,10 @@ impl PhoenixApp {
     }
 
     pub(crate) fn append_message(&mut self, m: Message, cx: &mut Context<Self>) {
+        // Our own echo replaces its optimistic copy in place (ui::chat::pending).
+        if self.take_echo(&m, cx) {
+            return;
+        }
         let ch = m.channel;
         let selected = self.selected_channel == Some(ch);
         // Blocked authors never ping (the client skips their mentions).
@@ -1029,6 +1037,10 @@ impl PhoenixApp {
 
     pub fn delete_message(&mut self, id: Id, cx: &mut Context<Self>) {
         let Some(ch) = self.selected_channel else { return };
+        if self.messages.get(&ch).and_then(|e| e.index_of(id).map(|i| &e.msgs[i])).is_some_and(ui::chat::pending::is_local) {
+            self.discard_local(ch, id, cx);
+            return;
+        }
         self.backend.delete_message(ch, id).detach_ok();
         cx.notify();
     }
@@ -1125,7 +1137,7 @@ impl PhoenixApp {
         let Some(m) = self
             .messages
             .get(&ch)
-            .and_then(|e| e.msgs.iter().rev().find(|m| m.author == self.me.id))
+            .and_then(|e| e.msgs.iter().rev().find(|m| m.author == self.me.id && !ui::chat::pending::is_local(m)))
         else {
             return false;
         };

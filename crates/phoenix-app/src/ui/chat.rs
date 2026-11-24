@@ -26,6 +26,7 @@ pub mod forward;
 pub mod message_ext;
 pub mod mosaic;
 pub mod panels;
+pub mod pending;
 pub mod scrollbar;
 pub mod state;
 pub mod thread_banner;
@@ -1095,10 +1096,17 @@ fn message(
     if let Some(t) = &msg.thread {
         content = content.child(message_ext::thread_chip(app, entity, t));
     }
+    // Ephemeral (local system reply to a failed send): "Only you can see this — Dismiss message".
+    if msg.flags & crate::model::FLAG_EPHEMERAL != 0 {
+        content = content.child(crate::ui::chat::pending::ephemeral_footer(entity, msg));
+    }
     let content = match message_ext::edit_box(app, entity, msg) {
         Some(b) => b,
         None => content,
     };
+    // messageContent_.isSending_: the optimistic copy is drawn at 50 % opacity, header and
+    // avatar untouched (live client, 20261124 pending test). Failed sends are coloured in render_msg.
+    let content = if msg.send_state == crate::model::SendState::Sending { content.opacity(0.5) } else { content };
 
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);
@@ -1279,7 +1287,11 @@ fn message(
             // message_:hover / .selected_ --message-background-hover; .mentioned_ and
             // .replying_ have their own backgrounds, hover shades and a 2px bar
             // (--icon-feedback-warning / --brand-500) drawn over the row.
-            let (bg, hover, bar) = if replying {
+            let ephemeral = msg.flags & crate::model::FLAG_EPHEMERAL != 0;
+            let (bg, hover, bar) = if ephemeral {
+                // ephemeral_: --brand-05a background with the 2px --brand-500 bar (live Clyde reply).
+                (idx::BRAND_05A, idx::BRAND_10A, Some(idx::BRAND_500))
+            } else if replying {
                 (idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, idx::BRAND_10A, Some(idx::BRAND_500))
             } else if mentioned {
                 (idx::MESSAGE_MENTIONED_BACKGROUND_DEFAULT, idx::MESSAGE_MENTIONED_BACKGROUND_HOVER, Some(idx::ICON_FEEDBACK_WARNING))

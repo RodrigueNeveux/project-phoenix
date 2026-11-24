@@ -22,6 +22,20 @@ pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, BackendError>> + S
 #[derive(Clone, Debug)]
 pub struct BackendError(pub String);
 
+/// Marks a send the API answered with a 4xx: the client then posts its local
+/// "your message could not be delivered" system message under the failed one.
+const REJECTED: &str = "\u{1}rejected\u{1}";
+
+impl BackendError {
+    pub fn rejected(msg: impl std::fmt::Display) -> Self {
+        Self(format!("{REJECTED}{msg}"))
+    }
+    /// The API refused the message (4xx) rather than the network failing.
+    pub fn is_rejected(&self) -> bool {
+        self.0.starts_with(REJECTED)
+    }
+}
+
 impl std::fmt::Display for BackendError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -150,15 +164,18 @@ pub trait Backend: Send + Sync + 'static {
     }
     fn delete_message(&self, channel: Id, id: Id) -> BoxFuture<()>;
     /// Send with reply options (`mention` pings the replied-to author) and
-    /// file attachments. Defaults to [`Backend::send_message`] without files.
+    /// file attachments. `nonce` is the client-made snowflake that also serves as
+    /// the optimistic local message id; the echoed MESSAGE_CREATE carries it back.
+    /// Defaults to [`Backend::send_message`] without files.
     fn send_message_ex(
         &self,
         channel: Id,
         content: String,
         reply: Option<(Id, bool)>,
         files: Vec<Upload>,
+        nonce: u64,
     ) -> BoxFuture<Message> {
-        let _ = files;
+        let _ = (files, nonce);
         self.send_message(channel, content, reply.map(|r| r.0))
     }
     /// Add (`add`) or remove our own reaction.

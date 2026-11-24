@@ -309,7 +309,7 @@ impl PhoenixApp {
     pub fn start_edit(&mut self, id: Id, window: &mut Window, cx: &mut Context<Self>) {
         let Some(channel) = self.selected_channel else { return };
         let Some(m) = self.find_msg(channel, id) else { return };
-        if m.author != self.me.id {
+        if m.author != self.me.id || super::pending::is_local(m) {
             return;
         }
         let content = m.content.clone();
@@ -401,6 +401,9 @@ impl PhoenixApp {
         cx: &mut Context<Self>,
     ) {
         let Some(mut m) = self.find_msg(channel, msg).cloned() else { return };
+        if super::pending::is_local(&m) {
+            return;
+        }
         if !apply_reaction(&mut m, &emoji, emoji_id, add) {
             return;
         }
@@ -445,6 +448,11 @@ impl PhoenixApp {
     /// Shift-click skips the confirmation (like Discord).
     pub fn request_delete(&mut self, channel: Id, id: Id, skip_confirm: bool, cx: &mut Context<Self>) {
         self.chat.menu = None;
+        // Never send a DELETE for a message the server does not have (pending/failed/local).
+        if self.find_msg(channel, id).is_some_and(super::pending::is_local) {
+            self.discard_local(channel, id, cx);
+            return;
+        }
         if skip_confirm {
             self.backend.delete_message(channel, id).detach_ok_chat();
         } else {
@@ -801,6 +809,12 @@ impl PhoenixApp {
             cx.notify();
             return true;
         }
+        // Slowmode: the send is held back and the text stays (submit_composer's check
+        // never ran for sends since this hook always handles them).
+        if super::composer::send_held(self, ch) {
+            return true;
+        }
+        super::composer::note_sent(ch);
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
         let reply = self.replying_to.take().map(|r| (r, self.chat.reply_mention));
         self.chat.reply_mention = true;
@@ -824,19 +838,10 @@ impl PhoenixApp {
             };
             self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now() });
         }
-        let fut = self.backend.send_message_ex(ch, text, reply, files);
-        cx.spawn(async move |this, cx| {
-            let res = fut.await;
-            let _ = this.update(cx, |this, cx| {
-                this.chat.sending.retain(|s| s.key != key);
-                match res {
-                    Ok(m) => this.append_message(m, cx),
-                    Err(e) => this.chat.error = Some(e.0.into()),
-                }
-                cx.notify();
-            });
-        })
-        .detach();
+        // Optimistic copy + POST (ui::chat::pending). The upload card goes away when
+        // the copy is settled (echo, POST answer or failure).
+        let upload = (!files.is_empty()).then_some(key);
+        self.send_optimistic(ch, text, reply, files, upload, cx);
         self.message_list.scroll_to_end();
         cx.notify();
         true

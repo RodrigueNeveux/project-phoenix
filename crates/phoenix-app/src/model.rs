@@ -273,7 +273,28 @@ pub struct Message {
     pub pinned: bool,
     pub mention_everyone: bool,
     pub thread: Option<ThreadRef>,
+    /// `nonce` of the send (the client's time snowflake); the echoed MESSAGE_CREATE
+    /// carries it back, which is how the optimistic local copy is replaced.
+    pub nonce: Option<u64>,
+    /// Local send lifecycle of our own message; `Sent` for everything from the API.
+    pub send_state: SendState,
+    /// Message flags (`1 << 6` = ephemeral: "Only you can see this").
+    pub flags: u64,
 }
+
+/// Send lifecycle of a message we typed (the client's `SENDING` / `SEND_FAILED` states).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SendState {
+    #[default]
+    Sent,
+    /// Optimistic copy shown while the POST is in flight: content at 50 % opacity.
+    Sending,
+    /// The POST failed: content in red, hover bar reduced to Retry / Delete.
+    Failed,
+}
+
+/// `MessageFlags.EPHEMERAL`.
+pub const FLAG_EPHEMERAL: u64 = 1 << 6;
 
 #[derive(Clone, Debug, Default)]
 pub struct SoundboardSound {

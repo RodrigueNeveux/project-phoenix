@@ -1,0 +1,291 @@
+//! Lifecycle of a message we send, as the live client shows it (measured
+//! 2026-11-24 in a test channel, POST held / failed locally through CDP):
+//!
+//! 1. Enter inserts an optimistic copy at once. Its id is the send `nonce`, a
+//!    snowflake made from the current time (`(ms - DISCORD_EPOCH) << 22`), and
+//!    it groups with the previous message like any other.
+//! 2. While the POST is in flight the content (not the header or avatar) is at
+//!    50 % opacity (`messageContent_.isSending_`); the hover bar is empty.
+//! 3. The echoed MESSAGE_CREATE (or the POST answer) carries the same nonce and
+//!    replaces the copy in place: same row, same height, so the list does not jump.
+//! 4. Network errors are retried (second POST ~1.5 s later). When the send fails
+//!    for good the text turns `--text-feedback-critical` (`isFailed_`), the hover
+//!    bar holds only Retry / Delete and the menu offers "Resend Message".
+//!    A 4xx answer also adds a local ephemeral system notice under it.
+//!
+//! Nothing here talks to the API except the (re)send itself: deleting or
+//! dismissing a local message never sends a request.
+
+use std::{cell::RefCell, collections::HashMap};
+
+use gpui::{AnyElement, Context, Entity, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled, div};
+
+use crate::{
+    app::PhoenixApp,
+    backend::{AppEvent, BackendError, Upload},
+    model::{FLAG_EPHEMERAL, Id, ImageRef, Message, SendState, User},
+    theme::{generated::idx, z},
+};
+
+use super::tk;
+
+/// Author of the local "could not be delivered" notice (the client's system bot).
+pub const SYSTEM_BOT: Id = Id(1);
+
+/// What was sent, kept until the send settles so "Retry" can post it again.
+#[derive(Clone)]
+struct Payload {
+    content: String,
+    reply: Option<(Id, bool)>,
+    files: Vec<Upload>,
+    /// `ChatState::sending` key of the upload card shown for this send.
+    upload: Option<u64>,
+}
+
+thread_local! {
+    static PAYLOADS: RefCell<HashMap<u64, Payload>> = RefCell::new(HashMap::new());
+}
+
+/// The client's nonce: a snowflake for "now" with zero worker/sequence bits.
+pub fn make_nonce() -> u64 {
+    phoenix_api::models::Snowflake::now().0
+}
+
+/// Only exists in this client (pending, failed, or a local ephemeral notice).
+pub fn is_local(m: &Message) -> bool {
+    m.send_state != SendState::Sent || m.flags & FLAG_EPHEMERAL != 0
+}
+
+/// The optimistic copy inserted when Enter is pressed.
+pub fn local_copy(app: &PhoenixApp, channel: Id, nonce: u64, content: &str, reply: Option<(Id, bool)>) -> Message {
+    Message {
+        id: Id(nonce),
+        channel,
+        author: app.me.id,
+        timestamp: (phoenix_api::models::Snowflake(nonce).timestamp_ms() / 1000) as i64,
+        content: content.to_owned().into(),
+        reply_to: reply.map(|r| r.0),
+        reply_mentions_author: reply.is_some_and(|r| r.1),
+        nonce: Some(nonce),
+        send_state: SendState::Sending,
+        ..Default::default()
+    }
+}
+
+/// "Only you can see this — Dismiss message" under an ephemeral message:
+/// ephemeralMessage_ 12px/16px --text-muted, margin-top 4px, 16px eye icon, link
+/// in --text-link (live Clyde notice).
+pub fn ephemeral_footer(entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
+    let (e, ch, id) = (entity.clone(), msg.channel, msg.id);
+    div()
+        .mt(z(4.))
+        .h(z(16.))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .text_color(tk(idx::TEXT_MUTED))
+        .child(super::icons::icon(super::icons::ChatIcon::Eye, 16., tk(idx::TEXT_MUTED)))
+        .child(crate::t!("chat.ephemeral_only_you"))
+        .child(
+            div()
+                .id(("eph-dismiss", id.0))
+                .text_color(tk(idx::TEXT_LINK))
+                .cursor_pointer()
+                .hover(|s| s.underline())
+                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.discard_local(ch, id, cx)))
+                .child(crate::t!("chat.ephemeral_dismiss")),
+        )
+        .into_any_element()
+}
+
+impl PhoenixApp {
+    /// Show the optimistic copy and post it. `files` go through untouched (uploads
+    /// keep their own progress card).
+    pub(crate) fn send_optimistic(
+        &mut self,
+        channel: Id,
+        content: String,
+        reply: Option<(Id, bool)>,
+        files: Vec<Upload>,
+        upload: Option<u64>,
+        cx: &mut Context<Self>,
+    ) -> u64 {
+        let nonce = make_nonce();
+        let local = local_copy(self, channel, nonce, &content, reply);
+        PAYLOADS.with(|p| p.borrow_mut().insert(nonce, Payload { content, reply, files, upload }));
+        self.append_message(local, cx);
+        self.post_pending(channel, nonce, cx);
+        nonce
+    }
+
+    /// (Re)send the payload kept for `nonce` and settle the local copy.
+    fn post_pending(&mut self, channel: Id, nonce: u64, cx: &mut Context<Self>) {
+        let Some(p) = PAYLOADS.with(|p| p.borrow().get(&nonce).cloned()) else { return };
+        let fut = self.backend.send_message_ex(channel, p.content, p.reply, p.files, nonce);
+        let upload = p.upload;
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(k) = upload {
+                    this.chat.sending.retain(|s| s.key != k);
+                }
+                match res {
+                    Ok(mut m) => {
+                        m.nonce.get_or_insert(nonce);
+                        if !this.take_echo(&m, cx) {
+                            this.append_message(m, cx);
+                        }
+                    }
+                    Err(e) => this.mark_send_failed(channel, nonce, &e, cx),
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// A message of ours came back (gateway or POST answer): if it carries the nonce
+    /// of a local copy, put it in that copy's row. True when it did.
+    pub(crate) fn take_echo(&mut self, m: &Message, cx: &mut Context<Self>) -> bool {
+        let Some(nonce) = m.nonce else { return false };
+        if m.author != self.me.id {
+            return false;
+        }
+        let ch = m.channel;
+        let Some(ix) = self
+            .messages
+            .get(&ch)
+            .and_then(|e| e.msgs.iter().rposition(|x| x.nonce == Some(nonce) && x.send_state != SendState::Sent))
+        else {
+            return false;
+        };
+        PAYLOADS.with(|p| p.borrow_mut().remove(&nonce));
+        // The gateway echo may arrive before the POST answer and vice versa: a second
+        // arrival finds no local copy and is dropped by append_message's id check.
+        let Some(mut entry) = self.messages.remove(&ch) else { return false };
+        entry.rendered[ix] = self.render_msg(m, ix.checked_sub(1).map(|p| &entry.msgs[p]));
+        entry.msgs[ix] = m.clone();
+        self.messages.insert(ch, entry);
+        if self.selected_channel == Some(ch) {
+            self.message_list.splice(ix + 1..ix + 2, 1);
+        }
+        cx.notify();
+        true
+    }
+
+    fn set_send_state(&mut self, ch: Id, id: Id, state: SendState, cx: &mut Context<Self>) -> Option<usize> {
+        let mut entry = self.messages.remove(&ch)?;
+        let ix = entry.index_of(id);
+        if let Some(ix) = ix {
+            entry.msgs[ix].send_state = state;
+            entry.rendered[ix] = self.render_msg(&entry.msgs[ix], ix.checked_sub(1).map(|p| &entry.msgs[p]));
+            if self.selected_channel == Some(ch) {
+                self.message_list.splice(ix + 1..ix + 2, 1);
+            }
+        }
+        self.messages.insert(ch, entry);
+        cx.notify();
+        ix
+    }
+
+    fn mark_send_failed(&mut self, ch: Id, nonce: u64, e: &BackendError, cx: &mut Context<Self>) {
+        let Some(ix) = self.set_send_state(ch, Id(nonce), SendState::Failed, cx) else { return };
+        if e.is_rejected() {
+            self.insert_system_notice(ch, ix + 1, nonce, cx);
+        }
+    }
+
+    /// Local ephemeral notice from the system bot under a refused send.
+    fn insert_system_notice(&mut self, ch: Id, at: usize, nonce: u64, cx: &mut Context<Self>) {
+        self.users.entry(SYSTEM_BOT).or_insert_with(|| User {
+            id: SYSTEM_BOT,
+            name: "clyde".into(),
+            display_name: "Clyde".into(),
+            avatar: ImageRef::Default(0),
+            bot: true,
+            verified_bot: true,
+            tag: None,
+            nameplate: None,
+            name_style: None,
+            decoration: None,
+        });
+        let notice = Message {
+            // Nonces have zero low bits, so +1 never collides with a real or local id.
+            id: Id(nonce + 1),
+            channel: ch,
+            author: SYSTEM_BOT,
+            timestamp: chrono_now(),
+            content: format!("{}\n\n{}", crate::t!("chat.send_failed"), crate::t!("chat.send_failed_reasons")).into(),
+            flags: FLAG_EPHEMERAL,
+            ..Default::default()
+        };
+        let Some(mut entry) = self.messages.remove(&ch) else { return };
+        let at = at.min(entry.msgs.len());
+        let r = self.render_msg(&notice, at.checked_sub(1).map(|p| &entry.msgs[p]));
+        entry.msgs.insert(at, notice);
+        entry.rendered.insert(at, r);
+        self.messages.insert(ch, entry);
+        if self.selected_channel == Some(ch) {
+            self.message_list.splice(at + 1..at + 1, 1);
+        }
+        cx.notify();
+    }
+
+    /// "Retry" / "Resend Message" on a failed send: same nonce, so a send that did
+    /// reach the server is not duplicated (enforce_nonce).
+    pub fn retry_send(&mut self, ch: Id, id: Id, cx: &mut Context<Self>) {
+        let known = PAYLOADS.with(|p| p.borrow().contains_key(&id.0));
+        if !known || self.set_send_state(ch, id, SendState::Sending, cx).is_none() {
+            return;
+        }
+        self.post_pending(ch, id.0, cx);
+    }
+
+    /// Remove a local-only message (failed send, dismissed notice). No request.
+    pub fn discard_local(&mut self, ch: Id, id: Id, cx: &mut Context<Self>) {
+        let local = self.messages.get(&ch).and_then(|e| e.index_of(id).map(|i| &e.msgs[i])).is_some_and(is_local);
+        if !local {
+            return;
+        }
+        PAYLOADS.with(|p| p.borrow_mut().remove(&id.0));
+        self.handle_event(AppEvent::MessageDelete { channel: ch, id }, cx);
+    }
+}
+
+fn chrono_now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nonce_is_a_time_snowflake() {
+        let n = make_nonce();
+        assert_eq!(n & ((1 << 22) - 1), 0, "worker / sequence bits are zero, like the client");
+        let ms = phoenix_api::models::Snowflake(n).timestamp_ms();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        assert!(now.abs_diff(ms) < 5_000);
+    }
+
+    #[test]
+    fn local_states() {
+        let mut m = Message::default();
+        assert!(!is_local(&m));
+        m.send_state = SendState::Sending;
+        assert!(is_local(&m));
+        m.send_state = SendState::Failed;
+        assert!(is_local(&m));
+        m.send_state = SendState::Sent;
+        m.flags = FLAG_EPHEMERAL;
+        assert!(is_local(&m));
+    }
+
+    #[test]
+    fn rejected_errors_are_marked() {
+        assert!(BackendError::rejected("HTTP 400").is_rejected());
+        assert!(!BackendError("transport".into()).is_rejected());
+    }
+}
