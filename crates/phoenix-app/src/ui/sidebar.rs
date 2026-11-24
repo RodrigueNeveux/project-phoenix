@@ -444,7 +444,16 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                         .size(z(24.))
                         .flex_none()
                         .p(z(4.))
-                        .child(icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::CHANNELS_DEFAULT))),
+                        .id(("cat-add", id.0))
+                        .group("cat-add")
+                        // `addButtonIcon_yOdhm_:hover` --interactive-text-hover;
+                        // `:active` --interactive-text-active + translateY(.5px).
+                        .active(|s| s.pt(z(4.5)))
+                        .child(
+                            icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::CHANNELS_DEFAULT))
+                                .group_hover("cat-add", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                                .group_active("cat-add", |s| s.text_color(t(idx::INTERACTIVE_TEXT_ACTIVE))),
+                        ),
                 )
                 .into_any_element()
         }
