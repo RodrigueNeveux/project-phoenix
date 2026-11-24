@@ -100,10 +100,10 @@ pub fn remote_video_active() -> bool {
 
 fn on_remote_video(user: u64, frame: &[u8]) {
     let mut r = remote().lock();
-    if !r.contains_key(&user) {
+    if let std::collections::hash_map::Entry::Vacant(v) = r.entry(user) {
         match phoenix_voice::media::ffmpeg::FfmpegDecoder::spawn() {
             Ok(d) => {
-                r.insert(user, d);
+                v.insert(d);
             }
             Err(e) => {
                 eprintln!("discord-phoenix: video decoder unavailable: {e}");

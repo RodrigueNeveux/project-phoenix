@@ -177,10 +177,12 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         }
         tiles.push(Tile { user: u, stream: false, invite: false });
     }
-    if let [only] = tiles.as_slice()
-        && !only.stream
-    {
-        tiles.push(Tile { user: only.user, stream: false, invite: true });
+    let solo = match tiles.as_slice() {
+        [only] if !only.stream => Some(only.user),
+        _ => None,
+    };
+    if let Some(user) = solo {
+        tiles.push(Tile { user, stream: false, invite: true });
     }
 
     let vp = window.viewport_size();
