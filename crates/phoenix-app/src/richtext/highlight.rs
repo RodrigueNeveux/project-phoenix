@@ -18,17 +18,19 @@ pub enum Tok {
 }
 
 impl Tok {
+    /// highlight.js class colours of the client (`.hljs-*` → `--text-code-*`).
     pub fn color(self) -> u32 {
-        match self {
-            Tok::Plain => 0xB9BBBE,
-            Tok::Keyword => 0x859900,
-            Tok::String => 0x2AA198,
-            Tok::Number => 0x2AA198,
-            Tok::Comment => 0x72767D,
-            Tok::Title => 0x268BD2,
-            Tok::Literal => 0xB58900,
-            Tok::Meta => 0xCB4B16,
-        }
+        use crate::theme::{generated::idx, tok};
+        tok(match self {
+            Tok::Plain => idx::TEXT_CODE,              // .hljs
+            Tok::Keyword => idx::TEXT_CODE_KEYWORD,    // .hljs-keyword
+            Tok::String => idx::TEXT_CODE_STRING,      // .hljs-string
+            Tok::Number => idx::TEXT_CODE_NUMBER,      // .hljs-number
+            Tok::Comment => idx::TEXT_CODE_COMMENT,    // .hljs-comment
+            Tok::Title => idx::TEXT_CODE_TITLE,        // .hljs-title.function_
+            Tok::Literal => idx::TEXT_CODE_VARIABLE,   // .hljs-literal
+            Tok::Meta => idx::TEXT_CODE_DECORATOR,     // .hljs-meta
+        })
     }
 }
 
