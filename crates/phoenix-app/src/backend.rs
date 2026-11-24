@@ -390,4 +390,10 @@ pub trait Backend: Send + Sync + 'static {
     fn send_soundboard_sound(&self, _channel: Id, _sound: crate::model::SoundboardSound) -> BoxFuture<()> {
         Box::pin(async { Err(BackendError("soundboard unavailable".into())) })
     }
+    fn upload_stream_preview(&self, _stream_key: String, _thumbnail: String) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("stream previews unavailable".into())) })
+    }
+    fn stream_preview(&self, _stream_key: String) -> BoxFuture<Option<String>> {
+        Box::pin(async { Ok(None) })
+    }
 }

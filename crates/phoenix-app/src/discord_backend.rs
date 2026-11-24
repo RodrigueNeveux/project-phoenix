@@ -309,7 +309,14 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
         }
         s.cache.apply(&ev);
         msg_cache::on_gateway(&ev);
-        if matches!(ev, GatewayEvent::VoiceStateUpdate(_) | GatewayEvent::VoiceServerUpdate(_)) {
+        if matches!(
+            ev,
+            GatewayEvent::VoiceStateUpdate(_)
+                | GatewayEvent::VoiceServerUpdate(_)
+                | GatewayEvent::StreamCreate(_)
+                | GatewayEvent::StreamServerUpdate(_)
+                | GatewayEvent::StreamDelete(_)
+        ) {
             let i = inner.clone();
             let emit: crate::voice::call::Emit = Arc::new(move |e| i.emit(e));
             crate::voice::call::manager().on_gateway(&emit, s.adapter.lock().me.0, &ev);
@@ -1109,5 +1116,11 @@ impl Backend for DiscordBackend {
                 .await
                 .map_err(api_err)
         })
+    }
+    fn upload_stream_preview(&self, stream_key: String, thumbnail: String) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move { s.rest.upload_stream_preview(&stream_key, &thumbnail).await.map_err(api_err) })
+    }
+    fn stream_preview(&self, stream_key: String) -> BoxFuture<Option<String>> {
+        self.with_session(move |_, s| async move { Ok(s.rest.stream_preview(&stream_key).await.map_err(api_err)?.url) })
     }
 }

@@ -207,11 +207,19 @@ impl GatewayHandle {
         self.send(GatewayCommand::RequestSoundboardSounds(RequestSoundboardSounds { guild_ids }))
     }
 
-    pub fn stream_create(&self, guild: GuildId, channel: ChannelId) -> crate::Result<()> {
+    pub fn stream_create(&self, guild: GuildId, channel: ChannelId, region: Option<&str>) -> crate::Result<()> {
         self.send(GatewayCommand::Raw {
             op: 18,
-            d: json!({ "type": "guild", "guild_id": guild.0.to_string(), "channel_id": channel.0.to_string(), "preferred_region": null }),
+            d: json!({ "type": "guild", "guild_id": guild.0.to_string(), "channel_id": channel.0.to_string(), "preferred_region": region }),
         })
+    }
+
+    pub fn stream_watch(&self, stream_key: &str) -> crate::Result<()> {
+        self.send(GatewayCommand::Raw { op: 20, d: json!({ "stream_key": stream_key }) })
+    }
+
+    pub fn stream_ping(&self, stream_key: &str) -> crate::Result<()> {
+        self.send(GatewayCommand::Raw { op: 21, d: json!({ "stream_key": stream_key }) })
     }
 
     pub fn stream_delete(&self, stream_key: &str) -> crate::Result<()> {

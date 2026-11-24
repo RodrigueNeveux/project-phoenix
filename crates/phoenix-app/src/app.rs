@@ -876,7 +876,17 @@ impl PhoenixApp {
                 }
                 self.rebuild_sidebar();
             }
-            AppEvent::Voice(e) => self.voice.apply(e),
+            AppEvent::Voice(e) => {
+                if let crate::voice::VoiceUiEvent::Stream(crate::voice::StreamUiEvent::Preview { key, thumbnail }) = &e {
+                    let fut = self.backend.upload_stream_preview(key.clone(), thumbnail.clone());
+                    let key = key.clone();
+                    std::thread::spawn(move || {
+                        let ok = futures::executor::block_on(fut).is_ok();
+                        crate::voice::call::preview_uploaded(&key, ok);
+                    });
+                }
+                self.voice.apply(e)
+            }
             AppEvent::Users(users) => {
                 for u in users {
                     self.users.insert(u.id, u);

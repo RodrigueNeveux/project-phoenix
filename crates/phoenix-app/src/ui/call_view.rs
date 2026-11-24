@@ -519,6 +519,48 @@ pub fn remote_image(user: Id) -> Option<std::sync::Arc<gpui::RenderImage>> {
     Some(img)
 }
 
+thread_local! {
+    static STREAM_FRAMES: std::cell::RefCell<std::collections::HashMap<u64, (u64, std::sync::Arc<gpui::RenderImage>)>> = Default::default();
+}
+
+pub fn stream_image(owner: Id, own: bool) -> Option<std::sync::Arc<gpui::RenderImage>> {
+    let f = if own { crate::voice::call::own_stream_frame() } else { crate::voice::call::stream_frame(owner.0) };
+    let Some(f) = f else {
+        STREAM_FRAMES.with(|c| c.borrow_mut().remove(&owner.0));
+        return None;
+    };
+    if let Some((pts, img)) = STREAM_FRAMES.with(|c| c.borrow().get(&owner.0).cloned())
+        && pts == f.pts_us
+    {
+        return Some(img);
+    }
+    let rgba = if own {
+        let step = if f.width > 1280 { 2 } else { 1 };
+        let (w, h) = (f.width / step, f.height / step);
+        let mut buf = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            let row = (y * step * f.width * 4) as usize;
+            for x in 0..w {
+                let i = row + (x * step * 4) as usize;
+                let p = f.data.get(i..i + 4)?;
+                buf.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+            }
+        }
+        image::RgbaImage::from_raw(w, h, buf)?
+    } else {
+        image::RgbaImage::from_raw(f.width, f.height, f.data.to_vec())?
+    };
+    let img = std::sync::Arc::new(gpui::RenderImage::new(vec![image::Frame::new(rgba)]));
+    STREAM_FRAMES.with(|c| c.borrow_mut().insert(owner.0, (f.pts_us, img.clone())));
+    Some(img)
+}
+
+pub fn stream_key(app: &PhoenixApp, owner: Id) -> Option<String> {
+    let ch = app.voice_channel?;
+    let guild = app.channels.get(&ch).and_then(|c| c.guild);
+    Some(crate::voice::stream::key(guild.map(|g| g.0), ch.0, owner.0))
+}
+
 fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if tile.invite {
         return solo_tile(w, h);
@@ -569,11 +611,41 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
     let white = t(idx::WHITE);
 
     let inner = if tile.stream {
+        let skey = stream_key(app, tile.user);
+        let watching = skey.as_ref().is_some_and(|k| app.voice.watching.contains(k));
+        let video = if me || watching { stream_image(tile.user, me) } else { None };
         base.bg(t(idx::BACKGROUND_BASE_LOWER))
             .flex()
             .items_center()
             .justify_center()
-            .child(glyph("icons/voice/screen.svg", 40., white))
+            .map(|d| match video {
+                Some(img) => d.child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Contain)),
+                None if !me && !watching => d.child(
+                    div()
+                        .id(SharedString::from(format!("call-watch-{}", tile.user.0)))
+                        .px(z(16.))
+                        .py(z(8.))
+                        .rounded(z(8.))
+                        .bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT))
+                        .hover(|s| s.bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_HOVER)))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t(idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT))
+                        .child(crate::t!("voice.watch_stream"))
+                        .on_click(cx.listener({
+                            let skey = skey.clone();
+                            move |a, _, _, cx| {
+                                cx.stop_propagation();
+                                if let Some(k) = skey.clone() {
+                                    drop(a.backend.voice_control(crate::voice::VoiceControl::WatchStream(k)));
+                                }
+                                cx.notify();
+                            }
+                        })),
+                ),
+                None => d.child(glyph("icons/voice/screen.svg", 40., white)),
+            })
             .child(
                 div()
                     .absolute()
@@ -732,7 +804,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
         Look::Green => t(idx::GREEN_300),
         Look::Dark => white,
     };
-    let screen_look = if me.stream { Look::Green } else { Look::Dark };
+    let screen_look = if me.stream || crate::ui::go_live::live(app) { Look::Green } else { Look::Dark };
     let cam_look = if me.video { Look::Green } else { Look::Dark };
     div()
         .h(z(49.))
@@ -794,8 +866,8 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             glyph("icons/voice/screen.svg", 20., icon_color(screen_look)),
                             screen_look,
                             false,
-                            crate::t!("voice.share_screen"),
-                            |_, _| {},
+                            crate::ui::go_live::label(app),
+                            crate::ui::go_live::toggle,
                             cx,
                         ))
                         .child(center_button(

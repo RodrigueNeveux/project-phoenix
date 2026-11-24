@@ -10,6 +10,8 @@ pub mod hotkey;
 pub mod leb128;
 pub mod media;
 pub mod rtp;
+#[cfg(target_os = "linux")]
+pub mod screencast;
 pub mod session;
 pub mod udp;
 

@@ -2,6 +2,7 @@ pub mod call;
 pub mod prefs;
 pub mod soundboard;
 pub mod start_time;
+pub mod stream;
 pub mod ptt;
 
 use std::collections::{HashSet, VecDeque};
@@ -30,6 +31,21 @@ pub enum VoiceUiEvent {
     Stats(ConnStats),
     Server { endpoint: String, mode: String },
     Error(String),
+    Stream(StreamUiEvent),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StreamUiEvent {
+    Live(Option<String>),
+    Watching { key: String, on: bool },
+    Preview { key: String, thumbnail: String },
+    Failed(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamSource {
+    TestPattern,
+    Portal(stream::SourceKind),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +67,11 @@ pub enum VoiceControl {
     SetPttDelay(u32),
     SetCamera(bool),
     SetCameraDevice(Option<String>),
+    StartStream { source: StreamSource, resolution: u32, fps: u32 },
+    StopStream,
+    WatchStream(String),
+    StopWatching(String),
+    SetStreamVolume(Id, f32),
 }
 
 pub const PING_HISTORY: usize = 40;
@@ -67,6 +88,9 @@ pub struct VoiceUi {
     pub stats: ConnStats,
     pub endpoint: Option<String>,
     pub mode: Option<String>,
+    pub own_stream: Option<String>,
+    pub watching: std::collections::BTreeSet<String>,
+    pub stream_error: Option<String>,
 }
 
 impl VoiceUi {
@@ -83,6 +107,8 @@ impl VoiceUi {
                     self.stats = ConnStats::default();
                     self.endpoint = None;
                     self.mode = None;
+                    self.own_stream = None;
+                    self.watching.clear();
                 }
                 if s == VoiceStatus::Connected {
                     self.last_error = None;
@@ -115,6 +141,26 @@ impl VoiceUi {
                 }
             }
             VoiceUiEvent::Error(e) => self.last_error = Some(e),
+            VoiceUiEvent::Stream(e) => match e {
+                StreamUiEvent::Live(k) => {
+                    self.own_stream = k;
+                    if self.own_stream.is_some() {
+                        self.stream_error = None;
+                    }
+                }
+                StreamUiEvent::Watching { key, on } => {
+                    if on {
+                        self.watching.insert(key);
+                    } else {
+                        self.watching.remove(&key);
+                    }
+                }
+                StreamUiEvent::Preview { .. } => {}
+                StreamUiEvent::Failed(e) => {
+                    self.own_stream = None;
+                    self.stream_error = Some(e);
+                }
+            },
         }
     }
 

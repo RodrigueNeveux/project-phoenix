@@ -159,6 +159,8 @@ impl Backend for ReadOnly {
             V::SetMute(_) => V::SetMute(true),
             V::SetPttKey(_) => return Box::pin(async { Ok(()) }),
             V::SetCameraDevice(_) => V::SetCameraDevice(Some(phoenix_voice::media::camera::TEST_PATTERN.into())),
+            V::StartStream { resolution, fps, .. } => V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps },
+            V::WatchStream(k) if !k.contains(&format!(":{VOICE_TEST_CHANNEL}:")) => return Box::pin(async { Ok(()) }),
             c => c,
         };
         self.0.voice_control(control)
@@ -168,6 +170,16 @@ impl Backend for ReadOnly {
             return denied();
         }
         self.0.send_soundboard_sound(channel, sound)
+    }
+    fn upload_stream_preview(&self, key: String, thumbnail: String) -> BoxFuture<()> {
+        if std::env::var_os("PHX_VOICE").is_none() || !key.starts_with(&format!("guild:1369382919948210248:{VOICE_TEST_CHANNEL}:")) {
+            return denied();
+        }
+        eprintln!("voice-trace: uploading stream preview for {key} ({} bytes)", thumbnail.len());
+        self.0.upload_stream_preview(key, thumbnail)
+    }
+    fn stream_preview(&self, key: String) -> BoxFuture<Option<String>> {
+        self.0.stream_preview(key)
     }
     fn soundboard_default_sounds(&self) -> BoxFuture<Vec<phoenix_app::model::SoundboardSound>> {
         self.0.soundboard_default_sounds()
@@ -1305,6 +1317,48 @@ fn main() -> anyhow::Result<()> {
                 );
             });
         }
+        if let Ok(q) = std::env::var("PHX_VOICE_STREAM") {
+            let mut it = q.split('p');
+            let resolution = it.next().and_then(|r| r.parse().ok()).unwrap_or(720u32);
+            let fps = it.next().and_then(|r| r.parse().ok()).unwrap_or(30u32);
+            cx.update_window(win.into(), |_, _, cx| {
+                v.update(cx, |app, _| {
+                    drop(app.backend.voice_control(V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps }))
+                })
+            })?;
+            let hold: u64 = std::env::var("PHX_VOICE_STREAM_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(8000);
+            let mut waited = 0;
+            while waited < hold {
+                pump(&mut cx, 1000);
+                waited += 1000;
+                let s = phoenix_app::voice::call::own_stream_stats();
+                cx.update(|cx| {
+                    let a = v.read(cx);
+                    println!(
+                        "stream t={waited} own={:?} capturing={} self_stream={} video_sent={:?} rtcp={:?} error={:?}",
+                        a.voice.own_stream,
+                        phoenix_app::voice::call::own_stream_active(),
+                        phoenix_app::ui::voice_panel::flags(a.me.id).stream,
+                        s.map(|s| s.video_packets_sent),
+                        s.map(|s| s.video_rtcp_received),
+                        a.voice.stream_error
+                    );
+                });
+                if let Ok(flag) = std::env::var("PHX_VOICE_STREAM_UNTIL")
+                    && std::path::Path::new(&flag).exists()
+                {
+                    break;
+                }
+            }
+        }
+        if let Some(key) = std::env::var("PHX_VOICE_WATCH").ok().filter(|k| !k.is_empty()) {
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(V::WatchStream(key.clone())))))?;
+            for t in 0..10 {
+                pump(&mut cx, 1000);
+                let owner = phoenix_app::voice::stream::parse_key(&key).map_or(0, |k| k.owner);
+                println!("watch t={t} watching={} frame={:?}", phoenix_app::voice::call::watching(&key), phoenix_app::voice::call::stream_frame(owner).map(|f| (f.width, f.height, f.pts_us)));
+            }
+        }
         if std::env::var("PHX_VOICE_OPEN").as_deref() == Ok("soundboard") {
             cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| phoenix_app::ui::pickers::soundboard::toggle(app, window, cx)))?;
             pump(&mut cx, 4000);
@@ -1357,6 +1411,7 @@ fn main() -> anyhow::Result<()> {
     let shot = shoot(&mut cx, &out);
     if voice_test {
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::SetCamera(false)))))?;
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::StopStream))))?;
         pump(&mut cx, 500);
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.join_voice(None, cx)))?;
         pump(&mut cx, 2500);

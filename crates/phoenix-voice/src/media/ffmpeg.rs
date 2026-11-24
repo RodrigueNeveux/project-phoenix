@@ -143,7 +143,10 @@ pub struct FfmpegDecoder {
 
 impl FfmpegDecoder {
     pub fn spawn() -> Result<Self> {
-        let (w, h) = (DECODE_W, DECODE_H);
+        Self::spawn_sized(DECODE_W, DECODE_H)
+    }
+
+    pub fn spawn_sized(w: u32, h: u32) -> Result<Self> {
         let mut child = Command::new("ffmpeg")
             .args(["-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-fflags", "nobuffer", "-flags", "low_delay"])
             .args(["-f", "h264", "-i", "-", "-vf"])

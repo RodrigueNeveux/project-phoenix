@@ -19,6 +19,7 @@ pub mod collectibles;
 pub mod frecency;
 pub mod favorites;
 pub mod soundboard;
+pub mod streams;
 pub mod uploads;
 
 use std::sync::Arc;

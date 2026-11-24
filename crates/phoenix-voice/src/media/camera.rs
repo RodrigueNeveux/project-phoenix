@@ -13,10 +13,22 @@ use crate::{Error, Result};
 
 pub const TEST_PATTERN: &str = "phoenix-test-pattern";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Input {
     TestPattern,
     Device(String),
+    PipeWire { fd: std::os::fd::OwnedFd, node: u32 },
+}
+
+impl PartialEq for Input {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::TestPattern, Self::TestPattern) => true,
+            (Self::Device(a), Self::Device(b)) => a == b,
+            (Self::PipeWire { node: a, .. }, Self::PipeWire { node: b, .. }) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl Input {
@@ -57,6 +69,20 @@ impl DeviceReader {
         Ok(Self { child, stdout })
     }
 
+    fn pipewire(fd: std::os::fd::OwnedFd, node: u32, width: u32, height: u32, fps: u32) -> Result<Self> {
+        let caps = format!("video/x-raw,format=RGBA,width={width},height={height},framerate={fps}/1,pixel-aspect-ratio=1/1");
+        let mut child = Command::new("gst-launch-1.0")
+            .args(["-q", "pipewiresrc", "fd=0", &format!("path={node}"), "do-timestamp=true", "keepalive-time=1000", "always-copy=true"])
+            .args(["!", "videoconvert", "!", "videoscale", "add-borders=true", "!", "videorate", "drop-only=true", "!", &caps, "!", "fdsink", "fd=1", "sync=false"])
+            .stdin(Stdio::from(fd))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| Error::Encoder(format!("gst-launch pipewiresrc: {e}")))?;
+        let stdout = child.stdout.take().ok_or(Error::Encoder("pipewiresrc stdout".into()))?;
+        Ok(Self { child, stdout })
+    }
+
     fn frame(&mut self, len: usize) -> Option<Vec<u8>> {
         let mut buf = vec![0u8; len];
         self.stdout.read_exact(&mut buf).ok()?;
@@ -77,19 +103,33 @@ impl Camera {
         width: u32,
         height: u32,
         fps: u32,
+        on_frame: impl FnMut(EncodedVideo) + Send + 'static,
+    ) -> Result<Self> {
+        Self::start_with(input, width, height, fps, 1_500_000, false, on_frame)
+    }
+
+    pub fn start_with(
+        input: Input,
+        width: u32,
+        height: u32,
+        fps: u32,
+        bitrate: u32,
+        screen: bool,
         mut on_frame: impl FnMut(EncodedVideo) + Send + 'static,
     ) -> Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let preview: Preview = Arc::new(Mutex::new(None));
-        let cfg = VideoEncoderConfig::new(Codec::H264, width, height, fps, 1_500_000, false);
+        let cfg = VideoEncoderConfig::new(Codec::H264, width, height, fps, bitrate, screen);
         let mut enc = FfmpegH264::spawn(&cfg)?;
         let (s2, p2) = (stop.clone(), preview.clone());
         let thread = std::thread::Builder::new()
             .name("phoenix-camera".into())
             .spawn(move || {
                 let mut pattern = TestPattern::new(width, height, fps);
-                let mut device = match &input {
-                    Input::Device(d) => DeviceReader::open(d, width, height, fps).ok(),
+                let live = !matches!(input, Input::TestPattern);
+                let mut device = match input {
+                    Input::Device(d) => DeviceReader::open(&d, width, height, fps).ok(),
+                    Input::PipeWire { fd, node } => DeviceReader::pipewire(fd, node, width, height, fps).ok(),
                     Input::TestPattern => None,
                 };
                 let started = Instant::now();
@@ -97,13 +137,13 @@ impl Camera {
                 let mut next = Instant::now();
                 let mut first = true;
                 while !s2.load(Ordering::Relaxed) {
-                    let frame = match (&input, device.as_mut()) {
-                        (Input::Device(_), Some(d)) => match d.frame((width * height * 4) as usize) {
+                    let frame = match (live, device.as_mut()) {
+                        (true, Some(d)) => match d.frame((width * height * 4) as usize) {
                             Some(data) => VideoFrame { width, height, pts_us: started.elapsed().as_micros() as u64, data: Arc::from(data) },
                             None => break,
                         },
-                        (Input::Device(_), None) => break,
-                        (Input::TestPattern, _) => pattern.frame(),
+                        (true, None) => break,
+                        (false, _) => pattern.frame(),
                     };
                     if let Ok(mut p) = p2.lock() {
                         *p = Some(frame.clone());
@@ -117,7 +157,7 @@ impl Camera {
                         }
                     }
                     first = false;
-                    if matches!(input, Input::TestPattern) {
+                    if !live {
                         next += period;
                         let now = Instant::now();
                         if next > now {

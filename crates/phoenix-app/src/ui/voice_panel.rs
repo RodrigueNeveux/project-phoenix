@@ -338,6 +338,32 @@ fn camera_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
         }))
 }
 
+fn screen_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let on = crate::ui::go_live::live(app);
+    let (bg, hover, fg) = if on {
+        (t(idx::OPACITY_GREEN_12), t(idx::OPACITY_GREEN_24), t(idx::GREEN_300))
+    } else {
+        (t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT), t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT))
+    };
+    div()
+        .id("voice-screen")
+        .flex_1()
+        .min_w_0()
+        .h(z(32.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(Palette::BORDER_MUTED))
+        .bg(bg)
+        .hover(move |s| s.bg(hover))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(asset_icon(SCREEN, 20. * crate::theme::zoom(), fg))
+        .tip(crate::ui::go_live::label(app))
+        .on_click(cx.listener(|a, _, _, cx| crate::ui::go_live::toggle(a, cx)))
+}
+
 fn large_ping(color: Hsla, bg: Hsla) -> impl IntoElement {
     div()
         .size(z(32.))
@@ -526,7 +552,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                 .flex()
                 .gap(z(8.))
                 .child(camera_button(app, cx))
-                .child(action_button("voice-screen", SCREEN, crate::t!("voice.share_screen"), cx))
+                .child(screen_button(app, cx))
                 .child(action_button("voice-activity", ACTIVITY, crate::t!("voice.start_activity"), cx))
                 .child(crate::ui::pickers::soundboard::panel_button(app, cx)),
         )

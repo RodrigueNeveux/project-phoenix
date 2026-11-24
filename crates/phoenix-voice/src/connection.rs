@@ -65,7 +65,7 @@ pub struct VoiceConfig {
 
 #[derive(Debug)]
 pub enum VideoOut {
-    Start { width: u32, height: u32, fps: u32 },
+    Start { width: u32, height: u32, fps: u32, bitrate: u32 },
     Frame(crate::media::EncodedVideo),
     Stop,
 }
@@ -117,6 +117,7 @@ struct Media {
     video_ssrc: u32,
     rtx_ssrc: u32,
     video: Option<VideoTx>,
+    bitrate: u32,
 }
 
 struct VideoTx {
@@ -125,8 +126,10 @@ struct VideoTx {
     base: u32,
 }
 
+pub const CAMERA_MAX_BITRATE: u32 = 2_500_000;
+
 pub fn video_payload(audio_ssrc: u32, video_ssrc: u32, rtx_ssrc: u32, active: Option<(u32, u32, u32)>) -> gateway::protocol::VideoPayload {
-    stream_payload("video", audio_ssrc, video_ssrc, rtx_ssrc, active)
+    stream_payload("video", audio_ssrc, video_ssrc, rtx_ssrc, active, CAMERA_MAX_BITRATE)
 }
 
 pub fn stream_payload(
@@ -135,6 +138,7 @@ pub fn stream_payload(
     video_ssrc: u32,
     rtx_ssrc: u32,
     active: Option<(u32, u32, u32)>,
+    max_bitrate: u32,
 ) -> gateway::protocol::VideoPayload {
     use gateway::protocol::{Resolution, StreamDescriptor, VideoPayload};
     let stream = StreamDescriptor {
@@ -144,7 +148,7 @@ pub fn stream_payload(
         rtx_ssrc,
         active: active.is_some(),
         quality: 100,
-        max_bitrate: Some(2_500_000),
+        max_bitrate: Some(max_bitrate),
         max_framerate: Some(active.map_or(20, |(_, _, fps)| fps)),
         max_resolution: Some(active.map_or(Resolution { kind: "fixed".into(), width: 1280, height: 720 }, |(width, height, _)| Resolution {
             kind: "fixed".into(),
@@ -227,6 +231,7 @@ async fn run(
                                 video_ssrc: vs.0,
                                 rtx_ssrc: vs.1,
                                 video: None,
+                                bitrate: CAMERA_MAX_BITRATE,
                             });
                         }
                         ServerMessage::SessionDescription(sd) => {
@@ -433,12 +438,13 @@ async fn run(
                 Some(Cmd::Video(v)) => {
                     let Some(m) = media.as_mut() else { continue };
                     match v {
-                        VideoOut::Start { width, height, fps } => {
+                        VideoOut::Start { width, height, fps, bitrate } => {
                             if m.video_ssrc == 0 {
                                 tracing::warn!("voice: no video ssrc from ready");
                                 continue;
                             }
-                            gw.video(&stream_payload(if cfg.info.stream { "screen" } else { "video" }, m.ssrc, m.video_ssrc, m.rtx_ssrc, Some((width, height, fps))))?;
+                            m.bitrate = bitrate;
+                            gw.video(&stream_payload(if cfg.info.stream { "screen" } else { "video" }, m.ssrc, m.video_ssrc, m.rtx_ssrc, Some((width, height, fps)), bitrate))?;
                             m.video = Some(VideoTx {
                                 sender: RtpSender::new(m.video_ssrc, Codec::H264.payload_type()),
                                 packetizer: crate::rtp::h264::H264Packetizer::new(),
@@ -447,7 +453,7 @@ async fn run(
                         }
                         VideoOut::Stop => {
                             if m.video.take().is_some() {
-                                gw.video(&stream_payload(if cfg.info.stream { "screen" } else { "video" }, m.ssrc, m.video_ssrc, m.rtx_ssrc, None))?;
+                                gw.video(&stream_payload(if cfg.info.stream { "screen" } else { "video" }, m.ssrc, m.video_ssrc, m.rtx_ssrc, None, m.bitrate))?;
                             }
                         }
                         VideoOut::Frame(e) => {
