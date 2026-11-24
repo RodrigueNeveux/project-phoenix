@@ -199,7 +199,13 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     items.push(stub(&e, "menu.gs.app_directory"));
     items.push(MenuItem::Separator);
     items.extend(crate::actions::channel::show_all_item(app, &e, g));
-    items.push(notify_item(app, &e, Some(g), None));
+    // A plain row that opens the notification settings modal (no submenu caret,
+    // which ellipsized the label in the 220px menu).
+    items.push(act(&e, crate::t!("menu.notify_settings"), move |a, _, cx| {
+        let st = crate::ui::modals::guild_notify::State::new(a, g);
+        crate::actions::open_modal(crate::ui::modals::Modal::GuildNotify(st), None);
+        cx.notify();
+    }));
     items.push(act(&e, crate::t!("menu.privacy_settings"), move |a, _, cx| a.open_privacy_settings(g, cx)));
     items.push(MenuItem::Separator);
     items.push(act(&e, crate::t!("menu.edit_server_profile"), move |a, _, cx| a.open_server_profile(g, cx)));
