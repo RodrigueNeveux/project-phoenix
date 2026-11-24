@@ -33,6 +33,7 @@ where its value is stored and what it changes in the UI.
 | cf-friends | DMs from friends | settings-proto `text_and_images.explicit_content_settings.explicit_content_friend_dm` (6, 29, 2) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
 | cf-others | DMs from others | settings-proto `text_and_images.explicit_content_settings.explicit_content_non_friend_dm` (6, 29, 3) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
 | cf-servers | Messages in server channels | settings-proto `text_and_images.explicit_content_settings.explicit_content_guilds` (6, 29, 1) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
+| cfv-friends / cfv-others / cfv-servers | Violent content filters | settings-proto `text_and_images.gore_content_settings.*` (6, 32, 1..3) | enforced by Discord | ✅ |
 | age-cmds | Allow access to age-restricted app commands in DMs | settings-proto `text_and_images.view_nsfw_commands` (6, 23) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
 | age-ios | Allow access to age-restricted servers on iOS | settings-proto `text_and_images.view_nsfw_guilds` (6, 20) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
 | spam | Automatically filter suspected spam messages | settings-proto `text_and_images.dm_spam_filter_v2` (6, 27) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
