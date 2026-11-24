@@ -61,7 +61,7 @@ pub enum B {
     /// Collapsed "Show advanced ..." row revealing more blocks.
     Expand(&'static str, &'static str, &'static str, &'static [B]),
     KeyGroup(&'static str, &'static str, &'static [(&'static str, &'static [&'static str])]),
-    Note(&'static str),
+
     Divider,
     /// Custom control; the key is used for search.
     Custom(&'static str, Render),
@@ -505,7 +505,6 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
             }
         }
         B::KeyGroup(l, d, rows) => out.push(key_group(l, d, rows).into_any_element()),
-        B::Note(t) => out.push(div().py(z(8.)).child(desc_text(tr(t))).into_any_element()),
         B::Divider => out.push(div().my(z(50.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element()),
         B::Custom(_, f) => out.push(f(app, cx)),
     }
@@ -525,7 +524,7 @@ pub fn render(app: &PhoenixApp, blocks: &'static [B], cx: &mut Cx) -> Div {
 fn push_texts(blocks: &'static [B], out: &mut Vec<&'static str>) {
     for b in blocks {
         match b {
-            B::Title(t) | B::Lead(t) | B::Legend(t) | B::Note(t) | B::Sound(_, t) | B::Custom(t, _) => out.push(t),
+            B::Title(t) | B::Lead(t) | B::Legend(t) | B::Sound(_, t) | B::Custom(t, _) => out.push(t),
             B::Switch(_, t, d, _) | B::Action(t, d, _, _) | B::Related(_, t, d, _) => out.extend([*t, *d]),
             B::Radios(_, t, d, o, _) => {
                 out.extend([*t, *d]);
