@@ -598,6 +598,10 @@ impl ReadCtx<'_> {
         }
         let last = c.last_message_id.map(|m| m.0).unwrap_or(0);
         match self.reads.get(&c.id.0) {
+            // `HAS_ONLY_SYSTEM_MESSAGES` (1 << 23) DMs (e.g. only "friend request
+            // accepted"): the official client shows no rail badge for them even
+            // with a server-side mention_count (live compare 2026-11-24).
+            Some(r) if c.kind.is_private() && c.flags & (1 << 23) != 0 => (last > r.last_read, 0),
             Some(r) => (last > r.last_read, r.mentions),
             // Never opened: only DMs count as unread.
             None => (c.kind.is_private() && last != 0, 0),
