@@ -116,10 +116,15 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         let sel = app.nav.friends_tab == t;
         pill()
             .id(id)
-            // selected_6zZYhF: --background-mod-strong, #dcdcdf; idle #96979e
-            .text_color(c(if sel { Palette::TEXT_HEADER } else { Palette::INTERACTIVE }))
-            .when(sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-            .when(!sel, |d| d.hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).text_color(c(Palette::INTERACTIVE_HOVER))))
+            // `topPill_ .themed_.item_6zZYhF` (vanilla-friends-online #1125/#1126): idle
+            // --text-subtle; selected --background-mod-strong + --text-strong; :hover
+            // --background-mod-subtle, :active --background-mod-strong, both --text-strong.
+            .text_color(c(tok(if sel { idx::TEXT_STRONG } else { idx::TEXT_SUBTLE })))
+            .when(sel, |d| d.bg(c(tok(idx::BACKGROUND_MOD_STRONG))))
+            .when(!sel, |d| {
+                d.hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).text_color(c(tok(idx::TEXT_STRONG))))
+                    .active(|s| s.bg(c(tok(idx::BACKGROUND_MOD_STRONG))).text_color(c(tok(idx::TEXT_STRONG))))
+            })
             .on_click(cx.listener(move |a, _, _, cx| {
                 a.nav.friends_tab = t;
                 cx.notify();
@@ -156,11 +161,18 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .child(tab("tab-all", crate::t!("friends.all"), FriendsTab::All, cx))
         .child(tab("tab-pending", crate::t!("friends.pending"), FriendsTab::Pending, cx))
         .child(
-            // addFriend_zrUwGA: brand bg, white; selected: text brand on mod-strong
+            // addFriend_zrUwGA (#1128): --control-primary-background-default, white;
+            // :hover / :active the -hover / -active backgrounds; [aria-selected]
+            // --opacity-blurple-16 with --text-brand.
             pill()
                 .id("tab-add")
-                .when(add_sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)).text_color(c(Palette::TEXT_BRAND)))
-                .when(!add_sel, |d| d.bg(c(Palette::BLURPLE)).text_color(gpui::white()))
+                .when(add_sel, |d| d.bg(c(tok(idx::OPACITY_BLURPLE_16))).text_color(c(tok(idx::TEXT_BRAND))))
+                .when(!add_sel, |d| {
+                    d.bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT)))
+                        .text_color(gpui::white())
+                        .hover(|s| s.bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_HOVER))))
+                        .active(|s| s.bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_ACTIVE))))
+                })
                 .on_click(cx.listener(|a, _, _, cx| {
                     a.nav.friends_tab = FriendsTab::AddFriend;
                     a.nav.add_friend_result = None;
