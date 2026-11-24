@@ -971,7 +971,8 @@ fn message(
     }
     content = content.children(crate::ui::components::render(app, entity, msg)).children(crate::ui::components::render_poll(app, entity, msg));
     if edited_after_embeds {
-        content = content.child(div().h(z(20.)).flex().items_center().child(edited_marker(ts))); // timestamp_ 20px
+        // accessories container_ row gap 4px, then timestamp_ 20px (dump: embed ends 219, timestamp_ 223).
+        content = content.child(div().mt(z(4.)).h(z(20.)).flex().items_center().child(edited_marker(ts)));
     }
     if !msg.reactions.is_empty() && app.prefs.synced.flag("reactions") {
         content = content.child(message_ext::reactions(app, entity, msg));
