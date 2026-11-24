@@ -422,7 +422,23 @@ pub fn rich_with_emoji(
     };
     for (r, token) in &t.emoji {
         row = push_text(row, last..r.start, &mut seg);
-        row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size)));
+        if token.as_ref() == crate::richtext::CHANNEL_ICON_TOKEN {
+            // icon__RYHZ5: 1em square, margin-inline-end --space-4, inside the
+            // .mention pill (--mention-background, radius 3px, padding-left 2px).
+            row = row.child(
+                div()
+                    .h(z(22.))
+                    .flex()
+                    .items_center()
+                    .pl(z(2.))
+                    .pr(z(4.))
+                    .rounded_l(z(3.))
+                    .bg(crate::theme::ca(crate::theme::Palette::MENTION_BG))
+                    .child(crate::ui::icon(crate::assets::Icon::Hash, 16., crate::theme::c(crate::theme::Palette::MENTION_FG))),
+            );
+        } else {
+            row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size)));
+        }
         last = r.end;
     }
     row = push_text(row, last..t.text.len(), &mut seg);

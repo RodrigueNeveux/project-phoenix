@@ -16,6 +16,9 @@ use crate::{
     theme::{FONT_MONO, FONT_UI, Palette, c, ca, generated::idx, tok},
 };
 
+/// Pseudo emoji token: draw the text-channel icon inside a channel mention pill.
+pub const CHANNEL_ICON_TOKEN: &str = "\u{1}channel-icon";
+
 #[derive(Clone, Debug)]
 pub enum ClickTarget {
     Link(SharedString),
@@ -150,7 +153,15 @@ pub fn rich_inline(inline: &Inline, revealed: &dyn Fn(usize) -> bool, base: Hsla
     let in_code = |r: &Range<usize>| {
         inline.spans.iter().any(|s| s.style.has(Style::CODE) && s.range.start <= r.start && r.end <= s.range.end)
     };
-    let emoji = emoji_ranges(&inline.text).into_iter().filter(|(r, _)| !in_code(r)).collect();
+    let mut emoji: Vec<(Range<usize>, SharedString)> =
+        emoji_ranges(&inline.text).into_iter().filter(|(r, _)| !in_code(r)).collect();
+    // Channel mentions draw the channel icon (icon__RYHZ5, 1em) in place of the "#".
+    for s in &inline.spans {
+        if matches!(s.mention, Some(Mention::Channel(_))) && inline.text[s.range.clone()].starts_with('#') {
+            emoji.push((s.range.start..s.range.start + 1, CHANNEL_ICON_TOKEN.into()));
+        }
+    }
+    emoji.sort_by_key(|(r, _)| r.start);
     RichText {
         text: inline.text.clone().into(),
         runs,
@@ -219,6 +230,7 @@ pub fn build(
         i.spans.iter().any(|s| {
             matches!(s.mention, Some(Mention::User(u)) if u == me.0)
                 || matches!(s.mention, Some(Mention::Everyone | Mention::Here))
+                || matches!(s.mention, Some(Mention::Role(r)) if resolver.has_role(r))
         })
     });
     let preview: String = parsed

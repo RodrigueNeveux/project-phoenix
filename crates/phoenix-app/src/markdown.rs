@@ -145,6 +145,10 @@ pub trait MentionResolver {
     fn role_color(&self, _id: u64) -> Option<u32> {
         None
     }
+    /// True when the current user has this role (a mention of it highlights the message).
+    fn has_role(&self, _id: u64) -> bool {
+        false
+    }
 }
 
 pub struct NoResolve;

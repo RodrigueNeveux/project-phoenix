@@ -164,6 +164,8 @@ struct Resolver<'a> {
     users: &'a HashMap<Id, User>,
     channels: &'a HashMap<Id, Channel>,
     roles: &'a HashMap<Id, Vec<Role>>,
+    members: &'a HashMap<Id, Vec<Member>>,
+    me: Id,
 }
 impl Resolver<'_> {
     fn find_role(&self, id: u64) -> Option<&Role> {
@@ -176,6 +178,13 @@ impl MentionResolver for Resolver<'_> {
     }
     fn role_color(&self, id: u64) -> Option<u32> {
         self.find_role(id).and_then(|r| r.color)
+    }
+    fn has_role(&self, id: u64) -> bool {
+        let Some((g, _)) = self.roles.iter().find(|(_, rs)| rs.iter().any(|r| r.id.0 == id)) else { return false };
+        self.members
+            .get(g)
+            .and_then(|ms| ms.iter().find(|m| m.user == self.me))
+            .is_some_and(|m| m.roles.contains(&Id(id)))
     }
     fn user(&self, id: u64) -> Option<String> {
         self.users.get(&Id(id)).map(|u| u.display_name.to_string())
@@ -619,7 +628,7 @@ impl PhoenixApp {
     }
 
     fn resolver(&self) -> Resolver<'_> {
-        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles }
+        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles, members: &self.members, me: self.me.id }
     }
 
     pub(crate) fn render_msg(&self, m: &Message, prev: Option<&Message>) -> RenderedMessage {
