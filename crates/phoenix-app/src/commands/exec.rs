@@ -253,6 +253,25 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             let raw = rest.scheduled_events(sf(guild)).await.map_err(e)?;
             ParityReply::Events(raw.iter().filter_map(super::parse_event).collect())
         }
+        ParityRequest::FetchThread { id: t } => {
+            let ch = rest.get_channel(sf(t)).await.map_err(e)?;
+            if !ch.kind.is_thread() {
+                return Err(BackendError("not a thread".into()));
+            }
+            ParityReply::Thread(crate::model::Channel {
+                id: id(ch.id),
+                guild: ch.guild_id.map(id),
+                parent: ch.parent_id.map(id),
+                name: ch.display_name().into(),
+                topic: None,
+                kind: crate::model::ChannelKind::Text,
+                position: 0,
+                unread: false,
+                muted: false,
+                mentions: 0,
+                voice_users: Vec::new(),
+            })
+        }
         ParityRequest::Onboarding { guild } => {
             let raw = rest.guild_onboarding(sf(guild)).await.map_err(e)?;
             ParityReply::Onboarding(super::parse_onboarding(&raw))

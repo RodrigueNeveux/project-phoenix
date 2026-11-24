@@ -140,6 +140,8 @@ pub enum ParityRequest {
     ScheduledEvents { guild: Id },
     /// `GET /guilds/{g}/onboarding` (Channels & Roles), read-only.
     Onboarding { guild: Id },
+    /// `GET /channels/{id}` for a thread / forum post opened by link.
+    FetchThread { id: Id },
 }
 
 /// One onboarding question (Channels & Roles "Customize" tab).
@@ -209,6 +211,7 @@ pub enum ParityReply {
     Inventory(Vec<InventoryEntry>),
     Events(Vec<GuildEvent>),
     Onboarding(Vec<OnboardingPrompt>),
+    Thread(crate::model::Channel),
 }
 
 /// Fresh READY after a non-resumable reconnect (carried by `AppEvent::Resync`).

@@ -55,7 +55,26 @@ fn open_forum(app: &PhoenixApp) -> Option<Id> {
     (app.channels.get(&id)?.kind == ChannelKind::Forum).then_some(id)
 }
 
-/// Unix seconds of a snowflake.
+/// Opens a thread or forum post by id (link, URL): from the cache, else
+/// `GET /channels/{id}`, then selects it like the client's full post view.
+pub fn open_by_id(app: &mut PhoenixApp, thread: Id, cx: &mut Context<PhoenixApp>) {
+    if app.channels.contains_key(&thread) {
+        app.select_channel(thread, cx);
+        return;
+    }
+    if app.nav.find_thread(thread).is_some() {
+        app.select_thread(thread, cx);
+        return;
+    }
+    app.parity_request(ParityRequest::FetchThread { id: thread }, cx, move |a, r, cx| {
+        // `open_channel_chat` switches to the post's guild itself.
+        if let Ok(ParityReply::Thread(ch)) = r {
+            a.channels.entry(thread).or_insert(ch);
+            a.select_channel(thread, cx);
+        }
+    });
+}
+
 /// The author opened this forum post: the "OP" tag next to their name
 /// (owner from the loaded post lists of the post's forum).
 pub fn is_op(app: &PhoenixApp, channel: Id, author: Id) -> bool {
@@ -122,6 +141,7 @@ pub fn op_tag() -> gpui::Div {
         .child(crate::t!("forum.op"))
 }
 
+/// Unix seconds of a snowflake.
 fn snowflake_time(id: Id) -> i64 {
     (((id.0 >> 22) + 1_420_070_400_000) / 1000) as i64
 }

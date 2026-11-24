@@ -232,6 +232,8 @@ impl Backend for ReadOnly {
             phoenix_app::commands::ParityRequest::ScheduledEvents { .. } => self.0.parity(req),
             // Channels & Roles page (PHX_OPEN=community): GET onboarding.
             phoenix_app::commands::ParityRequest::Onboarding { .. } => self.0.parity(req),
+            // Thread / forum post opened by id (PHX_CHANNEL of a post).
+            phoenix_app::commands::ParityRequest::FetchThread { .. } => self.0.parity(req),
             // Inbox popout tabs (PHX_VIEW=inbox): GET mentions / saved / scheduled.
             phoenix_app::commands::ParityRequest::Mentions { .. }
             | phoenix_app::commands::ParityRequest::SavedMessages
@@ -632,6 +634,9 @@ fn main() -> anyhow::Result<()> {
                 // Voice channels: open their text chat only (never joins voice).
                 if thread.is_some() && !app.channels.contains_key(&c) {
                     app.select_thread(c, cx);
+                } else if !app.channels.contains_key(&c) {
+                    // Forum posts / archived threads: GET /channels/{id}.
+                    phoenix_app::ui::forum::open_by_id(app, c, cx);
                 } else {
                     app.open_channel_chat(c, cx);
                 }
