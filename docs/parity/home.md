@@ -43,7 +43,7 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | Row action tooltips | hover | client strings Message / More / Accept / Ignore / Cancel / Unblock; glyph tinted on button hover (`actionButton_5GqXgh`, `actionAccept_`/`actionDeny_`) | ui/home/friends.rs `round_button` | ✅ |
 | Pending rows (username subtext, Incoming / Outgoing) | rest | friends-pending | ui/home/friends.rs | ✅ |
 | Add Friend form | rest, focus, success, error | friends-addfriend | ui/home/friends.rs `add_friend` | ✅ |
-| Empty states (Online / All / Pending / Blocked) | text | client strings, Add Friend button on All, no-results note for searches | ui/home/friends.rs | ⚠ text and buttons done; the Wumpus illustrations are Discord assets and need a runtime extraction like icons |
+| Empty states (Online / All / Pending / Blocked) | text | client strings, Add Friend button on All, no-results note for searches | ui/home/friends.rs | ✅ text and buttons done. No illustration to extract: `FriendsEmptyState` (web bundle, module 396478) declares lightSrc/darkSrc per section but only renders `pp` (centred column) + `SG` (note); the image component `G8` is never used there |
 
 ## Active Now column
 
@@ -75,7 +75,7 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 
 ## Coverage
 
-- 44 component × state rows: 38 ✅ (86 %), 4 ⚠, 2 ❌ (Nitro home and Shop: never dumped, they need the user to open them).
+- 44 component × state rows: 39 ✅ (89 %), 3 ⚠, 2 ❌ (Nitro home and Shop: never dumped, they need the user to open them).
 - Shipped in this pass: DM header hover and More button, close button, Friends tab states, em dash, group DM intro.
 - Still to do:
   - a 1:1 DM start dump, then the mutual servers row and its buttons;
