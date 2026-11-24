@@ -1850,7 +1850,8 @@ fn a11y_preview(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
         .flex()
         .flex_col()
         .gap(z(8.))
-        .child(title_text(tr("sp.ac.preview")))
+        // #2689 h2 body-md/medium in --text-muted
+        .child(title_text(tr("sp.ac.preview")).text_color(c(tok(idx::TEXT_MUTED))))
         .child(
             div()
                 .flex()
