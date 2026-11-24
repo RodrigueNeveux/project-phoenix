@@ -88,6 +88,19 @@ fn cover(g: &crate::ui::profile_games::Game, col: &Colors) -> Div {
         .children(g.cover.clone().map(|u| img(u).size_full()))
 }
 
+/// `actions_ltNcM4` (gap 8) `button_rOupvJ`: 24px "More" button at the end of a
+/// widget header (MoreHorizontalIcon).
+pub fn more_button(color: Hsla) -> Div {
+    div()
+        .size(z(24.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .child(gpui::svg().path(crate::icons::path("more-horizontal")).size(z(20.)).text_color(color))
+}
+
 /// One game widget card.
 pub fn card(w: &GameWidget, col: &Colors) -> Option<Div> {
     if w.games.is_empty() {
@@ -97,7 +110,9 @@ pub fn card(w: &GameWidget, col: &Colors) -> Option<Div> {
         .h(z(24.))
         .flex()
         .items_center()
-        .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(title(w.kind)));
+        .justify_between()
+        .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(title(w.kind)))
+        .child(more_button(col.strong));
     let body = if w.kind == Kind::Favorite {
         let g = &w.games[0];
         div().flex().gap(z(16.)).child(cover(g, col)).child(

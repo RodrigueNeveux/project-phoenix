@@ -1193,6 +1193,7 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
             Some(t) => hex(mix(modal_bg(t), 0, 0.3)),
             None => c(tok(idx::BACKGROUND_BASE_LOW)),
         },
+        more: false,
     };
     let board: Vec<Div> = if e.tab == 0 { e.widgets.iter().map(|w| super::profile_widgets::render(w, &wcol)).collect() } else { Vec::new() };
     let panel = match e.tab {

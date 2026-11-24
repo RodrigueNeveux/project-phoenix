@@ -31,6 +31,10 @@ impl DiscordBackend {
                 let Ok(cfg) = s.rest.request_json(Method::GET, &format!("/applications/{app}/widget-configs"), None).await else {
                     continue;
                 };
+                if std::env::var_os("PHX_DEBUG_WIDGETS").is_some() {
+                    // Config shape only (keys / types), for parity work on new component kinds.
+                    eprintln!("widget config shape {}", crate::discord_backend::profile_games::shape_of(&cfg));
+                }
                 if let Some(card) = w::build(app, &cfg, &w::identity_data(&ident, app)) {
                     out.push(card);
                 }

@@ -37,7 +37,7 @@ impl DiscordBackend {
     }
 }
 
-fn shape_of(v: &Value) -> String {
+pub(crate) fn shape_of(v: &Value) -> String {
     match v {
         Value::Object(o) => format!("{{{}}}", o.iter().map(|(k, x)| format!("{k}:{}", shape_of(x))).collect::<Vec<_>>().join(",")),
         Value::Array(a) => format!("[{}]", a.first().map(shape_of).unwrap_or_default()),

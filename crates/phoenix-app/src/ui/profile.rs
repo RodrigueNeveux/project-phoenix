@@ -1107,6 +1107,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
                 muted: c(tok(idx::TEXT_MUTED)),
                 card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
                 fade: c(tok(idx::BACKGROUND_BASE_LOWER)),
+                more: true,
             };
             let gcol = crate::ui::profile_board::Colors {
                 strong: c(tok(idx::TEXT_STRONG)),
@@ -1193,7 +1194,17 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
                 .child(tab(2, crate::t!("profile.mutual_servers", n = mutual_s))),
         )
         // tabBarPanel_y4ZEM5: padding-inline-start gutter (scroller margin -12px)
-        .child(div().id("profile-modal-panel").flex_1().min_h_0().pl(z(GUTTER - 12.)).overflow_y_scroll().child(panel));
+        .child(
+            div()
+                .id("profile-modal-panel")
+                .flex_1()
+                .min_h_0()
+                // Board / Activity / Wishlist cards line up with the tab bar (live: both at the
+                // gutter); the mutual lists bleed 12px left for their row hover.
+                .pl(z(if matches!(sel, 1 | 2) { GUTTER - 12. } else { GUTTER }))
+                .overflow_y_scroll()
+                .child(panel),
+        );
 
     let e3 = e.clone();
     // modalHeaderButtons_ZhNJfE: top --space-8 (header-button-top), end --space-8
@@ -1246,7 +1257,27 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
         .pt(z(pad + SYSTEM_BAR))
         .pl(z(pad))
         .pr(z(32.))
-        .child(profile)
+        // The applied profile frame wraps the profile card (same layers as the popout,
+        // card width pw).
+        .child({
+            let frame = i
+                .prof
+                .and_then(|p| p.frame_sku)
+                .and_then(|s| crate::ui::profile_fx::product(app, s, cx))
+                .and_then(|c| c.frame);
+            match frame {
+                None => profile.into_any_element(),
+                Some(f) => div()
+                    .relative()
+                    .flex_none()
+                    .flex()
+                    .flex_col()
+                    .children(crate::ui::profile_fx::frame(&f, pw, false, cx))
+                    .child(profile)
+                    .children(crate::ui::profile_fx::frame(&f, pw, true, cx))
+                    .into_any_element(),
+            }
+        })
         .child(right)
         .child(close)
 }

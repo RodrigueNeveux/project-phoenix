@@ -14,7 +14,7 @@ mod nav;
 mod people;
 mod profile_edit;
 mod profile_widgets;
-mod profile_games;
+pub(crate) mod profile_games;
 mod collectibles_shop;
 mod thread_members;
 #[cfg(test)]

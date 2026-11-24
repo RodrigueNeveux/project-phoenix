@@ -160,6 +160,8 @@ pub struct WidgetColors {
     pub card: Hsla,
     /// Colour the hero image fades into on its left (what is behind the card).
     pub fade: Hsla,
+    /// Draw the header "More" button (full profile; not in the editor preview).
+    pub more: bool,
 }
 
 pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
@@ -169,7 +171,8 @@ pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
         .items_center()
         .gap(z(4.))
         .children(w.icon.clone().map(|u| img(u).size(z(16.)).rounded(z(2.))))
-        .child(div().truncate().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(w.name.clone()));
+        .child(div().flex_1().min_w_0().truncate().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(w.name.clone()))
+        .children(col.more.then(|| crate::ui::profile_board::more_button(col.strong)));
     let content = div()
         .flex()
         .flex_col()
