@@ -452,8 +452,10 @@ pub fn rich_with_emoji_scaled(
         let mut ranges = Vec::new();
         let mut targets = Vec::new();
         for (cr, tg) in t.click_ranges.iter().zip(t.click_targets.iter()) {
-            if cr.start >= range.start && cr.end <= range.end {
-                ranges.push(cr.start - range.start..cr.end - range.start);
+            // Overlapping ranges are clamped: a channel mention's "#" is drawn as an icon,
+            // so its segment starts after it.
+            if cr.start < range.end && cr.end > range.start {
+                ranges.push(cr.start.max(range.start) - range.start..cr.end.min(range.end) - range.start);
                 targets.push(tg.clone());
             }
         }
@@ -510,11 +512,17 @@ pub fn rich_with_emoji_scaled(
         row
     };
     for (r, token) in &t.emoji {
+        if r.start < last {
+            continue;
+        }
         row = push_lines(row, last..r.start, &mut seg);
         if token.as_ref() == crate::richtext::CHANNEL_ICON_TOKEN {
+            // The icon and the channel name stay one unit: as separate flex items the "#"
+            // ended a line and the name started the next one.
+            let end = t.click_ranges.iter().find(|c| c.start == r.start).map_or(r.end, |c| c.end);
             // icon__RYHZ5: 1em square, margin-inline-end --space-4, inside the
             // .mention pill (--mention-background, radius 3px, padding-left 2px).
-            row = row.child(
+            let pill = div().flex().flex_none().items_center().child(
                 div()
                     .h(z(22.))
                     .flex()
@@ -525,9 +533,11 @@ pub fn rich_with_emoji_scaled(
                     .bg(crate::theme::ca(crate::theme::Palette::MENTION_BG))
                     .child(crate::ui::icon(crate::assets::Icon::Hash, 16., crate::theme::c(crate::theme::Palette::MENTION_FG))),
             );
-        } else {
-            row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size)));
+            row = row.child(push_text(pill, r.end..end, &mut seg));
+            last = end;
+            continue;
         }
+        row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size)));
         last = r.end;
     }
     row = push_lines(row, last..t.text.len(), &mut seg);
