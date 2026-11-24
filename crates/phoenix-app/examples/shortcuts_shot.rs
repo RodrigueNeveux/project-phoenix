@@ -59,7 +59,11 @@ fn main() -> anyhow::Result<()> {
     }
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     cx.run_until_parked();
+    // Headless time is virtual: advance it so enter animations (modals, popouts) finish.
+    cx.advance_clock(std::time::Duration::from_secs(2));
     let _ = cx.capture_screenshot(win.into())?;
+    // Headless time is virtual: advance it so enter animations (modals, popouts) finish.
+    cx.advance_clock(std::time::Duration::from_secs(2));
     let img = cx.capture_screenshot(win.into())?;
     img.save(&out)?;
     println!("wrote {out} ({}x{})", img.width(), img.height());

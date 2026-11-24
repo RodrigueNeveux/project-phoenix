@@ -702,6 +702,8 @@ fn main() -> anyhow::Result<()> {
     for _ in 0..2 {
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
         pump(&mut cx, 200);
+        // Headless time is virtual: advance it so enter animations (modals, popouts) finish.
+        cx.advance_clock(std::time::Duration::from_secs(2));
         img = Some(cx.capture_screenshot(win.into())?);
     }
     eprintln!("[{:.1}s] captured", t0.elapsed().as_secs_f32());
