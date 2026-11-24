@@ -222,6 +222,28 @@ impl Backend for ReadOnly {
             _ => denied(),
         }
     }
+    // Pins, expression pickers and search (PHX_OPEN): read-only GETs.
+    fn load_pins(&self, c: Id) -> BoxFuture<Vec<Message>> {
+        self.0.load_pins(c)
+    }
+    fn guild_stickers(&self, g: Id) -> Vec<phoenix_app::ui::pickers::types::StickerData> {
+        self.0.guild_stickers(g)
+    }
+    fn sticker_packs(&self) -> BoxFuture<Vec<phoenix_app::ui::pickers::types::StickerPackData>> {
+        self.0.sticker_packs()
+    }
+    fn gif_trending(&self) -> BoxFuture<phoenix_app::ui::pickers::types::GifHome> {
+        self.0.gif_trending()
+    }
+    fn gif_trending_gifs(&self) -> BoxFuture<Vec<phoenix_app::ui::pickers::types::GifItem>> {
+        self.0.gif_trending_gifs()
+    }
+    fn gif_search(&self, q: String) -> BoxFuture<Vec<phoenix_app::ui::pickers::types::GifItem>> {
+        self.0.gif_search(q)
+    }
+    fn search_messages(&self, r: phoenix_app::ui::search::SearchRequest) -> BoxFuture<phoenix_app::ui::search::SearchPage> {
+        self.0.search_messages(r)
+    }
     // nav / other parity / open_dm / notes / stickers / voice_control keep the
     // trait defaults (offline errors or no-ops): they may write.
 }
