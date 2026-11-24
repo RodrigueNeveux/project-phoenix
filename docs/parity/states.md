@@ -19,7 +19,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | folder `folderIcon_RTMSuZ` | hover | `--background-mod-subtle` bg | `--background-mod-subtle` | ✅ |
 | rail tooltip `tooltip_ZDdyhE` | position | card starts 12px right of the tile (x 72 for a 20..60 tile), vertically centred, caret left | anchor at tile right + 12 − 5 | ✅ (fixed) |
 | rail tooltip | style | `--background-surface-high`, 8px radius, inset 1px `--border-subtle` + `--shadow-high`, padding 8 12, body-md/semibold 16/20 | tokens | ✅ (fixed: was old palette) |
-| rail tooltip | appear | fade + slide in (JS spring) | 100ms fade + 6px slide | ❌ timing not measured (CDP lock held by another agent) |
+| rail tooltip | appear | no delay (~60ms), opacity 1, slides 4px leftwards over ~100ms (ref-cache tooltip-rail-appear.json) | 100ms ease-out-quint 4px slide, no fade | ✅ |
 
 ## Channel list
 
@@ -87,6 +87,6 @@ renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-45 rows: 43 ✅, 1 ➖, 1 ❌.
+45 rows: 44 ✅, 1 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.

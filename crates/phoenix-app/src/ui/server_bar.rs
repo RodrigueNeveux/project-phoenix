@@ -323,7 +323,9 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
                 .with_animation(
                     "rail-tip",
                     Animation::new(Duration::from_millis(100)).with_easing(ease_out_quint()),
-                    |d, t| d.opacity(t).ml(z(-6. * (1. - t))),
+                    // ref-cache tooltip-rail-appear.json: shown ~60ms after hover, opacity 1,
+                    // card slides 4px right-to-left (x 76 → 72) over ~100ms.
+                    |d, t| d.ml(z(4. * (1. - t))),
                 ),
         ),
     )
