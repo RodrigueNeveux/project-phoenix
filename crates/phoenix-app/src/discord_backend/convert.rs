@@ -1240,10 +1240,17 @@ pub fn self_activities(r: &phoenix_api::gateway::events::Ready) -> Option<AppEve
         let get = |n| f.iter().find(|x| x.0 == n && x.1 == 2).and_then(|x| std::str::from_utf8(x.2).ok()).filter(|t| !t.is_empty()).map(str::to_owned);
         // CustomStatus: text (1), emoji_id (2), emoji_name (3).
         let (text, emoji) = (get(1), get(3));
-        (text.is_some() || emoji.is_some()).then_some((text, emoji))
+        let emoji_id = f.iter().find(|x| x.0 == 2 && (x.1 == 1 || x.1 == 0)).map(|x| x.3).filter(|v| *v != 0);
+        (text.is_some() || emoji.is_some()).then_some((text, emoji, emoji_id))
     });
-    if let Some((text, emoji)) = from_proto {
-        let a = serde_json::json!({"type": 4, "name": "Custom Status", "state": text, "emoji": emoji.map(|e| serde_json::json!({"name": e}))});
+    if let Some((text, emoji, emoji_id)) = from_proto {
+        // The proto has no `animated` flag: request the animated webp, which the CDN
+        // answers with the still image for a static emoji.
+        let emoji = emoji.map(|e| match emoji_id {
+            Some(i) => serde_json::json!({"name": e, "id": i.to_string(), "animated": true}),
+            None => serde_json::json!({"name": e}),
+        });
+        let a = serde_json::json!({"type": 4, "name": "Custom Status", "state": text, "emoji": emoji});
         return Some(AppEvent::Activities { user: id(r.user.id), activities: crate::presence::parse_activities(&[a]) });
     }
     let sessions = r.sessions.as_ref()?.as_array()?;
