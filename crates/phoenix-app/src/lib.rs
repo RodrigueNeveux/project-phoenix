@@ -18,6 +18,7 @@ pub mod model;
 pub mod notifications;
 pub mod presence;
 pub mod richtext;
+pub mod shortcuts;
 pub mod theme;
 pub mod ui;
 pub mod voice;

@@ -36,6 +36,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("escape", Escape, Some(CONTEXT)),
         KeyBinding::new("ctrl-u", ToggleMembers, Some(CONTEXT)),
     ]);
+    crate::shortcuts::bind_keys(cx);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1192,6 +1193,10 @@ impl PhoenixApp {
         if ui::settings::on_escape(self, cx) {
             return;
         }
+        if crate::shortcuts::on_escape() {
+            cx.notify();
+            return;
+        }
         if crate::media::close_viewer(cx) {
         } else if self.people.any_overlay() {
             self.people.close_overlays();
@@ -1203,6 +1208,8 @@ impl PhoenixApp {
             self.composer.update(cx, |s, cx| s.set_value("", window, cx));
         } else if self.replying_to.take().is_none() {
             self.message_list.scroll_to_end();
+            // Client: Esc = mark channel as read (MARK_CHANNEL_READ).
+            self.mark_channel_read(cx);
         }
         cx.notify();
     }
@@ -1268,6 +1275,7 @@ impl Render for PhoenixApp {
             .on_action(cx.listener(ui::settings::open_action))
             .capture_key_down(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_down(this, ev, cx)))
             .capture_key_up(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_up(this, ev, cx)))
+            .map(|d| crate::shortcuts::handlers(self, d, cx))
             .on_action(cx.listener(|this, _: &ToggleMembers, _, cx| {
                 this.show_members = !this.show_members;
                 cx.notify();
@@ -1293,5 +1301,6 @@ impl Render for PhoenixApp {
             .children(ui::components::overlays(self, window, cx))
             .children(ui::voice_panel::overlays(self, window, cx))
             .children(crate::actions::overlays(self, window, cx))
+            .children(crate::shortcuts::render_help(self, cx))
     }
 }
