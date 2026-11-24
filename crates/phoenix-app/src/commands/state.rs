@@ -153,6 +153,8 @@ pub struct UnreadCard {
     /// More unread messages than shown: "View all" button.
     pub more: bool,
     pub loaded: bool,
+    /// The messages request failed (client `hasError`): the card stays, never acked.
+    pub error: Option<SharedString>,
 }
 
 pub struct InboxState {

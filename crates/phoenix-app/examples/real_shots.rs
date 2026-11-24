@@ -858,6 +858,23 @@ fn main() -> anyhow::Result<()> {
         pump(&mut cx, 500);
     }
     eprintln!("[{:.1}s] waited", t0.elapsed().as_secs_f32());
+    // `PHX_DEBUG_UNREADS=1`: what Inbox > Unreads holds (channel ids, counts), on stderr.
+    if std::env::var_os("PHX_DEBUG_UNREADS").is_some() {
+        cx.update(|cx| {
+            let a = v.read(cx);
+            let order = phoenix_app::ui::server_bar::flat_guild_order(a);
+            let entries = a.backend.inbox_unreads(&order);
+            eprintln!("unreads: {} guilds in order, {} entries from the backend", order.len(), entries.len());
+            for e in entries.iter().take(20) {
+                eprintln!("  entry {} guild {:?} sort {} mentions {} ack {} last {}", e.channel.0, e.guild.map(|g| g.0), e.sort, e.mentions, e.oldest_read.0, e.newest.0);
+            }
+            let i = &a.parity.inbox;
+            eprintln!("cards: {} (loading {})", i.unreads.len(), i.unreads_loading);
+            for c in &i.unreads {
+                eprintln!("  card {} loaded {} msgs {} more {} error {:?}", c.entry.channel.0, c.loaded, c.msgs.len(), c.more, c.error);
+            }
+        });
+    }
     // Same rows as the user's Discord: replay its scroll offsets on our lists.
     if let Some(sc) = scroll {
         apply_scroll(&mut cx, win.into(), &v, &sc, &pump)?;

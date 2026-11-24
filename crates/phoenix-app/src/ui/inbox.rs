@@ -119,7 +119,7 @@ impl PhoenixApp {
         i.unreads_loading = false;
         i.unreads = entries
             .into_iter()
-            .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false })
+            .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false, error: None })
             .collect();
         self.load_next_unread(cx);
         cx.notify();
@@ -149,11 +149,14 @@ impl PhoenixApp {
                 i.unreads_loading = false;
                 if let Some(card) = i.unreads.iter_mut().find(|c| c.entry.channel == entry.channel) {
                     card.loaded = true;
-                    if let Ok(msgs) = res {
-                        (card.msgs, card.more) = shown_messages(&entry, msgs);
+                    match res {
+                        Ok(msgs) => {
+                            (card.msgs, card.more) = shown_messages(&entry, msgs);
+                        }
+                        Err(e) => card.error = Some(e.0.into()),
                     }
                 }
-                i.unreads.retain(|c| !c.loaded || c.entry.kind != Kind::Messages || !c.msgs.is_empty());
+                i.unreads.retain(|c| !c.loaded || c.entry.kind != Kind::Messages || !c.msgs.is_empty() || c.error.is_some());
                 cx.notify();
             });
         })
@@ -957,6 +960,9 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
             ),
         );
         prev = Some(m);
+    }
+    if let Some(e) = &card.error {
+        body = body.child(div().px(z(16.)).text_size(z(14.)).text_color(tk(idx::TEXT_FEEDBACK_CRITICAL)).child(crate::t!("inbox.load_failed", e = e)));
     }
     if card.more
         && let Some(last) = card.msgs.last().map(|m| m.id)
