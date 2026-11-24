@@ -170,9 +170,13 @@ pub fn stem(word: &str) -> String {
     }
     let mut w: Vec<u8> = word.trim_start_matches('\'').as_bytes().to_vec();
     // Initial y, and y after a vowel, are consonants (Y).
-    for i in 0..w.len() {
-        if w[i] == b'y' && (i == 0 || vowel(w[i - 1])) {
-            w[i] = b'Y';
+    let mut after_vowel = true; // the first letter counts as "after a vowel"
+    for ch in w.iter_mut() {
+        if *ch == b'y' && after_vowel {
+            *ch = b'Y';
+            after_vowel = false;
+        } else {
+            after_vowel = vowel(*ch);
         }
     }
     let r1 = if w.starts_with(b"gener") || w.starts_with(b"arsen") {
@@ -197,8 +201,7 @@ pub fn stem(word: &str) -> String {
     } else if ends(&w, "ied") || ends(&w, "ies") {
         let with = if w.len() > 4 { "i" } else { "ie" };
         replace_end(&mut w, 3, with);
-    } else if ends(&w, "us") || ends(&w, "ss") {
-    } else if ends(&w, "s") && w.len() >= 2 && has_vowel(&w[..w.len() - 2]) {
+    } else if !ends(&w, "us") && !ends(&w, "ss") && ends(&w, "s") && w.len() >= 2 && has_vowel(&w[..w.len() - 2]) {
         w.pop();
     }
     if matches!(&w[..], b"inning" | b"outing" | b"canning" | b"herring" | b"earring" | b"proceed" | b"exceed" | b"succeed") {
@@ -307,7 +310,7 @@ pub fn stem(word: &str) -> String {
         if at >= r2 || (at >= r1 && !short_syllable_at(&w, at)) {
             w.pop();
         }
-    } else if n >= 2 && w[n - 1] == b'l' && n - 1 >= r2 && w[n - 2] == b'l' {
+    } else if n >= 2 && w[n - 1] == b'l' && n > r2 && w[n - 2] == b'l' {
         w.pop();
     }
     for c in &mut w {

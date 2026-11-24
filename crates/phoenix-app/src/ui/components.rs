@@ -655,8 +655,7 @@ fn select(app: &PhoenixApp, k: &Ctx, s: &api::SelectMenu) -> AnyElement {
 }
 
 /// A component media item as a chat attachment, so it is drawn (and opened in the
-/// viewer) like an uploaded one. A spoiler takes the SPOILER_ name the chat
-/// renderer covers.
+/// viewer, or covered when it is a spoiler) like an uploaded one.
 fn as_attachment(m: &api::UnfurledMedia, name: Option<&str>, size: u64, spoiler: bool) -> crate::model::Attachment {
     use crate::model::AttachmentKind as K;
     let ct = m.content_type.as_deref().unwrap_or("");
@@ -674,10 +673,9 @@ fn as_attachment(m: &api::UnfurledMedia, name: Option<&str>, size: u64, spoiler:
         let path = m.url.split(['?', '#']).next().unwrap_or_default();
         path.rsplit('/').next().unwrap_or("file").to_owned()
     });
-    let filename = if spoiler { format!("SPOILER_{base}") } else { base };
     let (w, h) = m.size().unwrap_or((0, 0));
     crate::model::Attachment {
-        filename: filename.into(),
+        filename: base.into(),
         url: if matches!(kind, K::Image | K::Video) { m.fetch_url().to_owned() } else { m.url.clone() }.into(),
         width: w,
         height: h,
@@ -685,6 +683,7 @@ fn as_attachment(m: &api::UnfurledMedia, name: Option<&str>, size: u64, spoiler:
         size,
         kind,
         original: m.url.clone().into(),
+        spoiler,
     }
 }
 
@@ -735,7 +734,7 @@ fn gallery(items: &[api::GalleryItem], msg: Id, ix: usize, cx: &App) -> AnyEleme
         [] => div().into_any_element(),
         [a] if matches!(a.kind, crate::model::AttachmentKind::Image | crate::model::AttachmentKind::Video) => {
             let size = crate::media::fit(a.width, a.height, 600., 350.);
-            if a.filename.starts_with("SPOILER_")
+            if a.spoiler
                 && let Some(cover) = crate::ui::chat::spoiler_cover(a.url.clone(), &a.url, size, cx)
             {
                 return cover;
@@ -1420,7 +1419,7 @@ mod tests {
             ..Default::default()
         };
         let a = as_attachment(&m, None, 0, true);
-        assert_eq!((a.filename.as_ref(), a.url.as_ref(), a.width), ("SPOILER_b.png", "https://media.example/a/b.png?ex=1", 800));
+        assert_eq!((a.filename.as_ref(), a.url.as_ref(), a.width, a.spoiler), ("b.png", "https://media.example/a/b.png?ex=1", 800, true));
         assert_eq!(a.kind, crate::model::AttachmentKind::Image);
         let f = UnfurledMedia { url: "https://cdn.example/t.html".into(), width: Some(0), height: Some(0), content_type: Some("text/html".into()), ..Default::default() };
         let a = as_attachment(&f, Some("t.html"), 40104, false);
