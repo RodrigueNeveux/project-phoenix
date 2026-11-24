@@ -61,6 +61,12 @@ pub fn markdown(app: &PhoenixApp, text: &str) -> AnyElement {
     markdown_sized(app, text, false, None)
 }
 
+/// [`markdown`] of a message shown outside the chat (inbox, pins): custom and
+/// unicode emoji render as images instead of their raw `<:name:id>` token.
+pub fn markdown_in(app: &PhoenixApp, text: &str, entity: &Entity<PhoenixApp>, msg: Id) -> AnyElement {
+    markdown_sized(app, text, false, Some((entity, msg)))
+}
+
 /// [`markdown`]; `reduced` is root_ sizeReduced_ (text inside a container):
 /// .875rem, line-height calc(--chat-markup-line-height * .875), small .75rem.
 fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool, ctx: Option<(&Entity<PhoenixApp>, Id)>) -> AnyElement {

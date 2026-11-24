@@ -745,7 +745,7 @@ fn channel_head(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>
 /// Cozy message of the inbox cards (`singleMessage_0JZW4Z wrapper_2i8Bfm cozy_`):
 /// padding 2 20 2 80, 40px avatar at 20px, username 16/22 500 --text-strong,
 /// timestamp 12px 500 --chat-text-muted (margin-start 4), content 16/22 --text-default.
-fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32) -> gpui::Div {
+fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixApp>) -> gpui::Div {
     let u = app.users.get(&m.author);
     let name_color = app.author_color(m.author).map(|c2| crate::theme::role_color(Some(c2))).unwrap_or_else(|| tk(idx::TEXT_STRONG));
     div()
@@ -771,7 +771,7 @@ fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32) -> gpui::Div {
                 .when_some(u.and_then(|u| u.tag.clone()), |d, t| d.child(crate::ui::members::server_tag(&t).ml(z(2.)).mr(z(4.))))
                 .child(div().ml(z(4.)).text_size(z(12.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::CHAT_TEXT_MUTED)).child(crate::app::format_time_full(m.timestamp))),
         )
-        .child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown(app, &m.content)))
+        .child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id)))
 }
 
 /// `box_0JZW4Z`: --background-surface-higher, 1px --border-subtle, radius
@@ -808,7 +808,7 @@ fn message_entry(
                 sm_icon_button(("inbox-x", id.0), close_glyph).on_click(cx.listener(move |a, _, _, cx| close(a, cx))),
             ],
         ))
-        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2.)))
+        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2., cx)))
         .into_any_element()
 }
 
@@ -990,7 +990,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                 list = list.child(
                     inbox_box()
                         .child(channel_head(app, m.channel, Vec::new()))
-                        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2.))),
+                        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2., cx))),
                 );
             }
         }
@@ -1312,7 +1312,7 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                 .border_color(tk(idx::BORDER_SUBTLE))
                 .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
                 .overflow_hidden()
-                .child(div().ml(z(-4.)).child(cozy_message(app, m, 16.)))
+                .child(div().ml(z(-4.)).child(cozy_message(app, m, 16., cx)))
                 .child(
                     div()
                         .absolute()
