@@ -46,6 +46,7 @@ struct Watch {
     owner: u64,
     rtc_server_id: Option<String>,
     conn: Option<VoiceConnection>,
+    stats: connection::ConnStats,
 }
 
 struct Running {
@@ -160,6 +161,10 @@ pub fn own_stream_stats() -> Option<connection::ConnStats> {
 
 pub fn own_stream_pending() -> bool {
     manager().state.lock().own.is_some()
+}
+
+pub fn watch_stats(key: &str) -> Option<connection::ConnStats> {
+    manager().state.lock().watches.get(key).map(|w| w.stats)
 }
 
 pub fn watching(key: &str) -> bool {
@@ -306,6 +311,9 @@ impl VoiceManager {
             GatewayEvent::StreamCreate(sc) => return on_stream_create(&mut st, me, sc),
             GatewayEvent::StreamServerUpdate(su) => return on_stream_server(&mut st, me, su),
             GatewayEvent::StreamDelete(sd) => {
+                if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
+                    eprintln!("voice-trace: STREAM_DELETE key={} reason={:?}", sd.stream_key, sd.reason);
+                }
                 if st.own.as_ref().and_then(|o| o.key.as_deref()) == Some(sd.stream_key.as_str()) {
                     stop_own_stream(&mut st, sd.reason.clone());
                 } else if st.watches.contains_key(&sd.stream_key) {
@@ -861,9 +869,17 @@ fn start_watch(st: &mut State, key: String) {
     if st.watches.contains_key(&key) {
         return;
     }
-    let Some(gw) = st.gw.clone() else { return };
+    let Some(gw) = st.gw.clone() else {
+        if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
+            eprintln!("voice-trace: watch {key}: no gateway");
+        }
+        return;
+    };
+    if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
+        eprintln!("voice-trace: op 20 STREAM_WATCH {key}");
+    }
     st.stream_generation += 1;
-    st.watches.insert(key.clone(), Watch { generation: st.stream_generation, owner: k.owner, rtc_server_id: None, conn: None });
+    st.watches.insert(key.clone(), Watch { generation: st.stream_generation, owner: k.owner, rtc_server_id: None, conn: None, stats: Default::default() });
     if let Err(e) = gw.stream_watch(&key) {
         st.watches.remove(&key);
         stream_ui(st, super::StreamUiEvent::Failed(e.to_string()));
@@ -897,6 +913,11 @@ async fn watch_events(generation: u64, key: String, owner: u64, mut events: mpsc
         }
         match ev {
             VoiceEvent::Video { frame, .. } => push_video(streams(), owner, &frame, STREAM_DECODE),
+            VoiceEvent::Stats(s) => {
+                if let Some(w) = manager().state.lock().watches.get_mut(&key) {
+                    w.stats = s;
+                }
+            }
             VoiceEvent::VideoState { active: false, .. } => {
                 streams().lock().remove(&owner);
             }

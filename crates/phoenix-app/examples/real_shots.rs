@@ -1444,7 +1444,12 @@ fn main() -> anyhow::Result<()> {
         for t in 0..secs {
             pump(&mut cx, 1000);
             let f = phoenix_app::voice::call::stream_frame(owner);
-            println!("watch-only t={t} watching={} frame={:?}", phoenix_app::voice::call::watching(&key), f.as_ref().map(|f| (f.width, f.height, f.pts_us)));
+            println!(
+                "watch-only t={t} watching={} stats={:?} frame={:?}",
+                phoenix_app::voice::call::watching(&key),
+                phoenix_app::voice::call::watch_stats(&key),
+                f.as_ref().map(|f| (f.width, f.height, f.pts_us))
+            );
             if let Some(f) = f.filter(|f| f.pts_us > 30)
                 && !saved
             {

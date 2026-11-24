@@ -301,7 +301,16 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(tiles_el)
         .child(bottom_controls(app, collapse(w + 16.), cx));
 
-    let root = div().flex_1().min_w_0().size_full().overflow_hidden().flex().flex_row().bg(t(idx::BACKGROUND_BASE_LOWEST)).child(call);
+    let root = div()
+        .flex_1()
+        .min_w_0()
+        .size_full()
+        .overflow_hidden()
+        .flex()
+        .flex_row()
+        .bg(t(idx::BACKGROUND_BASE_LOWEST))
+        .child(call)
+        .children(stream_menu(app, cx));
     Some(if chat_open() {
         root.child(
             div()
@@ -319,6 +328,69 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     } else {
         root.into_any_element()
     })
+}
+
+thread_local! {
+    static STREAM_MENU: Cell<Option<(Id, gpui::Point<gpui::Pixels>)>> = const { Cell::new(None) };
+    static STREAM_VOLUME: std::cell::RefCell<std::collections::HashMap<u64, u32>> = Default::default();
+}
+
+pub fn stream_volume(owner: Id) -> u32 {
+    STREAM_VOLUME.with(|v| v.borrow().get(&owner.0).copied().unwrap_or(100))
+}
+
+fn stream_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    use crate::ui::context_menu::{Dismiss, MenuItem};
+    let (owner, pos) = STREAM_MENU.with(Cell::get)?;
+    let key = stream_key(app, owner)?;
+    let watching = app.voice.watching.contains(&key);
+    let e = cx.entity();
+    let dismiss: Dismiss = std::rc::Rc::new(move |_, cx| {
+        STREAM_MENU.with(|m| m.set(None));
+        e.update(cx, |_, cx| cx.notify());
+    });
+    let vol = stream_volume(owner);
+    let mut items = vec![
+        MenuItem::Custom(
+            div()
+                .px(z(8.))
+                .py(z(6.))
+                .flex()
+                .flex_col()
+                .gap(z(8.))
+                .child(div().text_size(z(14.)).font_weight(FontWeight::MEDIUM).text_color(t(idx::INTERACTIVE_TEXT_DEFAULT)).child(crate::t!("voice.stream_volume")))
+                .child(crate::ui::settings::voice::slider(
+                    "stream-volume",
+                    vol as f32 / 200.,
+                    format!("{vol}%").into(),
+                    None,
+                    std::rc::Rc::new(move |app: &mut PhoenixApp, f: f32, _: bool, cx: &mut Context<PhoenixApp>| {
+                        let v = (f * 200.).round() as u32;
+                        STREAM_VOLUME.with(|m| m.borrow_mut().insert(owner.0, v));
+                        drop(app.backend.voice_control(crate::voice::VoiceControl::SetStreamVolume(owner, v as f32 / 100.)));
+                        cx.notify();
+                    }),
+                    cx,
+                ))
+                .into_any_element(),
+        ),
+        MenuItem::Separator,
+    ];
+    let e = cx.entity();
+    let k = key.clone();
+    items.push(MenuItem::action(if watching { crate::t!("voice.stop_watching") } else { crate::t!("voice.watch_stream") }, None, move |_, _, cx| {
+        let k = k.clone();
+        e.update(cx, |a, cx| {
+            let c = if watching { crate::voice::VoiceControl::StopWatching(k) } else { crate::voice::VoiceControl::WatchStream(k) };
+            drop(a.backend.voice_control(c));
+            cx.notify();
+        });
+    }));
+    items.push(MenuItem::action(crate::t!("call.fullscreen"), None, move |_, w, _| {
+        set_focus(Focus::Tile(owner, true));
+        w.toggle_fullscreen();
+    }));
+    Some(crate::ui::context_menu::render(pos, items, dismiss))
 }
 
 fn strip_button(open: bool, fade: f32, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -625,6 +697,18 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
     };
     let white = t(idx::WHITE);
 
+    let owner = tile.user;
+    let base = if tile.stream && !me {
+        base.on_mouse_down(
+            gpui::MouseButton::Right,
+            cx.listener(move |_, ev: &gpui::MouseDownEvent, _, cx| {
+                STREAM_MENU.with(|m| m.set(Some((owner, ev.position))));
+                cx.notify();
+            }),
+        )
+    } else {
+        base
+    };
     let inner = if tile.stream {
         let skey = stream_key(app, tile.user);
         let watching = skey.as_ref().is_some_and(|k| app.voice.watching.contains(k));

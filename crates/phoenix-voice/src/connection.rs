@@ -220,7 +220,16 @@ async fn run(
                             let caps = crate::media::video::probe_capabilities();
                             gw.select_protocol(&ip, port, mode.name(), &caps.offer())?;
                             let want = if cfg.info.stream { "screen" } else { "video" };
-                            let vs = r.streams.iter().find(|s| s.kind == want).map_or((0, 0), |s| (s.ssrc, s.rtx_ssrc));
+                            if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
+                                let list: Vec<_> = r.streams.iter().map(|s| (s.kind.as_str(), s.rid.as_str(), s.ssrc, s.rtx_ssrc)).collect();
+                                eprintln!("voice-trace: ready stream={} streams={list:?}", cfg.info.stream);
+                            }
+                            let vs = r
+                                .streams
+                                .iter()
+                                .find(|s| s.kind == want)
+                                .or_else(|| r.streams.iter().find(|s| s.ssrc != 0))
+                                .map_or((0, 0), |s| (s.ssrc, s.rtx_ssrc));
                             media = Some(Media {
                                 socket,
                                 ssrc: r.ssrc,
@@ -443,6 +452,9 @@ async fn run(
                         VideoOut::Start { width, height, fps, bitrate } => {
                             if m.video_ssrc == 0 {
                                 tracing::warn!("voice: no video ssrc from ready");
+                                if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
+                                    eprintln!("voice-trace: no video ssrc from ready, video not started");
+                                }
                                 continue;
                             }
                             m.bitrate = bitrate;
