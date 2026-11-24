@@ -23,8 +23,8 @@ GPUI only advances the frames of an `img` that has an element id: the frame inde
 its timer live in the element state, and an id-less `img` of a GIF or animated WebP
 stays on frame 0 forever (`vendor/gpui-pre/src/elements/img.rs`, `global_id.is_some()`
 gates both the state and `request_animation_frame`). Offscreen proof with
-`anim_emoji_shot` and a 4-frame 100 ms test GIF: before the fix the six captures were
-identical. Every image that can animate now carries an id (`media::anim_id`).
+`anim_emoji_shot` (control row, same 4-frame 100 ms GIF, 3 s sampled every 20 ms on the
+headless clock): bare `img` without id 0 frame changes, with an id 62–64. Every image that can animate now carries an id (`media::anim_id`).
 
 | media | client rule | Phoenix | status |
 |---|---|---|---|

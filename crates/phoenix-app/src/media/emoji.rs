@@ -116,7 +116,9 @@ impl RenderOnce for CustomEmojiImage {
                 })
             })
             // The id keeps the frame index and timer: without it GPUI never advances the frames.
-            .child(img(src).id("frames").size(px(size)).with_fallback(fallback))
+            // Keyed by URL: a still copy of the same emoji under the same parent (picker
+            // tile, static frame) would otherwise share the state and reset it to frame 0.
+            .child(img(src.clone()).id(gpui::ElementId::Name(src)).size(px(size)).with_fallback(fallback))
             .into_any_element()
     }
 }
