@@ -38,6 +38,7 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 - Clamped profile bios cut a long URL on the line instead of wrapping it with `break-word` inside the 3-line clamp.
 - Reply previews draw mentions as plain text, without the mention colour.
 - Some large attachments (probably big GIFs) stay on the loading placeholder after 45 s in `real_shots`.
+- A bot embed image (botillon.gg honeypot) is cropped on the right by `object-fit: cover`. The embed's width/height metadata probably does not match the served image. Not checked against the client yet.
 - Group DM "a ajouté quelqu'un au groupe." does not name the added user, because the model does not keep message mentions.
 
 ## Overlays & pages
