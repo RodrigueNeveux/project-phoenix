@@ -401,8 +401,6 @@ msg.interaction_info_body: "Application : {app} (ID {app_id})\nIdentifiant du me
 msg.copy_id: "Copier l'identifiant du message"
 msg.attachments: "{n} pièce(s) jointe(s)"
 msg.delete_confirm: "Veux-tu vraiment supprimer ce message ?"
-msg.protip: "ASTUCE :"
-msg.protip_delete: "Maintiens Maj enfoncée en cliquant sur Supprimer le message pour ignorer cette confirmation."
 common.delete: "Supprimer"
 pins.empty: "Ce salon n'a pas encore de messages épinglés... pour l'instant."
 pins.title: "Messages épinglés"

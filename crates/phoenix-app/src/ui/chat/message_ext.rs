@@ -301,13 +301,17 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
             .flex_col()
             .min_w_0()
             .child(
+                // Inline edit (live sandbox 2026-11-24): channelTextArea_SY_P2T margin-top 8,
+                // radius 8, 1px --border-subtle, 56px tall (textArea 16/22).
                 div()
                     .id("edit-box")
-                    .mt(z(4.))
-                    .min_h(z(44.))
+                    .mt(z(8.))
+                    .min_h(z(56.))
                     .px(z(16.))
                     .rounded(z(8.))
-                    .bg(c(Palette::INPUT_BG))
+                    .border_1()
+                    .border_color(tk(idx::BORDER_SUBTLE))
+                    .bg(tk(idx::CHAT_BACKGROUND_DEFAULT))
                     .flex()
                     .items_center()
                     .text_size(z(16.))
@@ -325,13 +329,15 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
                     .child(ui::icon(Icon::Emoji, 22., c(Palette::INTERACTIVE))),
             )
             .child(
-                // operations_h_zE4S: 12px medium --text-default, padding 7px 0; links --text-link.
+                // operations_h_zE4S: 12px / 12px, weight 400 (live), --text-default, padding
+                // 7px 0; links --text-link.
                 div()
                     .py(z(7.))
                     .flex()
                     .gap(z(4.))
                     .text_size(z(12.))
-                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .line_height(z(16.))
+                    .font_weight(gpui::FontWeight::NORMAL)
                     .text_color(tk(idx::TEXT_DEFAULT))
                     .child(crate::t!("edit.escape_to"))
                     .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| a.cancel_edit(w, cx))))
@@ -341,7 +347,6 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
     )
 }
 
-/// "N Messages ›" chip under a message that started a thread.
 /// Thread card under its starter (or "a commencé un fil" system) message, measured live
 /// 2026-11-24 in the sandbox channel (container_g2fiji): margin-top 8 (0 under a system
 /// line), padding 8, radius 4, --background-surface-high, 1px --border-subtle, max-width

@@ -426,20 +426,9 @@ fn delete_modal(app: &PhoenixApp, ch: crate::model::Id, id: crate::model::Id, cx
     if let Some(m) = msg {
         body.push(message_card(app, m).shadow_md().into_any_element());
     }
-    body.push(
-        div()
-            .flex()
-            .flex_col()
-            .gap(z(4.))
-            .child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::GREEN)).child(crate::t!("msg.protip")))
-            .child(
-                div()
-                    .text_size(z(14.))
-                    .text_color(c(Palette::TEXT_NORMAL))
-                    .child(crate::t!("msg.protip_delete")),
-            )
-            .into_any_element(),
-    );
+    // The 2026 client has no "Protip" block any more (live sandbox 2026-11-24: title,
+    // "Tu es sûr(e) de vouloir supprimer ce message ?", the message preview, Annuler /
+    // Supprimer); Shift+click on Delete still skips this dialog.
     modal::confirm(modal::Confirm {
         title: crate::t!("msg.delete"),
         body,
