@@ -109,7 +109,11 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
     use super::account as acct;
     let me = &app.me;
     let info = acct::info();
-    let (reveal_em, reveal_ph) = app.settings.as_ref().map_or((false, false), |s| (s.reveal_email, s.reveal_phone));
+    let (reveal_em, reveal_ph) = if app.prefs.local.streamer_hides_info() {
+        (false, false) // Streamer Mode keeps them masked
+    } else {
+        app.settings.as_ref().map_or((false, false), |s| (s.reveal_email, s.reveal_phone))
+    };
     // vanilla-settings-01 #2690-#2716: "value [Afficher]  [Modifier]", the
     // value/reveal pair 4px apart, 20px before the button.
     let trailing = |val: AnyElement, btn: Stateful<Div>| div().flex().items_center().gap(z(20.)).child(val).child(btn).into_any_element();

@@ -12,6 +12,7 @@ static GIF_AUTOPLAY: AtomicBool = AtomicBool::new(true);
 static UNDERLINE_LINKS: AtomicBool = AtomicBool::new(false);
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static INLINE_ATTACHMENTS: AtomicBool = AtomicBool::new(true);
+static STICKER_AUTOPLAY: AtomicBool = AtomicBool::new(true);
 
 pub fn sync(app: &PhoenixApp) {
     let p = &app.prefs;
@@ -33,6 +34,7 @@ pub fn sync(app: &PhoenixApp) {
     }
     GIF_AUTOPLAY.store(p.synced.flag("gifs"), Relaxed);
     REDUCED_MOTION.store(p.local.reduced_motion, Relaxed);
+    STICKER_AUTOPLAY.store(p.synced.pick("stickers") == 0, Relaxed);
     INLINE_ATTACHMENTS.store(p.synced.flag("media-uploads"), Relaxed);
 }
 
@@ -59,6 +61,11 @@ pub fn gif_autoplay() -> bool {
 /// "Enable Reduced Motion" (the client's `reduce-motion` class drops them).
 pub fn motion(ms: u64) -> std::time::Duration {
     std::time::Duration::from_millis(if REDUCED_MOTION.load(Relaxed) { 1 } else { ms })
+}
+
+/// Accessibility "Sticker animations: Always".
+pub fn sticker_autoplay() -> bool {
+    STICKER_AUTOPLAY.load(Relaxed)
 }
 
 /// Images/videos uploaded to Discord render inline (else as file cards).

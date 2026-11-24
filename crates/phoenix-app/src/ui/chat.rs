@@ -1731,6 +1731,17 @@ fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> 
     )
 }
 
+/// Accessibility "Sticker animations" other than Always: the media proxy's
+/// first frame (`passthrough=false`) instead of the animated file.
+fn still_sticker(u: SharedString, fmt: media::StickerFormat) -> SharedString {
+    let animated = matches!(fmt, media::StickerFormat::Apng | media::StickerFormat::Gif);
+    if !animated || crate::ui::settings::effects::sticker_autoplay() || !u.contains("media.discordapp.net") {
+        return u;
+    }
+    let sep = if u.contains('?') { '&' } else { '?' };
+    format!("{u}{sep}passthrough=false").into()
+}
+
 pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
     let remote = attach::loadable(&a.url);
     let spoiler = a.filename.starts_with("SPOILER_");
@@ -1751,7 +1762,7 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
         AttachmentKind::Sticker(fmt) => {
             let name = a.filename.clone();
             return match media::sticker_url(0, fmt).and(Some(a.url.clone())).filter(|u| !u.is_empty()) {
-                Some(u) => img(u)
+                Some(u) => img(still_sticker(u, fmt))
                     .mt(z(4.))
                     .size(z(160.))
                     .object_fit(gpui::ObjectFit::Contain)

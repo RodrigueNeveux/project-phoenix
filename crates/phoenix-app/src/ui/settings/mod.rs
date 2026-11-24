@@ -199,6 +199,14 @@ fn config_path() -> Option<PathBuf> {
 }
 
 impl LocalPrefs {
+    /// Streamer Mode is on and hides personal info (email, phone).
+    pub fn streamer_hides_info(&self) -> bool {
+        self.flag("streamer", false) && self.flag("st-info", true)
+    }
+    /// Desktop notifications, muted by Streamer Mode "Disable notifications".
+    pub fn notifications_on(&self) -> bool {
+        self.desktop_notifications && !(self.flag("streamer", false) && self.flag("st-notifs", true))
+    }
     /// Client-only switch `id` (see [`Self::ui`]).
     pub fn flag(&self, id: &str, default: bool) -> bool {
         self.ui.get(id).map(|v| *v != 0).unwrap_or(default)
@@ -272,7 +280,7 @@ pub struct Prefs {
 impl Prefs {
     pub fn load() -> Self {
         let local = LocalPrefs::load();
-        crate::notifications::set_enabled(local.desktop_notifications);
+        crate::notifications::set_enabled(local.notifications_on());
         Self { synced: SyncedSettings::default(), local }
     }
 }
@@ -459,7 +467,7 @@ pub fn save(app: &mut PhoenixApp, patch: SettingsPatch, cx: &mut Context<Phoenix
 
 pub fn update_local(app: &mut PhoenixApp, f: impl FnOnce(&mut LocalPrefs), cx: &mut Context<PhoenixApp>) {
     f(&mut app.prefs.local);
-    crate::notifications::set_enabled(app.prefs.local.desktop_notifications);
+    crate::notifications::set_enabled(app.prefs.local.notifications_on());
     app.prefs.local.save();
     cx.notify();
 }
