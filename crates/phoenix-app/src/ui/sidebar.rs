@@ -1355,7 +1355,8 @@ fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
     Some(
         // `container_BFMMcK` + `containerWithMargin_`: margin 0 0 12 8, padding
         // --space-xxs --space-xxs --space-sm (4 4 16), border-bottom 1px --border-subtle.
-        div().w_full().pl(z(8.)).mb(z(12.)).child(
+        // Right: the scroller's 8px stable gutter (live box 88..407 in a 416px list).
+        div().w_full().pl(z(8.)).pr(z(8.)).mb(z(12.)).child(
         div()
             .id("boost-goal")
             .group("boost-goal")
