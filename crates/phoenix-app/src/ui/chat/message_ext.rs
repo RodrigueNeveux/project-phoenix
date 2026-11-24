@@ -33,11 +33,24 @@ fn bar_button(id: impl Into<gpui::ElementId>) -> gpui::Stateful<Div> {
         .justify_center()
         .rounded(z(6.))
         .cursor_pointer()
+        .group("bar-btn")
         .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+        .active(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE))) // button_Z0MHyc:active
 }
 
 fn tool_button(id: &'static str, i: SharedString, _size: f32) -> gpui::Stateful<Div> {
-    bar_button(id).child(gpui::svg().path(i).size(z(20.)).flex_none().text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)))
+    bar_button(id).child(
+        gpui::svg()
+            .path(i)
+            .size(z(20.))
+            .flex_none()
+            .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+            // button_Z0MHyc:hover colour; hoverBarButton_:hover .icon_ scale(1.1) (as a 22px glyph)
+            .group_hover("bar-btn", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)).size(z(22.)))
+            .id("glyph")
+            // :active colour, icon back to scale(1)
+            .group_active("bar-btn", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)).size(z(20.))),
+    )
 }
 
 /// The floating hover toolbar (top-right of the hovered message).
