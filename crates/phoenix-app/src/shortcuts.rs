@@ -61,8 +61,24 @@ actions!(
         CreateThread,
         RecordVoiceMessage,
         ToggleSoundboard,
+        ZoomIn,
+        ZoomOut,
+        ZoomReset,
     ]
 );
+
+/// The client's zoom steps (`ZOOM_SCALES` in the 2026 web bundle), in percent.
+pub const ZOOM_SCALES: [u32; 11] = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200];
+
+/// Next zoom step from `cur` in `dir` (+1 in, -1 out), clamped to the ends. An
+/// off-grid value goes to the nearest step in that direction.
+pub fn zoom_step(cur: u32, dir: i32) -> u32 {
+    if dir > 0 {
+        ZOOM_SCALES.iter().copied().find(|&z| z > cur).unwrap_or(ZOOM_SCALES[ZOOM_SCALES.len() - 1])
+    } else {
+        ZOOM_SCALES.iter().rev().copied().find(|&z| z < cur).unwrap_or(ZOOM_SCALES[0])
+    }
+}
 
 /// One row of the shortcuts modal: GPUI keystrokes, the client's group and
 /// the i18n key of its description.
@@ -180,6 +196,17 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-shift-alt-n", CreateThread, ctx),
         KeyBinding::new("alt-r", RecordVoiceMessage, ctx),
         KeyBinding::new("ctrl-shift-b", ToggleSoundboard, ctx),
+        // Zoom like the desktop client. `=` is unshifted on AZERTY, `+` needs Shift on
+        // QWERTY; reset is Ctrl+0, which on AZERTY is the unshifted `à` key.
+        KeyBinding::new("ctrl-=", ZoomIn, ctx),
+        KeyBinding::new("ctrl-+", ZoomIn, ctx),
+        KeyBinding::new("ctrl-shift-=", ZoomIn, ctx),
+        KeyBinding::new("ctrl-shift-+", ZoomIn, ctx),
+        KeyBinding::new("ctrl--", ZoomOut, ctx),
+        KeyBinding::new("ctrl-shift--", ZoomOut, ctx),
+        KeyBinding::new("ctrl-0", ZoomReset, ctx),
+        KeyBinding::new("ctrl-shift-0", ZoomReset, ctx),
+        KeyBinding::new("ctrl-à", ZoomReset, ctx),
     ]);
 }
 
@@ -487,6 +514,9 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
     .on_action(cx.listener(|a, _: &CallDm, _, cx| a.call_current_dm(cx)))
     .on_action(cx.listener(|a, _: &JumpToCall, _, cx| a.jump_to_call(cx)))
     .on_action(cx.listener(|a, _: &CreateThread, w, cx| a.create_thread_shortcut(w, cx)))
+    .on_action(cx.listener(|a, _: &ZoomIn, _, cx| ui::settings::update_local(a, |p| p.zoom = zoom_step(p.zoom, 1), cx)))
+    .on_action(cx.listener(|a, _: &ZoomOut, _, cx| ui::settings::update_local(a, |p| p.zoom = zoom_step(p.zoom, -1), cx)))
+    .on_action(cx.listener(|a, _: &ZoomReset, _, cx| ui::settings::update_local(a, |p| p.zoom = 100, cx)))
     // UI-only placeholders (the same stub the voice panel's buttons open): nothing is recorded or sent.
     .on_action(cx.listener(|a, _: &RecordVoiceMessage, _, cx| a.stub(&crate::t!("shortcuts.voice_message"), cx)))
     .on_action(cx.listener(|a, _: &ToggleSoundboard, _, cx| a.stub(&crate::t!("voice.soundboard"), cx)))
@@ -752,6 +782,16 @@ pub fn render_help(_app: &PhoenixApp, window: &mut gpui::Window, cx: &mut Contex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zoom_steps_follow_the_client() {
+        assert_eq!(zoom_step(100, 1), 110);
+        assert_eq!(zoom_step(100, -1), 90);
+        assert_eq!(zoom_step(200, 1), 200);
+        assert_eq!(zoom_step(50, -1), 50);
+        assert_eq!(zoom_step(105, 1), 110);
+        assert_eq!(zoom_step(105, -1), 100);
+    }
 
     #[test]
     fn cycle_wraps_both_ways() {
