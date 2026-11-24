@@ -196,7 +196,7 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
 pub fn on_key(app: &mut PhoenixApp, key: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) -> bool {
     if key == "escape" && crate::ui::search_filters::is_open(cx) {
         if !crate::ui::search_filters::close_popover(cx) {
-            crate::ui::search_filters::close(cx);
+            crate::ui::search_filters::dismiss(cx);
         }
         return true;
     }
@@ -418,7 +418,7 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
         .into_any_element()
 }
 
-pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let s = cx.try_global::<Search>()?.0.as_ref()?;
     let input = s.input.clone();
     let loading = s.loading;
@@ -426,6 +426,13 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
     let page = s.page.clone();
     let req = s.request.clone();
     let top = layout::HEADER_H;
+    // The client closes the search popout when "Plus de filtres" opens its modal (the
+    // header bar goes back to idle): only the modal is drawn while it is up.
+    if page.is_none() || req.is_none() {
+        if let Some(modal) = crate::ui::search_filters::render(app, window, cx) {
+            return Some(modal);
+        }
+    }
 
     let body: AnyElement = if let Some(page) = page.filter(|_| req.is_some()) {
         let req = req.unwrap_or_default();
@@ -685,7 +692,6 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
                     .child(div().text_color(tk(idx::TEXT_MUTED)).child(crate::t!("search.v_more"))),
             ),
     );
-    let modal = crate::ui::search_filters::render(app, cx);
     let mut body = div().flex().flex_col();
     // Typed query: a 28px "Search for: <query>" row (dump search-popout-vanilla
     // #3369–#3375 `itemContainer_` > `labelWithElements_` body-sm/medium gap 4,
@@ -798,7 +804,6 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
                 .occlude()
                 .child(body),
         )
-        .children(modal)
         .into_any_element()
 }
 

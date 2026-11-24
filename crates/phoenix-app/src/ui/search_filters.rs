@@ -174,6 +174,15 @@ pub fn close(cx: &mut Context<PhoenixApp>) {
     cx.notify();
 }
 
+/// Cancel / close / Escape / backdrop: the modal goes away without a search, and like
+/// in the client the popout it came from does not come back (the search bar is idle).
+pub fn dismiss(cx: &mut Context<PhoenixApp>) {
+    close(cx);
+    if !crate::ui::search::results_shown(cx) && cx.has_global::<crate::ui::search::Search>() {
+        cx.global_mut::<crate::ui::search::Search>().0 = None;
+    }
+}
+
 /// Normalise one field value for its key (French or English words accepted).
 fn value_for(key: &str, v: &str) -> Option<String> {
     let l = v.trim().to_lowercase();
@@ -584,7 +593,14 @@ fn calendar_el(i: usize, month: NaiveDate, selected: NaiveDate, cx: &mut Context
         .children(next)
 }
 
-pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+/// Calendar height: 20px padding, month row 20 + 20 + 1px rule + 10, day names 13 + 10,
+/// 40px weeks, 1px borders.
+fn calendar_h(month: NaiveDate) -> f32 {
+    let weeks = month_weeks(month, crate::i18n::locale() == "en").len();
+    2. + 40. + 51. + 23. + 40. * weeks as f32
+}
+
+pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let m = cx.try_global::<Filters>()?.0.as_ref()?;
     let fields = m.fields.clone();
     let (dates, calendar, op_menu) = (m.dates.clone(), m.calendar, m.op_menu);
@@ -602,12 +618,21 @@ pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
     }
     // The open popover, placed from the probes (calendar 8px, type list 4px under the control).
     let pop: Option<AnyElement> = match (calendar, op_menu, ANCHOR.with(|c| c.get()), CARD.with(|c| c.get())) {
-        (Some((i, month)), _, Some(b), Some(o)) => dates
-            .get(i)
-            .map(|r| div().absolute().left(b.left() - o.x).top(b.bottom() - o.y + z(8.)).child(calendar_el(i, month, r.day, cx)).into_any_element()),
-        (None, Some(i), Some(b), Some(o)) => {
-            dates.get(i).map(|r| div().absolute().left(b.left() - o.x).top(b.bottom() - o.y + z(4.)).child(op_list(i, *r, cx)).into_any_element())
-        }
+        (Some((i, month)), _, Some(b), Some(o)) => dates.get(i).map(|r| {
+            // Like the client's popper: under the field, flipped above it when it would
+            // pass the bottom of the window.
+            let h = z(calendar_h(month));
+            let below = b.bottom() + z(8.);
+            let top = if below + h > window.viewport_size().height && b.top() - z(8.) - h >= gpui::px(0.) { b.top() - z(8.) - h } else { below };
+            div().absolute().left(b.left() - o.x).top(top - o.y).child(calendar_el(i, month, r.day, cx)).into_any_element()
+        }),
+        (None, Some(i), Some(b), Some(o)) => dates.get(i).map(|r| {
+            // 3 rows of 40 + padding 4 + border, flipped like the calendar.
+            let h = z(130.);
+            let below = b.bottom() + z(4.);
+            let top = if below + h > window.viewport_size().height && b.top() - z(4.) - h >= gpui::px(0.) { b.top() - z(4.) - h } else { below };
+            div().absolute().left(b.left() - o.x).top(top - o.y).child(op_list(i, *r, cx)).into_any_element()
+        }),
         _ => None,
     };
     if calendar.is_none() && op_menu.is_none() {
@@ -686,7 +711,7 @@ pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
                         }))
                         .child(if set > 0 { format!("{} ({set})", crate::t!("search.m_clear")).into() } else { crate::t!("search.m_clear") }),
                 )
-                .child(button("search-filters-cancel", crate::t!("common.cancel"), BtnKind::Secondary).on_click(cx.listener(|_, _, _, cx| close(cx))))
+                .child(button("search-filters-cancel", crate::t!("common.cancel"), BtnKind::Secondary).on_click(cx.listener(|_, _, _, cx| dismiss(cx))))
                 .child(button("search-filters-apply", crate::t!("search.m_apply"), BtnKind::Primary).on_click(cx.listener(|a, _, w, cx| {
                     let acx: &App = cx;
                     let t = acx.global::<Filters>().0.as_ref().map(|m| tokens(m, acx)).unwrap_or_default();
@@ -708,14 +733,14 @@ pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
                 .justify_center()
                 .cursor_pointer()
                 .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
-                .on_click(cx.listener(|_, _, _, cx| close(cx)))
+                .on_click(cx.listener(|_, _, _, cx| dismiss(cx)))
                 .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         );
     let weak = cx.entity().downgrade();
     Some(crate::ui::modal::frame(
         "search-filters-modal",
         std::rc::Rc::new(move |_, cx| {
-            let _ = weak.update(cx, |_, cx| close(cx));
+            let _ = weak.update(cx, |_, cx| dismiss(cx));
         }),
         div().relative().child(card).children(pop),
     ))
