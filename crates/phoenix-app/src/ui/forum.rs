@@ -59,7 +59,12 @@ fn open_forum(app: &PhoenixApp) -> Option<Id> {
 /// The author opened this forum post: the "OP" tag next to their name
 /// (owner from the loaded post lists of the post's forum).
 pub fn is_op(app: &PhoenixApp, channel: Id, author: Id) -> bool {
-    let Some(forum) = app.channels.get(&channel).and_then(|ch| ch.parent).or_else(|| app.nav.find_thread(channel).and_then(|t| t.parent))
+    let Some(forum) = app
+        .channels
+        .get(&channel)
+        .and_then(|ch| ch.parent)
+        .or_else(|| app.nav.find_thread(channel).and_then(|t| t.parent))
+        .or_else(|| open_forum(app))
     else {
         return false;
     };

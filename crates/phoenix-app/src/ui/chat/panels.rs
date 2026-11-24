@@ -381,12 +381,14 @@ thread_local! {
 /// gap 4; each button_F7qvhY sm secondary 32x32, radius 8, 16px icon.
 fn forum_post_bar(app: &PhoenixApp, thread: crate::model::Id, scroll: &gpui::ScrollHandle, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     use crate::theme::{generated::idx, tok};
-    let ch = app.channels.get(&thread).or_else(|| app.nav.find_thread(thread))?;
-    let forum = ch.parent?;
-    if app.channels.get(&forum).is_none_or(|f| f.kind != crate::model::ChannelKind::Forum) {
+    // Posts opened from the forum list are not in the channel cache: the open forum.
+    let ch = app.channels.get(&thread).or_else(|| app.nav.find_thread(thread));
+    let forum = ch.and_then(|c| c.parent).or(app.selected_channel)?;
+    let f = app.channels.get(&forum)?;
+    if f.kind != crate::model::ChannelKind::Forum {
         return None;
     }
-    let link = format!("https://discord.com/channels/{}/{}", ch.guild.map_or(0, |g| g.0), thread.0);
+    let link = format!("https://discord.com/channels/{}/{}", f.guild.map_or(0, |g| g.0), thread.0);
     let btn = |id: &'static str, path: &'static str, tip: SharedString| {
         div()
             .id(id)
