@@ -46,6 +46,7 @@ pub mod nav_menus;
 pub mod thread_menu;
 pub mod thread_create;
 pub mod title_bar;
+pub mod window_chrome;
 pub mod tooltip;
 pub mod channel_unread_bar;
 pub mod user_menu;

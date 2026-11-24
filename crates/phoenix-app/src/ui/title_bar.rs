@@ -31,6 +31,8 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpu
         .items_center()
         .justify_center()
         .rounded(z(m::TITLE_BAR_ITEM_RADIUS))
+        // `-webkit-app-region: no-drag`: keep presses out of the drag region.
+        .occlude()
         .cursor_pointer()
         // `clickable_fErCLM`: `--icon-muted`; hover `--background-mod-normal` +
         // `--interactive-icon-hover`; selected `--interactive-icon-active`.
@@ -47,6 +49,7 @@ fn nav_arrow(id: &'static str, name: &'static str, back: bool, enabled: bool) ->
         .w(z(26.))
         .h(z(24.))
         .flex_none()
+        .occlude()
         .flex()
         .items_center()
         .when(back, |d| d.pl(z(6.)).pr(z(2.)).rounded_l(z(6.)))
@@ -103,8 +106,8 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
     let (glyph, text) = title(app);
     let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
     // `bar_3zSH5d` (dump #13): 32px, no fill (the app background shows through).
-    div()
-        .id("app-title-bar")
+    // `bar_3zSH5d` `-webkit-app-region: drag`: press-drag moves, double click maximizes.
+    crate::ui::window_chrome::drag_region(div().id("app-title-bar"))
         .h(z(m::TITLE_BAR_H))
         .flex_none()
         .w_full()
@@ -164,44 +167,107 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
         )
 }
 
+/// Login screen: no app content in the bar, only the drag region and the window
+/// buttons, drawn over the login background (same `bar_3zSH5d` geometry).
+pub fn login_bar(window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    crate::ui::window_chrome::drag_region(div().id("login-title-bar"))
+        .absolute()
+        .top_0()
+        .left_0()
+        .right_0()
+        .h(z(m::TITLE_BAR_H))
+        .flex()
+        .items_center()
+        .justify_end()
+        .when(client_decorated(window), |d| d.child(win_buttons(cx)))
+}
+
 /// `winButtons_3zSH5d winButtonsWithDivider_3zSH5d` (vanilla-guild-text #46..#52): gap
 /// `--space-4`, `:before` divider 1px `--border-subtle`, height 32 - `--space-12`,
-/// margin-inline `--space-4`; 32×32 `winButton_3zSH5d` with a 12px glyph in
-/// `--interactive-text-default`. Only drawn when the window has no server-side frame.
+/// margin-inline `--space-4`; 32×32 `winButton_3zSH5d` (`--custom-app-top-bar-height`)
+/// with a 12×12 glyph (#48/#50/#52) in `--interactive-text-default`. Only drawn when the
+/// window has no server-side frame.
 fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let btn = |id: &'static str, glyph: gpui::AnyElement, close: bool| {
+    let btn = |id: &'static str, close: bool| {
         div()
             .id(id)
             .group(id)
             .size(z(m::TITLE_BAR_H))
+            .flex_none()
             .flex()
             .items_center()
             .justify_center()
+            // `pointer-events: auto` + `no-drag`
+            .occlude()
             .cursor_pointer()
-            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
             .map(|d| {
                 if close {
-                    // `winButtonClose_3zSH5d:hover`
-                    d.hover(|s| {
-                        s.bg(c(tok(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT)))
-                            .text_color(c(tok(idx::CONTROL_CRITICAL_PRIMARY_ICON_DEFAULT)))
-                    })
+                    // `winButtonClose_3zSH5d:hover` (no :active rule)
+                    d.hover(|s| s.bg(c(tok(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT))))
                 } else {
-                    // `winButtonMinMax_3zSH5d:hover`
-                    d.hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))).text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
+                    // `winButtonMinMax_3zSH5d:hover` / `:active`
+                    d.hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+                        .active(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_ACTIVE))))
                 }
             })
-            .child(glyph)
     };
+    let fg = c(tok(idx::INTERACTIVE_TEXT_DEFAULT));
+    let fg_hover = c(tok(idx::INTERACTIVE_TEXT_HOVER));
+    let fg_active = c(tok(idx::INTERACTIVE_TEXT_ACTIVE));
+    // 12×12 glyph box; min/max glyphs are plain rects so they are drawn as divs.
+    let glyph_box = || div().relative().size(z(12.)).flex_none();
     div()
         .flex()
         .items_center()
+        .justify_end()
         .gap(z(4.))
         .child(div().mx(z(4.)).w(z(1.)).h(z(m::TITLE_BAR_H - 12.)).bg(c(tok(idx::BORDER_SUBTLE))))
-        .child(btn("win-min", div().w(z(12.)).h(z(1.)).bg(gpui::transparent_black()).border_t_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-            // `winButtonMinMax_3zSH5d:hover` color `--interactive-text-hover` (glyph stroke)
-            .group_hover("win-min", |s| s.border_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.minimize_window())))
-        .child(btn("win-max", div().size(z(12.)).border_1().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-            .group_hover("win-max", |s| s.border_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))).into_any_element(), false).on_click(cx.listener(|_, _, w, _| w.zoom_window())))
-        .child(btn("win-close", icon(Icon::Close, 14. * zoom(), c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element(), true).on_click(cx.listener(|_, _, w, _| w.remove_window())))
+        .child(
+            // Minimize (#48): filled 10×1 rect at (1, 6).
+            btn("win-min", false)
+                .child(glyph_box().child(
+                    div()
+                        .id("win-min-g")
+                        .absolute()
+                        .left(z(1.))
+                        .top(z(6.))
+                        .w(z(10.))
+                        .h(z(1.))
+                        .bg(fg)
+                        .group_hover("win-min", |s| s.bg(fg_hover))
+                        .group_active("win-min", |s| s.bg(fg_active)),
+                ))
+                .on_click(cx.listener(|_, _, w, _| w.minimize_window())),
+        )
+        .child(
+            // Maximize (#50): 9×9 rect at 1.5 with a 1px stroke = 10×10 outline at (1, 1).
+            // The client keeps this glyph when maximized (one `Maximiser` button).
+            btn("win-max", false)
+                .child(glyph_box().child(
+                    div()
+                        .id("win-max-g")
+                        .absolute()
+                        .left(z(1.))
+                        .top(z(1.))
+                        .size(z(10.))
+                        .border_1()
+                        .border_color(fg)
+                        .group_hover("win-max", |s| s.border_color(fg_hover))
+                        .group_active("win-max", |s| s.border_color(fg_active)),
+                ))
+                .on_click(cx.listener(|_, _, w, _| w.zoom_window())),
+        )
+        .child(
+            // Close (#52): 10×10 cross in the 12px box; white on the red hover.
+            btn("win-close", true)
+                .child(
+                    gpui::svg()
+                        .path(crate::icons::path("window/close"))
+                        .size(z(12.))
+                        .flex_none()
+                        .text_color(fg)
+                        .group_hover("win-close", |s| s.text_color(c(tok(idx::CONTROL_CRITICAL_PRIMARY_ICON_DEFAULT)))),
+                )
+                .on_click(cx.listener(|_, _, w, _| w.remove_window())),
+        )
 }

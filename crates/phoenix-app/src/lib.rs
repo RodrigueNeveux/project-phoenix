@@ -29,7 +29,7 @@ pub mod voice;
 use std::sync::Arc;
 
 use gpui::{
-    App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowOptions, px, size,
+    App, AppContext, Bounds, TitlebarOptions, WindowBounds, WindowDecorations, WindowOptions, px, size,
 };
 use gpui_component::{Root, theme::{Theme, ThemeMode}};
 
@@ -47,8 +47,12 @@ pub fn window_options(cx: &App) -> WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: Some("Discord Phoenix".into()),
+            appears_transparent: true,
             ..Default::default()
         }),
+        // Frameless like the client's Electron window (`frame: false`): the app top
+        // bar draws the window buttons (ui::title_bar, ui::window_chrome).
+        window_decorations: Some(WindowDecorations::Client),
         app_id: Some(APP_ID.into()),
         icon: window_icon(),
         window_min_size: Some(size(px(940.), px(500.))),

@@ -174,6 +174,8 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/plus-circle.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm-1 5v4H7v2h4v4h2v-4h4v-2h-4V7z"/>"#),
         "icons/compass.svg" => f!(r#"<path fill-rule="evenodd" d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm4.5 5.5-6.4 2.6-2.6 6.4 6.4-2.6zM12 10.7a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z"/>"#),
         "icons/download.svg" => s!(r#"<path d="M12 3v12m-5-5 5 5 5-5M4 21h16"/>"#),
+        // Window close glyph (winButtonClose_ svg #52: 12×12 box, 10×10 cross, ~0.8px arms), drawn here.
+        "icons/window/close.svg" => concat!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12">"#, r#"<path d="M1.3 1.3 10.7 10.7M10.7 1.3 1.3 10.7" stroke="black" stroke-width="0.82"/>"#, "</svg>"),
         "icons/close.svg" => s!(r#"<path d="M6 6l12 12M18 6 6 18"/>"#),
         "icons/threads.svg" => s!(r#"<path d="M5 4h14v10H11l-4 3v-3H5zM9 8h6M9 11h4"/>"#),
         "icons/friends.svg" => f!(r#"<circle cx="12" cy="7" r="4.5"/><path d="M3 21a9 7 0 0 1 18 0z"/>"#),
