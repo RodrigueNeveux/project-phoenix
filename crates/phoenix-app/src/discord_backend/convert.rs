@@ -1075,7 +1075,11 @@ impl Adapter {
         let Some(list) = self.shown_list(guild.0) else { return };
         let (rows, acts) = crate::presence::list_rows(list.items.iter());
         self.emit_members(cache, guild, out);
-        out.extend(acts.into_iter().map(|(user, activities)| AppEvent::Activities { user, activities }));
+        // Our own row comes with `activities: []` (observed 2026-11-24 while READY and
+        // SESSIONS_REPLACE carried the custom status): own activities come from the
+        // sessions only, else the user panel lost its custom status on every sync.
+        let me = id(self.me);
+        out.extend(acts.into_iter().filter(|(user, _)| *user != me).map(|(user, activities)| AppEvent::Activities { user, activities }));
         out.push(AppEvent::MemberListRows { guild: id(guild), rows });
     }
 
