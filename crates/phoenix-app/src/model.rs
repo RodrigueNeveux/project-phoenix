@@ -167,6 +167,13 @@ pub struct Attachment {
     pub original: SharedString,
     pub spoiler: bool,
     pub description: Option<SharedString>,
+    pub voice: Option<VoiceMeta>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct VoiceMeta {
+    pub duration_secs: f64,
+    pub waveform: SharedString,
 }
 
 impl Attachment {

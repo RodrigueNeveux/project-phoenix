@@ -99,6 +99,19 @@ pub struct Upload {
     pub description: Option<String>,
 }
 
+#[derive(Clone)]
+pub struct VoiceUpload {
+    pub ogg: Vec<u8>,
+    pub duration_secs: f64,
+    pub waveform: String,
+}
+
+impl std::fmt::Debug for VoiceUpload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VoiceUpload").field("len", &self.ogg.len()).field("duration_secs", &self.duration_secs).finish()
+    }
+}
+
 impl std::fmt::Debug for Upload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Upload").field("filename", &self.filename).field("len", &self.bytes.len()).finish()
@@ -138,6 +151,10 @@ pub trait Backend: Send + Sync + 'static {
     ) -> BoxFuture<Message> {
         let _ = (files, nonce, progress);
         self.send_message(channel, content, reply.map(|r| r.0))
+    }
+    fn send_voice_message(&self, channel: Id, voice: VoiceUpload, reply: Option<(Id, bool)>, nonce: u64) -> BoxFuture<Message> {
+        let _ = (channel, voice, reply, nonce);
+        Box::pin(async { Err(BackendError("voice messages are not supported by this backend".into())) })
     }
     fn max_upload_size(&self, channel: Id) -> u64 {
         let _ = channel;

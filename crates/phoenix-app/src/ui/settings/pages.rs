@@ -17,6 +17,7 @@ pub enum Bind {
     Synced(fn(&SyncedSettings) -> bool, fn(bool) -> SettingsPatch),
     Proto,
     Pref(bool),
+    Os(fn() -> bool, fn(bool)),
 }
 
 #[derive(Clone, Copy)]
@@ -126,6 +127,7 @@ fn get_bool(app: &PhoenixApp, id: &str, b: Bind) -> bool {
         Bind::Synced(g, _) => g(&app.prefs.synced),
         Bind::Proto => app.prefs.synced.flag(id),
         Bind::Pref(d) => app.prefs.local.flag(id, d),
+        Bind::Os(g, _) => g(),
     }
 }
 
@@ -144,9 +146,19 @@ fn set_bool(app: &mut PhoenixApp, id: &'static str, b: Bind, v: bool, cx: &mut C
             let w = super::synced_map::bool_wire(&app.prefs.synced.proto, id, v);
             save(app, SettingsPatch::Proto(id, w), cx)
         }
+        Bind::Pref(_) if id == crate::hwaccel::PREF => {
+            if let Some(s) = app.settings.as_mut() {
+                s.confirm_hwaccel = Some(v);
+            }
+            cx.notify();
+        }
         Bind::Pref(_) => update_local(app, |p| {
             p.ui.insert(id.to_owned(), v as u64);
         }, cx),
+        Bind::Os(_, s) => {
+            s(v);
+            cx.notify();
+        }
     }
 }
 
@@ -1476,7 +1488,7 @@ static A11Y: &[B] = &[
 
 static SYSTEM: &[B] = &[
     B::Title("sp.sy.t1"),
-    B::Switch("startup", "sp.sy.startup", "", Bind::Pref(false)),
+    B::Switch("startup", "sp.sy.startup", "", Bind::Os(crate::autostart::is_installed, crate::autostart::set)),
     B::Switch("tray", "sp.sy.tray", "sp.sy.tray_d", Bind::Local(|p| p.minimize_to_tray, |p, v| p.minimize_to_tray = v)),
     B::Switch("hwaccel", "sp.sy.hwaccel", "sp.sy.hwaccel_d", Bind::Pref(true)),
     B::Custom("sp.sy.hwaccel", hwaccel_banner),

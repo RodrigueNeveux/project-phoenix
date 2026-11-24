@@ -3,7 +3,9 @@ use std::sync::Arc;
 use phoenix_app::{assets::Assets, backend::Backend, discord_backend::DiscordBackend, mock::MockBackend};
 
 fn main() {
+    phoenix_app::hwaccel::apply_at_startup();
     phoenix_app::perf::start();
+    phoenix_app::autostart::refresh();
     let mock = std::env::var("PHOENIX_MOCK").is_ok_and(|v| !v.is_empty() && v != "0");
     gpui_platform::application()
         .with_assets(Assets)

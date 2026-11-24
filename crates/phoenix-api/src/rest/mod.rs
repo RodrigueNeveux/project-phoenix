@@ -37,13 +37,15 @@ use ratelimit::{RateLimitInfo, RateLimiter, major_param, route_key};
 
 pub const API_BASE: &str = "https://discord.com/api/v10";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FileUpload {
     pub filename: String,
     pub bytes: Vec<u8>,
     pub content_type: Option<String>,
     pub description: Option<String>,
     pub spoiler: bool,
+    pub duration_secs: Option<f64>,
+    pub waveform: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

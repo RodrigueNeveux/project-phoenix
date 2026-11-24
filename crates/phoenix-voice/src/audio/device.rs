@@ -187,7 +187,7 @@ impl Drop for AudioEngine {
     }
 }
 
-fn open_input(name: Option<&str>, tx: std_mpsc::Sender<Vec<f32>>) -> Option<(Stream, (u32, usize))> {
+pub(crate) fn open_input(name: Option<&str>, tx: std_mpsc::Sender<Vec<f32>>) -> Option<(Stream, (u32, usize))> {
     let dev = find_device(true, name)?;
     let sc = pick_config(&dev, true)?;
     let fmt = sc.sample_format();

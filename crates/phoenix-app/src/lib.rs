@@ -2,12 +2,14 @@ pub mod actions;
 pub mod app;
 pub mod assets;
 pub mod auth;
+pub mod autostart;
 pub mod backend;
 pub mod commands;
 pub mod discord_backend;
 pub mod grouping;
 pub mod history_ui;
 pub mod history_detached;
+pub mod hwaccel;
 pub mod i18n;
 pub mod fonts;
 pub mod icons;
@@ -34,6 +36,7 @@ pub mod tray {
         false
     }
     pub fn spawn(_: &mut gpui::App) {}
+    pub fn set_target(_: &mut gpui::App, _: gpui::WeakEntity<crate::app::PhoenixApp>) {}
 }
 pub mod ui;
 pub mod voice;
@@ -84,6 +87,15 @@ pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {
     cx.open_window(opts, move |window, cx| {
         window.set_window_title("Discord Phoenix");
         let view = cx.new(|cx| app::PhoenixApp::new(backend, window, cx));
+        tray::set_target(cx, view.downgrade());
+        let weak = view.downgrade();
+        window.on_window_should_close(cx, move |w, cx| {
+            let hide = tray::running() && weak.upgrade().is_some_and(|v| v.read(cx).prefs.local.minimize_to_tray);
+            if hide {
+                w.minimize_window();
+            }
+            !hide
+        });
         view.read(cx).focus.clone().focus(window, cx);
         cx.new(|cx| Root::new(view, window, cx))
     })

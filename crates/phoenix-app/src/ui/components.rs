@@ -670,6 +670,7 @@ fn as_attachment(m: &api::UnfurledMedia, name: Option<&str>, size: u64, spoiler:
         original: m.url.clone().into(),
         spoiler,
         description: None,
+        voice: None,
     }
 }
 

@@ -826,6 +826,9 @@ impl PhoenixApp {
 
     pub fn chat_submit(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(ch) = self.selected_channel else { return true };
+        if super::voice_message::on_enter(self, cx) {
+            return true;
+        }
         if super::slash::submit(self, window, cx) {
             return true;
         }

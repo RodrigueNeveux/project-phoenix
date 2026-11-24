@@ -604,6 +604,7 @@ impl PhoenixApp {
             self.rebuild_members();
         }
         self.selected_channel = Some(id);
+        crate::ui::chat::voice_message::on_channel_change(self, cx);
         self.last_channel.insert(guild, id);
         self.nav_channel_selected(guild);
         self.replying_to = None;
@@ -1402,8 +1403,13 @@ impl Render for PhoenixApp {
             .on_action(cx.listener(ui::settings::open_action))
             .capture_key_down(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_down(this, ev, cx)))
             .capture_key_up(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_up(this, ev, cx)))
-            .on_key_down(cx.listener(|_, ev, w, cx| {
+            .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, w, cx| {
                 if ui::focus_ring::on_key_down(ev, w, cx) {
+                    cx.stop_propagation();
+                    return;
+                }
+                let k = &ev.keystroke;
+                if k.key == "enter" && k.modifiers.number_of_modifiers() == 0 && !ev.is_held && ui::chat::voice_message::on_enter(this, cx) {
                     cx.stop_propagation();
                 }
             }))

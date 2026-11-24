@@ -752,9 +752,9 @@ impl Backend for DiscordBackend {
                 .map(|f| phoenix_api::rest::FileUpload {
                     filename: f.filename,
                     bytes: f.bytes,
-                    content_type: None,
                     description: f.description,
                     spoiler: f.spoiler,
+                    ..Default::default()
                 })
                 .collect();
             let attachments = if files.is_empty() {
@@ -780,6 +780,36 @@ impl Backend for DiscordBackend {
                     Err(e) => return Err(api_err(e)),
                 }
             };
+            s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
+            Ok(convert::message(&m))
+        })
+    }
+
+    fn send_voice_message(&self, channel: Id, voice: crate::backend::VoiceUpload, reply: Option<(Id, bool)>, nonce: u64) -> BoxFuture<Message> {
+        use phoenix_voice::audio::voice_message as vm;
+        self.with_session(move |_, s| async move {
+            let mut msg = CreateMessage::text(String::new());
+            msg.nonce = Some(nonce.to_string());
+            msg.enforce_nonce = Some(true);
+            msg.flags = Some(vm::FLAG_IS_VOICE_MESSAGE);
+            if let Some((r, mention)) = reply {
+                msg = msg.reply_to(sf(channel), sf(r), mention);
+            }
+            let files = vec![phoenix_api::rest::FileUpload {
+                filename: vm::FILENAME.into(),
+                bytes: voice.ogg,
+                content_type: Some(vm::CONTENT_TYPE.into()),
+                duration_secs: Some(voice.duration_secs),
+                waveform: Some(voice.waveform),
+                ..Default::default()
+            }];
+            let rejected = |e: ApiError| match e {
+                e @ ApiError::Api { status: 400..=499, .. } => BackendError::rejected(api_err(e)),
+                e => api_err(e),
+            };
+            let slots = s.rest.upload_files(sf(channel), &files, None, phoenix_api::rest::uploads::UPLOAD_CHUNK).await.map_err(rejected)?;
+            msg.attachments = phoenix_api::rest::uploads::message_attachments(&files, &slots).as_array().cloned().unwrap_or_default();
+            let m = s.rest.send_message(sf(channel), msg).await.map_err(rejected)?;
             s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             Ok(convert::message(&m))
         })

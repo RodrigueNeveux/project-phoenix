@@ -226,15 +226,21 @@ impl LocalPrefs {
     pub fn save(&self) {
         let Some(p) = config_path() else { return };
         let data = serde_json::to_vec_pretty(&self.to_json()).unwrap_or_default();
-        std::thread::spawn(move || {
-            if let Some(dir) = p.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
-            let tmp = p.with_extension("json.tmp");
-            if std::fs::write(&tmp, data).is_ok() {
-                let _ = std::fs::rename(tmp, p);
-            }
-        });
+        std::thread::spawn(move || write_prefs(&p, &data));
+    }
+    pub fn save_blocking(&self) {
+        let Some(p) = config_path() else { return };
+        write_prefs(&p, &serde_json::to_vec_pretty(&self.to_json()).unwrap_or_default());
+    }
+}
+
+fn write_prefs(p: &std::path::Path, data: &[u8]) {
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let tmp = p.with_extension("json.tmp");
+    if std::fs::write(&tmp, data).is_ok() {
+        let _ = std::fs::rename(tmp, p);
     }
 }
 
@@ -319,6 +325,7 @@ pub const NAV: &[(&str, &[Page])] = &[
 pub struct SettingsState {
     pub page: Page,
     pub confirm_logout: bool,
+    pub confirm_hwaccel: Option<bool>,
     pub error: Option<SharedString>,
     pub reveal_email: bool,
     pub reveal_phone: bool,
@@ -354,7 +361,9 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
         cx.notify();
         return true;
     }
-    if s.confirm_logout {
+    if s.confirm_hwaccel.is_some() {
+        s.confirm_hwaccel = None;
+    } else if s.confirm_logout {
         s.confirm_logout = false;
     } else if s.open_select.is_some() {
         s.open_select = None;

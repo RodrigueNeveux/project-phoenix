@@ -223,7 +223,7 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
         });
     })));
     items.push(MenuItem::disabled(crate::t!("attach.schedule"), Some(crate::icons::path("inbox/schedule"))));
-    items.push(MenuItem::disabled(crate::t!("attach.voice"), Some(crate::icons::path("mic"))));
+    items.push(MenuItem::action(crate::t!("attach.voice"), Some(crate::icons::path("mic")), act(|a, _, _, cx| super::voice_message::start(a, cx))));
     let dismiss: context_menu::Dismiss = std::rc::Rc::new(move |_, cx| {
         let _ = e.update(cx, |a, cx| {
             a.chat.attach_menu = false;
@@ -311,6 +311,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     let show_send_button = should_show_send_button(app.prefs.local.flag("send-btn", false), blocked);
     let can_send = !placeholder_empty || !app.chat.uploads.is_empty();
     let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
+    let vbar = super::voice_message::bar(app, cx);
+    let voice_on = vbar.is_some();
     div()
         .flex_none()
         .relative()
@@ -370,7 +372,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     cx.stop_propagation();
                                 }
                             }))
-                            .child(
+                            .when_some(vbar, |d, bar| d.child(bar))
+                            .when(!voice_on, |d| d.child(
                                 div().pl(z(15.)).h(z(56.)).flex().items_center().when(blocked, |d| d.invisible()).child(div().px(z(14.)).child(
                                     div()
                                         .relative()
@@ -495,7 +498,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                                     .when(!can_send, |b| b.cursor(gpui::CursorStyle::OperationNotAllowed)),
                                             )
                                     }),
-                            ),
+                            )),
                     ),
             ),
         )

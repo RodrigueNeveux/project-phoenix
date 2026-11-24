@@ -15,6 +15,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
         original: SharedString::default(),
         spoiler: false,
         description: None,
+        voice: None,
     };
     let now = ts;
 
@@ -122,6 +123,19 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
     );
     push(4, Message { attachments: vec![at(AttachmentKind::Video, "clip.mp4", 1280, 720, 9_800_000)], ..Default::default() }, &mut out);
     push(4, Message { attachments: vec![at(AttachmentKind::Audio, "voice-note.ogg", 0, 0, 482_000)], ..Default::default() }, &mut out);
+    let wave: Vec<u8> = (0..64u32).map(|i| (40 + (i * 37 % 160) + if i % 7 < 3 { 50 } else { 0 }) as u8).collect();
+    push(
+        3,
+        Message {
+            attachments: vec![Attachment {
+                voice: Some(crate::model::VoiceMeta { duration_secs: 7.4, waveform: crate::ui::chat::voice_message::waveform_b64(&wave).into() }),
+                ..at(AttachmentKind::Audio, "voice-message.ogg", 0, 0, 61_440)
+            }],
+            flags: phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE,
+            ..Default::default()
+        },
+        &mut out,
+    );
     push(5, Message { attachments: vec![at(AttachmentKind::File, "phoenix-0.1.0.tar.gz", 0, 0, 4_213_337)], ..Default::default() }, &mut out);
     push(
         5,

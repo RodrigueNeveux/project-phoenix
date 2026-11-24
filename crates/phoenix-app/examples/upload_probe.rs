@@ -31,9 +31,7 @@ fn main() -> anyhow::Result<()> {
         let mut f = FileUpload {
             filename: std::path::Path::new(path).file_name().unwrap_or_default().to_string_lossy().into_owned(),
             bytes: std::fs::read(path)?,
-            content_type: None,
-            description: None,
-            spoiler: false,
+            ..Default::default()
         };
         for p in parts {
             if p == "spoiler" {

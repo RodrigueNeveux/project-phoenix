@@ -243,6 +243,11 @@ pub fn message(m: &api::Message) -> model::Message {
                     original: a.url.clone().into(),
                     spoiler: a.flags & 8 != 0 || a.filename.starts_with("SPOILER_"),
                     description: a.description.clone().filter(|d| !d.is_empty()).map(Into::into),
+                    voice: (kind == model::AttachmentKind::Audio && (m.flags & phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE != 0 || a.waveform.is_some()))
+                        .then(|| model::VoiceMeta {
+                            duration_secs: a.duration_secs.unwrap_or(0.),
+                            waveform: a.waveform.clone().unwrap_or_default().into(),
+                        }),
                 }
             })
             .chain(m.sticker_items.iter().map(|st| {

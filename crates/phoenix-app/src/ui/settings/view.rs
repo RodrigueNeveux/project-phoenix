@@ -714,6 +714,40 @@ fn content_header(label: SharedString, cx: &mut Cx) -> Div {
         )
 }
 
+fn hwaccel_modal(on: bool, cx: &mut Cx) -> AnyElement {
+    let (e1, e2) = (cx.entity(), cx.entity());
+    let lines: Vec<SharedString> = if on {
+        vec![crate::t!("sp.sy.hwaccel_on_body")]
+    } else {
+        vec![crate::t!("sp.sy.hwaccel_off_body"), crate::t!("sp.sy.hwaccel_sure")]
+    };
+    crate::ui::modal::confirm(crate::ui::modal::Confirm {
+        title: crate::t!("sp.sy.hwaccel_title"),
+        body: vec![div().flex().flex_col().children(lines).into_any_element()],
+        confirm_label: crate::t!("sp.sy.hwaccel_restart"),
+        danger: false,
+        on_confirm: std::rc::Rc::new(move |_, cx| {
+            e1.update(cx, |a, cx| {
+                if let Some(s) = a.settings.as_mut() {
+                    s.confirm_hwaccel = None;
+                }
+                a.prefs.local.ui.insert(crate::hwaccel::PREF.to_owned(), on as u64);
+                a.prefs.local.save_blocking();
+                cx.notify();
+            });
+            crate::hwaccel::relaunch(cx);
+        }),
+        on_cancel: std::rc::Rc::new(move |_, cx| {
+            e2.update(cx, |a, cx| {
+                if let Some(s) = a.settings.as_mut() {
+                    s.confirm_hwaccel = None;
+                }
+                cx.notify();
+            })
+        }),
+    })
+}
+
 fn logout_modal(cx: &mut Cx) -> AnyElement {
     let (e1, e2) = (cx.entity(), cx.entity());
     crate::ui::modal::confirm(crate::ui::modal::Confirm {
@@ -758,6 +792,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
     }
     let error = s.error.clone();
     let confirm = s.confirm_logout;
+    let hwaccel = s.confirm_hwaccel;
     let page_label = s.page.label();
     let body = div()
         .id("settings-content")
@@ -833,6 +868,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
                     .child(card.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())),
             )
             .when(confirm, |d| d.child(logout_modal(cx)))
+            .when_some(hwaccel, |d, on| d.child(hwaccel_modal(on, cx)))
             .into_any_element(),
     )
 }

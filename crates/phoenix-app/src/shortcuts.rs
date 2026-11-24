@@ -481,7 +481,7 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
     .on_action(cx.listener(|a, _: &ZoomIn, _, cx| ui::settings::update_local(a, |p| p.zoom = zoom_step(p.zoom, 1), cx)))
     .on_action(cx.listener(|a, _: &ZoomOut, _, cx| ui::settings::update_local(a, |p| p.zoom = zoom_step(p.zoom, -1), cx)))
     .on_action(cx.listener(|a, _: &ZoomReset, _, cx| ui::settings::update_local(a, |p| p.zoom = 100, cx)))
-    .on_action(cx.listener(|a, _: &RecordVoiceMessage, _, cx| a.stub(&crate::t!("shortcuts.voice_message"), cx)))
+    .on_action(cx.listener(|a, _: &RecordVoiceMessage, _, cx| crate::ui::chat::voice_message::start(a, cx)))
     .on_action(cx.listener(|a, _: &ToggleSoundboard, w, cx| {
         if a.voice_channel.is_some() {
             crate::ui::pickers::soundboard::toggle(a, w, cx);

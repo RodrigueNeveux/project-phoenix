@@ -28,6 +28,7 @@ pub mod scrollbar;
 pub mod alt_text;
 pub mod state;
 pub mod thread_banner;
+pub mod voice_message;
 pub mod blocked;
 pub mod slash;
 pub mod spoiler;
@@ -1693,7 +1694,12 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 .children(alt.map(|t| alt_text::badge(a.url.clone(), t)))
                 .into_any_element();
         }
-        AttachmentKind::Audio => return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element(),
+        AttachmentKind::Audio => {
+            if let Some(meta) = a.voice.as_ref() {
+                return voice_message::player(&a.url, meta, cx);
+            }
+            return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element();
+        }
         _ => {}
     }
     if a.is_image && inline {

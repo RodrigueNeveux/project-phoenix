@@ -141,6 +141,12 @@ pub fn message_attachments(files: &[FileUpload], uploaded: &[CloudUpload]) -> Va
                 if f.spoiler {
                     a["is_spoiler"] = json!(true);
                 }
+                if let Some(d) = f.duration_secs {
+                    a["duration_secs"] = json!(d);
+                }
+                if let Some(w) = &f.waveform {
+                    a["waveform"] = json!(w);
+                }
                 a
             })
             .collect(),
@@ -290,7 +296,7 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn file(name: &str, len: usize) -> FileUpload {
-        FileUpload { filename: name.into(), bytes: vec![7; len], content_type: None, description: None, spoiler: false }
+        FileUpload { filename: name.into(), bytes: vec![7; len], ..Default::default() }
     }
 
     #[test]
@@ -319,6 +325,19 @@ mod tests {
                 {"id":"0","filename":"cat.JPG","uploaded_filename":"u1/cat.JPG","original_content_type":"image/jpeg","description":"a cat","is_spoiler":true},
                 {"id":"1","filename":"b.txt","uploaded_filename":"u2/b.txt","original_content_type":"text/plain"}
             ])
+        );
+    }
+
+    #[test]
+    fn voice_message_attachment_carries_duration_and_waveform() {
+        let mut a = file("voice-message.ogg", 10);
+        a.content_type = Some("audio/ogg".into());
+        a.duration_secs = Some(3.52);
+        a.waveform = Some("AAEC".into());
+        let up = CloudUpload { id: "0".into(), upload_url: String::new(), upload_filename: "u/voice-message.ogg".into() };
+        assert_eq!(
+            message_attachments(&[a], &[up]),
+            json!([{"id":"0","filename":"voice-message.ogg","uploaded_filename":"u/voice-message.ogg","original_content_type":"audio/ogg","duration_secs":3.52,"waveform":"AAEC"}])
         );
     }
 

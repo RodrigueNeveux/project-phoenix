@@ -1,10 +1,13 @@
 use std::{
     collections::HashMap,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
 };
 
 use futures::{StreamExt, channel::mpsc};
-use gpui::App;
+use gpui::{App, Global, WeakEntity};
+use zbus::object_server::SignalEmitter;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -12,9 +15,127 @@ pub fn running() -> bool {
     RUNNING.load(Ordering::Relaxed)
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TrayState {
+    pub connected: bool,
+    pub muted: bool,
+    pub deafened: bool,
+    pub speaking: bool,
+    pub unread: bool,
+}
+
+impl TrayState {
+    pub fn icon(&self) -> &'static str {
+        if self.connected {
+            if self.deafened {
+                "tray-deafened"
+            } else if self.muted {
+                "tray-muted"
+            } else if self.speaking {
+                "tray-speaking"
+            } else {
+                "tray-connected"
+            }
+        } else if self.unread {
+            "tray-unread"
+        } else {
+            "tray"
+        }
+    }
+
+    fn from_app(a: &crate::app::PhoenixApp) -> Self {
+        let connected = a.voice_channel.is_some();
+        let badge = a.prefs.local.flag("badge", true);
+        let unread = badge && a.channels.values().any(|c| c.mentions > 0 || (c.unread && c.guild.is_none()));
+        Self {
+            connected,
+            muted: a.mic_muted || a.deafened,
+            deafened: a.deafened,
+            speaking: connected && crate::voice::call::manager().control().transmitting(),
+            unread,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Cmd {
     Open,
     Quit,
+    ToggleMute,
+    ToggleDeafen,
+    VoiceSettings,
+    Acknowledgements,
+}
+
+pub struct Target(pub WeakEntity<crate::app::PhoenixApp>);
+
+impl Global for Target {}
+
+pub fn set_target(cx: &mut App, app: WeakEntity<crate::app::PhoenixApp>) {
+    cx.set_global(Target(app));
+}
+
+pub const ICON_NAMES: [&str; 6] = ["tray", "tray-unread", "tray-connected", "tray-speaking", "tray-muted", "tray-deafened"];
+
+type Pixmap = Vec<(i32, i32, Vec<u8>)>;
+
+struct Labels {
+    open: String,
+    mute: String,
+    deafen: String,
+    voice_settings: String,
+    acknowledgements: String,
+    quit: String,
+}
+
+fn client_tray_dirs() -> Vec<PathBuf> {
+    let Some(home) = std::env::var_os("HOME").map(PathBuf::from) else { return Vec::new() };
+    let mut out = Vec::new();
+    for root in [home.join(".config/discord"), home.join(".var/app/com.discordapp.Discord/config/discord")] {
+        let Ok(entries) = std::fs::read_dir(&root) else { continue };
+        let mut versions: Vec<PathBuf> = entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+        versions.sort();
+        for v in versions.into_iter().rev() {
+            let Ok(mods) = std::fs::read_dir(v.join("modules")) else { continue };
+            for m in mods.flatten() {
+                let dir = m.path().join("discord_desktop_core/app/images/systemtray/linux");
+                if dir.join("tray.png").is_file() {
+                    out.push(dir);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn argb(img: &image::RgbaImage) -> (i32, i32, Vec<u8>) {
+    let data = img.pixels().flat_map(|p| [p[3], p[0], p[1], p[2]]).collect();
+    (img.width() as i32, img.height() as i32, data)
+}
+
+fn load_png(path: &Path) -> Option<image::RgbaImage> {
+    let bytes = std::fs::read(path).ok()?;
+    Some(image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?.to_rgba8())
+}
+
+fn app_pixmap() -> Pixmap {
+    let Ok(img) = image::load_from_memory_with_format(crate::assets::APP_ICON_PNG, image::ImageFormat::Png) else {
+        return Vec::new();
+    };
+    let rgba = img.to_rgba8();
+    [32u32, 64].iter().map(|&s| argb(&image::imageops::resize(&rgba, s, s, image::imageops::FilterType::Lanczos3))).collect()
+}
+
+fn icons() -> HashMap<&'static str, Pixmap> {
+    let fallback = app_pixmap();
+    let dir = client_tray_dirs().into_iter().next();
+    ICON_NAMES
+        .iter()
+        .map(|&n| {
+            let px = dir.as_ref().and_then(|d| load_png(&d.join(format!("{n}.png")))).map(|i| vec![argb(&i)]).unwrap_or_else(|| fallback.clone());
+            (n, px)
+        })
+        .collect()
 }
 
 pub fn spawn(cx: &mut App) {
@@ -22,10 +143,18 @@ pub fn spawn(cx: &mut App) {
         return;
     }
     let (tx, mut rx) = mpsc::unbounded::<Cmd>();
-    let labels = (crate::t!("tray.open").to_string(), crate::t!("tray.quit").to_string());
-    let icon = pixmap();
+    let (state_tx, state_rx) = mpsc::unbounded::<TrayState>();
+    let labels = Labels {
+        open: crate::t!("tray.open").to_string(),
+        mute: crate::t!("tray.mute").to_string(),
+        deafen: crate::t!("tray.deafen").to_string(),
+        voice_settings: crate::t!("tray.voice_settings").to_string(),
+        acknowledgements: crate::t!("tray.acknowledgements").to_string(),
+        quit: crate::t!("tray.quit").to_string(),
+    };
     let spawned = std::thread::Builder::new().name("phoenix-tray".into()).spawn(move || {
-        if let Err(e) = zbus::block_on(serve(tx, labels, icon)) {
+        let icons = icons();
+        if let Err(e) = zbus::block_on(serve(tx, state_rx, labels, icons)) {
             eprintln!("tray icon unavailable: {e}");
         }
         RUNNING.store(false, Ordering::Relaxed);
@@ -35,44 +164,85 @@ pub fn spawn(cx: &mut App) {
     }
     cx.spawn(async move |cx| {
         while let Some(cmd) = rx.next().await {
-            let quit = matches!(cmd, Cmd::Quit);
-            cx.update(|cx| {
-                if quit {
-                    cx.quit();
-                    return;
-                }
-                for w in cx.windows() {
-                    let _ = w.update(cx, |_, window, _| window.activate_window());
-                }
-            });
-            if quit {
+            cx.update(|cx| handle(cmd, cx));
+            if cmd == Cmd::Quit {
                 break;
+            }
+        }
+    })
+    .detach();
+    cx.spawn(async move |cx| {
+        let mut last: Option<TrayState> = None;
+        loop {
+            cx.background_executor().timer(Duration::from_millis(500)).await;
+            let st = cx.update(|cx| {
+                let t = cx.try_global::<Target>()?.0.upgrade()?;
+                Some(TrayState::from_app(t.read(cx)))
+            });
+            if let Some(st) = st
+                && last != Some(st)
+            {
+                last = Some(st);
+                if state_tx.unbounded_send(st).is_err() {
+                    break;
+                }
             }
         }
     })
     .detach();
 }
 
-fn pixmap() -> Vec<(i32, i32, Vec<u8>)> {
-    let Ok(img) = image::load_from_memory_with_format(crate::assets::APP_ICON_PNG, image::ImageFormat::Png) else {
-        return Vec::new();
-    };
-    [32u32, 64]
-        .iter()
-        .map(|&s| {
-            let rgba = image::imageops::resize(&img.to_rgba8(), s, s, image::imageops::FilterType::Lanczos3);
-            let argb = rgba.pixels().flat_map(|p| [p[3], p[0], p[1], p[2]]).collect();
-            (s as i32, s as i32, argb)
-        })
-        .collect()
+fn activate(cx: &mut App) {
+    for w in cx.windows() {
+        let _ = w.update(cx, |_, window, _| window.activate_window());
+    }
 }
 
-async fn serve(tx: mpsc::UnboundedSender<Cmd>, labels: (String, String), icon: Vec<(i32, i32, Vec<u8>)>) -> zbus::Result<()> {
+fn handle(cmd: Cmd, cx: &mut App) {
+    let target = cx.try_global::<Target>().and_then(|t| t.0.upgrade());
+    match cmd {
+        Cmd::Quit => cx.quit(),
+        Cmd::Open => activate(cx),
+        Cmd::Acknowledgements => cx.open_url("https://discord.com/acknowledgements"),
+        Cmd::ToggleMute | Cmd::ToggleDeafen => {
+            if let Some(t) = target {
+                t.update(cx, |a, cx| {
+                    if cmd == Cmd::ToggleMute {
+                        a.mic_muted = !a.mic_muted;
+                    } else {
+                        a.deafened = !a.deafened;
+                    }
+                    crate::voice::sync_self_state(a);
+                    cx.notify();
+                });
+            }
+        }
+        Cmd::VoiceSettings => {
+            activate(cx);
+            if let Some(t) = target {
+                t.update(cx, |a, cx| {
+                    crate::ui::settings::open(a, cx);
+                    if let Some(s) = a.settings.as_mut() {
+                        s.page = crate::ui::settings::Page::VoiceVideo;
+                    }
+                    cx.notify();
+                });
+            }
+        }
+    }
+}
+
+async fn serve(
+    tx: mpsc::UnboundedSender<Cmd>,
+    mut states: mpsc::UnboundedReceiver<TrayState>,
+    labels: Labels,
+    icons: HashMap<&'static str, Pixmap>,
+) -> zbus::Result<()> {
     let name = format!("org.kde.StatusNotifierItem-{}-1", std::process::id());
     let conn = zbus::connection::Builder::session()?
         .name(name.as_str())?
-        .serve_at("/StatusNotifierItem", Item { tx: tx.clone(), icon })?
-        .serve_at("/MenuBar", Menu { tx, labels })?
+        .serve_at("/StatusNotifierItem", Item { tx: tx.clone(), icons, state: TrayState::default() })?
+        .serve_at("/MenuBar", Menu { tx, labels, state: TrayState::default(), revision: 1 })?
         .build()
         .await?;
     conn.call_method(
@@ -84,13 +254,36 @@ async fn serve(tx: mpsc::UnboundedSender<Cmd>, labels: (String, String), icon: V
     )
     .await?;
     RUNNING.store(true, Ordering::Relaxed);
-    std::future::pending::<()>().await;
+    while let Some(st) = states.next().await {
+        let item = conn.object_server().interface::<_, Item>("/StatusNotifierItem").await?;
+        let icon_changed = {
+            let mut i = item.get_mut().await;
+            let changed = i.state.icon() != st.icon();
+            i.state = st;
+            changed
+        };
+        if icon_changed {
+            Item::new_icon(item.signal_emitter()).await?;
+        }
+        let menu = conn.object_server().interface::<_, Menu>("/MenuBar").await?;
+        let rev = {
+            let mut m = menu.get_mut().await;
+            if m.state == st {
+                continue;
+            }
+            m.state = st;
+            m.revision += 1;
+            m.revision
+        };
+        Menu::layout_updated(menu.signal_emitter(), rev, 0).await?;
+    }
     Ok(())
 }
 
 struct Item {
     tx: mpsc::UnboundedSender<Cmd>,
-    icon: Vec<(i32, i32, Vec<u8>)>,
+    icons: HashMap<&'static str, Pixmap>,
+    state: TrayState,
 }
 
 #[zbus::interface(name = "org.kde.StatusNotifierItem")]
@@ -103,6 +296,9 @@ impl Item {
     }
     fn context_menu(&self, _x: i32, _y: i32) {}
     fn scroll(&self, _delta: i32, _orientation: String) {}
+    fn provide_xdg_activation_token(&self, _token: String) {}
+    #[zbus(signal)]
+    async fn new_icon(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
     #[zbus(property)]
     fn category(&self) -> String {
         "Communications".into()
@@ -124,8 +320,12 @@ impl Item {
         "".into()
     }
     #[zbus(property)]
-    fn icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
-        self.icon.clone()
+    fn icon_pixmap(&self) -> Pixmap {
+        self.icons.get(self.state.icon()).or_else(|| self.icons.get("tray")).cloned().unwrap_or_default()
+    }
+    #[zbus(property)]
+    fn tool_tip(&self) -> (String, Pixmap, String, String) {
+        (String::new(), Vec::new(), "Discord Phoenix".into(), String::new())
     }
     #[zbus(property)]
     fn item_is_menu(&self) -> bool {
@@ -139,12 +339,20 @@ impl Item {
 
 struct Menu {
     tx: mpsc::UnboundedSender<Cmd>,
-    labels: (String, String),
+    labels: Labels,
+    state: TrayState,
+    revision: u32,
 }
 
 const ID_OPEN: i32 = 1;
-const ID_SEP: i32 = 2;
-const ID_QUIT: i32 = 3;
+const ID_SEP_VOICE: i32 = 2;
+const ID_MUTE: i32 = 3;
+const ID_DEAFEN: i32 = 4;
+const ID_VOICE_SETTINGS: i32 = 5;
+const ID_SEP_META: i32 = 6;
+const ID_ACK: i32 = 7;
+const ID_SEP_QUIT: i32 = 8;
+const ID_QUIT: i32 = 9;
 
 type Props = HashMap<String, zbus::zvariant::OwnedValue>;
 
@@ -155,13 +363,29 @@ fn props(pairs: &[(&str, zbus::zvariant::Value<'_>)]) -> Props {
         .collect()
 }
 
+pub fn menu_ids(state: &TrayState) -> Vec<i32> {
+    let mut ids = vec![ID_OPEN];
+    if state.connected {
+        ids.extend([ID_SEP_VOICE, ID_MUTE, ID_DEAFEN, ID_VOICE_SETTINGS]);
+    }
+    ids.extend([ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
+    ids
+}
+
 impl Menu {
     fn item_props(&self, id: i32) -> Props {
         use zbus::zvariant::Value;
+        let check = |label: &str, on: bool| {
+            props(&[("label", Value::from(label)), ("toggle-type", Value::from("checkmark")), ("toggle-state", Value::from(i32::from(on)))])
+        };
         match id {
-            ID_OPEN => props(&[("label", Value::from(self.labels.0.as_str()))]),
-            ID_SEP => props(&[("type", Value::from("separator"))]),
-            ID_QUIT => props(&[("label", Value::from(self.labels.1.as_str()))]),
+            ID_OPEN => props(&[("label", Value::from(self.labels.open.as_str()))]),
+            ID_SEP_VOICE | ID_SEP_META | ID_SEP_QUIT => props(&[("type", Value::from("separator"))]),
+            ID_MUTE => check(&self.labels.mute, self.state.muted),
+            ID_DEAFEN => check(&self.labels.deafen, self.state.deafened),
+            ID_VOICE_SETTINGS => props(&[("label", Value::from(self.labels.voice_settings.as_str()))]),
+            ID_ACK => props(&[("label", Value::from(self.labels.acknowledgements.as_str()))]),
+            ID_QUIT => props(&[("label", Value::from(self.labels.quit.as_str()))]),
             _ => props(&[("children-display", Value::from("submenu"))]),
         }
     }
@@ -175,14 +399,14 @@ impl Menu {
         _recursion_depth: i32,
         _property_names: Vec<String>,
     ) -> (u32, (i32, Props, Vec<zbus::zvariant::OwnedValue>)) {
-        let children = [ID_OPEN, ID_SEP, ID_QUIT]
+        let children = menu_ids(&self.state)
             .into_iter()
             .filter_map(|id| {
                 let node = (id, self.item_props(id), Vec::<zbus::zvariant::OwnedValue>::new());
                 zbus::zvariant::OwnedValue::try_from(zbus::zvariant::Value::from(zbus::zvariant::Structure::from(node))).ok()
             })
             .collect();
-        (1, (0, self.item_props(0), children))
+        (self.revision, (0, self.item_props(0), children))
     }
 
     fn get_group_properties(&self, ids: Vec<i32>, _property_names: Vec<String>) -> Vec<(i32, Props)> {
@@ -195,6 +419,10 @@ impl Menu {
         }
         let cmd = match id {
             ID_OPEN => Cmd::Open,
+            ID_MUTE => Cmd::ToggleMute,
+            ID_DEAFEN => Cmd::ToggleDeafen,
+            ID_VOICE_SETTINGS => Cmd::VoiceSettings,
+            ID_ACK => Cmd::Acknowledgements,
             ID_QUIT => Cmd::Quit,
             _ => return,
         };
@@ -204,6 +432,9 @@ impl Menu {
     fn about_to_show(&self, _id: i32) -> bool {
         false
     }
+
+    #[zbus(signal)]
+    async fn layout_updated(emitter: &SignalEmitter<'_>, revision: u32, parent: i32) -> zbus::Result<()>;
 
     #[zbus(property)]
     fn version(&self) -> u32 {
@@ -216,5 +447,34 @@ impl Menu {
     #[zbus(property)]
     fn text_direction(&self) -> String {
         "ltr".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icon_follows_the_client_priority() {
+        let mut s = TrayState::default();
+        assert_eq!(s.icon(), "tray");
+        s.unread = true;
+        assert_eq!(s.icon(), "tray-unread");
+        s.connected = true;
+        assert_eq!(s.icon(), "tray-connected");
+        s.speaking = true;
+        assert_eq!(s.icon(), "tray-speaking");
+        s.muted = true;
+        assert_eq!(s.icon(), "tray-muted");
+        s.deafened = true;
+        assert_eq!(s.icon(), "tray-deafened");
+    }
+
+    #[test]
+    fn menu_shows_voice_rows_only_when_connected() {
+        let idle = menu_ids(&TrayState::default());
+        assert_eq!(idle, vec![ID_OPEN, ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
+        let call = menu_ids(&TrayState { connected: true, ..Default::default() });
+        assert_eq!(call, vec![ID_OPEN, ID_SEP_VOICE, ID_MUTE, ID_DEAFEN, ID_VOICE_SETTINGS, ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
     }
 }
