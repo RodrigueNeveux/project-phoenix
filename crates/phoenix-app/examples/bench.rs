@@ -45,6 +45,10 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static A: Counting = Counting;
 
+/// `PHX_FRAMES=1`: frame times per interaction instead (examples/frames.rs).
+#[path = "common/frames_impl.rs"]
+mod frames_impl;
+
 fn allocs() -> (u64, u64) {
     (ALLOCS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed))
 }
@@ -90,6 +94,9 @@ fn bench_markdown() {
 }
 
 fn main() -> anyhow::Result<()> {
+    if std::env::var_os("PHX_FRAMES").is_some() {
+        return frames_impl::run();
+    }
     let target: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(5000);
     let t_start = Instant::now();
     bench_markdown();
