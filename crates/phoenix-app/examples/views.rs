@@ -1,6 +1,6 @@
 //! Offscreen render of one non-chat view in a given theme.
 //! `cargo run -p phoenix-app --example views -- out.png [dark|light|ash|onyx] <scene>`
-//! Scenes: friends-all, friends-pending, inbox, pins, threads, search, profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum, dm-menu, dm-submenu.
+//! Scenes: friends-all, friends-pending, inbox, pins, threads, search, profile, profile-modal, appearance, account, status, switcher, emoji, gif, sticker, friends, forum, post, events, browse, guide, dm-menu, dm-submenu.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -203,7 +203,20 @@ fn main() -> anyhow::Result<()> {
                             app.select_channel(id, cx);
                         }
                     }
-                    "forum" => {
+                    // Server Events modal, Channels & Roles Browse tab, Server Guide (mock data).
+                    "events" | "browse" | "guide" => {
+                        let g = app.guilds.first().map(|g| g.id);
+                        app.select_guild(g, cx);
+                        if let Some(g) = g {
+                            match scene.as_str() {
+                                "events" => phoenix_app::ui::events::open(app, g, cx),
+                                "browse" => phoenix_app::ui::community::open_tab(app, g, true, cx),
+                                _ => phoenix_app::ui::guide::open(app, g, cx),
+                            }
+                        }
+                    }
+                    // Forum post sidebar: the forum first, its first post once the list loaded.
+                    "forum" | "post" => {
                         let id = app.channels.values().find(|c| c.kind == phoenix_app::model::ChannelKind::Forum).map(|c| c.id);
                         if let Some(id) = id {
                             app.select_channel(id, cx);
@@ -215,6 +228,21 @@ fn main() -> anyhow::Result<()> {
             });
         })?;
         pump(&mut cx, 4);
+        if scene == "post" {
+            cx.update_window(win.into(), |_, window, cx| {
+                v.update(cx, |app, cx| {
+                    let post = app
+                        .selected_channel
+                        .and_then(|f| app.parity.forums.get(&f))
+                        .and_then(|f| f.posts.first())
+                        .map(|p| phoenix_app::model::ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count });
+                    if let Some(r) = post {
+                        app.open_thread(r, window, cx);
+                    }
+                });
+            })?;
+            pump(&mut cx, 4);
+        }
     }
     // Images (avatars, decorations) load over several frames: with
     // PHX_MOCK_DECO or PHX_WAIT_IMAGES, keep painting ~2 s before capturing.
