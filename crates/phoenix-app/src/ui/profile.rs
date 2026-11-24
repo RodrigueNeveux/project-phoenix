@@ -411,7 +411,7 @@ fn status_bubble(t: SharedString) -> Div {
         .line_height(z(18.))
         .text_color(c(tok(idx::TEXT_DEFAULT))) // content_rmCN9_
         .line_clamp(2)
-        .child(t)
+        .child(crate::ui::emoji_text::status_wrapped(t, 14. * crate::theme::zoom()))
 }
 
 /// Name block (866212 `displayNameRow_C2XpHA`, `usernameAndPronounsRow_`):

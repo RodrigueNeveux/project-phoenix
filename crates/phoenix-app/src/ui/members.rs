@@ -1010,7 +1010,7 @@ fn sub_text(in_voice: bool, bot: bool, sub: Option<SubText>, fallback: Option<Sh
     let (custom, main, count) = sub.map(|s| (s.custom, s.main, s.count)).unwrap_or((None, None, 0));
     let total = count + usize::from(in_voice);
     let custom_text = custom.as_ref().is_some_and(|c| c.1.is_some());
-    let text_el = |t: SharedString| div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(crate::ui::emoji_text::label(t, 12.));
+    let text_el = |t: SharedString| div().min_w_0().font_weight(FontWeight::MEDIUM).text_ellipsis().child(crate::ui::emoji_text::status_label(t, 14. * crate::theme::zoom() / 1.375));
     let mut row = div()
         .mt(z(-2.))
         .h(z(16.))
@@ -1053,7 +1053,7 @@ fn sub_text(in_voice: bool, bot: bool, sub: Option<SubText>, fallback: Option<Sh
         }
         if let Some(e) = emoji {
             // emoji_HigqCD 14px; custom (animated) emoji as images
-            row = row.child(div().flex_none().text_size(z(14.)).child(crate::ui::emoji_text::label_with_custom(e, 14. * crate::theme::zoom() / 1.375)));
+            row = row.child(div().flex_none().text_size(z(14.)).child(crate::ui::emoji_text::status_label(e, 14. * crate::theme::zoom() / 1.375)));
         }
         if let Some(t) = state {
             row = row.child(text_el(t));

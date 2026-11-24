@@ -13,15 +13,45 @@ use gpui::{AnyElement, IntoElement, ParentElement, SharedString, Styled, div};
 
 /// `text` (drawn at `font_px`) with its Unicode emoji as images.
 pub fn label(text: SharedString, font_px: f32) -> AnyElement {
-    label_impl(text, font_px, false)
+    label_impl(text, font_px, false, false)
 }
 
 /// [`label`] that also draws custom `<:name:id>` emoji as images (channel topics).
 pub fn label_with_custom(text: SharedString, font_px: f32) -> AnyElement {
-    label_impl(text, font_px, true)
+    label_impl(text, font_px, true, false)
 }
 
-fn label_impl(text: SharedString, font_px: f32, custom: bool) -> AnyElement {
+/// Custom statuses and activity lines: every emoji, custom or Unicode, is an
+/// image (live client 2026-11-24: `customStatusContent_` and the member
+/// activity text hold `img.emoji` 14px Twemoji, not font glyphs, while names
+/// and channel names stay text).
+pub fn status_label(text: SharedString, font_px: f32) -> AnyElement {
+    label_impl(text, font_px, true, true)
+}
+
+/// Wrapping version of [`status_label`] for the profile status bubble (two
+/// lines): words and emoji images flow in a wrapping row.
+pub fn status_wrapped(text: SharedString, font_px: f32) -> AnyElement {
+    let ranges = crate::richtext::emoji_ranges(&text);
+    if ranges.is_empty() {
+        return text.into_any_element();
+    }
+    let mut row = div().flex().flex_wrap().items_center();
+    let mut at = 0;
+    let words = |row: gpui::Div, r: std::ops::Range<usize>| {
+        crate::ui::chat::message_ext::words(&text, r)
+            .into_iter()
+            .fold(row, |row, w| row.child(div().flex_none().whitespace_nowrap().child(SharedString::from(text[w].to_string()))))
+    };
+    for (r, tok) in &ranges {
+        row = words(row, at..r.start);
+        row = row.child(div().flex_none().mx(gpui::px(1.)).child(crate::media::emoji::emoji_element(tok, font_px * 1.375)));
+        at = r.end;
+    }
+    words(row, at..text.len()).into_any_element()
+}
+
+fn label_impl(text: SharedString, font_px: f32, custom: bool, images: bool) -> AnyElement {
     // HTML collapses newlines in these one-line labels; a bot's multi-line custom status
     // otherwise stacked three lines over the member name.
     let text: SharedString = if text.contains(['\n', '\r']) { text.replace(['\r', '\n'], " ").into() } else { text };
@@ -31,7 +61,7 @@ fn label_impl(text: SharedString, font_px: f32, custom: bool) -> AnyElement {
         .filter(|(r, _)| custom || !text[r.clone()].starts_with('<'))
         // Chromium only switches to the emoji font for emoji presentation: "☲" (U+2632)
         // in role names stays a text glyph, "❓" or "ℹ️" do not.
-        .filter(|(r, _)| text[r.clone()].starts_with('<') || emoji_presentation(&text[r.clone()]))
+        .filter(|(r, _)| images || text[r.clone()].starts_with('<') || emoji_presentation(&text[r.clone()]))
         .map(|(r, _)| r)
         .collect();
     // PHX_NO_EMOJI_FONT=1: old behaviour, for before/after renders.
@@ -46,7 +76,7 @@ fn label_impl(text: SharedString, font_px: f32, custom: bool) -> AnyElement {
         if r.start > at {
             row = row.child(div().flex_none().child(SharedString::from(text[at..r.start].to_string())));
         }
-        if text[r.clone()].starts_with('<') {
+        if images || text[r.clone()].starts_with('<') {
             // `.emoji` 1.375em
             row = row.child(div().flex_none().mx(gpui::px(1.)).child(crate::media::emoji::emoji_element(&text[r.clone()], font_px * 1.375)));
             at = r.end;

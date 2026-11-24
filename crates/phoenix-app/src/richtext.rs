@@ -304,57 +304,30 @@ fn rich_text_mut(b: &mut RBlock) -> Option<&mut RichText> {
     }
 }
 
-fn is_emoji_modifier(c: char) -> bool {
-    matches!(c as u32, 0xFE0F | 0x200D | 0x20E3 | 0x1F3FB..=0x1F3FF | 0xE0020..=0xE007F)
-}
-
 /// Custom emoji tokens and Unicode emoji sequences in `text`, in order.
+/// Unicode emoji are the client's set (`media::emoji::unicode_emoji_at`),
+/// longest sequence first, so arrows, stars or math symbols stay text.
 pub fn emoji_ranges(text: &str) -> Vec<(Range<usize>, SharedString)> {
     let custom = crate::media::emoji::find_custom(text);
     let mut out: Vec<(Range<usize>, SharedString)> = Vec::new();
     let mut ci = custom.iter().peekable();
-    let mut it = text.char_indices().peekable();
-    while let Some((i, ch)) = it.next() {
+    let mut i = 0;
+    while i < text.len() {
         if let Some((r, _)) = ci.peek()
             && r.start == i
         {
             let r = r.clone();
             out.push((r.clone(), text[r.clone()].to_owned().into()));
             ci.next();
-            while it.peek().is_some_and(|(j, _)| *j < r.end) {
-                it.next();
-            }
+            i = r.end;
             continue;
         }
-        let cp = ch as u32;
-        let start_ok = cp >= 0x1F000 || (0x2190..0x2BFF).contains(&cp) || (0x2600..0x27C0).contains(&cp);
-        let keycap = ch.is_ascii_digit() || ch == '#' || ch == '*';
-        // Any other symbol with VS16 (U+FE0F) asks for emoji presentation ("ℹ️", "‼️").
-        let vs16 = !ch.is_ascii() && text[i + ch.len_utf8()..].starts_with('\u{FE0F}');
-        if !start_ok && !keycap && !vs16 {
+        if let Some(end) = crate::media::emoji::unicode_emoji_at(text, i) {
+            out.push((i..end, text[i..end].to_owned().into()));
+            i = end;
             continue;
         }
-        let mut end = i + ch.len_utf8();
-        let mut regional = (0x1F1E6..=0x1F1FF).contains(&cp);
-        while let Some(&(j, c)) = it.peek() {
-            let joined = text[..j].ends_with('\u{200D}');
-            if is_emoji_modifier(c) || joined || (regional && (0x1F1E6..=0x1F1FF).contains(&(c as u32))) {
-                if (0x1F1E6..=0x1F1FF).contains(&(c as u32)) {
-                    regional = false;
-                }
-                end = j + c.len_utf8();
-                it.next();
-            } else {
-                break;
-            }
-        }
-        let seq = &text[i..end];
-        if keycap && !seq.contains('\u{20E3}') {
-            continue;
-        }
-        if crate::media::emoji::twemoji_code(seq).is_some() {
-            out.push((i..end, seq.to_owned().into()));
-        }
+        i += text[i..].chars().next().map_or(1, char::len_utf8);
     }
     out
 }
@@ -399,5 +372,10 @@ mod emoji_tests {
         let t = "hi 👍🏽 <:blob:12> 👨\u{200D}👩\u{200D}👧 🇫🇷 ok 1";
         let e: Vec<String> = emoji_ranges(t).into_iter().map(|(_, s)| s.to_string()).collect();
         assert_eq!(e, vec!["👍🏽", "<:blob:12>", "👨\u{200D}👩\u{200D}👧", "🇫🇷"]);
+        // Text symbols are no emoji (they used to become broken images, and a lone "→"
+        // went jumbo); Emoji 16.0, unqualified forms and keycaps are.
+        assert_eq!(emoji_ranges("a → b ★ ∞ ✓ ■ ♡ ↗ x").len(), 1); // only ↗ (north_east_arrow)
+        let e: Vec<String> = emoji_ranges("\u{1FAE9} ☺ 1\u{20E3} 🙂\u{200D}↔\u{FE0F} ❤\u{FE0F}\u{200D}🔥").into_iter().map(|(_, s)| s.to_string()).collect();
+        assert_eq!(e, vec!["\u{1FAE9}", "☺", "1\u{20E3}", "🙂\u{200D}↔\u{FE0F}", "❤\u{FE0F}\u{200D}🔥"]);
     }
 }

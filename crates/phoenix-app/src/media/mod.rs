@@ -7,6 +7,7 @@
 
 pub mod cache;
 pub mod emoji;
+pub mod emoji_seqs;
 pub mod lottie;
 pub mod lru;
 

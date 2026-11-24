@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui::{AnyElement, App, IntoElement, ParentElement, RenderOnce, SharedString, Styled, StyledImage, Window, div, img, prelude::*, px};
 
-pub const TWEMOJI_BASE: &str = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/72x72";
+pub const TWEMOJI_BASE: &str = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/72x72";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CustomEmoji {
@@ -154,22 +154,69 @@ pub fn find_custom(text: &str) -> Vec<(std::ops::Range<usize>, CustomEmoji)> {
     out
 }
 
+/// Every Unicode emoji sequence the client turns into an image, and its fully
+/// qualified form. Live client (2026-11-24): its emoji table lists the
+/// Emoji 16.0 set, fully qualified, plus the same sequences without U+FE0F
+/// when they have no ZWJ ("☺" and "☺️", "#⃣"), the 26 lone regional
+/// indicators and the 5 skin tone modifiers, and "👁‍🗨" without its
+/// selectors. Text-only symbols ("→", "★", "∞"…) are not in it and stay text.
+struct Table {
+    canon: std::collections::HashMap<&'static str, &'static str>,
+    starts: std::collections::HashSet<char>,
+    max_chars: usize,
+}
+
+fn table() -> &'static Table {
+    static T: std::sync::OnceLock<Table> = std::sync::OnceLock::new();
+    T.get_or_init(|| {
+        let leak = |s: String| -> &'static str { Box::leak(s.into_boxed_str()) };
+        let mut canon = std::collections::HashMap::new();
+        let extra: Vec<&'static str> =
+            (0x1F1E6..=0x1F1FF).chain(0x1F3FB..=0x1F3FF).filter_map(char::from_u32).map(|c| leak(c.to_string())).collect();
+        for s in super::emoji_seqs::SEQUENCES.iter().copied().chain(extra) {
+            canon.insert(s, s);
+            if !s.contains('\u{200D}') && s.contains('\u{FE0F}') {
+                canon.entry(leak(s.replace('\u{FE0F}', ""))).or_insert(s);
+            }
+        }
+        if let Some(eye) = super::emoji_seqs::SEQUENCES.iter().copied().find(|s| s.starts_with("\u{1F441}\u{FE0F}\u{200D}")) {
+            canon.insert("\u{1F441}\u{200D}\u{1F5E8}", eye);
+        }
+        let starts = canon.keys().filter_map(|k| k.chars().next()).collect();
+        let max_chars = canon.keys().map(|k| k.chars().count()).max().unwrap_or(1);
+        Table { canon, starts, max_chars }
+    })
+}
+
+/// End (byte offset) of the Unicode emoji sequence starting at byte `i` of
+/// `text`, longest match first; a trailing U+FE0F is kept with it.
+pub fn unicode_emoji_at(text: &str, i: usize) -> Option<usize> {
+    let t = table();
+    let rest = &text[i..];
+    if !rest.chars().next().is_some_and(|c| t.starts.contains(&c)) {
+        return None;
+    }
+    let ends: Vec<usize> = rest.char_indices().skip(1).map(|(j, _)| j).chain([rest.len()]).take(t.max_chars).collect();
+    let end = ends.into_iter().rev().find(|&e| t.canon.contains_key(&rest[..e]))?;
+    let end = if rest[end..].starts_with('\u{FE0F}') { end + 3 } else { end };
+    Some(i + end)
+}
+
+/// Fully qualified form of a Unicode emoji sequence, if it is one.
+fn canonical(e: &str) -> Option<&'static str> {
+    let t = table();
+    t.canon.get(e).or_else(|| t.canon.get(e.strip_suffix('\u{FE0F}')?)).copied()
+}
+
 /// Twemoji file name for a Unicode emoji ("1f44d", "1f469-200d-1f4bb").
-/// FE0F is dropped unless the sequence contains a ZWJ, as Twemoji does.
+/// FE0F is dropped unless the sequence contains a ZWJ, as Twemoji does; the
+/// eye in a speech bubble is the one ZWJ file named without them.
 pub fn twemoji_code(e: &str) -> Option<String> {
-    let has_zwj = e.contains('\u{200D}');
-    let parts: Vec<String> = e
-        .chars()
-        .filter(|&c| has_zwj || c != '\u{FE0F}')
-        .map(|c| format!("{:x}", c as u32))
-        .collect();
-    let first = e.chars().next()? as u32;
-    // Only real emoji ranges; plain text is not looked up.
-    let emojiish = first >= 0x1F000
-        || (0x2000..0x3300).contains(&first)
-        || e.contains('\u{FE0F}')
-        || e.contains('\u{20E3}');
-    (emojiish && !parts.is_empty()).then(|| parts.join("-"))
+    let e = canonical(e)?;
+    let eye = e.starts_with("\u{1F441}\u{FE0F}\u{200D}");
+    let keep = e.contains('\u{200D}') && !eye;
+    let parts: Vec<String> = e.chars().filter(|&c| keep || c != '\u{FE0F}').map(|c| format!("{:x}", c as u32)).collect();
+    Some(parts.join("-"))
 }
 
 pub fn twemoji_url(e: &str) -> Option<SharedString> {
@@ -245,5 +292,17 @@ mod tests {
         assert_eq!(twemoji_code("❤️").as_deref(), Some("2764"));
         assert_eq!(twemoji_code("👩‍💻").as_deref(), Some("1f469-200d-1f4bb"));
         assert_eq!(twemoji_code("a"), None);
+        // Emoji 16.0, unqualified forms, keycaps, flags, tones, the eye bubble.
+        assert_eq!(twemoji_code("\u{1FAE9}").as_deref(), Some("1fae9"));
+        assert_eq!(twemoji_code("☺").as_deref(), Some("263a"));
+        assert_eq!(twemoji_code("#⃣").as_deref(), Some("23-20e3"));
+        assert_eq!(twemoji_code("🏳️‍🌈").as_deref(), Some("1f3f3-fe0f-200d-1f308"));
+        assert_eq!(twemoji_code("👁️‍🗨️").as_deref(), Some("1f441-200d-1f5e8"));
+        assert_eq!(twemoji_code("👍🏽").as_deref(), Some("1f44d-1f3fd"));
+        assert_eq!(twemoji_code("🏴󠁧󠁢󠁳󠁣󠁴󠁿").as_deref(), Some("1f3f4-e0067-e0062-e0073-e0063-e0074-e007f"));
+        // Text symbols stay text.
+        for t in ["→", "★", "∞", "✓", "■", "♡", "1"] {
+            assert_eq!(twemoji_code(t), None, "{t}");
+        }
     }
 }
