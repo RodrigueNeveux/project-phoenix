@@ -423,7 +423,20 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         }
         None => {
             // positionLayer: right edge 24px left of the composer's right side.
-            let right = 16. + if app.show_members && app.selected_guild.is_some() { 240. } else { 0. };
+            // The right panel shown next to the chat: guild / group DM member list
+            // (--custom-member-list-width) or the DM profile panel (aside 320).
+            let side = if !app.show_members {
+                0.
+            } else if crate::ui::dm_profile_panel::peer(app).is_some() {
+                320.
+            } else if app.selected_guild.is_some()
+                || app.selected_channel.is_some_and(|c| crate::ui::dm_profile_panel::is_group_dm(app, c))
+            {
+                crate::theme::m::MEMBER_LIST_W
+            } else {
+                0.
+            };
+            let right = 16. + side;
             ((vw - right - PICKER_W).max(8.), (vh - 75. - ph).max(8.))
         }
     };
