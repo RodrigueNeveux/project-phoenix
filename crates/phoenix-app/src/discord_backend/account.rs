@@ -186,6 +186,7 @@ pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
         locale: p.locale().filter(|l| !l.is_empty()).map(|l| l.to_owned().into()).unwrap_or(d.locale),
         allow_server_dms: !p.default_guilds_restricted(),
         proto: Default::default(),
+        rest: Default::default(),
         density: density_from_proto(p.ui_density()).unwrap_or(d.density),
     }
 }
