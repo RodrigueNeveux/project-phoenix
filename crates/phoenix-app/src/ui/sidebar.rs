@@ -399,7 +399,9 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 // `.enlarge-target-size .wrapper_yOdhm_` padding-inline 20 / 6 (cozy).
                 .pt(z(16.))
                 .pl(z(20.))
-                .pr(z(6.))
+                // padding-inline-end 6 + the scroller's 8px stable gutter (live
+                // `wrapper_yOdhm_` 327px wide in a 335px scroller, like the channel rows).
+                .pr(z(6. + 8.))
                 .h(z(40.))
                 .w_full()
                 .flex()
