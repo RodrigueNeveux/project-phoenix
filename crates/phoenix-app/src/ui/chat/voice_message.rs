@@ -863,6 +863,8 @@ pub fn player(url: &SharedString, meta: &VoiceMeta, cx: &App) -> AnyElement {
     div()
         .id(id("player"))
         .mt(z(4.))
+        .self_start()
+        .flex_none()
         .relative()
         .flex()
         .flex_row()
