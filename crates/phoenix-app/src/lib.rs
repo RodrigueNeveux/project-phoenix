@@ -13,6 +13,7 @@ pub mod i18n;
 pub mod fonts;
 pub mod icons;
 pub mod markdown;
+pub mod member_index;
 pub mod media;
 pub mod mock;
 pub mod mock_showcase;

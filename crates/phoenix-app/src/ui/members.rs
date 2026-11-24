@@ -338,7 +338,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
         let uid = e.author;
         let user_cow = app.member_user(Some(g), uid);
         let user = user_cow.as_deref();
-        let mem = app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == uid));
+        let mem = app.members.get(&g).and_then(|ms| crate::member_index::find(ms, g, uid));
         let name = mem
             .and_then(|m| m.nick.clone())
             .or_else(|| user.map(|u| u.display_name.clone()))

@@ -1183,14 +1183,14 @@ impl PhoenixApp {
     /// Guild nickname of `user` in the selected guild, from the member cache.
     pub fn member_nick(&self, user: Id) -> Option<SharedString> {
         let g = self.selected_guild?;
-        self.members.get(&g)?.iter().find(|m| m.user == user)?.nick.clone()
+        crate::member_index::find(self.members.get(&g)?, g, user)?.nick.clone()
     }
 
     /// `user` as shown in guild `g`: the per-guild avatar and decoration of its
     /// member replace the global ones (client `getGuildMemberAvatarURL`).
     pub fn member_user(&self, g: Option<Id>, user: Id) -> Option<std::borrow::Cow<'_, crate::model::User>> {
         let u = self.users.get(&user)?;
-        let m = g.and_then(|g| self.members.get(&g)).and_then(|ms| ms.iter().find(|m| m.user == user));
+        let m = g.and_then(|g| crate::member_index::find(self.members.get(&g)?, g, user));
         match m {
             Some(m) if m.avatar.is_some() || m.decoration.is_some() => {
                 let mut u = u.clone();
@@ -1208,14 +1208,14 @@ impl PhoenixApp {
 
     pub fn author_color(&self, user: Id) -> Option<u32> {
         let g = self.selected_guild?;
-        let m = self.members.get(&g)?.iter().find(|m| m.user == user)?;
+        let m = crate::member_index::find(self.members.get(&g)?, g, user)?;
         self.member_color(g, m)
     }
 
     /// Icon of the highest role of `user` that has one, in the selected guild.
     pub fn author_role_icon(&self, user: Id) -> Option<SharedString> {
         let g = self.selected_guild?;
-        let m = self.members.get(&g)?.iter().find(|m| m.user == user)?;
+        let m = crate::member_index::find(self.members.get(&g)?, g, user)?;
         self.roles.get(&g)?.iter().filter(|r| m.roles.contains(&r.id) && r.icon.is_some()).max_by_key(|r| r.position)?.icon.clone()
     }
 
@@ -1225,7 +1225,7 @@ impl PhoenixApp {
     pub fn is_new_member(&self, user: Id) -> bool {
         const WEEK_MS: i64 = 7 * 86_400_000;
         let Some(g) = self.selected_guild else { return false };
-        let Some(m) = self.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == user)) else { return false };
+        let Some(m) = self.members.get(&g).and_then(|ms| crate::member_index::find(ms, g, user)) else { return false };
         let now = chrono::Utc::now().timestamp_millis();
         let guild_ms = (g.0 >> 22) as i64 + 1_420_070_400_000;
         let bot = self.users.get(&user).is_some_and(|u| u.bot);
