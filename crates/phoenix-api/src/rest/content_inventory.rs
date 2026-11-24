@@ -26,6 +26,7 @@ pub struct ScheduledMessage {
 /// Content inventory trait types (`TraitType` enum of the client).
 pub const TRAIT_FIRST_TIME: u64 = 1;
 pub const TRAIT_DURATION: u64 = 2;
+pub const TRAIT_IS_LIVE: u64 = 3;
 pub const TRAIT_RESURRECTED: u64 = 5;
 pub const TRAIT_STREAK: u64 = 8;
 pub const TRAIT_TRENDING: u64 = 9;
@@ -49,6 +50,12 @@ pub struct InventoryEntry {
     pub first_time: bool,
     /// `traits[type=5].resurrected_last_played` -> "Resurrection".
     pub resurrected: bool,
+    /// `traits[type=3].is_live`: the session is still running (the card shows a timer).
+    pub live: bool,
+    /// ISO 8601 session start (`started_at`); the live timer counts from it.
+    pub started_at: Option<String>,
+    /// ISO 8601 `expires_at` of a live entry (the server extends it while the game runs).
+    pub expires_at: Option<String>,
 }
 
 fn id_of(v: &Value) -> Option<u64> {
@@ -82,6 +89,9 @@ pub fn parse_inventory(v: &Value) -> Vec<InventoryEntry> {
                     .map(str::to_owned),
                 first_time: tr(TRAIT_FIRST_TIME).and_then(|t| t.get("first_time")?.as_bool()).unwrap_or(false),
                 resurrected: tr(TRAIT_RESURRECTED).is_some_and(|t| t.get("resurrected_last_played").is_some_and(|x| !x.is_null())),
+                live: tr(TRAIT_IS_LIVE).and_then(|t| t.get("is_live")?.as_bool()).unwrap_or(false),
+                started_at: e.get("started_at").and_then(Value::as_str).map(str::to_owned),
+                expires_at: e.get("expires_at").and_then(Value::as_str).map(str::to_owned),
             })
         })
         .collect()
@@ -126,6 +136,18 @@ mod tests {
         let e = parse_inventory(&v);
         assert_eq!((e[0].id, e[0].author_id, e[0].streak_days), (9, 42, Some(2)));
         assert!(e[0].trending);
+        assert!(!e[0].live && e[0].started_at.is_none());
+    }
+
+    #[test]
+    fn parses_live_session() {
+        let v = serde_json::json!({"entries": [{"id": "1", "author_id": "42", "content_type": 1,
+            "started_at": "2026-11-24T13:28:52.309000+00:00", "expires_at": "2026-11-24T14:03:52.308170+00:00",
+            "extra": {"game_name": "War Thunder"}, "traits": [{"type": 2, "duration_seconds": 0}, {"type": 3, "is_live": true}]}]});
+        let e = parse_inventory(&v);
+        assert!(e[0].live);
+        assert_eq!(e[0].started_at.as_deref(), Some("2026-11-24T13:28:52.309000+00:00"));
+        assert_eq!(e[0].expires_at.as_deref(), Some("2026-11-24T14:03:52.308170+00:00"));
     }
 
     #[test]

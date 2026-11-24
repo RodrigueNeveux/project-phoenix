@@ -72,6 +72,7 @@ fn main() -> anyhow::Result<()> {
         trending,
         streak_days: None,
         icon: None,
+        ..Default::default()
     };
     phoenix_app::ui::activity_traits::seed(vec![
         entry(1, 5, "Fortnite", false, false),

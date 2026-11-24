@@ -200,6 +200,10 @@ pub struct InventoryEntry {
     pub streak_days: Option<u64>,
     /// `app-icons/{app}/{icon}.png` from `/applications/public`.
     pub icon: Option<gpui::SharedString>,
+    /// Live session (trait `is_live`): start and expiry, unix ms.
+    pub live: bool,
+    pub started_ms: Option<i64>,
+    pub expires_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug)]

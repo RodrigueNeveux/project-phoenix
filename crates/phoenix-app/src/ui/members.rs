@@ -214,9 +214,11 @@ pub fn elapsed(start_ms: i64, now_s: i64) -> String {
 /// entries of the rendered content types whose author is a member of `g`
 /// (unknown authors are requested with op 8, like `requestMember`) and can
 /// VIEW_CHANNEL the open channel, in feed order.
-/// Also returns how many entries the header counts: the client counts the
-/// feed entries whose author is not loaded yet too (they are pending op 8).
-fn feed_cards(app: &PhoenixApp, g: Id) -> (Vec<crate::commands::InventoryEntry>, usize) {
+/// The header counts the cards shown. Live
+/// client 2026-11-24, guild with 6 feed entries of which 5 by non-members:
+/// "Activité — 1" with one card; authors that are not members never resolve
+/// through op 8, so counting them as pending kept "6" forever.
+fn feed_cards(app: &PhoenixApp, g: Id) -> Vec<crate::commands::InventoryEntry> {
     let is_member = |u: Id| {
         app.members.get(&g).is_some_and(|ms| ms.iter().any(|m| m.user == u))
             || rows_for(app, g).is_some_and(|rows| rows.iter().any(|r| matches!(r, ListEntry::Member(m, _) if m.user == u)))
@@ -224,7 +226,6 @@ fn feed_cards(app: &PhoenixApp, g: Id) -> (Vec<crate::commands::InventoryEntry>,
     let entries = crate::ui::activity_traits::entries();
     let mut unknown: Vec<Id> = Vec::new();
     let mut out = Vec::new();
-    let mut pending = 0;
     for e in entries {
         // Rendered content types (client member list row switch): PLAYED_GAME (1)
         // and LAUNCHED_ACTIVITY (8, `extra.activity_name`), both name + 48px art.
@@ -232,9 +233,6 @@ fn feed_cards(app: &PhoenixApp, g: Id) -> (Vec<crate::commands::InventoryEntry>,
             continue;
         }
         if !is_member(e.author) {
-            if !app.users.contains_key(&e.author) {
-                pending += 1;
-            }
             if !unknown.contains(&e.author) && app.people.feed_requested.borrow_mut().insert((g, e.author)) {
                 unknown.push(e.author);
             }
@@ -248,8 +246,7 @@ fn feed_cards(app: &PhoenixApp, g: Id) -> (Vec<crate::commands::InventoryEntry>,
     if !unknown.is_empty() {
         app.backend.request_feed_members(g, unknown);
     }
-    let n = out.len() + pending;
-    (out, n)
+    out
 }
 
 /// Activity section expanded past its first 3 cards (toggleExpandIcon).
@@ -259,7 +256,8 @@ static ACTIVITY_EXPANDED: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 /// member playing a game. Dump `-channels-N-N+` nodes 1502 (header) and
 /// 1512 (card `container_g7esM5 usesCardRows_g7esM5`).
 fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> AnyElement {
-    let (acts, count) = feed_cards(app, g);
+    let acts = feed_cards(app, g);
+    let count = acts.len();
     let expanded = ACTIVITY_EXPANDED.load(std::sync::atomic::Ordering::Relaxed);
     // Member list content feed gate (client bundle, member list groups hook):
     // shown when the guild allows it (`activity_feed_enabled`) AND the open
@@ -369,13 +367,18 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .child(div().text_size(z(12.)).line_height(z(16.)).text_color(col).text_ellipsis().child(t))
         };
         let badge = |ic: &'static str, t: SharedString| badge_in(ic, t, c(Palette::TEXT_MUTED));
-        // Time badge (client content badge `$`): while the author still plays it (a matching
-        // presence activity), a running timer from the activity start in
-        // --text-feedback-positive; otherwise "x ago" in the muted colors.
-        let live_start = app.people.activities.get(&uid).and_then(|acts| {
-            acts.iter()
-                .find(|a| e.game.as_deref().is_some_and(|g| a.name.eq_ignore_ascii_case(g)))
-                .and_then(|a| a.start)
+        // Time badge (client content badge `$`): while the session is live, a running
+        // timer in --text-feedback-positive; otherwise "x ago" in the muted colors.
+        // Live client 2026-11-24: an entry with trait 3 `is_live` showed "12:08" =
+        // now - `started_at` exactly, while the author's presence had no matching start.
+        // A matching presence activity start is the fallback.
+        let entry_live = e.live && e.expires_ms.is_none_or(|x| x > now * 1000);
+        let live_start = e.started_ms.filter(|_| entry_live).or_else(|| {
+            app.people.activities.get(&uid).and_then(|acts| {
+                acts.iter()
+                    .find(|a| e.game.as_deref().is_some_and(|g| a.name.eq_ignore_ascii_case(g)))
+                    .and_then(|a| a.start)
+            })
         });
         let time_icon = if e.content_type == 8 { "apps" } else { "game-controller" };
         let time_badge = match live_start {

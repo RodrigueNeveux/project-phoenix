@@ -166,6 +166,9 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                     trending: x.trending,
                     streak_days: x.streak_days,
                     icon: None,
+                    live: x.live,
+                    started_ms: x.started_at.as_deref().and_then(iso_ms),
+                    expires_ms: x.expires_at.as_deref().and_then(iso_ms),
                 })
                 .collect();
             // Card thumbnails: `app-icons/{id}/{icon}.png?size=240` (read-only lookup).
@@ -303,6 +306,11 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             ParityReply::ForumPosts { posts, has_more }
         }
     })
+}
+
+/// ISO 8601 / RFC 3339 timestamp to unix milliseconds.
+fn iso_ms(s: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(s).ok().map(|d| d.timestamp_millis())
 }
 
 #[cfg(test)]
