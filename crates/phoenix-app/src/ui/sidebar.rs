@@ -705,7 +705,10 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     // `name_TNyK-N`: `--channels-default`; `modeSelected`/`modeUnreadImportant`:
     // `--interactive-text-active`; `modeMuted`: `--text-muted` at 50 % opacity.
     // `modeConnected_TNyK-N .name_`: `--interactive-text-active` too.
-    let fg = if selected || connected || (ch.unread && !ch.muted) {
+    let fg = if (selected || connected) && !is_dm {
+        // `.modeConnected_/.modeSelected_ .name_TNyK-N {color: var(--text-strong)}`
+        tok(idx::TEXT_STRONG)
+    } else if selected || connected || (ch.unread && !ch.muted) {
         tok(idx::INTERACTIVE_TEXT_ACTIVE)
     } else if ch.muted {
         tok(idx::TEXT_MUTED)
@@ -756,9 +759,13 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         // --text-feedback-positive (live: oklab(.633 -.114 .059), same as the timer).
         let col = t(if app.voice_channel == Some(id) {
             idx::TEXT_FEEDBACK_POSITIVE
+        } else if selected {
+            // `.modeConnected_/.modeSelected_ .icon_TNyK-N {color: var(--icon-strong)}`
+            // (f4b2f93f8f92b799.css, after the `--channel-icon` rule, so it wins).
+            idx::ICON_STRONG
         } else if ch.muted {
             idx::ICON_MUTED
-        } else if unread && !selected {
+        } else if unread {
             idx::ICON_SUBTLE
         } else {
             idx::CHANNEL_ICON
@@ -1113,12 +1120,15 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         // Rail + channel list width, so a long custom status ellipsizes instead
         // of widening the card past the sidebar.
         .w(z(m::SERVER_BAR_W + crate::ui::sidebar_resize::width()))
+        // The live scrollers (`sidebarList_`, `guilds_`) run down to the card's top edge,
+        // behind its 10px margin: overlap them by that margin and leave it transparent.
+        .mt(z(-10.))
         .relative()
-        .child(div().absolute().top_0().bottom_0().left_0().w(z(m::SERVER_BAR_W)).bg(c(Palette::BG_TERTIARY)))
+        .child(div().absolute().top(z(10.)).bottom_0().left_0().w(z(m::SERVER_BAR_W)).bg(c(Palette::BG_TERTIARY)))
         .child(
             div()
                 .absolute()
-                .top_0()
+                .top(z(10.))
                 .bottom_0()
                 .right_0()
                 .left(z(m::SERVER_BAR_W))
