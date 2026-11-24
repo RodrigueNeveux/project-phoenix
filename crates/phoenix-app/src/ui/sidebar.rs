@@ -761,9 +761,11 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     });
     let action = |i: Icon, path: Option<&'static str>| {
         let col = t(idx::INTERACTIVE_TEXT_DEFAULT);
-        div().size(z(24.)).p(z(4.)).flex_none().child(match path {
-            Some(p) => gpui::svg().path(crate::icons::path(p)).size(z(16.)).text_color(col).into_any_element(),
-            None => icon(i, 16., col).into_any_element(),
+        // iconItem_Wx6SnQ:hover .actionIcon_Wx6SnQ color --interactive-text-hover
+        let hov = |s: gpui::StyleRefinement| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER));
+        div().size(z(24.)).p(z(4.)).flex_none().group("ch-action").child(match path {
+            Some(p) => gpui::svg().path(crate::icons::path(p)).size(z(16.)).text_color(col).group_hover("ch-action", hov).into_any_element(),
+            None => icon(i, 16., col).group_hover("ch-action", hov).into_any_element(),
         })
     };
     let is_voice = matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage);

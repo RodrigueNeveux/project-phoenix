@@ -131,6 +131,7 @@ pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool
         .items_center()
         .justify_center()
         .cursor_pointer()
+        .group("panel-btn")
         .when(red, |d| d.bg(t(idx::OPACITY_RED_12)).hover(|s| s.bg(t(idx::OPACITY_RED_24))))
         .when(!red, |d| d.hover(|s| s.bg(t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
         .child(glyph)
@@ -138,7 +139,9 @@ pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool
 
 /// Glyph colour of a panel button (`--icon-subtle` / `--icon-feedback-critical`).
 pub fn panel_glyph(i: Icon, red: bool) -> AnyElement {
-    icon(i, 20. * crate::theme::zoom(), t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE })).into_any_element()
+    let g = icon(i, 20. * crate::theme::zoom(), t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE }));
+    // button_Y-8oZW.enabled:hover color --interactive-text-hover (not on redGlow).
+    if red { g.into_any_element() } else { g.group_hover("panel-btn", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))).into_any_element() }
 }
 
 /// Mic / deafen button with its dropdown chevron (`audioButtonParent_gKpIZP`):

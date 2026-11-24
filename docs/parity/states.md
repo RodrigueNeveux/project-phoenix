@@ -31,8 +31,8 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | channel row muted `modeMuted_` | hover | name `--interactive-text-hover` | opacity 1 + hover colour | ✅ |
 | thread row | hover / active | same as channel row | `.active()` | ✅ (added) |
 | DM home nav rows (Friends, Nitro, Shop, Quests) | hover / active | same link rules | `.active()` | ✅ (added) |
-| row action icons `actionIcon_Wx6SnQ` (invite, settings) | reveal on hover | `iconVisibility:hover .iconItem` display block, `.channelInfo` hidden | | ❌ |
-| row action icons | hover / active | `--icon-muted` → `--interactive-text-hover`; active `--interactive-text-active` + translateY(.5px) | | ❌ |
+| row action icons `actionIcon_Wx6SnQ` (invite, settings) | reveal on hover | `iconVisibility:hover .iconItem` display block, `.channelInfo` hidden | sidebar.rs `invite_hover` group_hover | ✅ |
+| row action icons | hover / active | `--icon-muted` → `--interactive-text-hover`; active `--interactive-text-active` + translateY(.5px) | hover colour via group_hover; no pressed nudge | ❌ active part |
 | category `wrapper_yOdhm_` | hover | name + chevron `--interactive-text-hover` | sidebar.rs:408 | ✅ |
 
 ## Member list
@@ -62,7 +62,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 |---|---|---|---|---|
 | header icon `clickable_ybUK7Z .icon` | hover | glyph `--icon-subtle` | | ❌ to verify |
 | header tooltip | position | below the button, caret on top, body-sm/medium 14/18 | gpui tooltip under the cursor | ❌ position follows the cursor |
-| user panel button `button_Y-8oZW` | hover | `--control-secondary-background-hover`, glyph `--interactive-text-hover`, .2s ease | bg only | ❌ glyph colour |
+| user panel button `button_Y-8oZW` | hover | `--control-secondary-background-hover`, glyph `--interactive-text-hover`, .2s ease | bg + glyph via `panel-btn` group | ✅ (added) |
 | user panel red (muted/deafened) | rest / hover | `--opacity-red-12` → `--opacity-red-24` | voice_panel.rs | ✅ |
 | user panel | active | none in CSS | | ➖ |
 | audio button pair `audioButtonParent_` | hover | pair `--background-mod-muted`, hovered half `--control-secondary-background-hover` | voice_panel.rs | ✅ |
@@ -73,6 +73,6 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 
 ## Coverage
 
-40 rows: 23 ✅, 1 ➖, 16 ❌ (several of them "to verify" with a live CDP hover session).
+40 rows: 25 ✅, 1 ➖, 14 ❌ (several of them "to verify" with a live CDP hover session).
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.
