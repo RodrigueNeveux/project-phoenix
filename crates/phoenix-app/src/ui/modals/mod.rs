@@ -93,6 +93,14 @@ pub enum Modal {
 
 /// Create the inputs that need a `Window`.
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    with_modal(|m| {
+        if let Some(Modal::Form(f)) = m {
+            for fl in f.fields.iter_mut().filter(|fl| fl.rows > 1 && fl.area.is_none()) {
+                let (ph, val, rows) = (fl.placeholder.clone(), fl.initial.clone(), fl.rows);
+                fl.area = Some(cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, rows).placeholder(ph).default_value(val)));
+            }
+        }
+    });
     let mut mk = |placeholder: SharedString, initial: &str, focus: bool| {
         let i = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
         if !initial.is_empty() {
@@ -107,12 +115,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     with_modal(|m| match m {
         Some(Modal::Form(f)) => {
             for (n, fl) in f.fields.iter_mut().enumerate() {
-                if fl.rows > 1 {
-                    if fl.area.is_none() {
-                        let (ph, val, rows) = (fl.placeholder.clone(), fl.initial.clone(), fl.rows);
-                        fl.area = Some(cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, rows).placeholder(ph).default_value(val)));
-                    }
-                } else if fl.input.is_none() {
+                if fl.rows == 1 && fl.input.is_none() {
                     fl.input = Some(mk(fl.placeholder.clone(), &fl.initial, n == 0));
                 }
             }

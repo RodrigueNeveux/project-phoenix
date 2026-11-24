@@ -56,11 +56,24 @@ pub fn auto_scrollbar(state: &ListState) -> Option<AnyElement> {
 pub const THIN_FADE_GROUP: &str = "thin-fade-scroller";
 
 pub fn thin_fade_scrollbar(state: &ListState) -> Option<AnyElement> {
-    thin_fade(
-        f32::from(state.viewport_bounds().size.height),
-        f32::from(state.max_offset_for_scrollbar().y),
-        -f32::from(state.scroll_px_offset_for_scrollbar().y),
-    )
+    let vh = f32::from(state.viewport_bounds().size.height);
+    let measured = f32::from(state.max_offset_for_scrollbar().y);
+    thin_fade(vh, estimated_max_offset(state, vh, measured), -f32::from(state.scroll_px_offset_for_scrollbar().y))
+}
+
+fn estimated_max_offset(state: &ListState, vh: f32, measured: f32) -> f32 {
+    let n = state.item_count();
+    let top = state.logical_scroll_top().item_ix;
+    let (mut sum, mut k) = (0f32, 0usize);
+    for ix in top..n.min(top + 200) {
+        let Some(b) = state.bounds_for_item(ix) else { break };
+        sum += f32::from(b.size.height);
+        k += 1;
+    }
+    if k == 0 || k + top >= n {
+        return measured;
+    }
+    measured.max(sum / k as f32 * n as f32 - vh)
 }
 
 pub fn thin_fade_scrollbar_div(scroll: &ScrollHandle) -> Option<AnyElement> {
