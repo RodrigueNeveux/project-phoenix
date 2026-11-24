@@ -42,6 +42,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let show_members = show_members && app.chat.thread.is_none() && !crate::ui::thread_create::is_open(cx);
     // The call view's side chat has no member list.
     let show_members = show_members && !crate::ui::call_view::active(app);
+    let search_results = crate::ui::search::results_shown(cx);
     div()
         .flex_1()
         .min_w_0()
@@ -96,9 +97,12 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         .child(panels::drop_overlay(app))
                         .children(crate::ui::forum::render(app, cx)),
                 )
-                .when(show_members, |d| d.child(members::render(app, cx)))
-                .children(crate::ui::dm_profile_panel::render(app, cx))
-                .children(crate::ui::group_dm::members_panel(app, cx))
+                // Search results take the right column (the panel itself is an overlay).
+                .when(search_results, |d| d.child(div().flex_none().w(gpui::px(crate::ui::search::WIDTH))))
+                .when(show_members && !search_results, |d| d.child(members::render(app, cx)))
+                .when(!search_results, |d| {
+                    d.children(crate::ui::dm_profile_panel::render(app, cx)).children(crate::ui::group_dm::members_panel(app, cx))
+                })
                 .children(panels::thread_panel(app, cx))
                 .children(crate::ui::thread_create::panel(app, cx)),
         )

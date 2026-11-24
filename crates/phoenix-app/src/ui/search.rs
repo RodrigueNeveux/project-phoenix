@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub const PAGE: u32 = 25;
-const WIDTH: f32 = 420.;
+pub const WIDTH: f32 = 420.;
 
 /// What to search, with names already resolved to ids.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -139,6 +139,12 @@ pub fn build_request(app: &PhoenixApp, text: &str) -> Result<SearchRequest, Stri
         return Err(String::new());
     }
     Ok(req)
+}
+
+/// The results sidebar is shown (not just the options popout): the chat makes
+/// room for it instead of the member list / profile panel.
+pub fn results_shown(cx: &App) -> bool {
+    cx.try_global::<Search>().and_then(|s| s.0.as_ref()).is_some_and(|s| s.page.is_some() && s.request.is_some())
 }
 
 pub fn is_open(cx: &App) -> bool {
