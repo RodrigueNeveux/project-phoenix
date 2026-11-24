@@ -1556,7 +1556,8 @@ fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, o
         .max_w_full()
         .aspect_ratio(w / h.max(1.))
         .rounded(z(8.))
-        .object_fit(gpui::ObjectFit::Cover)
+        // Unknown size: the box is a guess, so show the whole image rather than crop it.
+        .object_fit(if ow == 0 || oh == 0 { gpui::ObjectFit::Contain } else { gpui::ObjectFit::Cover })
         .cursor_pointer()
         // `imageContainer_` --background-mod-normal while loading (base-lower is the chat
         // background itself, so the slot looked empty); same box when the image fails.

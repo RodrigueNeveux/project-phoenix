@@ -105,10 +105,22 @@ pub fn activity(activities: &[Value]) -> Option<SharedString> {
 
 // --------------------------------------------------------------- messages
 
-fn embed_media(m: &Option<api::EmbedMedia>) -> Option<model::EmbedMedia> {
+/// Embed media. Bots that upload the image with the message (`attachment://x.png`)
+/// often get no `width`/`height` on the embed: take them from the matching
+/// attachment, as the client sizes the box from it (a 750x225 banner was drawn in a
+/// 400x225 fallback box and cropped by `cover`).
+fn embed_media(m: &Option<api::EmbedMedia>, atts: &[api::Attachment]) -> Option<model::EmbedMedia> {
     let m = m.as_ref()?;
     let url = m.proxy_url.clone().filter(|u| u.starts_with("https://")).or_else(|| m.url.clone())?;
-    Some(model::EmbedMedia { url: url.into(), width: m.width.unwrap_or(0), height: m.height.unwrap_or(0) })
+    let (mut w, mut h) = (m.width.unwrap_or(0), m.height.unwrap_or(0));
+    if w == 0 || h == 0 {
+        let path = |u: &str| u.split('?').next().unwrap_or("").rsplit('/').take(2).collect::<Vec<_>>().join("/");
+        let want = path(&url);
+        if let Some(a) = atts.iter().find(|a| path(&a.url) == want || path(&a.proxy_url) == want) {
+            (w, h) = (a.width.unwrap_or(0), a.height.unwrap_or(0));
+        }
+    }
+    Some(model::EmbedMedia { url: url.into(), width: w, height: h })
 }
 
 /// A forward (`message_snapshots[0].message`) rendered as its snapshot: the outer message with
@@ -190,9 +202,9 @@ pub fn message(m: &api::Message) -> model::Message {
                 description: e.description.clone().map(Into::into),
                 url: e.url.clone().map(Into::into),
                 kind: e.kind.clone().map(Into::into),
-                thumbnail: embed_media(&e.thumbnail),
-                image: embed_media(&e.image),
-                video: embed_media(&e.video),
+                thumbnail: embed_media(&e.thumbnail, &m.attachments),
+                image: embed_media(&e.image, &m.attachments),
+                video: embed_media(&e.video, &m.attachments),
                 author: e.author.as_ref().map(|a| model::EmbedAuthor {
                     name: a.name.clone().into(),
                     url: a.url.clone().map(Into::into),
