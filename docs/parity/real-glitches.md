@@ -65,7 +65,6 @@ Checked, not bugs: Friends "Tous les amis - N" vs "Envoyée(s) — N" (client st
 settings arrive), inbox tab ellipsis (client also ellipsizes at this width).
 
 Open items of round 1 (search embeds, Favoris preview, trending tile) are fixed on main.
-preview of a favourite.
 
 ### Overlays & pages, round 2
 
