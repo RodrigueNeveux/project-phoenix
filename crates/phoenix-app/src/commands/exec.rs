@@ -37,12 +37,16 @@ pub fn merge_commands(indexes: &[CommandIndex]) -> Vec<SlashCommand> {
             if out.iter().any(|o| o.raw.get("id") == Some(&json!(c.id))) {
                 continue;
             }
-            let app_name =
-                idx.applications.iter().find(|a| a.id == c.application_id).map(|a| a.name.clone()).unwrap_or_default();
+            let app = idx.applications.iter().find(|a| a.id == c.application_id);
+            let app_name = app.map(|a| a.name.clone()).unwrap_or_default();
+            let app_icon = app.and_then(|a| {
+                a.icon.as_ref().map(|i| format!("https://cdn.discordapp.com/app-icons/{}/{i}.png?size=64&keep_aspect_ratio=false", a.id))
+            });
             out.push(SlashCommand {
                 name: c.name.clone(),
                 description: c.description.clone(),
                 app_name,
+                app_icon,
                 raw: serde_json::to_value(c).unwrap_or(Value::Null),
             });
         }

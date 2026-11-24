@@ -163,20 +163,26 @@ pub fn submit(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
     true
 }
 
-fn app_badge(name: &str) -> impl IntoElement {
-    let initial: SharedString = name.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default().into();
+/// Application icon (`app-icons/{app}/{icon}.png`), or its initial on a round
+/// blurple badge when the app has no icon.
+fn app_icon(cmd: &SlashCommand, size: f32) -> AnyElement {
+    if let Some(url) = &cmd.app_icon {
+        return gpui::img(SharedString::from(url.clone())).size(z(size)).flex_none().rounded_full().into_any_element();
+    }
+    let initial: SharedString = cmd.app_name.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default().into();
     div()
-        .size(z(24.))
+        .size(z(size))
         .flex_none()
         .rounded_full()
         .bg(c(Palette::BLURPLE))
         .flex()
         .items_center()
         .justify_center()
-        .text_size(z(12.))
+        .text_size(z(size / 2.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(gpui::white())
         .child(initial)
+        .into_any_element()
 }
 
 fn option_list(raw: &Value) -> Vec<(String, u64, bool, String)> {
@@ -230,26 +236,56 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             });
         };
         let sel = cx.try_global::<SlashUi>().map_or(0, |s| s.selected).min(items.len() - 1);
-        let mut list = popup().max_h(z(400.));
+        use crate::theme::generated::idx;
+        // 116815 outerWrapper_ > wrapper_ (row, height 420) holding the 934305 rail and list_.
+        // Rail: wrapper_mTknAg 48px, --background-base-lowest, listPadding [16, 8, 8, 8];
+        // one 32px app icon per section (section_mTknAg radius 4, margin-bottom 8).
+        let mut rail = div()
+            .w(z(48.))
+            .h_full()
+            .flex_none()
+            .bg(super::tk(idx::BACKGROUND_BASE_LOWEST))
+            .pt(z(16.))
+            .pb(z(8.))
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(z(8.));
+        // list_: listPadding [8, 8, 0, 8]; sections are categorySection_ (margin-bottom 16,
+        // none on the last) under a 32px sticky categoryHeader_.
+        let mut list = div().id("slash-list").flex_1().min_w_0().h_full().overflow_y_scroll().pt(z(8.)).px(z(8.)).flex().flex_col();
         let mut last_app: Option<&str> = None;
         for (i, cmd) in items.iter().enumerate() {
             if last_app != Some(cmd.app_name.as_str()) {
+                if last_app.is_some() {
+                    list = list.child(div().h(z(16.)).flex_none());
+                }
                 last_app = Some(cmd.app_name.as_str());
+                rail = rail.child(div().size(z(32.)).flex_none().rounded(z(4.)).cursor_pointer().child(app_icon(cmd, 32.)));
                 list = list.child(
+                    // categoryHeader_ / wrapper_kSdzCr: --background-surface-high, padding-inline 8 4,
+                    // 16px icon, label body-sm/semibold (14px 600) --text-default, 4px apart.
                     div()
-                        .px(z(12.))
-                        .pt(z(12.))
-                        .pb(z(4.))
+                        .h(z(32.))
+                        .flex_none()
+                        .bg(super::tk(idx::BACKGROUND_SURFACE_HIGH))
+                        .pl(z(8.))
+                        .pr(z(4.))
                         .flex()
                         .items_center()
-                        .gap(z(8.))
-                        .child(app_badge(&cmd.app_name))
+                        .gap(z(4.))
+                        .child(app_icon(cmd, 16.))
                         .child(
                             div()
-                                .text_size(z(12.))
-                                .font_weight(FontWeight::BOLD)
-                                .text_color(c(Palette::TEXT_MUTED))
-                                .child(SharedString::from(cmd.app_name.to_uppercase())),
+                                .min_w_0()
+                                .overflow_hidden()
+                                .whitespace_nowrap()
+                                .text_ellipsis()
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(super::tk(idx::TEXT_DEFAULT))
+                                .child(SharedString::from(cmd.app_name.clone())),
                         ),
                 );
             }
@@ -263,9 +299,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             list = list.child(
                 div()
                     .id(("slash-cmd", i))
-                    // autocompleteRow_ (padding 0 8) + base_ (padding 8, radius 3);
-                    // selected / hover --interactive-background-hover. CSS only.
-                    .mx(z(8.))
+                    // NewCommand row: rowHeight 56; itemWrapper_ padding 0 (the list_ has
+                    // listPadding 8) + base_ (padding 8, radius 3); selected / hover
+                    // --interactive-background-hover.
+                    .h(z(56.))
+                    .flex_none()
                     .p(z(8.))
                     .rounded(z(3.))
                     .cursor_pointer()
@@ -298,7 +336,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .on_click(cx.listener(move |a, _, w, cx| fill(a, &c2, w, cx))),
             );
         }
-        return Some(anchor(list.pb(z(8.))));
+        return Some(anchor(popup().h(z(420.)).flex_row().child(rail).child(list)));
     }
     // A command is picked: hint bar with its options as chips.
     let (name, args) = slash::split_invocation(t.trim_start())?;

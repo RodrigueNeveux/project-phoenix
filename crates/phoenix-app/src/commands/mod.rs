@@ -44,6 +44,8 @@ pub struct SlashCommand {
     pub name: String,
     pub description: String,
     pub app_name: String,
+    /// `app-icons/{app}/{icon}.png` of the command's application, if it has one.
+    pub app_icon: Option<String>,
     /// Raw command, sent back as is to run it.
     pub raw: Value,
 }
