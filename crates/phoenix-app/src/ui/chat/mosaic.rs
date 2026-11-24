@@ -54,10 +54,12 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
     };
     let video = a.kind == AttachmentKind::Video;
     let original = viewer.original.clone();
-    let mut im = img(src.clone()).id("frames");
+    let mut im = img(src.clone());
     if let Some(cache) = media::lru::chat() {
         im = im.image_cache(&cache);
     }
+    // The id keeps the frame index of GIF / animated WebP uploads (media::anim_id).
+    let im = im.id("frames");
     div()
         .relative()
         .overflow_hidden()

@@ -5,7 +5,7 @@
 //! --decoration-to-avatar-ratio (1.2), pointer-events none, drawn above the
 //! avatar but masked by the status cut-out (the status stays on top).
 
-use gpui::{img, px, SharedString, Styled};
+use gpui::{img, px, InteractiveElement, SharedString, Styled};
 
 use crate::model::User;
 
