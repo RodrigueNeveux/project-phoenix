@@ -54,3 +54,36 @@ Live dumps (2026-11-24, user asleep, read-only, view restored): ref-cache/messag
 Colours are not compared from the dumps: the user's theme differs from the generated dark tokens.
 Still "✅ (CSS)": `<t:…>` timestamps and inline code (no example in the scanned channels). No real-data compare score for these
 components yet (none of them is on the live channel the user shows).
+
+## Message components (buttons, selects, Components V2)
+
+Sources: the component renderer of the 2026 client (`current-client/js/e940c8e032f54075.js`:
+`lS` root, `lE` per type, `V` button, `ep`/`na` selects, `lA` section, `lC` container, `nQ`
+thumbnail, `nw` gallery, `ng` file, `nF` separator, `n1` unknown) and its CSS modules; checked on
+live DOM dumps (2026-11-24): search results of real GLaDOS / bot messages in Aperture Sciences
+(sections with green/red buttons, a primary button with an animated emoji, a transcript file,
+a one-image gallery) and, in the #phoenix sandbox, one test message posted through a temporary
+webhook (deleted right after) that holds every non-interactive type at full width. Parsing is in
+`phoenix-api/src/models/component.rs` (unit tests on anonymised shapes of the real payloads),
+drawing in `ui/components.rs`.
+
+| feature | CSS / JS source | values | status |
+|---|---|---|---|
+| Root | `container_uEFz2z` / `.isComponentsV2_` | column, row-gap 6px (v1) / 8px + max-width min(600px, 100%) + width fit-content (v2) | ✅ (live: 600 / 469 / 276 wide) |
+| Action row | `container_J1RNcC` > `children_J1RNcC` | flex wrap, gap 8 | ✅ (live) |
+| Button | `button_9OQtot sizeSmall_ grow_` | 32px, 1px border, radius 8, padding 3 11, min-width 60, 14/18 medium; disabled opacity .5 | ✅ (live) |
+| Button colours | `V` colour switch + `lookFilled_.color*_` | primary + premium → `--control-primary-*`, success → `--control-connected-*` (white text), danger → `--control-critical-primary-*`, secondary + link → `--control-secondary-*` with `--border-muted`; hover / active backgrounds | ✅ (live: rgb(88,101,242) / (0,133,69) / (210,45,57) / secondary) |
+| Button content | `content_ZMR-xe` | emoji 19.25px + 4px before a label; label ellipsis; link: WindowLaunchIcon 16px, 8px left; premium: ShopIcon 16px white + 4px | ✅ (live: link, emoji); premium ⚠ see below |
+| Premium button | `V` sku branch | label "{sku} — {price}" from the store listing, else disabled "Product Unavailable" | ⚠ Phoenix has no store: always the disabled "Produit indisponible" (no premium button found to compare) |
+| Button click | `V` / `component_body` | interaction `type: 3` (POST /interactions) with the message flags; link: opens the URL (the client first asks for untrusted links) | ✅ implemented, never fired on a real message (unit test checks the link URL / custom id) ; ⚠ no "leaving Discord" confirm |
+| Selects | shared Select (`selectField_`), `ep` for user/role/mentionable/channel | 40px field, 1px --input-border, radius 8, 16/20 value, 20px chevron; menu of ≤ 5 rows; multi-select sends on close | ⚠ field from `controls::select_field` values; no live select in a search result yet (the role menu message has no text to search) |
+| Section | `section_5m-AKz`, `children_`, `textChildren_`, `accessory_` | row gap 12, texts column gap 4 (centred next to a button), accessory align start, `restrictWidth_` max calc(50% − 12px) | ✅ (live); restrictWidth drawn as 50% |
+| Text display | `markup_ markdownContainer_ root_KNAhcP` (`.sizeReduced_` in containers) | 16/22, in a container 14/19.25 (h1 24/33, h2 20/27.5, small 12/16.5) | ✅ (live) |
+| Thumbnail | `imgContainer_TZN6d8` | 85px square, --radius-sm 8, cover | ✅ (live, sandbox) |
+| Media gallery | mosaic with `isInAppComponentsV2_` | the attachments' mosaic, max-width 600; one item = oneByOneGrid_ at its own size (never upscaled) + 2.4px line box | ✅ (live: 3 items 1×2 at 350 high, 1 item 256×256 in 258.4) |
+| File | `fileDisplayContainer_aMNXbv` + attachment card | 432px card (name link, size, download) | ✅ (live) |
+| Separator | `divider_pdtj88` / `spacingLarge_` | 1px --background-mod-strong; large: margin 8 0 | ✅ (live) |
+| Container | `container_rc97-L` | --background-surface-high, 1px --border-subtle, radius 8, padding 16, gap 8; 4px accent bar `:before` | ✅ (live) |
+| Spoiler container / media | `spoilerContainer_0_7_Rr` + `isHidden_` blur | hidden spoiler background, SPOILER pill (padding 8 12, radius 20, 15px semibold) | ✅ layout; the blur itself is a flat cover (GPUI has no backdrop blur) |
+| Unknown type | `n1` `container_xAKhZr` | 1px --status-warning, radius 12, padding 16, body-sm/medium --text-subtle "Merci de mettre à jour Discord pour afficher ce message" | ✅ (CSS + string) |
+| Search results | `shouldDisableInteractiveComponents` | same drawing, no interaction, no highlight inside components | ✅ (live) |
