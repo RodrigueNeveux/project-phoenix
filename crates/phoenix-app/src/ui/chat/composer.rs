@@ -649,9 +649,6 @@ fn full_buttons() -> bool {
 thread_local! {
     /// Our last send per channel (slowmode countdown).
     static LAST_SENT: std::cell::RefCell<std::collections::HashMap<crate::model::Id, std::time::Instant>> = Default::default();
-    /// Emphasize slowmode cooldown in critical colour for 1s after a held send
-    /// (ee411b7c20ef82cb.js `EMPHASIZE_SLOWMODE_COOLDOWN`).
-    static SLOWMODE_FLASH: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
 }
 
 fn slowmode_of(app: &PhoenixApp, ch: crate::model::Id) -> u32 {
@@ -669,7 +666,7 @@ pub fn cooldown_left(app: &PhoenixApp, ch: crate::model::Id) -> u64 {
 pub fn send_held(app: &PhoenixApp, ch: crate::model::Id) -> bool {
     let held = cooldown_left(app, ch) > 0;
     if held {
-        SLOWMODE_FLASH.with(|f| f.set(Some(std::time::Instant::now() + std::time::Duration::from_secs(1))));
+        emphasize_cooldown();
     }
     held
 }
