@@ -1646,7 +1646,11 @@ fn a11y_preview(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .flex()
                 .gap(z(8.)) // --space-8
                 .p(z(24.)) // --space-24
-                .max_h(z(175.)) // max-height 25vh of the 700px viewport (#2690 h=175)
+                .max_h(z({
+                    // max-height 25vh (#2690: 175 in a 700px viewport); 700 before the first frame.
+                    let vh = crate::ui::title_bar::viewport_h_css();
+                    0.25 * if vh > 0. { vh } else { 700. }
+                }))
                 .overflow_hidden()
                 .rounded(z(8.)) // --radius-sm
                 .border_1()

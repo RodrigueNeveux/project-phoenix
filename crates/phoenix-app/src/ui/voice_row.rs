@@ -77,6 +77,11 @@ pub fn voice_activity_card(app: &crate::app::PhoenixApp, user: Id, entity: gpui:
     let g = ch.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
     let gname = g.map(|g| g.name.clone());
     let acronym = g.map(|g| g.acronym.clone()).unwrap_or_default();
+    // GuildIcon: the guild's icon when it has one, the acronym otherwise.
+    let icon = g.and_then(|g| match &g.icon {
+        crate::model::ImageRef::Url(u) => Some(u.clone()),
+        _ => None,
+    });
     // `.theme-light :where(.overlay_P1YEjQ)` borders the card
     let light = crate::ui::profile_theme::is_light();
     Some(
@@ -126,7 +131,11 @@ pub fn voice_activity_card(app: &crate::app::PhoenixApp, user: Id, entity: gpui:
                                     .justify_center()
                                     .text_size(z(14.))
                                     .text_color(c(tok(idx::TEXT_DEFAULT)))
-                                    .child(acronym),
+                                    .overflow_hidden()
+                                    .map(|d| match icon {
+                                        Some(u) => d.child(gpui::img(u).absolute().inset_0().size_full().rounded(z(8.))),
+                                        None => d.child(acronym),
+                                    }),
                             )
                             .child(
                                 div()

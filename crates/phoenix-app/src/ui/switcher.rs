@@ -445,7 +445,8 @@ pub fn render(app: &PhoenixApp, sw: &Switcher, cx: &mut Context<PhoenixApp>) -> 
                         .items_center()
                         .text_size(px(22.))
                         .text_color(tk(idx::TEXT_DEFAULT))
-                        .child(Input::new(&sw.input).appearance(false).bordered(false)),
+                        // The input draws its own text: set the 22px on it, not only on the box.
+                        .child(Input::new(&sw.input).appearance(false).bordered(false).text_size(px(22.))),
                 )
                 // resultsArea_a1DYes: height 262px
                 .child(div().h(px(262.)).flex_none().child(rows))
