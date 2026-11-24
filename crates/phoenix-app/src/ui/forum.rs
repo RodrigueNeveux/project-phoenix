@@ -673,8 +673,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     if !tags.is_empty() {
         // divider_BkGrJJ: 2x24, margin 0 16, --border-subtle, --radius-xs
         filters = filters.child(div().w(z(2.)).h(z(24.)).mx(z(16.)).flex_none().rounded(z(4.)).bg(c(tok(idx::BORDER_SUBTLE))));
-        // tagListInner_BkGrJJ: gap 8
-        let mut list = div().flex().gap(z(8.)).min_w_0().overflow_hidden();
+        // tagListInner_BkGrJJ: flex-wrap, gap 8 (tags that don't fit wrap out of sight,
+        // never shown cut in half)
+        let mut list = div().flex().flex_wrap().gap(z(8.));
         for t in &tags {
             let on = v.tags.contains(&t.id);
             let id = t.id;
@@ -686,7 +687,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .child(tag_pill(t, on)),
             );
         }
-        filters = filters.child(list).child(
+        // tagList_BkGrJJ: flex-shrink 1, height 32, overflow hidden
+        filters = filters.child(div().flex_shrink().min_w_0().h(z(32.)).overflow_hidden().child(list)).child(
             // tagsButton_BkGrJJ: h 32, padding 0 4, radius 20, margin-left 8; inner padding-left 8, gap 4
             div()
                 .ml(z(8.))
