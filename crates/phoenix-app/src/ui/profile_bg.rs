@@ -21,9 +21,12 @@ const BAKE_W: u32 = 128;
 /// Mask end (`transparent 280px`), CSS px.
 const MASK_H: f32 = 280.;
 
+/// (static banner URL, modal width) -> baked layer (`None` = loading or failed).
+type Cache = HashMap<(String, u32), Option<Arc<RenderImage>>>;
+
 thread_local! {
     /// (static banner URL, modal width) -> baked layer (`None` = loading or failed).
-    static CACHE: RefCell<HashMap<(String, u32), Option<Arc<RenderImage>>>> = RefCell::new(HashMap::new());
+    static CACHE: RefCell<Cache> = RefCell::new(HashMap::new());
 }
 
 /// `getPreviewBanner(…, animated = false)`: the still PNG of the banner.
