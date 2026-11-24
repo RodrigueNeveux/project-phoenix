@@ -16,9 +16,8 @@ use crate::{
     model::{Id, Message, Reaction, ThreadRef},
 };
 
-/// Discord's non-Nitro upload cap.
-pub const MAX_UPLOAD: u64 = 10 * 1024 * 1024;
-pub const MAX_FILES: usize = 10;
+/// Most files of one message (client `getMaxAttachmentsCount`).
+pub const MAX_FILES: usize = phoenix_api::rest::uploads::MAX_ATTACHMENTS;
 /// Quick reactions offered in the context menu / toolbar.
 pub const QUICK_REACTIONS: [&str; 4] = ["👍", "❤️", "😂", "🔥"];
 
@@ -67,6 +66,18 @@ pub struct Sending {
     pub label: SharedString,
     pub size: u64,
     pub started: Instant,
+    /// Bytes confirmed by the upload so far (written by the backend's progress callback).
+    pub sent: Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl Sending {
+    /// 0..=1 share of the bytes uploaded.
+    pub fn fraction(&self) -> f32 {
+        if self.size == 0 {
+            return 1.;
+        }
+        (self.sent.load(std::sync::atomic::Ordering::Relaxed) as f64 / self.size as f64).clamp(0., 1.) as f32
+    }
 }
 
 /// Who receives the emoji chosen in the emoji picker (owned by another
@@ -95,6 +106,8 @@ pub struct ChatState {
     pub thread: Option<ThreadPanel>,
     pub uploads: Vec<PendingFile>,
     pub sending: Vec<Sending>,
+    /// The composer's "+" menu (Upload a File, Create Thread…) is open.
+    pub attach_menu: bool,
     /// New messages received while scrolled up: (count, first timestamp).
     pub new_messages: Option<(u32, i64)>,
     pub at_bottom: bool,
@@ -124,6 +137,7 @@ impl Default for ChatState {
             thread: None,
             uploads: Vec::new(),
             sending: Vec::new(),
+            attach_menu: false,
             new_messages: None,
             at_bottom: true,
             unread_marker: None,
@@ -180,7 +194,7 @@ pub fn apply_reaction(m: &mut Message, emoji: &str, emoji_id: Option<Id>, add: b
     }
 }
 
-fn is_image_name(name: &str) -> Option<gpui::ImageFormat> {
+pub fn is_image_name(name: &str) -> Option<gpui::ImageFormat> {
     let ext = name.rsplit('.').next()?.to_ascii_lowercase();
     Some(match ext.as_str() {
         "png" => gpui::ImageFormat::Png,
@@ -230,6 +244,7 @@ impl PhoenixApp {
         self.chat.menu = None;
         self.chat.confirm_delete = None;
         self.chat.uploads.clear();
+        self.chat.attach_menu = false;
         self.chat.new_messages = None;
         self.chat.at_bottom = true;
         self.chat.emoji_target = None;
@@ -692,16 +707,81 @@ impl PhoenixApp {
             multiple: true,
             prompt: Some(crate::t!("chat.upload")),
         });
-        cx.spawn(async move |this, cx| {
-            if let Ok(Ok(Some(paths))) = rx.await {
+        cx.spawn(async move |this, cx| match rx.await {
+            Ok(Ok(Some(paths))) => {
                 let _ = this.update(cx, |this, cx| this.add_paths(paths, cx));
+            }
+            Ok(Ok(None)) | Err(_) => {}
+            // The file chooser portal failed (missing xdg-desktop-portal backend…): say so
+            // instead of doing nothing.
+            Ok(Err(e)) => {
+                eprintln!("file chooser failed: {e:#}");
+                let _ = this.update(cx, |this, cx| {
+                    this.chat.error = Some(crate::t!("chat.picker_failed", e = format!("{e:#}")));
+                    cx.notify();
+                });
             }
         })
         .detach();
     }
 
+    /// Progress callback that fills the upload card `key`, and a repaint loop
+    /// that runs while the card exists. `None` when there is no such card.
+    pub fn upload_progress(&mut self, key: u64, cx: &mut Context<Self>) -> Option<crate::backend::UploadProgress> {
+        let sent = self.chat.sending.iter().find(|s| s.key == key)?.sent.clone();
+        cx.spawn(async move |this, cx| loop {
+            cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
+            let alive = this
+                .update(cx, |this, cx| {
+                    let alive = this.chat.sending.iter().any(|s| s.key == key);
+                    if alive {
+                        cx.notify();
+                    }
+                    alive
+                })
+                .unwrap_or(false);
+            if !alive {
+                break;
+            }
+        })
+        .detach();
+        Some(Arc::new(move |n: u64, _total: u64| sent.store(n, std::sync::atomic::Ordering::Relaxed)))
+    }
+
+    /// Per-file limit of the selected channel (Nitro, boosts).
+    pub fn upload_limit(&self) -> u64 {
+        self.selected_channel.map_or(20 << 20, |ch| self.backend.max_upload_size(ch))
+    }
+
+    /// Adds one file to the tray after the client's checks (count, per-file
+    /// size, total size). False when it was refused (`chat.error` says why).
+    pub fn push_upload(&mut self, name: String, bytes: Vec<u8>) -> bool {
+        let limit = self.upload_limit();
+        if self.chat.uploads.len() >= MAX_FILES {
+            self.chat.error = Some(crate::t!("chat.max_files", n = MAX_FILES));
+            return false;
+        }
+        if bytes.is_empty() {
+            self.chat.error = Some(crate::t!("chat.empty_file", name = name));
+            return false;
+        }
+        if bytes.len() as u64 > limit {
+            self.chat.error = Some(crate::t!("chat.too_large", name = name, max = limit >> 20));
+            return false;
+        }
+        let total: u64 = self.chat.uploads.iter().map(|u| u.bytes.len() as u64).sum::<u64>() + bytes.len() as u64;
+        if total > phoenix_api::rest::uploads::MAX_TOTAL_SIZE {
+            self.chat.error =
+                Some(crate::t!("chat.total_too_large", max = phoenix_api::rest::uploads::MAX_TOTAL_SIZE >> 20));
+            return false;
+        }
+        self.chat.uploads.push(pending_file(name, bytes));
+        true
+    }
+
     /// Drag & drop / file picker: read the files off the UI thread.
     pub fn add_paths(&mut self, paths: Vec<PathBuf>, cx: &mut Context<Self>) {
+        let max = self.upload_limit();
         let task = cx.background_spawn(async move {
             paths
                 .into_iter()
@@ -709,8 +789,8 @@ impl PhoenixApp {
                 .map(|p| {
                     let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
                     let len = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-                    if len > MAX_UPLOAD {
-                        return Err(crate::t!("chat.too_large", name = name).to_string());
+                    if len > max {
+                        return Err(crate::t!("chat.too_large", name = name, max = max >> 20).to_string());
                     }
                     std::fs::read(&p).map(|b| (name.clone(), b)).map_err(|e| format!("{name}: {e}"))
                 })
@@ -721,10 +801,9 @@ impl PhoenixApp {
             let _ = this.update(cx, |this, cx| {
                 for f in files {
                     match f {
-                        Ok((name, bytes)) if this.chat.uploads.len() < MAX_FILES => {
-                            this.chat.uploads.push(pending_file(name, bytes))
+                        Ok((name, bytes)) => {
+                            this.push_upload(name, bytes);
                         }
-                        Ok(_) => this.chat.error = Some(crate::t!("chat.max_files", n = MAX_FILES)),
                         Err(e) => this.chat.error = Some(e.into()),
                     }
                 }
@@ -734,9 +813,13 @@ impl PhoenixApp {
         .detach();
     }
 
-    /// Ctrl+V: attach a pasted image. True when the clipboard held an image.
-    pub fn paste_image(&mut self, cx: &mut Context<Self>) -> bool {
-        let Some(item) = cx.read_from_clipboard() else { return false };
+    /// Ctrl+V in the composer (the text area's paste hook, before it inserts
+    /// text): attaches a pasted image, copied files, or a text that is only
+    /// `file://` URIs (a file manager's copy). True when the paste was taken.
+    pub fn paste_clipboard(&mut self, item: &ClipboardItem, cx: &mut Context<Self>) -> bool {
+        if self.selected_channel.is_none() {
+            return false;
+        }
         let mut took = false;
         for e in item.entries() {
             match e {
@@ -746,18 +829,22 @@ impl PhoenixApp {
                         gpui::ImageFormat::Gif => "gif",
                         gpui::ImageFormat::Webp => "webp",
                         gpui::ImageFormat::Bmp => "bmp",
+                        gpui::ImageFormat::Svg => "svg",
                         _ => "png",
                     };
-                    if self.chat.uploads.len() < MAX_FILES {
-                        self.chat.uploads.push(pending_file(format!("image.{ext}"), img.bytes.clone()));
-                    }
+                    self.push_upload(format!("image.{ext}"), img.bytes.clone());
                     took = true;
                 }
                 ClipboardEntry::ExternalPaths(p) => {
                     self.add_paths(p.paths().to_vec(), cx);
                     took = true;
                 }
-                _ => {}
+                ClipboardEntry::String(t) => {
+                    if let Some(paths) = file_uris(t.text()) {
+                        self.add_paths(paths, cx);
+                        took = true;
+                    }
+                }
             }
         }
         if took {
@@ -822,10 +909,11 @@ impl PhoenixApp {
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
         let reply = self.replying_to.take().map(|r| (r, self.chat.reply_mention));
         self.chat.reply_mention = true;
+        // The client keeps the file name and flags spoilers with `is_spoiler`.
         let files: Vec<Upload> = std::mem::take(&mut self.chat.uploads)
             .into_iter()
             .map(|f| Upload {
-                filename: if f.spoiler { format!("SPOILER_{}", f.name) } else { f.name.to_string() },
+                filename: f.name.to_string(),
                 bytes: Arc::unwrap_or_clone(f.bytes),
                 spoiler: f.spoiler,
                 description: Some(f.description).filter(|d| !d.trim().is_empty()),
@@ -840,7 +928,7 @@ impl PhoenixApp {
             } else {
                 crate::t!("chat.n_files", n = files.len())
             };
-            self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now() });
+            self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now(), sent: Arc::new(0.into()) });
         }
         // Optimistic copy + POST (ui::chat::pending). The upload card goes away when
         // the copy is settled (echo, POST answer or failure).
@@ -850,6 +938,39 @@ impl PhoenixApp {
         cx.notify();
         true
     }
+}
+
+/// Paths of a pasted text made only of `file://` URIs (one per line, like a
+/// file manager's copy); `None` for any other text.
+pub fn file_uris(text: &str) -> Option<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')) {
+        let path = line.strip_prefix("file://")?;
+        // `file:///abs` or `file://localhost/abs`.
+        let path = path.strip_prefix("localhost").unwrap_or(path);
+        if !path.starts_with('/') {
+            return None;
+        }
+        out.push(PathBuf::from(percent_decode(path)?));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+fn percent_decode(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            let hex = std::str::from_utf8(b.get(i + 1..i + 3)?).ok()?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
 }
 
 trait DetachChat {
@@ -866,6 +987,87 @@ impl<T: Send + 'static> DetachChat for crate::backend::BoxFuture<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// MockBackend end to end: tray checks, paste of an image, spoiler and alt
+    /// text, then the send: the backend gets the files with their original
+    /// names, the progress card fills and goes away, the message lands with
+    /// its attachments and the tray is empty again.
+    #[gpui::test]
+    fn upload_end_to_end_on_the_mock(cx: &mut gpui::TestAppContext) {
+        use crate::{backend::Backend, mock::MockBackend};
+        let backend = Arc::new(MockBackend::synchronous());
+        let ready = futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|w, cx| PhoenixApp::new(backend.clone(), w, cx));
+        let (ch, png_len) = window
+            .update(cx, |app, _, cx| {
+                app.apply_ready(ready, cx);
+                let g = app.guilds[0].id;
+                app.select_guild(Some(g), cx);
+                let ch = app.guild_channels[&g]
+                    .iter()
+                    .copied()
+                    .find(|c| app.channels[c].kind == crate::model::ChannelKind::Text)
+                    .unwrap();
+                app.select_channel(ch, cx);
+                assert_eq!(app.upload_limit(), 20 << 20);
+                // Refused: empty file, over the limit.
+                assert!(!app.push_upload("empty.txt".into(), vec![]));
+                assert!(!app.push_upload("big.bin".into(), vec![0; (20 << 20) + 1]));
+                assert!(app.chat.error.as_ref().is_some_and(|e| e.contains("big.bin")));
+                // Pasted image + one file.
+                let png = {
+                    let mut out = std::io::Cursor::new(Vec::new());
+                    image::RgbaImage::new(2, 2).write_to(&mut out, image::ImageFormat::Png).unwrap();
+                    out.into_inner()
+                };
+                let item = ClipboardItem { entries: vec![ClipboardEntry::Image(Image::from_bytes(gpui::ImageFormat::Png, png.clone()))] };
+                assert!(app.paste_clipboard(&item, cx));
+                assert!(!app.paste_clipboard(&ClipboardItem::new_string("just text".into()), cx));
+                assert!(app.push_upload("notes.txt".into(), b"hello".to_vec()));
+                assert_eq!(app.chat.uploads.len(), 2);
+                assert_eq!(app.chat.uploads[0].name.as_ref(), "image.png");
+                app.chat.uploads[0].spoiler = true;
+                app.chat.uploads[1].description = "my notes".into();
+                (ch, png.len())
+            })
+            .unwrap();
+        window
+            .update(cx, |app, w, cx| {
+                assert!(app.chat_submit(w, cx));
+                assert!(app.chat.uploads.is_empty(), "the tray empties on send");
+                assert_eq!(app.chat.sending.len(), 1);
+                assert_eq!(app.chat.sending[0].size, png_len as u64 + 5);
+            })
+            .unwrap();
+        cx.run_until_parked();
+        window
+            .update(cx, |app, _, _| {
+                assert!(app.chat.sending.is_empty(), "the progress card goes away");
+                let last = app.messages[&ch].msgs.last().unwrap();
+                let names: Vec<&str> = last.attachments.iter().map(|a| a.filename.as_ref()).collect();
+                assert_eq!(names, ["image.png", "notes.txt"]);
+                assert!(last.attachments[0].is_image);
+            })
+            .unwrap();
+        let sent = backend.sent_uploads();
+        assert_eq!(sent.len(), 1);
+        let f = &sent[0];
+        assert_eq!((f[0].filename.as_str(), f[0].spoiler), ("image.png", true), "no SPOILER_ prefix: the client sends is_spoiler");
+        assert_eq!((f[1].filename.as_str(), f[1].description.as_deref()), ("notes.txt", Some("my notes")));
+        assert_eq!(f[1].bytes, b"hello");
+    }
+
+    #[test]
+    fn pasted_file_uris() {
+        assert_eq!(
+            file_uris("file:///home/me/a%20b.png\r\nfile:///tmp/c.txt\n"),
+            Some(vec![PathBuf::from("/home/me/a b.png"), PathBuf::from("/tmp/c.txt")])
+        );
+        assert_eq!(file_uris("hello"), None);
+        assert_eq!(file_uris("file:///a.png\nhttps://x.y/z"), None);
+        assert_eq!(file_uris("  "), None);
+    }
 
     #[test]
     fn reaction_names() {

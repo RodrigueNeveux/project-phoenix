@@ -84,6 +84,8 @@ struct Inner {
     channels: Vec<Channel>,
     members: HashMap<Id, Vec<Member>>,
     roles: Vec<(Id, Vec<Role>)>,
+    /// Files of every `send_message_ex` call (tests).
+    sent_uploads: Vec<Vec<Upload>>,
 }
 
 #[derive(Clone)]
@@ -290,9 +292,15 @@ impl MockBackend {
                 channels,
                 members,
                 roles,
+                sent_uploads: Vec::new(),
             })),
             latency: Duration::from_millis(120),
         }
+    }
+
+    /// Files passed to each `send_message_ex` call so far (tests).
+    pub fn sent_uploads(&self) -> Vec<Vec<Upload>> {
+        self.inner.lock().map(|i| i.sent_uploads.clone()).unwrap_or_default()
     }
 
     /// Zero-latency mock: every call resolves immediately on the caller's
@@ -666,6 +674,53 @@ impl Backend for MockBackend {
                 .unwrap_or(h.len());
             let start = end.saturating_sub(limit as usize);
             h[start..end].to_vec()
+        })
+    }
+
+    /// Keeps the files as local attachments and reports the whole size as
+    /// uploaded (no network). Records each call for the upload tests.
+    fn send_message_ex(
+        &self,
+        channel: Id,
+        content: String,
+        reply: Option<(Id, bool)>,
+        files: Vec<Upload>,
+        nonce: u64,
+        progress: Option<UploadProgress>,
+    ) -> BoxFuture<Message> {
+        let total: u64 = files.iter().map(|f| f.bytes.len() as u64).sum();
+        if let Some(p) = &progress {
+            p(0, total);
+            p(total, total);
+        }
+        let atts: Vec<Attachment> = files
+            .iter()
+            .map(|f| {
+                let image = crate::ui::chat::state::is_image_name(&f.filename).is_some();
+                Attachment {
+                    filename: f.filename.clone().into(),
+                    size: f.bytes.len() as u64,
+                    is_image: image,
+                    kind: if image { AttachmentKind::Image } else { AttachmentKind::File },
+                    ..Default::default()
+                }
+            })
+            .collect();
+        if let Ok(mut i) = self.inner.lock() {
+            i.sent_uploads.push(files);
+        }
+        let fut = self.send_message(channel, content, reply.map(|r| r.0));
+        let inner = self.inner.clone();
+        Box::pin(async move {
+            let mut m = fut.await?;
+            m.attachments = atts;
+            m.nonce = Some(nonce);
+            if let Ok(mut i) = inner.lock()
+                && let Some(h) = i.history.get_mut(&channel).and_then(|h| h.iter_mut().find(|x| x.id == m.id))
+            {
+                h.attachments = m.attachments.clone();
+            }
+            Ok(m)
         })
     }
 

@@ -743,6 +743,7 @@ impl Backend for DiscordBackend {
         reply: Option<(Id, bool)>,
         files: Vec<crate::backend::Upload>,
         nonce: u64,
+        progress: Option<crate::backend::UploadProgress>,
     ) -> BoxFuture<Message> {
         self.with_session(move |_, s| async move {
             let mut msg = CreateMessage::text(content);
@@ -762,15 +763,23 @@ impl Backend for DiscordBackend {
                     spoiler: f.spoiler,
                 })
                 .collect();
+            // Files first (same flow as the client: upload URLs, chunked PUT to the
+            // cloud), once; only the message POST below is retried.
+            let attachments = if files.is_empty() {
+                Vec::new()
+            } else {
+                let slots = s.rest.upload_files(sf(channel), &files, progress, phoenix_api::rest::uploads::UPLOAD_CHUNK).await.map_err(|e| match e {
+                    e @ ApiError::Api { status: 400..=499, .. } => BackendError::rejected(api_err(e)),
+                    e => api_err(e),
+                })?;
+                phoenix_api::rest::uploads::message_attachments(&files, &slots).as_array().cloned().unwrap_or_default()
+            };
+            msg.attachments = attachments;
             // The client retries a send the network dropped (measured: second POST
             // ~1.5 s after the first) and only marks it failed after that.
             let mut retries = SEND_RETRY_DELAYS.iter();
             let m = loop {
-                let res = if files.is_empty() {
-                    s.rest.send_message(sf(channel), msg.clone()).await
-                } else {
-                    s.rest.send_message_with_files(sf(channel), msg.clone(), files.clone()).await
-                };
+                let res = s.rest.send_message(sf(channel), msg.clone()).await;
                 match res {
                     Ok(m) => break m,
                     Err(ApiError::Http(e)) => match retries.next() {
@@ -788,6 +797,14 @@ impl Backend for DiscordBackend {
 
     fn guild_emojis(&self, guild: Id) -> Vec<crate::ui::pickers::types::GuildEmoji> {
         self.inner.session().map(|s| expressions::guild_emojis(&s, guild)).unwrap_or_default()
+    }
+    fn max_upload_size(&self, channel: Id) -> u64 {
+        use phoenix_api::rest::uploads::{max_file_size, message_upload_limit};
+        let Ok(s) = self.inner.session() else { return message_upload_limit(10 << 20) };
+        let premium = s.cache.current_user().and_then(|u| u.premium_type);
+        let guild = s.cache.channel(sf(channel)).and_then(|c| c.guild_id).and_then(|g| s.cache.guild(g));
+        let limit = max_file_size(premium, guild.as_ref().map(|g| (g.properties.premium_tier, g.properties.features.iter().map(String::as_str))));
+        message_upload_limit(limit)
     }
     fn has_premium(&self) -> bool {
         self.inner.session().ok().and_then(|s| s.cache.current_user()).is_none_or(|u| u.premium_type.unwrap_or(0) > 0)

@@ -19,6 +19,7 @@ pub mod thread_create;
 pub mod content_inventory;
 pub mod collectibles;
 pub mod frecency;
+pub mod uploads;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -104,6 +105,9 @@ pub struct CreateMessage {
     pub allowed_mentions: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enforce_nonce: Option<bool>,
+    /// Cloud-uploaded files (`uploads::message_attachments`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Value>,
 }
 
 impl CreateMessage {
@@ -442,6 +446,8 @@ impl RestClient {
     }
 
     /// Send a message with attachments (multipart `payload_json` + `files[n]`).
+    /// Legacy: the client now uploads to the cloud first, see
+    /// [`Self::send_message_with_uploads`].
     pub async fn send_message_with_files(
         &self,
         channel: ChannelId,

@@ -574,6 +574,12 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
 
 /// Full-window overlay with the menu anchored at `pos`.
 pub fn render(pos: Point<Pixels>, items: Vec<MenuItem>, dismiss: Dismiss) -> AnyElement {
+    render_anchored(pos, gpui::Anchor::TopLeft, items, dismiss)
+}
+
+/// Like [`render`], with `corner` of the menu at `pos` (e.g. bottom-left for
+/// a menu that opens above its button).
+pub fn render_anchored(pos: Point<Pixels>, corner: gpui::Anchor, items: Vec<MenuItem>, dismiss: Dismiss) -> AnyElement {
     let inner = dismiss;
     let dismiss: Dismiss = Rc::new(move |w, cx| {
         reset_state();
@@ -612,6 +618,7 @@ pub fn render(pos: Point<Pixels>, items: Vec<MenuItem>, dismiss: Dismiss) -> Any
             .child(keys)
             .child(
                 anchored()
+                    .anchor(corner)
                     .position(pos)
                     .snap_to_window_with_margin(z(VIEWPORT_PAD))
                     .child(panel("context-menu", items, dismiss)),

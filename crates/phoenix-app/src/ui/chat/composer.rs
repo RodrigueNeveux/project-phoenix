@@ -17,6 +17,7 @@ use super::{
 };
 use crate::{
     app::PhoenixApp,
+    model::Id,
     assets::Icon,
     theme::{Palette, c, fz, generated::idx, z},
     ui::icon_button,
@@ -204,6 +205,64 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
     Some(tray)
 }
 
+thread_local! {
+    /// Bounds of the "+" button at the last paint, to anchor its menu.
+    static ATTACH_BTN: std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+/// The "+" menu of the 2026 client (`channel-attach-*` items, measured live
+/// 2026-11-24: 239px wide, 36px rows, opens 8px above the button, left edges
+/// aligned). Upload a File opens the file picker; Create Thread and Use Apps
+/// are wired; poll, scheduled and voice messages are not built yet.
+fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
+    use crate::ui::context_menu::{self, MenuItem};
+    if !app.chat.attach_menu {
+        return None;
+    }
+    let ch = app.selected_channel?;
+    let b = ATTACH_BTN.with(|c| c.get())?;
+    let e = cx.entity().downgrade();
+    let act = |f: fn(&mut PhoenixApp, Id, &mut Window, &mut Context<PhoenixApp>)| {
+        let e = e.clone();
+        move |_: &gpui::ClickEvent, w: &mut Window, cx: &mut gpui::App| {
+            let _ = e.update(cx, |a, cx| {
+                a.chat.attach_menu = false;
+                f(a, ch, w, cx);
+                cx.notify();
+            });
+        }
+    };
+    let thread_ok = app
+        .channels
+        .get(&ch)
+        .is_some_and(|c| c.guild.is_some() && matches!(c.kind, crate::model::ChannelKind::Text | crate::model::ChannelKind::Announcement));
+    let mut items = vec![MenuItem::action(crate::t!("attach.upload"), Some(crate::icons::path("chat/upload")), act(|a, _, _, cx| a.prompt_attach(cx)))];
+    if thread_ok {
+        items.push(MenuItem::action(crate::t!("attach.thread"), Some(crate::icons::path("chat/thread")), act(|a, ch, w, cx| a.open_create_thread(ch, w, cx))));
+    }
+    items.push(MenuItem::disabled(crate::t!("attach.poll"), Some(crate::icons::path("sort"))));
+    items.push(MenuItem::action(crate::t!("attach.apps"), Some(crate::icons::path("apps")), act(|a, _, w, cx| {
+        // Typing "/" opens the slash command popup.
+        a.composer.update(cx, |s, cx| {
+            if s.value().is_empty() {
+                s.set_value("/", w, cx);
+            }
+            s.focus(w, cx);
+        });
+    })));
+    items.push(MenuItem::disabled(crate::t!("attach.schedule"), Some(crate::icons::path("inbox/schedule"))));
+    items.push(MenuItem::disabled(crate::t!("attach.voice"), Some(crate::icons::path("mic"))));
+    let dismiss: context_menu::Dismiss = std::rc::Rc::new(move |_, cx| {
+        let _ = e.update(cx, |a, cx| {
+            a.chat.attach_menu = false;
+            cx.notify();
+        });
+    });
+    // Bottom-left corner 8px above the button.
+    let pos = gpui::point(b.origin.x, b.origin.y - z(8.));
+    Some(context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss))
+}
+
 /// In-flight uploads: file name, size, animated progress bar.
 fn sending(app: &PhoenixApp) -> impl IntoElement {
     let ch = app.selected_channel;
@@ -236,11 +295,8 @@ fn sending(app: &PhoenixApp) -> impl IntoElement {
                         )
                         .child(
                             div().h(z(6.)).rounded(z(3.)).bg(c(Palette::INTERACTIVE_MUTED)).overflow_hidden().child(
-                                div().h_full().rounded(z(3.)).bg(c(Palette::BLURPLE)).with_animation(
-                                    ("upload-bar", s.key as usize),
-                                    Animation::new(Duration::from_millis(1400)).repeat(),
-                                    |d, t| d.w(relative(0.15 + 0.8 * t)),
-                                ),
+                                // Real share of the bytes uploaded (backend progress callback).
+                                div().h_full().rounded(z(3.)).bg(c(Palette::BLURPLE)).w(relative(s.fraction().max(0.02))),
                             ),
                         ),
                 ),
@@ -345,6 +401,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
         .flex_col()
         .gap(z(8.))
         .child(sending(app))
+        .children(attach_menu(app, cx))
         .children(super::slash::render(app, cx))
         .child(
             // form_ padding-inline --space-xs; channelTextArea_ --chat-background-default,
@@ -402,9 +459,10 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     cx.stop_propagation();
                                     return;
                                 }
+                                // Ctrl+V goes through the text area's paste hook (on_paste below):
+                                // the bound Paste action runs before key listeners.
                                 let edit = k.key == "up" && k.modifiers.number_of_modifiers() == 0;
-                                let paste = k.key == "v" && (k.modifiers.control || k.modifiers.platform);
-                                if (edit && a.edit_last(w, cx)) || (paste && a.paste_image(cx)) {
+                                if edit && a.edit_last(w, cx) {
                                     cx.stop_propagation();
                                 }
                             }))
@@ -414,10 +472,21 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                 // #1438 inner_ padding-inline-start 15px; #1439 attachWrapper_ padding 12px 14px;
                                 // #1440 attachButton_ 32px, radius 8px, margin 0 10px 0 -16px, PlusLargeIcon 20px.
                                 div().pl(z(15.)).h(z(56.)).flex().items_center().when(blocked, |d| d.invisible()).child(div().px(z(14.)).child(
-                                    crate::ui::states::composer_button("attach", Icon::Plus)
+                                    div()
+                                        .relative()
                                         .ml(z(-16.))
                                         .mr(z(10.))
-                                        .on_click(cx.listener(|a, _, _, cx| a.prompt_attach(cx))),
+                                        .child(
+                                            crate::ui::states::composer_button("attach", Icon::Plus).on_click(cx.listener(|a, _, _, cx| {
+                                                a.chat.attach_menu = !a.chat.attach_menu;
+                                                cx.notify();
+                                            })),
+                                        )
+                                        .child(
+                                            gpui::canvas(|b, _, _| ATTACH_BTN.with(|c| c.set(Some(b))), |_, _, _, _| ())
+                                                .absolute()
+                                                .size_full(),
+                                        ),
                                 )),
                             )
                             .child(
@@ -437,6 +506,11 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                         // xsmall: no editor padding (py 0, px 4), the 4px cancelled below.
                                         div().mx(z(-4.)).child(
                                             gpui_component::input::Textarea::new(&app.composer)
+                                                // Ctrl+V of an image / copied files: attach instead of inserting text.
+                                                .on_paste({
+                                                    let this = cx.entity().downgrade();
+                                                    move |item, _, cx| this.update(cx, |a, cx| a.paste_clipboard(item, cx)).unwrap_or(false)
+                                                })
                                                 .appearance(false)
                                                 .bordered(false)
                                                 .xsmall()

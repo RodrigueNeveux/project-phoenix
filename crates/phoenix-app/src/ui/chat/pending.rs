@@ -123,8 +123,9 @@ impl PhoenixApp {
     /// (Re)send the payload kept for `nonce` and settle the local copy.
     fn post_pending(&mut self, channel: Id, nonce: u64, cx: &mut Context<Self>) {
         let Some(p) = PAYLOADS.with(|p| p.borrow().get(&nonce).cloned()) else { return };
-        let fut = self.backend.send_message_ex(channel, p.content, p.reply, p.files, nonce);
         let upload = p.upload;
+        let progress = upload.and_then(|k| self.upload_progress(k, cx));
+        let fut = self.backend.send_message_ex(channel, p.content, p.reply, p.files, nonce, progress);
         cx.spawn(async move |this, cx| {
             let res = fut.await;
             let _ = this.update(cx, |this, cx| {

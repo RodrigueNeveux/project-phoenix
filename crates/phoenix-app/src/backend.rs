@@ -137,6 +137,9 @@ impl std::fmt::Debug for Upload {
     }
 }
 
+/// Upload progress: `(bytes sent, total bytes)` over every file of a message.
+pub type UploadProgress = Arc<dyn Fn(u64, u64) + Send + Sync>;
+
 pub type EventSink = Arc<dyn Fn(AppEvent) + Send + Sync>;
 
 pub trait Backend: Send + Sync + 'static {
@@ -174,9 +177,16 @@ pub trait Backend: Send + Sync + 'static {
         reply: Option<(Id, bool)>,
         files: Vec<Upload>,
         nonce: u64,
+        progress: Option<UploadProgress>,
     ) -> BoxFuture<Message> {
-        let _ = (files, nonce);
+        let _ = (files, nonce, progress);
         self.send_message(channel, content, reply.map(|r| r.0))
+    }
+    /// Per-file upload limit in bytes for `channel` (Nitro of the account,
+    /// boosts of the guild), as checked by the client before an upload.
+    fn max_upload_size(&self, channel: Id) -> u64 {
+        let _ = channel;
+        phoenix_api::rest::uploads::message_upload_limit(10 << 20)
     }
     /// Add (`add`) or remove our own reaction.
     fn set_reaction(&self, channel: Id, msg: Id, emoji: Reaction, add: bool) -> BoxFuture<()> {

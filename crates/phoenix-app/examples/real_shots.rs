@@ -106,7 +106,15 @@ impl Backend for ReadOnly {
     fn send_message(&self, _: Id, _: String, _: Option<Id>) -> BoxFuture<Message> {
         denied()
     }
-    fn send_message_ex(&self, ch: Id, content: String, reply: Option<(Id, bool)>, files: Vec<Upload>, nonce: u64) -> BoxFuture<Message> {
+    fn send_message_ex(
+        &self,
+        ch: Id,
+        content: String,
+        reply: Option<(Id, bool)>,
+        files: Vec<Upload>,
+        nonce: u64,
+        progress: Option<phoenix_app::backend::UploadProgress>,
+    ) -> BoxFuture<Message> {
         // Hard guard: PHX_SEND set, the test channel, our prefix, no reply. Anything else is refused.
         if std::env::var_os("PHX_SEND").is_none() || ch.0 != SEND_TEST_CHANNEL || !content.starts_with(SEND_PREFIX) || reply.is_some() {
             return denied();
@@ -124,7 +132,7 @@ impl Backend for ReadOnly {
             let _ = rx.await;
             eprintln!("send released after {hold} ms (fail={fail:?})");
             match fail {
-                None => real.send_message_ex(ch, content, None, files, nonce).await,
+                None => real.send_message_ex(ch, content, None, files, nonce, progress).await,
                 Some(_) => Err(BackendError::rejected("HTTP 400 (simulated locally, not sent)")),
             }
         })

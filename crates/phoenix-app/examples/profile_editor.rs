@@ -83,6 +83,7 @@ impl Backend for ReadOnly {
         _: Option<(Id, bool)>,
         _: Vec<Upload>,
         _: u64,
+        _: Option<phoenix_app::backend::UploadProgress>,
     ) -> BoxFuture<Message> {
         denied()
     }
