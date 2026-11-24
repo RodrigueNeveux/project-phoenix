@@ -160,13 +160,17 @@ pub fn load_first_page(app: &PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
             return;
         };
         let t0 = std::time::Instant::now();
-        let (msgs, rendered) = cx
-            .background_executor()
-            .spawn(async move {
-                let r = render_page(&msgs, &resolver, me, off, &revealed);
-                (msgs, r)
-            })
-            .await;
+        // Own thread, not GPUI's background pool: image decodes queue there
+        // and delayed pages by up to ~600 ms under load (docs/perf.md).
+        let (tx, rx) = futures::channel::oneshot::channel();
+        let job = move || {
+            let r = render_page(&msgs, &resolver, me, off, &revealed);
+            let _ = tx.send((msgs, r));
+        };
+        if std::thread::Builder::new().name("phoenix-layout".into()).spawn(job).is_err() {
+            return;
+        }
+        let Ok((msgs, rendered)) = rx.await else { return };
         crate::perf::span("page_layout_bg", t0);
         let _ = this.update(cx, |a, cx| {
             insert_first_page(a, id, msgs, rendered, cx);
