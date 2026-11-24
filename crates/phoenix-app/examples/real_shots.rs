@@ -7,7 +7,7 @@
 //! changed: only READY, channel selection, message history, member list
 //! subscription and media downloads go out.
 //!
-//! Location: env `PHX_GUILD` + `PHX_CHANNEL`, or `PHX_DM=<channel id>`, or by
+//! Location: env `PHX_GUILD` + `PHX_CHANNEL` (`PHX_GUILD` alone = its first text channel), or `PHX_DM=<channel id>`, or by
 //! default the location shown by the user's Discord (`cdp.mjs eval location.pathname`).
 //! Size / theme / density: env `PHX_W`, `PHX_H`, `PHX_THEME` (dark|light|ash|onyx),
 //! `PHX_COMPACT`, otherwise read from the live Discord through CDP.
@@ -407,6 +407,9 @@ fn main() -> anyhow::Result<()> {
         (None, Some(dm))
     } else if let Some(c) = std::env::var("PHX_CHANNEL").ok().and_then(|v| parse_id(&v)) {
         (std::env::var("PHX_GUILD").ok().and_then(|v| parse_id(&v)), Some(c))
+    } else if let Some(g) = std::env::var("PHX_GUILD").ok().and_then(|v| parse_id(&v)) {
+        // Guild only: its first text channel is picked once READY is in.
+        (Some(g), None)
     } else {
         let path = cdp("location.pathname").unwrap_or_default();
         let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
@@ -601,6 +604,14 @@ fn main() -> anyhow::Result<()> {
                     "add" => F::AddFriend,
                     _ => F::Online,
                 };
+            } else if let (Some(g), None) = (guild, channel) {
+                app.select_guild(Some(g), cx);
+                let first = app.guild_channels.get(&g).and_then(|l| {
+                    l.iter().copied().find(|id| app.channels.get(id).is_some_and(|c| c.kind == phoenix_app::model::ChannelKind::Text))
+                });
+                if let Some(c) = first {
+                    app.open_channel_chat(c, cx);
+                }
             } else if let Some(c) = channel {
                 // Threads live in `nav.threads` until selected (select_thread registers them).
                 let thread = app.nav.find_thread(c).cloned();
@@ -811,6 +822,12 @@ fn main() -> anyhow::Result<()> {
                         _ => Tab::Emoji,
                     };
                     phoenix_app::ui::pickers::open(app, tab, EmojiTarget::Composer, window, cx);
+                    // `emoji:<row>`: scrolled to that grid row (later categories).
+                    if let Ok(row) = arg.parse::<usize>()
+                        && let Some(op) = cx.try_global::<phoenix_app::ui::pickers::Pickers>().and_then(|p| p.open.as_ref())
+                    {
+                        op.list.scroll_to(gpui::ListOffset { item_ix: row, offset_in_item: px(0.) });
+                    }
                 }
                 // Context menus at (700, 300): channel / category (nth in the sidebar), server.
                 "chanmenu" | "catmenu" => {
