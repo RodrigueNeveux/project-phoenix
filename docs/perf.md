@@ -79,14 +79,36 @@ See the table at the bottom; each row is one commit, measured the same way.
 The ~1.8 s before `connect_start` in real_shots is the example's CDP probes
 (the user's Discord had no CDP port during these runs), not the app.
 
+### Round 2 (649899d, two runs)
+
+Pre-READY history over REST, scroll kept on refresh, unread-mention warm-up
+(`warm_channels 7` = 8 max mentions + 6 recent, deduped), snapshot parsed on a
+thread at backend creation.
+
+| step | run 1 | run 2 |
+|---|---|---|
+| snapshot read (disk) | 3.4 ms | 6.8 ms |
+| snapshot JSON parse | 148 ms | 198 ms |
+| snapshot → UI data | 54 ms | 65 ms |
+| `connect_start` → `snapshot_applied` | **112 ms** (was ~300) | **116 ms** |
+| cached channel → frame (cold UI) | 150 ms | 167 ms |
+| after live READY, page from memory → frame | 13.7 ms | 11.3 ms |
+
+The preload finishes before the window in real_shots; in the app the parse
+(~150–200 ms) overlaps window creation instead of following it.
+
 ## What's next
 
-- `snapshot_loaded` (~190 ms) is mostly serde on the multi-MB READY: store a
-  compact pre-converted snapshot instead of the raw payload.
+- The snapshot cost is now the JSON parse (150–200 ms). A compact binary
+  snapshot needs serde on the UI model types (`model.rs`, `SharedString`,
+  `ImageRef`) and on the nav events: not done.
 - Messages in state take ~95 ms the first time (markdown/rich text of 50
   messages on the UI thread) and ~9 ms when warm: build `RenderedMessage`s
   off-thread.
-- Gateway RESUME across restarts (persist session_id + seq at exit) would
-  skip READY entirely when the app is restarted within a few minutes.
+- Gateway RESUME across restarts: deferred. A resume replays only events
+  after the saved seq, but the UI would rebuild from the READY saved at the
+  start of the previous run, so everything that changed during that run would
+  be lost: read states (channels read become unread again), channel edits,
+  presences. It needs a snapshot of the live cache at exit first.
 - Prefetch the channels with unread mentions after READY (now only the 6
   most recently viewed channels and hovered rows).
