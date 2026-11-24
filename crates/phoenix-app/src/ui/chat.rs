@@ -949,7 +949,7 @@ fn message(
         }
     }
     for e in &msg.embeds {
-        content = content.child(embed(e));
+        content = content.child(embed(app, e));
     }
     // Forward: the snapshot sits inside the quote frame; reactions/threads stay outside.
     if let Some(f) = &msg.forward {
@@ -1633,7 +1633,7 @@ fn sticker_name(name: SharedString) -> AnyElement {
 /// Embed description / field values: Discord renders them as markdown.
 /// Parsed embed markdown, keyed by source text and style generation, so
 /// visible embeds are not re-parsed on every frame. Cleared when full.
-fn embed_blocks(src: &str) -> std::rc::Rc<[RBlock]> {
+fn embed_blocks(app: &PhoenixApp, src: &str) -> std::rc::Rc<[RBlock]> {
     use std::{cell::RefCell, collections::HashMap, rc::Rc};
     type EmbedCache = (u32, HashMap<SharedString, Rc<[RBlock]>>);
     thread_local! {
@@ -1648,15 +1648,17 @@ fn embed_blocks(src: &str) -> std::rc::Rc<[RBlock]> {
         if let Some(b) = map.get(src) {
             return b.clone();
         }
-        let parsed = crate::markdown::parse(src, &crate::markdown::NoResolve);
+        // Channel / role / user mentions resolved like message text (bots' embeds showed
+        // "#unknown" and "@unknown-role" for channels and roles of the server).
+        let parsed = crate::markdown::parse(src, &app.resolver());
         let blocks: Rc<[RBlock]> = crate::richtext::render_blocks(&parsed, &|_| true, c(Palette::TEXT_NORMAL)).into();
         map.insert(SharedString::from(src.to_owned()), blocks.clone());
         blocks
     })
 }
 
-fn embed_markdown(src: &str, size: f32) -> AnyElement {
-    let blocks = embed_blocks(src);
+fn embed_markdown(app: &PhoenixApp, src: &str, size: f32) -> AnyElement {
+    let blocks = embed_blocks(app, src);
     let mut d = div().flex().flex_col().text_size(fz(size)).line_height(z(18.)).min_w_0();
     for b in blocks.iter().cloned() {
         d = d.child(match b {
@@ -1734,7 +1736,7 @@ fn embed_text(t: &RichText, size: f32) -> gpui::Div {
     push(row, last..t.text.len())
 }
 
-fn embed(e: &Embed) -> AnyElement {
+fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
     let has_text = e.title.is_some() || e.description.is_some() || e.author.is_some() || !e.fields.is_empty();
     // gifv embeds always render as bare media, even with a provider/title (Tenor).
     let media_only = e.kind.as_deref() == Some("gifv") || (e.kind.as_deref() == Some("image") && !has_text);
@@ -1804,7 +1806,7 @@ fn embed(e: &Embed) -> AnyElement {
                                 .text_color(tk(idx::TEXT_STRONG))
                                 .child(f.name.clone()),
                         )
-                        .child(embed_markdown(&f.value, 14.)),
+                        .child(embed_markdown(app, &f.value, 14.)),
                 );
             }
             grid = grid.child(row);
@@ -1914,7 +1916,7 @@ fn embed(e: &Embed) -> AnyElement {
                         })
                         .children(author)
                         .children(title)
-                        .when_some(e.description.clone(), |d, t| d.child(embed_markdown(&t, 14.)))
+                        .when_some(e.description.clone(), |d, t| d.child(embed_markdown(app, &t, 14.)))
                         .children(fields)
                         .when_some(big, |d, m| {
                             let size = media::fit(m.width, m.height, 400., 300.);

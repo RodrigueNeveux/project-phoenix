@@ -160,7 +160,7 @@ pub struct PhoenixApp {
     _subs: Vec<Subscription>,
 }
 
-struct Resolver<'a> {
+pub(crate) struct Resolver<'a> {
     users: &'a HashMap<Id, User>,
     channels: &'a HashMap<Id, Channel>,
     roles: &'a HashMap<Id, Vec<Role>>,
@@ -661,7 +661,7 @@ impl PhoenixApp {
         .detach();
     }
 
-    fn resolver(&self) -> Resolver<'_> {
+    pub(crate) fn resolver(&self) -> Resolver<'_> {
         Resolver { users: &self.users, channels: &self.channels, roles: &self.roles, members: &self.members, me: self.me.id }
     }
 
