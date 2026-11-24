@@ -11,13 +11,13 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Bold / italic / underline / strike | `markup_` | strong 700, em italic, u, s | markdown.rs `DELIMS` | ✅ |
 | `***bold italic***`, `__*u+i*__` | – | nested emphasis | markdown.rs `find_close` (run end) | ✅ (was rendering `*…*` literally) |
 | Headers `#`/`##`/`###`, `-#` subtext | `markup_ h1/h2/h3`, `small` | 24/20/16, subtext 12 --text-subtle | markdown.rs `line_block`, ui/components.rs | ✅ (see text.md) |
-| Lists (nested, ordered) | `markup_ ul/ol` margin-inline 16, nested `ul ul` circle; `li` margin-bottom 4 | | markdown.rs `ListItem`, ui/chat.rs `block` | ✅ (CSS) |
-| Block quotes | `blockquoteContainer_` margin-block --space-4; `blockquoteDivider_` 4px radius 4 --spine-default; `blockquote` padding-inline 12 8, --text-subtle, max 90% | | ui/chat.rs `block`, richtext.rs | ✅ (CSS) |
-| Spoilers (text, click to reveal) | `spoilerContent_` hidden: --spoiler-hidden-background (text + bg); revealed --spoiler-revealed-background | | richtext.rs | ✅ (CSS) |
-| Masked links + hover underline | `anchor_ anchorUnderlineOnHover_` | --text-link, underline on hover | richtext.rs | ✅ (CSS) |
+| Lists (nested, ordered) | `markup_ ul/ol` margin-inline 16, nested `ul ul` circle; `li` margin-bottom 4 | | markdown.rs `ListItem`, ui/chat.rs `block` | ✅ (live dump: ul margin 4 0 0 16, li margin-bottom 4) |
+| Block quotes | `blockquoteContainer_` margin-block --space-4; `blockquoteDivider_` 4px radius 4 --spine-default; `blockquote` padding-inline 12 8, --text-subtle, max 90% | | ui/chat.rs `block`, richtext.rs | ✅ (live dump: divider 4 wide radius 4, blockquote padding 0 8 0 12) |
+| Spoilers (text, click to reveal) | `spoilerContent_` hidden: --spoiler-hidden-background (text + bg); revealed --spoiler-revealed-background | | richtext.rs | ✅ (live dump: radius 4, hidden bg = --spoiler-hidden-background) |
+| Masked links + hover underline | `anchor_ anchorUnderlineOnHover_` | --text-link, underline on hover | richtext.rs | ✅ (live dump: anchor 16/22 --text-link) |
 | `<t:…>` timestamps | `timestamp_ku1OHH` --background-mod-normal, radius 3, padding 0 2 | | markdown.rs `format_timestamp`, richtext.rs | ✅ (CSS; radius/padding approximated by the text run background) |
 | Inline code | `markup_ code.inline` --font-code 85%, --background-code, radius 4 | | richtext.rs | ✅ (CSS) |
-| Code block + highlighting | `markup_ pre` mt 6 radius 4 max 90%; `code` .875rem/1.125rem 1px --border-normal; `.hljs` padding .5em --background-base-lower --text-code | | ui/chat.rs `block`, richtext/highlight.rs | ✅ (CSS) |
+| Code block + highlighting | `markup_ pre` mt 6 radius 4 max 90%; `code` .875rem/1.125rem 1px --border-normal; `.hljs` padding .5em --background-base-lower --text-code | | ui/chat.rs `block`, richtext/highlight.rs | ✅ (live dump: pre mt 6 radius 4; code.hljs padding 7, 14/18) |
 | Rich embed frame | `embedFull_ grid_` | 4px start border, radius 4, padding 2 16 16 12, max 516 | ui/chat.rs `embed` | ✅ |
 | Embed provider | `embedProvider_` body-xs/normal | 12/16 --interactive-text-default | ui/chat.rs `embed` | ✅ |
 | Embed author | `embedAuthorName_` .875rem semibold --text-strong; icon 24 + 8 | | ui/chat.rs `embed` | ✅ |
@@ -36,17 +36,18 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Audio player | `wrapperAudio_ newMosaicStyle_` 432, p16, radius 8, --background-base-lower, 1px --border-subtle; `audioControls_` --opacity-black-28 radius-sm mt 4; `controlIcon_` 24+4; duration --font-code 12/12 500; seek `mediaBarWrapper_` 6px | | ui/chat/attach.rs `audio_card` | ✅ |
 | Generic file card | `fileWrapper_` 432; `file_` --background-surface-high, 1px --border-subtle, radius 8, --shadow-low, p16; icon 30x40 mr 8; name 16/20 --text-link hover underline; size body-xs 12/16 --text-muted (dump vanilla-thread-channel node fileWrapper_) | | ui/chat/attach.rs `file_card` | ✅ |
 | File download hover button | `hoverButtonGroup_ nonMediaMosaicItem_` -8/-8, --background-base-low, radius 5; `hoverButton_` p6, 20px, hover --interactive-background-hover | | ui/chat/attach.rs `hover_download` | ✅ |
-| Stickers | `stickerAsset_` 160 | | ui/chat.rs `attachment` | ⚠ (name fallback in mock: no network) |
+| Stickers | `assetWrapper_1399Om` / `stickerAsset_` 160x160 | | ui/chat.rs `attachment` | ✅ (live dump: 160x160) |
 | Poll container | `container_HOJNvw` --background-surface-high, 1px --border-subtle, radius-sm, p16, max 472 / min 302 | | ui/components.rs `render_poll` | ✅ |
 | Poll question / prompt | body-md/medium (16/20 500) --text-strong / body-sm/normal --text-muted mt 4 | | ui/components.rs | ✅ |
 | Poll answers | `answersContainer_` gap 8, margin 8 0 16; `answerInner_` min-h 50, p 8 16, gap 8, --background-mod-muted, outline (voted --control-brand-foreground, victor --status-positive, hover --border-strong); label body-sm/semibold | | ui/components.rs | ✅ |
 | Poll results bar | `votePercentageBar_` --interactive-background-active / --polls-voted-fill / --polls-victor-fill; `votesData_` gap 8: count body-xs/semibold + % body-md/semibold | | ui/components.rs | ✅ |
 | Poll bottom bar | `bottomBar_` gap 16, min-h --custom-button-button-md-height; details body-sm/normal muted | | ui/components.rs | ✅ |
 | Forwarded messages | `container_4dy_KE` | | ui/chat/forward.rs | ✅ (forward agent) |
-| System: join, boost, pin, thread, call | `systemMessage_` | | ui/chat/system.rs | ⚠ |
-| `(edited)` label | `edited_2i8Bfm` .625rem, line-height 1, normal weight, --text-muted | | ui/chat.rs `edited_marker` | ✅ (CSS) |
+| System: join, boost, pin, thread, call | `systemMessage_SY_P2T` content at +80, `iconContainer_bLMKT5` 72x22 at +8, text 16/22 | | ui/chat/system.rs | ✅ (live dump; the join welcome card `systemMessageContainer_g2fiji` with its wave button is not done) |
+| `(edited)` label | `edited_2i8Bfm` .625rem, line-height 1, normal weight, --text-muted | | ui/chat.rs `edited_marker` | ✅ (live dump: 10px / 10px, 400) |
 
-Coverage: 35 ✅ / 3 ⚠ / 0 ❌ of 38 rows (spoiler image, stickers, system lines still need a live dump).
-"✅ (CSS)" rows are traced to the CSS rule but no live message of that kind was on screen to dump
-(read-only CDP scan 2026-11-24: none of blockquote/code/spoiler/system classes present). No real-data compare score for these
+Coverage: 37 ✅ / 1 ⚠ / 0 ❌ of 38 rows (spoiler image: none found in 16 scanned channels).
+Live dumps (2026-11-24, user asleep, read-only, view restored): ref-cache/message-content-<channel>.json.
+Colours are not compared from the dumps: the user's theme differs from the generated dark tokens.
+Still "✅ (CSS)": `<t:…>` timestamps and inline code (no example in the scanned channels). No real-data compare score for these
 components yet (none of them is on the live channel the user shows).

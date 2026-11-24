@@ -72,7 +72,9 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
     let line = div()
         .id(("sysmsg", msg.id.0))
         .relative()
-        .pl(z(72.))
+        // systemMessage_ row: content at x+80; iconContainer_bLMKT5 72x22 at x+8, centred icon
+        // (live dump ref-cache message-content-*.json, 2026-11-24).
+        .pl(z(80.))
         .pr(z(48.))
         .py(z(2.))
         .mt(z(if r.group_start { 17. } else { 0. }))
@@ -86,8 +88,8 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .child(
             div()
                 .absolute()
-                .left(z(28.))
-                .top(z(5.))
+                .left(z(36.)) // 8 + (72 - 16) / 2
+                .top(z(7.)) // container_bLMKT5 padding-top 2 + (22 - 16) / 2 + row py 2
                 .child(super::icons::icon(icon, 16., c(color))),
         )
         .child(before)
