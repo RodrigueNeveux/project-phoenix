@@ -142,6 +142,9 @@ pub fn render(app: &PhoenixApp, guild: Id, section: usize, cx: &mut Context<Phoe
         .child(content(app, guild, section));
     let close = div()
         .id("gs-close")
+        // Never shrunk or pushed past the window edge by a wide section (roles list).
+        .flex_none()
+        .mr(z(20.))
         .mt(z(60.))
         .size(z(36.))
         .rounded_full()
