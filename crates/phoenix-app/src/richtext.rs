@@ -350,12 +350,14 @@ pub fn emoji_ranges(text: &str) -> Vec<(Range<usize>, SharedString)> {
     out
 }
 
-/// Emoji-only message (whitespace aside, at most 27 emoji): Discord draws
-/// them "jumbo" (48px).
+/// Emoji-only message (whitespace aside, at most 30 emoji): Discord draws
+/// them "jumbo" (48px). Client markup rule: only text, emoji and custom emoji
+/// top-level nodes, non-blank text disqualifies, and more than 30 emoji keeps
+/// them inline; a heading is another node type, so it never jumbos.
 pub fn is_jumbo(blocks: &[RBlock]) -> bool {
     let mut n = 0;
     for b in blocks {
-        let (RBlock::Text(t) | RBlock::Heading(_, t)) = b else { return false };
+        let RBlock::Text(t) = b else { return false };
         let mut last = 0;
         for (r, _) in &t.emoji {
             if !t.text[last..r.start].trim().is_empty() {
@@ -368,12 +370,21 @@ pub fn is_jumbo(blocks: &[RBlock]) -> bool {
             return false;
         }
     }
-    n > 0 && n <= 27
+    n > 0 && n <= 30
 }
 
 #[cfg(test)]
 mod emoji_tests {
     use super::*;
+    #[test]
+    fn jumbo_up_to_thirty_emoji() {
+        let block = |s: String| RBlock::Text(RichText { emoji: emoji_ranges(&s), text: s.into(), runs: vec![], click_ranges: vec![], click_targets: vec![] });
+        assert!(is_jumbo(&[block("👍 <a:d:9>".into())]));
+        assert!(is_jumbo(&[block("👍".repeat(30))]));
+        assert!(!is_jumbo(&[block("👍".repeat(31))]));
+        assert!(!is_jumbo(&[block("hi 👍".into())]));
+    }
+
     #[test]
     fn finds_unicode_and_custom() {
         let t = "hi 👍🏽 <:blob:12> 👨\u{200D}👩\u{200D}👧 🇫🇷 ok 1";

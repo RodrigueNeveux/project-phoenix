@@ -562,7 +562,8 @@ pub fn rich_with_emoji_scaled(
             last = end;
             continue;
         }
-        row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size)));
+        // `.emoji.jumboable` padding 4px 0
+        row = row.child(div().mx(z(1.)).when(jumbo, |d| d.py(z(4.))).child(crate::media::emoji::emoji_element(token, size)));
         last = r.end;
     }
     row = push_lines(row, last..t.text.len(), &mut seg);
