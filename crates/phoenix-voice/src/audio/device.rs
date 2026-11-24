@@ -32,8 +32,12 @@ const RATE: u32 = 48_000;
 /// Output queue cap (device samples), ~120 ms.
 const MAX_OUT_MS: usize = 120;
 
-/// Names of the available input devices (default first).
+/// Names of the available input devices (default first): Pulse/PipeWire
+/// descriptions like the official client, else the ALSA names.
 pub fn input_devices() -> Vec<String> {
+    if let Some(v) = super::pulse::devices(true).filter(|v| !v.is_empty()) {
+        return v.into_iter().map(|d| d.description).collect();
+    }
     let host = cpal::default_host();
     let mut v: Vec<String> = host.input_devices().map(|d| d.filter_map(|d| d.name().ok()).collect()).unwrap_or_default();
     if let Some(n) = host.default_input_device().and_then(|d| d.name().ok()) {
@@ -43,8 +47,11 @@ pub fn input_devices() -> Vec<String> {
     v
 }
 
-/// Names of the available output devices (default first).
+/// Names of the available output devices (default first), see [`input_devices`].
 pub fn output_devices() -> Vec<String> {
+    if let Some(v) = super::pulse::devices(false).filter(|v| !v.is_empty()) {
+        return v.into_iter().map(|d| d.description).collect();
+    }
     let host = cpal::default_host();
     let mut v: Vec<String> = host.output_devices().map(|d| d.filter_map(|d| d.name().ok()).collect()).unwrap_or_default();
     if let Some(n) = host.default_output_device().and_then(|d| d.name().ok()) {
@@ -61,6 +68,12 @@ fn find_device(input: bool, name: Option<&str>) -> Option<Device> {
             .and_then(|mut it| it.find(|d| d.name().is_ok_and(|n| n == name)));
         if found.is_some() {
             return found;
+        }
+        // A Pulse/PipeWire description: open the default device, then move
+        // the stream onto that node.
+        if let Some(node) = super::pulse::node_for(input, name) {
+            super::pulse::route_own_streams(input, node);
+            return if input { host.default_input_device() } else { host.default_output_device() };
         }
         tracing::warn!(device = name, "audio device not found, using default");
     }

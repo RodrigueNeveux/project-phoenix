@@ -11,6 +11,8 @@ pub mod dsp;
 pub mod mixer;
 #[cfg(feature = "audio")]
 pub mod device;
+#[cfg(feature = "audio")]
+pub mod pulse;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
