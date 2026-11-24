@@ -46,7 +46,6 @@ pub enum Bind {
 #[derive(Clone, Copy)]
 pub enum Pick {
     Ui(usize),
-    Local(fn(&LocalPrefs) -> usize, fn(&mut LocalPrefs, usize)),
     Synced(fn(&SyncedSettings) -> usize, fn(usize) -> SettingsPatch),
     Proto,
     Pref(usize),
@@ -146,7 +145,6 @@ fn set_bool(app: &mut PhoenixApp, id: &'static str, b: Bind, v: bool, cx: &mut C
 fn get_pick(app: &PhoenixApp, id: &str, p: Pick) -> usize {
     match p {
         Pick::Ui(d) => app.settings.as_ref().and_then(|s| s.picks.get(id).copied()).unwrap_or(d),
-        Pick::Local(g, _) => g(&app.prefs.local),
         Pick::Synced(g, _) => g(&app.prefs.synced),
         Pick::Proto => app.prefs.synced.pick(id),
         Pick::Pref(d) => app.prefs.local.pick(id, d),
@@ -164,7 +162,6 @@ fn set_pick(app: &mut PhoenixApp, id: &'static str, p: Pick, v: usize, cx: &mut 
             }
             cx.notify();
         }
-        Pick::Local(_, s) => update_local(app, |pr| s(pr, v), cx),
         Pick::Synced(_, f) => save(app, f(v), cx),
         Pick::Proto => save(app, SettingsPatch::Proto(id, super::synced_map::pick_wire(id, v)), cx),
         Pick::Pref(_) => update_local(app, |p| {
