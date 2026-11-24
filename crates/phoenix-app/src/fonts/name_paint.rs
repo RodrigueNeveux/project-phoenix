@@ -84,8 +84,21 @@ impl Element for NameText {
     ) -> (LayoutId, Layout) {
         let color = window.text_style().color;
         let line_height = window.text_style().line_height_in_pixels(window.rem_size());
-        let chars: Vec<(String, Pixels)> =
-            unicode_segmentation::UnicodeSegmentation::graphemes(self.text.as_ref(), true).map(|c| c.to_string()).map(|s| (s.clone(), self.shape(&s, window, color).width)).collect();
+        // Advances come from shaping the whole name once (a cluster shaped on
+        // its own, e.g. a combining mark or an emoji in a fallback font,
+        // measures wider than in the line), split at grapheme boundaries.
+        let full = self.shape(&self.text, window, color);
+        let text = self.text.clone();
+        let starts: Vec<(usize, &str)> = unicode_segmentation::UnicodeSegmentation::grapheme_indices(text.as_ref(), true).collect();
+        let chars: Vec<(String, Pixels)> = starts
+            .iter()
+            .enumerate()
+            .map(|(i, (b, g))| {
+                let x0 = full.x_for_index(*b);
+                let x1 = starts.get(i + 1).map_or(full.width, |(nb, _)| full.x_for_index(*nb));
+                ((*g).to_owned(), (x1 - x0).max(px(0.)))
+            })
+            .collect();
         let ellipsis = self.shape("\u{2026}", window, color).width;
         let natural = chars.iter().fold(px(0.), |w, (_, a)| w + *a + self.spacing);
         let mut style = Style::default();
