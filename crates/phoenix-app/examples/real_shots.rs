@@ -861,6 +861,11 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 "switcher" => phoenix_app::ui::switcher::open(app, window, cx),
+                // User panel avatar popout (`statuspicker:sub` with the status submenu).
+                "statuspicker" => {
+                    app.toggle_status_picker(window, cx);
+                    phoenix_app::ui::status_picker::debug_open_status_submenu(arg == "sub");
+                }
                 "leave" => {
                     if let Some(g) = app.selected_guild {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::LeaveGuild(g), cx);
