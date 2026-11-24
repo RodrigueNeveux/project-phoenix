@@ -144,6 +144,11 @@ struct Span {
     mentions: u32,
 }
 
+/// The official rail scroller (`wrapper_5dqHTG`) ends 16px under the panels card top
+/// while ours stops 10px above it, so a row in that 26px band still counts as visible
+/// (live 2026-11-24: bottom bar `hidden_oJAkDB` with the next unread guild peeking).
+const RAIL_UNDER_PANELS: f32 = 26.;
+
 /// Nearest unread row scrolled off above / below the rail viewport (last
 /// frame's layout) and the mentions hidden on each side.
 fn offscreen_unread(h: &gpui::ScrollHandle, spans: &[Span]) -> (Option<usize>, Option<usize>, u32, u32) {
@@ -158,7 +163,7 @@ fn offscreen_unread(h: &gpui::ScrollHandle, spans: &[Span]) -> (Option<usize>, O
         if top + z(s.h) <= view.top() {
             above = Some(s.ix);
             ma += s.mentions;
-        } else if top >= view.bottom() {
+        } else if top >= view.bottom() + z(RAIL_UNDER_PANELS) {
             below.get_or_insert(s.ix);
             mb += s.mentions;
         }

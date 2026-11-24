@@ -368,7 +368,9 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .id(("activity-card", e.id.0))
                 .mt(z(8.)) // container_g7esM5 margin 8px 0 0 8px (no right margin)
                 .ml(z(8.))
-                .h(z(70.)) // live container_g7esM5 box 252x70
+                .w(z(252.)) // live container_g7esM5 box 252x70 (fixed: long names must not widen it)
+                .h(z(70.))
+                .overflow_hidden()
                 .p(z(8.)) // padding 8px
                 .rounded(z(12.)) // border-radius 12px
                 .border_1()
@@ -386,6 +388,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                     div()
                         .flex_1()
                         .min_w_0()
+                        .overflow_hidden()
                         .flex()
                         .flex_col()
                         .mb(z(-2.)) // infoSection_g7esM5 margin-bottom -2px
