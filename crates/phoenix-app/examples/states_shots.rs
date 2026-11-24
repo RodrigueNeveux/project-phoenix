@@ -83,6 +83,24 @@ fn main() -> anyhow::Result<()> {
             })?;
             pump(&mut cx, 20);
         }
+        // `PHX_TYPING=n`: n mock users typing in the open channel (the first one with a server nick).
+        if let Some(n) = std::env::var("PHX_TYPING").ok().and_then(|n| n.parse::<usize>().ok()) {
+            cx.update_window(win.into(), |_, _, cx| {
+                v.update(cx, |app, cx| {
+                    let Some(ch) = app.selected_channel else { return };
+                    let me = app.me.id;
+                    let mut ids: Vec<_> = app.users.keys().copied().filter(|u| *u != me).collect();
+                    ids.sort_by_key(|u| u.0);
+                    ids.truncate(n);
+                    if let Some(first) = ids.first() {
+                        app.typing_nicks.insert((ch, *first), "Pseudo du serveur".into());
+                    }
+                    app.typing.insert(ch, ids.into_iter().map(|u| (u, std::time::Instant::now())).collect());
+                    cx.notify();
+                })
+            })?;
+            pump(&mut cx, 4);
+        }
         if std::env::var_os("PHX_SETTINGS").is_some() {
             cx.update_window(win.into(), |_, _, cx| v.update(cx, phoenix_app::ui::settings::open))?;
             pump(&mut cx, 10);
