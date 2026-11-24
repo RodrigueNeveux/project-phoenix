@@ -8,7 +8,7 @@
 //! to our hand-drawn icons. Nothing extracted is ever stored in the repo.
 
 pub mod art;
-mod cache;
+pub(crate) mod cache;
 mod extract;
 mod names;
 

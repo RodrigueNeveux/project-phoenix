@@ -39,6 +39,7 @@ pub fn decline(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
 
 /// CALL_CREATE / CALL_UPDATE / CALL_DELETE: track whether we're rung.
 pub fn on_call(app: &mut PhoenixApp, channel: Id, ringing: &[Id]) {
+    crate::sounds::watch::on_call(channel, ringing, app.me.id);
     if ringing.contains(&app.me.id) {
         app.parity.incoming_call = Some(channel);
     } else if app.parity.incoming_call == Some(channel) {

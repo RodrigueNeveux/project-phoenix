@@ -24,6 +24,7 @@ pub mod perf;
 pub mod presence;
 pub mod richtext;
 pub mod shortcuts;
+pub mod sounds;
 pub mod theme;
 #[cfg(target_os = "linux")]
 pub mod tray;

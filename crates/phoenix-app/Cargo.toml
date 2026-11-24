@@ -38,6 +38,8 @@ brotli-decompressor = "4"
 flate2 = "1"
 wuff = "0.2"
 ttf-parser = "0.25"
+# MP3 decoding for the client's sound effects (loaded from the local Discord cache at runtime).
+symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Tray icon (StatusNotifierItem + dbusmenu); same zbus as ashpd/gpui already pull.

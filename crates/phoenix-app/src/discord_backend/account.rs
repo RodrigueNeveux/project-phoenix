@@ -216,6 +216,7 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
             let me = s.adapter.lock().me;
             let viewing = *s.selected_channel.lock();
             crate::notifications::on_message(&s.notify.lock(), &s.cache, me, viewing, m);
+            crate::sounds::on_message(&s.notify.lock(), &s.cache, me, m);
         }
         GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => s.notify.lock().update(data),
         // Server default level, used where no settings entry overrides it.

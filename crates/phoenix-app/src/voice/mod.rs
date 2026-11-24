@@ -175,6 +175,7 @@ pub enum Quality {
 /// `PhoenixApp::join_voice` hook: show "RTC Connecting" right away.
 pub fn on_join_clicked(app: &mut crate::app::PhoenixApp, channel: Option<Id>) {
     app.voice.apply(VoiceUiEvent::Status(if channel.is_some() { VoiceStatus::Connecting } else { VoiceStatus::Idle }));
+    crate::sounds::watch::on_join_requested(channel);
 }
 
 /// Push the user panel's mute/deafen toggles to the voice runtime.
@@ -184,6 +185,7 @@ pub fn sync_self_state(app: &crate::app::PhoenixApp) {
     drop(app.backend.voice_control(VoiceControl::SetDeaf(app.deafened)));
     let (m, d) = (app.mic_muted, app.deafened);
     prefs::update(|p| (p.self_mute, p.self_deaf) = (m, d), true);
+    crate::sounds::watch::watch(app);
 }
 
 #[cfg(test)]

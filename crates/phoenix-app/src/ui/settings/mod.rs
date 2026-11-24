@@ -282,6 +282,7 @@ impl Prefs {
     pub fn load() -> Self {
         let local = LocalPrefs::load();
         crate::notifications::set_enabled(local.notifications_on());
+        crate::sounds::sync_prefs(&local);
         Self { synced: SyncedSettings::default(), local }
     }
 }
@@ -470,6 +471,7 @@ pub fn save(app: &mut PhoenixApp, patch: SettingsPatch, cx: &mut Context<Phoenix
 pub fn update_local(app: &mut PhoenixApp, f: impl FnOnce(&mut LocalPrefs), cx: &mut Context<PhoenixApp>) {
     f(&mut app.prefs.local);
     crate::notifications::set_enabled(app.prefs.local.notifications_on());
+    crate::sounds::sync_prefs(&app.prefs.local);
     app.prefs.local.save();
     cx.notify();
 }

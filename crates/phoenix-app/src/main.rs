@@ -10,6 +10,7 @@ fn main() {
         .with_assets(Assets)
         .run(move |cx| {
             phoenix_app::init(cx);
+            phoenix_app::sounds::init();
             let backend: Arc<dyn Backend> = if mock {
                 Arc::new(MockBackend::new())
             } else {

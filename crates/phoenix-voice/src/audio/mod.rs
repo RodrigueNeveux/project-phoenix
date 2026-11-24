@@ -5,6 +5,7 @@
 //!   volumes, input sensitivity) and the live input level.
 //! - `mixer` (feature `opus`): per-user jitter buffer + Opus decode + mix.
 //! - `device` (feature `audio`): cpal capture/playback threads.
+//! - `effects` (feature `audio`): UI sound effects on the default output.
 
 pub mod dsp;
 #[cfg(feature = "opus")]
@@ -13,6 +14,8 @@ pub mod mixer;
 pub mod device;
 #[cfg(feature = "audio")]
 pub mod pulse;
+#[cfg(feature = "audio")]
+pub mod effects;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};

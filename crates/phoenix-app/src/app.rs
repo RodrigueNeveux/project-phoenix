@@ -1016,6 +1016,7 @@ impl PhoenixApp {
                 self.screen = Screen::Login;
             }
         }
+        crate::sounds::watch::watch(self);
         cx.notify();
     }
 
@@ -1393,6 +1394,7 @@ impl Render for PhoenixApp {
         crate::perf::on_render(self.selected_channel.map(|c| c.0), true);
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
+        crate::sounds::set_focused(window.is_window_active());
         crate::media::emoji::sync_motion(self.prefs.synced.flag("anim-emoji"), window.is_window_active());
         crate::ui::settings::effects::sync(self);
         self.chat_sync_style();

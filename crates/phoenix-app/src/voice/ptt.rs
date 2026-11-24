@@ -63,7 +63,7 @@ fn base_key(binding: &str) -> &str {
 }
 
 /// Root capture-phase key down hook.
-pub fn on_key_down(_app: &mut PhoenixApp, ev: &KeyDownEvent, cx: &mut Context<PhoenixApp>) {
+pub fn on_key_down(app: &mut PhoenixApp, ev: &KeyDownEvent, cx: &mut Context<PhoenixApp>) {
     if is_recording() {
         if ev.keystroke.key == "escape" {
             set_recording(false);
@@ -87,11 +87,12 @@ pub fn on_key_down(_app: &mut PhoenixApp, ev: &KeyDownEvent, cx: &mut Context<Ph
     if stroke_string(&ev.keystroke) == key {
         HELD.with(|h| *h.borrow_mut() = Some(key));
         super::call::manager().apply_control(None, VoiceControl::SetPttPressed(true));
+        crate::sounds::watch::on_ptt(app, true);
     }
 }
 
 /// Root capture-phase key up hook.
-pub fn on_key_up(_app: &mut PhoenixApp, ev: &KeyUpEvent, _cx: &mut Context<PhoenixApp>) {
+pub fn on_key_up(app: &mut PhoenixApp, ev: &KeyUpEvent, _cx: &mut Context<PhoenixApp>) {
     let released = HELD.with(|h| {
         let mut h = h.borrow_mut();
         let hit = h.as_deref().is_some_and(|k| base_key(k) == ev.keystroke.key);
@@ -102,6 +103,7 @@ pub fn on_key_up(_app: &mut PhoenixApp, ev: &KeyUpEvent, _cx: &mut Context<Phoen
     });
     if released {
         super::call::manager().apply_control(None, VoiceControl::SetPttPressed(false));
+        crate::sounds::watch::on_ptt(app, false);
     }
 }
 

@@ -94,6 +94,7 @@ pub static ENTRIES: &[Entry] = &[
     b("n-anniv", &[7, 14], true),        // enable_friend_anniversary_notifications
     b("n-profile", &[7, 16], true),      // enable_profile_updates_notifications
     b("n-event", &[7, 22], true),        // enable_upcoming_server_event_notifications
+    b("quiet-mode", &[7, 5], false),    // quiet_mode (BoolValue): no message notifications / sounds
     b("share-update", &[7, 24], true),   // notify_friends_on_profile_update
     b("act-online", &[7, 25], true),     // notify_friends_on_come_online
     // --- Privacy (8)
