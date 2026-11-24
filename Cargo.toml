@@ -26,4 +26,4 @@ debug = false
 # Pulled by git rev (not path) so every worktree shares one compiled GPUI: a path
 # dependency gets a different package id per checkout and rebuilds the whole GUI stack.
 # Update the rev after changing vendor/gpui-pre (see docs/gpui-patches.md).
-gpui-pre = { git = "https://github.com/RoxasYTB/project-phoenix", rev = "eea2827db5a821879e5de42267fab20d45cde8bf" }
+gpui-pre = { git = "https://github.com/RoxasYTB/project-phoenix", rev = "d3a3f23daaaa38a3c08a16d6bf708f6cd404e25d" }
