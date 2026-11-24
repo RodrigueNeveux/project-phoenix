@@ -144,7 +144,8 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         .flex_col()
         .gap(z(4.))
         .child(label(crate::t!("gn.override")))
-        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("gn.override_desc")));
+        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("gn.override_desc")))
+        .child(override_table(app, s, cx));
     let body = div()
         .id("gn-body")
         .max_h(z(560.))
@@ -165,4 +166,117 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         move |_, w, cx| close(w, cx)
     });
     card(480., crate::t!("menu.notify_settings"), None, body.into_any_element(), Some(footer.into_any_element()), cx)
+}
+
+/// Channel override table (vanilla-guild-notifications-modal #3142..):
+/// `channelNotificationHeaders_Onug95` (44 tall; 122px name cell with 8px
+/// margin, four 75px option cells, body-sm/medium headers), then one
+/// `override_Onug95` card per override: card_qCN-Ri primary outline (1px
+/// --border-subtle, --radius-sm, transparent), padding 10 0 10 10, 8 apart;
+/// 24x20 channel glyph at .6, name body-md/semibold --text-strong over a
+/// body-xs category byline at .6 (container padding 0 10); a 300px
+/// justify-around strip of 20px checkboxes (all / mentions / nothing / mute).
+fn override_table(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::notifications::Level;
+    let prefs = app.backend.notify_prefs().and_then(|p| p.guilds.get(&s.guild.0).cloned()).unwrap_or_default();
+    let mut rows: Vec<_> = prefs
+        .channels
+        .iter()
+        .filter_map(|(id, p)| app.channels.get(&Id(*id)).filter(|ch| ch.guild == Some(s.guild)).map(|ch| (ch.clone(), *p)))
+        .collect();
+    if rows.is_empty() {
+        return div().into_any_element();
+    }
+    rows.sort_by_key(|(ch, _)| (ch.position, ch.id));
+    let head = |k: &str, w: f32| {
+        div().w(z(w)).flex_none().h(z(44.)).child(
+            div().mb(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!(k)),
+        )
+    };
+    let mut table = div()
+        .mt(z(30.))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .flex()
+                .child(div().ml(z(8.)).w(z(122.)).flex_none().h(z(44.)).child(
+                    div().mb(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("gn.ov_name")),
+                ))
+                .child(head("gn.ov_all", 75.))
+                .child(head("gn.ov_mentions", 75.))
+                .child(head("gn.ov_nothing", 75.))
+                .child(head("gn.ov_mute", 75.)),
+        );
+    let guild = s.guild;
+    let default = s.level;
+    for (ch, p) in rows {
+        let cid = ch.id;
+        let level = match p.level {
+            Level::All => 0,
+            Level::Mentions => 1,
+            Level::Nothing => 2,
+            Level::Inherit => default,
+        };
+        let byline = ch
+            .parent
+            .and_then(|pid| app.channels.get(&pid))
+            .map(|c| c.name.clone())
+            .unwrap_or_else(|| crate::t!("gn.ov_no_category"));
+        let check = |n: usize, on: bool| crate::ui::controls::checkbox_option(("gn-ov", (cid.0 as usize).wrapping_mul(8) + n), SharedString::default(), on).w(z(20.)).overflow_hidden();
+        let mut opts = div().w(z(300.)).flex_none().flex().items_center().justify_around();
+        for n in 0..3u8 {
+            opts = opts.child(check(n as usize, level == n).on_click(cx.listener(move |a, _, _, cx| {
+                a.nav_request(NavRequest::NotifyLevel { guild: Some(guild), channel: Some(cid), level: n }, cx, |_, _, _| {});
+                cx.notify();
+            })));
+        }
+        let muted = p.muted;
+        opts = opts.child(check(3, muted).on_click(cx.listener(move |a, _, _, cx| {
+            a.nav_request(NavRequest::Mute { guild: Some(guild), channel: Some(cid), muted: !muted, secs: None }, cx, |_, _, _| {});
+            cx.notify();
+        })));
+        table = table.child(
+            div()
+                .mb(z(8.))
+                .flex()
+                .pl(z(10.))
+                .py(z(10.))
+                .rounded(z(8.)) // --radius-sm
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .child(
+                    div()
+                        .w(z(120.))
+                        .flex_none()
+                        .flex()
+                        .child(
+                            div().w(z(24.)).h(z(20.)).mt(z(8.)).flex_none().opacity(0.6).child(
+                                gpui::svg()
+                                    .path(crate::icons::path(super::create_channel::icon_for(ch.kind)))
+                                    .size(z(20.))
+                                    .text_color(c(tok(idx::TEXT_DEFAULT))),
+                            ),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .px(z(10.))
+                                .child(
+                                    div()
+                                        .truncate()
+                                        .text_size(z(16.))
+                                        .line_height(z(20.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(c(tok(idx::TEXT_STRONG)))
+                                        .child(ch.name.clone()),
+                                )
+                                .child(div().truncate().opacity(0.6).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(byline)),
+                        ),
+                )
+                .child(opts),
+        );
+    }
+    table.into_any_element()
 }
