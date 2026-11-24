@@ -72,8 +72,10 @@ fn row(id: impl Into<gpui::ElementId>, title: SharedString, desc: Option<SharedS
         .gap(z(24.))
         .cursor_pointer()
         .child(
+            // min_w_0: long descriptions wrap instead of pushing the switch out of the modal.
             div()
                 .flex_1()
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap(z(4.))
@@ -81,7 +83,7 @@ fn row(id: impl Into<gpui::ElementId>, title: SharedString, desc: Option<SharedS
                 .children(desc.map(|d| div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(d))),
         )
         .group(crate::ui::controls::SWITCH_ROW)
-        .child(switch("notify-switch", on))
+        .child(div().flex_none().child(switch("notify-switch", on)))
 }
 
 fn label(s: SharedString) -> gpui::Div {
