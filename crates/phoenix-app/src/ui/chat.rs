@@ -956,14 +956,14 @@ fn message(
     for e in &msg.embeds {
         content = content.child(embed(app, e));
     }
-    if edited_after_embeds {
-        content = content.child(div().h(z(20.)).flex().items_center().child(edited_marker(ts))); // timestamp_ 20px
-    }
     // Forward: the snapshot sits inside the quote frame; reactions/threads stay outside.
     if let Some(f) = &msg.forward {
         content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL)).child(forward::wrap(app, f, content));
     }
     content = content.children(crate::ui::components::render(app, entity, msg)).children(crate::ui::components::render_poll(app, entity, msg));
+    if edited_after_embeds {
+        content = content.child(div().h(z(20.)).flex().items_center().child(edited_marker(ts))); // timestamp_ 20px
+    }
     if !msg.reactions.is_empty() {
         content = content.child(message_ext::reactions(app, entity, msg));
     }
