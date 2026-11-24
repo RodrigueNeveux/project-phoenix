@@ -596,6 +596,10 @@ impl PhoenixApp {
         self.backend.select_channel(id).detach_ok();
         let entry = self.messages.entry(id).or_default();
         self.message_list.reset(entry.msgs.len() + 1);
+        crate::perf::channel_opened(id.0);
+        if entry.loaded_once {
+            crate::perf::channel_messages_ready(id.0, "memory");
+        }
         if !entry.loaded_once && !entry.loading {
             entry.loading = true;
             let fut = self.backend.load_messages(id, None, 50);
@@ -652,6 +656,9 @@ impl PhoenixApp {
     }
 
     pub(crate) fn insert_history(&mut self, ch: Id, page: Vec<Message>, older: bool, cx: &mut Context<Self>) {
+        if !older {
+            crate::perf::channel_messages_ready(ch.0, "load");
+        }
         let mut entry = self.messages.remove(&ch).unwrap_or_default();
         entry.loading = false;
         entry.loaded_once = true;
@@ -1249,6 +1256,7 @@ impl Focusable for PhoenixApp {
 
 impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::perf::on_render(self.selected_channel.map(|c| c.0), true);
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
         self.chat_sync_style();

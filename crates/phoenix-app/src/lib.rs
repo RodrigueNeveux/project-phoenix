@@ -17,6 +17,7 @@ pub mod mock;
 pub mod mock_showcase;
 pub mod model;
 pub mod notifications;
+pub mod perf;
 pub mod presence;
 pub mod richtext;
 pub mod shortcuts;

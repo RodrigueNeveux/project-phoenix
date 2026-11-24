@@ -149,12 +149,16 @@ impl HttpClient for CachingHttpClient {
             return self.inner.send(req);
         };
         let url = req.uri().to_string();
-        if let Some(bytes) = store.read(&url) {
-            return async move { Ok(Response::builder().status(200).body(AsyncBody::from(bytes))?) }.boxed();
-        }
-        let fut = self.inner.send(req);
+        let t0 = std::time::Instant::now();
+        let inner = self.inner.clone();
+        // The disk read runs in the returned future (an executor thread), never in the caller.
         async move {
-            let resp = fut.await?;
+            if let Some(bytes) = store.read(&url) {
+                crate::perf::span("media_disk", t0);
+                return Ok(Response::builder().status(200).body(AsyncBody::from(bytes))?);
+            }
+            let resp = inner.send(req).await?;
+            crate::perf::span("media_net", t0);
             if !resp.status().is_success() {
                 return Ok(resp);
             }

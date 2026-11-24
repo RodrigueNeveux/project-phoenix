@@ -3,6 +3,7 @@ use std::sync::Arc;
 use phoenix_app::{assets::Assets, backend::Backend, discord_backend::DiscordBackend, mock::MockBackend};
 
 fn main() {
+    phoenix_app::perf::start();
     // PHOENIX_MOCK=1 runs on offline fake data (no network, no keyring).
     let mock = std::env::var("PHOENIX_MOCK").is_ok_and(|v| !v.is_empty() && v != "0");
     gpui_platform::application()
@@ -17,6 +18,7 @@ fn main() {
                 Arc::new(b)
             };
             phoenix_app::open_main_window(backend, cx);
+            phoenix_app::perf::mark("main_window_opened");
             bench_hooks(cx);
             cx.activate(true);
         });
@@ -26,11 +28,12 @@ fn main() {
 /// frame on stderr; PHOENIX_BENCH_EXIT_MS=N quits N ms after start. Used by
 /// scripts/bench to time cold start without touching the window.
 fn bench_hooks(cx: &mut gpui::App) {
-    if std::env::var_os("PHOENIX_BENCH").is_some()
+    if (std::env::var_os("PHOENIX_BENCH").is_some() || phoenix_app::perf::enabled())
         && let Some(win) = cx.windows().first().copied()
     {
         let _ = win.update(cx, |_, window, _| {
             window.on_next_frame(|_, _| {
+                phoenix_app::perf::mark("first_frame");
                 let ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |d| d.as_millis());

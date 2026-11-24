@@ -358,6 +358,7 @@ fn parse_id(s: &str) -> Option<Id> {
 }
 
 fn main() -> anyhow::Result<()> {
+    phoenix_app::perf::start();
     let out = std::env::args().nth(1).unwrap_or_else(|| "real.png".into());
     phoenix_app::discord_backend::NO_ACKS.store(true, std::sync::atomic::Ordering::Relaxed);
     // The desktop client draws its own window buttons; so does Phoenix with client decorations.

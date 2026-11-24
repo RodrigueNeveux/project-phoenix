@@ -201,9 +201,12 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
     if let Some(old) = inner.session.lock().take() {
         old.gateway.shutdown();
     }
+    let t0 = Instant::now();
+    crate::perf::mark("connect_start");
     let rest = RestClient::new(token.expose(), inner.props.clone());
     // Cheap validation first: a bad token fails here with a clear 401.
     rest.get_me().await.map_err(api_err)?;
+    crate::perf::span("rest_get_me", t0);
 
     let mut cfg = GatewayConfig::new(token.expose());
     cfg.properties = inner.props.clone();
@@ -214,7 +217,10 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
         while let Some(ev) = rx.recv().await {
             cache.apply(&ev);
             match ev {
-                GatewayEvent::Ready(r) => return Ok(r),
+                GatewayEvent::Ready(r) => {
+                    crate::perf::span("gateway_ready", t0);
+                    return Ok(r);
+                }
                 GatewayEvent::Fatal { code, reason } => return Err(err(convert::fatal_message(code, &reason))),
                 _ => {}
             }
@@ -239,6 +245,7 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
     crate::commands::set_session_id(&ready.session_id);
     let prefs = Prefs::from_ready(&ready);
     let data = convert::build_ready(&cache, &ready, &prefs);
+    crate::perf::span("ready_built", t0);
     let adapter = Arc::new(Mutex::new(Adapter::new(ready.user.id, prefs)));
     let session = Arc::new(Session {
         rest,
@@ -570,12 +577,14 @@ impl Backend for DiscordBackend {
 
     fn load_messages(&self, channel: Id, before: Option<Id>, limit: u32) -> BoxFuture<Vec<Message>> {
         self.with_session(move |inner, s| async move {
+            let t0 = Instant::now();
             let limit = limit.clamp(1, 100) as u8;
             let q = match before {
                 Some(b) => MessageQuery::before(sf(b), limit),
                 None => MessageQuery::latest(limit),
             };
             let mut msgs = s.rest.get_messages(sf(channel), q).await.map_err(api_err)?;
+            crate::perf::span(if before.is_none() { "rest_messages_latest" } else { "rest_messages_older" }, t0);
             msgs.sort_by_key(|m| m.id);
             let mut users = Vec::new();
             for m in &msgs {
