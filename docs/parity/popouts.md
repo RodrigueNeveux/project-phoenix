@@ -37,6 +37,7 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | menu separator | `separator_M3qk4j` | margin | --custom-menu-separator-margin 8px | ui/context_menu.rs | ✅ (was 4px) |
 | tooltip | `tooltip_ZDdyhE` | bg / radius / padding | --background-surface-high / --radius-sm / 8px 12px | ui/tooltip.rs | ✅ |
 | tooltip | `tooltip_ZDdyhE` | max-width | 200px | ui/tooltip.rs | ✅ (was 190) |
+| toast | `container_W6gbBa top_W6gbBa`, `wrapper_O41c2-` | position / box / motion | centred, top --space-8; --background-surface-highest, --radius-md, --shadow-high, 1px --border-normal, padding 12, max 280, body-md --text-strong 2 lines; slide in from -100% + fade, 300ms linear | ui/components.rs toast (09e2dff) | ✅ |
 | profile popout | 253781 `outer_P1YEjQ.user-profile-popout` | width / bg / radius / max-height | --custom-user-profile-popout-width 300 / --background-surface-high / --radius-sm / 100vh-20 | ui/profile.rs popout_card | ✅ (was 300 / floating / fixed height) |
 | profile popout | 253781 `inner_P1YEjQ` | gap / padding-bottom | 8px / 4px | ui/profile.rs popout_card | ✅ |
 | popout banner | 253781 `.user-profile-popout` + 58495 `banner_s9bWOi` | height / radius / bottom line | 105px / 8px 8px 0 0 / 1px --border-muted | ui/profile.rs banner | ✅ |
