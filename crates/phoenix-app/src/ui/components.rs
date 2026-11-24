@@ -268,7 +268,8 @@ fn unknown() -> AnyElement {
 
 /// lA: section_5m-AKz (column, gap 4) > children_ (row, gap 12, space-between) >
 /// textChildren_ (flex 1, column, row-gap 4; centred vertically next to a button) +
-/// accessory_ (align-items flex-start, min-width 0).
+/// accessory_ (align-items flex-start, min-width 0; restrictWidth_ max-width
+/// calc(50% - 12px), seen on every live section: drawn as 50%).
 fn section(app: &PhoenixApp, k: &Ctx, s: &api::Section, ix: usize, cx: &App) -> AnyElement {
     let button = matches!(s.accessory.as_deref(), Some(Comp::Button(_)));
     let mut texts = div().flex_1().min_w_0().flex().flex_col().gap(z(4.)).when(button, |d| d.justify_center());
@@ -281,7 +282,7 @@ fn section(app: &PhoenixApp, k: &Ctx, s: &api::Section, ix: usize, cx: &App) -> 
         .gap(z(4.))
         .child(
             div().flex().gap(z(12.)).justify_between().child(texts).when_some(s.accessory.as_deref(), |d, a| {
-                d.child(div().flex().items_start().min_w_0().flex_none().child(comp_el(app, k, a, ix * 8 + 7, cx)))
+                d.child(div().flex().items_start().min_w_0().max_w(gpui::relative(0.5)).flex_none().child(comp_el(app, k, a, ix * 8 + 7, cx)))
             }),
         )
         .into_any_element()
@@ -322,7 +323,9 @@ fn container(app: &PhoenixApp, k: &Ctx, ct: &api::Container, ix: usize, cx: &App
 }
 
 /// Spoiler cover over a component (obscured attachment wrapper): the hidden
-/// spoiler background and the SPOILER pill of `spoilerWarning_`, revealed on click.
+/// spoiler background (`spoilerContainer_0_7_Rr` radius 8) and the SPOILER pill
+/// of `spoilerWarning_` (live dump: padding 8 12, radius 20, 15px semibold,
+/// --opacity-black-60), revealed on click.
 fn spoiler_overlay(key: SharedString) -> AnyElement {
     div()
         .id(gpui::ElementId::Name(key.clone()))
@@ -337,7 +340,7 @@ fn spoiler_overlay(key: SharedString) -> AnyElement {
         .child(
             div()
                 .px(z(12.))
-                .py(z(6.))
+                .py(z(8.))
                 .rounded(z(20.))
                 .bg(t(idx::SPOILER_WARNING_BACKGROUND_COLOR))
                 .text_size(z(15.))
@@ -740,11 +743,17 @@ fn gallery(items: &[api::GalleryItem], msg: Id, ix: usize, cx: &App) -> AnyEleme
             if a.kind == crate::model::AttachmentKind::Video {
                 return crate::ui::chat::attach::video_card(a, size, cx);
             }
+            // oneByOneGrid_ is inline-block at the media's own size (never upscaled):
+            // the line box under it adds 2.4px (live dump: 256px image, 258.4px container).
             div()
                 .id(("gallery", (msg.0 << 8) ^ ix as u64))
-                .rounded(z(8.))
-                .overflow_hidden()
-                .child(crate::ui::chat::media_image_with(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size, false))
+                .pb(z(2.4))
+                .child(
+                    div()
+                        .rounded(z(8.))
+                        .overflow_hidden()
+                        .child(crate::ui::chat::media_image_with(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size, false)),
+                )
                 .into_any_element()
         }
         many => {
