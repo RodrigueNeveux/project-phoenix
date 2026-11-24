@@ -366,9 +366,9 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
         col = col.child(
             div()
                 .id(("activity-card", e.id.0))
-                .mt(z(8.)) // container_g7esM5 margin 8px 0 0 8px
+                .mt(z(8.)) // container_g7esM5 margin 8px 0 0 8px (no right margin)
                 .ml(z(8.))
-                .mr(z(8.))
+                .h(z(70.)) // live container_g7esM5 box 252x70
                 .p(z(8.)) // padding 8px
                 .rounded(z(12.)) // border-radius 12px
                 .border_1()

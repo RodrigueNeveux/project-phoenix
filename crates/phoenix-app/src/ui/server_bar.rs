@@ -627,17 +627,15 @@ fn folder(
                     .items_center()
                     .justify_center()
                     .when(hover, |d| d.bg(c(Palette::GUILD_ICON_BG)))
+                    // folderIcon_RTMSuZ: 18px glyph (24-unit folder drawn at 0.75):
+                    // 15x15 ink box, tab 7.5 wide, body from 2.25 down, radius 2.25.
                     .child(
                         div()
-                            .w(z(20.))
+                            .w(z(15.))
                             .h(z(15.))
-                            .mt(z(2.))
-                            .rounded(z(2.))
-                            .bg(c(color))
                             .relative()
-                            .child(
-                                div().absolute().top(z(-3.)).left_0().w(z(8.)).h(z(4.)).rounded_t(z(2.)).bg(c(color)),
-                            ),
+                            .child(div().absolute().top_0().left_0().w(z(7.5)).h(z(4.)).rounded_tl(z(2.25)).rounded_tr(z(1.5)).bg(c(color)))
+                            .child(div().absolute().top(z(2.25)).left_0().w(z(15.)).h(z(12.75)).rounded(z(2.25)).bg(c(color))),
                     ),
             )
             .into_any_element()
