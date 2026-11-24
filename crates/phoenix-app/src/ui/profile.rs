@@ -1151,7 +1151,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             .relative()
             // The last tab (mutual servers) shrinks with an ellipsis when the bar is
             // full (live: "9 s…"); the others keep their width.
-            .map(|d| if n == 2 { d.flex_shrink().min_w_0().overflow_hidden().text_ellipsis() } else { d.flex_none() })
+            .map(|d| if n == 2 { d.flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis() } else { d.flex_none() })
             .whitespace_nowrap()
             .when(n != first, |d| d.ml(z(16.)))
             .pb(z(16.))
