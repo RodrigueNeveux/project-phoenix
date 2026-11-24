@@ -421,7 +421,7 @@ pub fn camera_image() -> Option<std::sync::Arc<gpui::RenderImage>> {
     let mut buf = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h {
         let row = (y * 2 * f.width * 4) as usize;
-        for x in 0..w {
+        for x in (0..w).rev() {
             let i = row + (x * 2 * 4) as usize;
             let p = f.data.get(i..i + 4)?;
             buf.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
@@ -609,7 +609,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
             .items_center()
             .justify_center()
             .map(|d| match f.video.then(|| if me { camera_image() } else { remote_image(tile.user) }).flatten() {
-                Some(img) => d.child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)),
+                Some(img) => d.bg(t(idx::BACKGROUND_BASE_LOWER)).child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Contain)),
                 None => d.child(avatar(u, 80. * crate::theme::zoom())),
             })
             .children(crate::ui::voice_effects::overlay(tile.user, w, h))

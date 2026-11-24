@@ -51,11 +51,11 @@ impl Codec {
     pub fn payload_type(self) -> u8 {
         match self {
             Codec::Opus => 120,
-            Codec::Av1 => 105,
-            Codec::H264 => 101,
-            Codec::Vp8 => 103,
-            Codec::Vp9 => 107,
-            Codec::H265 => 109,
+            Codec::Av1 => 101,
+            Codec::H265 => 103,
+            Codec::H264 => 105,
+            Codec::Vp8 => 107,
+            Codec::Vp9 => 109,
         }
     }
 

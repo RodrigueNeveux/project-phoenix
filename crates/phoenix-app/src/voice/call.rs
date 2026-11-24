@@ -82,7 +82,7 @@ fn ui(emit: &Emit, e: VoiceUiEvent) {
     emit(AppEvent::Voice(e));
 }
 
-pub const CAMERA_SIZE: (u32, u32, u32) = (1280, 720, 30);
+pub const CAMERA_SIZE: (u32, u32, u32) = (1280, 720, 20);
 
 type Decoders = std::collections::HashMap<u64, phoenix_voice::media::ffmpeg::FfmpegDecoder>;
 

@@ -134,9 +134,13 @@ pub fn video_payload(audio_ssrc: u32, video_ssrc: u32, rtx_ssrc: u32, active: Op
         rtx_ssrc,
         active: active.is_some(),
         quality: 100,
-        max_bitrate: active.map(|_| 2_500_000),
-        max_framerate: active.map(|(_, _, fps)| fps),
-        max_resolution: active.map(|(width, height, _)| Resolution { kind: "fixed".into(), width, height }),
+        max_bitrate: Some(2_500_000),
+        max_framerate: Some(active.map_or(20, |(_, _, fps)| fps)),
+        max_resolution: Some(active.map_or(Resolution { kind: "fixed".into(), width: 1280, height: 720 }, |(width, height, _)| Resolution {
+            kind: "fixed".into(),
+            width,
+            height,
+        })),
     };
     VideoPayload {
         user_id: None,

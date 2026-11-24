@@ -366,7 +366,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
     const BAD: (usize, usize) = (idx::TEXT_FEEDBACK_CRITICAL, idx::BACKGROUND_FEEDBACK_MOD_CRITICAL);
     let (title, (fg, bg)) = match v.status {
         VoiceStatus::Connected | VoiceStatus::Idle => (
-            crate::t!("voice.connected"),
+            if flags(app.me.id).video { crate::t!("voice.video_connected") } else { crate::t!("voice.connected") },
             match v.quality() {
                 Quality::Fair => WARN,
                 Quality::Bad => BAD,
