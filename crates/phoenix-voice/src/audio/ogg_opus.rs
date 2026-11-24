@@ -47,7 +47,7 @@ pub fn decode(bytes: &[u8]) -> Option<Pcm> {
         if p.is_empty() {
             continue;
         }
-        if let Ok(pcm) = dec.decode(Some(p)) {
+        if let Ok(pcm) = dec.decode(Some(p.as_slice())) {
             samples.extend(pcm.iter().map(|s| *s as f32 / 32768.0));
         }
     }
@@ -98,10 +98,10 @@ mod tests {
         let a = enc.encode(&pcm).unwrap();
         let b = enc.encode(&pcm).unwrap();
         let big = vec![7u8; 600];
-        let mut file = page(0, &[&head]);
-        file.extend(page(1, &[b"OpusTags"]));
-        file.extend(page(2, &[&a, &b]));
-        assert_eq!(packets(&page(3, &[&big]))[0].len(), 600);
+        let mut file = page(0, &[head.as_slice()]);
+        file.extend(page(1, &[b"OpusTags".as_slice()]));
+        file.extend(page(2, &[a.as_slice(), b.as_slice()]));
+        assert_eq!(packets(&page(3, &[big.as_slice()]))[0].len(), 600);
         let out = decode(&file).unwrap();
         assert_eq!(out.channels, 2);
         assert_eq!(out.samples.len(), (960 * 2 - 312) * 2);

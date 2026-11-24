@@ -177,6 +177,10 @@ mod tests {
             application_frecency: Some(ApplicationFrecency {
                 applications: HashMap::from([("100".into(), item(5, 1)), ("200".into(), item(15, 2))]),
             }),
+            favorite_soundboard_sounds: Some(FavoriteSoundboardSounds { sound_ids: vec![7, 8], ordered_sound_ids: vec![] }),
+            played_sound_frecency: Some(PlayedSoundFrecency {
+                played_sounds: HashMap::from([("3".into(), item(202, 4)), ("1568753632852054267".into(), item(730, 23))]),
+            }),
         };
         let b64 = STANDARD.encode(prost::Message::encode_to_vec(&s));
         let d = FrecencyUserSettings::decode_base64(&b64).unwrap();
@@ -184,5 +188,7 @@ mod tests {
         assert_eq!(d.stickers_ranked(), vec![2, 1]);
         assert_eq!(d.favorite_gifs()[0].0, "b");
         assert_eq!(d.applications_ranked(), vec![200, 100]);
+        assert_eq!(d.favorite_sounds(), vec![7, 8]);
+        assert_eq!(d.played_sounds_ranked(), vec![1568753632852054267, 3]);
     }
 }
