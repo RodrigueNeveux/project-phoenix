@@ -1191,6 +1191,11 @@ fn main() -> anyhow::Result<()> {
             if hc {
                 app.prefs.local.ui.insert("contrast".into(), 1);
             }
+            for (id, v) in std::env::var("PHX_PROTO").unwrap_or_default().split(',').filter_map(|kv| kv.split_once('=')) {
+                if let Ok(v) = v.trim().parse::<u64>() {
+                    app.prefs.synced.proto.insert(Box::leak(id.trim().to_owned().into_boxed_str()), v);
+                }
+            }
             cx.notify();
         })
     })?;

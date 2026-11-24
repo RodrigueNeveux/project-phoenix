@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 
 use gpui::{
-    AnchoredPositionMode, AnyElement, Corner, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    SharedString, StatefulInteractiveElement, Styled, anchored, deferred, div, point, prelude::*,
+    Anchor, AnchoredPositionMode, AnyElement, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement,
+    SharedString, StatefulInteractiveElement, Styled, anchored, deferred, div, point, prelude::FluentBuilder,
 };
 
 use crate::{
@@ -57,7 +57,7 @@ pub fn badge(key: SharedString, text: SharedString) -> AnyElement {
         .bottom(z(4.))
         .left(z(4.5))
         .child(button)
-        .when(open, |d| d.child(popout(key, text)))
+        .when(open, |d| d.child(div().absolute().top_0().left(gpui::relative(1.)).child(popout(key, text))))
         .into_any_element()
 }
 
@@ -91,8 +91,8 @@ fn popout(key: SharedString, text: SharedString) -> AnyElement {
     deferred(
         anchored()
             .position_mode(AnchoredPositionMode::Local)
-            .anchor(Corner::BottomLeft)
-            .position(point(z(0.), z(-8.)))
+            .anchor(Anchor::TopLeft)
+            .position(point(z(8.), z(0.)))
             .snap_to_window_with_margin(z(8.))
             .child(card),
     )
