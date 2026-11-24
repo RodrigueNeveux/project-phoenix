@@ -151,6 +151,8 @@ impl PhoenixApp {
                 submit: crate::t!(key),
                 danger: true,
                 on_submit: Rc::new(move |a, _, _, cx| a.delete_thread(thread, cx)),
+                preview: None,
+                width: 440.,
             }),
             None,
         );
