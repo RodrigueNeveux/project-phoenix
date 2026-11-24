@@ -5,7 +5,6 @@
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
-    time::Duration,
 };
 
 use gpui::{
@@ -326,7 +325,7 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
                 .child(card)
                 .with_animation(
                     "rail-tip",
-                    Animation::new(Duration::from_millis(100)).with_easing(ease_out_quint()),
+                    Animation::new(crate::ui::settings::effects::motion(100)).with_easing(ease_out_quint()),
                     // ref-cache tooltip-rail-appear.json: shown ~60ms after hover, opacity 1,
                     // card slides 4px right-to-left (x 76 → 72) over ~100ms.
                     |d, t| d.ml(z(4. * (1. - t))),
@@ -363,7 +362,7 @@ fn pill(key: u64, selected: bool, hover: bool, unread: bool) -> AnyElement {
     } else {
         bar.with_animation(
             ElementId::Name(format!("pill-{key}-{epoch}").into()),
-            Animation::new(Duration::from_millis(PILL_MS)).with_easing(ease_out_quint()),
+            Animation::new(crate::ui::settings::effects::motion(PILL_MS)).with_easing(ease_out_quint()),
             move |d, t| d.h(z(from + (to - from) * t)),
         )
         .into_any_element()

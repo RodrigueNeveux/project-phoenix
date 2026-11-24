@@ -1039,6 +1039,7 @@ impl PhoenixApp {
             return;
         }
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));
+        let text = if self.prefs.synced.flag("emoticons") { ui::settings::emoticons::convert(&text) } else { text };
         if let Some(id) = self.editing.take() {
             let fut = self.backend.edit_message(ch, id, text);
             cx.spawn(async move |this, cx| {
@@ -1159,6 +1160,10 @@ impl PhoenixApp {
     }
 
     pub fn member_color(&self, guild: Id, m: &Member) -> Option<u32> {
+        // Accessibility "Role colors": only "Show in names" (0) tints names.
+        if self.prefs.local.pick("roles", 0) != 0 {
+            return None;
+        }
         let roles = self.roles.get(&guild)?;
         roles
             .iter()
@@ -1295,6 +1300,7 @@ impl Render for PhoenixApp {
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
         crate::media::emoji::sync_motion(self.prefs.local.animate_emoji, window.is_window_active());
+        crate::ui::settings::effects::sync(&self.prefs);
         self.chat_sync_style();
         let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),

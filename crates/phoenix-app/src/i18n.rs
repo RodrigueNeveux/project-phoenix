@@ -128,7 +128,9 @@ pub fn clock<Tz: chrono::TimeZone>(dt: chrono::DateTime<Tz>) -> String
 where
     Tz::Offset: std::fmt::Display,
 {
-    if locale() == "en" { dt.format("%-I:%M %p").to_string() } else { dt.format("%H:%M").to_string() }
+    // Language > Time format (settings-proto appearance.timestamp_hour_cycle).
+    let h24 = crate::ui::settings::effects::hour24().unwrap_or(locale() != "en");
+    if h24 { dt.format("%H:%M").to_string() } else { dt.format("%-I:%M %p").to_string() }
 }
 
 /// "11/23/2026" / "23/11/2026".

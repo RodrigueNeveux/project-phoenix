@@ -927,7 +927,14 @@ fn message(
     }
     // A message that is only a gifv link (Tenor/Giphy) shows just the gif: the link
     // text is hidden (vanilla #discussion, real compare 20261123-161135).
-    let gif_only = matches!(msg.embeds.as_slice(), [e] if e.kind.as_deref() == Some("gifv") && e.url.as_deref() == Some(msg.content.trim()));
+    // Text & images settings (settings-proto text_and_images): render_embeds,
+    // inline_embed_media (image/gifv/video embeds) and render_reactions.
+    let show_embed = |e: &&crate::model::Embed| {
+        let sy = &app.prefs.synced;
+        let media = matches!(e.kind.as_deref(), Some("image" | "gifv" | "video"));
+        sy.flag("embeds") && (!media || sy.flag("media-links"))
+    };
+    let gif_only = matches!(msg.embeds.as_slice(), [e] if e.kind.as_deref() == Some("gifv") && e.url.as_deref() == Some(msg.content.trim()) && show_embed(&e));
     for (bi, b) in r.blocks.iter().enumerate().filter(|_| !gif_only) {
         let edited_here = msg.edited && last_text == Some(bi) && bi + 1 == n_blocks;
         match b {
@@ -955,7 +962,7 @@ fn message(
             content = content.child(attachment(a, cx));
         }
     }
-    for e in &msg.embeds {
+    for e in msg.embeds.iter().filter(show_embed) {
         content = content.child(embed(app, e));
     }
     // Forward: the snapshot sits inside the quote frame; reactions/threads stay outside.
@@ -966,7 +973,7 @@ fn message(
     if edited_after_embeds {
         content = content.child(div().h(z(20.)).flex().items_center().child(edited_marker(ts))); // timestamp_ 20px
     }
-    if !msg.reactions.is_empty() {
+    if !msg.reactions.is_empty() && app.prefs.synced.flag("reactions") {
         content = content.child(message_ext::reactions(app, entity, msg));
     }
     if let Some(t) = &msg.thread {
@@ -1810,7 +1817,8 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
         let original = e.url.clone().unwrap_or_else(|| m.url.clone());
         // gifv: play the animated gif rendition (GPUI animates GIF frames only while the
         // row is laid out, i.e. on screen in the virtual list, and the window is active).
-        let animated = (e.kind.as_deref() == Some("gifv"))
+        // Accessibility "Play GIFs when Discord is focused" (gif_auto_play): off = still frame.
+        let animated = (e.kind.as_deref() == Some("gifv") && crate::ui::settings::effects::gif_autoplay())
             .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url, size.0)))
             .flatten();
         let Some(src) = animated else {

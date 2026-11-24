@@ -104,7 +104,9 @@ fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {
         // anchor_: --text-link
         color = c(tok(idx::TEXT_LINK));
     }
-    let underline = style.has(Style::UNDERLINE).then(|| UnderlineStyle {
+    // Accessibility "Always underline links" (anchorUnderlineOnHover_ off).
+    let link_ul = style.has(Style::LINK) && crate::ui::settings::effects::underline_links();
+    let underline = (style.has(Style::UNDERLINE) || link_ul).then(|| UnderlineStyle {
         thickness: px(1.),
         color: Some(color),
         wavy: false,
@@ -137,7 +139,7 @@ pub fn rich_inline(inline: &Inline, revealed: &dyn Fn(usize) -> bool, base: Hsla
     let mut click_ranges = Vec::new();
     let mut click_targets = Vec::new();
     for s in &inline.spans {
-        let rev = s.spoiler.is_some_and(revealed);
+        let rev = s.spoiler.is_some_and(|i| crate::ui::settings::effects::spoilers_always() || revealed(i));
         runs.push(run_for(s.range.len(), s.style, rev, base));
         if let Some(sp) = s.spoiler
             && !rev

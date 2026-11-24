@@ -174,7 +174,7 @@ pub struct MediaState {
 impl Global for MediaState {}
 
 pub fn is_revealed(key: &SharedString, cx: &App) -> bool {
-    cx.try_global::<MediaState>().is_some_and(|s| s.revealed.contains(key))
+    crate::ui::settings::effects::spoilers_always() || cx.try_global::<MediaState>().is_some_and(|s| s.revealed.contains(key))
 }
 
 pub fn reveal(key: SharedString, cx: &mut App) {

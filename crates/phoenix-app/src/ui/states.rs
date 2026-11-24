@@ -247,7 +247,7 @@ pub fn fade_to(key: u64, on: bool, rest: gpui::Hsla, hover: gpui::Hsla, ms: u64,
 /// Tooltip enter zoom: the client's spring takes the card from ~0.95 to 1 in ~100ms
 /// (ref-cache tooltip-{header,rail}-appear.json: 43→45 / 140→148px wide), opacity 1.
 pub fn tip_zoom() -> gpui::Animation {
-    gpui::Animation::new(std::time::Duration::from_millis(100)).with_easing(ease_out)
+    gpui::Animation::new(crate::ui::settings::effects::motion(100)).with_easing(ease_out)
 }
 
 /// gpui has no CSS transform on divs, so the zoom scales the card's own metrics

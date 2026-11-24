@@ -50,7 +50,7 @@ pub fn frame(id: &'static str, on_cancel: Action, card: impl IntoElement) -> Any
                     // Discord: card fades in and grows from ~0.9 over ~200ms.
                     .with_animation(
                         id,
-                        Animation::new(Duration::from_millis(200)).with_easing(ease_out_quint()),
+                        Animation::new(crate::ui::settings::effects::motion(200)).with_easing(ease_out_quint()),
                         |d, t| d.opacity(t).mt(px(24. * (1. - t))),
                     ),
             )

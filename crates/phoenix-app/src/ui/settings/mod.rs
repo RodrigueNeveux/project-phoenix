@@ -13,6 +13,8 @@ mod boost;
 mod gift;
 mod pages;
 pub mod synced_map;
+pub mod effects;
+pub mod emoticons;
 pub(crate) mod profile_editor;
 pub mod collectible_picker;
 pub mod collectibles;

@@ -162,6 +162,21 @@ static THEME: AtomicU8 = AtomicU8::new(0);
 static ZOOM: AtomicU32 = AtomicU32::new(100);
 static FONT_PX: AtomicU32 = AtomicU32::new(16);
 static DENSITY: AtomicU8 = AtomicU8::new(Density::Cozy as u8);
+/// Accessibility "Saturation" percent (the client's `--saturation-factor`).
+static SATURATION: AtomicU32 = AtomicU32::new(100);
+
+/// Scale the HSL saturation of `0xRRGGBBAA` by the saturation preference.
+pub fn saturate(v: u32) -> u32 {
+    let f = SATURATION.load(Ordering::Relaxed);
+    if f >= 100 {
+        return v;
+    }
+    let mut h: Hsla = rgba(v).into();
+    h.s *= f as f32 / 100.;
+    let r: Rgba = h.into();
+    let ch = |x: f32| (x.clamp(0., 1.) * 255.).round() as u32;
+    (ch(r.r) << 24) | (ch(r.g) << 16) | (ch(r.b) << 8) | ch(r.a)
+}
 
 /// UI density (`html.density-compact|default|cozy`). Each one rebinds the
 /// semantic `--space-*` tokens to a different step of the raw scale.
@@ -221,6 +236,11 @@ pub mod space {
 /// resolved colours or measured heights know to rebuild them.
 static STYLE_GEN: AtomicU32 = AtomicU32::new(0);
 
+/// Invalidate cached renders (a setting that changes rendered text changed).
+pub fn bump_style_generation() {
+    STYLE_GEN.fetch_add(1, Ordering::Relaxed);
+}
+
 /// Current style generation (see [`STYLE_GEN`]).
 pub fn style_generation() -> u32 {
     STYLE_GEN.load(Ordering::Relaxed)
@@ -242,7 +262,7 @@ pub fn resolve(hex: u32) -> u32 {
         if let Some(v) = crate::ui::profile_theme::lookup((hex & 0xFFFF) as usize) {
             return v;
         }
-        generated::THEMES[THEME.load(Ordering::Relaxed) as usize][(hex & 0xFFFF) as usize]
+        saturate(generated::THEMES[THEME.load(Ordering::Relaxed) as usize][(hex & 0xFFFF) as usize])
     } else {
         hex
     }
@@ -279,6 +299,10 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
     let pz = ZOOM.swap(prefs.local.zoom.clamp(50, 200), Ordering::Relaxed);
     let pf = FONT_PX.swap(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
     let pd = DENSITY.swap(prefs.local.density as u8, Ordering::Relaxed);
+    let ps = SATURATION.swap(prefs.local.saturation.min(100), Ordering::Relaxed);
+    if ps != prefs.local.saturation.min(100) {
+        STYLE_GEN.fetch_add(1, Ordering::Relaxed);
+    }
     // The locale too: messages rendered before the synced settings arrived kept English
     // times and day dividers ("November 13, 2026") in the French UI.
     static LOCALE: std::sync::Mutex<&str> = std::sync::Mutex::new("");

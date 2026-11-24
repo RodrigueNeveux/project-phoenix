@@ -121,7 +121,7 @@ pub fn format_timestamp(ts: i64, style: char) -> Option<String> {
     let dt = Local.timestamp_opt(ts, 0).single()?;
     Some(match style {
         't' => crate::i18n::clock(dt),
-        'T' => if crate::i18n::locale() == "en" { dt.format("%-I:%M:%S %p").to_string() } else { dt.format("%H:%M:%S").to_string() },
+        'T' => if crate::ui::settings::effects::hour24().unwrap_or(crate::i18n::locale() != "en") { dt.format("%H:%M:%S").to_string() } else { dt.format("%-I:%M:%S %p").to_string() },
         'd' => crate::i18n::short_date(dt),
         'D' => crate::i18n::long_date(dt.date_naive()),
         'F' => crate::i18n::full_datetime(dt),
