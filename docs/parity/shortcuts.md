@@ -69,7 +69,7 @@ We have not checked how the client itself enters message focus (CDP can't send r
 | Ctrl+Shift+H, F1 | Get help (opens support site) | ✅ |
 | Ctrl+F, Ctrl+Shift+F | Search | ✅ |
 | Shift+F10 | Open context menu (focused message) | ✅ |
-| Ctrl+/ (also Ctrl+Shift+/) | Keyboard combos modal (lists the shortcuts above; Esc closes it) | ✅ functionally. The visual still needs a dump: ❌ |
+| Ctrl+/ (also Ctrl+Shift+/) | Keyboard combos modal (Esc closes it) | ✅. Rebuilt from the live modal (ref-cache `shortcuts-modal-default.json`). Card measures 950x672 in both at 1536x840, keybind cards are 180x81 with a 24px gap, and caps are 23px high. Missing: the Discord Revolution arrows decoration (Discord's SVG assets, not copied), real SVG arrow caps (we use ↑↓←→ glyphs), and the grid's per-column max-content widths (we wrap) |
 | H H Right N K | Easter egg | ❌ |
 | Ctrl+Alt+Shift+W | Lo-fi Wumpus | ❌ |
 

@@ -282,6 +282,11 @@ fn with<R>(f: impl FnOnce(&mut State) -> R) -> R {
     STATE.with(|s| f(&mut s.borrow_mut()))
 }
 
+/// Opens the Ctrl+/ modal (offscreen renders).
+pub fn open_help() {
+    with(|s| s.help_open = true);
+}
+
 pub fn help_open() -> bool {
     with(|s| s.help_open)
 }
@@ -489,9 +494,29 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
 }
 
 // ------------------------------------------------------------ Ctrl+/ modal
+//
+// Layout and values from the live modal (ref-cache shortcuts-modal-default.json,
+// `keyboardShortcutsModal_jCEr5v` and friends in the 2026 CSS).
 
-/// "ctrl-shift-u" -> ["CTRL", "MAJ", "U"] (the client's key caps, localized).
+/// Focused-message combos (handled per keystroke in `message.rs`, not keymap bindings).
+pub const MESSAGE_SHORTCUTS: &[(&str, &str)] = &[
+    ("e", "shortcuts.msg.edit"),
+    ("backspace", "shortcuts.msg.delete"),
+    ("p", "shortcuts.msg.pin"),
+    ("+", "shortcuts.msg.react"),
+    ("r", "shortcuts.msg.reply"),
+    ("f", "shortcuts.msg.forward"),
+    ("s", "shortcuts.msg.speak"),
+    ("ctrl-c", "shortcuts.msg.copy"),
+    ("alt-enter", "shortcuts.msg.unread"),
+    ("escape", "shortcuts.msg.composer"),
+];
+
+/// "ctrl-shift-u" -> ["CTRL", "MAJ", "U"] (combo_ text-transform: uppercase; localized caps).
 pub fn key_caps(keys: &str) -> Vec<SharedString> {
+    if keys == "+" {
+        return vec!["+".into()];
+    }
     keys.split('-')
         .map(|k| match k {
             "ctrl" => crate::t!("shortcuts.key.ctrl"),
@@ -500,6 +525,8 @@ pub fn key_caps(keys: &str) -> Vec<SharedString> {
             "escape" => crate::t!("shortcuts.key.escape"),
             "pageup" => crate::t!("shortcuts.key.pageup"),
             "pagedown" => crate::t!("shortcuts.key.pagedown"),
+            "backspace" => crate::t!("shortcuts.key.backspace"),
+            "enter" => crate::t!("shortcuts.key.enter"),
             "up" => "↑".into(),
             "down" => "↓".into(),
             "left" => "←".into(),
@@ -509,23 +536,137 @@ pub fn key_caps(keys: &str) -> Vec<SharedString> {
         .collect()
 }
 
-fn cap(text: SharedString) -> impl IntoElement {
+/// `combo_dMUH0f`: 23px row of `key_dMUH0f` caps, 3px apart.
+fn combo(keys: &str) -> gpui::Div {
+    let caps = key_caps(keys);
+    let n = caps.len();
     div()
-        .px(z(6.))
-        .h(z(22.))
-        .min_w(z(22.))
         .flex()
-        .items_center()
-        .justify_center()
-        .rounded(z(4.))
-        .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
-        .text_size(z(12.))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(c(tok(idx::TEXT_DEFAULT)))
-        .child(text)
+        .h(z(23.)) // combo_ height 23px
+        .children(caps.into_iter().enumerate().map(move |(i, k)| {
+            div()
+                .h(z(23.)) // key_ height 23px
+                .min_w(z(14.)) // key_ min-width 14px
+                .pt(z(3.)) // key_ padding 3px 6px 4px
+                .px(z(6.))
+                .pb(z(4.))
+                .when(i + 1 < n, |d| d.mr(z(3.))) // key_:not(:last-child) margin-inline-end 3px
+                .rounded(z(4.)) // key_ border-radius 4px
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE))) // key_ border --border-subtle
+                .bg(c(tok(idx::BACKGROUND_MOD_MUTED))) // key_ --background-mod-muted
+                .text_size(z(12.)) // combo_ 12px / 12px semibold
+                .line_height(z(12.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))) // key_ color --interactive-text-active
+                .flex()
+                .justify_center()
+                .child(k)
+        }))
 }
 
-pub fn render_help(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
+/// `keybindGroup_jCEr5v`: label then the combos (each `keybindKey_` 8px below).
+fn keybind_card(label: SharedString, keys: &[&str]) -> impl IntoElement {
+    let mut combos = div().flex().flex_wrap().mb(z(8.)); // keybindKey_ margin-bottom 8px
+    for (i, k) in keys.iter().enumerate() {
+        combos = combos.child(combo(k).when(i > 0, |d| d.ml(z(8.)))); // combo + combo margin-left 8px
+    }
+    div()
+        .min_w(z(180.)) // grid minmax(180px, max-content)
+        .p(z(12.)) // keybindGroup_ padding 12px
+        .rounded(z(8.)) // keybindGroup_ border-radius 8px
+        .bg(c(tok(idx::BACKGROUND_MOD_MUTED))) // --background-mod-muted
+        .flex()
+        .flex_col()
+        .gap(z(8.)) // keybindGroup_ gap 8px
+        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(label)) // body-sm/normal
+        .child(combos)
+}
+
+/// `keyboardShortcutSection_jCEr5v`: heading, optional description, wrapped cards.
+fn section(title: SharedString, desc: Option<SharedString>, cards: Vec<gpui::AnyElement>) -> impl IntoElement {
+    div()
+        .ml(z(16.)) // margin-inline-start 16px
+        .px(z(8.)) // padding 24px 8px
+        .py(z(24.))
+        .border_b_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE))) // border-bottom 1px --border-subtle
+        .child(
+            div()
+                .text_size(z(20.)) // heading-lg/semibold 20/24
+                .line_height(z(24.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(title),
+        )
+        .when_some(desc, |d, t| {
+            d.child(div().mt(z(8.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(t))
+        })
+        // keyboardShortcutListGroup_: margin-top 8, padding 8px 0, gap 24 (grid auto-fill -> wrap).
+        .child(div().mt(z(8.)).py(z(8.)).flex().flex_wrap().gap(z(24.)).children(cards))
+}
+
+/// The modal's card (without backdrop), sized for a `vp` viewport.
+pub fn help_card(vp: gpui::Size<Pixels>) -> gpui::AnyElement {
+    // keyboardShortcutsModal_: width 80vw, min 800, max 950; max-height 80vh.
+    let w = (vp.width * 0.8).clamp(px(800.), px(950.));
+    let mut list = div().id("shortcuts-list").flex_1().min_h_0().overflow_y_scroll().pr(z(16.));
+    let msg_cards = MESSAGE_SHORTCUTS.iter().map(|(k, l)| keybind_card(crate::t!(l), &[k]).into_any_element()).collect();
+    list = list.child(section(crate::t!("shortcuts.group.messages"), Some(crate::t!("shortcuts.group.messages_desc")), msg_cards));
+    for g in [Group::Navigation, Group::Voice, Group::Chat, Group::Misc] {
+        let cards = SHORTCUTS.iter().filter(|s| s.group == g).map(|s| keybind_card(crate::t!(s.label), s.keys).into_any_element()).collect();
+        list = list.child(section(g.title(), None, cards));
+    }
+    div()
+        .rounded(z(12.)) // root_ border-radius 12px, 1px border, 0 4px 8px rgba(0,0,0,.16)
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow(vec![gpui::BoxShadow {
+            color: gpui::hsla(0., 0., 0., 0.16),
+            offset: gpui::point(px(0.), px(4.)),
+            blur_radius: px(8.),
+            spread_radius: px(0.),
+            inset: false,
+        }])
+        .child(
+            div()
+                .w(w)
+                .max_h(vp.height * 0.8)
+                .rounded(z(4.)) // keyboardShortcutsModal_ border-radius 4px
+                .overflow_hidden()
+                .bg(c(tok(idx::BACKGROUND_BASE_LOWER))) // --background-base-lower
+                .flex()
+                .flex_col()
+                .child(
+                    // modalTitle_: 26/34, --text-strong, padding 20px 40px 0, margin-bottom 5px.
+                    div()
+                        .flex()
+                        .items_center()
+                        .pt(z(20.))
+                        .px(z(40.))
+                        .mb(z(5.))
+                        .text_size(z(26.))
+                        .line_height(z(34.))
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .child(crate::t!("shortcuts.title"))
+                        .child(combo("ctrl-/").ml(z(20.))),
+                )
+                .child(
+                    // modalSubtitle_: 16/20, padding 0 40px 20px.
+                    div()
+                        .px(z(40.))
+                        .pb(z(20.))
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .text_color(c(tok(idx::TEXT_DEFAULT)))
+                        .child(crate::t!("shortcuts.subtitle")),
+                )
+                .child(list),
+        )
+        .into_any_element()
+}
+
+pub fn render_help(_app: &PhoenixApp, window: &mut gpui::Window, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
     if !help_open() {
         return None;
     }
@@ -534,54 +675,7 @@ pub fn render_help(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
         with(|s| s.help_open = false);
         let _ = entity.update(cx, |_, cx| cx.notify());
     });
-    let mut body = div().id("shortcuts-list").flex().flex_col().gap(z(4.)).max_h(px(560.)).overflow_y_scroll();
-    for g in [Group::Navigation, Group::Voice, Group::Chat, Group::Misc] {
-        body = body.child(
-            div().pt(z(16.)).pb(z(4.)).text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(tok(idx::TEXT_MUTED))).child(g.title()),
-        );
-        for s in SHORTCUTS.iter().filter(|s| s.group == g) {
-            let mut keys = div().flex().gap(z(4.)).items_center();
-            for (i, k) in s.keys.iter().enumerate() {
-                if i > 0 {
-                    keys = keys.child(div().w(z(8.)));
-                }
-                keys = keys.children(key_caps(k).into_iter().map(cap));
-            }
-            body = body.child(
-                div()
-                    .flex()
-                    .justify_between()
-                    .items_center()
-                    .py(z(6.))
-                    .text_size(z(14.))
-                    .text_color(c(tok(idx::TEXT_DEFAULT)))
-                    .child(crate::t!(s.label))
-                    .child(keys),
-            );
-        }
-    }
-    let card = div()
-        .w(px(720.))
-        .p(z(24.))
-        .rounded(z(8.))
-        .bg(c(tok(idx::MODAL_BACKGROUND)))
-        .border_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .flex()
-                .gap(z(8.))
-                .items_center()
-                .text_size(z(20.))
-                .font_weight(FontWeight::BOLD)
-                .text_color(c(tok(idx::TEXT_STRONG)))
-                .child(crate::t!("shortcuts.title"))
-                .children(key_caps("ctrl-/").into_iter().map(cap)),
-        )
-        .child(body);
-    Some(ui::modal::frame("shortcuts-modal", close, card))
+    Some(ui::modal::frame("shortcuts-modal", close, help_card(window.viewport_size())))
 }
 
 #[cfg(test)]

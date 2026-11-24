@@ -1310,6 +1310,6 @@ impl Render for PhoenixApp {
             .children(ui::components::overlays(self, window, cx))
             .children(ui::voice_panel::overlays(self, window, cx))
             .children(crate::actions::overlays(self, window, cx))
-            .children(crate::shortcuts::render_help(self, cx))
+            .children(crate::shortcuts::render_help(self, window, cx))
     }
 }
