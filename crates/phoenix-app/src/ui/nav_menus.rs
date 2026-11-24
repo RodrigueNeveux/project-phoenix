@@ -583,7 +583,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    fn set_nav_mute(&mut self, guild: Option<Id>, channel: Option<Id>, muted: bool, secs: Option<u32>, cx: &mut Context<Self>) {
+    pub(crate) fn set_nav_mute(&mut self, guild: Option<Id>, channel: Option<Id>, muted: bool, secs: Option<u32>, cx: &mut Context<Self>) {
         match channel {
             Some(id) => {
                 if let Some(ch) = self.channels.get_mut(&id) {

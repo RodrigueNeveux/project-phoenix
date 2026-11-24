@@ -52,6 +52,8 @@ fn report_path(path: &str) {
                 if let Some(label) = label {
                     r.toggle(key, &label);
                 }
+            } else if tok == "=ok" {
+                r.submitted(Ok(()));
             } else if tok == "<" {
                 r.back();
             } else if tok == ">" {

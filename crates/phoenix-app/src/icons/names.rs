@@ -174,4 +174,5 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("forum/book-check", &["BookCheckIcon"]),
     ("close-small", &["XSmallIcon"]),
     ("maximize", &["MaximizeIcon"]),
+    ("plus-medium", &["PlusMediumIcon"]),
 ];

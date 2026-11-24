@@ -176,7 +176,7 @@ fn act_owned(e: &gpui::Entity<PhoenixApp>, label: gpui::SharedString, f: Act) ->
 }
 
 impl PhoenixApp {
-    fn relationship_action(&mut self, user: Id, action: RelAction, cx: &mut Context<Self>) {
+    pub(crate) fn relationship_action(&mut self, user: Id, action: RelAction, cx: &mut Context<Self>) {
         self.nav_request(NavRequest::Relationship { user, action }, cx, |_, _, _| {});
         cx.notify();
     }

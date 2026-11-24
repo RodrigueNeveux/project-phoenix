@@ -148,9 +148,10 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         }
         Some(Modal::Forward(f)) => {
             if f.search.is_none() {
-                f.search = Some(mk(crate::t!("fwd.search"), "", true));
+                let ph = if f.favorites { crate::t!("fav.add_search") } else { crate::t!("fwd.search") };
+                f.search = Some(mk(ph, "", true));
             }
-            if f.comment.is_none() {
+            if f.comment.is_none() && !f.favorites {
                 f.comment = Some(mk(crate::t!("fwd.comment"), "", false));
             }
         }

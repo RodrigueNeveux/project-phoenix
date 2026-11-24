@@ -10,6 +10,14 @@ use crate::{
     ui::controls::{BtnKind, button},
 };
 
+const SUCCESS_ART: &str = "https://cdn.discordapp.com/assets/content/9d1441338ce9090a7c1e9fab8fe34e58daa2ab7df4ac84fa280c308869d8f27b.svg";
+
+const MORE_ELEMENTS: [&str; 7] = ["ignore_users", "block_users", "mute_users", "delete_message", "leave_guild", "deauthorize_app", "share_with_parents"];
+
+thread_local! {
+    static CONTENT_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+}
+
 pub struct Report {
     pub target: ReportTarget,
     pub menu: Option<Box<ReportMenu>>,
@@ -21,11 +29,12 @@ pub struct Report {
     pub sending: bool,
     pub auto_sent: Option<u64>,
     pub viewport: Option<Size<Pixels>>,
+    pub done: Vec<&'static str>,
 }
 
 impl Report {
     pub fn new(target: ReportTarget) -> Self {
-        Self { target, menu: None, current: 0, history: Vec::new(), picks: Vec::new(), error: None, load_error: None, sending: false, auto_sent: None, viewport: None }
+        Self { target, menu: None, current: 0, history: Vec::new(), picks: Vec::new(), error: None, load_error: None, sending: false, auto_sent: None, viewport: None, done: Vec::new() }
     }
 
     pub fn current(&self) -> Option<&ReportNode> {
@@ -435,6 +444,148 @@ fn links(node: &ReportNode, first: bool) -> Vec<AnyElement> {
     out
 }
 
+fn reported_user(app: &PhoenixApp, target: &ReportTarget) -> Option<(Id, Option<Id>)> {
+    match *target {
+        ReportTarget::Message { channel, message } => {
+            let ch = Id(channel.0);
+            let m = app.messages.get(&ch)?.msgs.iter().find(|m| m.id == Id(message.0))?;
+            Some((m.author, Some(ch)))
+        }
+        ReportTarget::User { user, .. } => Some((Id(user.0), None)),
+        ReportTarget::Guild { .. } => None,
+    }
+}
+
+fn user_name(app: &PhoenixApp, user: Id, channel: Option<Id>) -> String {
+    let guild = channel.and_then(|c| app.channels.get(&c)).and_then(|c| c.guild).or(app.selected_guild);
+    app.member_nick_in(guild, user)
+        .or_else(|| app.users.get(&user).map(|u| if u.display_name.is_empty() { u.name.clone() } else { u.display_name.clone() }))
+        .map(|s| s.to_string())
+        .unwrap_or_default()
+}
+
+fn dm_with(app: &PhoenixApp, user: Id) -> Option<Id> {
+    app.dms.iter().copied().find(|d| app.channels.get(d).is_some_and(|c| c.guild.is_none() && c.voice_users.len() == 1 && c.voice_users[0] == user))
+}
+
+fn mark_done(key: &'static str) {
+    with_modal(|m| {
+        if let Some(Modal::Report(r)) = m
+            && !r.done.contains(&key)
+        {
+            r.done.push(key);
+        }
+    });
+}
+
+struct MoreRow {
+    key: &'static str,
+    title: String,
+    description: SharedString,
+    label: SharedString,
+    kind: BtnKind,
+    disabled: bool,
+}
+
+fn action_row(row: MoreRow, last: bool, cx: &mut Context<PhoenixApp>, on: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static) -> gpui::Div {
+    let key = row.key;
+    let b = crate::ui::controls::button_sm(gpui::ElementId::Name(format!("report-more-{key}").into()), row.label, row.kind).flex_none();
+    let b = if row.disabled {
+        b.opacity(0.5).cursor_default()
+    } else {
+        b.on_click(cx.listener(move |a, _, _, cx| {
+            mark_done(key);
+            on(a, cx);
+            cx.notify();
+        }))
+    };
+    div()
+        .mx(z(16.))
+        .py(z(16.))
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(z(16.))
+        .when(!last, |d| d.border_b_1().border_color(c(tok(idx::BORDER_MUTED))))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(z(2.))
+                .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(row.title))
+                .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_SUBTLE))).child(row.description)),
+        )
+        .child(b)
+}
+
+fn more_you_can_do(app: &PhoenixApp, r: &Report, n: &ReportNode, cx: &mut Context<PhoenixApp>) -> Option<gpui::Div> {
+    if !MORE_ELEMENTS.iter().any(|k| n.has(k)) {
+        return None;
+    }
+    let (user, channel) = reported_user(app, &r.target)?;
+    let msg_target = matches!(r.target, ReportTarget::Message { .. });
+    let name = user_name(app, user, channel);
+    let blocked = app.nav.is_blocked(user);
+    let ignored = app.nav.is_ignored(user) || crate::actions::user::is_ignored(user);
+    let done = |k: &str| r.done.iter().any(|d| *d == k);
+    let ignore = n.has("ignore_users");
+    let mut rows: Vec<MoreRow> = Vec::new();
+    if ignore {
+        let off = ignored || blocked || done("ignore");
+        rows.push(MoreRow { key: "ignore", title: crate::t!("report.more_ignore", username = name).to_string(), description: crate::t!("report.more_ignore_desc"), label: crate::t!(if off { "report.ignored" } else { "report.ignore" }), kind: BtnKind::Secondary, disabled: off });
+    }
+    if n.has("block_users") {
+        let off = blocked || done("block");
+        rows.push(MoreRow { key: "block", title: crate::t!("report.more_block", username = name).to_string(), description: crate::t!("report.more_block_desc"), label: crate::t!(if off { "report.blocked" } else { "report.block" }), kind: BtnKind::Critical, disabled: off });
+    }
+    let dm = dm_with(app, user);
+    if !ignore && n.has("mute_users") {
+        let off = done("mute") || dm.and_then(|d| app.channels.get(&d)).is_some_and(|c| c.muted);
+        rows.push(MoreRow { key: "mute", title: crate::t!("report.more_mute", username = name).to_string(), description: crate::t!("report.more_mute_desc"), label: crate::t!(if off { "report.muted" } else { "report.mute" }), kind: BtnKind::Secondary, disabled: off });
+    }
+    if msg_target && n.has("delete_message") {
+        let guild = channel.and_then(|c| app.channels.get(&c)).and_then(|c| c.guild);
+        let can = guild.is_some_and(|g| crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 13));
+        if can {
+            let off = done("delete");
+            rows.push(MoreRow { key: "delete", title: crate::t!("report.more_delete").to_string(), description: crate::t!("report.more_delete_desc"), label: crate::t!(if off { "report.deleted" } else { "report.delete" }), kind: BtnKind::Critical, disabled: off });
+        }
+    }
+    if rows.is_empty() {
+        return None;
+    }
+    let target = r.target;
+    let k = rows.len();
+    let mut list = div().rounded(z(12.)).border_1().border_color(c(tok(idx::BORDER_SUBTLE))).bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)));
+    for (i, row) in rows.into_iter().enumerate() {
+        let key = row.key;
+        list = list.child(action_row(row, i + 1 == k, cx, move |a, cx| match key {
+            "ignore" => a.toggle_ignore(user, cx),
+            "block" => a.relationship_action(user, crate::ui::home::data::RelAction::Block, cx),
+            "mute" => {
+                if let Some(d) = dm {
+                    a.set_nav_mute(None, Some(d), true, None, cx);
+                }
+            }
+            _ => {
+                if let ReportTarget::Message { message, .. } = target {
+                    a.delete_message(Id(message.0), cx);
+                }
+            }
+        }));
+    }
+    Some(
+        div()
+            .mb(z(8.))
+            .flex()
+            .flex_col()
+            .child(div().mb(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("report.more")))
+            .child(list),
+    )
+}
+
 pub fn render(app: &PhoenixApp, r: &Report, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let vp = r.viewport.unwrap_or(Size { width: px(1536.), height: px(840.) });
     let width = z(440.).min(vp.width);
@@ -461,7 +612,15 @@ pub fn render(app: &PhoenixApp, r: &Report, cx: &mut Context<PhoenixApp>) -> Any
                 sub = sub.child(div().mt(z(8.)).child(notice(info.into(), false)));
             }
             if success {
-                body = body.child(sub);
+                body = body.child(
+                    div()
+                        .mb(z(8.))
+                        .flex()
+                        .flex_col()
+                        .items_start()
+                        .child(div().w_full().pt(z(24.)).mb(z(16.)).flex().justify_center().child(gpui::img(SUCCESS_ART).w(z(288.)).h(z(162.)).flex_none()))
+                        .child(sub),
+                );
             } else {
                 top = top.child(sub);
             }
@@ -514,6 +673,7 @@ pub fn render(app: &PhoenixApp, r: &Report, cx: &mut Context<PhoenixApp>) -> Any
                 }
                 body = body.child(col);
             }
+            body = body.children(more_you_can_do(app, r, n, cx));
             let has_links = n.links().any(|e| e.link_localized());
             if !n.children.is_empty() || has_links {
                 let k = n.children.len();
@@ -585,15 +745,28 @@ pub fn render(app: &PhoenixApp, r: &Report, cx: &mut Context<PhoenixApp>) -> Any
         }
         div().flex_none().p(z(24.)).bg(c(tok(idx::MODAL_FOOTER_BACKGROUND))).rounded_b(z(12.)).child(row)
     });
+    let scroll = CONTENT_SCROLL.with(|h| h.clone());
     let content = div()
-        .id("report-content")
         .flex_auto()
         .min_h_0()
-        .overflow_y_scroll()
-        .pt(z(24.))
-        .px(z(24.))
-        .when(!has_footer, |d| d.pb(z(24.)))
-        .child(body);
+        .relative()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .id("report-content")
+                .track_scroll(&scroll)
+                .flex_auto()
+                .min_h_0()
+                .overflow_y_scroll()
+                .when(!success, |d| d.pt(z(24.)))
+                .pl(z(24.))
+                .pr(z(16.))
+                .mr(z(8.))
+                .when(!has_footer, |d| d.pb(z(24.)))
+                .child(body),
+        )
+        .children(crate::ui::chat::scrollbar::thin_scrollbar_div(&scroll));
     let el = div()
         .relative()
         .w(width)

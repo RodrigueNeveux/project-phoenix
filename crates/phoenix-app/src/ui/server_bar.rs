@@ -262,6 +262,51 @@ fn track_hover(el: gpui::Stateful<gpui::Div>, key: u64, entity: &Entity<PhoenixA
 }
 
 pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
+    right_tooltip_with(text, None, item_h)
+}
+
+fn voice_row(app: &PhoenixApp, users: &[Id]) -> Option<gpui::Div> {
+    const MAX: usize = 6;
+    if users.is_empty() {
+        return None;
+    }
+    let shown = if users.len() <= MAX { users.len() } else { MAX - 1 };
+    let more = users.len() - shown;
+    let tok = |i| c(crate::theme::tok(i));
+    use crate::theme::generated::idx;
+    Some(
+        div()
+            .mt(z(8.))
+            .flex()
+            .items_center()
+            .child(svg().path(crate::icons::path("speaker")).size(z(20.)).mr(z(8.)).flex_none().text_color(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+            .children(users.iter().take(shown).enumerate().map(|(k, u)| {
+                let last = k + 1 == shown && more == 0;
+                div().flex_none().size(z(24.)).when(!last, |d| d.mr(z(-6.))).child(crate::ui::avatar(app.users.get(u), 24.))
+            }))
+            .when(more > 0, |d| {
+                d.child(
+                    div()
+                        .flex_none()
+                        .h(z(24.))
+                        .min_w(z(24.))
+                        .px(z(8.))
+                        .rounded(z(12.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .bg(tok(idx::BACKGROUND_BASE_LOWEST))
+                        .text_color(tok(idx::TEXT_DEFAULT))
+                        .text_size(z(12.))
+                        .line_height(z(12.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .child(format!("+{more}")),
+                )
+            }),
+    )
+}
+
+fn right_tooltip_with(text: SharedString, extra: Option<gpui::Div>, item_h: f32) -> AnyElement {
     let card = div()
         .max_w(z(196.))
         .px(z(12.))
@@ -276,6 +321,7 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_NORMAL))
         .child(text)
+        .children(extra)
         .with_animation("rail-tip-zoom", crate::ui::states::tip_zoom(), |d, t| crate::ui::states::zoom_card_sized(d, t, 16., 20.));
     let mut pointer = div().flex().flex_col().justify_center().items_end().w(z(5.));
     for i in 0..9 {
@@ -495,7 +541,7 @@ fn favorites(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Option<AnyElement
                     )
                     .when(mentions > 0, |d| d.child(mention_badge(mentions))),
             )
-            .when(hover, |d| d.child(right_tooltip(crate::t!("fav.title"), ICON)))
+            .when(hover, |d| d.child(right_tooltip_with(crate::t!("fav.title"), voice_row(app, &crate::ui::favorites::voice_users(app)), ICON)))
             .into_any_element(),
     )
 }

@@ -45,6 +45,9 @@ fn page_content(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     if app.selected_guild.is_none() && app.nav.home == HomeView::Nitro {
         return nitro::render(app, window, cx);
     }
+    if app.favorites_view && app.selected_channel.is_none() {
+        return crate::ui::favorites::empty_page(cx);
+    }
     if app.selected_guild.is_none() && app.nav.home != HomeView::Dm {
         friends::render(app, window, cx).into_any_element()
     } else {

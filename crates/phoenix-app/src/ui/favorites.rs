@@ -1,4 +1,4 @@
-use gpui::{Context, SharedString};
+use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
 use phoenix_api::rest::favorites::{Favorites, Known, Row, snowflake_at};
 
 use crate::{
@@ -8,6 +8,85 @@ use crate::{
 };
 
 pub const GUILD: Id = Id(373);
+
+const EMPTY_ART: &str = "https://cdn.discordapp.com/assets/content/88fc1694d1f36c93bf35b9cdc7dda25f1064d8205bfa103d62fd6cbf7fe636f7.png";
+
+pub fn empty_page(cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::theme::{c, generated::idx, tok, z};
+    let button = div()
+        .id("fav-empty-add")
+        .h(z(40.))
+        .px(z(16.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(z(8.))
+        .cursor_pointer()
+        .bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT)))
+        .hover(|s| s.bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_HOVER))))
+        .active(|s| s.bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_ACTIVE))))
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::CONTROL_PRIMARY_TEXT_DEFAULT)))
+        .on_click(cx.listener(|_, _, _, cx| {
+            open_add_modal();
+            cx.notify();
+        }))
+        .child(gpui::svg().path(crate::icons::path("plus-medium")).size(z(18.)).flex_none().text_color(c(tok(idx::CONTROL_PRIMARY_TEXT_DEFAULT))))
+        .child(crate::t!("fav.empty_add"));
+    div()
+        .flex_1()
+        .min_w_0()
+        .h_full()
+        .relative()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+        .border_t_1()
+        .border_color(c(tok(idx::APP_FRAME_BORDER)))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .w_full()
+                .max_w(z(440.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .gap(z(16.))
+                .child(gpui::img(EMPTY_ART).w(z(197.)).h(z(107.)).flex_none())
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_center()
+                        .child(
+                            div()
+                                .max_w(z(321.))
+                                .text_center()
+                                .text_size(z(24.))
+                                .line_height(z(32.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                                .child(crate::t!("fav.empty_title")),
+                        )
+                        .child(
+                            div()
+                                .mt(z(8.))
+                                .max_w(z(321.))
+                                .text_center()
+                                .text_size(z(16.))
+                                .line_height(z(20.))
+                                .text_color(c(tok(idx::TEXT_MUTED)))
+                                .child(crate::t!("fav.empty_note")),
+                        ),
+                )
+                .child(button),
+        )
+        .into_any_element()
+}
 
 pub fn data(app: &PhoenixApp) -> &Favorites {
     &app.prefs.synced.favorites
@@ -70,6 +149,20 @@ fn known(app: &PhoenixApp, id: u64) -> Known {
         Some(t) => Known::Visible { channel_type: t },
         None => Known::Missing,
     }
+}
+
+pub fn voice_users(app: &PhoenixApp) -> Vec<Id> {
+    let mut out = Vec::new();
+    for id in data(app).favorite_channels.keys() {
+        if let Some(ch) = app.channels.get(&Id(*id)).filter(|c| c.kind == ChannelKind::Voice) {
+            for u in &ch.voice_users {
+                if !out.contains(u) {
+                    out.push(*u);
+                }
+            }
+        }
+    }
+    out
 }
 
 pub fn badge(app: &PhoenixApp) -> (bool, u32) {
@@ -169,6 +262,24 @@ pub fn add(app: &mut PhoenixApp, channel: Id, parent: Option<u64>, cx: &mut Cont
         Ok(false) => {}
         Err(limit) => app.parity_toast(crate::t!("fav.limit", count = limit), cx),
     }
+}
+
+pub fn add_many(app: &mut PhoenixApp, channels: &[Id], cx: &mut Context<PhoenixApp>) {
+    let mut fav = data(app).clone();
+    fav.prune(|id| known(app, id));
+    let list: Vec<(u64, Option<u32>)> = channels.iter().map(|c| (c.0, channel_type(app, *c))).collect();
+    match fav.add(&list, None, app.backend.premium_tier2()) {
+        Ok(true) => {
+            save(app, fav, cx);
+            app.parity_toast(crate::t!("fav.added"), cx);
+        }
+        Ok(false) => {}
+        Err(limit) => app.parity_toast(crate::t!("fav.limit", count = limit), cx),
+    }
+}
+
+pub fn open_add_modal() {
+    crate::actions::open_modal(crate::ui::modals::Modal::Forward(crate::ui::modals::forward::Forward::favorites()), None);
 }
 
 pub fn add_to_new_category(app: &mut PhoenixApp, channel: Id, name: &str, cx: &mut Context<PhoenixApp>) {

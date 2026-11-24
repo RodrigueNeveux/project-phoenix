@@ -11,6 +11,7 @@ use crate::{
 };
 
 pub const MAX_DESTINATIONS: usize = 5;
+pub const MAX_FAVORITES: usize = 20;
 
 pub struct Forward {
     pub channel: Id,
@@ -19,15 +20,28 @@ pub struct Forward {
     pub comment: Option<Entity<InputState>>,
     pub picked: Vec<Id>,
     pub sending: bool,
+    pub favorites: bool,
 }
 
 impl Forward {
     pub fn new(channel: Id, msg: Id) -> Self {
-        Self { channel, msg, search: None, comment: None, picked: Vec::new(), sending: false }
+        Self { channel, msg, search: None, comment: None, picked: Vec::new(), sending: false, favorites: false }
+    }
+
+    pub fn favorites() -> Self {
+        Self { favorites: true, ..Self::new(Id(0), Id(0)) }
+    }
+
+    fn max(&self) -> usize {
+        if self.favorites { MAX_FAVORITES } else { MAX_DESTINATIONS }
     }
 }
 
 pub fn destinations(app: &PhoenixApp, q: &str) -> Vec<(Id, SharedString, Option<SharedString>)> {
+    destinations_of(app, q, false)
+}
+
+fn destinations_of(app: &PhoenixApp, q: &str, favorites: bool) -> Vec<(Id, SharedString, Option<SharedString>)> {
     let q = q.to_lowercase();
     let mut out = Vec::new();
     for d in &app.dms {
@@ -37,7 +51,12 @@ pub fn destinations(app: &PhoenixApp, q: &str) -> Vec<(Id, SharedString, Option<
     }
     for g in &app.guilds {
         for id in app.guild_channels.get(&g.id).into_iter().flatten() {
-            if let Some(ch) = app.channels.get(id).filter(|c| matches!(c.kind, ChannelKind::Text | ChannelKind::Announcement)) {
+            let kinds = |c: &&crate::model::Channel| match c.kind {
+                ChannelKind::Text | ChannelKind::Announcement => true,
+                ChannelKind::Voice | ChannelKind::Stage | ChannelKind::Forum => favorites,
+                _ => false,
+            };
+            if let Some(ch) = app.channels.get(id).filter(kinds).filter(|c| !favorites || !crate::ui::favorites::is_favorite(app, c.id)) {
                 out.push((*id, format!("#{}", ch.name).into(), Some(g.name.clone())));
             }
         }
@@ -49,9 +68,13 @@ pub fn destinations(app: &PhoenixApp, q: &str) -> Vec<(Id, SharedString, Option<
 }
 
 pub fn toggle(picked: &mut Vec<Id>, id: Id) {
+    toggle_max(picked, id, MAX_DESTINATIONS);
+}
+
+fn toggle_max(picked: &mut Vec<Id>, id: Id, max: usize) {
     if let Some(i) = picked.iter().position(|x| *x == id) {
         picked.remove(i);
-    } else if picked.len() < MAX_DESTINATIONS {
+    } else if picked.len() < max {
         picked.push(id);
     }
 }
@@ -59,9 +82,10 @@ pub fn toggle(picked: &mut Vec<Id>, id: Id) {
 pub fn render(app: &PhoenixApp, f: &Forward, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let q = f.search.as_ref().map(|s| s.read(cx).value().to_string()).unwrap_or_default();
     let mut list = div().id("fwd-list").h(z(320.)).overflow_y_scroll().flex().flex_col().gap(z(2.));
-    let dest = destinations(app, &q);
+    let dest = destinations_of(app, &q, f.favorites);
     if dest.is_empty() {
-        list = list.child(div().p(z(16.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(crate::t!("fwd.none")));
+        let none = if f.favorites { crate::t!("fav.add_none") } else { crate::t!("fwd.none") };
+        list = list.child(div().p(z(16.)).text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_MUTED))).child(none));
     }
     for (id, name, sub) in dest.into_iter().take(200) {
         let on = f.picked.contains(&id);
@@ -80,7 +104,8 @@ pub fn render(app: &PhoenixApp, f: &Forward, cx: &mut Context<PhoenixApp>) -> An
                 .on_click(cx.listener(move |_, _, _, cx| {
                     with_modal(|m| {
                         if let Some(Modal::Forward(f)) = m {
-                            toggle(&mut f.picked, id);
+                            let max = f.max();
+                            toggle_max(&mut f.picked, id, max);
                         }
                     });
                     cx.notify();
@@ -132,6 +157,23 @@ pub fn render(app: &PhoenixApp, f: &Forward, cx: &mut Context<PhoenixApp>) -> An
         body = body.child(input_box(cmt));
     }
     let can = !f.picked.is_empty() && !f.sending;
+    if f.favorites {
+        let label = if f.picked.len() >= 2 { crate::t!("fav.add_n", count = f.picked.len()) } else { crate::t!("fav.add_title") };
+        let add = button("fav-add-send", label, BtnKind::Primary)
+            .w_full()
+            .when(!can, |d| d.opacity(0.5).cursor_default())
+            .on_click(cx.listener(move |a, _, _, cx| {
+                let picked = with_modal(|m| match m {
+                    Some(Modal::Forward(f)) if f.favorites && !f.picked.is_empty() => Some(f.picked.clone()),
+                    _ => None,
+                });
+                let Some(picked) = picked else { return };
+                close_modal();
+                crate::ui::favorites::add_many(a, &picked, cx);
+                cx.notify();
+            }));
+        return card(480., crate::t!("fav.add_title"), None, body.into_any_element(), Some(add.into_any_element()), cx);
+    }
     let send = button("fwd-send", crate::t!("fwd.send"), BtnKind::Primary)
         .when(!can, |d| d.opacity(0.5).cursor_default())
         .on_click(cx.listener(move |a, _, _, cx| {
