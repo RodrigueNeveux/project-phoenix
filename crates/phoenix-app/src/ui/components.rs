@@ -820,9 +820,19 @@ fn hash(s: &str) -> u64 {
 
 // ------------------------------------------------------------------ polls
 
+/// "0 vote" / "2 votes" (wqBc7A, CLDR one: French 0 and 1).
+fn votes_text(n: u32) -> String {
+    let one = if crate::i18n::locale() == "fr" { n < 2 } else { n == 1 };
+    if one { crate::t!("poll.vote_one", n = n).to_string() } else { crate::t!("poll.votes", n = n).to_string() }
+}
+
+/// Poll countdown (fr live 2026-11-24 "59 min restantes"): dex68a "{n} j restant(s)",
+/// BWqf0c "{n} heure(s) restante(s)" (CLDR one), 3SLXAz "{n} min restantes" / "< 1 min restante".
 fn time_left(secs: i64) -> String {
+    let one = |n: i64| if crate::i18n::locale() == "fr" { n < 2 } else { n == 1 };
     match secs {
         s if s >= 86_400 => crate::t!("poll.days_left", n = s / 86_400).to_string(),
+        s if s >= 3_600 && one(s / 3_600) => crate::t!("poll.hours_left_one", n = s / 3_600).to_string(),
         s if s >= 3_600 => crate::t!("poll.hours_left", n = s / 3_600).to_string(),
         s if s >= 60 => crate::t!("poll.minutes_left", n = s / 60).to_string(),
         _ => crate::t!("poll.lt_minute").to_string(),
@@ -925,7 +935,7 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
                                     .text_size(px(12.))
                                     .line_height(px(16.))
                                     .font_weight(FontWeight::SEMIBOLD)
-                                    .child(if a.count == 1 { crate::t!("poll.vote_one").to_string() } else { crate::t!("poll.votes", n = a.count).to_string() }),
+                                    .child(votes_text(a.count)),
                             )
                             .child(div().text_size(px(16.)).line_height(px(20.)).font_weight(FontWeight::SEMIBOLD).child(format!("{pct}%"))),
                     )
@@ -935,7 +945,7 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
         answers = answers.child(row);
     }
 
-    let mut footer_text = if total == 1 { crate::t!("poll.vote_one").to_string() } else { crate::t!("poll.votes", n = total).to_string() };
+    let mut footer_text = votes_text(total);
     footer_text.push_str(" • ");
     footer_text.push_str(&if ended {
         crate::t!("poll.closed").to_string()
