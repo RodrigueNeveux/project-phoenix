@@ -903,6 +903,17 @@ fn main() -> anyhow::Result<()> {
             })
         })?;
         pump(&mut cx, wait * 1000 / 3);
+        // Scroll the emoji grid once it has laid out (opening resets the list).
+        if kind == "emoji"
+            && let Ok(row) = arg.parse::<usize>()
+        {
+            cx.update(|cx| {
+                if let Some(op) = cx.try_global::<phoenix_app::ui::pickers::Pickers>().and_then(|p| p.open.as_ref()) {
+                    op.list.scroll_to(gpui::ListOffset { item_ix: row, offset_in_item: px(0.) });
+                }
+            });
+            pump(&mut cx, 1000);
+        }
     }
     if std::env::var_os("PHX_DEBUG_GIF").is_some() {
         cx.update(|cx| {
