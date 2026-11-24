@@ -126,7 +126,7 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
                     .child(crate::t!("sys.see_threads")),
             )
         });
-    let cta = (msg.kind == MessageKind::Join).then(|| welcome_cta(app, entity, msg)).flatten();
+    let cta = if msg.kind == MessageKind::Join { welcome_cta(app, entity, msg) } else { None };
     let line: AnyElement = match cta {
         Some(b) => div().child(line).child(b).into_any_element(),
         None => line.into_any_element(),

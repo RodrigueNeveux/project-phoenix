@@ -510,11 +510,6 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
     )
 }
 
-/// 865429 `icons_` (100x60, relative): `wrapOne/Three_` translateY -70, `wrapTwo_` -80,
-/// each holding an absolute 100x130 `icon_` posed at its final keyframe (= the
-/// reduce-motion pose): one translate(-44,-6) rotate(-30deg), two (0,-6), three
-/// (44,-6) rotate(30deg). Painted one, three, two like the client's DOM order.
-/// The art comes from the local Discord cache ([`crate::icons::art`]); without it, one glyph.
 thread_local! {
     /// External drag over the chat: (entered, last move), to replay the fly-in.
     static DROP_DRAG: std::cell::Cell<Option<(std::time::Instant, std::time::Instant)>> = const { std::cell::Cell::new(None) };
@@ -579,6 +574,12 @@ fn text_pose(ms: f32, delay: f32, dur: f32) -> (f32, f32) {
     (k, -4. * (1. - k))
 }
 
+/// 865429 `icons_` (100x60, relative): `wrapOne/Three_` translateY -70, `wrapTwo_` -80,
+/// each holding an absolute 100x130 `icon_` posed at its final keyframe (= the
+/// reduce-motion pose): one translate(-44,-6) rotate(-30deg), two (0,-6), three
+/// (44,-6) rotate(30deg). Painted one, three, two like the client's DOM order.
+/// The art comes from the local Discord cache ([`crate::icons::art`]); without it, one glyph.
+///
 /// The three icons at `ms` into the fly-in (`None`: final pose).
 fn upload_icons_at(ms: Option<f32>) -> AnyElement {
     use crate::icons::art;
