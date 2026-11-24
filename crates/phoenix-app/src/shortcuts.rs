@@ -14,6 +14,8 @@ use gpui::{
     ParentElement, Pixels, SharedString, Stateful, Styled, actions, div, prelude::*, px,
 };
 
+pub mod message;
+
 use crate::{
     app::{CONTEXT, PhoenixApp},
     model::{ChannelKind, Id},
@@ -53,6 +55,9 @@ actions!(
         CreateGroupDm,
         CopyChannelLink,
         GetHelp,
+        MarkInboxRead,
+        CallDm,
+        JumpToCall,
     ]
 );
 
@@ -96,16 +101,19 @@ pub const SHORTCUTS: &[Shortcut] = &[
     sc!(Navigation, "shortcuts.history", ["alt-left", "alt-right"]),
     sc!(Navigation, "shortcuts.unread", ["alt-shift-up", "alt-shift-down"]),
     sc!(Navigation, "shortcuts.mentions", ["ctrl-shift-alt-up", "ctrl-shift-alt-down"]),
+    sc!(Navigation, "shortcuts.jump_call", ["ctrl-shift-alt-v"]),
     sc!(Navigation, "shortcuts.last_guild", ["ctrl-alt-right"]),
     sc!(Navigation, "shortcuts.switcher", ["ctrl-k"]),
     sc!(Navigation, "shortcuts.create_guild", ["ctrl-shift-n"]),
     sc!(Voice, "shortcuts.mute", ["ctrl-shift-m"]),
     sc!(Voice, "shortcuts.deafen", ["ctrl-shift-d"]),
+    sc!(Voice, "shortcuts.call", ["ctrl-'"]),
     sc!(Chat, "shortcuts.mark_server_read", ["shift-escape"]),
     sc!(Chat, "shortcuts.mark_channel_read", ["escape"]),
     sc!(Chat, "shortcuts.group_dm", ["ctrl-shift-t"]),
     sc!(Chat, "shortcuts.pins", ["ctrl-p"]),
     sc!(Chat, "shortcuts.inbox", ["ctrl-i"]),
+    sc!(Chat, "shortcuts.inbox_read", ["ctrl-shift-e"]),
     sc!(Chat, "shortcuts.members", ["ctrl-u"]),
     sc!(Chat, "shortcuts.emoji", ["ctrl-e"]),
     sc!(Chat, "shortcuts.gif", ["ctrl-g"]),
@@ -159,6 +167,10 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-shift-l", CopyChannelLink, ctx),
         KeyBinding::new("ctrl-shift-h", GetHelp, ctx),
         KeyBinding::new("f1", GetHelp, ctx),
+        KeyBinding::new("ctrl-shift-e", MarkInboxRead, ctx),
+        KeyBinding::new("ctrl-'", CallDm, ctx),
+        KeyBinding::new("ctrl-shift-'", CallDm, ctx),
+        KeyBinding::new("ctrl-shift-alt-v", JumpToCall, ctx),
     ]);
 }
 
@@ -248,6 +260,7 @@ impl History {
 #[derive(Default)]
 struct State {
     help_open: bool,
+    keys: Option<gpui::Subscription>,
     history: History,
     last_guild: Option<Id>,
 }
@@ -386,6 +399,18 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
     if let Some(g) = app.selected_guild {
         with(|s| s.last_guild = Some(g));
     }
+    if with(|s| s.keys.is_none()) {
+        let weak = cx.entity().downgrade();
+        let sub = cx.intercept_keystrokes(move |ev, window, cx| {
+            let Some(app) = weak.upgrade() else { return };
+            app.update(cx, |app, cx| {
+                if app.shortcut_keystroke(&ev.keystroke, window, cx) {
+                    cx.stop_propagation();
+                }
+            });
+        });
+        with(|s| s.keys = Some(sub));
+    }
     use ui::pickers::{EmojiTarget, Tab};
     root.on_action(cx.listener(|_, _: &ToggleHelp, _, cx| {
         with(|s| s.help_open = !s.help_open);
@@ -444,6 +469,9 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
     .on_action(cx.listener(|a, _: &CreateGuild, w, cx| a.open_join_server(w, cx)))
     .on_action(cx.listener(|a, _: &CreateGroupDm, _, cx| a.open_group_dm_picker(cx)))
     .on_action(cx.listener(|a, _: &CopyChannelLink, _, cx| a.copy_channel_link(cx)))
+    .on_action(cx.listener(|a, _: &MarkInboxRead, _, cx| a.mark_inbox_read(cx)))
+    .on_action(cx.listener(|a, _: &CallDm, _, cx| a.call_current_dm(cx)))
+    .on_action(cx.listener(|a, _: &JumpToCall, _, cx| a.jump_to_call(cx)))
     .on_action(cx.listener(|_, _: &GetHelp, _, cx| cx.open_url("https://support.discord.com")))
 }
 

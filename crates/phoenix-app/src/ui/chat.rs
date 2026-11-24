@@ -936,7 +936,7 @@ fn message(
             } else {
                 (usize::MAX, idx::MESSAGE_BACKGROUND_HOVER, None)
             };
-            let selected = editing || app.chat.menu.is_some_and(|m| m.msg == id);
+            let selected = editing || app.chat.menu.is_some_and(|m| m.msg == id) || crate::shortcuts::message::focused().is_some_and(|f| f.1 == id);
             let d = match (bar, selected) {
                 (_, true) => d.bg(tk(hover)),
                 (Some(_), false) => d.bg(tk(bg)),
