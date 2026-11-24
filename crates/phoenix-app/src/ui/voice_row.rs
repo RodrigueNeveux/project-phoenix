@@ -19,7 +19,6 @@ thread_local! {
     static ROWS: RefCell<HashMap<u64, Bounds<Pixels>>> = RefCell::new(HashMap::new());
 }
 
-/// Remember where the row for `user` was painted.
 thread_local! {
     /// Voice channels with "Hide Names" checked (voice channel context menu), saved in
     /// `$XDG_CONFIG_HOME/discord-phoenix/voice-hidden-names.txt` like the client keeps it
@@ -92,6 +91,7 @@ pub fn collapsed_list(app: &crate::app::PhoenixApp, users: &[Id]) -> AnyElement 
         .into_any_element()
 }
 
+/// Remember where the row for `user` was painted.
 pub fn record(user: Id, b: Bounds<Pixels>) {
     ROWS.with(|r| r.borrow_mut().insert(user.0, b));
 }
