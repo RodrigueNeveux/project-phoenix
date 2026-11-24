@@ -631,7 +631,7 @@ mod tests {
     #[test]
     fn mentions() {
         let i = inline("hi <@42> in <#7>, <@!99> @everyone");
-        assert_eq!(i.text, "hi @wumpus in #general, @Unknown User @everyone");
+        assert_eq!(i.text, "hi @wumpus in #general, @Unknown user @everyone");
         let m: Vec<_> = i.spans.iter().filter_map(|s| s.mention.clone()).collect();
         assert_eq!(
             m,
