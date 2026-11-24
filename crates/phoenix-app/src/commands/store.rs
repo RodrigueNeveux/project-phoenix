@@ -59,6 +59,9 @@ pub struct Media {
     pub url: String,
     pub description: Option<String>,
     pub spoiler: bool,
+    /// Unfurled size (`media.width` / `media.height`), 0 when unknown.
+    pub width: u32,
+    pub height: u32,
 }
 
 /// One message component (types from the Discord docs).
@@ -122,6 +125,8 @@ fn media(v: Option<&Value>) -> Option<Media> {
         url,
         description: s(v, "description"),
         spoiler: v.get("spoiler").and_then(Value::as_bool).unwrap_or(false),
+        width: m.get("width").and_then(Value::as_u64).unwrap_or(0) as u32,
+        height: m.get("height").and_then(Value::as_u64).unwrap_or(0) as u32,
     })
 }
 

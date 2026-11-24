@@ -499,6 +499,28 @@ fn hash(s: &str) -> u64 {
 fn gallery(items: &[Media], msg: Id, ix: usize) -> AnyElement {
     let n = items.len();
     let mut grid = div().flex().flex_wrap().gap(px(4.)).max_w(px(520.)).rounded(px(8.)).overflow_hidden();
+    // One item with a known size: the column width at the media's own ratio (a
+    // 750x225 banner was cropped by a fixed 520x300 box; the client drew it 566x170).
+    if let [m] = items
+        && m.width > 0
+        && m.height > 0
+    {
+        let url: SharedString = m.url.clone().into();
+        let original = url.clone();
+        return div()
+            .id(("gallery", (msg.0 << 8) ^ ((ix * 16) as u64)))
+            .w_full()
+            .max_w(px(m.width as f32))
+            .max_h(px(350.))
+            .aspect_ratio(m.width as f32 / m.height as f32)
+            .rounded(px(8.))
+            .overflow_hidden()
+            .cursor_pointer()
+            .on_click(move |_, _, cx: &mut App| cx.open_url(&original))
+            .child(img(url).size_full().object_fit(gpui::ObjectFit::Cover))
+            .when(m.spoiler, |d| d.opacity(0.3))
+            .into_any_element();
+    }
     for (i, m) in items.iter().take(10).enumerate() {
         let (w, h) = match n {
             1 => (520., 300.),
