@@ -239,6 +239,10 @@ struct Scroll {
     from_bottom: f32,
 }
 
+/// Activity cards shown by Discord: "author id ¦ game" records joined by ¶ (kept verbatim in the JSON output).
+const FEED_JS: &str = r"[...document.querySelectorAll('[class*=container_g7esM5]')].map(c=>{const m=(c.querySelector('img')?.src||'').match(/avatars\/(\d+)/);
+return (m?m[1]:'')+'¦'+(c.querySelector('[class*=lineClamp1]')?.textContent||'')}).join('¶')";
+
 const SCROLL_JS: &str = r"(()=>{const q=s=>document.querySelector(s);
 const ch=q('[class*=sidebarList_] [class*=scroller_]'),mb=q('[class*=membersWrap_] [class*=scroller_]')||q('[class*=membersWrap_] [class*=members_]'),
 ms=q('ol[data-list-id=chat-messages]')?.closest('[class*=scroller_]')||q('[class*=messagesWrapper_] > [class*=scroller_]');let top='',off=0,fb=0,ct='',co=0;
@@ -618,6 +622,39 @@ fn main() -> anyhow::Result<()> {
                 println!("profile {} effect={:?} frame={:?}", u.0, p.effect_sku, p.frame_sku);
             }
         });
+    }
+    // Same Activity cards as the Discord capture: the client fetched its feed at another
+    // time, so put the entries it shows (read-only DOM read: author id from the avatar
+    // URL + game) first, in its order. PHX_NO_FEED_SYNC=1 turns this off.
+    if std::env::var_os("PHX_NO_FEED_SYNC").is_none()
+        && let Some(cards) = cdp(FEED_JS)
+    {
+        let want: Vec<(Option<u64>, String)> = cards
+            .split('¶')
+            .filter(|c| !c.is_empty())
+            .map(|c| {
+                let (u, g) = c.split_once('¦').unwrap_or(("", c));
+                (u.parse().ok(), g.to_string())
+            })
+            .collect();
+        let mut feed = phoenix_app::ui::activity_traits::entries();
+        let mut front = Vec::new();
+        for (u, g) in &want {
+            let hit = feed.iter().position(|e| {
+                e.game.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(g)) && u.is_none_or(|u| e.author.0 == u)
+            });
+            if let Some(i) = hit {
+                front.push(feed.remove(i));
+            }
+        }
+        println!("feed sync: {}/{} Discord cards matched", front.len(), want.len());
+        front.extend(feed);
+        phoenix_app::ui::activity_traits::seed(front);
+        cx.update(|cx| v.update(cx, |a, cx| {
+            a.member_list.remeasure();
+            cx.notify();
+        }));
+        pump(&mut cx, 500);
     }
     eprintln!("[{:.1}s] waited", t0.elapsed().as_secs_f32());
     // Same rows as the user's Discord: replay its scroll offsets on our lists.
