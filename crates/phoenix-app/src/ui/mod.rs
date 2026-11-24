@@ -15,6 +15,7 @@ pub mod context_menu;
 pub mod controls;
 pub mod guild_menu;
 pub mod home;
+pub mod locale_inputs;
 pub mod invite;
 pub mod image_viewer;
 pub mod login;

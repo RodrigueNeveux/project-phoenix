@@ -231,6 +231,9 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
         .detach();
         SEARCH.with(|s| *s.borrow_mut() = Some((forum, input)));
     }
+    if let Some(i) = search_input(forum) {
+        crate::ui::locale_inputs::keep_placeholder(&i, "forum.search", window, cx);
+    }
     let v = app.parity.forums.entry(forum).or_default();
     if !v.loaded && !v.loading {
         app.load_forum(forum, true, cx);

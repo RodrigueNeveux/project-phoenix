@@ -36,19 +36,12 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
         app.nav.subs.push(sub);
         app.nav.friends_search = Some(input);
     }
-    // The inputs are created on the first home render, often before the synced settings
-    // set the locale: re-apply the placeholders when it changes ("Search" in the French UI).
-    thread_local! {
-        static PLACEHOLDER_LOCALE: std::cell::Cell<&'static str> = const { std::cell::Cell::new("") };
+    // Created on the first home render, often before the synced settings set the locale.
+    if let Some(i) = app.nav.friends_search.clone() {
+        crate::ui::locale_inputs::keep_placeholder(&i, "search.placeholder", window, cx);
     }
-    let locale = crate::i18n::locale();
-    if PLACEHOLDER_LOCALE.with(|l| l.replace(locale)) != locale {
-        if let Some(i) = app.nav.friends_search.clone() {
-            i.update(cx, |s, cx| s.set_placeholder(crate::t!("search.placeholder"), window, cx));
-        }
-        if let Some(i) = app.nav.add_friend_input.clone() {
-            i.update(cx, |s, cx| s.set_placeholder(crate::t!("friends.add_hint"), window, cx));
-        }
+    if let Some(i) = app.nav.add_friend_input.clone() {
+        crate::ui::locale_inputs::keep_placeholder(&i, "friends.add_hint", window, cx);
     }
     let body: AnyElement = match app.nav.friends_tab {
         FriendsTab::AddFriend => add_friend(app, cx).into_any_element(),
