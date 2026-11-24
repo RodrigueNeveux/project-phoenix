@@ -147,9 +147,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex()
         .flex_col()
         .bg(c(Palette::BG_SECONDARY))
-        .border_l_1()
-        .border_t_1()
-        .border_color(c(Palette::APP_FRAME_BORDER))
         .rounded_tl(z(m::FRAME_RADIUS))
         .overflow_hidden()
         .relative()
@@ -165,6 +162,17 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .when_some(app.selected_guild.filter(|_| app.nav.guild_menu), |d, g| {
             d.child(crate::ui::guild_menu::render(app, g, m::HEADER_H + 4., cx))
         })
+        // Frame border drawn over the content, not as layout border: the live rows sit
+        // at sidebarList_.x + 10 (the 1px border does not push them right).
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .border_l_1()
+                .border_t_1()
+                .border_color(c(Palette::APP_FRAME_BORDER))
+                .rounded_tl(z(m::FRAME_RADIUS)),
+        )
         .child(crate::ui::sidebar_resize::handle(cx))
 }
 
