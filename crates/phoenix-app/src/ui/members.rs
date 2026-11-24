@@ -699,7 +699,9 @@ pub fn member_row_in(
         // 42px without (avatar 32), both including its 1px block padding.
         .h(px(if two_lines { m::MEMBER_ROW_H } else { m::MEMBER_ROW_H - 2. }))
         .pl(z(10.))
-        .pr(z(8.))
+        // childContainer_J1Adu_ padding-right 8px, 32px with `nameplated_J1Adu_`
+        // (vanilla-members row at y 718): names ellipsize before the nameplate art.
+        .pr(z(if user.is_some_and(|u| u.nameplate.is_some()) { 32. } else { 8. }))
         .py(z(4.))
         .rounded(z(8.))
         .flex()
