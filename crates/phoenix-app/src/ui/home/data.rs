@@ -89,6 +89,8 @@ pub enum NavEvent {
     Extras(Vec<(Id, ChannelExtra)>),
     /// Guild banner hashes (`None` = no banner).
     Banners(Vec<(Id, Option<String>)>),
+    /// Guild folders / rail order changed from another client.
+    Folders(Vec<GuildFolder>),
 }
 
 #[derive(Clone, Debug)]
@@ -233,6 +235,7 @@ impl NavState {
                 }
             },
             NavEvent::ThreadUpsert(t) => self.upsert_thread(t),
+            NavEvent::Folders(f) => self.folders = f,
             NavEvent::ThreadDelete(id) => {
                 for v in self.threads.values_mut() {
                     v.retain(|t| t.id != id);
