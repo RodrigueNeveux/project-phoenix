@@ -129,6 +129,21 @@ pub fn svg_asset(path: &str) -> Option<&'static str> {
             r#"<path d="M3 3l18 18" stroke="black" stroke-width="2.4" stroke-linecap="round"/>"#,
             "</svg>"
         ),
+        "icons/call/fullscreen-exit.svg" => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">"#,
+            r#"<path d="M9 4v4a1 1 0 0 1-1 1H4M20 9h-4a1 1 0 0 1-1-1V4M15 20v-4a1 1 0 0 1 1-1h4M4 15h4a1 1 0 0 1 1 1v4"/>"#,
+            "</svg>"
+        ),
+        "icons/golive/screen.svg" => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
+            r#"<rect x="2" y="3" width="20" height="13" rx="3"/><rect x="11" y="16" width="2" height="4"/><rect x="8" y="19" width="8" height="2" rx="1"/>"#,
+            "</svg>"
+        ),
+        "icons/golive/window.svg" => concat!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
+            r#"<rect x="1" y="3" width="22" height="18" rx="3"/>"#,
+            "</svg>"
+        ),
         _ => return None,
     })
 }

@@ -386,8 +386,10 @@ async fn run(
                     AudioOut::Frame(f) => {
                         if !m.transmitting {
                             m.transmitting = true;
-                            gw.speaking(speaking::MICROPHONE, m.ssrc)?;
-                            let _ = events.send(VoiceEvent::Speaking { user_id: cfg.user_id, speaking: true });
+                            gw.speaking(if cfg.info.stream { speaking::SOUNDSHARE } else { speaking::MICROPHONE }, m.ssrc)?;
+                            if !cfg.info.stream {
+                                let _ = events.send(VoiceEvent::Speaking { user_id: cfg.user_id, speaking: true });
+                            }
                         }
                         m.silence_left = 5;
                         f

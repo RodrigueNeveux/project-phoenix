@@ -513,6 +513,10 @@ pub fn render(pos: Point<Pixels>, items: Vec<MenuItem>, dismiss: Dismiss) -> Any
 }
 
 pub fn render_anchored(pos: Point<Pixels>, corner: gpui::Anchor, items: Vec<MenuItem>, dismiss: Dismiss) -> AnyElement {
+    render_anchored_at(pos, corner, items, dismiss, 10)
+}
+
+pub fn render_anchored_at(pos: Point<Pixels>, corner: gpui::Anchor, items: Vec<MenuItem>, dismiss: Dismiss, priority: usize) -> AnyElement {
     let inner = dismiss;
     let dismiss: Dismiss = Rc::new(move |w, cx| {
         reset_state();
@@ -557,6 +561,6 @@ pub fn render_anchored(pos: Point<Pixels>, corner: gpui::Anchor, items: Vec<Menu
                     .child(panel("context-menu", items, dismiss)),
             ),
     )
-    .with_priority(10)
+    .with_priority(priority)
     .into_any_element()
 }

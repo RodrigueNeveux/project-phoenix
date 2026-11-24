@@ -9,6 +9,7 @@ use tokio::sync::oneshot;
 pub enum Kind {
     Screen,
     Window,
+    Any,
 }
 
 #[derive(Debug)]
@@ -67,6 +68,7 @@ async fn open(kind: Kind) -> ashpd::Result<Opened> {
     let types: BitFlags<SourceType> = match kind {
         Kind::Screen => SourceType::Monitor.into(),
         Kind::Window => SourceType::Window.into(),
+        Kind::Any => SourceType::Monitor | SourceType::Window,
     };
     proxy
         .select_sources(

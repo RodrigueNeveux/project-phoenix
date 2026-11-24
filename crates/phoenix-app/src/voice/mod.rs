@@ -67,7 +67,7 @@ pub enum VoiceControl {
     SetPttDelay(u32),
     SetCamera(bool),
     SetCameraDevice(Option<String>),
-    StartStream { source: StreamSource, resolution: u32, fps: u32 },
+    StartStream { source: StreamSource, resolution: u32, fps: u32, sound: bool },
     StopStream,
     WatchStream(String),
     StopWatching(String),

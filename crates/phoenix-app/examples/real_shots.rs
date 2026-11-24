@@ -151,6 +151,13 @@ impl Backend for ReadOnly {
     }
     fn voice_control(&self, control: phoenix_app::voice::VoiceControl) -> BoxFuture<()> {
         use phoenix_app::voice::VoiceControl as V;
+        let test_key = |k: &str| k.starts_with(&format!("guild:1369382919948210248:{VOICE_TEST_CHANNEL}:"));
+        if std::env::var_os("PHX_STREAM_WATCH").is_some()
+            && let V::WatchStream(k) | V::StopWatching(k) = &control
+            && test_key(k)
+        {
+            return self.0.voice_control(control);
+        }
         if std::env::var_os("PHX_VOICE").is_none() {
             return Box::pin(async { Ok(()) });
         }
@@ -159,7 +166,7 @@ impl Backend for ReadOnly {
             V::SetMute(_) => V::SetMute(true),
             V::SetPttKey(_) => return Box::pin(async { Ok(()) }),
             V::SetCameraDevice(_) => V::SetCameraDevice(Some(phoenix_voice::media::camera::TEST_PATTERN.into())),
-            V::StartStream { resolution, fps, .. } => V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps },
+            V::StartStream { resolution, fps, sound, .. } => V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps, sound },
             V::WatchStream(k) if !k.contains(&format!(":{VOICE_TEST_CHANNEL}:")) => return Box::pin(async { Ok(()) }),
             c => c,
         };
@@ -957,6 +964,20 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
+                "golive" => {
+                    phoenix_app::ui::modals::go_live::open(Some(window));
+                    phoenix_app::actions::with_modal(|m| {
+                        if let Some(phoenix_app::ui::modals::Modal::GoLive(s)) = m {
+                            s.kind = match arg.as_str() {
+                                "screen" | "screen-menu" => Some(phoenix_app::voice::stream::SourceKind::Screen),
+                                "window" => Some(phoenix_app::voice::stream::SourceKind::Window),
+                                _ => None,
+                            };
+                            s.menu = arg.ends_with("menu");
+                            s.devices_tab = arg == "devices";
+                        }
+                    });
+                }
                 "pins" => app.toggle_pins(cx),
                 "threads" => app.toggle_threads_popout(cx),
                 "search" => {
@@ -1332,7 +1353,7 @@ fn main() -> anyhow::Result<()> {
             let fps = it.next().and_then(|r| r.parse().ok()).unwrap_or(30u32);
             cx.update_window(win.into(), |_, _, cx| {
                 v.update(cx, |app, _| {
-                    drop(app.backend.voice_control(V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps }))
+                    drop(app.backend.voice_control(V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps, sound: std::env::var_os("PHX_VOICE_STREAM_SOUND").is_some() }))
                 })
             })?;
             let hold: u64 = std::env::var("PHX_VOICE_STREAM_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(8000);
@@ -1401,6 +1422,31 @@ fn main() -> anyhow::Result<()> {
                 println!("wrote {path} playing={}", phoenix_app::voice::soundboard::is_user_playing(cx.update(|cx| v.read(cx).me.id)));
             }
         }
+    }
+    if let Some(key) = std::env::var("PHX_STREAM_WATCH").ok().filter(|k| !k.is_empty()) {
+        use phoenix_app::voice::VoiceControl as V;
+        let owner = phoenix_app::voice::stream::parse_key(&key).map_or(0, |k| k.owner);
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(V::WatchStream(key.clone())))))?;
+        let secs: u64 = std::env::var("PHX_STREAM_WATCH_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
+        let mut saved = false;
+        for t in 0..secs {
+            pump(&mut cx, 1000);
+            let f = phoenix_app::voice::call::stream_frame(owner);
+            println!("watch-only t={t} watching={} frame={:?}", phoenix_app::voice::call::watching(&key), f.as_ref().map(|f| (f.width, f.height, f.pts_us)));
+            if let Some(f) = f.filter(|f| f.pts_us > 30)
+                && !saved
+            {
+                let rgba: Vec<u8> = f.data.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], 255]).collect();
+                if let Some(img) = image::RgbaImage::from_raw(f.width, f.height, rgba) {
+                    let path = format!("{}-stream-frame.png", out.trim_end_matches(".png"));
+                    img.save(&path)?;
+                    println!("wrote {path}");
+                    saved = true;
+                }
+            }
+        }
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(V::StopWatching(key.clone())))))?;
+        pump(&mut cx, 800);
     }
     if let Some(what) = std::env::var("PHX_SEND").ok().filter(|w| !w.trim().is_empty()) {
         anyhow::ensure!(channel.map(|c| c.0) == Some(SEND_TEST_CHANNEL), "PHX_SEND only works in the test channel");

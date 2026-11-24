@@ -4,6 +4,8 @@ pub mod mock;
 pub mod testsrc;
 #[cfg(feature = "opus")]
 pub mod opus;
+#[cfg(feature = "opus")]
+pub mod soundshare;
 pub mod video;
 
 use crate::codec::{Codec, VideoEncoderConfig};

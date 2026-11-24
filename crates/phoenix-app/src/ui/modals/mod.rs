@@ -1,6 +1,7 @@
 pub mod channel_settings;
 pub mod create_channel;
 pub mod forward;
+pub mod go_live;
 pub mod guild_notify;
 pub mod member;
 pub mod poll_create;
@@ -88,6 +89,7 @@ pub enum Modal {
     Security(privacy::Security),
     GuildNotify(guild_notify::State),
     CreatePoll(poll_create::State),
+    GoLive(go_live::State),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -156,6 +158,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         Some(Modal::ChannelSettings(s)) => channel_settings::prepare(s, &mut mk),
         Some(Modal::CreatePoll(s)) => poll_create::prepare(s, &mut mk),
         Some(Modal::Report(r)) => r.viewport = Some(vp),
+        Some(Modal::GoLive(g)) => g.viewport = Some(vp),
         _ => {}
     });
 }
@@ -176,6 +179,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Security(s) => privacy::render_security(s, cx),
             Modal::GuildNotify(s) => guild_notify::render(app, s, cx),
             Modal::CreatePoll(s) => poll_create::render(app, s, cx),
+            Modal::GoLive(s) => go_live::render(app, s, cx),
         })
     })
 }

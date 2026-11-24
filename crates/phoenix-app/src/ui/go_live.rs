@@ -33,8 +33,9 @@ pub fn live(app: &PhoenixApp) -> bool {
 }
 
 pub fn start(app: &PhoenixApp, kind: SourceKind) {
-    let (resolution, fps) = crate::voice::stream::resolve(quality(), perks(app));
-    drop(app.backend.voice_control(VoiceControl::StartStream { source: StreamSource::Portal(kind), resolution, fps }));
+    let q = quality();
+    let (resolution, fps) = crate::voice::stream::resolve(q, perks(app));
+    drop(app.backend.voice_control(VoiceControl::StartStream { source: StreamSource::Portal(kind), resolution, fps, sound: q.sound }));
 }
 
 pub fn stop(app: &PhoenixApp) {
@@ -45,7 +46,7 @@ pub fn toggle(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if live(app) {
         stop(app);
     } else {
-        start(app, SourceKind::Screen);
+        crate::ui::modals::go_live::open(None);
     }
     cx.notify();
 }

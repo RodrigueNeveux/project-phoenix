@@ -36,6 +36,9 @@ struct OwnStream {
     portal: Option<phoenix_voice::screencast::PortalSession>,
     preview_failed: Option<std::time::Instant>,
     stats: connection::ConnStats,
+    sound: Option<phoenix_voice::media::soundshare::Source>,
+    audio_tx: Option<mpsc::UnboundedSender<AudioOut>>,
+    soundshare: Option<phoenix_voice::media::soundshare::Soundshare>,
 }
 
 struct Watch {
@@ -264,6 +267,10 @@ impl VoiceManager {
         let mut st = self.state.lock();
         st.emit = Some(emit.clone());
         st.gw = Some(gw.clone());
+        if channel.is_some() && st.target.map(|t| t.channel) == channel && st.running.is_some() {
+            ui(emit, VoiceUiEvent::Status(VoiceStatus::Connected));
+            return Ok(());
+        }
         st.region = channel.and_then(|c| cache.channel(Snowflake(c))).and_then(|c| c.rtc_region.clone());
         stop(&mut st);
         st.generation += 1;
@@ -295,17 +302,21 @@ impl VoiceManager {
         }
         let mut st = self.state.lock();
         st.emit = Some(emit.clone());
-        let Some(target) = st.target else { return };
         match ev {
-            GatewayEvent::StreamCreate(sc) => on_stream_create(&mut st, me, sc),
-            GatewayEvent::StreamServerUpdate(su) => on_stream_server(&mut st, me, su),
+            GatewayEvent::StreamCreate(sc) => return on_stream_create(&mut st, me, sc),
+            GatewayEvent::StreamServerUpdate(su) => return on_stream_server(&mut st, me, su),
             GatewayEvent::StreamDelete(sd) => {
                 if st.own.as_ref().and_then(|o| o.key.as_deref()) == Some(sd.stream_key.as_str()) {
                     stop_own_stream(&mut st, sd.reason.clone());
                 } else if st.watches.contains_key(&sd.stream_key) {
                     stop_watch(&mut st, &sd.stream_key);
                 }
+                return;
             }
+            _ => {}
+        }
+        let Some(target) = st.target else { return };
+        match ev {
             GatewayEvent::VoiceStateUpdate(v) if v.user_id.0 == me => match v.channel_id {
                 None => {
                     stop(&mut st);
@@ -482,7 +493,7 @@ impl VoiceManager {
                 }
                 resend = true;
             }
-            VoiceControl::StartStream { source, resolution, fps } => start_own_stream(&mut st, source, resolution, fps),
+            VoiceControl::StartStream { source, resolution, fps, sound } => start_own_stream(&mut st, source, resolution, fps, sound),
             VoiceControl::StopStream => stop_own_stream(&mut st, None),
             VoiceControl::WatchStream(key) => start_watch(&mut st, key),
             VoiceControl::StopWatching(key) => stop_watch(&mut st, &key),
@@ -543,7 +554,7 @@ fn stream_ui(st: &State, e: super::StreamUiEvent) {
     }
 }
 
-fn start_own_stream(st: &mut State, source: super::StreamSource, resolution: u32, fps: u32) {
+fn start_own_stream(st: &mut State, source: super::StreamSource, resolution: u32, fps: u32, sound: bool) {
     stop_own_stream(st, None);
     let (Some(t), true) = (st.target, st.running.is_some()) else {
         stream_ui(st, super::StreamUiEvent::Failed("not connected to voice".into()));
@@ -569,6 +580,13 @@ fn start_own_stream(st: &mut State, source: super::StreamSource, resolution: u32
         portal: None,
         preview_failed: None,
         stats: Default::default(),
+        sound: sound.then_some(if source == super::StreamSource::TestPattern {
+            phoenix_voice::media::soundshare::Source::Tone
+        } else {
+            phoenix_voice::media::soundshare::Source::Monitor
+        }),
+        audio_tx: None,
+        soundshare: None,
     });
     match source {
         super::StreamSource::TestPattern => {
@@ -582,6 +600,7 @@ fn start_own_stream(st: &mut State, source: super::StreamSource, resolution: u32
             let kind = match kind {
                 super::stream::SourceKind::Screen => phoenix_voice::screencast::Kind::Screen,
                 super::stream::SourceKind::Window => phoenix_voice::screencast::Kind::Window,
+                super::stream::SourceKind::Any => phoenix_voice::screencast::Kind::Any,
             };
             phoenix_voice::screencast::pick(kind, move |r| {
                 let mut st = manager().state.lock();
@@ -632,6 +651,9 @@ fn stop_own_stream(st: &mut State, reason: Option<String>) {
     if let Some(c) = o.capture {
         std::thread::spawn(move || c.stop());
     }
+    if let Some(s) = o.soundshare {
+        std::thread::spawn(move || drop(s));
+    }
     if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
         eprintln!("voice-trace: own stream stopped reason={reason:?}");
     }
@@ -662,7 +684,7 @@ fn on_stream_server(st: &mut State, me: u64, su: &phoenix_api::gateway::events::
         eprintln!("voice-trace: STREAM_SERVER_UPDATE key={} endpoint_set={}", su.stream_key, su.endpoint.is_some());
     }
     let Some(endpoint) = su.endpoint.clone() else { return };
-    let Some(session_id) = st.session_id.clone() else { return };
+    let Some(session_id) = st.session_id.clone().or_else(|| Some(crate::commands::session_id()).filter(|s| !s.is_empty())) else { return };
     let own = st.own.as_ref().is_some_and(|o| o.key.as_deref() == Some(su.stream_key.as_str()));
     if own {
         let Some(o) = st.own.as_mut() else { return };
@@ -672,8 +694,11 @@ fn on_stream_server(st: &mut State, me: u64, su: &phoenix_api::gateway::events::
         }
         let generation = o.generation;
         let info = stream_info(endpoint, server_id, me, session_id, su.token.clone());
-        let (conn, events) = connection::connect(VoiceConfig { info, channel_id: st.target.map_or(0, |t| t.channel), user_id: me }, mpsc::unbounded_channel().1, Box::new(|_: connection::AudioIn| {}));
+        let (audio_tx, audio_rx) = mpsc::unbounded_channel();
+        let (conn, events) = connection::connect(VoiceConfig { info, channel_id: st.target.map_or(0, |t| t.channel), user_id: me }, audio_rx, Box::new(|_: connection::AudioIn| {}));
         o.conn = Some(conn);
+        o.soundshare = None;
+        o.audio_tx = Some(audio_tx);
         tokio::spawn(own_stream_events(generation, su.stream_key.clone(), events));
         return;
     }
@@ -687,7 +712,7 @@ fn on_stream_server(st: &mut State, me: u64, su: &phoenix_api::gateway::events::
     let sink = st.running.as_ref().map(|r| r.sink.clone());
     let info = stream_info(endpoint, server_id, me, session_id, su.token.clone());
     let (conn, events) = connection::connect(
-        VoiceConfig { info, channel_id: st.target.map_or(0, |t| t.channel), user_id: me },
+        VoiceConfig { info, channel_id: super::stream::parse_key(&su.stream_key).map_or(0, |k| k.channel), user_id: me },
         mpsc::unbounded_channel().1,
         Box::new(move |mut a: connection::AudioIn| {
             a.user_id = owner | STREAM_AUDIO_BIT;
@@ -761,6 +786,12 @@ fn start_capture(st: &mut State) {
     let bitrate = super::stream::bitrate(o.resolution, fps);
     conn.video(phoenix_voice::connection::VideoOut::Start { width: w, height: h, fps, bitrate });
     let sink = conn.clone();
+    if let (Some(src), Some(tx)) = (o.sound.clone(), o.audio_tx.clone()) {
+        match phoenix_voice::media::soundshare::Soundshare::start(src, tx) {
+            Ok(s) => o.soundshare = Some(s),
+            Err(e) => eprintln!("discord-phoenix: stream audio unavailable: {e}"),
+        }
+    }
     match phoenix_voice::media::camera::Camera::start_with(input, w, h, fps, bitrate, false, move |e| sink.video(phoenix_voice::connection::VideoOut::Frame(e))) {
         Ok(c) => o.capture = Some(c),
         Err(e) => {
@@ -827,7 +858,7 @@ pub fn preview_uploaded(key: &str, ok: bool) {
 
 fn start_watch(st: &mut State, key: String) {
     let Some(k) = super::stream::parse_key(&key) else { return };
-    if st.watches.contains_key(&key) || st.target.is_none() {
+    if st.watches.contains_key(&key) {
         return;
     }
     let Some(gw) = st.gw.clone() else { return };

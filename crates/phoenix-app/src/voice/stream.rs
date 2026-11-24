@@ -10,6 +10,7 @@ pub enum Preset {
 pub enum SourceKind {
     Screen,
     Window,
+    Any,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
