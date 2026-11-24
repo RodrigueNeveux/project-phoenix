@@ -799,6 +799,23 @@ fn checkbox(on: bool) -> AnyElement {
         .into_any_element()
 }
 
+/// answerSelectionIcon_D4-WfD on the answer we voted for (live 2026-11-24): 24px box, a
+/// --brand-500 circle (r 11) with the check cut out over a white disc (r 10).
+fn voted_check() -> AnyElement {
+    div()
+        .size(px(24.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div().size(px(22.)).rounded_full().bg(c(crate::theme::tok(crate::theme::generated::idx::BRAND_500))).flex().items_center().justify_center().child(
+                gpui::svg().path(crate::icons::path("check")).size(px(14.)).text_color(gpui::white()),
+            ),
+        )
+        .into_any_element()
+}
+
 fn radio(on: bool) -> AnyElement {
     // poll RADIO_BUTTONS selection icon: size 24 (checkboxes 20).
     div()
@@ -940,6 +957,7 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
                             .child(div().text_size(px(16.)).line_height(px(20.)).font_weight(FontWeight::SEMIBOLD).child(format!("{pct}%"))),
                     )
                 })
+                .when(show_results && a.me, |d| d.child(voted_check()))
                 .when(!show_results, |d| d.child(if poll.multi { checkbox(ticked) } else { radio(ticked) })),
         );
         answers = answers.child(row);
