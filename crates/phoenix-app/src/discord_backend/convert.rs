@@ -367,6 +367,9 @@ pub struct MuteSettings {
     /// mention check (`isMentioned`) ignores @everyone / role pings there.
     pub suppress_everyone: HashSet<u64>,
     pub suppress_roles: HashSet<u64>,
+    /// Guilds with `flags & OPT_IN_CHANNELS_ON` (16384): "browse channels"
+    /// mode, where the client hides resource channels from the list.
+    pub opt_in: HashSet<u64>,
 }
 
 pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
@@ -390,6 +393,9 @@ pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
             }
             if e.get("suppress_roles").and_then(Value::as_bool).unwrap_or(false) {
                 out.suppress_roles.insert(g);
+            }
+            if e.get("flags").and_then(Value::as_u64).unwrap_or(0) & 16384 != 0 {
+                out.opt_in.insert(g);
             }
         }
         if let Some(Value::Array(ovs)) = e.get("channel_overrides") {
@@ -545,7 +551,9 @@ pub struct ReadCtx<'a> {
 
 impl ReadCtx<'_> {
     pub fn unread(&self, c: &api::Channel) -> (bool, u32) {
-        if c.kind.is_voice() || c.kind == api::ChannelType::GuildCategory {
+        // GuildReadStateStore skips IS_GUILD_RESOURCE_CHANNEL for the guild's
+        // unread and mentions (the channel itself is still listed).
+        if c.kind.is_voice() || c.kind == api::ChannelType::GuildCategory || c.is_guild_resource() {
             return (false, 0);
         }
         let last = c.last_message_id.map(|m| m.0).unwrap_or(0);
@@ -584,7 +592,10 @@ pub fn guild_channels(cache: &Cache, guild: api::Snowflake, rc: &ReadCtx) -> Vec
     let all: Vec<_> = cache
         .guild_channels(guild)
         .into_iter()
-        .filter(|c| !c.kind.is_thread() && !c.is_guild_resource() && channel_kind(c.kind).is_some())
+        // Resource channels (flag 128) are listed unless the guild is in opt-in
+        // "browse channels" mode (client: optInEnabled && hideResourceChannels).
+        .filter(|c| !c.kind.is_thread() && channel_kind(c.kind).is_some())
+        .filter(|c| !c.is_guild_resource() || !rc.mutes.opt_in.contains(&guild.0))
         .filter(|c| !perms_known || cache.permissions_in(c.id).contains(api::Permissions::VIEW_CHANNEL))
         .collect();
     let key = |c: &api::Channel| (c.kind.is_voice(), c.position.unwrap_or(0), c.id.0);
