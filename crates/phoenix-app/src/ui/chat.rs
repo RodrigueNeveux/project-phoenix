@@ -1143,6 +1143,11 @@ fn message(
     // messageContent_.isSending_: the optimistic copy is drawn at 50 % opacity, header and
     // avatar untouched (live client, 20261124 pending test). Failed sends are coloured in render_msg.
     let content = if msg.send_state == crate::model::SendState::Sending { content.opacity(0.5) } else { content };
+    // Upload in flight: the file card with its progress bar sits under the dimmed text.
+    let content = match attach::upload_progress_card(app, entity, msg) {
+        Some(card) => div().flex().flex_col().min_w_0().child(content).child(card),
+        None => content,
+    };
 
     let reply = msg.reply_to.map(|rid| {
         let found = entry.index_of(rid);

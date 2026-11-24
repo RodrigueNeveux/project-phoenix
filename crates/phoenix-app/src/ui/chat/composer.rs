@@ -23,14 +23,6 @@ use crate::{
     ui::icon_button,
 };
 
-fn human_size(n: u64) -> SharedString {
-    if n >= 1 << 20 {
-        format!("{:.2} MB", n as f64 / (1 << 20) as f64).into()
-    } else {
-        format!("{:.2} KB", n as f64 / 1024.).into()
-    }
-}
-
 fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl IntoElement + use<>> {
     let rid = app.replying_to?;
     let e = app.messages.get(&app.selected_channel?)?;
@@ -263,48 +255,6 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
     Some(context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss))
 }
 
-/// In-flight uploads: file name, size, animated progress bar.
-fn sending(app: &PhoenixApp) -> impl IntoElement {
-    let ch = app.selected_channel;
-    let mut col = div().flex().flex_col().gap(z(8.));
-    for s in app.chat.sending.iter().filter(|s| Some(s.channel) == ch) {
-        col = col.child(
-            div()
-                .mx(z(16.))
-                .p(z(12.))
-                .rounded(z(8.))
-                .bg(c(Palette::BG_SECONDARY))
-                .flex()
-                .items_center()
-                .gap(z(12.))
-                .child(icon(ChatIcon::Upload, 32., c(Palette::BLURPLE)))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(z(6.))
-                        .child(
-                            div()
-                                .flex()
-                                .gap(z(8.))
-                                .text_size(z(14.))
-                                .child(div().text_color(c(Palette::TEXT_NORMAL)).text_ellipsis().child(s.label.clone()))
-                                .child(div().text_color(c(Palette::TEXT_MUTED)).child(human_size(s.size))),
-                        )
-                        .child(
-                            div().h(z(6.)).rounded(z(3.)).bg(c(Palette::INTERACTIVE_MUTED)).overflow_hidden().child(
-                                // Real share of the bytes uploaded (backend progress callback).
-                                div().h_full().rounded(z(3.)).bg(c(Palette::BLURPLE)).w(relative(s.fraction().max(0.02))),
-                            ),
-                        ),
-                ),
-        );
-    }
-    col
-}
-
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> gpui::AnyElement {
     if let Some(notice) = blocked_dm_notice(app, cx) {
         return notice;
@@ -400,7 +350,6 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
         .flex()
         .flex_col()
         .gap(z(8.))
-        .child(sending(app))
         .children(attach_menu(app, cx))
         .children(super::slash::render(app, cx))
         .child(

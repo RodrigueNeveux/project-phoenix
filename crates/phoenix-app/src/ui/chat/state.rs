@@ -68,6 +68,10 @@ pub struct Sending {
     pub started: Instant,
     /// Bytes confirmed by the upload so far (written by the backend's progress callback).
     pub sent: Arc<std::sync::atomic::AtomicU64>,
+    /// Set by the card's X: the progress callback then stops the upload.
+    pub cancel: Arc<std::sync::atomic::AtomicBool>,
+    /// Nonce of the optimistic message the card is drawn under.
+    pub nonce: Option<u64>,
 }
 
 impl Sending {
@@ -728,7 +732,8 @@ impl PhoenixApp {
     /// Progress callback that fills the upload card `key`, and a repaint loop
     /// that runs while the card exists. `None` when there is no such card.
     pub fn upload_progress(&mut self, key: u64, cx: &mut Context<Self>) -> Option<crate::backend::UploadProgress> {
-        let sent = self.chat.sending.iter().find(|s| s.key == key)?.sent.clone();
+        let s = self.chat.sending.iter().find(|s| s.key == key)?;
+        let (sent, cancel) = (s.sent.clone(), s.cancel.clone());
         cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
             let alive = this
@@ -745,7 +750,22 @@ impl PhoenixApp {
             }
         })
         .detach();
-        Some(Arc::new(move |n: u64, _total: u64| sent.store(n, std::sync::atomic::Ordering::Relaxed)))
+        Some(Arc::new(move |n: u64, _total: u64| {
+            sent.store(n, std::sync::atomic::Ordering::Relaxed);
+            !cancel.load(std::sync::atomic::Ordering::Relaxed)
+        }))
+    }
+
+    /// The X of an upload card: stop the upload and drop the optimistic copy
+    /// (the client's cancel; nothing is posted).
+    pub fn cancel_upload(&mut self, key: u64, cx: &mut Context<Self>) {
+        let Some(ix) = self.chat.sending.iter().position(|s| s.key == key) else { return };
+        let s = self.chat.sending.remove(ix);
+        s.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(n) = s.nonce {
+            self.discard_local(s.channel, Id(n), cx);
+        }
+        cx.notify();
     }
 
     /// Per-file limit of the selected channel (Nitro, boosts).
@@ -928,12 +948,15 @@ impl PhoenixApp {
             } else {
                 crate::t!("chat.n_files", n = files.len())
             };
-            self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now(), sent: Arc::new(0.into()) });
+            self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now(), sent: Arc::new(0.into()), cancel: Arc::default(), nonce: None });
         }
         // Optimistic copy + POST (ui::chat::pending). The upload card goes away when
         // the copy is settled (echo, POST answer or failure).
         let upload = (!files.is_empty()).then_some(key);
-        self.send_optimistic(ch, text, reply, files, upload, cx);
+        let nonce = self.send_optimistic(ch, text, reply, files, upload, cx);
+        if let Some(s) = self.chat.sending.iter_mut().find(|s| s.key == key) {
+            s.nonce = Some(nonce);
+        }
         self.message_list.scroll_to_end();
         cx.notify();
         true

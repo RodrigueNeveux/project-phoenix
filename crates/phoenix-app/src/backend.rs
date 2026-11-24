@@ -137,8 +137,9 @@ impl std::fmt::Debug for Upload {
     }
 }
 
-/// Upload progress: `(bytes sent, total bytes)` over every file of a message.
-pub type UploadProgress = Arc<dyn Fn(u64, u64) + Send + Sync>;
+/// Upload progress: `(bytes sent, total bytes)` over every file of a message;
+/// returning `false` cancels the upload (nothing more is sent).
+pub type UploadProgress = Arc<dyn Fn(u64, u64) -> bool + Send + Sync>;
 
 pub type EventSink = Arc<dyn Fn(AppEvent) + Send + Sync>;
 

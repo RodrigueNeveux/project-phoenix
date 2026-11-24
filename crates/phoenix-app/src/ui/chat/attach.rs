@@ -347,3 +347,97 @@ mod tests {
         assert_eq!(human_size(4_213_337).as_ref(), "4.02 MB");
     }
 }
+
+/// Upload in flight under its optimistic message, like the client's message
+/// list upload row (`fileWrapper_`/`file_` card; `filenameWrapper_`: name, then
+/// "— size" while bytes go out; `progressContainer_` 16px row with the bar,
+/// "Processing…" once everything is sent; X cancel button, `--interactive-text-default`,
+/// hover `--interactive-text-hover`). The bar's own look is not measured live yet.
+pub fn upload_progress_card(
+    app: &crate::app::PhoenixApp,
+    entity: &gpui::Entity<crate::app::PhoenixApp>,
+    msg: &crate::model::Message,
+) -> Option<AnyElement> {
+    if msg.send_state != crate::model::SendState::Sending {
+        return None;
+    }
+    let nonce = msg.nonce?;
+    let s = app.chat.sending.iter().find(|s| s.nonce == Some(nonce))?;
+    let frac = s.fraction();
+    let done = frac >= 1.;
+    let key = s.key;
+    let e = entity.clone();
+    let row = if done {
+        div().text_size(z(12.)).line_height(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("chat.upload_processing")).into_any_element()
+    } else {
+        div()
+            .w_full()
+            .h(z(6.))
+            .rounded(z(3.))
+            .bg(tk(idx::BACKGROUND_MOD_NORMAL))
+            .overflow_hidden()
+            .child(div().h_full().rounded(z(3.)).bg(tk(idx::CONTROL_BRAND_FOREGROUND)).min_w(z(10.)).w(gpui::relative(frac)))
+            .into_any_element()
+    };
+    Some(
+        div()
+            .mt(z(4.))
+            .w(z(432.))
+            .max_w_full()
+            .p(z(16.))
+            .rounded(z(8.))
+            .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+            .border_1()
+            .border_color(tk(idx::BORDER_SUBTLE))
+            .shadow(crate::ui::inbox::low_shadow())
+            .flex()
+            .items_center()
+            .child(named_icon("file", 40., tk(idx::TEXT_LINK)).w(z(30.)).h(z(40.)).mr(z(8.)))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .flex()
+                            .items_end()
+                            .min_w_0()
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .truncate()
+                                    .text_size(z(16.))
+                                    .line_height(z(20.))
+                                    .text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))
+                                    .child(s.label.clone()),
+                            )
+                            .when(!done, |d| {
+                                d.child(
+                                    div()
+                                        .flex_none()
+                                        .ml(z(4.))
+                                        .text_size(z(16.))
+                                        .line_height(z(20.))
+                                        .text_color(tk(idx::TEXT_MUTED))
+                                        .child(SharedString::from(format!("\u{2014} {}", human_size(s.size)))),
+                                )
+                            }),
+                    )
+                    .child(div().h(z(16.)).mr(z(8.)).flex().items_center().child(row)),
+            )
+            .when(!done, |d| {
+                d.child(
+                    div()
+                        .id(("upload-cancel", key as usize))
+                        .ml(z(4.))
+                        .flex_none()
+                        .cursor_pointer()
+                        .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                        .child(named_icon("close", 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)))
+                        .on_click(move |_, _, cx| e.update(cx, |a, cx| a.cancel_upload(key, cx))),
+                )
+            })
+            .into_any_element(),
+    )
+}

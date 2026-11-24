@@ -689,9 +689,10 @@ impl Backend for MockBackend {
         progress: Option<UploadProgress>,
     ) -> BoxFuture<Message> {
         let total: u64 = files.iter().map(|f| f.bytes.len() as u64).sum();
-        if let Some(p) = &progress {
-            p(0, total);
-            p(total, total);
+        if let Some(p) = &progress
+            && !(p(0, total) && p(total, total))
+        {
+            return Box::pin(async { Err(BackendError("upload cancelled".into())) });
         }
         let atts: Vec<Attachment> = files
             .iter()

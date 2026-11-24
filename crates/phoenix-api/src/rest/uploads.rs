@@ -27,8 +27,12 @@ use super::{Body, CreateMessage, FileUpload, RestClient, fill_nonce};
 use crate::error::{ApiErrorBody, Error, Result};
 use crate::models::{ChannelId, Message};
 
-/// Progress callback: `(bytes sent so far, total bytes)` over every file of a message.
-pub type Progress = Arc<dyn Fn(u64, u64) + Send + Sync>;
+/// Progress callback: `(bytes sent so far, total bytes)` over every file of a
+/// message. Returning `false` cancels: no further chunk, file or message is sent.
+pub type Progress = Arc<dyn Fn(u64, u64) -> bool + Send + Sync>;
+
+/// `Error::Protocol` text of an upload stopped by its progress callback.
+pub const UPLOAD_CANCELLED: &str = "upload cancelled";
 
 /// Chunk size of the resumable PUT. A multiple of 256 KiB (Cloud Storage rule).
 /// Files up to one chunk go in a single plain PUT.
@@ -239,7 +243,7 @@ impl RestClient {
     /// Step 2: PUT the bytes to the upload URL, in `chunk`-sized resumable
     /// pieces when the file is larger than one chunk. `on_sent` gets the
     /// number of bytes of this file confirmed so far.
-    pub async fn put_upload(&self, url: &str, bytes: &[u8], chunk: usize, on_sent: &(dyn Fn(u64) + Send + Sync)) -> Result<()> {
+    pub async fn put_upload(&self, url: &str, bytes: &[u8], chunk: usize, on_sent: &(dyn Fn(u64) -> bool + Send + Sync)) -> Result<()> {
         if !upload_url_allowed(url, &self.inner.base) {
             return Err(Error::Protocol("upload URL outside Cloud Storage".into()));
         }
@@ -270,7 +274,9 @@ impl RestClient {
                 let body = resp.bytes().await.unwrap_or_default();
                 return Err(put_error(status, &body));
             }
-            on_sent(range.as_ref().map_or(bytes.len(), |(_, e, _)| e + 1) as u64);
+            if !on_sent(range.as_ref().map_or(bytes.len(), |(_, e, _)| e + 1) as u64) {
+                return Err(Error::Protocol(UPLOAD_CANCELLED.into()));
+            }
         }
         Ok(())
     }
@@ -297,12 +303,10 @@ impl RestClient {
         chunk: usize,
     ) -> Result<Vec<CloudUpload>> {
         let total: u64 = files.iter().map(|f| f.bytes.len() as u64).sum();
-        let report = |sent: u64| {
-            if let Some(p) = &progress {
-                p(sent.min(total), total)
-            }
-        };
-        report(0);
+        let report = |sent: u64| progress.as_ref().is_none_or(|p| p(sent.min(total), total));
+        if !report(0) {
+            return Err(Error::Protocol(UPLOAD_CANCELLED.into()));
+        }
         let slots = self.request_upload_urls(channel, files).await?;
         let mut done = 0u64;
         for (f, slot) in files.iter().zip(&slots) {
@@ -453,7 +457,10 @@ mod tests {
         let rest = RestClient::with_base(Some("test-token".into()), crate::ClientProperties::linux_desktop(), format!("http://{addr}"));
         let seen = Arc::new(parking_lot::Mutex::new(Vec::new()));
         let s2 = seen.clone();
-        let progress: Progress = Arc::new(move |a, b| s2.lock().push((a, b)));
+        let progress: Progress = Arc::new(move |a, b| {
+            s2.lock().push((a, b));
+            true
+        });
         let mut f = file("pic.png", 20);
         f.spoiler = true;
         let mut msg = CreateMessage::text("hi");
@@ -510,11 +517,31 @@ mod tests {
         assert!(server.await.unwrap(), "a message was posted after a failed upload");
     }
 
+    /// Cancelling from the progress callback stops after the current chunk:
+    /// no further PUT and no message.
+    #[tokio::test]
+    async fn cancel_stops_before_the_message() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let slots = format!(r#"{{"attachments":[{{"id":"0","upload_url":"http://{addr}/up/x","upload_filename":"x"}}]}}"#);
+            serve_one(&listener, "200 OK", "", &slots).await;
+            serve_one(&listener, "308 Resume Incomplete", "", "").await;
+            tokio::time::timeout(std::time::Duration::from_millis(300), listener.accept()).await.is_err()
+        });
+        let rest = RestClient::with_base(Some("t".into()), crate::ClientProperties::linux_desktop(), format!("http://{addr}"));
+        let progress: Progress = Arc::new(|sent, _| sent == 0);
+        let mut msg = CreateMessage::text("");
+        let err = rest.send_message_with_uploads_chunked(Snowflake(7), &mut msg, vec![file("a.png", 40)], Some(progress), 16).await;
+        assert!(matches!(err, Err(Error::Protocol(ref m)) if m == UPLOAD_CANCELLED));
+        assert!(server.await.unwrap(), "something was sent after the cancel");
+    }
+
     #[test]
     fn rejects_foreign_upload_urls() {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let rest = RestClient::with_base(Some("t".into()), crate::ClientProperties::linux_desktop(), "http://127.0.0.1:9");
-        let r = rt.block_on(rest.put_upload("https://example.com/x", b"abc", UPLOAD_CHUNK, &|_| {}));
+        let r = rt.block_on(rest.put_upload("https://example.com/x", b"abc", UPLOAD_CHUNK, &|_| true));
         assert!(matches!(r, Err(Error::Protocol(_))));
     }
 }

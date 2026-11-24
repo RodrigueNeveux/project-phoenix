@@ -74,7 +74,10 @@ fn main() -> anyhow::Result<()> {
         );
         println!("guard ok: {gname} / {cname}");
         let content = format!("[Test Phoenix] envoyé depuis le client Rust (Phoenix) — {what}");
-        let progress: phoenix_api::rest::uploads::Progress = Arc::new(|a, b| println!("progress {a}/{b}"));
+        let progress: phoenix_api::rest::uploads::Progress = Arc::new(|a, b| {
+            println!("progress {a}/{b}");
+            true
+        });
         let mut msg = CreateMessage::text(content);
         let t = std::time::Instant::now();
         let m = rest.send_message_with_uploads_chunked(Snowflake(channel), &mut msg, files, Some(progress), chunk).await?;
