@@ -16,6 +16,10 @@ use gpui::{
 const EDGE: f32 = 5.;
 /// Corner hit squares (diagonal cursors) are larger so corners are easy to grab.
 const CORNER: f32 = 16.;
+/// Window buttons block in the top-right corner (`winButtonsWithDivider_3zSH5d`
+/// #46: 117×32). Electron keeps the buttons `no-drag` and clickable to the very
+/// edge, so no resize strip covers them.
+const WIN_BUTTONS_W: f32 = 117.;
 
 /// Set on a primary press in the drag region; the move starts on the first drag
 /// motion so a double click still reaches the click handler (toggle maximize).
@@ -65,24 +69,23 @@ pub fn resize_handles(window: &Window) -> Option<impl IntoElement> {
     let (t, b, l, r) = (!tiling.top, !tiling.bottom, !tiling.left, !tiling.right);
     let e = px(EDGE);
     let k = px(CORNER);
+    let z = crate::theme::zoom();
+    let buttons_w = px(WIN_BUTTONS_W * z);
+    let bar_h = px(crate::theme::m::TITLE_BAR_H * z);
     Some(
         div()
             .absolute()
             .inset_0()
-            .when(t, |d| d.child(strip("rs-top", ResizeEdge::Top, CursorStyle::ResizeUpDown).top_0().left(k).right(k).h(e)))
+            .when(t, |d| d.child(strip("rs-top", ResizeEdge::Top, CursorStyle::ResizeUpDown).top_0().left(k).right(buttons_w).h(e)))
             .when(b, |d| d.child(strip("rs-bottom", ResizeEdge::Bottom, CursorStyle::ResizeUpDown).bottom_0().left(k).right(k).h(e)))
             .when(l, |d| d.child(strip("rs-left", ResizeEdge::Left, CursorStyle::ResizeLeftRight).left_0().top(k).bottom(k).w(e)))
-            .when(r, |d| d.child(strip("rs-right", ResizeEdge::Right, CursorStyle::ResizeLeftRight).right_0().top(k).bottom(k).w(e)))
-            // Corners: an L of EDGE-thick bars CORNER long, so the window buttons in the
-            // top-right corner stay clickable except for their outer 5px.
+            .when(r, |d| d.child(strip("rs-right", ResizeEdge::Right, CursorStyle::ResizeLeftRight).right_0().top(bar_h).bottom(k).w(e)))
+            // Corners: an L of EDGE-thick bars CORNER long.
             .when(t && l, |d| {
                 d.child(strip("rs-tl-h", ResizeEdge::TopLeft, CursorStyle::ResizeUpLeftDownRight).top_0().left_0().w(k).h(e))
                     .child(strip("rs-tl-v", ResizeEdge::TopLeft, CursorStyle::ResizeUpLeftDownRight).top_0().left_0().w(e).h(k))
             })
-            .when(t && r, |d| {
-                d.child(strip("rs-tr-h", ResizeEdge::TopRight, CursorStyle::ResizeUpRightDownLeft).top_0().right_0().w(k).h(e))
-                    .child(strip("rs-tr-v", ResizeEdge::TopRight, CursorStyle::ResizeUpRightDownLeft).top_0().right_0().w(e).h(k))
-            })
+            // No top-right corner: the close button owns it.
             .when(b && l, |d| {
                 d.child(strip("rs-bl-h", ResizeEdge::BottomLeft, CursorStyle::ResizeUpRightDownLeft).bottom_0().left_0().w(k).h(e))
                     .child(strip("rs-bl-v", ResizeEdge::BottomLeft, CursorStyle::ResizeUpRightDownLeft).bottom_0().left_0().w(e).h(k))
