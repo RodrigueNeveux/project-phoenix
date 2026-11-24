@@ -380,6 +380,23 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         // descriptionClamp_BcddaK: 3 lines of body-sm 14/18
         body = body.child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_STRONG))).line_clamp(3).child(bio));
     }
+    // Live account popout: the first Board app widget as a compact card under the bio.
+    if let Some(w) = crate::ui::profile_board::get(app, me, cx).widgets.first() {
+        let col = crate::ui::settings::profile_widgets::WidgetColors {
+            strong: c(tok(idx::TEXT_STRONG)),
+            muted: c(tok(idx::TEXT_MUTED)),
+            card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
+            fade: match theme {
+                Some(t) => {
+                    let mix = |sh: u32| ((((t.0 >> sh) & 0xFF) as f32 * 0.3 + ((t.1 >> sh) & 0xFF) as f32 * 0.7) as u32) << sh;
+                    c(crate::ui::profile_theme::composite(t, mix(16) | mix(8) | mix(0)))
+                }
+                None => c(surface),
+            },
+            more: false,
+        };
+        body = body.child(crate::ui::settings::profile_widgets::render_compact(w, &col));
+    }
     let body = body.child(menus);
 
     // outer_P1YEjQ: 300 (+2px theme padding), radius 8; inner_P1YEjQ radius 6,
