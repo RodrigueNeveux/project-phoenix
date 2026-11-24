@@ -143,7 +143,25 @@ fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> An
                 .shadow_lg()
                 .overflow_hidden()
                 .on_click(|_, _, cx| cx.stop_propagation())
-                .child(inner),
+                .relative()
+                .child(inner)
+                // Close button (top right, like the client's modals).
+                .child(
+                    div()
+                        .id("modal-close")
+                        .absolute()
+                        .top(z(12.))
+                        .right(z(12.))
+                        .size(z(24.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .text_color(c(Palette::INTERACTIVE))
+                        .hover(|s| s.text_color(c(Palette::TEXT_NORMAL)))
+                        .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx)))
+                        .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(Palette::INTERACTIVE))),
+                ),
         )
         .into_any_element()
 }
