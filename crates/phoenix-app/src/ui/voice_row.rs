@@ -20,6 +20,33 @@ thread_local! {
 }
 
 /// Remember where the row for `user` was painted.
+thread_local! {
+    /// Voice channels with "Hide Names" checked (channel context menu, per session).
+    static HIDDEN_NAMES: std::cell::RefCell<std::collections::HashSet<u64>> = Default::default();
+}
+
+pub fn names_hidden(channel: Id) -> bool {
+    HIDDEN_NAMES.with(|h| h.borrow().contains(&channel.0))
+}
+
+pub fn set_names_hidden(channel: Id, hidden: bool) {
+    HIDDEN_NAMES.with(|h| {
+        let mut h = h.borrow_mut();
+        if hidden {
+            h.insert(channel.0);
+        } else {
+            h.remove(&channel.0);
+        }
+    });
+}
+
+/// Whether `user`'s row sits in a voice channel with hidden names.
+pub fn user_name_hidden(app: &crate::app::PhoenixApp, user: Id) -> bool {
+    HIDDEN_NAMES.with(|h| {
+        h.borrow().iter().any(|c| app.channels.get(&Id(*c)).is_some_and(|ch| ch.voice_users.contains(&user)))
+    })
+}
+
 pub fn record(user: Id, b: Bounds<Pixels>) {
     ROWS.with(|r| r.borrow_mut().insert(user.0, b));
 }

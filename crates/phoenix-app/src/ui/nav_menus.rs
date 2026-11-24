@@ -289,6 +289,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 // Category: Mark As Read | Collapse Category, Collapse All | Mute
                 // Category >, Notification Settings > | Move To… > | Edit, Delete | Copy ID.
                 let cat = ch.kind == ChannelKind::Category;
+                // Live voice-channel menu (dumps/voice-channel-context-menu, 2026-11-24):
+                // same as text but "Invite to Voice Channel", then | Open Chat, Hide
+                // Names (checkbox) |, no Notification Settings, "Create Voice Channel".
+                let voice = ch.kind == ChannelKind::Voice;
                 let manage = perms(app, g, MANAGE_CHANNELS);
                 if cat {
                     let collapsed = app.collapsed.contains(&id);
@@ -315,9 +319,20 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 } else {
                     items.push(crate::actions::channel::favorite_item(&e, id));
                     items.push(MenuItem::Separator);
-                    items.push(act(&e, crate::t!("menu.invite_channel"), move |a, _, cx| a.open_invite_people(g, cx)));
+                    let invite = if voice { "menu.invite_voice_channel" } else { "menu.invite_channel" };
+                    items.push(act(&e, crate::t!(invite), move |a, _, cx| a.open_invite_people(g, cx)));
                     items.push(crate::actions::channel::pin_item(&e, id, false));
                     items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, id.0)));
+                    if voice {
+                        items.push(MenuItem::Separator);
+                        items.push(act(&e, crate::t!("menu.open_voice_chat"), move |a, _, cx| a.open_channel_chat(id, cx)));
+                        let hidden = crate::ui::voice_row::names_hidden(id);
+                        let e2 = e.clone();
+                        items.push(MenuItem::check(crate::t!("menu.hide_voice_names"), hidden, move |_, _, cx: &mut App| {
+                            crate::ui::voice_row::set_names_hidden(id, !hidden);
+                            e2.update(cx, |_, cx| cx.notify());
+                        }));
+                    }
                 }
                 items.push(MenuItem::Separator);
                 let (mute, unmute) = if cat {
@@ -326,7 +341,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     (crate::t!("menu.mute_channel"), crate::t!("menu.unmute_channel"))
                 };
                 items.push(mute_item(&e, mute, unmute, muted, guild, Some(id)));
-                items.push(notify_item(app, &e, guild, Some(id)).with_subtext(level_label(app, guild, Some(id))));
+                if !voice {
+                    items.push(notify_item(app, &e, guild, Some(id)).with_subtext(level_label(app, guild, Some(id))));
+                }
                 if manage {
                     items.push(MenuItem::Separator);
                     items.push(if cat { move_to(&e, false) } else { crate::actions::channel::move_to_item(app, &e, g, id) });
@@ -341,7 +358,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         items.push(act(&e, crate::t!("menu.edit_channel"), move |a, _, cx| a.open_channel_settings(id, cx)));
                         items.push(act(&e, crate::t!("menu.clone_channel"), move |a, _, cx| a.open_clone_channel(g, id, cx)));
                         let parent = app.channels.get(&id).and_then(|c| c.parent);
-                        items.push(act(&e, crate::t!("menu.create_text_channel"), move |a, _, cx| a.open_create_channel(g, parent, crate::model::ChannelKind::Text, cx)));
+                        let (create, kind) = if voice {
+                            ("menu.create_voice_channel", ChannelKind::Voice)
+                        } else {
+                            ("menu.create_text_channel", ChannelKind::Text)
+                        };
+                        items.push(act(&e, crate::t!(create), move |a, _, cx| a.open_create_channel(g, parent, kind, cx)));
                         items.push(MenuItem::danger(crate::t!("menu.delete_channel"), None, {
                             let e = e.clone();
                             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_delete_channel(id, cx))
