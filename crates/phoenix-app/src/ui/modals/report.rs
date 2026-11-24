@@ -400,7 +400,7 @@ fn legal() -> AnyElement {
         .text_size(z(14.))
         .line_height(z(18.))
         .text_color(c(tok(idx::TEXT_DEFAULT)))
-        .child(InteractiveText::new("report-legal", styled).on_click(vec![start..end], |_, _, cx| cx.open_url("https://discord.com/guidelines")))
+        .child(InteractiveText::new("report-legal", styled).on_click(std::iter::once(start..end).collect(), |_, _, cx| cx.open_url("https://discord.com/guidelines")))
         .into_any_element()
 }
 
