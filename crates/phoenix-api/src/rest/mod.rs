@@ -15,6 +15,7 @@ pub mod guild_admin;
 pub mod reporting;
 pub mod guild_manage;
 pub mod threads;
+pub mod thread_create;
 pub mod content_inventory;
 pub mod collectibles;
 
