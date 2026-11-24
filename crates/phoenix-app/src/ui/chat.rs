@@ -605,7 +605,26 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
             )
             .child(
                 // `description_w6h4R2 body-md/normal` (#1111): 16/20 --text-default.
-                div().text_size(z(16.)).line_height(z(20.)).text_color(tk(idx::TEXT_DEFAULT)).child(desc_el),
+                // 1:1 (vanilla-dm-start #1139): first the username as `heading-xl/medium`
+                // 24/32 500 --text-strong, margin-bottom 20; after the sentence the
+                // `responsive_Vu5YPS` row (margin-top 8, gap 8).
+                div()
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    .when_some(peer.map(|u| u.name.clone()), |d, uname| {
+                        d.child(
+                            div()
+                                .mb(z(20.))
+                                .text_size(z(24.))
+                                .line_height(z(32.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(tk(idx::TEXT_STRONG))
+                                .child(uname),
+                        )
+                    })
+                    .child(desc_el)
+                    .when_some(peer.map(|u| u.id), |d, uid| d.child(dm_intro_actions(app, entity, uid))),
             )
             .when(group, |d| {
                 // `stack_ buttonContainer_KT4tG0` (#1113): margin-top 16, gap 8; md
@@ -658,6 +677,75 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                 .text_color(tk(idx::TEXT_DEFAULT)) // description_ color
                 .child(crate::t!("chat.channel_start", name = name)),
         )
+}
+
+/// 1:1 DM intro row (vanilla-dm-start #1142..#1156): mutual servers
+/// (`container_nM9YUb clickable_ divider_`: gap 8, 24px guild icon stack, `body-sm/normal`
+/// `mutualGuildsLink_` --interactive-text-default → hover / active, then a 4px
+/// --border-strong dot with 4px margins), then `stack_TWWX0S` gap 8 of sm secondary
+/// buttons: Remove Friend (or Add Friend) and Block.
+fn dm_intro_actions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, uid: Id) -> gpui::Div {
+    use crate::ui::controls::{BtnKind, button_sm};
+    let mutual: Vec<Id> = app.people.profiles.get(&uid).map(|p| p.mutual_guild_ids.clone()).unwrap_or_default();
+    let is_friend = app
+        .nav
+        .relationship(uid)
+        .is_some_and(|r| r.kind == crate::ui::home::data::RelationshipKind::Friend);
+    let mut row = div().mt(z(8.)).flex().flex_wrap().items_center().gap(z(8.));
+    if !mutual.is_empty() {
+        let label = if mutual.len() == 1 {
+            crate::t!("chat.mutual_one")
+        } else {
+            crate::t!("profile.mutual_servers", n = mutual.len())
+        };
+        let icons = mutual
+            .iter()
+            .filter_map(|g| app.guilds.iter().find(|x| x.id == *g))
+            .take(3)
+            .map(|g| crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 24. * crate::theme::zoom()))
+            .collect::<Vec<_>>();
+        let e = entity.clone();
+        row = row.child(
+            div()
+                .id("dm-intro-mutual")
+                .group("dm-intro-mutual")
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .cursor_pointer()
+                .on_click(move |ev, window, cx| {
+                    let at = ev.position();
+                    e.update(cx, |a, cx| a.open_profile(uid, None, at, window, cx));
+                })
+                .child(div().flex().children(icons))
+                .child(
+                    div()
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                        .group_hover("dm-intro-mutual", |s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
+                        .child(label),
+                )
+                // divider_nM9YUb:after
+                .child(div().mx(z(4.)).size(z(4.)).rounded_full().bg(tk(idx::BORDER_STRONG))),
+        );
+    }
+    let e1 = entity.clone();
+    let e2 = entity.clone();
+    let friend_label = if is_friend { crate::t!("menu.remove_friend") } else { crate::t!("chat.add_friend") };
+    row.child(
+        div()
+            .flex()
+            .gap(z(8.))
+            .child(button_sm("dm-intro-friend", friend_label.clone(), BtnKind::Secondary).on_click(move |_, _, cx| {
+                let l = friend_label.clone();
+                e1.update(cx, |a, cx| a.stub(&l, cx))
+            }))
+            .child(
+                button_sm("dm-intro-block", crate::t!("menu.block"), BtnKind::Secondary)
+                    .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("Block", cx))),
+            ),
+    )
 }
 
 fn day_divider(label: SharedString) -> gpui::Div {
