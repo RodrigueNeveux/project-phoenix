@@ -68,7 +68,12 @@ pub fn layer(user: &User, h: f32, place: Place, hovered: bool, selected: bool) -
     };
     let mut d = div().absolute().top_0().left_0().size_full().rounded(z(8.)).overflow_hidden();
     if let Some(c) = pal {
-        d = d.child(seg(0., 0.2, 0., 0.08, c)).child(seg(0.2, 0.5, 0.08, 0.08, c)).child(seg(0.5, 1., 0.08, 0.2, c));
+        // GPUI clips children to a plain rectangle, so the pieces touching the
+        // rounded corners carry the 8px radius themselves.
+        d = d
+            .child(seg(0., 0.2, 0., 0.08, c).rounded_l(z(8.)))
+            .child(seg(0.2, 0.5, 0.08, 0.08, c))
+            .child(seg(0.5, 1., 0.08, 0.2, c).rounded_r(z(8.)));
     }
     Some(
         d.child(
@@ -79,6 +84,7 @@ pub fn layer(user: &User, h: f32, place: Place, hovered: bool, selected: bool) -
                 .h_full()
                 .w(z(h * 213. / 40.))
                 .object_fit(gpui::ObjectFit::Cover)
+                .rounded_r(z(8.)) // right edge is the row's rounded edge (see above)
                 .opacity(opacity),
         )
         .into_any_element(),
