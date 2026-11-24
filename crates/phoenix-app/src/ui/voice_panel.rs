@@ -661,6 +661,13 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
                 .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state))),
         )
+        // optionsButtonContainer_: only while the row is hovered (display:none otherwise).
+        .child(
+            div()
+                .invisible()
+                .group_hover("voice-user-row", |s| s.visible())
+                .child(crate::ui::voice_row::options_button(user, guild, in_call)),
+        )
         .on_mouse_down(MouseButton::Right, move |ev, window, cx| {
             cx.stop_propagation();
             if in_call {
@@ -996,4 +1003,10 @@ pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Phoenix
         out.push(user_menu(app, user, pos, cx));
     }
     out
+}
+
+/// Open the in-call voice member menu at `pos` (row options button).
+pub fn open_user_menu(user: Id, pos: Point<Pixels>, cx: &mut App) {
+    USER_MENU.with(|m| m.set(Some((user, pos))));
+    cx.refresh_windows();
 }

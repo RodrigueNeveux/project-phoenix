@@ -9,7 +9,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use gpui::{Bounds, Pixels, Point, point, px};
+use gpui::{AnyElement, Bounds, InteractiveElement, IntoElement, ParentElement, Pixels, Point, StatefulInteractiveElement, Styled, div, point, px, svg};
+
+use crate::theme::{c, generated::idx, tok, z};
 
 use crate::model::Id;
 
@@ -30,6 +32,36 @@ pub fn popout_anchor(user: Id, fallback: Point<Pixels>) -> Point<Pixels> {
         Some(b) => point(b.right() + px(8. + 300. + 16.), b.top() + px(60.)),
         None => point(fallback.x + px(300. + 16. + 8.), fallback.y + px(60.)),
     }
+}
+
+/// optionsButton_YUoOxm: 24x24, radius 4px, hover/active --interactive-background-active.
+/// Opens the user's context menu at the button (voice menu when in the call).
+pub fn options_button(user: Id, guild: Option<Id>, in_call: bool) -> AnyElement {
+    div()
+        .id(("voice-user-options", user.0))
+        .size(z(24.))
+        .flex_none()
+        .rounded(z(4.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_ACTIVE))))
+        .child(
+            svg()
+                .path(crate::icons::path("more-horizontal"))
+                .size(z(16.))
+                .text_color(c(tok(idx::CHANNELS_DEFAULT))), // .icon_YUoOxm --channels-default
+        )
+        .on_click(move |ev, window, cx| {
+            cx.stop_propagation();
+            if in_call {
+                crate::ui::voice_panel::open_user_menu(user, ev.position(), cx);
+            } else {
+                crate::ui::user_menu::open(user, guild, ev.position(), window);
+            }
+        })
+        .into_any_element()
 }
 
 #[cfg(test)]
