@@ -1335,6 +1335,8 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .children(thumb)
         });
 
+    let mw = (f32::from(vp.width) - 96.).min(MODAL_W);
+    let backdrop = i.prof.and_then(|p| p.banner.clone()).and_then(|b| crate::ui::profile_bg::get(&b, mw, cx));
     let e3 = e.clone();
     // modalHeaderButtons_ZhNJfE: top --space-8 (header-button-top), end --space-8
     let close = div()
@@ -1385,6 +1387,8 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 )))
                 .child(div().absolute().top(z(300.)).left_0().right_0().bottom_0().bg(modal_inner(t, 0.2)))
         })
+        // backgroundImage_s3DB6Y: the banner, faint and blurred, fading out by 280px
+        .children(backdrop.map(|(a, h)| img(gpui::ImageSource::Render(a)).absolute().top_0().left_0().w(z(mw)).h(z(h))))
         .shadow_lg()
         .pt(z(pad + system_bar))
         .pl(z(pad))
