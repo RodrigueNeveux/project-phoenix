@@ -700,6 +700,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let extra = app.nav.extras.get(&id);
     let is_group = extra.is_some_and(|e| e.recipients > 1 || e.group_icon.is_some());
     let unread = ch.unread && !ch.muted;
+    let guild_dim = !is_dm && ch.muted && !selected;
     // `--channels-default` at rest, `--interactive-text-active` when selected
     // or unread, `--interactive-muted` when muted.
     // `name_TNyK-N`: `--channels-default`; `modeSelected`/`modeUnreadImportant`:
@@ -932,11 +933,12 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .gap(z(if is_dm { 12. } else { 10. })) // linkTop_TNyK-N gap --space-xs (10 cozy); DM avatar margin 12
                 .cursor_pointer()
                 .text_color(c(fg))
-                .when(ch.muted && !selected, |d| d.opacity(0.5))
+                .when(is_dm && ch.muted && !selected, |d| d.opacity(0.5))
                 .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
                 .when(!selected, |d| {
                     d.hover(|s| {
-                        s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)).opacity(1.)
+                        let s = s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER));
+                        if is_dm { s.opacity(1.) } else { s }
                     })
                     // wrapper_TNyK-N:active .link_TNyK-N background
                     .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
@@ -976,9 +978,18 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         )
                     },
                 )
-                .child(top_line(lead, connected))
+                .child(
+                    // `.modeMuted_TNyK-N .icon_/.name_ {opacity:.5}`: only the icon and the name
+                    // dim (also on hover); the row background stays opaque.
+                    if guild_dim {
+                        div().flex_none().opacity(0.5).child(top_line(lead, connected)).into_any_element()
+                    } else {
+                        top_line(lead, connected)
+                    },
+                )
                 .child(
                     div()
+                        .when(guild_dim, |d| d.opacity(0.5))
                         .flex_1()
                         .min_w_0()
                         .flex()
