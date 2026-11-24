@@ -318,6 +318,7 @@ pub fn message(m: &api::Message) -> model::Message {
         kind: match message_kind(m.kind) {
             model::MessageKind::RecipientAdd(_) => model::MessageKind::RecipientAdd(m.mentions.first().map(|x| id(x.user.id))),
             model::MessageKind::RecipientRemove(_) => model::MessageKind::RecipientRemove(m.mentions.first().map(|x| id(x.user.id))),
+            model::MessageKind::PollResult(_) => model::MessageKind::PollResult(m.message_reference.as_ref().and_then(|r| r.message_id).map(id)),
             k => k,
         },
         pinned: m.pinned,
@@ -349,6 +350,7 @@ fn message_kind(k: api::MessageType) -> model::MessageKind {
         T::GuildBoostTier2 => K::Boost(2),
         T::GuildBoostTier3 => K::Boost(3),
         T::ThreadCreated => K::ThreadCreated,
+        T::PollResult => K::PollResult(None),
         T::RecipientAdd => K::RecipientAdd(None),
         T::RecipientRemove => K::RecipientRemove(None),
         T::Call => K::Call,

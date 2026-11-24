@@ -239,6 +239,9 @@ pub enum MessageKind {
     StageEnd,
     StageSpeaker,
     StageTopic,
+    /// POLL_RESULT (46): "Le sondage « … » de X est clos." + the winner card; the poll
+    /// message it closes (`message_reference.message_id`).
+    PollResult(Option<Id>),
     /// Any other non-user type: shown as a generic system line.
     OtherSystem,
 }

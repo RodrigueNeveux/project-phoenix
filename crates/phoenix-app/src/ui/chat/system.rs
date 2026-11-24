@@ -36,6 +36,13 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         });
     }
     // actorHook: the member's server nick and role colour, like a message author.
+    if let MessageKind::PollResult(poll) = msg.kind {
+        let line = poll_result(app, entity, msg, r, poll);
+        return Some(match r.day_divider.clone() {
+            Some(label) => div().child(super::day_divider(label)).child(line).into_any_element(),
+            None => line,
+        });
+    }
     let name: SharedString = msg
         .author_nick
         .clone()
@@ -255,6 +262,14 @@ fn welcome_cta(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn poll_result_title_is_cut_like_the_client() {
+        // Live 2026-11-24: "[Test Phoenix] envoyé depuis le client Rust (Phoe…".
+        let q = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — sondage de test : quelle réponse ?";
+        assert_eq!(super::truncate_question(q), "[Test Phoenix] envoyé depuis le client Rust (Phoe\u{2026}");
+        assert_eq!(super::truncate_question("court"), "court");
+    }
+
     use super::*;
     #[test]
     fn join_text_is_stable() {
@@ -264,4 +279,135 @@ mod tests {
         assert_eq!(wave_sticker(0, 0).0, 749054660769218631);
         assert_eq!(wave_sticker(3 << 22, 0), (781291131828699156, true));
     }
+}
+
+/// Field `name` of the POLL_RESULT embed.
+fn poll_field<'a>(msg: &'a Message, name: &str) -> Option<&'a str> {
+    msg.embeds.first()?.fields.iter().find(|f| f.name.as_ref() == name).map(|f| f.value.as_ref())
+}
+
+/// `s.EJ(question, 50)`: cut to 49 characters plus "…" when longer than 50.
+pub fn truncate_question(q: &str) -> String {
+    if q.chars().count() > 50 { q.chars().take(49).collect::<String>() + "\u{2026}" } else { q.to_string() }
+}
+
+/// POLL_RESULT (live sandbox 2026-11-24): system line VJcK41 "Le sondage « **question** » de
+/// **author** est clos." (question cut at 50, a link to the poll; author in nick + role
+/// colour), PollsIcon 16px --interactive-icon-default in the gutter, then the embed card
+/// container_D5ZFqQ (margin 8 0 2, padding 8 16 8 8, radius 8, --background-surface-high,
+/// 1px --border-subtle, gap 8): the winner's emoji, "Réponse B" body-sm/semibold + check,
+/// "Réponse gagnante • 100%" body-xs/medium (a+lSZ/ "Il n'y a pas eu de vainqueur" without
+/// votes), and a secondary sm "Voir le sondage" that jumps to the poll.
+fn poll_result(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &RenderedMessage, poll: Option<crate::model::Id>) -> AnyElement {
+    use crate::theme::{generated::idx, tok};
+    let tk = |i: usize| c(tok(i));
+    let name: SharedString = msg
+        .author_nick
+        .clone()
+        .or_else(|| app.member_nick(msg.author))
+        .or_else(|| app.users.get(&msg.author).map(|u| u.display_name.clone()))
+        .unwrap_or_else(|| crate::t!("sys.someone"));
+    let name_color = app.author_color(msg.author).map(c).unwrap_or_else(|| tk(idx::INTERACTIVE_TEXT_ACTIVE));
+    let question = truncate_question(poll_field(msg, "poll_question_text").unwrap_or(""));
+    let votes: u32 = poll_field(msg, "victor_answer_votes").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let total: u32 = poll_field(msg, "total_votes").and_then(|v| v.parse().ok()).unwrap_or(0);
+    let victor = poll_field(msg, "victor_answer_text").map(str::to_string);
+    let emoji = poll_field(msg, "victor_answer_emoji_name").map(str::to_string);
+    let emoji_id = poll_field(msg, "victor_answer_emoji_id").map(str::to_string);
+    let (ch, e1, e2) = (msg.channel, entity.clone(), entity.clone());
+    let link = |id: (&'static str, u64), text: SharedString, color: gpui::Hsla| {
+        div().id(id).font_weight(FontWeight::MEDIUM).text_color(color).cursor_pointer().hover(|s| s.underline()).child(text)
+    };
+    let line = div()
+        .id(("sysmsg", msg.id.0))
+        .relative()
+        .pl(z(80.))
+        .pr(z(48.))
+        .py(z(2.))
+        .mt(z(if r.group_start { 17. } else { 0. }))
+        .min_h(z(22.))
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .text_size(z(16.))
+        .line_height(z(22.))
+        .text_color(c(Palette::TEXT_MUTED))
+        .child(
+            div().absolute().left(z(36.)).top(z(7.)).child(gpui::svg().path(crate::icons::path("attach/poll")).size(z(16.)).text_color(tk(idx::INTERACTIVE_ICON_DEFAULT))),
+        )
+        .children({
+            // fr: "Le sondage « Q » de A est clos." / en: "A's poll Q has closed."
+            let q = link(("sys-poll-q", msg.id.0), question.into(), tk(idx::INTERACTIVE_TEXT_ACTIVE))
+                .on_click(move |_, _, cx| {
+                    if let Some(p) = poll {
+                        e1.update(cx, |a, cx| a.jump_to_message(ch, p, cx));
+                    }
+                })
+                .into_any_element();
+            let author = link(("sys-poll-author", msg.id.0), name, name_color).into_any_element();
+            let t = |k: &str| crate::i18n::t(k, &[]).into_any_element();
+            if crate::i18n::locale() == "en" {
+                vec![author, t("sys.poll_closed_b"), q, t("sys.poll_closed_c")]
+            } else {
+                vec![t("sys.poll_closed_a"), q, t("sys.poll_closed_b"), author, t("sys.poll_closed_c")]
+            }
+        })
+        .child(div().ml(z(6.)).text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(r.time_full.clone()));
+    let pct = if total == 0 { 0 } else { (votes as f64 * 100. / total as f64).round() as u32 };
+    let emoji_el = emoji.map(|n| {
+        let src: SharedString = match emoji_id {
+            Some(id) => format!("https://cdn.discordapp.com/emojis/{id}.webp?size=48").into(),
+            None => crate::media::emoji::twemoji_url(&n).unwrap_or_default().into(),
+        };
+        div().size(z(40.)).flex_none().flex().items_center().justify_center().child(gpui::img(src).size(z(32.)))
+    });
+    let description = if victor.is_some() && votes > 0 {
+        div()
+            .flex()
+            .flex_col()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z(4.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    .child(victor.unwrap_or_default())
+                    // victorIcon_D5ZFqQ: 16px circle check (white disc, --control-connected ring)
+                    .child(div().size(z(16.)).flex().items_center().justify_center().child(
+                        div().size(z(15.)).rounded_full().bg(tk(idx::CONTROL_CONNECTED_BACKGROUND_DEFAULT)).flex().items_center().justify_center().child(
+                            gpui::svg().path(crate::icons::path("check")).size(z(10.)).text_color(gpui::white()),
+                        ),
+                    )),
+            )
+            .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("sys.poll_winner", pct = pct)))
+    } else {
+        div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("sys.poll_no_winner"))
+    };
+    let card = div()
+        .ml(z(80.))
+        .mt(z(8.))
+        .mb(z(2.))
+        .max_w(z(432.))
+        .pt(z(8.))
+        .pb(z(8.))
+        .pl(z(8.))
+        .pr(z(16.))
+        .rounded(z(8.))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .children(emoji_el)
+        .child(div().flex_1().min_w_0().child(description))
+        .child(crate::ui::controls::button_sm(("sys-poll-view", msg.id.0), crate::t!("sys.poll_view"), crate::ui::controls::BtnKind::Secondary).on_click(move |_, _, cx| {
+            if let Some(p) = poll {
+                e2.update(cx, |a, cx| a.jump_to_message(ch, p, cx));
+            }
+        }));
+    div().flex().flex_col().pb(z(2.)).child(line).child(div().flex().child(card)).into_any_element()
 }
