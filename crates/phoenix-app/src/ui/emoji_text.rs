@@ -22,6 +22,9 @@ pub fn label_with_custom(text: SharedString, font_px: f32) -> AnyElement {
 }
 
 fn label_impl(text: SharedString, font_px: f32, custom: bool) -> AnyElement {
+    // HTML collapses newlines in these one-line labels; a bot's multi-line custom status
+    // otherwise stacked three lines over the member name.
+    let text: SharedString = if text.contains(['\n', '\r']) { text.replace(['\r', '\n'], " ").into() } else { text };
     let ranges: Vec<_> = crate::richtext::emoji_ranges(&text)
         .into_iter()
         // custom `<:name:id>` tokens stay text unless asked for
