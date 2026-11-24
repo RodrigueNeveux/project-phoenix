@@ -1213,6 +1213,11 @@ impl PhoenixApp {
         if self.prefs.local.pick("roles", 0) != 0 {
             return None;
         }
+        self.member_role_color(guild, m)
+    }
+
+    /// Highest coloured role of `m`, ignoring the Role colors setting.
+    pub fn member_role_color(&self, guild: Id, m: &Member) -> Option<u32> {
         let roles = self.roles.get(&guild)?;
         roles
             .iter()
@@ -1245,6 +1250,16 @@ impl PhoenixApp {
             }
             _ => Some(std::borrow::Cow::Borrowed(u)),
         }
+    }
+
+    /// Role dot of Accessibility "Role colors: Show next to names".
+    pub fn author_role_dot(&self, user: Id) -> Option<u32> {
+        if self.prefs.local.pick("roles", 0) != 1 {
+            return None;
+        }
+        let g = self.selected_guild?;
+        let m = self.members.get(&g)?.iter().find(|m| m.user == user)?;
+        self.member_role_color(g, m)
     }
 
     pub fn author_color(&self, user: Id) -> Option<u32> {
@@ -1349,7 +1364,7 @@ impl Render for PhoenixApp {
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
         crate::media::emoji::sync_motion(self.prefs.synced.flag("anim-emoji"), window.is_window_active());
-        crate::ui::settings::effects::sync(&self.prefs);
+        crate::ui::settings::effects::sync(self);
         self.chat_sync_style();
         let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),

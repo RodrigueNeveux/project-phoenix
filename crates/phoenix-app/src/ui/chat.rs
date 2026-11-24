@@ -1184,8 +1184,10 @@ fn message(
             )
     });
 
+    let role_dot = app.author_role_dot(msg.author);
     let author_name = crate::fonts::styled_name(div(), author, false)
         .flex_none()
+        .when(role_dot.is_some(), |d| d.flex().items_center())
         .text_size(fz(16.))
         .line_height(fz(22.))
         .font_weight(FontWeight::MEDIUM)
@@ -1194,7 +1196,9 @@ fn message(
         .cursor_pointer()
         .hover(|s| s.underline())
         .on_click(message_ext::open_author(entity, msg))
-        .child(crate::ui::emoji_text::label(name, 16.));
+        .child(crate::ui::emoji_text::label(name, 16.))
+        // roleDot_: 8px circle in the role colour, 4px after the name.
+        .children(role_dot.map(|col| div().flex_none().ml(z(4.)).size(z(8.)).rounded_full().bg(c(col))));
 
     let base = div()
         .id(("msg", id.0))

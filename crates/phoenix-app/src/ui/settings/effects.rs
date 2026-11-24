@@ -3,7 +3,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering::Relaxed};
 
-use super::Prefs;
+use crate::app::PhoenixApp;
 
 static SPOILERS_ALWAYS: AtomicBool = AtomicBool::new(false);
 /// `timestamp_hour_cycle`: 0 auto (locale), 1 12h, 2 24h.
@@ -13,9 +13,19 @@ static UNDERLINE_LINKS: AtomicBool = AtomicBool::new(false);
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static INLINE_ATTACHMENTS: AtomicBool = AtomicBool::new(true);
 
-pub fn sync(p: &Prefs) {
+pub fn sync(app: &PhoenixApp) {
+    let p = &app.prefs;
+    // "Show spoiler content": 1 always, 2 if I can manage messages in the open server.
+    let always = match p.synced.pick("spoilers") {
+        1 => true,
+        2 => {
+            use crate::actions::{ADMINISTRATOR, MANAGE_MESSAGES, has};
+            has(app, app.selected_guild, MANAGE_MESSAGES) || has(app, app.selected_guild, ADMINISTRATOR)
+        }
+        _ => false,
+    };
     // Spoilers, clocks and link underlines are baked into cached message renders.
-    let a = SPOILERS_ALWAYS.swap(p.synced.pick("spoilers") == 1, Relaxed);
+    let a = SPOILERS_ALWAYS.swap(always, Relaxed);
     let h = HOUR_CYCLE.swap(p.synced.pick("time-format") as u8, Relaxed);
     let u = UNDERLINE_LINKS.swap(p.local.flag("underline", false), Relaxed);
     if a != spoilers_always() || h != HOUR_CYCLE.load(Relaxed) || u != underline_links() {
