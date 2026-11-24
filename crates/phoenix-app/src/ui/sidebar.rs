@@ -179,7 +179,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     match app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
         None => div()
-            .h(px(m::HEADER_H + 1.) // + the frame border, now drawn over the content)
+            .h(px(m::HEADER_H + 1.)) // + the frame border, now drawn over the content
             .flex_none()
             .px(z(10.))
             .flex()
