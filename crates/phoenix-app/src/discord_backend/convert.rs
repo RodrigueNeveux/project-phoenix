@@ -1269,6 +1269,16 @@ impl Adapter {
                 out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id) });
                 out.push(AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) });
             }
+            // My sessions changed (status set from another client): the "all"
+            // pseudo-session holds the status every client shows for me.
+            GatewayEvent::Unknown { name, data } if name == "SESSIONS_REPLACE" => {
+                let all = data.as_array().into_iter().flatten().find(|s| s.get("session_id").and_then(Value::as_str) == Some("all"));
+                if let Some(st) = all.and_then(|s| s.get("status")).and_then(Value::as_str) {
+                    let p = presence(st);
+                    self.statuses.insert(self.me.0, p);
+                    out.push(AppEvent::PresenceUpdate { user: id(self.me), presence: p });
+                }
+            }
             // Mute / suppress / opt-in changed from another client: one guild's entry.
             GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => {
                 if let Some(g) = data.get("guild_id").and_then(snowflake_value) {

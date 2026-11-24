@@ -148,3 +148,11 @@ fn joined_thread_messages_make_the_guild_unread() {
     let g = out.iter().find_map(|x| match x { AppEvent::GuildUnread { mentions, unread, .. } => Some((*unread, *mentions)), _ => None });
     assert_eq!(g, Some((true, 1)));
 }
+
+#[test]
+fn sessions_replace_sets_my_status() {
+    let (cache, mut a) = setup();
+    let d = serde_json::json!([{"session_id": "abc", "status": "online"}, {"session_id": "all", "status": "dnd"}]);
+    let out = feed(&cache, &mut a, &GatewayEvent::Unknown { name: "SESSIONS_REPLACE".into(), data: d });
+    assert!(out.iter().any(|x| matches!(x, AppEvent::PresenceUpdate { user, presence: model::Presence::Dnd } if user.0 == ME)));
+}

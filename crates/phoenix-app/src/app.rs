@@ -826,6 +826,9 @@ impl PhoenixApp {
             }
             AppEvent::PresenceUpdate { user, presence } => {
                 if user == self.me.id {
+                    self.presence = presence; // status changed from another client
+                }
+                if user == self.me.id {
                     self.presence = presence; // own status dot in the user panel
                 }
                 self.people.on_presence(user, presence);
