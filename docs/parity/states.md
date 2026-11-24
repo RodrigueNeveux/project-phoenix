@@ -48,7 +48,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | component | state | client | ours | status |
 |---|---|---|---|---|
 | avatar `avatar_2i8Bfm.clickable` | hover | drop-shadow `--elevation-medium` (0 4px 4px black 16%) | chat.rs msg-avatar `.hover(shadow)` | ✅ |
-| avatar | active | translateY(1px) (decoration too) | `.active(mt 1px)` on the avatar; decoration stays put | ✅ (decoration offset not reproduced) |
+| avatar | active | translateY(1px) (decoration too) | `.active(mt 1px)` on the avatar box, which now also holds the decoration (chat.rs msg-avatar) | ✅ (decoration moves with it) |
 | username `.clickable` | hover | underline | chat.rs author name `.hover(underline)` | ✅ |
 | reaction `reaction_MmKct8` | hover / active | `--reaction-background-hover/-active`, border, count `--reaction-text-hover/-active` | message_ext.rs `reactions` | ✅ (added active + count colours) |
 | add-reaction button `reactionBtn_` | reveal / hover / active | `forceShow` variant (padding 5 7, opacity 1), hover/active reaction tokens | message_ext.rs | ✅ |
