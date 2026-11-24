@@ -34,6 +34,24 @@ pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Phoenix
     out
 }
 
+thread_local! {
+    /// Image URL under the cursor at the last right-click, then the one the
+    /// open message menu was opened on.
+    static MENU_MEDIA: std::cell::RefCell<(Option<SharedString>, Option<SharedString>)> = const { std::cell::RefCell::new((None, None)) };
+}
+
+pub fn set_menu_media(url: SharedString) {
+    MENU_MEDIA.with(|m| m.borrow_mut().0 = Some(url));
+}
+
+/// Called when a message menu opens: the pending image (if any) becomes its target.
+pub fn arm_menu_media() {
+    MENU_MEDIA.with(|m| {
+        let mut m = m.borrow_mut();
+        m.1 = m.0.take();
+    });
+}
+
 fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<PhoenixApp>) -> AnyElement {
     use context_menu::MenuItem;
     let e = cx.entity();
@@ -236,6 +254,18 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.copy_id"), ic(ChatIcon::IdBadge), move |_, _, cx| {
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(id.0.to_string()))
     }));
+    }
+    // vanilla-menu-image: | Copy Image, Save Image | Copy Image Link, Open Image Link.
+    if let Some(url) = MENU_MEDIA.with(|m| m.borrow().1.clone()) {
+        items.push(MenuItem::Separator);
+        items.push(stub("msg.copy_image", "image"));
+        items.push(stub("msg.save_image", "image"));
+        items.push(MenuItem::Separator);
+        let u = url.clone();
+        items.push(MenuItem::action(crate::t!("msg.copy_image_link"), Some(crate::icons::path("chat/link")), move |_, _, cx| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.to_string()))
+        }));
+        items.push(MenuItem::action(crate::t!("msg.open_image_link"), Some(crate::icons::path("menu/open-link")), move |_, _, cx| cx.open_url(&url)));
     }
     let ed = e.clone();
     let dismiss: context_menu::Dismiss = Rc::new(move |_, cx| {

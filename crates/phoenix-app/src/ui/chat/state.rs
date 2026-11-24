@@ -444,6 +444,7 @@ impl PhoenixApp {
 
     pub fn open_message_menu(&mut self, channel: Id, msg: Id, pos: Point<Pixels>, cx: &mut Context<Self>) {
         self.chat.menu = Some(MenuState { channel, msg, pos });
+        super::panels::arm_menu_media();
         cx.notify();
     }
 

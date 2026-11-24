@@ -1608,8 +1608,11 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
             if a.kind == AttachmentKind::Video {
                 return div().mt(z(4.)).child(attach::video_card(a, size, cx)).into_any_element();
             }
+            let link = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
             return div()
                 .mt(z(4.))
+                // Right-click on the image adds the image rows to the message menu.
+                .on_mouse_down(gpui::MouseButton::Right, move |_, _, _| panels::set_menu_media(link.clone()))
                 .child(media_image(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size))
                 .into_any_element();
         }

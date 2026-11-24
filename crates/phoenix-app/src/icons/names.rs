@@ -90,6 +90,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("menu/remove-all-reactions", &["ReactionMinusIcon"]),
     ("menu/bookmark", &["BookmarkOutlineIcon"]),
     ("menu/speak", &["ChatSpeakIcon"]),
+    ("menu/open-link", &["LinkExternalSmallIcon"]),
     ("chat/upload", &["UploadIcon"]),
     ("chat/boost", &["BoostGemIcon"]),
     ("chat/arrow-right", &["ArrowSmallRightIcon"]),
