@@ -23,6 +23,7 @@ pub mod forward;
 pub mod message_ext;
 pub mod mosaic;
 pub mod panels;
+pub mod scrollbar;
 pub mod state;
 pub mod slash;
 pub mod system;
@@ -85,6 +86,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                     list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                                         .size_full(),
                                 )
+                                .children(scrollbar::auto_scrollbar(&app.message_list))
                                 .children(panels::new_messages_bar(app, cx))
                                 .children(panels::jump_bar(app, cx)),
                         )
