@@ -1614,8 +1614,9 @@ fn embed(e: &Embed) -> AnyElement {
                                 .mb(z(2.))
                                 .text_size(z(14.))
                                 .line_height(z(18.))
+                                // embedFieldName_ body-sm/semibold --text-strong, margin-bottom 2
                                 .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(Palette::TEXT_HEADER))
+                                .text_color(tk(idx::TEXT_STRONG))
                                 .child(f.name.clone()),
                         )
                         .child(embed_markdown(&f.value, 14.)),
@@ -1647,8 +1648,9 @@ fn embed(e: &Embed) -> AnyElement {
                 div()
                     .text_size(z(12.))
                     .line_height(z(16.))
+                    // embedFooterText_ body-xs/medium --text-default
                     .font_weight(FontWeight::MEDIUM)
-                    .text_color(c(Palette::TEXT_NORMAL))
+                    .text_color(tk(idx::TEXT_DEFAULT))
                     .child(SharedString::from(parts.join(" \u{2022} "))),
             )
     });
@@ -1661,13 +1663,15 @@ fn embed(e: &Embed) -> AnyElement {
             .items_center()
             .gap(z(8.))
             .when_some(a.icon.clone(), |d, u| {
-                d.child(img(media::resized(&u, 48, 48)).size(z(24.)).rounded_full().flex_none())
+                d.child(img(media::resized(&u, 48, 48)).size(z(24.)).rounded_full().flex_none()) // embedAuthorIcon_ 24, mr 8
             })
             .child(
                 div()
                     .text_size(z(14.))
+                    // embedAuthorName_ .875rem semibold --text-strong
+                    .line_height(z(18.))
                     .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(Palette::TEXT_HEADER))
+                    .text_color(tk(idx::TEXT_STRONG))
                     .when(url.is_some(), |d| d.hover(|s| s.underline()))
                     .child(a.name.clone()),
             )
@@ -1681,7 +1685,8 @@ fn embed(e: &Embed) -> AnyElement {
             .text_size(z(16.))
             .line_height(z(22.))
             .font_weight(FontWeight::SEMIBOLD)
-            .text_color(c(if url.is_some() { Palette::TEXT_LINK } else { Palette::TEXT_HEADER }))
+            // embedTitle_ 1rem semibold --text-strong; embedTitleLink_ is an anchor (--text-link)
+            .text_color(if url.is_some() { tk(idx::TEXT_LINK) } else { tk(idx::TEXT_STRONG) })
             .when(url.is_some(), |d| d.hover(|s| s.underline()))
             .child(t)
             .when_some(url, |d, u| d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&u)))

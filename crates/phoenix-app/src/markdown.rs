@@ -498,6 +498,13 @@ fn find_close(body: &str, d: &str) -> Option<usize> {
                 i += 2;
                 continue;
             }
+            // `***x***` / `___x___`: a double delimiter closes on the last two characters of
+            // the run, so the inner single one closes first (bold + italic, underline + italic).
+            if d.len() == 2 && (d == "**" || d == "__") {
+                let ch = d.as_bytes()[0];
+                let run = b[i..].iter().take_while(|&&c| c == ch).count();
+                return Some(i + run - 2);
+            }
             return Some(i);
         }
         i += body[i..].chars().next().map_or(1, char::len_utf8);
@@ -525,6 +532,15 @@ mod tests {
         fn channel(&self, id: u64) -> Option<String> {
             (id == 7).then(|| "general".into())
         }
+    }
+
+    #[test]
+    fn triple_stars_are_bold_italic() {
+        let i = inline("***both***");
+        assert_eq!(i.text, "both");
+        assert!(i.spans.iter().all(|s| s.style.has(Style::BOLD) && s.style.has(Style::ITALIC)));
+        let u = inline("__*under*__");
+        assert_eq!(u.text, "under");
     }
 
     fn inline(s: &str) -> Inline {
