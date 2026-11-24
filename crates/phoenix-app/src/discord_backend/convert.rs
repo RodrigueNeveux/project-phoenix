@@ -361,6 +361,10 @@ pub fn parse_read_state(v: Option<&Value>) -> HashMap<u64, ReadMark> {
 pub struct MuteSettings {
     pub guilds: HashSet<u64>,
     pub channels: HashSet<u64>,
+    /// Guilds with `suppress_everyone` / `suppress_roles` set: the client's
+    /// mention check (`isMentioned`) ignores @everyone / role pings there.
+    pub suppress_everyone: HashSet<u64>,
+    pub suppress_roles: HashSet<u64>,
 }
 
 pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
@@ -377,6 +381,14 @@ pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
         let muted = e.get("muted").and_then(Value::as_bool).unwrap_or(false);
         if muted && let Some(g) = e.get("guild_id").and_then(snowflake_value) {
             out.guilds.insert(g);
+        }
+        if let Some(g) = e.get("guild_id").and_then(snowflake_value) {
+            if e.get("suppress_everyone").and_then(Value::as_bool).unwrap_or(false) {
+                out.suppress_everyone.insert(g);
+            }
+            if e.get("suppress_roles").and_then(Value::as_bool).unwrap_or(false) {
+                out.suppress_roles.insert(g);
+            }
         }
         if let Some(Value::Array(ovs)) = e.get("channel_overrides") {
             for o in ovs {
@@ -925,11 +937,17 @@ impl Adapter {
                 out.push(AppEvent::Users(users));
                 if m.author.id == self.me {
                     self.mark_read(m.channel_id.0, m.id.0);
-                } else if m.mentions_user(self.me)
-                    || m.mention_everyone
-                    // Role pings count too (the live client bumps mention_count on them).
-                    || m.guild_id.and_then(|g| cache.member(g, self.me)).is_some_and(|me| m.mention_roles.iter().any(|r| me.roles.contains(r)))
-                {
+                } else if {
+                    // Client `isMentioned`: direct mention, @everyone unless the guild
+                    // suppresses it, a role of mine unless the guild suppresses roles.
+                    let g = m.guild_id.map(|g| g.0);
+                    let sup_every = g.is_some_and(|g| self.prefs.mutes.suppress_everyone.contains(&g));
+                    let sup_roles = g.is_some_and(|g| self.prefs.mutes.suppress_roles.contains(&g));
+                    m.mentions_user(self.me)
+                        || (m.mention_everyone && !sup_every)
+                        || (!sup_roles
+                            && m.guild_id.and_then(|g| cache.member(g, self.me)).is_some_and(|me| m.mention_roles.iter().any(|r| me.roles.contains(r))))
+                } {
                     self.prefs.reads.entry(m.channel_id.0).or_default().mentions += 1;
                 }
                 out.push(AppEvent::MessageCreate(message(m)));

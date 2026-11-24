@@ -373,6 +373,30 @@ impl MockBackend {
             }
             out.push(m);
         }
+        // PHX_MOCK_COMPONENTS=1: the last message is a components V2 bot reply
+        // (container with text displays, -# subtext and a separator) for renders.
+        if std::env::var_os("PHX_MOCK_COMPONENTS").is_some()
+            && let Some(last) = out.last_mut()
+        {
+            last.content = "".into();
+            let v = serde_json::json!({
+                "id": last.id.0.to_string(), "channel_id": channel.0.to_string(), "flags": 32768,
+                "author": {"id": last.author.0.to_string(), "username": "bot", "discriminator": "0"},
+                "content": "", "timestamp": "2026-01-01T00:00:00+00:00", "type": 0,
+                "components": [{"type": 17, "accent_color": 0xF1C40F, "components": [
+                    {"type": 10, "content": "## Rust Programming"},
+                    {"type": 14, "divider": true, "spacing": 1},
+                    {"type": 10, "content": "**Members**\n1358"},
+                    {"type": 10, "content": "**Created**\n6 May 2025"},
+                    {"type": 10, "content": "**Boost**\nLevel 2"},
+                    {"type": 14, "divider": true, "spacing": 1},
+                    {"type": 10, "content": "-# Requested by wumpus"}
+                ]}]
+            });
+            if let Ok(m) = serde_json::from_value::<phoenix_api::models::Message>(v) {
+                crate::commands::store::record(&m);
+            }
+        }
         out
     }
 

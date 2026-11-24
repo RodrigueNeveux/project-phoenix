@@ -157,7 +157,10 @@ fn offscreen_unread(h: &gpui::ScrollHandle, spans: &[Span]) -> (Option<usize>, O
     if view.size.height <= px(0.) {
         return (above, below, ma, mb);
     }
-    for s in spans {
+    // Client guild bar: `isUnread: () => false`, `isMentioned: guild
+    // highImportanceMentionCount > 0` — only offscreen mentions raise the bar,
+    // a merely unread guild below the fold does not.
+    for s in spans.iter().filter(|s| s.mentions > 0) {
         let Some(b) = h.bounds_for_item(s.ix) else { continue };
         let top = b.top() + z(s.y);
         if top + z(s.h) <= view.top() {
