@@ -293,6 +293,19 @@ fn hdr(id: &'static str, path: SharedString, color: gpui::Hsla) -> gpui::Statefu
 
 /// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
 /// section title_ padding 8px 8px 8px 20px, height 49px, border-bottom --border-subtle;
+thread_local! {
+    /// Last painted width of the channel header (`container_ybUK7Z`, the
+    /// `container-type: inline-size` box the search width is resolved against).
+    static HEADER_W: std::cell::Cell<f32> = const { std::cell::Cell::new(0.) };
+}
+
+/// `search_bWCaDq` width: `clamp(var(--space-64), 100cqi - 320px, 244px)` with
+/// `flex: 0 1 244px` (so it also yields to the toolbar when even 64px don't fit).
+fn header_search_w() -> f32 {
+    let w = HEADER_W.with(std::cell::Cell::get);
+    if w <= 0. { 244. } else { (w - 320.).clamp(64., 244.) }
+}
+
 /// upperContainer_ → children_ (icon/avatar, title, dot, topic) + toolbar_ (gap 10px, padding-left 10px).
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
@@ -323,6 +336,20 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     };
     let search_ph = SharedString::from(format!("{} {}", crate::t!("search.placeholder"), scope));
     div()
+        .relative()
+        .child(
+            gpui::canvas(
+                |b, w, _| {
+                    let nw = f32::from(b.size.width);
+                    if (HEADER_W.with(|c| c.replace(nw)) - nw).abs() > 0.5 {
+                        w.on_next_frame(|w, _| w.refresh());
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .inset_0(),
+        )
         .h(z(m::HEADER_H + 1.))
         .flex_none()
         .pl(z(20.))
@@ -520,7 +547,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     // editor_ padding 0 6px, 14px/22px medium; icon_ 24px box, padding 4px, 16px glyph.
                     div()
                         .ml(z(4.))
-                        .w(z(244.))
+                        .flex_shrink()
+                        .min_w_0()
+                        .w(z(header_search_w()))
                         .h(z(32.))
                         .rounded(z(8.))
                         .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
