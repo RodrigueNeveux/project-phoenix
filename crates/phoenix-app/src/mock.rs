@@ -791,6 +791,29 @@ impl Backend for MockBackend {
                     ParityReply::ForumPosts { posts, has_more: false }
                 })
             }
+            ParityRequest::ScheduledEvents { .. } => Box::pin(async {
+                let now = chrono::Utc::now().timestamp();
+                Ok(ParityReply::Events(vec![
+                    crate::commands::GuildEvent {
+                        id: Id(9_000_001),
+                        name: "Community game night".into(),
+                        description: "Bring a friend, we play until midnight.".into(),
+                        start: now + 2 * 86_400,
+                        status: 1,
+                        location: Some("Voice lounge".into()),
+                        user_count: 12,
+                        ..Default::default()
+                    },
+                    crate::commands::GuildEvent {
+                        id: Id(9_000_002),
+                        name: "Release party".into(),
+                        start: now - 600,
+                        status: 2,
+                        user_count: 31,
+                        ..Default::default()
+                    },
+                ]))
+            }),
             _ => Box::pin(async { Err(crate::backend::BackendError("Not available offline.".into())) }),
         }
     }

@@ -10,6 +10,7 @@ pub mod dm_call;
 pub mod chat;
 pub mod code_copy;
 pub mod components;
+pub mod events;
 pub mod forum;
 pub mod group_dm;
 pub mod inbox;

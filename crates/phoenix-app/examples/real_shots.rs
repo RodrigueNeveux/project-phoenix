@@ -16,7 +16,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n].
+//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events.
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
@@ -228,6 +228,8 @@ impl Backend for ReadOnly {
             }
             // GET /content-inventory/users/@me (member list Activity feed).
             phoenix_app::commands::ParityRequest::ContentInventory => self.0.parity(req),
+            // Events modal (PHX_OPEN=events): GET scheduled-events.
+            phoenix_app::commands::ParityRequest::ScheduledEvents { .. } => self.0.parity(req),
             // Inbox popout tabs (PHX_VIEW=inbox): GET mentions / saved / scheduled.
             phoenix_app::commands::ParityRequest::Mentions { .. }
             | phoenix_app::commands::ParityRequest::SavedMessages
@@ -923,6 +925,11 @@ fn main() -> anyhow::Result<()> {
                 "invite" => {
                     if let Some(guild) = app.selected_guild {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink { guild, link: None }, cx);
+                    }
+                }
+                "events" => {
+                    if let Some(g) = app.selected_guild {
+                        phoenix_app::ui::events::open(app, g, cx);
                     }
                 }
                 // Forum post n (0 = first, active then older) in the thread sidebar.

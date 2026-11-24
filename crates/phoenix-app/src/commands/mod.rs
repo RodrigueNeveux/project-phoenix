@@ -136,6 +136,28 @@ pub enum ParityRequest {
     GuildFolders(Vec<FolderSync>),
     /// Archived public + joined private threads of a text channel (threads browser).
     ArchivedThreads { channel: Id },
+    /// `GET /guilds/{g}/scheduled-events` (Events modal), read-only.
+    ScheduledEvents { guild: Id },
+}
+
+/// A guild scheduled event (Events modal card).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GuildEvent {
+    pub id: Id,
+    pub name: String,
+    pub description: String,
+    /// Unix seconds.
+    pub start: i64,
+    pub end: Option<i64>,
+    /// 1 scheduled, 2 active, 3 completed, 4 canceled.
+    pub status: u8,
+    /// Voice/stage channel, or `location` for external events.
+    pub channel: Option<Id>,
+    pub location: Option<String>,
+    pub user_count: u32,
+    pub creator: Option<Id>,
+    /// Cover image hash (`guild-events/{id}/{hash}.png`).
+    pub image: Option<String>,
 }
 
 /// One content inventory feed entry (member list Activity card).
@@ -163,6 +185,7 @@ pub enum ParityReply {
     Channel(Id),
     /// Content inventory feed entries.
     Inventory(Vec<InventoryEntry>),
+    Events(Vec<GuildEvent>),
 }
 
 /// Fresh READY after a non-resumable reconnect (carried by `AppEvent::Resync`).
@@ -218,5 +241,45 @@ mod tests {
                 assert_eq!(app.selected_channel, Some(ch));
             })
             .unwrap();
+    }
+}
+
+/// One `scheduled-events` entry; `None` without an id.
+pub fn parse_event(v: &serde_json::Value) -> Option<GuildEvent> {
+    let sid = |k: &str| v.get(k).and_then(|x| x.as_str()).and_then(|x| x.parse::<u64>().ok()).map(Id);
+    let time = |k: &str| {
+        v.get(k).and_then(|x| x.as_str()).and_then(|x| chrono::DateTime::parse_from_rfc3339(x).ok()).map(|d| d.timestamp())
+    };
+    let s = |k: &str| v.get(k).and_then(|x| x.as_str()).map(str::to_owned);
+    Some(GuildEvent {
+        id: sid("id")?,
+        name: s("name").unwrap_or_default(),
+        description: s("description").unwrap_or_default(),
+        start: time("scheduled_start_time").unwrap_or(0),
+        end: time("scheduled_end_time"),
+        status: v.get("status").and_then(|x| x.as_u64()).unwrap_or(1) as u8,
+        channel: sid("channel_id"),
+        location: v.get("entity_metadata").and_then(|m| m.get("location")).and_then(|x| x.as_str()).map(str::to_owned),
+        user_count: v.get("user_count").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
+        creator: sid("creator_id"),
+        image: s("image"),
+    })
+}
+
+#[cfg(test)]
+mod event_tests {
+    #[test]
+    fn parses_scheduled_event() {
+        let v = serde_json::json!({
+            "id": "12", "name": "Game night", "description": "", "status": 1,
+            "scheduled_start_time": "2026-11-30T20:00:00+00:00", "scheduled_end_time": null,
+            "channel_id": null, "entity_metadata": { "location": "Paris" }, "user_count": 3
+        });
+        let ev = super::parse_event(&v).unwrap();
+        assert_eq!(ev.id, super::Id(12));
+        assert_eq!(ev.location.as_deref(), Some("Paris"));
+        assert_eq!(ev.user_count, 3);
+        assert_eq!(ev.start, 1_796_068_800);
+        assert!(ev.end.is_none());
     }
 }

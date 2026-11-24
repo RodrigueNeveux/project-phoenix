@@ -91,6 +91,11 @@ impl RestClient {
         self.call_empty(Method::PATCH, &format!("/guilds/{guild}/channels"), Body::Json(Value::Array(entries))).await
     }
 
+    /// `GET /guilds/{g}/scheduled-events?with_user_count=true` (Events modal), read-only.
+    pub async fn scheduled_events(&self, guild: GuildId) -> Result<Vec<Value>> {
+        self.call(Method::GET, &format!("/guilds/{guild}/scheduled-events?with_user_count=true"), Body::None).await
+    }
+
     pub async fn create_scheduled_event(&self, guild: GuildId, body: Value) -> Result<Snowflake> {
         self.post_for_id(&format!("/guilds/{guild}/scheduled-events"), body).await
     }

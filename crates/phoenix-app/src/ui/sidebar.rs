@@ -394,7 +394,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         return if app.selected_guild.is_none() {
             dm_top(entity, cx).into_any_element()
         } else {
-            guild_top(app).into_any_element()
+            guild_top(app, entity.clone()).into_any_element()
         };
     }
     let Some(r) = app.sidebar_rows.get(ix - 1).copied() else {
@@ -1489,7 +1489,7 @@ fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
 /// 20px `icon_TNyK-N`, 16/28 medium `--channels-default`) for "Events", "Members"
 /// (with moderation rights) and "Server Boosts", then `sectionDivider_ysO7Gy`
 /// (1px `--border-subtle`, inset 20 / 11) and a 12px gap.
-fn guild_top(app: &PhoenixApp) -> impl IntoElement {
+fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
     let perms = app.selected_guild.map(|g| app.backend.guild_permissions(g)).unwrap_or(0);
     let mods = crate::ui::inbox::has_perm(perms, (1 << 1) | (1 << 2) | (1 << 5)); // KICK | BAN | MANAGE_GUILD
     let features = app.selected_guild.map(|g| app.backend.guild_features(g)).unwrap_or_default();
@@ -1537,7 +1537,18 @@ fn guild_top(app: &PhoenixApp) -> impl IntoElement {
             let (n, on) = app.backend.guild_boosts(g)?;
             boost_goal(n, on, boost_goal_max(&app.backend.guild_features(g)))
         }))
-        .child(item("g-events", "calendar", crate::t!("guild.top.events")))
+        .child(
+            div()
+                .id("g-events-open")
+                .on_click(move |_, _, cx| {
+                    entity.update(cx, |a, cx| {
+                        if let Some(g) = a.selected_guild {
+                            crate::ui::events::open(a, g, cx);
+                        }
+                    })
+                })
+                .child(item("g-events", "calendar", crate::t!("guild.top.events"))),
+        )
         // vanilla-inbox-0 #629..#633: "Channels & Roles" row (ChannelListMagnifyingGlassIcon)
         // for onboarding guilds, "Browse Channels" for other community guilds.
         .when_some(browse, |d, label| d.child(item("g-browse", "channel-browse", label)))

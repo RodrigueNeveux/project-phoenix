@@ -31,3 +31,6 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 - tag pill: rest / selected ✅; hover ❌ not measured.
 | inline new post form | vanilla-forum-new-post container_owUmX8 | title 20/600 h32, body min 80, media tile 78 r12, tag row mt16 mb12 gap 8, small pills h24, divider, controls h40 mt12 | | ui/forum.rs compose_card | ✅ (dump) / render pending |
 | announcement "Follow" button | vanilla-announcement followButton_z_gUBg | padding 4 8, mr 8; sm secondary h32 r8 14/500 | | ui/forum.rs follow_button, ui/chat.rs header | ✅ (dump); follow modal ❌ |
+| Events modal frame + header | vanilla-events-modal root__KoJTP / flex_hkRWAH | 602x400 r12, header pad 16 24 8, icon 24 mr 8, divider 1x16 mx 16, sm primary | | ui/events.rs | ✅ (dump) |
+| Events empty state | container_NkbMg8 | heading-xl 24/32 mb 8, body-sm 14/18, roleTip mt 4 | | ui/events.rs | ✅ (dump) |
+| Event card | not dumped (no event on the measured guild) | | | ui/events.rs card | ❌ tokens only |
