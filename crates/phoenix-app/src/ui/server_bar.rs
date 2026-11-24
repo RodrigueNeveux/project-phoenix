@@ -137,7 +137,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .h_full()
         .relative()
         .bg(c(Palette::BG_TERTIARY))
+        // `stack_ scroller_ scrollbarGutterStable_ thin_tqapBM fade_tqapBM` (CDP 2026-11-24):
+        // the thin bar shows in the rail's 8px gutter while hovered.
+        .group(crate::ui::chat::scrollbar::THIN_FADE_GROUP)
         .child(col)
+        .children(crate::ui::chat::scrollbar::thin_fade_scrollbar_div(&scroll))
         .children(above.map(|ix| unread_bar(&scroll, ix, true, m_above)))
         .children(below.map(|ix| unread_bar(&scroll, ix, false, m_below)))
 }

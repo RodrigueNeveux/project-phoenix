@@ -189,13 +189,22 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .border_l_1()
         .border_color(c(Palette::DIVIDER)) // container_86es0b border-inline-start --border-subtle
         .child(
-            list(app.member_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
+            div()
                 .flex_1()
+                .min_h_0()
                 .w_full()
-                // live client: content_tqapBM is 260px of the 268px list, the thin
-                // scroller keeps an 8px gutter on the right.
-                .pr(z(8.))
-                .pb(z(10.)), // members_86es0b padding-bottom 10px
+                .relative()
+                .group(crate::ui::chat::scrollbar::THIN_FADE_GROUP)
+                .child(
+                    list(app.member_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
+                        .size_full()
+                        // live client: content_tqapBM is 260px of the 268px list, the thin
+                        // scroller keeps an 8px gutter on the right.
+                        .pr(z(8.))
+                        .pb(z(10.)), // members_86es0b padding-bottom 10px
+                )
+                // members_86es0b is `thin_tqapBM fade_tqapBM`: the bar shows on hover.
+                .children(crate::ui::chat::scrollbar::thin_fade_scrollbar(&app.member_list)),
         )
 }
 
