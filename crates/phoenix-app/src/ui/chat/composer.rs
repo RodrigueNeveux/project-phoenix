@@ -235,7 +235,7 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
     // "Créer le sondage" (PollsIcon, canPostPolls = DM or SEND_MESSAGES + SEND_POLLS 1<<49).
     let guild = app.channels.get(&ch).and_then(|c| c.guild);
     if guild.is_none() || crate::actions::has(app, guild, 1 << 49) {
-        items.push(MenuItem::action(crate::t!("attach.poll"), Some(crate::icons::path("attach/poll")), act(|_, ch, w, cx| {
+        items.push(MenuItem::action(crate::t!("attach.poll"), Some(crate::icons::path("attach/poll")), act(|_, ch, w, _cx| {
             crate::actions::open_modal(crate::ui::modals::Modal::CreatePoll(crate::ui::modals::poll_create::State::new(ch)), Some(w));
         })));
     }

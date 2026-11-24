@@ -260,27 +260,6 @@ fn welcome_cta(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> 
     )
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn poll_result_title_is_cut_like_the_client() {
-        // Live 2026-11-24: "[Test Phoenix] envoyé depuis le client Rust (Phoe…".
-        let q = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — sondage de test : quelle réponse ?";
-        assert_eq!(super::truncate_question(q), "[Test Phoenix] envoyé depuis le client Rust (Phoe\u{2026}");
-        assert_eq!(super::truncate_question("court"), "court");
-    }
-
-    use super::*;
-    #[test]
-    fn join_text_is_stable() {
-        assert_eq!(join_text(1 << 22), join_text(1 << 22));
-        assert!(is_system(MessageKind::Join));
-        assert!(!is_system(MessageKind::Reply));
-        assert_eq!(wave_sticker(0, 0).0, 749054660769218631);
-        assert_eq!(wave_sticker(3 << 22, 0), (781291131828699156, true));
-    }
-}
-
 /// Field `name` of the POLL_RESULT embed.
 fn poll_field<'a>(msg: &'a Message, name: &str) -> Option<&'a str> {
     msg.embeds.first()?.fields.iter().find(|f| f.name.as_ref() == name).map(|f| f.value.as_ref())
@@ -357,7 +336,7 @@ fn poll_result(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: 
     let emoji_el = emoji.map(|n| {
         let src: SharedString = match emoji_id {
             Some(id) => format!("https://cdn.discordapp.com/emojis/{id}.webp?size=48").into(),
-            None => crate::media::emoji::twemoji_url(&n).unwrap_or_default().into(),
+            None => crate::media::emoji::twemoji_url(&n).unwrap_or_default(),
         };
         div().size(z(40.)).flex_none().flex().items_center().justify_center().child(gpui::img(src).size(z(32.)))
     });
@@ -410,4 +389,26 @@ fn poll_result(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: 
             }
         }));
     div().flex().flex_col().pb(z(2.)).child(line).child(div().flex().child(card)).into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poll_result_title_is_cut_like_the_client() {
+        // Live 2026-11-24: "[Test Phoenix] envoyé depuis le client Rust (Phoe…".
+        let q = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — sondage de test : quelle réponse ?";
+        assert_eq!(super::truncate_question(q), "[Test Phoenix] envoyé depuis le client Rust (Phoe\u{2026}");
+        assert_eq!(super::truncate_question("court"), "court");
+    }
+
+    #[test]
+    fn join_text_is_stable() {
+        assert_eq!(join_text(1 << 22), join_text(1 << 22));
+        assert!(is_system(MessageKind::Join));
+        assert!(!is_system(MessageKind::Reply));
+        assert_eq!(wave_sticker(0, 0).0, 749054660769218631);
+        assert_eq!(wave_sticker(3 << 22, 0), (781291131828699156, true));
+    }
 }
