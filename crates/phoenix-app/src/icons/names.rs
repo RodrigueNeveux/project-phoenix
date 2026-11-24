@@ -107,7 +107,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("voice/video-small", &["VideoIcon"]),
     ("voice/screen", &["ScreenArrowIcon"]),
     ("voice/soundboard", &["SoundboardIcon"]),
-    ("voice/activity", &["RocketIcon", "ActivitiesPlusIcon"]),
+    ("voice/activity", &["AppsIcon"]),
     ("voice/noise", &["WaveformIcon"]),
     ("inbox/filter", &["SlidersHorizontalIcon", "FiltersHorizontalIcon", "SlidersIcon"]),
     ("inbox/read-all", &["DoubleCheckmarkIcon", "CheckmarkDoubleIcon", "ChatCheckIcon"]),

@@ -77,7 +77,8 @@ pub fn svg_asset(path: &str) -> Option<&'static str> {
         ),
         ACTIVITY => concat!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
-            r#"<path fill-rule="evenodd" d="M7 6h10a5 5 0 0 1 5 5v2a5 5 0 0 1-8.5 3.5h-3A5 5 0 0 1 2 13v-2a5 5 0 0 1 5-5zm0 3v1.5H5.5v2H7V14h2v-1.5h1.5v-2H9V9zm9.5 0a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4zm-2 2.6a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z"/>"#,
+            r#"<rect x="2.5" y="2.5" width="8.5" height="8.5" rx="2.5"/><path d="M15.9 2.8a1.3 1.3 0 0 1 2.2 0l3.6 6.2a1.3 1.3 0 0 1-1.1 2H13.4a1.3 1.3 0 0 1-1.1-2z"/>"#,
+            r#"<path d="M6.75 13l1.2 1.3 1.7-.4.4 1.7 1.7.6-.6 1.6.9 1.5-1.6.8.1 1.7-1.7-.2-1 1.4-1.1-1.4-1.7.2.1-1.7-1.6-.8.9-1.5-.6-1.6 1.7-.6.4-1.7 1.7.4z"/><path d="M17.25 12.5c.5 2.6 1.6 3.7 4.25 4.25-2.65.5-3.75 1.6-4.25 4.25-.5-2.65-1.6-3.75-4.25-4.25 2.65-.55 3.75-1.65 4.25-4.25z"/>"#,
             "</svg>"
         ),
         NOISE => concat!(
@@ -308,6 +309,35 @@ fn action_button(id: &'static str, path: &'static str, label: SharedString, cx: 
         .on_click(cx.listener(move |a, _, _, cx| a.stub(&label, cx)))
 }
 
+fn camera_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+    let on = flags(app.me.id).video;
+    let (bg, hover, fg) = if on {
+        (t(idx::OPACITY_GREEN_12), t(idx::OPACITY_GREEN_24), t(idx::GREEN_300))
+    } else {
+        (t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT), t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT))
+    };
+    div()
+        .id("voice-camera")
+        .flex_1()
+        .min_w_0()
+        .h(z(32.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(Palette::BORDER_MUTED))
+        .bg(bg)
+        .hover(move |s| s.bg(hover))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(asset_icon(if on { CAMERA } else { "icons/call/camera-off.svg" }, 20. * crate::theme::zoom(), fg))
+        .tip(if on { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") })
+        .on_click(cx.listener(move |a, _, _, cx| {
+            drop(a.backend.voice_control(crate::voice::VoiceControl::SetCamera(!on)));
+            cx.notify();
+        }))
+}
+
 fn large_ping(color: Hsla, bg: Hsla) -> impl IntoElement {
     div()
         .size(z(32.))
@@ -495,7 +525,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
             div()
                 .flex()
                 .gap(z(8.))
-                .child(action_button("voice-camera", CAMERA, crate::t!("voice.camera_on"), cx))
+                .child(camera_button(app, cx))
                 .child(action_button("voice-screen", SCREEN, crate::t!("voice.share_screen"), cx))
                 .child(action_button("voice-activity", ACTIVITY, crate::t!("voice.start_activity"), cx))
                 .child(crate::ui::pickers::soundboard::panel_button(app, cx)),
