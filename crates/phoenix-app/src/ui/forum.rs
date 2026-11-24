@@ -342,7 +342,10 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
     let author_color = guild
         .zip(author_id)
         .and_then(|(g, u)| app.members.get(&g).and_then(|ms| ms.iter().find(|m| m.user == u)).and_then(|m| app.member_color(g, m)));
-    let preview: SharedString = first.map(|m| preview_text(&m.content)).unwrap_or_default().into();
+    // Inline markdown (`**bold**`, `code`) and raw mentions resolved like the reply preview,
+    // instead of showing the markers.
+    let preview: SharedString =
+        first.map(|m| crate::ui::chat::reply_preview_text(app, &preview_text(&m.content).into())).unwrap_or_default();
     let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
     let reaction = first.and_then(|m| m.reactions.iter().max_by_key(|r| r.count)).cloned();
     let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
