@@ -661,7 +661,9 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                             .bg(t(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
                             .flex()
                             .items_center()
-                            .text_size(z(11.))
+                            // vanilla-call-view.png: "EN DIRECT" cap height ≈ 12px text in a 16px badge.
+                            .text_size(z(12.))
+                            .line_height(z(16.))
                             .font_weight(FontWeight::BOLD)
                             .text_color(gpui::white())
                             .child(crate::t!("voice.live")),
