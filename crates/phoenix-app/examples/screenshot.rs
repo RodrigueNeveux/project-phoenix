@@ -11,6 +11,10 @@ fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let out = args.next().unwrap_or_else(|| "phoenix.png".into());
     let login_only = args.next().as_deref() == Some("login");
+    // PHOENIX_CSD=1: draw the window buttons like the frameless desktop window.
+    if std::env::var_os("PHOENIX_CSD").is_some() {
+        phoenix_app::ui::title_bar::FORCE_CLIENT_DECORATIONS.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
 
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), || {
