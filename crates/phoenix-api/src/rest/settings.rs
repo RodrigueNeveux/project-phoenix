@@ -51,6 +51,9 @@ pub struct PrivacySettings {
     pub restricted_guild_ids: Vec<u64>,
     #[prost(bool, tag = "4")]
     pub default_guilds_restricted: bool,
+    /// Servers the game/app activity is not shared with.
+    #[prost(fixed64, repeated, tag = "13")]
+    pub activity_restricted_guild_ids: Vec<u64>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]

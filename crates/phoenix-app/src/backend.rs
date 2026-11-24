@@ -313,6 +313,10 @@ pub trait Backend: Send + Sync + 'static {
     fn recent_activity(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_activity::RecentGame>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Logged-in devices count (`GET /auth/sessions`) for Settings > Account.
+    fn session_count(&self) -> BoxFuture<Option<usize>> {
+        Box::pin(async { Ok(None) })
+    }
     /// Owned collectibles (`GET /users/@me/collectibles-purchases`) for the
     /// profile editor pickers.
     fn owned_collectibles(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {

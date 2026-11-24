@@ -151,6 +151,10 @@ impl Backend for ReadOnly {
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
+    /// Settings > Account devices count (read-only GET).
+    fn session_count(&self) -> BoxFuture<Option<usize>> {
+        self.0.session_count()
+    }
     /// Profile Board: widgets, games and recent activity (read-only GETs).
     fn profile_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_widgets::AppWidget>> {
         self.0.profile_widgets(u)

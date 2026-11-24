@@ -49,6 +49,9 @@ pub struct User {
     pub premium_type: Option<u8>,
     #[serde(default)]
     pub phone: Option<String>,
+    /// Adult age group (Account Standing > Age group).
+    #[serde(default)]
+    pub nsfw_allowed: Option<bool>,
     #[serde(default)]
     pub locale: Option<String>,
     #[serde(default)]

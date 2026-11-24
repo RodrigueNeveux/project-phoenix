@@ -244,6 +244,8 @@ fn radio_group(app: &PhoenixApp, id: &'static str, opts: &'static [(&'static str
             .child(
                 div()
                     .flex_1()
+                    // let long descriptions wrap (vanilla-settings-02 #2841: 664px, 2 lines)
+                    .min_w_0()
                     .flex()
                     .flex_col()
                     .gap(z(4.))
@@ -306,7 +308,25 @@ fn key_group(legend: &'static str, lead: &'static str, rows: &'static [(&'static
         )))
 }
 
-fn related(icon: &'static str, title: &'static str, desc: &'static str, page: Page, cx: &mut Cx) -> AnyElement {
+/// Related-row description; "Confidentialité des activités" appends the
+/// servers the activity is shared with, in bold (vanilla-settings-02 #2883
+/// strong: "Aperture Sciences et 41 autres serveurs").
+fn related_desc(app: &PhoenixApp, title: &str, desc: &'static str) -> AnyElement {
+    if title != "settings.page.activity" {
+        return desc_text(tr(desc)).into_any_element();
+    }
+    let restricted = super::account::activity_restricted();
+    let shared: Vec<&crate::model::Guild> = app.guilds.iter().filter(|g| !restricted.contains(&g.id.0)).collect();
+    let tail = match shared.as_slice() {
+        [] => crate::t!("sp.activity_shared_none"),
+        [g] => crate::t!("sp.activity_shared_one", guild = g.name),
+        [g, _] => crate::t!("sp.activity_shared_two", guild = g.name),
+        [g, rest @ ..] => crate::t!("sp.activity_shared_many", guild = g.name, n = rest.len()),
+    };
+    super::account::bold_desc(format!("{} {tail}", tr("sp.activity_related_d")).into())
+}
+
+fn related(app: &PhoenixApp, icon: &'static str, title: &'static str, desc: &'static str, page: Page, cx: &mut Cx) -> AnyElement {
     let lead = div()
         .w(z(48.))
         .flex_none()
@@ -343,7 +363,7 @@ fn related(icon: &'static str, title: &'static str, desc: &'static str, page: Pa
             cx.notify();
         }))
         .child(lead)
-        .child(div().flex_1().min_w_0().flex().flex_col().gap(z(4.)).child(title_text(tr(title))).child(desc_text(tr(desc))))
+        .child(div().flex_1().min_w_0().flex().flex_col().gap(z(4.)).child(title_text(tr(title))).child(related_desc(app, title, desc)))
         .child(
             div().flex_none().flex().items_center().child(
                 gpui::svg().path(crate::icons::path("chevron-right")).size(z(24.)).text_color(c(tok(idx::ICON_DEFAULT))),
@@ -375,7 +395,7 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
         B::Sound(id, t) => {
             // the preview link (anchor_R6ReNl, 14/18 --text-link)
             let link = div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_LINK))).child(tr("sp.sound_preview"));
-            out.push(switch_row(app, id, tr(t), Some(link.into_any_element()), Bind::Ui(true), cx));
+            out.push(switch_row(app, id, tr(t), Some(link.into_any_element()), Bind::Ui(*id != "snd-msg-cur"), cx)); // vanilla-settings-04: current-channel sound off
         }
         B::Radios(id, t, d, opts, p) => {
             let mut col = div().flex().flex_col().py(z(12.));
@@ -417,7 +437,7 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
                         .into_any_element(),
                 );
             }
-            out.push(related(icon, t, d, *page, cx));
+            out.push(related(app, icon, t, d, *page, cx));
         }
         B::Expand(id, t, d, inner) => {
             let open = app.settings.as_ref().is_some_and(|s| s.expanded.contains(id));
@@ -834,12 +854,12 @@ static DATA: &[B] = &[
     }),
     B::Switch("data-improve", "sp.data.improve", "sp.data.improve_d", Bind::Ui(true)),
     B::Switch("data-personalize", "sp.data.personalize", "sp.data.personalize_d", Bind::Ui(true)),
-    B::Switch("data-sponsored", "sp.data.sponsored", "sp.data.sponsored_d", Bind::Ui(true)),
+    B::Switch("data-sponsored", "sp.data.sponsored", "sp.data.sponsored_d", Bind::Ui(false)),
     B::Switch("data-third", "sp.data.third", "sp.data.third_d", Bind::Ui(false)),
-    B::Switch("data-discovery", "sp.data.discovery", "sp.data.discovery_d", Bind::Ui(true)),
+    B::Switch("data-discovery", "sp.data.discovery", "sp.data.discovery_d", Bind::Ui(false)),
     B::Switch("data-clips", "sp.data.clips", "sp.data.clips_d", Bind::Ui(true)),
     B::Action("sp.data.request", "sp.data.request_d", "sp.data.request_b", false),
-    B::Related("apps", "sp.games", "sp.games_d", Page::ActivityPrivacy),
+    B::Related("apps", "sp.games", "sp.games_d", Page::RegisteredGames),
     B::Divider,
     B::Title("sp.data.t2"),
     B::Lead("sp.data.t2_d"),
@@ -913,7 +933,7 @@ static NOTIF: &[B] = &[
     B::Legend("sp.no.when"),
     B::Switch("n-stream", "sp.no.stream", "", Bind::Ui(true)),
     B::Switch("n-anniv", "sp.no.anniv", "", Bind::Ui(true)),
-    B::Switch("n-online", "sp.no.online", "", Bind::Ui(false)),
+    B::Switch("n-online", "sp.no.online", "", Bind::Ui(true)),
     B::Switch("n-event", "sp.no.event", "", Bind::Ui(true)),
     B::Switch("n-profile", "sp.no.profile", "", Bind::Ui(true)),
     B::Select("n-react", "sp.no.react", "", &["sp.no.r_all", "sp.no.r_dm", "sp.no.r_never"], Pick::Ui(0)),
@@ -1356,7 +1376,7 @@ static ACTIVITY: &[B] = &[
     B::Switch("act-share", "sp.at.share", "sp.at.share_d", Bind::Ui(true)),
     B::Switch("act-online", "sp.at.online", "sp.at.online_d", Bind::Ui(true)),
     B::Switch("act-stream", "sp.at.stream", "sp.at.stream_d", Bind::Ui(true)),
-    B::Related("apps", "sp.games", "sp.games_d", Page::ActivityPrivacy),
+    B::Related("apps", "sp.games", "sp.games_d", Page::RegisteredGames),
     B::Divider,
     B::Title("sp.at.t2"),
     B::Radios("act-where", "sp.at.auto", "sp.at.auto_d", &[("sp.at.a_all", ""), ("sp.at.a_small", ""), ("sp.at.a_none", "")], Pick::Ui(0)),

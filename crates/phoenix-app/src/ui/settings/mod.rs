@@ -5,6 +5,7 @@
 //! * [`LocalPrefs`]: client-only settings (font scale, zoom, notifications),
 //!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
 
+pub mod account;
 mod art;
 mod boost;
 mod gift;
@@ -286,6 +287,7 @@ pub struct SettingsState {
     pub confirm_logout: bool,
     pub error: Option<SharedString>,
     pub reveal_email: bool,
+    pub reveal_phone: bool,
     /// Session-only values of settings Phoenix doesn't back yet.
     pub toggles: std::collections::HashMap<&'static str, bool>,
     pub picks: std::collections::HashMap<&'static str, usize>,
@@ -305,6 +307,7 @@ pub struct SettingsState {
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if app.screen == crate::app::Screen::Main {
         app.settings = Some(SettingsState::default());
+        account::fetch_sessions(app, cx);
         cx.notify();
     }
 }

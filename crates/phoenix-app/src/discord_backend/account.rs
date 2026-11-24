@@ -136,6 +136,7 @@ fn theme_to_api(t: AppTheme) -> Theme {
 
 pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
     let d = SyncedSettings::default();
+    crate::ui::settings::account::set_activity_restricted(p.privacy.as_ref().map(|x| x.activity_restricted_guild_ids.clone()).unwrap_or_default());
     SyncedSettings {
         theme: match p.theme() {
             Theme::Dark => AppTheme::Dark,
@@ -160,5 +161,15 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
         }
         GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => s.notify.lock().update(data),
         _ => {}
+    }
+}
+
+impl DiscordBackend {
+    /// `GET /auth/sessions`: number of logged-in devices (Settings > Account).
+    pub(super) fn session_count_impl(&self) -> BoxFuture<Option<usize>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.request_json(reqwest::Method::GET, "/auth/sessions", None).await.map_err(api_err)?;
+            Ok(v.get("user_sessions").and_then(serde_json::Value::as_array).map(Vec::len))
+        })
     }
 }

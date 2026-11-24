@@ -94,37 +94,60 @@ fn field_row(label: impl Into<SharedString>, value: SharedString, action: Option
     controls::control_item(label, None, Some(trailing.into_any_element())).into_any_element()
 }
 
-fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
-    let me = &app.me;
-    let reveal = app.settings.as_ref().is_some_and(|s| s.reveal_email);
-    let email: SharedString = if reveal { crate::t!("settings.account.email_hidden") } else { "**********@*****.com".into() };
-    // textButton_nJgowo: 16/500 --text-link
-    let reveal_btn = div()
-        .id("reveal-email")
-        .text_size(z(16.))
-        .line_height(z(20.))
-        .font_weight(FontWeight::MEDIUM)
-        .text_color(c(tok(idx::TEXT_LINK)))
-        .cursor_pointer()
-        .on_click(cx.listener(|a, _, _, cx| {
-            if let Some(s) = st(a) {
-                s.reveal_email = !s.reveal_email;
-            }
-            cx.notify();
-        }))
-        .child(if reveal { crate::t!("common.hide") } else { crate::t!("common.reveal") });
-    let email_val = div()
+/// vanilla-settings-01 #2690-#2716: "value [Afficher]", 4px apart.
+fn masked_value(shown: bool, v: String, masked: String, id: &'static str, flip: fn(&mut PhoenixApp), cx: &mut Cx) -> AnyElement {
+    div()
         .flex()
         .items_center()
         .gap(z(4.))
-        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(email))
-        .child(reveal_btn);
-    let email_row = controls::control_item(
-        crate::t!("settings.account.email"),
-        None,
-        Some(div().flex().items_center().gap(z(20.)).child(email_val).child(secondary("edit-em", crate::t!("common.edit"))).into_any_element()),
-    )
+        .child(super::account::value(if shown { v } else { masked }))
+        .child(super::account::reveal_button(id, shown, flip, cx))
+        .into_any_element()
+}
+
+fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
+    use super::account as acct;
+    let me = &app.me;
+    let info = acct::info();
+    let (reveal_em, reveal_ph) = app.settings.as_ref().map_or((false, false), |s| (s.reveal_email, s.reveal_phone));
+    // vanilla-settings-01 #2690-#2716: "value [Afficher]  [Modifier]", the
+    // value/reveal pair 4px apart, 20px before the button.
+    let trailing = |val: AnyElement, btn: Stateful<Div>| div().flex().items_center().gap(z(20.)).child(val).child(btn).into_any_element();
+    let email_row = match info.email.clone() {
+        Some(e) => {
+            let m = acct::mask_email(&e);
+            let v = masked_value(reveal_em, e, m, "reveal-email", |a| {
+                if let Some(s) = st(a) {
+                    s.reveal_email = !s.reveal_email;
+                }
+            }, cx);
+            controls::control_item(crate::t!("settings.account.email"), None, Some(trailing(v, secondary("edit-em", crate::t!("common.edit")))))
+        }
+        None => controls::control_item(crate::t!("settings.account.email"), None, Some(trailing(acct::value(crate::t!("settings.account.no_email")).into_any_element(), secondary("edit-em", crate::t!("common.add"))))),
+    }
     .into_any_element();
+    let phone_row = match info.phone.clone() {
+        Some(p) => {
+            let m = acct::mask_phone(&p);
+            let v = masked_value(reveal_ph, p, m, "reveal-phone", |a| {
+                if let Some(s) = st(a) {
+                    s.reveal_phone = !s.reveal_phone;
+                }
+            }, cx);
+            controls::control_item(crate::t!("settings.account.phone"), None, Some(trailing(v, secondary("edit-ph", crate::t!("common.edit")))))
+                .into_any_element()
+        }
+        None => field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element())),
+    };
+    // Clickable rows with "value >" (#2749-#2768).
+    let link_row = |id: &'static str, title: SharedString, v: Option<SharedString>| {
+        controls::control_item(title, None, Some(acct::value_chevron(v)))
+            .id(id)
+            .cursor_pointer()
+            .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+            .into_any_element()
+    };
+    let devices = acct::sessions().map(|n| crate::t!("settings.account.devices_n", n = n));
     div()
         .child(category(
             crate::t!("settings.account.info"),
@@ -132,7 +155,7 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 // vanilla-settings-01: no display-name row (it moved to Profiles).
                 field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element())),
                 email_row,
-                field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element())),
+                phone_row,
             ],
         ))
         .child(divider())
@@ -145,14 +168,32 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     Some(secondary("change-pw", crate::t!("common.edit")).into_any_element()),
                 )
                 .into_any_element(),
-                controls::control_item(crate::t!("settings.account.authenticator"), Some(crate::t!("settings.account.authenticator_note")), None).into_any_element(),
+                link_row(
+                    "acct-mfa",
+                    crate::t!("settings.account.mfa"),
+                    Some(if info.mfa { crate::t!("settings.account.mfa_on") } else { crate::t!("settings.account.mfa_off") }),
+                ),
+                link_row("acct-devices", crate::t!("settings.account.devices"), devices),
             ],
         ))
         .child(divider())
+        .child(category(crate::t!("settings.account.status"), acct::standing_rows(&info)))
+        .child(divider())
         .child(category(
-            crate::t!("settings.account.removal"),
-            vec![controls::control_item(crate::t!("settings.account.removal"), Some(crate::t!("settings.account.removal_note")), None).into_any_element()],
+            crate::t!("settings.account.family"),
+            vec![controls::control_item(
+                crate::t!("settings.account.family_setup"),
+                Some(crate::t!("settings.account.family_d")),
+                Some(acct::value_chevron(None)),
+            )
+            .id("acct-family")
+            .cursor_pointer()
+            .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+            .into_any_element()],
         ))
+        .child(divider())
+        // #2824: the last category has no title.
+        .child(div().flex().flex_col().gap(z(10.)).children(acct::removal_rows()))
 }
 
 /// Profiles page: the 2026 profile editor's styles panel (h3 body-sm/medium
@@ -437,8 +478,30 @@ fn subnav_rows(p: Page) -> Vec<SharedString> {
             crate::t!("settings.account.status"),
             crate::t!("settings.account.family"),
         ],
-        Page::VoiceVideo => vec![crate::t!("sp.vo.t1"), crate::t!("sp.vo.t2")],
-        p => super::pages::titles(p),
+        p => match subnav_keys(p) {
+            [] => super::pages::titles(p),
+            keys => keys.iter().map(|k| crate::t!(k)).collect(),
+        },
+    }
+}
+
+/// Sidebar sub-navigation labels per page (vanilla-settings-02..14 dumps,
+/// body-md/normal rows under the active item): shorter than the category
+/// titles on some pages ("Messages privés" for "Permissions de messages privés (MP)").
+fn subnav_keys(p: Page) -> &'static [&'static str] {
+    match p {
+        Page::DataPrivacy => &["settings.sub.data_use", "settings.sub.profile_privacy", "settings.sub.e2ee"],
+        Page::PrivacySafety => &["settings.sub.content_filters", "settings.sub.spam", "settings.sub.dms", "settings.sub.friend_requests", "settings.sub.connected_games", "settings.sub.ignore_block"],
+        Page::Notifications => &["settings.sub.overview", "settings.sub.sounds", "settings.sub.badges", "settings.sub.email", "settings.sub.advanced_n"],
+        Page::Billing => &["settings.sub.payment", "settings.sub.transactions"],
+        Page::VoiceVideo => &["settings.sub.voice", "settings.sub.camera", "settings.sub.streaming", "settings.sub.sounds", "settings.sub.soundboard", "settings.sub.advanced"],
+        Page::Appearance => &["settings.sub.theme", "settings.sub.app_icon", "settings.sub.messages", "settings.sub.chat_box", "settings.sub.search", "settings.sub.streamer"],
+        Page::Accessibility => &["settings.sub.readability", "settings.sub.density", "settings.sub.contrast", "settings.sub.motion", "settings.sub.audio_sr"],
+        Page::System => &["settings.sub.general", "settings.sub.custom_keys", "settings.sub.default_keys", "settings.sub.advanced_n"],
+        Page::RegisteredGames => &["settings.sub.current_game", "settings.sub.added_games"],
+        Page::ActivityPrivacy => &["settings.sub.what_share", "settings.sub.where_share", "settings.sub.joining"],
+        Page::Connections => &["settings.sub.connections", "settings.sub.authorized"],
+        _ => &[],
     }
 }
 
