@@ -41,6 +41,8 @@ fn text_form(title: gpui::SharedString, label: gpui::SharedString, initial: Stri
         check: None,
         submit: crate::t!("common.save"),
         danger: false,
+        preview: None,
+        width: 440.,
         on_submit: Rc::new(move |a, v, _, cx| on(a, v.into_iter().next().unwrap_or_default(), cx)),
     })
 }

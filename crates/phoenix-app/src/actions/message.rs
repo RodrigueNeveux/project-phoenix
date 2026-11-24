@@ -88,6 +88,8 @@ impl PhoenixApp {
                 check: None,
                 submit: crate::t!("thread.create"),
                 danger: false,
+                preview: None,
+                width: 440.,
                 on_submit: Rc::new(move |a, v, _, cx| {
                     let name = v.into_iter().next().unwrap_or_default();
                     a.action(ActionRequest::CreateThread { channel, msg, name }, cx, |a, r, cx| match r {
@@ -122,6 +124,8 @@ impl PhoenixApp {
                 check: None,
                 submit: crate::t!("msg.remind_save"),
                 danger: false,
+                preview: None,
+                width: 440.,
                 on_submit: Rc::new(move |a, _, choice, cx| {
                     let secs = CUSTOM_REMINDERS[choice.unwrap_or(0).min(CUSTOM_REMINDERS.len() - 1)].1;
                     a.remind_message(channel, msg, now_unix() + secs, cx);

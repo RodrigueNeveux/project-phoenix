@@ -584,19 +584,25 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
 fn open_upload_edit(app: &mut PhoenixApp, ix: usize, cx: &mut Context<PhoenixApp>) {
     use crate::ui::modals::{Field, Form, Modal};
     let Some(f) = app.chat.uploads.get(ix) else { return };
+    let preview = f.image.clone().and_then(|im| {
+        let (w, h) = image::ImageReader::new(std::io::Cursor::new(f.bytes.as_slice())).with_guessed_format().ok()?.into_dimensions().ok()?;
+        Some((im, w, h))
+    });
     crate::actions::open_modal(
         Modal::Form(Form {
             title: crate::t!("upload.modify"),
             subtitle: None,
             fields: vec![
                 Field::new(crate::t!("upload.filename"), "".into(), f.name.to_string()),
-                Field::new(crate::t!("upload.description"), crate::t!("upload.description_ph"), f.description.clone()),
+                Field::new(crate::t!("upload.description"), crate::t!("upload.description_ph"), f.description.clone()).rows(3),
             ],
             choices: Vec::new(),
             choice: None,
             check: Some((crate::t!("upload.mark_spoiler"), f.spoiler)),
             submit: crate::t!("upload.save"),
             danger: false,
+            preview,
+            width: 480.,
             on_submit: std::rc::Rc::new(move |a: &mut PhoenixApp, v: Vec<String>, _, cx: &mut Context<PhoenixApp>| {
                 let mut v = v.into_iter();
                 let (name, description, spoiler) = (v.next().unwrap_or_default(), v.next().unwrap_or_default(), v.next().is_some_and(|s| s == "1"));

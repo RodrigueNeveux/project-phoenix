@@ -17,7 +17,7 @@ pub mod settings_layout;
 use std::rc::Rc;
 
 use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*};
-use gpui_component::input::{Input, InputState};
+use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 
 use crate::{
     actions::{close_modal, with_modal},
@@ -34,11 +34,26 @@ pub struct Field {
     pub placeholder: SharedString,
     pub initial: String,
     pub input: Option<Entity<InputState>>,
+    pub rows: usize,
+    pub area: Option<Entity<TextareaState>>,
 }
 
 impl Field {
     pub fn new(label: SharedString, placeholder: SharedString, initial: impl Into<String>) -> Self {
-        Self { label, placeholder, initial: initial.into(), input: None }
+        Self { label, placeholder, initial: initial.into(), input: None, rows: 1, area: None }
+    }
+
+    pub fn rows(mut self, rows: usize) -> Self {
+        self.rows = rows.max(1);
+        self
+    }
+
+    fn value(&self, cx: &gpui::App) -> String {
+        match (&self.area, &self.input) {
+            (Some(a), _) => a.read(cx).value().to_string(),
+            (None, Some(i)) => i.read(cx).value().to_string(),
+            _ => String::new(),
+        }
     }
 }
 
@@ -55,6 +70,8 @@ pub struct Form {
     pub submit: SharedString,
     pub danger: bool,
     pub on_submit: Submit,
+    pub preview: Option<(std::sync::Arc<gpui::Image>, u32, u32)>,
+    pub width: f32,
 }
 
 pub enum Modal {
@@ -90,7 +107,12 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     with_modal(|m| match m {
         Some(Modal::Form(f)) => {
             for (n, fl) in f.fields.iter_mut().enumerate() {
-                if fl.input.is_none() {
+                if fl.rows > 1 {
+                    if fl.area.is_none() {
+                        let (ph, val, rows) = (fl.placeholder.clone(), fl.initial.clone(), fl.rows);
+                        fl.area = Some(cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, rows).placeholder(ph).default_value(val)));
+                    }
+                } else if fl.input.is_none() {
                     fl.input = Some(mk(fl.placeholder.clone(), &fl.initial, n == 0));
                 }
             }
@@ -209,12 +231,25 @@ pub fn input_box(i: &Entity<InputState>) -> gpui::Div {
         .child(Input::new(i).appearance(false).bordered(false))
 }
 
+fn area_box(a: &Entity<TextareaState>, rows: usize) -> gpui::Div {
+    div()
+        .h(z(rows as f32 * 20.8 + 24.))
+        .px(z(10.))
+        .py(z(12.))
+        .rounded(z(8.))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .text_size(z(16.))
+        .child(Textarea::new(a).appearance(false).bordered(false))
+}
+
 pub fn label(t: SharedString) -> gpui::Div {
     div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).mb(z(8.)).child(t)
 }
 
 pub fn values(f: &Form, cx: &gpui::App) -> Vec<String> {
-    let mut v: Vec<String> = f.fields.iter().map(|fl| fl.input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default()).collect();
+    let mut v: Vec<String> = f.fields.iter().map(|fl| fl.value(cx)).collect();
     if let Some((_, on)) = &f.check {
         v.push(if *on { "1" } else { "0" }.to_string());
     }
@@ -223,9 +258,15 @@ pub fn values(f: &Form, cx: &gpui::App) -> Vec<String> {
 
 fn form(f: &Form, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let mut body = div().flex().flex_col().gap(z(16.));
+    if let Some((im, iw, ih)) = &f.preview {
+        let (w, h) = crate::media::fit(*iw, *ih, f.width - 80., 150.);
+        body = body.child(div().mt(z(8.)).ml(z(16.)).child(gpui::img(im.clone()).w(z(w)).h(z(h)).object_fit(gpui::ObjectFit::Contain)));
+    }
     for (n, fl) in f.fields.iter().enumerate() {
         let mut col = div().id(("aform-field", n)).flex().flex_col().child(label(fl.label.clone()));
-        if let Some(i) = &fl.input {
+        if let Some(a) = &fl.area {
+            col = col.child(area_box(a, fl.rows));
+        } else if let Some(i) = &fl.input {
             col = col.child(input_box(i));
         }
         body = body.child(col);
@@ -276,5 +317,5 @@ fn form(f: &Form, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 cx.notify();
             })),
         );
-    card(440., f.title.clone(), f.subtitle.clone(), body.into_any_element(), Some(footer.into_any_element()), cx)
+    card(f.width, f.title.clone(), f.subtitle.clone(), body.into_any_element(), Some(footer.into_any_element()), cx)
 }

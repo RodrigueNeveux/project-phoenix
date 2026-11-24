@@ -69,6 +69,8 @@ impl PhoenixApp {
                 check: None,
                 submit: crate::t!("clone.create"),
                 danger: false,
+                preview: None,
+                width: 440.,
                 on_submit: Rc::new(move |a, v, _, cx| {
                     let name = v.into_iter().next().unwrap_or_default();
                     a.action(ActionRequest::CloneChannel { guild, channel, name }, cx, |a, r, cx| match r {
@@ -116,6 +118,8 @@ impl PhoenixApp {
                 check: None,
                 submit: crate::t!("event.create"),
                 danger: false,
+                preview: None,
+                width: 440.,
                 on_submit: Rc::new(move |a, v, choice, cx| {
                     let (name, loc, desc) = (v[0].clone(), v[1].clone(), v[2].clone());
                     let Some(place) = event_place(&loc, voice).filter(|_| !name.trim().is_empty()) else {

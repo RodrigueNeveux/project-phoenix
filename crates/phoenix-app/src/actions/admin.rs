@@ -203,6 +203,8 @@ impl PhoenixApp {
                 check: None,
                 submit: crate::t!(if cat { "menu.delete_category" } else { "menu.delete_channel" }),
                 danger: true,
+                preview: None,
+                width: 440.,
                 on_submit: Rc::new(move |a, _, _, cx| a.delete_channel(channel, cx)),
             }),
             None,
