@@ -1,6 +1,7 @@
 //! Offscreen renders of hover / pressed states (docs/parity/states.md).
 //! `cargo run -p phoenix-app --example states_shots -- out_dir x,y[,down] ...`
-//! writes one PNG per point with the mouse moved there (and pressed with `,down`).
+//! writes one PNG per point with the mouse moved there (left-pressed with `,down`,
+//! right-clicked with `,right`; a later point can then hover the open menu).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
@@ -66,16 +67,18 @@ fn main() -> anyhow::Result<()> {
         let parts: Vec<&str> = p.split(',').collect();
         let (x, y): (f32, f32) = (parts[0].parse()?, parts[1].parse()?);
         let down = parts.get(2) == Some(&"down");
+        let right = parts.get(2) == Some(&"right");
         let position = gpui::point(px(x), px(y));
         cx.update_window(win.into(), |_, window, cx| {
             window.dispatch_event(
                 PlatformInput::MouseMove(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() }),
                 cx,
             );
-            if down {
+            if down || right {
+                let button = if right { MouseButton::Right } else { MouseButton::Left };
                 window.dispatch_event(
                     PlatformInput::MouseDown(MouseDownEvent {
-                        button: MouseButton::Left,
+                        button,
                         position,
                         modifiers: Modifiers::default(),
                         click_count: 1,

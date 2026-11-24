@@ -73,6 +73,20 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | app launcher button | hover / active | same rules | composer.rs `apps` | ✅ (added) |
 | shared tooltip (`tooltip.rs`) | style | `tooltip_ZDdyhE` tokens, 14/18 medium | ✅ | ✅ |
 
+## Context menus (`context_menu.rs`, `menu_M3qk4j`)
+
+Source: CSS `_M3qk4j` rules + dumps vanilla-menu-{channel,guild,dm,member,message,…}.
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| menu item | hover (mouse) | `item_:hover` `--background-mod-subtle`, radius 2px | `row` `.hover` | ✅ |
+| menu item | focused (keyboard / highlighted) | `colorDefault_.focused_` `--interactive-background-hover`, radius 4px, `--text-strong`; caret/subtext recoloured | `row(lit)` | ✅ |
+| menu item | active (pressed) | `colorDefault_:active` `--background-mod-subtle` | `.active()` | ✅ (added) |
+| danger item | rest / focused / active | `--text-feedback-critical`; `--background-feedback-mod-critical` | `row(danger)` + `.active()` | ✅ |
+| disabled item | rest | `disabled_M3qk4j` opacity .5, no pointer events (live: "Mark As Read" with nothing unread, 34px) | `MenuItem::Disabled`; channel + guild "Mark As Read" | ✅ (added) |
+| submenu row | hover opens, caret 20px `--text-muted` → white when focused | `Submenu` | ✅ |
+| checkbox / radio | checked colours `--control-brand-foreground-new` | `Check` | ✅ |
+
 ## Transitions
 
 `states.rs` has a small colour-fade helper: `track` + `fade_layer` (a bg layer animated
@@ -87,6 +101,6 @@ renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-45 rows: 44 ✅, 1 ➖, 0 ❌.
+52 rows: 51 ✅, 1 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.

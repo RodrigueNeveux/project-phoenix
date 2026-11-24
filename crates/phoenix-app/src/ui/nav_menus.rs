@@ -198,7 +198,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Target::Channel(id) => {
             let ch = app.channels.get(&id)?;
             let (guild, muted) = (ch.guild, ch.muted);
-            items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Channel(id), cx)));
+            // Live channel-context: "Mark As Read" is disabled_M3qk4j when nothing is unread.
+            if ch.unread || ch.mentions > 0 {
+                items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Channel(id), cx)));
+            } else {
+                items.push(MenuItem::disabled(crate::t!("menu.mark_read"), None));
+            }
             items.push(MenuItem::Separator);
             if let Some(g) = guild {
                 // Live "channel-context" (text channel) and category menus, 2026-11-23:
@@ -358,7 +363,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
             let (manage_guild, manage_channels, events) =
                 (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
-            items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
+            if app.guilds.iter().find(|x| x.id == g).is_some_and(|x| x.unread || x.mentions > 0) {
+                items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
+            } else {
+                items.push(MenuItem::disabled(crate::t!("menu.mark_read"), None));
+            }
             items.push(MenuItem::Separator);
             items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)));
             items.push(MenuItem::Separator);

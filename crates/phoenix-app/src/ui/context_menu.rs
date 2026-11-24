@@ -32,6 +32,9 @@ pub enum MenuItem {
     /// Checkbox (`radio: false`) or radio row; the menu stays open on click
     /// for checkboxes, like Discord.
     Check { label: SharedString, checked: bool, radio: bool, subtext: Option<SharedString>, on_click: Handler },
+    /// `disabled_M3qk4j`: opacity .5, no hover, no click, skipped by the keyboard
+    /// (e.g. "Mark As Read" with nothing unread).
+    Disabled { label: SharedString, icon: Option<SharedString> },
 }
 
 thread_local! {
@@ -200,6 +203,10 @@ impl MenuItem {
         Self::Action { label: label.into(), icon, subtext: None, danger: false, on_click: Rc::new(on_click) }
     }
 
+    pub fn disabled(label: impl Into<SharedString>, icon: Option<SharedString>) -> Self {
+        Self::Disabled { label: label.into(), icon }
+    }
+
     pub fn danger(
         label: impl Into<SharedString>,
         icon: Option<SharedString>,
@@ -288,6 +295,7 @@ thread_local! {
 fn row_h(item: &MenuItem) -> f32 {
     match item {
         MenuItem::Separator => 17.,
+        MenuItem::Disabled { icon, .. } => if icon.is_some() { 36. } else { 34. },
         MenuItem::Custom(_) => 60.,
         MenuItem::Action { icon, subtext, .. } => {
             let text: f32 = 18. + if subtext.is_some() { 18. } else { 0. };
@@ -321,6 +329,8 @@ fn row(id: (&'static str, usize), lit: bool, danger: bool) -> gpui::Stateful<gpu
             d.bg(c(tok(if danger { idx::BACKGROUND_FEEDBACK_MOD_CRITICAL } else { idx::INTERACTIVE_BACKGROUND_HOVER })))
         })
         .when(!lit, |d| d.hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))))
+        // colorDefault_:active → --background-mod-subtle; colorDanger_:active → critical mod.
+        .active(move |s| s.bg(c(tok(if danger { idx::BACKGROUND_FEEDBACK_MOD_CRITICAL } else { idx::BACKGROUND_MOD_SUBTLE }))))
 }
 
 fn label_box(label: SharedString) -> gpui::Div {
@@ -451,6 +461,25 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     })
                     .into_any_element()
             }
+            MenuItem::Disabled { label, icon } => div()
+                .id(("menu-item", ix))
+                .flex_none()
+                .min_h(z(32.))
+                .p(z(8.))
+                .rounded(z(2.))
+                .flex()
+                .items_center()
+                .opacity(0.5) // disabled_M3qk4j opacity .5, pointer-events none
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .when_some(icon, |d, name| {
+                    let path: SharedString = if name.ends_with(".svg") { name } else { crate::icons::path(&name) };
+                    d.child(svg().path(path).mr(z(8.)).size(z(20.)).flex_none().text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
+                })
+                .child(label_box(label))
+                .into_any_element(),
             MenuItem::Action { label, icon, subtext, danger, on_click } => {
                 let dismiss = dismiss.clone();
                 let icon_fg = if danger {
