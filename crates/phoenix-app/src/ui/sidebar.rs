@@ -1490,6 +1490,7 @@ fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
 /// (with moderation rights) and "Server Boosts", then `sectionDivider_ysO7Gy`
 /// (1px `--border-subtle`, inset 20 / 11) and a 12px gap.
 fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
+    let ev_entity = entity.clone();
     let perms = app.selected_guild.map(|g| app.backend.guild_permissions(g)).unwrap_or(0);
     let mods = crate::ui::inbox::has_perm(perms, (1 << 1) | (1 << 2) | (1 << 5)); // KICK | BAN | MANAGE_GUILD
     let features = app.selected_guild.map(|g| app.backend.guild_features(g)).unwrap_or_default();
@@ -1541,7 +1542,7 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
             div()
                 .id("g-events-open")
                 .on_click(move |_, _, cx| {
-                    entity.update(cx, |a, cx| {
+                    ev_entity.update(cx, |a, cx| {
                         if let Some(g) = a.selected_guild {
                             crate::ui::events::open(a, g, cx);
                         }
@@ -1551,7 +1552,21 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>) -> impl IntoElement {
         )
         // vanilla-inbox-0 #629..#633: "Channels & Roles" row (ChannelListMagnifyingGlassIcon)
         // for onboarding guilds, "Browse Channels" for other community guilds.
-        .when_some(browse, |d, label| d.child(item("g-browse", "channel-browse", label)))
+        .when_some(browse, |d, label| {
+            let ent = entity.clone();
+            d.child(
+                div()
+                    .id("g-browse-open")
+                    .on_click(move |_, _, cx| {
+                        ent.update(cx, |a, cx| {
+                            if let Some(g) = a.selected_guild {
+                                crate::ui::community::open(a, g, cx);
+                            }
+                        })
+                    })
+                    .child(item("g-browse", "channel-browse", label)),
+            )
+        })
         .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"))))
         .child(item("g-boosts", "boost", crate::t!("guild.top.boosts")))
         // vanilla-inbox-0 #645 sectionDivider_: margin-top 15, inline 20 / 11, 1px.

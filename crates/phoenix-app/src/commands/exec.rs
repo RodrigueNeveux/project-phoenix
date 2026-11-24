@@ -253,6 +253,10 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             let raw = rest.scheduled_events(sf(guild)).await.map_err(e)?;
             ParityReply::Events(raw.iter().filter_map(super::parse_event).collect())
         }
+        ParityRequest::Onboarding { guild } => {
+            let raw = rest.guild_onboarding(sf(guild)).await.map_err(e)?;
+            ParityReply::Onboarding(super::parse_onboarding(&raw))
+        }
         ParityRequest::ArchivedThreads { channel } => {
             use phoenix_api::rest::threads::{ArchiveKind, merge_archived};
             let public = rest.archived_threads(sf(channel), ArchiveKind::Public, None).await.map_err(e)?;

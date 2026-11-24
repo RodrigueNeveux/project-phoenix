@@ -96,6 +96,11 @@ impl RestClient {
         self.call(Method::GET, &format!("/guilds/{guild}/scheduled-events?with_user_count=true"), Body::None).await
     }
 
+    /// `GET /guilds/{g}/onboarding` (Channels & Roles page), read-only.
+    pub async fn guild_onboarding(&self, guild: GuildId) -> Result<Value> {
+        self.call(Method::GET, &format!("/guilds/{guild}/onboarding"), Body::None).await
+    }
+
     pub async fn create_scheduled_event(&self, guild: GuildId, body: Value) -> Result<Snowflake> {
         self.post_for_id(&format!("/guilds/{guild}/scheduled-events"), body).await
     }

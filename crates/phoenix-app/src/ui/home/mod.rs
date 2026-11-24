@@ -40,6 +40,9 @@ fn page_content(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     if let Some(call) = crate::ui::call_view::render(app, window, cx) {
         return call;
     }
+    if let Some(page) = crate::ui::community::render(app, cx) {
+        return page;
+    }
     if app.selected_guild.is_none() && app.nav.home != HomeView::Dm {
         friends::render(app, window, cx).into_any_element()
     } else {

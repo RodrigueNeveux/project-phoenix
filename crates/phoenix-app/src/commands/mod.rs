@@ -138,6 +138,28 @@ pub enum ParityRequest {
     ArchivedThreads { channel: Id },
     /// `GET /guilds/{g}/scheduled-events` (Events modal), read-only.
     ScheduledEvents { guild: Id },
+    /// `GET /guilds/{g}/onboarding` (Channels & Roles), read-only.
+    Onboarding { guild: Id },
+}
+
+/// One onboarding question (Channels & Roles "Customize" tab).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OnboardingPrompt {
+    pub id: Id,
+    pub title: String,
+    pub single_select: bool,
+    pub options: Vec<OnboardingOption>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OnboardingOption {
+    pub id: Id,
+    pub title: String,
+    pub description: String,
+    /// Custom emoji id, or a unicode emoji in `emoji_name`.
+    pub emoji_id: Option<Id>,
+    pub emoji_name: Option<String>,
+    pub animated: bool,
 }
 
 /// A guild scheduled event (Events modal card).
@@ -186,6 +208,7 @@ pub enum ParityReply {
     /// Content inventory feed entries.
     Inventory(Vec<InventoryEntry>),
     Events(Vec<GuildEvent>),
+    Onboarding(Vec<OnboardingPrompt>),
 }
 
 /// Fresh READY after a non-resumable reconnect (carried by `AppEvent::Resync`).
@@ -281,5 +304,58 @@ mod event_tests {
         assert_eq!(ev.user_count, 3);
         assert_eq!(ev.start, 1_796_068_800);
         assert!(ev.end.is_none());
+    }
+}
+
+/// `prompts` of `GET /guilds/{g}/onboarding`, in order.
+pub fn parse_onboarding(v: &serde_json::Value) -> Vec<OnboardingPrompt> {
+    let sid = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).and_then(|x| x.parse::<u64>().ok()).map(Id);
+    let s = |v: &serde_json::Value, k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or_default().to_owned();
+    let Some(prompts) = v.get("prompts").and_then(|p| p.as_array()) else { return Vec::new() };
+    prompts
+        .iter()
+        .filter_map(|p| {
+            let options = p
+                .get("options")
+                .and_then(|o| o.as_array())
+                .map(|o| {
+                    o.iter()
+                        .filter_map(|o| {
+                            let emoji = o.get("emoji");
+                            Some(OnboardingOption {
+                                id: sid(o, "id")?,
+                                title: s(o, "title"),
+                                description: s(o, "description"),
+                                emoji_id: emoji.and_then(|e| sid(e, "id")),
+                                emoji_name: emoji.and_then(|e| e.get("name")).and_then(|x| x.as_str()).map(str::to_owned),
+                                animated: emoji.and_then(|e| e.get("animated")).and_then(|x| x.as_bool()).unwrap_or(false),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            Some(OnboardingPrompt {
+                id: sid(p, "id")?,
+                title: s(p, "title"),
+                single_select: p.get("single_select").and_then(|x| x.as_bool()).unwrap_or(false),
+                options,
+            })
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod onboarding_tests {
+    #[test]
+    fn parses_prompts() {
+        let v = serde_json::json!({ "prompts": [{ "id": "1", "title": "Topics", "single_select": false, "options": [
+            { "id": "2", "title": "AI", "description": "", "emoji": { "id": null, "name": "🧠" } },
+            { "id": "3", "title": "Games", "description": "Fun", "emoji": { "id": "44", "name": "pad", "animated": true } }
+        ]}]});
+        let p = super::parse_onboarding(&v);
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].options[0].emoji_name.as_deref(), Some("🧠"));
+        assert_eq!(p[0].options[1].emoji_id, Some(super::Id(44)));
+        assert!(p[0].options[1].animated);
     }
 }

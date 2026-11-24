@@ -34,3 +34,5 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 | Events modal frame + header | vanilla-events-modal root__KoJTP / flex_hkRWAH | 602x400 r12, header pad 16 24 8, icon 24 mr 8, divider 1x16 mx 16, sm primary | | ui/events.rs | ✅ (dump) |
 | Events empty state | container_NkbMg8 | heading-xl 24/32 mb 8, body-sm 14/18, roleTip mt 4 | | ui/events.rs | ✅ (dump) |
 | Event card | not dumped (no event on the measured guild) | | | ui/events.rs card | ❌ tokens only |
+| Channels & Roles page (Customize tab) | vanilla-channels-roles tabBar_xTP3zy / prompt_pHGfKY / optionButton_87WSWY | tabs mt 32 mx 32 gap 24 pb 16; prompt pad 16 r8 surface-high; options 2 cols gap 8, r12, pad 12 16, emoji 22 mr 12 | | ui/community.rs | ✅ (dump) |
+| Channels & Roles: "Mon profil" column, Browse tab content, selected answers | vanilla-channels-roles | | | — | ❌ |
