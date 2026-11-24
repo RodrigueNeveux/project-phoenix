@@ -80,6 +80,8 @@ pub enum EmojiTarget {
 
 /// How long a jumped-to message stays highlighted.
 const FLASH_HOLD: std::time::Duration = std::time::Duration::from_millis(2000);
+/// Older pages fetched at most when jumping to a message that isn't loaded.
+const JUMP_MAX_PAGES: u32 = 10;
 
 pub struct ChatState {
     /// `theme::style_generation()` the cached rich text was built under.
@@ -548,9 +550,42 @@ impl PhoenixApp {
         if self.selected_channel != Some(channel) {
             self.select_channel(channel, cx);
         }
-        if let Some(ix) = self.messages.get(&channel).and_then(|e| e.msgs.iter().position(|m| m.id == id)) {
+        self.jump_reveal(channel, id, JUMP_MAX_PAGES, cx);
+        cx.notify();
+    }
+
+    /// Scroll to `id` and flash it; when it isn't loaded yet, page older history
+    /// (read-only GETs) until it shows up, the channel start, or `pages` runs out.
+    fn jump_reveal(&mut self, channel: Id, id: Id, pages: u32, cx: &mut Context<Self>) {
+        let Some(e) = self.messages.get_mut(&channel) else { return };
+        if let Some(ix) = e.msgs.iter().position(|m| m.id == id) {
             self.message_list.scroll_to_reveal_item(ix + 1);
+            self.flash_message(id, cx);
+            return;
         }
+        if pages == 0 || e.reached_start || e.loading || !e.loaded_once {
+            return;
+        }
+        // Snowflakes are time-ordered: a reply target newer than our oldest row was deleted.
+        if e.msgs.first().is_some_and(|m| m.id.0 < id.0) {
+            return;
+        }
+        let before = e.msgs.first().map(|m| m.id);
+        e.loading = true;
+        let fut = self.backend.load_messages(channel, before, 50);
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |this, cx| {
+                this.insert_history(channel, res.unwrap_or_default(), true, cx);
+                if this.selected_channel == Some(channel) {
+                    this.jump_reveal(channel, id, pages - 1, cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn flash_message(&mut self, id: Id, cx: &mut Context<Self>) {
         self.chat.flash = Some(id);
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(FLASH_HOLD).await;
