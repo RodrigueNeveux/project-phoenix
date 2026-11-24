@@ -1834,7 +1834,11 @@ fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
                 d.child(img(media::resized(&u, 40, 40)).size(z(20.)).rounded_full().flex_none())
             })
             .child(
+                // flex 1 / min-width 0: as a shrunk flex item the text kept its wider wrap
+                // and was clipped in narrow windows ("… membres • Hier" lost its time)
                 div()
+                    .flex_1()
+                    .min_w_0()
                     .text_size(z(12.))
                     .line_height(z(16.))
                     // embedFooterText_ body-xs/medium --text-default
