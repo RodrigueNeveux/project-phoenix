@@ -162,6 +162,15 @@ pub fn load_first_page(app: &PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
         let t0 = std::time::Instant::now();
         // Own thread, not GPUI's background pool: image decodes queue there
         // and delayed pages by up to ~600 ms under load (docs/perf.md).
+        // GPUI's test scheduler rejects wakeups from foreign threads: lay out inline there.
+        if cfg!(test) {
+            let rendered = render_page(&msgs, &resolver, me, off, &revealed);
+            let _ = this.update(cx, |a, cx| {
+                insert_first_page(a, id, msgs, rendered, cx);
+                crate::commands::state::apply_read_mark(a, id);
+            });
+            return;
+        }
         let (tx, rx) = futures::channel::oneshot::channel();
         let job = move || {
             let r = render_page(&msgs, &resolver, me, off, &revealed);
