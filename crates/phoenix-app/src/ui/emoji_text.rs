@@ -12,13 +12,23 @@
 use gpui::{AnyElement, IntoElement, ParentElement, SharedString, Styled, div};
 
 /// `text` (drawn at `font_px`) with its Unicode emoji as images.
-pub fn label(text: SharedString, _font_px: f32) -> AnyElement {
+pub fn label(text: SharedString, font_px: f32) -> AnyElement {
+    label_impl(text, font_px, false)
+}
+
+/// [`label`] that also draws custom `<:name:id>` emoji as images (channel topics).
+pub fn label_with_custom(text: SharedString, font_px: f32) -> AnyElement {
+    label_impl(text, font_px, true)
+}
+
+fn label_impl(text: SharedString, font_px: f32, custom: bool) -> AnyElement {
     let ranges: Vec<_> = crate::richtext::emoji_ranges(&text)
         .into_iter()
-        .filter(|(r, _)| !text[r.clone()].starts_with('<')) // custom `<:name:id>` tokens stay text
+        // custom `<:name:id>` tokens stay text unless asked for
+        .filter(|(r, _)| custom || !text[r.clone()].starts_with('<'))
         // Chromium only switches to the emoji font for emoji presentation: "☲" (U+2632)
         // in role names stays a text glyph, "❓" or "ℹ️" do not.
-        .filter(|(r, _)| emoji_presentation(&text[r.clone()]))
+        .filter(|(r, _)| text[r.clone()].starts_with('<') || emoji_presentation(&text[r.clone()]))
         .map(|(r, _)| r)
         .collect();
     // PHX_NO_EMOJI_FONT=1: old behaviour, for before/after renders.
@@ -32,6 +42,12 @@ pub fn label(text: SharedString, _font_px: f32) -> AnyElement {
     for r in ranges {
         if r.start > at {
             row = row.child(div().flex_none().child(SharedString::from(text[at..r.start].to_string())));
+        }
+        if text[r.clone()].starts_with('<') {
+            // `.emoji` 1.375em
+            row = row.child(div().flex_none().mx(gpui::px(1.)).child(crate::media::emoji::emoji_element(&text[r.clone()], font_px * 1.375)));
+            at = r.end;
+            continue;
         }
         // Keep the UI font (gg sans has no emoji) but make the color emoji font the
         // only fallback, so "❓" no longer resolves to DejaVu Sans' monochrome glyph.

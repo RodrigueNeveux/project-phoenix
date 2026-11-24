@@ -451,7 +451,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                                 .overflow_hidden()
                                 .text_ellipsis()
                                 .on_click(topic_click)
-                                .child(t),
+                                // Inline markdown stripped, mentions resolved and custom emoji
+                                // drawn (a real topic began with a raw `<:icon_…:id>` token).
+                                .child(crate::ui::emoji_text::label_with_custom(reply_preview_text(app, &t), 14.)),
                         )
                 }),
         )
