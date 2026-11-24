@@ -187,6 +187,22 @@ fn main() -> anyhow::Result<()> {
                             }
                         }
                     }
+                    "boost" => page(app, settings::Page::ServerBoost, cx),
+                    "guild-notify" => {
+                        let g = app.guilds[0].id;
+                        let st = phoenix_app::ui::modals::guild_notify::State::new(app, g);
+                        phoenix_app::actions::open_modal(phoenix_app::ui::modals::Modal::GuildNotify(st), None);
+                    }
+                    "incoming-call" => {
+                        app.select_guild(None, cx);
+                        app.parity.incoming_call = app.dms.first().copied();
+                    }
+                    "join" => {
+                        let id = app.channels.values().find(|c| c.name.as_ref() == "showcase").map(|c| c.id);
+                        if let Some(id) = id {
+                            app.select_channel(id, cx);
+                        }
+                    }
                     "forum" => {
                         let id = app.channels.values().find(|c| c.kind == phoenix_app::model::ChannelKind::Forum).map(|c| c.id);
                         if let Some(id) = id {

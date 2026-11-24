@@ -444,6 +444,20 @@ impl MockBackend {
 }
 
 impl Backend for MockBackend {
+    /// A few channel overrides on the first guild (notification settings table).
+    fn notify_prefs(&self) -> Option<crate::notifications::NotifyPrefs> {
+        let mut p = crate::notifications::NotifyPrefs::default();
+        p.update(&serde_json::json!({
+            "guild_id": "100",
+            "message_notifications": 1,
+            "channel_overrides": [
+                {"channel_id": "1003", "message_notifications": 0, "muted": false},
+                {"channel_id": "1006", "message_notifications": 1, "muted": false},
+                {"channel_id": "1010", "message_notifications": 2, "muted": true},
+            ],
+        }));
+        Some(p)
+    }
     /// Mock Board: a favourite game and a played-games grid (no covers).
     fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
         use crate::ui::profile_games::{Game, GameWidget, Kind};
