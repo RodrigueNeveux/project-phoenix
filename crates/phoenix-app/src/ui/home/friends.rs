@@ -186,7 +186,26 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
             div()
                 .pl(z(10.))
                 .pr(z(8.))
-                .child(div().size(z(32.)).flex().items_center().justify_center().child(gpui::svg().path(crate::icons::path("new-group-dm")).size(z(20.)).text_color(c(Palette::TEXT_MUTED)))),
+                // iconWrapper_ybUK7Z clickable_: 32px, icon_ybUK7Z 20px --icon-muted,
+                // hover --icon-subtle (vanilla-friends-online #1133/#1134).
+                .child(
+                    div()
+                        .id("fr-new-group-dm")
+                        .group("fr-new-group-dm")
+                        .size(z(32.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .tooltip(crate::ui::tooltip::tip(crate::t!("friends.new_group_dm")))
+                        .child(
+                            gpui::svg()
+                                .path(crate::icons::path("new-group-dm"))
+                                .size(z(20.))
+                                .text_color(c(tok(idx::ICON_MUTED)))
+                                .group_hover("fr-new-group-dm", |s| s.text_color(c(tok(idx::ICON_SUBTLE)))),
+                        ),
+                ),
         )
 }
 

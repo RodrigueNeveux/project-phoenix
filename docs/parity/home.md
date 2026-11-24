@@ -35,15 +35,15 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | Pending tab badge | count > 0 | dump | ui/home/friends.rs | ✅ |
 | Add Friend tab | rest / hover / active / selected (`--opacity-blurple-16` + `--text-brand`) | #1128 `addFriend_zrUwGA` | ui/home/friends.rs | ✅ (this pass, hover and active added) |
 | Blocked tab | the 2026 client removed the tab (Blocked lives in settings) | vanilla-friends-* (no tab) | not shown | ✅ |
-| "New Group DM" toolbar button | rest | `inviteToolbar_zrUwGA` | ui/home/friends.rs | ⚠ no hover state yet |
+| "New Group DM" toolbar button | rest, hover, tooltip | `inviteToolbar_zrUwGA` padding-inline-end 8, `iconWrapper_ybUK7Z clickable_` 32px, `icon_ybUK7Z` --icon-muted → hover --icon-subtle (vanilla-friends-online #1132–#1134) | ui/home/friends.rs `fr-new-group-dm` | ✅ |
 | Search bar | rest, typing | `searchBar_wVFOQW`, #1141–#1143 | ui/home/friends.rs `list` | ✅ |
 | Section title "Online — N" | rest | #1150 (em dash) | locales `friends.section` | ✅ (this pass, it used a hyphen) |
 | Friend row | rest, hover (subtle bg, discriminator shown), 61px | `peopleListItem_y75PxA` | ui/home/friends.rs `friend_row` | ✅ |
 | Row action buttons (Message, More) | rest, hover; accept / deny on pending | `actionButton_5GqXgh` | ui/home/friends.rs `round_button` | ✅ |
-| Row action tooltips | hover | aria-labels | ui/home/friends.rs | ⚠ |
+| Row action tooltips | hover | client strings Message / More / Accept / Ignore / Cancel / Unblock; glyph tinted on button hover (`actionButton_5GqXgh`, `actionAccept_`/`actionDeny_`) | ui/home/friends.rs `round_button` | ✅ |
 | Pending rows (username subtext, Incoming / Outgoing) | rest | friends-pending | ui/home/friends.rs | ✅ |
 | Add Friend form | rest, focus, success, error | friends-addfriend | ui/home/friends.rs `add_friend` | ✅ |
-| Empty states (Online / All / Pending / Blocked) | text | — | ui/home/friends.rs | ❌ no Wumpus illustrations (they are Discord assets and are not copied; they need a runtime extraction like icons), and no dump of the empty text |
+| Empty states (Online / All / Pending / Blocked) | text | client strings, Add Friend button on All, no-results note for searches | ui/home/friends.rs | ⚠ text and buttons done; the Wumpus illustrations are Discord assets and need a runtime extraction like icons |
 
 ## Active Now column
 
@@ -70,12 +70,12 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | DM header toolbar: voice call, video call, pins, add to DM, profile | rest, hover, tooltip | vanilla-dm #1101–#1109 | ui/chat.rs | ✅ |
 | Group DM intro (80px icon, 32/40 bold `--text-strong` title, margin 8 0, description with bold name) | rest | group-dm #1103–#1112 `container_w6h4R2` (margin 20) | ui/chat.rs `intro` | ✅ (this pass) |
 | Group DM intro buttons: Invite to Group DM (primary), Edit Group (secondary) | rest, hover, active | group-dm #1113–#1123 | ui/chat.rs `intro` | ✅ (this pass; Edit Group is a stub) |
-| 1:1 DM intro (avatar, name, description) | rest | same container | ui/chat.rs `intro` | ✅ |
+| 1:1 DM intro: username line, mutual servers row (`container_nM9YUb` gap 8, dot divider), Add/Remove Friend + Block buttons (`stack_TWWX0S` gap 8, sm secondary 32px radius 8) | rest, hover | vanilla-dm-start #1135–#1156: avatar 80, `heading-xxl/semibold` 32/40, `heading-xl/medium` 24/32, `body-sm/normal` 14/18 mutuals link | ui/chat.rs `dm_intro_actions` | ✅ values match the dump; no pixel compare yet (user awake, CDP offline) |
 | 1:1 DM intro: username line, mutual servers row (`container_nM9YUb` gap 8, dot divider), Add Friend / Block / Report Spam buttons (`stacked_Vu5YPS` gap 8) | rest, hover | CSS only, no dump (the start of a 1:1 history was never on screen) | — | ❌ |
 
 ## Coverage
 
-- 44 component × state rows: 35 ✅ (80 %), 5 ⚠, 4 ❌.
+- 44 component × state rows: 38 ✅ (86 %), 4 ⚠, 2 ❌ (Nitro home and Shop: never dumped, they need the user to open them).
 - Shipped in this pass: DM header hover and More button, close button, Friends tab states, em dash, group DM intro.
 - Still to do:
   - a 1:1 DM start dump, then the mutual servers row and its buttons;
