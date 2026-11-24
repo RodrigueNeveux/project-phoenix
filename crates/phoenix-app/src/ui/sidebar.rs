@@ -230,7 +230,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                 format!("https://cdn.discordapp.com/banners/{gid}/{hash}.{ext}?size=480").into()
                             };
                             let animated = hash.starts_with("a_");
-                            d.child(gpui::img(url("png")).absolute().bottom_0().left_0().right_0().h(px(full_h)).object_fit(gpui::ObjectFit::Cover))
+                            // Explicit width: with only left/right, taffy sizes the image from its aspect
+                            // ratio (16:9 at 144 px tall = 256 px), leaving the right of the banner empty.
+                            d.child(gpui::img(url("png")).absolute().bottom_0().left_0().right_0().w_full().h(px(full_h)).object_fit(gpui::ObjectFit::Cover))
                                 .when(animated, |d| {
                                     d.child(
                                         div()
