@@ -469,6 +469,14 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
         }
     }
     let empty = t.input.read(cx).value().is_empty();
+    let is_post = app
+        .channels
+        .get(&id)
+        .or_else(|| app.nav.find_thread(id))
+        .and_then(|ch| ch.parent)
+        .or(app.selected_channel)
+        .and_then(|f| app.channels.get(&f))
+        .is_some_and(|f| f.kind == crate::model::ChannelKind::Forum);
     // Same chat sidebar frame as the "New Thread" sidebar (ref-cache
     // create-thread-sidebar-header / -frame; see ui/thread_create.rs).
     let tk = |i: usize| c(crate::theme::tok(i));
@@ -498,12 +506,13 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
                     .items_center()
                     .border_b_1()
                     .border_color(tk(idx::BORDER_SUBTLE))
-                    // iconWrapper_ 32, svg 20 --icon-muted
-                    .child(
-                        div().size(z(32.)).flex_none().flex().items_center().justify_center().child(
+                    // iconWrapper_ 32, svg 20 --icon-muted. A forum post has no icon: its
+                    // title starts at the 20px padding (dumps/vanilla-forum-post-sidebar).
+                    .when(!is_post, |d| {
+                        d.child(div().size(z(32.)).flex_none().flex().items_center().justify_center().child(
                             gpui::svg().path(crate::icons::path("chat/thread")).size(z(20.)).flex_none().text_color(tk(idx::ICON_MUTED)),
-                        ),
-                    )
+                        ))
+                    })
                     .child(
                         // titleWrapper_ > h1 body-md/medium 16/20 --text-strong
                         div()
@@ -516,26 +525,39 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
                             .text_color(tk(idx::TEXT_STRONG))
                             .child(t.thread.name.clone()),
                     )
-                    .child(
-                        // toolbar_ padding-left 10; iconWrapper_ clickable 32, svg 20
+                    .child({
+                        // toolbar_ (vanilla-forum-post-sidebar #1634): padding-left 10, gap 10;
+                        // More then Close, iconWrapper_ clickable 32 with a 20px glyph,
+                        // --icon-muted, :hover --icon-subtle.
+                        let btn = |id: &'static str, path: &'static str| {
+                            div()
+                                .id(id)
+                                .group(id)
+                                .size(z(32.))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .cursor_pointer()
+                                .child(
+                                    gpui::svg()
+                                        .path(crate::icons::path(path))
+                                        .size(z(20.))
+                                        .flex_none()
+                                        .text_color(tk(idx::ICON_MUTED))
+                                        .group_hover(id, |s| s.text_color(tk(idx::ICON_SUBTLE))),
+                                )
+                        };
                         div()
-                            .id("close-thread")
-                            .ml(z(10.))
-                            .size(z(32.))
                             .flex_none()
+                            .pl(z(10.))
                             .flex()
-                            .items_center()
-                            .justify_center()
-                            .cursor_pointer()
-                            .child(
-                                gpui::svg()
-                                    .path(crate::icons::path("close"))
-                                    .size(z(20.))
-                                    .flex_none()
-                                    .text_color(tk(idx::INTERACTIVE_ICON_DEFAULT)),
-                            )
-                            .on_click(cx.listener(|a, _, _, cx| a.close_thread(cx))),
-                    ),
+                            .gap(z(10.))
+                            .child(btn("thread-more", "more-horizontal").tip(crate::t!("header.more")).on_click(move |ev, w, _| {
+                                crate::ui::thread_menu::open(id, ev.position(), w)
+                            }))
+                            .child(btn("close-thread", "close").on_click(cx.listener(|a, _, _, cx| a.close_thread(cx))))
+                    }),
             )
             .child(body)
             .child(

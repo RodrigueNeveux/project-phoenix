@@ -21,7 +21,7 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 | thread sidebar frame | chatLayerWrapper_ / container_FrbQJp | w 480, radius 12 0 0, --background-base-lower | | ui/chat/panels.rs thread_panel | ✅ (ref-cache) |
 | thread sidebar header | container_ybUK7Z | h 49, pad 8 8 8 20, icon 32/20, body-md/medium --text-strong | | ui/chat/panels.rs | ✅ |
 | thread sidebar composer | channelTextArea_ | margin 0 10 10, radius 8, --border-subtle, --chat-background-default | | ui/chat/panels.rs | ✅ |
-| thread sidebar header toolbar (bell, pins, threads, more) | not dumped | | | — | ❌ needs a vanilla dump |
+| thread sidebar header toolbar, forum post | vanilla-forum-post-sidebar (2026-11-24) toolbar_ybUK7Z | no thread icon (title at the 20px padding, h2 body-md/medium), toolbar padding-left 10 gap 10: More + Close, 32px wrappers, 20px glyph --icon-muted | | ui/chat/panels.rs thread_panel | ✅ (dump). Regular thread sidebar (non-forum) not dumped: keeps the 32px thread icon of the create-thread sidebar |
 | forum post action bar: copy link + jump to top | vanilla-thread-channel buttons_HeWz1C | sm secondary 32x32, radius 8, gap 4 | | ui/chat/panels.rs forum_post_bar | ✅ (dump) |
 | forum post action bar: reactions + Following | vanilla-thread-channel reactButtons_HeWz1C | | | — | ❌ follow state not in model |
 | opening a forum post by URL (not in active threads) | GET /channels/{id} (read-only) | | | ui/forum.rs open_by_id, ParityRequest::FetchThread | ✅ real_shots `PHX_CHANNEL=<post id>` opens the post with its forum breadcrumb (2026-11-24, 06081ab) |
