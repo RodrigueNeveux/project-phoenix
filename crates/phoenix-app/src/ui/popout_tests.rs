@@ -136,6 +136,9 @@ impl Harness {
     }
 
     fn click(&mut self, at: Point<Pixels>) {
+        // A real pointer moves there first: GPUI hit-tests on mouse moves.
+        self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
+        self.vcx.run_until_parked();
         self.vcx.simulate_click(at, Modifiers::none());
         self.vcx.run_until_parked();
     }
