@@ -92,3 +92,14 @@ Added rows:
 | card name/tag/badges | #3387 `dnsFont_`, #3408 `selectButtonPill_C3qxaU`, #3412 `container_IqWmhA` | font, layout | name style font; pill 24h p0 6 0 8 r8 + chevron; badges p1 3 gap 2 | `card`, `tag_select`, `badges_row` | ✅ |
 | card bio / note | #3443-#3447, #3462-#3475 | links, offset | --text-link, editable at heading bottom +5; note -4 -7 | `bio_markup`, `card` | ✅ |
 | Send message colour | #3421 | background | --profile-gradient-button-color = primary walked in Lab to contrast 7-10 vs white (module 498596 `OB`) | `gradient_button_color` (test: #00A7FF → #004D9A ±1) | ✅ |
+
+## Control states (live client, ref-cache `settings-switch-states`, `settings-slider-select-states`, 2026-11-24)
+
+| control | state | CSS value | our code | status |
+|---|---|---|---|---|
+| switch on | hover | bg #5865F2 → #4452BB (--switch-background-selected-hover) | `controls::switch` `.hover` | ✅ states_shots |
+| switch off | hover | border alpha .2 → .4 (--switch-border-hover) | `controls::switch` `.hover` | ✅ states_shots |
+| switch | hover target | only the indicator itself (hovering the row label changes nothing) | `controls::switch` | ✅ |
+| slider grabber | hover / drag | 16px → 20px, 1px --border-normal, shadow 0 1 4 .14 | `voice::slider` grabber | ✅ |
+| select field | hover | no visual change (transition border-color .1s only on focus) | `pages::dropdown` | ✅ |
+| marker slider grabber | hover | 16 → 20 | `controls::marker_slider` (hit zones cover the grabber) | ❌ |

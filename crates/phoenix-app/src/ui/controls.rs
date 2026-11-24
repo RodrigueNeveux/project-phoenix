@@ -143,10 +143,16 @@ pub fn nearest(values: &[f32], value: f32) -> usize {
 /// 48x24, 1px border, --radius-lg (16); thumb is a 24px box (margin -1) holding
 /// a 16px white disc, at left 1 off / 24 on.
 pub fn switch(on: bool) -> Div {
-    let (bg, border) = if on {
-        (idx::SWITCH_BACKGROUND_SELECTED_DEFAULT, idx::SWITCH_BORDER_SELECTED_DEFAULT)
+    // Hover (ref-cache settings-switch-states): on #5865F2 → #4452BB, off border .2 → .4 alpha.
+    let (bg, border, hbg, hborder) = if on {
+        (
+            idx::SWITCH_BACKGROUND_SELECTED_DEFAULT,
+            idx::SWITCH_BORDER_SELECTED_DEFAULT,
+            idx::SWITCH_BACKGROUND_SELECTED_HOVER,
+            idx::SWITCH_BORDER_SELECTED_HOVER,
+        )
     } else {
-        (idx::SWITCH_BACKGROUND_DEFAULT, idx::SWITCH_BORDER_DEFAULT)
+        (idx::SWITCH_BACKGROUND_DEFAULT, idx::SWITCH_BORDER_DEFAULT, idx::SWITCH_BACKGROUND_HOVER, idx::SWITCH_BORDER_HOVER)
     };
     div()
         .relative()
@@ -157,6 +163,8 @@ pub fn switch(on: bool) -> Div {
         .border_1()
         .border_color(c(tok(border)))
         .bg(c(tok(bg)))
+        .cursor_pointer()
+        .hover(move |d| d.bg(c(tok(hbg))).border_color(c(tok(hborder))))
         .child(
             div()
                 .absolute()

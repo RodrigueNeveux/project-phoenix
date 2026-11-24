@@ -222,14 +222,20 @@ pub(crate) fn slider(
         )
         .child(
             // #2737 grabber_OnqacX: 16px white circle.
+            // ref-cache settings-grab0-hover: grows to 20px on hover (centre kept via -2 margins).
             div().absolute().top(z(4.)).left(relative(frac)).w(z(0.)).flex().justify_center().child(
                 div()
+                    .id(eid(format!("slider-{id}-grab")))
                     .relative()
                     .flex_none()
                     .size(z(16.))
                     .rounded_full()
                     .bg(gpui::white())
+                    .border_1()
+                    .border_color(c(tok(idx::BORDER_NORMAL))) // grabber_OnqacX border --border-normal
                     .shadow_sm()
+                    .hover(|d| d.size(z(20.)).m(z(-2.)))
+                    .when(dragging, |d| d.size(z(20.)).m(z(-2.)))
                     .when(dragging, |d| {
                         d.child(
                             div().absolute().bottom(z(30.)).left(z(-27.)).w(z(64.)).flex().justify_center().child(
