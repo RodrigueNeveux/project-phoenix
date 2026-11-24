@@ -17,7 +17,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|thread:<id>|thread_create:<msg>|leave|invite|post[:n]|events|community[:browse]|guide.
+//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|thread:<id>|thread_create:<msg>|attach|poll_create|leave|invite|post[:n]|events|community[:browse]|guide.
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_SEARCH_SORT=old|rel` and `PHX_SEARCH_PAGE=<n>` with `PHX_OPEN=search:<q>`.
@@ -1041,6 +1041,16 @@ fn main() -> anyhow::Result<()> {
                         let id = phoenix_app::model::Id(id);
                         let name = app.channels.get(&id).or_else(|| app.nav.find_thread(id)).map(|c| c.name.clone()).unwrap_or_default();
                         app.open_thread(phoenix_app::model::ThreadRef { id, name, message_count: 0 }, window, cx);
+                    }
+                }
+                // `attach`: the composer "+" menu; `poll_create`: the "Crée un sondage" modal.
+                "attach" => app.chat.attach_menu = true,
+                "poll_create" => {
+                    if let Some(ch) = app.selected_channel {
+                        phoenix_app::actions::open_modal(
+                            phoenix_app::ui::modals::Modal::CreatePoll(phoenix_app::ui::modals::poll_create::State::new(ch)),
+                            Some(window),
+                        );
                     }
                 }
                 "thread_create" => {

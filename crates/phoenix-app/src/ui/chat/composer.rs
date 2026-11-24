@@ -204,8 +204,8 @@ thread_local! {
 
 /// The "+" menu of the 2026 client (`channel-attach-*` items, measured live
 /// 2026-11-24: 239px wide, 36px rows, opens 8px above the button, left edges
-/// aligned). Upload a File opens the file picker; Create Thread and Use Apps
-/// are wired; poll, scheduled and voice messages are not built yet.
+/// aligned). Upload a File opens the file picker; Create Thread, Create Poll
+/// (ui/modals/poll_create.rs) and Use Apps are wired; scheduled and voice messages are not built yet.
 fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
     use crate::ui::context_menu::{self, MenuItem};
     if !app.chat.attach_menu {
@@ -232,7 +232,13 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
     if thread_ok {
         items.push(MenuItem::action(crate::t!("attach.thread"), Some(crate::icons::path("chat/thread")), act(|a, ch, w, cx| a.open_create_thread(ch, w, cx))));
     }
-    items.push(MenuItem::disabled(crate::t!("attach.poll"), Some(crate::icons::path("sort"))));
+    // "Créer le sondage" (PollsIcon, canPostPolls = DM or SEND_MESSAGES + SEND_POLLS 1<<49).
+    let guild = app.channels.get(&ch).and_then(|c| c.guild);
+    if guild.is_none() || crate::actions::has(app, guild, 1 << 49) {
+        items.push(MenuItem::action(crate::t!("attach.poll"), Some(crate::icons::path("attach/poll")), act(|_, ch, w, cx| {
+            crate::actions::open_modal(crate::ui::modals::Modal::CreatePoll(crate::ui::modals::poll_create::State::new(ch)), Some(w));
+        })));
+    }
     items.push(MenuItem::action(crate::t!("attach.apps"), Some(crate::icons::path("apps")), act(|a, _, w, cx| {
         // Typing "/" opens the slash command popup.
         a.composer.update(cx, |s, cx| {
@@ -261,6 +267,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     }
     render_text_area(app, window, cx).into_any_element()
 }
+
 
 /// 1:1 DM with a user we blocked: the client swaps the text area for its
 /// chat blocker ("Tu ne peux pas envoyer de message à un utilisateur que tu

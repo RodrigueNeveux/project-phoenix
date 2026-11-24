@@ -122,6 +122,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("inbox/clock", &["ClockIcon"]),
     // Slowmode cooldown (slowModeIcon_, measured live 2026-11-24).
     ("chat/timer", &["TimerIcon"]),
+    // Composer "+" menu (ceb73656 attach options, 2026-11-24).
+    ("attach/poll", &["PollsIcon"]),
     ("inbox/schedule", &["CalendarPlusIcon", "CalendarIcon"]),
     ("search/user", &["UserIcon"]),
     ("search/attachment", &["AttachmentIcon", "PaperclipIcon"]),

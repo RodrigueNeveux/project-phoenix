@@ -7,6 +7,7 @@ pub mod create_channel;
 pub mod forward;
 pub mod guild_notify;
 pub mod member;
+pub mod poll_create;
 pub mod privacy;
 pub mod reactions;
 pub mod report;
@@ -70,6 +71,7 @@ pub enum Modal {
     Privacy(privacy::Privacy),
     Security(privacy::Security),
     GuildNotify(guild_notify::State),
+    CreatePoll(poll_create::State),
 }
 
 /// Create the inputs that need a `Window`.
@@ -103,6 +105,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         }
         Some(Modal::CreateChannel(s)) => create_channel::prepare(s, &mut mk),
         Some(Modal::ChannelSettings(s)) => channel_settings::prepare(s, &mut mk),
+        Some(Modal::CreatePoll(s)) => poll_create::prepare(s, &mut mk),
         _ => {}
     });
 }
@@ -122,6 +125,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Privacy(p) => privacy::render_privacy(app, p, cx),
             Modal::Security(s) => privacy::render_security(s, cx),
             Modal::GuildNotify(s) => guild_notify::render(app, s, cx),
+            Modal::CreatePoll(s) => poll_create::render(app, s, cx),
         })
     })
 }
