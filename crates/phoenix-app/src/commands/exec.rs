@@ -202,6 +202,15 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             rest.vote_poll(sf(channel), sf(m), &answers).await.map_err(e)?;
             ParityReply::Done
         }
+        ParityRequest::CreatePoll { channel, question, answers, hours, multi } => {
+            let answers: Vec<_> = answers.into_iter().map(|(t, em)| (t, em.map(|(i, n)| (i.map(sf), n)))).collect();
+            let m = rest.create_poll(sf(channel), &question, &answers, hours, multi).await.map_err(e)?;
+            ParityReply::Messages(vec![message(&m)])
+        }
+        ParityRequest::EndPoll { channel, message: m } => {
+            rest.end_poll(sf(channel), sf(m)).await.map_err(e)?;
+            ParityReply::Done
+        }
         ParityRequest::ForumPosts { forum, tags, offset, by_creation, archived } => {
             let sort = if by_creation { ThreadSort::Created } else { ThreadSort::LastMessage };
             let r = rest.search_threads(sf(forum), sort, &ids(&tags), offset, archived).await.map_err(e)?;

@@ -133,6 +133,17 @@ impl RestClient {
         .await
     }
 
+    /// Post a poll (`POST /channels/{c}/messages` with `poll`), like the client's
+    /// "Créer le sondage" modal: `answers` are (text, optional (emoji id, emoji name)).
+    pub async fn create_poll(&self, channel: ChannelId, question: &str, answers: &[(String, Option<(Option<Snowflake>, String)>)], hours: u32, multi: bool) -> Result<Message> {
+        self.call(Method::POST, &format!("/channels/{channel}/messages"), Body::Json(poll_body(question, answers, hours, multi))).await
+    }
+
+    /// End a poll now (`POST /channels/{c}/polls/{m}/expire`, POLL_EXPIRE in the client).
+    pub async fn end_poll(&self, channel: ChannelId, message: MessageId) -> Result<Message> {
+        self.call(Method::POST, &format!("/channels/{channel}/polls/{message}/expire"), Body::None).await
+    }
+
     /// `GET /stage-instances/{channel}` (null body if no stage is live).
     pub async fn get_stage_instance(&self, channel: ChannelId) -> Result<Value> {
         self.request_json(Method::GET, &format!("/stage-instances/{channel}"), None).await
@@ -150,9 +161,43 @@ impl RestClient {
     }
 }
 
+/// Body of a poll message: `poll {question {text}, answers [{poll_media {text, emoji}}],
+/// duration (hours), allow_multiselect, layout_type 1}`, empty content, fresh nonce.
+pub fn poll_body(question: &str, answers: &[(String, Option<(Option<Snowflake>, String)>)], hours: u32, multi: bool) -> Value {
+    let answers: Vec<Value> = answers
+        .iter()
+        .map(|(text, emoji)| {
+            let mut media = json!({ "text": text });
+            if let Some((id, name)) = emoji {
+                media["emoji"] = match id {
+                    Some(id) => json!({ "id": id.to_string(), "name": name }),
+                    None => json!({ "name": name }),
+                };
+            }
+            json!({ "poll_media": media })
+        })
+        .collect();
+    let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| ((d.as_millis() as u64 - 1_420_070_400_000) << 22).to_string()).unwrap_or_default();
+    json!({
+        "content": "",
+        "nonce": nonce,
+        "poll": { "question": { "text": question }, "answers": answers, "allow_multiselect": multi, "duration": hours, "layout_type": 1 },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn poll_message_body() {
+        let b = poll_body("Q ?", &[("A".into(), None), ("B".into(), Some((None, "👍".into())))], 24, true);
+        assert_eq!(b["poll"]["question"]["text"], "Q ?");
+        assert_eq!(b["poll"]["answers"][1]["poll_media"]["emoji"]["name"], "👍");
+        assert_eq!(b["poll"]["duration"], 24);
+        assert_eq!(b["poll"]["allow_multiselect"], true);
+        assert_eq!(b["poll"]["layout_type"], 1);
+    }
 
     #[test]
     fn paths_and_bodies() {

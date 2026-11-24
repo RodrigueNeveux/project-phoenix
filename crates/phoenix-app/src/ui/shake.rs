@@ -18,7 +18,7 @@ pub fn start(duration_ms: u32, intensity: f32) {
 /// Offset of frame `frame` (60 fps): moves on odd frames only, x alternates, y is pseudo-random.
 fn frame_offset(frame: u32, intensity: f32) -> (f32, f32) {
     let step = frame / 2;
-    let dir = if step % 2 == 0 { -1. } else { 1. };
+    let dir = if step.is_multiple_of(2) { -1. } else { 1. };
     // xorshift of the step: deterministic "random" in [-1, 1].
     let mut h = step.wrapping_mul(2_654_435_761) ^ 0x9e37_79b9;
     h ^= h << 13;

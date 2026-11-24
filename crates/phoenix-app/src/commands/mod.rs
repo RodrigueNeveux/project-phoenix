@@ -130,6 +130,10 @@ pub enum ParityRequest {
     ContentInventory,
     SetSaved { channel: Id, message: Id, saved: bool },
     VotePoll { channel: Id, message: Id, answers: Vec<u32> },
+    /// "Créer le sondage": answers are (text, optional (custom emoji id, emoji name)).
+    CreatePoll { channel: Id, question: String, answers: Vec<(String, Option<(Option<Id>, String)>)>, hours: u32, multi: bool },
+    /// "Mettre fin au sondage" (POLL_EXPIRE).
+    EndPoll { channel: Id, message: Id },
     /// `by_creation` sorts by post date instead of recent activity.
     ForumPosts { forum: Id, tags: Vec<Id>, offset: u32, by_creation: bool, archived: bool },
     CreatePost { forum: Id, title: String, content: String, tags: Vec<Id> },

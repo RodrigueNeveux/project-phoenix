@@ -417,9 +417,9 @@ pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef,
 
 /// .cozy_.hasThread_::after: the L from under the avatar to the thread card, 2px
 /// --spine-default left and bottom borders, bottom-left radius 8, bottom 29, at
-/// left = margin-horizontal + avatar / 2 - 1 and width = content margin - margin-horizontal
-/// - avatar / 2 - 4 (39 and 36 live); top 3rem (4.375rem with a reply), 1.75rem on a
-/// system line.
+/// left = margin-horizontal + avatar / 2 - 1 and width = content margin minus
+/// margin-horizontal, avatar / 2 and 4 (39 and 36 live); top 3rem (4.375rem with a reply),
+/// 1.75rem on a system line.
 pub fn thread_spine(top: f32) -> Div {
     let mh = crate::theme::space::md();
     let av = super::msg_avatar_size();
