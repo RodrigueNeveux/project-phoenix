@@ -264,7 +264,7 @@ impl PhoenixApp {
         match focused() {
             Some((ch, id)) if self.channels.get(&ch).is_some_and(|c| c.guild.is_some()) => {
                 set_focused(None);
-                self.open_thread_form(ch, id, cx);
+                self.open_create_thread_from(ch, id, window, cx);
             }
             _ => {
                 if let Some(ch) = self.selected_channel {

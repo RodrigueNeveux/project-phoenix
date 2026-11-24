@@ -167,6 +167,17 @@ fn forward_snapshot(m: &api::Message) -> Option<(api::Message, model::Forward)> 
 }
 
 pub fn message(m: &api::Message) -> model::Message {
+    // THREAD_STARTER_MESSAGE (21): empty itself, the thread view shows the parent channel's
+    // message it references, as a normal message without its thread accessory (live
+    // sandbox thread, 2026-11-24: GET /channels/{thread}/messages starts with it).
+    if m.kind == api::MessageType::ThreadStarterMessage
+        && let Some(r) = &m.referenced_message
+    {
+        let mut out = message(r);
+        out.channel = id(m.channel_id);
+        out.thread = None;
+        return out;
+    }
     if let Some((inner, f)) = forward_snapshot(m) {
         let mut out = message(&inner);
         out.forward = Some(f);

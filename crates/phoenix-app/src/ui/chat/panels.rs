@@ -208,8 +208,8 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }));
     if in_guild && msg.is_some_and(|m| m.thread.is_none()) {
         let ee = e.clone();
-        items.push(MenuItem::action(crate::t!("msg.create_thread"), Some(crate::icons::path("chat/thread")), move |_, _, cx| {
-            ee.update(cx, |a, cx| a.open_thread_form(ch, id, cx))
+        items.push(MenuItem::action(crate::t!("msg.create_thread"), Some(crate::icons::path("chat/thread")), move |_, w, cx| {
+            ee.update(cx, |a, cx| a.open_create_thread_from(ch, id, w, cx))
         }));
     }
     items.push(MenuItem::Separator);
@@ -613,6 +613,48 @@ fn forum_post_bar(app: &PhoenixApp, thread: crate::model::Id, scroll: &gpui::Scr
     )
 }
 
+fn forum_post_bar_absent(app: &PhoenixApp, id: crate::model::Id) -> bool {
+    !app.channels
+        .get(&id)
+        .or_else(|| app.nav.find_thread(id))
+        .and_then(|ch| ch.parent)
+        .and_then(|f| app.channels.get(&f))
+        .is_some_and(|f| f.kind == crate::model::ChannelKind::Forum)
+}
+
+/// Start of a thread (live sandbox thread 2026-11-24, container_w6h4R2 at the top of the
+/// list): iconWrapper_ii8eNV 64px --background-mod-strong disc (margin-top 16) with the
+/// 32px thread icon in --icon-subtle, h3 heading-xxl/semibold 32/40 bold margin 8 0
+/// --text-strong, then "Commencé par **name**" (subtitle_ii8eNV body-md/normal
+/// --text-default, margin-bottom 2; threadCreatorName_ semibold --text-strong). The
+/// container keeps --custom-message-margin-horizontal (20) on every side.
+fn thread_intro(app: &PhoenixApp, id: crate::model::Id, name: SharedString, entry: &crate::app::ChannelMessages) -> gpui::Div {
+    use crate::theme::generated::idx;
+    let tk = |i: usize| c(crate::theme::tok(i));
+    let owner = app.nav.extras.get(&id).and_then(|x| x.owner).or_else(|| entry.msgs.first().map(|m| m.author));
+    let owner_name = owner.map(|u| app.member_nick(u).or_else(|| app.users.get(&u).map(|x| x.display_name.clone())).unwrap_or_else(|| crate::t!("common.unknown")));
+    let mut d = div()
+        .m(z(20.))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .justify_end()
+        .child(
+            div().mt(z(16.)).size(z(64.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_STRONG)).flex().items_center().justify_center().child(
+                gpui::svg().path(crate::icons::path("chat/thread")).size(z(32.)).text_color(tk(idx::ICON_SUBTLE)),
+            ),
+        )
+        .child(div().my(z(8.)).text_size(z(32.)).line_height(z(40.)).font_weight(FontWeight::BOLD).text_color(tk(idx::TEXT_STRONG)).child(name));
+    if let Some(n) = owner_name {
+        d = d.child(
+            div().mb(z(2.)).flex().flex_wrap().text_size(z(16.)).line_height(z(20.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("thread.started_by")).child(
+                div().font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(n),
+            ),
+        );
+    }
+    d
+}
+
 /// Thread side panel (replaces the member list while open).
 pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let t = app.chat.thread.as_ref()?;
@@ -623,8 +665,12 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
     if let Some(bar) = forum_post_bar(app, id, &scroll, cx) {
         body = body.child(bar);
     }
+    let tname = t.thread.name.clone();
     match app.messages.get(&id) {
         Some(entry) if entry.loaded_once => {
+            if entry.reached_start && forum_post_bar_absent(app, id) {
+                body = body.child(thread_intro(app, id, tname, entry));
+            }
             for (m, r) in entry.msgs.iter().zip(entry.rendered.iter()) {
                 body = body.child(super::message(app, &entity, m, r, entry, cx));
             }
@@ -718,6 +764,11 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
                             .pl(z(10.))
                             .flex()
                             .gap(z(10.))
+                            // Thread toolbar (live 2026-11-24): "Paramètres de notification" bell,
+                            // "Plus", "Fermer" (forum posts keep More + Close).
+                            .when(!is_post, |d| d.child(btn("thread-notify", "bell").tip(crate::t!("menu.notify_settings")).on_click(cx.listener(|a, _, _, cx| {
+                                a.stub(&crate::t!("menu.notify_settings"), cx)
+                            }))))
                             .child(btn("thread-more", "more-horizontal").tip(crate::t!("header.more")).on_click(move |ev, w, _| {
                                 crate::ui::thread_menu::open(id, ev.position(), w)
                             }))

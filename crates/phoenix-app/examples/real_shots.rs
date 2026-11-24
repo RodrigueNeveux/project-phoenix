@@ -17,7 +17,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse]|guide.
+//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|thread:<id>|thread_create:<msg>|leave|invite|post[:n]|events|community[:browse]|guide.
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_SEARCH_SORT=old|rel` and `PHX_SEARCH_PAGE=<n>` with `PHX_OPEN=search:<q>`.
@@ -1034,6 +1034,20 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 "switcher" => phoenix_app::ui::switcher::open(app, window, cx),
+                // `thread:<id>`: that thread in the side panel; `thread_create:<msg>`: the
+                // "Nouveau fil" sidebar for a message of the open channel (open only).
+                "thread" => {
+                    if let Ok(id) = arg.parse::<u64>() {
+                        let id = phoenix_app::model::Id(id);
+                        let name = app.channels.get(&id).or_else(|| app.nav.find_thread(id)).map(|c| c.name.clone()).unwrap_or_default();
+                        app.open_thread(phoenix_app::model::ThreadRef { id, name, message_count: 0 }, window, cx);
+                    }
+                }
+                "thread_create" => {
+                    if let (Some(ch), Ok(m)) = (app.selected_channel, arg.parse::<u64>()) {
+                        app.open_create_thread_from(ch, phoenix_app::model::Id(m), window, cx);
+                    }
+                }
                 // Guild / channel / message dialogs, open only (nothing is saved).
                 "chansettings" | "createchannel" | "privacy" | "serverprofile" | "security" | "createevent" | "nickname" => {
                     if let Some(g) = app.selected_guild {

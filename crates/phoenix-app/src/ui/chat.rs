@@ -1029,7 +1029,7 @@ pub(crate) fn bot_tag(verified: bool) -> gpui::Div {
         .child(crate::t!("common.app"))
 }
 
-fn message(
+pub(crate) fn message(
     app: &PhoenixApp,
     entity: &Entity<PhoenixApp>,
     msg: &Message,

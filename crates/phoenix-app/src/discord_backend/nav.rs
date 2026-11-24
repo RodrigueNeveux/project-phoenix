@@ -241,7 +241,8 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
         recipients: if c.kind.is_private() { c.recipient_user_ids().len() } else { 0 },
         group_name: group.then(|| group_name(cache, c)).flatten(),
         members: if group { c.recipient_user_ids().into_iter().map(id).collect() } else { Vec::new() },
-        owner: c.owner_id.filter(|_| group).map(id),
+        // Threads too: "Commencé par" in the thread view.
+        owner: c.owner_id.filter(|_| group || c.kind.is_thread()).map(id),
     }
 }
 

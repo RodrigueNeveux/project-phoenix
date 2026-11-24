@@ -6,6 +6,13 @@
 //! bottom-aligned form: 64px icon disc, "Nom du fil" input, "Fil privé"
 //! checkbox; starter-message textarea at the bottom.
 //! Submitting posts `POST /channels/{id}/threads`, then the starter message.
+//!
+//! From a message ("Créer un fil" in the message menu, measured live 2026-11-24 in the
+//! sandbox channel): same sidebar, label "Nom du fil (facultatif)", the default name
+//! (web bundle module 971389 `V`) as the name placeholder, no "Fil privé" option, and the
+//! source message rendered under the field (messagePreview_UU236g: padding-bottom 24).
+//! Submitting posts `POST /channels/{c}/messages/{m}/threads` with the typed name, else the
+//! default name, else "Fil" (7Xm5QI), then the starter message in the new thread.
 
 use gpui::{AnyElement, ClickEvent, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Subscription, Window, div, prelude::*};
 use gpui_component::input::{Input, InputEvent, InputState};
@@ -22,7 +29,54 @@ pub struct CreateThread {
     pub name: Entity<InputState>,
     pub starter: Entity<InputState>,
     pub private: bool,
+    /// Starter message of a thread created from a message, and its default name.
+    pub source: Option<(Id, String)>,
     _subs: Vec<Subscription>,
+}
+
+/// Default thread name of a message (module 971389 `V`): the first embed's title (40),
+/// else the poll question (80), else the first content line without leading " #-",
+/// grown token by token (separators kept) while it fits 40 UTF-16 units; `B` then cuts
+/// anything longer at 40 and appends "...".
+pub fn default_thread_name(content: &str, embed_title: Option<&str>, poll_question: Option<&str>) -> String {
+    fn cut(s: &str, n: usize) -> String {
+        if s.encode_utf16().count() > n { String::from_utf16_lossy(&s.encode_utf16().take(n).collect::<Vec<_>>()) + "..." } else { s.to_string() }
+    }
+    let len = |s: &str| s.encode_utf16().count();
+    if let Some(t) = embed_title.filter(|t| !t.is_empty()) {
+        return cut(t, 40);
+    }
+    if let Some(q) = poll_question.filter(|q| !q.is_empty()) {
+        return cut(q, 80);
+    }
+    let first = content.split('\n').next().unwrap_or("");
+    let line = first.trim_start_matches([' ', '#', '-']);
+    // Split into words and separator runs (whitespace or `!@#$%^&*()_-+={}[]:";'<>?,./`).
+    let sep = |c: char| c.is_whitespace() || "!@#$%^&*()_-+={}[]:\";'<>?,./".contains(c);
+    let mut parts: Vec<&str> = Vec::new();
+    let mut start = 0;
+    let mut in_sep = None;
+    for (i, ch) in line.char_indices() {
+        let s = sep(ch);
+        if in_sep.is_some_and(|w| w != s) {
+            parts.push(&line[start..i]);
+            start = i;
+        }
+        in_sep = Some(s);
+    }
+    parts.push(&line[start..]);
+    // The client's split always starts with a (possibly empty) word.
+    if line.chars().next().is_some_and(sep) {
+        parts.insert(0, "");
+    }
+    let mut out = parts[0].to_string();
+    for p in &parts[1..] {
+        if len(&out) + len(p) > 40 {
+            break;
+        }
+        out.push_str(p);
+    }
+    cut(&out, 40)
 }
 
 impl gpui::Global for Slot {}
@@ -60,7 +114,25 @@ impl PhoenixApp {
         starter.update(cx, |s, cx| s.focus(window, cx));
         self.chat.thread = None;
         self.parity.threads_open = false;
-        cx.set_global(Slot(Some(CreateThread { channel, name, starter, private: false, _subs: subs })));
+        cx.set_global(Slot(Some(CreateThread { channel, name, starter, private: false, source: None, _subs: subs })));
+        cx.notify();
+    }
+
+    /// "Créer un fil" on a message: the sidebar with the message preview.
+    pub fn open_create_thread_from(&mut self, channel: Id, msg: Id, window: &mut Window, cx: &mut Context<Self>) {
+        self.chat.menu = None;
+        let Some(m) = self.messages.get(&channel).and_then(|x| x.msgs.iter().find(|m| m.id == msg)) else { return };
+        let poll = crate::commands::store::get(m.id).and_then(|x| x.poll.as_ref().map(|p| p.question.clone()));
+        let default = default_thread_name(&m.content, m.embeds.first().and_then(|e| e.title.as_deref()), poll.as_deref());
+        self.open_create_thread(channel, window, cx);
+        let ph: SharedString = if default.is_empty() { crate::t!("thread.default_name") } else { default.clone().into() };
+        let input = cx.global_mut::<Slot>().0.as_mut().map(|s| {
+            s.source = Some((msg, default));
+            s.name.clone()
+        });
+        if let Some(input) = input {
+            input.update(cx, |i, cx| i.set_placeholder(ph, window, cx));
+        }
         cx.notify();
     }
 
@@ -74,6 +146,35 @@ impl PhoenixApp {
         let (channel, private) = (s.channel, s.private);
         let name = s.name.read(cx).value().trim().to_string();
         let starter = s.starter.read(cx).value().trim().to_string();
+        if let Some((msg, default)) = s.source.clone() {
+            let handle = window.window_handle();
+            let name = if !name.is_empty() { name } else if !default.is_empty() { default } else { crate::t!("thread.default_name").to_string() };
+            let thread_name = name.clone();
+            self.action(ActionRequest::CreateThread { channel, msg, name }, cx, move |a, r, cx| match r {
+                Ok(ActionReply::Channel(id)) => {
+                    a.close_create_thread(cx);
+                    // Client: the new thread opens in the side panel (open_thread needs the window).
+                    let (e, tname) = (cx.entity(), thread_name.clone());
+                    cx.defer(move |cx| {
+                        let _ = handle.update(cx, |_, w, cx| {
+                            e.update(cx, |a, cx| a.open_thread(crate::model::ThreadRef { id, name: tname.into(), message_count: 0 }, w, cx))
+                        });
+                    });
+                    if !starter.is_empty() {
+                        let fut = a.backend.send_message(id, starter, None);
+                        cx.spawn(async move |this, cx| {
+                            if let Ok(m) = fut.await {
+                                let _ = this.update(cx, |this, cx| this.append_message(m, cx));
+                            }
+                        })
+                        .detach();
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => a.parity_toast(e.0, cx),
+            });
+            return;
+        }
         // Client: an empty name falls back to the starter message's start.
         let name = if name.is_empty() { starter.chars().take(40).collect() } else { name };
         if name.is_empty() {
@@ -109,6 +210,14 @@ pub fn panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
     }
     let private = s.private;
     let (name, starter) = (s.name.clone(), s.starter.clone());
+    let source = s.source.as_ref().map(|(m, _)| *m);
+    // messagePreview_UU236g (padding-bottom 24) under the form: the starter message.
+    let preview = source.and_then(|mid| {
+        let entry = app.messages.get(&s.channel)?;
+        let i = entry.index_of(mid)?;
+        let entity = cx.entity();
+        Some(div().pb(z(24.)).child(crate::ui::chat::message(app, &entity, &entry.msgs[i], &entry.rendered[i], entry, cx)))
+    });
     let header = div()
         .flex_none()
         .h(z(49.)) // container_ybUK7Z height 49
@@ -184,7 +293,7 @@ pub fn panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
                 .flex_col()
                 .gap(z(24.)) // stack_ gap 24
                 .child(
-                    div().flex().flex_col().child(label(crate::t!("thread.name"))).child(
+                    div().flex().flex_col().child(label(if source.is_some() { crate::t!("thread.name_optional") } else { crate::t!("thread.name") })).child(
                         div()
                             .h(z(40.)) // input wrapper md: 40px, radius 8, 1px --input-border-default
                             .rounded(z(8.))
@@ -198,7 +307,7 @@ pub fn panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
                             .child(Input::new(&name).appearance(false).bordered(false)),
                     ),
                 )
-                .child(
+                .when(source.is_none(), |d| d.child(
                     div().flex().flex_col().child(label(crate::t!("thread.private"))).child(
                         div()
                             .id("create-thread-private")
@@ -222,7 +331,7 @@ pub fn panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
                                 cx.notify();
                             })),
                     ),
-                ),
+                )),
         );
     let composer = div()
         .flex_none()
@@ -254,8 +363,25 @@ pub fn panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
             .flex()
             .flex_col()
             .child(header)
-            .child(div().id("create-thread-scroll").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().justify_end().child(form))
+            .child(div().id("create-thread-scroll").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().justify_end().child(form).children(preview))
             .child(composer)
             .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_thread_name;
+
+    #[test]
+    fn default_name_matches_the_live_client() {
+        // Live sandbox 2026-11-24: placeholder "[Test Phoenix] envoyé depuis le client ".
+        let c = "[Test Phoenix] envoyé depuis le client officiel — message source pour tester les fils";
+        assert_eq!(default_thread_name(c, None, None), "[Test Phoenix] envoyé depuis le client ");
+        assert_eq!(default_thread_name("## Titre\nsuite", None, None), "Titre");
+        assert_eq!(default_thread_name("x", Some("Embed"), None), "Embed");
+        assert_eq!(default_thread_name("", None, Some("Question ?")), "Question ?");
+        let long = "a".repeat(50);
+        assert_eq!(default_thread_name(&long, None, None), format!("{}...", "a".repeat(40)));
+    }
 }
