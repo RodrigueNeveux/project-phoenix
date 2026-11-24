@@ -183,8 +183,13 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                 .gap(z(6.))
                 .border_1()
                 .when(r.me, |d| {
-                    d.bg(tk(idx::REACTION_BACKGROUND_REACTED_DEFAULT))
-                        .border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT))
+                    // `.theme-light .reaction_.reactionMe_`: --brand-160 on --brand-500.
+                    if crate::theme::is_light() {
+                        d.bg(tk(idx::BRAND_160)).border_color(tk(idx::BRAND_500))
+                    } else {
+                        d.bg(tk(idx::REACTION_BACKGROUND_REACTED_DEFAULT))
+                            .border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT))
+                    }
                 })
                 .when(!r.me, |d| {
                     // reaction_MmKct8 transition: background-color .1s ease (layer below).
@@ -215,7 +220,12 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
                         .text_size(z(16.))
                         .line_height(z(16.))
                         .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(tk(if r.me { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::TEXT_SUBTLE }))
+                        // `.theme-light .reactionMe_ .reactionCount_`: --brand-560.
+                        .text_color(tk(match (r.me, crate::theme::is_light()) {
+                            (true, true) => idx::BRAND_560,
+                            (true, false) => idx::REACTION_TEXT_REACTED_DEFAULT,
+                            _ => idx::TEXT_SUBTLE,
+                        }))
                         // reaction_:hover / :active .reactionCount_ colours
                         .group_hover("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_HOVER)))
                         .id("count")

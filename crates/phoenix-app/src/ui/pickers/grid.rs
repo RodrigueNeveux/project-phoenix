@@ -272,8 +272,15 @@ fn render_row(ix: usize, cx: &mut App) -> AnyElement {
                         .justify_center()
                         .rounded(px(4.))
                         .cursor_pointer()
-                        // emojiItemSelected_6OcK5D: --interactive-background-selected
-                        .when(is_sel, |d| d.bg(tk(idx::INTERACTIVE_BACKGROUND_SELECTED)))
+                        // emojiItemSelected_6OcK5D: --interactive-background-selected; Light:
+                        // --background-base-low with an inset 1px --border-subtle.
+                        .when(is_sel, |d| {
+                            if crate::theme::is_light() {
+                                d.bg(tk(idx::BACKGROUND_BASE_LOW)).border_1().border_color(tk(idx::BORDER_SUBTLE))
+                            } else {
+                                d.bg(tk(idx::INTERACTIVE_BACKGROUND_SELECTED))
+                            }
+                        })
                         .on_hover(move |h, w, cx| {
                             if *h {
                                 with_app(cx, w, |_, _, cx| {

@@ -102,7 +102,15 @@ fn cell(s: &StickerData, section: SharedString, inspected: bool, locked: bool) -
             }
         })
         .when(!locked, |d| d.on_click(move |_, w, cx| with_app(cx, w, move |a, w, cx| send(a, id, w, cx))))
-        .child(div().relative().size_full().when(locked, |d| d.opacity(0.3)).child(sticker_graphic(s, CELL - 2.)))
+        // stickerLocked_5z8c5P: filter brightness(.4), approximated by opacity .3 over the
+        // dark surface (transparent pixels must stay clear); `.theme-light`: opacity .4.
+        .child(
+            div()
+                .relative()
+                .size_full()
+                .when(locked, |d| d.opacity(if crate::theme::is_light() { 0.4 } else { 0.3 }))
+                .child(sticker_graphic(s, CELL - 2.)),
+        )
         .into_any_element()
 }
 

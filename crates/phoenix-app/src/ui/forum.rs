@@ -366,8 +366,15 @@ fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
         .text_size(z(14.))
         .line_height(z(18.))
         .font_weight(FontWeight::SEMIBOLD)
-        .bg(if on { c(Palette::BLURPLE) } else { c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)) })
-        .text_color(if on { gpui::white() } else { c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)) })
+        // .selected_snX-u4: --brand-15a (Light --brand-160) on --brand-500 with
+        // --reaction-text-reacted-default.
+        .when(on, |d| d.border_color(c(tok(idx::BRAND_500))))
+        .bg(c(tok(match (on, crate::theme::is_light()) {
+            (true, true) => idx::BRAND_160,
+            (true, false) => idx::BRAND_15A,
+            _ => idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT,
+        })))
+        .text_color(c(tok(if on { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::CONTROL_SECONDARY_TEXT_DEFAULT })))
         .when_some(t.emoji.clone(), |d, e| d.child(crate::media::emoji::emoji_element(&e, 16.)))
         .child(t.name.clone())
 }
