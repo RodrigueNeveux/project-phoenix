@@ -198,6 +198,9 @@ impl PhoenixApp {
         if crate::ui::incoming_call::on_key(self, ks, cx) {
             return true;
         }
+        if crate::ui::easter::on_key(self, ks, cx) {
+            return true;
+        }
         let m = ks.modifiers;
         let in_composer = composer_focused(self, window, cx);
         // A control reached with Tab counts as the root (client: type-to-focus works from any button).

@@ -1459,7 +1459,11 @@ impl Render for PhoenixApp {
             })
             .text_color(c(Palette::TEXT_NORMAL))
             .bg(c(Palette::BG_TERTIARY))
-            .child(body)
+            .child({
+                // `SHAKE_APP` from the Raging Demon easter egg.
+                let (dx, dy) = ui::easter::shake_offset(window);
+                div().size_full().relative().left(gpui::px(dx)).top(gpui::px(dy)).child(body)
+            })
             .children(ui::settings::render(self, window, cx))
             .children(ui::chat::panels::overlays(self, window, cx))
             .children(ui::home::overlay(self, window, cx))

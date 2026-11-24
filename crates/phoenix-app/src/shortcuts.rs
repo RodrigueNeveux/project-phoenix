@@ -738,6 +738,7 @@ pub fn help_card(window: &gpui::Window) -> gpui::AnyElement {
             div()
                 .w(w)
                 .max_h(vp.height * 0.8)
+                .relative()
                 .rounded(z(4.)) // keyboardShortcutsModal_ border-radius 4px
                 .overflow_hidden()
                 .bg(c(tok(idx::BACKGROUND_BASE_LOWER))) // --background-base-lower
@@ -767,7 +768,8 @@ pub fn help_card(window: &gpui::Window) -> gpui::AnyElement {
                         .text_color(c(tok(idx::TEXT_DEFAULT)))
                         .child(crate::t!("shortcuts.subtitle")),
                 )
-                .child(list),
+                .child(list)
+                .child(crate::ui::easter::arrows()),
         )
         .into_any_element()
 }
@@ -775,6 +777,13 @@ pub fn help_card(window: &gpui::Window) -> gpui::AnyElement {
 pub fn render_help(_app: &PhoenixApp, window: &mut gpui::Window, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
     if !help_open() {
         return None;
+    }
+    crate::ui::easter::preload();
+    if crate::ui::easter::demon_active() {
+        return crate::ui::easter::render_demon(window, cx);
+    }
+    if crate::ui::easter::arrows_animating() {
+        window.request_animation_frame();
     }
     let entity = cx.entity().downgrade();
     let close: ui::modal::Action = std::rc::Rc::new(move |_, cx| {

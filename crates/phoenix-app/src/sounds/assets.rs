@@ -219,8 +219,13 @@ fn looks_like_mp3(b: &[u8]) -> bool {
     b.starts_with(b"ID3") || (b.len() > 1 && b[0] == 0xff && b[1] & 0xe0 == 0xe0)
 }
 
-/// Cached `/assets/<file>` entries of every local Discord cache.
+/// Cached `/assets/<file>` mp3 entries of every local Discord cache.
 fn cached_assets() -> HashMap<String, PathBuf> {
+    cached_with(".mp3")
+}
+
+/// Cached `/assets/<file>` entries ending in `ext`.
+fn cached_with(ext: &str) -> HashMap<String, PathBuf> {
     let mut out = HashMap::new();
     for cache in crate::icons::discord_caches() {
         for e in std::fs::read_dir(&cache).into_iter().flatten().flatten() {
@@ -235,7 +240,7 @@ fn cached_assets() -> HashMap<String, PathBuf> {
             let kl = u32::from_le_bytes([h[12], h[13], h[14], h[15]]) as usize;
             let Some(key) = h.get(24..24 + kl).and_then(|k| std::str::from_utf8(k).ok()) else { continue };
             let Some(name) = key.rsplit_once("/assets/").map(|(_, n)| n.split('?').next().unwrap_or(n)) else { continue };
-            if name.ends_with(".mp3") {
+            if name.ends_with(ext) {
                 // The sparse `_s` file holds the body; prefer it over the `_0` headers.
                 let is_sparse = p.to_string_lossy().ends_with("_s");
                 if is_sparse || !out.contains_key(name) {
@@ -248,6 +253,11 @@ fn cached_assets() -> HashMap<String, PathBuf> {
 }
 
 fn download(file: &str) -> Option<Vec<u8>> {
+    let b = download_any(file)?;
+    looks_like_mp3(&b).then_some(b)
+}
+
+fn download_any(file: &str) -> Option<Vec<u8>> {
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
     rt.block_on(async {
         let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().ok()?;
@@ -255,8 +265,7 @@ fn download(file: &str) -> Option<Vec<u8>> {
         if !r.status().is_success() {
             return None;
         }
-        let b = r.bytes().await.ok()?.to_vec();
-        looks_like_mp3(&b).then_some(b)
+        Some(r.bytes().await.ok()?.to_vec())
     })
 }
 
@@ -279,6 +288,58 @@ pub fn load(name: &str) -> Option<Vec<u8>> {
         return Some(b);
     }
     fetch_into(&dir, name, &cached_assets())
+}
+
+/// Any other client asset (`/assets/<file>`: easter egg images, DDR arrows) as a local
+/// path: `Some` once it is on disk, else `None` and a background fetch starts (local
+/// Discord cache first, then `discord.com/assets`).
+pub fn asset_file(file: &str) -> Option<PathBuf> {
+    let dir = out_dir()?.with_file_name("assets");
+    let path = dir.join(file);
+    if path.is_file() {
+        return Some(path);
+    }
+    static PENDING: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+    {
+        let mut p = PENDING.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if p.iter().any(|f| f == file) {
+            return None;
+        }
+        p.push(file.to_owned());
+    }
+    let file = file.to_owned();
+    let _ = std::thread::Builder::new().name("asset-fetch".into()).spawn(move || {
+        let ext = file.rsplit_once('.').map_or(String::new(), |(_, e)| format!(".{e}"));
+        let bytes = cached_with(&ext)
+            .get(&file)
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| entry_body_any(&b))
+            .or_else(|| download_any(&file));
+        if let Some(b) = bytes {
+            let _ = std::fs::create_dir_all(&dir);
+            let _ = std::fs::write(dir.join(&file), b);
+        }
+    });
+    None
+}
+
+/// Like [`entry_body`] without the mp3 check on plain `_0` bodies (decompressed if needed).
+fn entry_body_any(bytes: &[u8]) -> Option<Vec<u8>> {
+    if let Some(b) = entry_body(bytes) {
+        return Some(b);
+    }
+    if bytes.len() < 24 || bytes[..8] != MAGIC {
+        return None;
+    }
+    let kl = u32::from_le_bytes(bytes[12..16].try_into().ok()?) as usize;
+    let off = 24 + kl;
+    let end = memchr::memmem::find(bytes.get(off..)?, &EOF_MAGIC).map_or(bytes.len(), |p| p + off);
+    let raw = &bytes[off..end];
+    let mut out = Vec::new();
+    if brotli_decompressor::Decompressor::new(raw, 4096).read_to_end(&mut out).is_ok() && !out.is_empty() {
+        return Some(out);
+    }
+    (!raw.is_empty()).then(|| raw.to_vec())
 }
 
 /// Sounds fetched ahead of time, so the first cue plays without a download.

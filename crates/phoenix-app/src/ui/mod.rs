@@ -27,6 +27,7 @@ pub mod invite;
 pub mod image_viewer;
 pub mod login;
 pub mod settings;
+pub mod easter;
 pub mod members;
 pub mod activity_traits;
 pub mod nameplate;
