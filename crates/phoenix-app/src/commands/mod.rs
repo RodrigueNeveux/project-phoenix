@@ -102,6 +102,9 @@ pub enum ModAction {
 }
 
 #[derive(Clone, Debug)]
+/// Poll answer typed in the creation modal: text and optional (custom emoji id, emoji name).
+pub type PollAnswerDraft = (String, Option<(Option<Id>, String)>);
+
 pub enum ParityRequest {
     /// Guild (or DM channel) + user-installed commands.
     Commands { guild: Option<Id>, channel: Id },
@@ -131,7 +134,7 @@ pub enum ParityRequest {
     SetSaved { channel: Id, message: Id, saved: bool },
     VotePoll { channel: Id, message: Id, answers: Vec<u32> },
     /// "Créer le sondage": answers are (text, optional (custom emoji id, emoji name)).
-    CreatePoll { channel: Id, question: String, answers: Vec<(String, Option<(Option<Id>, String)>)>, hours: u32, multi: bool },
+    CreatePoll { channel: Id, question: String, answers: Vec<PollAnswerDraft>, hours: u32, multi: bool },
     /// "Mettre fin au sondage" (POLL_EXPIRE).
     EndPoll { channel: Id, message: Id },
     /// `by_creation` sorts by post date instead of recent activity.

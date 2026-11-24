@@ -135,7 +135,7 @@ impl RestClient {
 
     /// Post a poll (`POST /channels/{c}/messages` with `poll`), like the client's
     /// "Créer le sondage" modal: `answers` are (text, optional (emoji id, emoji name)).
-    pub async fn create_poll(&self, channel: ChannelId, question: &str, answers: &[(String, Option<(Option<Snowflake>, String)>)], hours: u32, multi: bool) -> Result<Message> {
+    pub async fn create_poll(&self, channel: ChannelId, question: &str, answers: &[PollAnswerInput], hours: u32, multi: bool) -> Result<Message> {
         self.call(Method::POST, &format!("/channels/{channel}/messages"), Body::Json(poll_body(question, answers, hours, multi))).await
     }
 
@@ -161,9 +161,12 @@ impl RestClient {
     }
 }
 
+/// A poll answer to post: text and optional emoji (custom emoji id, name).
+pub type PollAnswerInput = (String, Option<(Option<Snowflake>, String)>);
+
 /// Body of a poll message: `poll {question {text}, answers [{poll_media {text, emoji}}],
 /// duration (hours), allow_multiselect, layout_type 1}`, empty content, fresh nonce.
-pub fn poll_body(question: &str, answers: &[(String, Option<(Option<Snowflake>, String)>)], hours: u32, multi: bool) -> Value {
+pub fn poll_body(question: &str, answers: &[PollAnswerInput], hours: u32, multi: bool) -> Value {
     let answers: Vec<Value> = answers
         .iter()
         .map(|(text, emoji)| {
