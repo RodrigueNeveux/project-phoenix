@@ -64,8 +64,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .flex()
                 .flex_row()
                 .child(
-                    div()
-                        .id("chat-column")
+                    panels::track_drop(div().id("chat-column"))
                         .group("chat-drop")
                         .relative()
                         .flex_1()
@@ -73,6 +72,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         .flex()
                         .flex_col()
                         .on_drop(cx.listener(|a, paths: &gpui::ExternalPaths, _, cx| {
+                            panels::drop_ended();
                             a.add_paths(paths.paths().to_vec(), cx)
                         }))
                         .children(discovery_notice(app, cx))

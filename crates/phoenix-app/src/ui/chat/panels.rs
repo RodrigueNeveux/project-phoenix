@@ -5,8 +5,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, Styled, Window, div,
-    prelude::*,
+    AnyElement, Context, Div, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window,
+    div, prelude::*,
 };
 use gpui_component::input::Input;
 
@@ -515,7 +515,72 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
 /// reduce-motion pose): one translate(-44,-6) rotate(-30deg), two (0,-6), three
 /// (44,-6) rotate(30deg). Painted one, three, two like the client's DOM order.
 /// The art comes from the local Discord cache ([`crate::icons::art`]); without it, one glyph.
-fn upload_icons() -> AnyElement {
+thread_local! {
+    /// External drag over the chat: (entered, last move), to replay the fly-in.
+    static DROP_DRAG: std::cell::Cell<Option<(std::time::Instant, std::time::Instant)>> = const { std::cell::Cell::new(None) };
+}
+
+/// Whole fly-in: icons .8s, title 1s after .175s, instructions 1.25s after .185s.
+const DROP_ANIM_MS: f32 = 1435.;
+
+/// Track file drags over `el` (the `chat-drop` column) so the overlay can
+/// replay the client's enter keyframes each time a drag comes in.
+pub fn track_drop(el: gpui::Stateful<Div>) -> gpui::Stateful<Div> {
+    el.on_drag_move::<gpui::ExternalPaths>(|ev, window, _| {
+        let now = std::time::Instant::now();
+        let inside = ev.bounds.contains(&ev.event.position);
+        let cur = DROP_DRAG.get();
+        match (inside, cur) {
+            // A pause of over a second means the previous drag left the window unseen.
+            (true, Some((start, last))) if now.duration_since(last).as_secs_f32() < 1. => DROP_DRAG.set(Some((start, now))),
+            (true, _) => {
+                DROP_DRAG.set(Some((now, now)));
+                window.refresh();
+            }
+            (false, _) => DROP_DRAG.set(None),
+        }
+    })
+}
+
+/// Files dropped: the next drag starts a fresh fly-in.
+pub fn drop_ended() {
+    DROP_DRAG.set(None);
+}
+
+/// Piecewise-linear keyframes with CSS `ease` inside each segment.
+fn keyframes(stops: &[(f32, f32)], p: f32) -> f32 {
+    let ease = crate::ui::states::cubic_bezier(0.25, 0.1, 0.25, 1.);
+    let p = p.clamp(0., 1.);
+    for w in stops.windows(2) {
+        let ((t0, v0), (t1, v1)) = (w[0], w[1]);
+        if p <= t1 {
+            let k = if t1 > t0 { ease((p - t0) / (t1 - t0)) } else { 1. };
+            return v0 + (v1 - v0) * k;
+        }
+    }
+    stops.last().map_or(0., |s| s.1)
+}
+
+/// uploadIconAnimateInLeft/Middle/Right_TLgD1o (.8s ease forwards):
+/// (x, y, opacity) of the left icon at progress `p`; the right one mirrors x.
+fn icon_pose(p: f32) -> (f32, f32, f32) {
+    const T: [f32; 7] = [0., 0.041667, 0.308334, 0.583334, 0.75, 0.833334, 1.];
+    const X: [f32; 7] = [0., 0., -48., -41., -45., -44., -44.];
+    const Y: [f32; 7] = [0., -1., -10., -3., -8., -7., -6.];
+    const O: [f32; 7] = [0.6, 0.68, 1., 1., 1., 1., 1.];
+    let at = |v: &[f32; 7]| keyframes(&T.iter().copied().zip(v.iter().copied()).collect::<Vec<_>>(), p);
+    (at(&X), at(&Y), at(&O))
+}
+
+/// uploadTextFadeIn_TLgD1o: (opacity, y) at `ms` after the overlay appeared.
+fn text_pose(ms: f32, delay: f32, dur: f32) -> (f32, f32) {
+    let p = ((ms - delay) / dur).clamp(0., 1.);
+    let k = keyframes(&[(0., 0.), (0.08334, 0.), (0.458, 1.), (1., 1.)], p);
+    (k, -4. * (1. - k))
+}
+
+/// The three icons at `ms` into the fly-in (`None`: final pose).
+fn upload_icons_at(ms: Option<f32>) -> AnyElement {
     use crate::icons::art;
     let Some([one, two, three]) = art::upload_icons() else {
         return icon(ChatIcon::Upload, 48., gpui::white()).into_any_element();
@@ -525,21 +590,88 @@ fn upload_icons() -> AnyElement {
     let place = |p: &std::path::PathBuf, x: f32, y: f32| {
         gpui::img(p.clone()).absolute().left(z(x - pad)).top(z(y)).w(z(art::UPLOAD_CANVAS_W)).h(z(art::UPLOAD_CANVAS_H))
     };
+    // The art is pre-rotated to the final ±30deg: only translate and opacity replay.
+    let (x, y, o) = ms.map_or((-44., -6., 1.), |ms| icon_pose(ms / 800.));
+    let (_, my, _) = ms.map_or((0., -6., 1.), |ms| icon_pose(ms / 800.));
     div()
         .relative()
         .flex_none()
         .w(z(100.))
         .h(z(60.))
-        .child(place(one, -44., -70. - 6.))
-        .child(place(three, 44., -70. - 6.))
-        .child(place(two, 0., -80. - 6.))
+        .child(place(one, x, -70. + y).opacity(o))
+        .child(place(three, -x, -70. + y).opacity(o))
+        .child(place(two, 0., -80. + my))
         .into_any_element()
 }
 
-/// Full-area overlay shown while files are dragged over the chat.
+/// uploadDropModal_ inner_: 2px dashed --opacity-white-40, radius 6, centred
+/// column; title_ 22px bold white; instructions_ 12/16 white, margin-top 4.
+/// `ms` into the fly-in (`None`: settled).
+fn drop_inner(name: SharedString, ms: Option<f32>) -> Div {
+    let (to, ty) = ms.map_or((1., 0.), |ms| text_pose(ms, 175., 1000.));
+    let (io, iy) = ms.map_or((1., 0.), |ms| text_pose(ms, 185., 1250.));
+    div()
+        .flex_1()
+        .rounded(z(6.))
+        .border_2()
+        .border_dashed()
+        .border_color(super::tk(crate::theme::generated::idx::OPACITY_WHITE_40))
+        .flex()
+        .flex_col()
+        .items_center()
+        .justify_center()
+        .child(upload_icons_at(ms))
+        .child(
+            div()
+                .relative()
+                .top(z(ty))
+                .opacity(to)
+                .px(z(8.))
+                .text_size(z(22.))
+                .font_weight(FontWeight::BOLD)
+                .text_color(gpui::white())
+                .text_center()
+                .child(crate::t!("chat.upload_to", name = name)),
+        )
+        .child(
+            div()
+                .relative()
+                .top(z(iy))
+                .opacity(io)
+                .mt(z(4.))
+                .px(z(8.))
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .text_color(gpui::white())
+                .text_center()
+                .child(crate::t!("chat.upload_hint")),
+        )
+}
+
+/// Full-area overlay shown while files are dragged over the chat. Each new
+/// drag (see [`track_drop`]) replays the client's enter keyframes: icons fly
+/// out (.8s), bgScale_ bounces (uploadModalBounce_ .99 → 1.005 → .995 → 1),
+/// title and instructions fade in from -4px.
 pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
     use crate::theme::generated::idx;
+    use gpui::AnimationExt;
     let name = app.selected_channel.and_then(|c| app.channels.get(&c)).map(|c| c.name.clone()).unwrap_or_default();
+    // uploadDropModal_ 310x170; bgScale_ --brand-500 radius 10.
+    let modal = div().w(z(310.)).h(z(170.)).rounded(z(10.)).bg(super::tk(idx::BRAND_500)).flex();
+    let modal = match DROP_DRAG.get().map(|(start, _)| start) {
+        Some(start) if start.elapsed().as_secs_f32() * 1000. < DROP_ANIM_MS => modal
+            .with_animation(
+                gpui::ElementId::Name(format!("drop-in-{start:?}").into()),
+                gpui::Animation::new(std::time::Duration::from_millis(DROP_ANIM_MS as u64)),
+                move |d, t| {
+                    let ms = t * DROP_ANIM_MS;
+                    let k = keyframes(&[(0., 0.99), (0.333334, 1.005), (0.541667, 0.995), (0.708334, 1.), (1., 1.)], ms / 800.);
+                    d.w(z(310. * k)).h(z(170. * k)).child(drop_inner(name.clone(), Some(ms)))
+                },
+            )
+            .into_any_element(),
+        _ => modal.child(drop_inner(name, None)).into_any_element(),
+    };
     div()
         .absolute()
         .top_0()
@@ -551,47 +683,5 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_center()
-        .child(
-            // uploadDropModal_ 310x170; bgScale_ --brand-500 radius 10; inner_ 2px dashed
-            // --opacity-white-40 radius 6, centred column; title_ 22px bold white; instructions_
-            // 12/16 white, margin-top 4.
-            div()
-                .w(z(310.))
-                .h(z(170.))
-                .rounded(z(10.))
-                .bg(super::tk(idx::BRAND_500))
-                .flex()
-                .child(
-                    div()
-                        .flex_1()
-                        .rounded(z(6.))
-                        .border_2()
-                        .border_dashed()
-                        .border_color(super::tk(idx::OPACITY_WHITE_40))
-                        .flex()
-                        .flex_col()
-                        .items_center()
-                        .justify_center()
-                        .child(upload_icons())
-                        .child(
-                            div()
-                                .px(z(8.))
-                                .text_size(z(22.))
-                                .font_weight(FontWeight::BOLD)
-                                .text_color(gpui::white())
-                                .text_center()
-                                .child(crate::t!("chat.upload_to", name = name)),
-                        )
-                        .child(
-                            div()
-                                .mt(z(4.))
-                                .px(z(8.))
-                                .text_size(z(12.))
-                                .line_height(z(16.))
-                                .text_color(gpui::white())
-                                .text_center()
-                                .child(crate::t!("chat.upload_hint")),
-                        ),
-                ),
-        )
+        .child(modal)
 }
