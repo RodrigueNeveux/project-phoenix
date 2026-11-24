@@ -208,5 +208,37 @@ fn main() -> anyhow::Result<()> {
     p.measure("scroll_emoji_picker", 150, |p, _| p.input(wheel(1000., 450., -120.)));
     p.measure("hover_emoji_picker", 150, |p, i| p.input(mouse(820. + (i % 9) as f32 * 40., 400. + (i / 9 % 5) as f32 * 40.)));
     println!("rss_end_kib={}", rss_kib());
+
+    // PHX_SOAK_SECS=600: keep browsing (guilds, channels, scroll, hover) and
+    // print RSS every minute, to spot leaks.
+    let soak: u64 = std::env::var("PHX_SOAK_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    if soak > 0 && !guilds.is_empty() {
+        p.cx.update_window(p.win, |_, window, cx| v.update(cx, |app, cx| phoenix_app::ui::pickers::close(app, window, cx)))?;
+        let t = Instant::now();
+        let mut next = 60;
+        let mut i = 0usize;
+        while t.elapsed().as_secs() < soak {
+            let g = guilds[i % guilds.len()];
+            p.cx.update(|cx| {
+                v.update(cx, |app, cx| {
+                    app.select_guild(Some(g), cx);
+                    let chans: Vec<_> = app.guild_channels.get(&g).cloned().unwrap_or_default();
+                    if let Some(c) = chans.get(i / guilds.len() % chans.len().max(1)) {
+                        app.select_channel(*c, cx);
+                    }
+                })
+            });
+            for k in 0..20 {
+                p.input(wheel(700., 400., if k < 10 { 240. } else { -240. }));
+                p.input(mouse(700., 100. + k as f32 * 30.));
+                p.frame();
+            }
+            i += 1;
+            if t.elapsed().as_secs() >= next {
+                println!("soak t={}s switches={i} rss_kib={}", t.elapsed().as_secs(), rss_kib());
+                next += 60;
+            }
+        }
+    }
     Ok(())
 }
