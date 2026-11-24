@@ -770,6 +770,25 @@ fn popout_card_inner(
             }
         }
     }
+    // The first Board app widget, as a compact card under the bio (live popout).
+    if let Some(w) = crate::ui::profile_board::get(app, uid, cx).widgets.first() {
+        let col = crate::ui::settings::profile_widgets::WidgetColors {
+            strong: c(tok(idx::TEXT_STRONG)),
+            muted: c(tok(idx::TEXT_MUTED)),
+            card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
+            // What shows behind the card: the themed gradient near the secondary
+            // colour under the overlay (the card sits low in the popout).
+            fade: match theme {
+                Some(t) => {
+                    let mix = |sh: u32| ((((t.0 >> sh) & 0xFF) as f32 * 0.3 + ((t.1 >> sh) & 0xFF) as f32 * 0.7) as u32) << sh;
+                    c(crate::ui::profile_theme::composite(t, mix(16) | mix(8) | mix(0)))
+                }
+                None => c(bg),
+            },
+            more: false,
+        };
+        body = body.child(crate::ui::settings::profile_widgets::render_compact(w, &col));
+    }
     // container_M2WrKU (padding-bottom 8px): activity cards
     body = body.children(crate::ui::voice_row::voice_activity_card(app, uid, cx.entity()));
     for a in i.acts {

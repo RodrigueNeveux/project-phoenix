@@ -51,6 +51,13 @@ pub struct AppWidget {
     pub subtitle: SharedString,
     pub hero: Option<SharedString>,
     pub items: Vec<WidgetItem>,
+    /// `widget_top.contained_image`: a 152px contained square (no fade) instead of the hero.
+    pub contained: bool,
+    /// `widget_bottom` progress layout: (`progress.current` 0..=100, `objective`).
+    pub progress: Option<(f32, WidgetItem)>,
+    /// `mini_profile` (popout card): `stat.text` and `hero_image.image`.
+    pub mini_stat: SharedString,
+    pub mini_hero: Option<SharedString>,
 }
 
 /// Application ids of the profile's application widgets, in board order.
@@ -148,7 +155,23 @@ pub fn build(app: u64, configs: &Value, data: &[(String, String)]) -> Option<App
         icon,
         title: field("widget_top", "title", "text", 0).unwrap_or_default(),
         subtitle: field("widget_top", "subtitle_1", "text", 0).unwrap_or_default(),
-        hero: field("widget_top", "hero_image", "image", 512),
+        hero: field("widget_top", "hero_image", "image", 512).or_else(|| field("widget_top", "contained_image", "image", 512)),
+        contained: cfg.pointer("/surfaces/widget_top/components/contained_image").is_some(),
+        progress: cfg.pointer("/surfaces/widget_bottom/components/progress").map(|_| {
+            // `current` is a 0..1 fraction (live: 0.7 → "70%"); accept percentages too.
+            let v = field("widget_bottom", "progress", "current", 0).and_then(|v| v.trim_end_matches('%').trim().parse::<f32>().ok()).unwrap_or(0.);
+            let pct = if v <= 1. { v * 100. } else { v };
+            (
+                pct.clamp(0., 100.),
+                WidgetItem {
+                    name: field("widget_bottom", "objective", "name", 128).unwrap_or_default(),
+                    value: field("widget_bottom", "objective", "description", 128).unwrap_or_default(),
+                    image: field("widget_bottom", "objective", "image", 128),
+                },
+            )
+        }),
+        mini_stat: field("mini_profile", "stat", "text", 0).unwrap_or_default(),
+        mini_hero: field("mini_profile", "hero_image", "image", 256),
         items: items.into_iter().map(|(_, i)| i).collect(),
     })
 }
@@ -182,7 +205,19 @@ pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
         .w(z(188.))
         .child(div().mb(z(4.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(w.title.clone()))
         .when(!w.subtitle.is_empty(), |d| d.child(div().text_size(z(14.)).line_height(z(18.)).text_color(col.muted).child(w.subtitle.clone())));
-    let hero = w.hero.clone().map(|u| {
+    // image_jlRl3z (contained): 152px square at (264, 49), radius 12, --background-mod-subtle, contain.
+    let contained = w.contained.then(|| w.hero.clone()).flatten().map(|u| {
+        div()
+            .absolute()
+            .top(z(48.))
+            .right(z(16.))
+            .size(z(152.))
+            .rounded(z(12.))
+            .overflow_hidden()
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+            .child(img(u).size_full().object_fit(gpui::ObjectFit::Contain))
+    });
+    let hero = (!w.contained).then(|| w.hero.clone()).flatten().map(|u| {
         div()
             .absolute()
             .top_0()
@@ -211,7 +246,7 @@ pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
                     ))
             }))
     });
-    let top = div().relative().pt(z(12.)).px(z(16.)).children(hero).child(header).child(content);
+    let top = div().relative().pt(z(12.)).px(z(16.)).children(hero).children(contained).child(header).child(content);
     let item = |i: &WidgetItem| {
         div()
             .w(z(182.))
@@ -251,6 +286,52 @@ pub fn render(w: &AppWidget, col: &WidgetColors) -> Div {
         .flex_col()
         .child(top)
         .when(!w.items.is_empty(), |d| d.child(div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE)))).child(grid))
+        .when_some(w.progress.clone(), |d, p| d.child(div().h(z(2.)).bg(c(tok(idx::BORDER_SUBTLE)))).child(progress_row(&p, col)))
+}
+
+/// `root_2E0EiK` progress layout (live modal, ref-cache profile-modal-app-widget.json):
+/// padding 24 16 16, gap 12; 50px image radius 8 on --background-mod-subtle;
+/// content gap 4: 6px bar (radius 12, track rgba(151,151,159,.32), fill the
+/// themed primary control colour), then name 14/18 500 + description 12/16 500
+/// (--text-subtle) and the percentage 14/18 500 at the end.
+fn progress_row((pct, it): &(f32, WidgetItem), col: &WidgetColors) -> Div {
+    div()
+        .pt(z(24.))
+        .px(z(16.))
+        .pb(z(16.))
+        .flex()
+        .items_center()
+        .gap(z(12.))
+        .child(match &it.image {
+            Some(u) => img(u.clone()).size(z(50.)).flex_none().rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).object_fit(gpui::ObjectFit::Contain).into_any_element(),
+            None => div().size(z(50.)).flex_none().rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).into_any_element(),
+        })
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(z(4.))
+                .child(
+                    div().h(z(6.)).w_full().rounded(z(12.)).bg(gpui::hsla(240. / 360., 0.04, 0.608, 0.32)).child(
+                        div().h_full().w(gpui::relative(pct / 100.)).rounded(z(12.)).bg(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT))),
+                    ),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .gap(z(2.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .child(div().truncate().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(it.name.clone()))
+                                .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_SUBTLE))).child(it.value.clone())),
+                        )
+                        .child(div().flex_none().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(format!("{}%", pct.round()))),
+                ),
+        )
 }
 
 #[cfg(test)]
@@ -281,4 +362,55 @@ mod tests {
         assert_eq!(w.hero.as_deref(), Some("https://cdn.discordapp.com/app-assets/42/7.png?size=512"));
         assert_eq!(w.items.iter().map(|i| (i.name.to_string(), i.value.to_string())).collect::<Vec<_>>(), vec![("A".into(), "12".into()), ("B".into(), "-".into())]);
     }
+}
+
+/// Compact card in the profile popout (live popout, ref-cache
+/// profile-popout-app-widget.json): `overlay_P1YEjQ` radius 8, 1px border,
+/// --user-profile-overlay-background; `root_CPqUlz` row, gap 4; `body_CPqUlz`
+/// padding 8, gap 8: 16px header (16px icon r2, gap 4, name 12/16 500), then
+/// `content_CPqUlz` (padding 2 0): title 14/18 600, subtitle 12/16 muted;
+/// `heroImage__9KZT7` 79px square at the end, faded to the left.
+pub fn render_compact(w: &AppWidget, col: &WidgetColors) -> Div {
+    let header = div()
+        .h(z(16.))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .children(w.icon.clone().map(|u| img(u).size(z(16.)).rounded(z(2.))))
+        .child(div().truncate().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(col.strong).child(w.name.clone()));
+    let content = div()
+        .py(z(2.))
+        .flex()
+        .flex_col()
+        .gap(z(2.))
+        .child(div().truncate().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(col.strong).child(if w.mini_stat.is_empty() { w.title.clone() } else { w.mini_stat.clone() }))
+        // textButton_nJgowo: the client's own "View All Stats" link (English in every locale).
+        .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT))).child("View All Stats"));
+    let hero = w.mini_hero.clone().or_else(|| w.hero.clone()).map(|u| {
+        let s = 79.;
+        div()
+            .relative()
+            .size(z(s))
+            .flex_none()
+            .child(img(u).size(z(s)).object_fit(gpui::ObjectFit::Cover))
+            .children(FADE_MASK.windows(2).map(|m| {
+                let ((x0, a0), (x1, a1)) = (m[0], m[1]);
+                div().absolute().top_0().bottom_0().left(z(s * x0)).w(z(s * (x1 - x0) + 0.5)).bg(gpui::linear_gradient(
+                    90.,
+                    gpui::linear_color_stop(col.fade.opacity(1. - a0), 0.),
+                    gpui::linear_color_stop(col.fade.opacity(1. - a1), 1.),
+                ))
+            }))
+    });
+    div()
+        .flex()
+        .flex_none()
+        .gap(z(4.))
+        .rounded(z(8.))
+        .overflow_hidden()
+        .border_1()
+        .border_color(c(tok(idx::USER_PROFILE_BORDER)))
+        .bg(col.card)
+        .child(div().flex_1().min_w_0().p(z(8.)).flex().flex_col().gap(z(8.)).child(header).child(content))
+        .children(hero)
 }
