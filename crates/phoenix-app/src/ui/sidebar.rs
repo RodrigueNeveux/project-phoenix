@@ -356,6 +356,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .child(
                             div()
                                 .id("guild-invite")
+                                .tooltip(crate::ui::tooltip::tip(crate::t!("menu.invite")))
                                 .size(z(32.))
                                 .flex_none()
                                 .flex()
@@ -457,6 +458,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                         .flex_none()
                         .p(z(4.))
                         .id(("cat-add", id.0))
+                        .tooltip(crate::ui::tooltip::tip(crate::t!("menu.create_channel")))
                         .group("cat-add")
                         // `addButtonIcon_yOdhm_:hover` --interactive-text-hover;
                         // `:active` --interactive-text-active + translateY(.5px).
@@ -902,11 +904,12 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                             cx.stop_propagation();
                             chat_entity.update(cx, |a, cx| a.open_channel_chat(id, cx));
                         })
+                        .tooltip(crate::ui::tooltip::tip(crate::t!("channel.open_chat")))
                         .child(action(Icon::Members, Some("chat"))),
                 )
             })
-            .child(action(Icon::Members, Some("invite")))
-            .when(can_edit, |d| d.child(action(Icon::Gear, None)))
+            .child(action(Icon::Members, Some("invite")).tooltip(crate::ui::tooltip::tip(crate::t!("perm.create_invite"))))
+            .when(can_edit, |d| d.child(action(Icon::Gear, None).tooltip(crate::ui::tooltip::tip(crate::t!("menu.edit_channel")))))
     });
     // `channelInfo_Wx6SnQ` (vanilla-voice-sidebar #1003..#1006): margin-inline-start 12,
     // padding-inline-end --space-4; `tabularNumbers_` `body-xs/normal` `fontCode_` 12/16,
