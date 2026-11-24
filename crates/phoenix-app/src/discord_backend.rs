@@ -207,14 +207,17 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
     let t0 = Instant::now();
     crate::perf::mark("connect_start");
     let rest = RestClient::new(token.expose(), inner.props.clone());
-    // Cheap validation first: a bad token fails here with a clear 401.
-    rest.get_me().await.map_err(api_err)?;
-    crate::perf::span("rest_get_me", t0);
-
     let mut cfg = GatewayConfig::new(token.expose());
     cfg.properties = inner.props.clone();
     cfg.raw_dispatch = Some(snapshot::hook());
     let (gateway, mut rx) = Gateway::spawn(cfg);
+    // The token check (clear 401 for a bad token) runs during the gateway
+    // handshake instead of before it; dispatches queue in `rx` meanwhile.
+    if let Err(e) = rest.get_me().await {
+        gateway.shutdown();
+        return Err(api_err(e));
+    }
+    crate::perf::span("rest_get_me", t0);
     let cache = Cache::default();
 
     let ready = tokio::time::timeout(READY_TIMEOUT, async {
@@ -402,6 +405,7 @@ impl Backend for DiscordBackend {
                 err("")
             })?;
             let Some(tok) = tok else { return Err(err("")) };
+            crate::perf::mark("keyring_loaded");
             let res = connect(inner.clone(), tok, false).await;
             if let Err(e) = &res
                 && e.0 == "Invalid token."
