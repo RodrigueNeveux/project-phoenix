@@ -35,11 +35,14 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             None => div().into_any_element(),
         });
     }
-    let name: SharedString = app
-        .users
-        .get(&msg.author)
-        .map(|u| u.display_name.clone())
+    // actorHook: the member's server nick and role colour, like a message author.
+    let name: SharedString = msg
+        .author_nick
+        .clone()
+        .or_else(|| app.member_nick(msg.author))
+        .or_else(|| app.users.get(&msg.author).map(|u| u.display_name.clone()))
         .unwrap_or_else(|| crate::t!("sys.someone"));
+    let name_color = app.author_color(msg.author).map(c).unwrap_or_else(|| c(Palette::TEXT_HEADER));
     // Group DM add/remove name the other member ("X a ajouté Y au groupe."); leaving
     // the group on one's own keeps the single-name line.
     let target = |t: Option<crate::model::Id>| t.filter(|t| *t != msg.author);
@@ -68,7 +71,9 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             ChatIcon::Thread,
             Palette::INTERACTIVE,
             "".into(),
-            crate::t!("sys.thread", c = msg.content),
+            // cZ9Uf2: "{actor} a commencé un fil : **{name}**. Voir tous les {fils}."; the
+            // name and "fils" are links drawn below.
+            crate::t!("sys.thread_prefix"),
         ),
         MessageKind::RecipientAdd(t) => match target(t) {
             Some(_) => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.recipient_add_named")),
@@ -98,7 +103,6 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         ),
     };
     let thread = msg.thread.clone().filter(|_| msg.kind == MessageKind::ThreadCreated);
-    let e = entity.clone();
     let line = div()
         .id(("sysmsg", msg.id.0))
         .relative()
@@ -126,12 +130,36 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .child(
             div()
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(Palette::TEXT_HEADER))
+                .text_color(name_color)
                 .cursor_pointer()
                 .hover(|s| s.underline())
                 .child(name),
         )
         .child(after)
+        // content_bLMKT5 a: medium, --interactive-text-active (the <strong> keeps the
+        // anchor's 500 weight).
+        .when_some(thread.clone(), |d, t| {
+            let (e1, e2) = (entity.clone(), entity.clone());
+            let link = |id: (&'static str, u64), text: SharedString| {
+                div()
+                    .id(id)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_TEXT_ACTIVE)))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .child(text)
+            };
+            let t2 = t.clone();
+            d.child(link(("sys-thread-name", msg.id.0), t.name.clone()).on_click(move |_, w, cx| {
+                let t = t2.clone();
+                e1.update(cx, |a, cx| a.open_thread(t, w, cx));
+            }))
+            .child(crate::t!("sys.thread_see_all"))
+            .child(link(("sys-thread-all", msg.id.0), crate::t!("sys.thread_all_link")).on_click(move |_, _, cx| {
+                e2.update(cx, |a, cx| a.toggle_threads_popout(cx));
+            }))
+            .child(".")
+        })
         .when_some(other, |d, (n, tail)| {
             d.child(
                 div()
@@ -149,28 +177,19 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
                 .text_size(z(12.))
                 .text_color(c(Palette::TEXT_MUTED))
                 .child(r.time_full.clone()),
-        )
-        .when_some(thread, |d, t| {
-            d.child(
-                div()
-                    .id(("sys-thread", msg.id.0))
-                    .ml(z(6.))
-                    .text_size(z(14.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(Palette::TEXT_LINK))
-                    .cursor_pointer()
-                    .hover(|s| s.underline())
-                    .on_click(move |_, w, cx| {
-                        let t = t.clone();
-                        e.update(cx, |a, cx| a.open_thread(t, w, cx));
-                    })
-                    .child(crate::t!("sys.see_threads")),
-            )
-        });
+        );
     let cta = if msg.kind == MessageKind::Join { welcome_cta(app, entity, msg) } else { None };
-    let line: AnyElement = match cta {
-        Some(b) => div().child(line).child(b).into_any_element(),
-        None => line.into_any_element(),
+    let line: AnyElement = match (cta, thread) {
+        (Some(b), _) => div().child(line).child(b).into_any_element(),
+        // The thread card under the line (systemMessageContainer_: margin-top 0) and the
+        // .hasThread_.isSystemMessage_ spine from 1.75rem down.
+        (None, Some(t)) => div()
+            .relative()
+            .child(line)
+            .child(div().pl(z(80.)).pr(z(30.)).pb(z(2.)).flex().child(super::message_ext::thread_chip(app, entity, &t, true)))
+            .child(super::message_ext::thread_spine(28. + if r.group_start { 17. } else { 0. }))
+            .into_any_element(),
+        (None, None) => line.into_any_element(),
     };
     Some(match r.day_divider.clone() {
         Some(label) => div().child(super::day_divider(label)).child(line).into_any_element(),

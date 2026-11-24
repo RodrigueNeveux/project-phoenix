@@ -87,7 +87,11 @@ pub fn icon(i: Icon, size: f32, color: Hsla) -> gpui::Svg {
 /// Circle avatar. URL images go through GPUI's asset cache, which fetches
 /// lazily only when the element is actually painted (rows are virtualized).
 pub fn avatar(user: Option<&User>, size: f32) -> AnyElement {
-    let img_ref = user.map(|u| u.avatar.clone()).unwrap_or(ImageRef::Default(0));
+    avatar_ref(user.map(|u| u.avatar.clone()).unwrap_or(ImageRef::Default(0)), size)
+}
+
+/// [`avatar`] from the image alone.
+pub fn avatar_ref(img_ref: ImageRef, size: f32) -> AnyElement {
     match img_ref {
         ImageRef::Url(url) => crate::media::avatar_image(url, size),
         // The client shows the CDN default avatar (embed/avatars/<n>.png), fetched at runtime;

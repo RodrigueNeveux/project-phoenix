@@ -342,49 +342,97 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
 }
 
 /// "N Messages ›" chip under a message that started a thread.
-pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef) -> AnyElement {
-    let _ = app;
+/// Thread card under its starter (or "a commencé un fil" system) message, measured live
+/// 2026-11-24 in the sandbox channel (container_g2fiji): margin-top 8 (0 under a system
+/// line), padding 8, radius 4, --background-surface-high, 1px --border-subtle, max-width
+/// min(100%, 480). topLine_: name body-sm/semibold 14/18 --text-strong (margin-inline-end 8,
+/// ellipsis) then cta_ "N messages ›" (rfAXDV) --text-link, underlined on card hover.
+/// bottomLine_ (margin-top 2, body-sm/normal 14/18 --text-default): the latest message
+/// (ThreadMessageStore) = 16px avatar (margin-inline-end 8), name 500 at opacity .64
+/// (margin-inline-end 4), content with ellipsis, then timestamp_ "Il y a 2 min"
+/// (--text-muted, margin-inline-start 8, no shrink).
+pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef, system: bool) -> AnyElement {
     let e = entity.clone();
     let t2 = t.clone();
+    let recent = crate::thread_recent::get(t.id);
+    let count = recent.as_ref().map_or(t.message_count, |_| t.message_count.max(1));
+    let group = SharedString::from(format!("thread-card-{}", t.id.0));
+    // rfAXDV, CLDR "one" (French: 0 and 1).
+    let one = if crate::i18n::locale() == "fr" { count < 2 } else { count == 1 };
+    let cta = if one { crate::t!("thread.one_message_cta", n = count) } else { crate::t!("thread.messages_cta", n = count) };
+    let bottom = recent.map(|r| {
+        let img = app.users.get(&r.author).map_or_else(|| r.avatar.clone(), |u| u.avatar.clone());
+        let now = chrono::Utc::now().timestamp();
+        div()
+            .mt(z(2.))
+            .h(z(18.))
+            .flex()
+            .items_center()
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .text_color(tk(idx::TEXT_DEFAULT))
+            .child(
+                div()
+                    .flex_initial()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .flex()
+                    .items_center()
+                    .child(div().mr(z(8.)).child(ui::avatar_ref(img, 16.)))
+                    .child(div().flex_none().mr(z(4.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_STRONG)).opacity(0.64).child(r.name.clone()))
+                    .child(div().min_w_0().text_ellipsis().whitespace_nowrap().child(SharedString::from(r.content.replace('\n', " ")))),
+            )
+            .child(div().flex_none().ml(z(8.)).text_color(tk(idx::TEXT_MUTED)).child(crate::thread_recent::ago(now - r.ts)))
+    });
     div()
         .id(("thread-chip", t.id.0))
-        .mt(z(4.))
+        .group(group.clone())
+        .when(!system, |d| d.mt(z(8.)))
         .max_w(z(480.))
         .p(z(8.))
         .rounded(z(4.))
-        .bg(c(Palette::BG_SECONDARY))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
         .flex()
-        .items_center()
-        .gap(z(8.))
+        .flex_col()
         .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .child(icon(ChatIcon::Thread, 18., c(Palette::INTERACTIVE)))
         .child(
             div()
-                .flex_1()
-                .min_w_0()
-                .text_ellipsis()
+                .flex()
+                .h(z(18.))
                 .text_size(z(14.))
+                .line_height(z(18.))
                 .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_HEADER))
-                .child(t.name.clone()),
+                .child(div().min_w_0().mr(z(8.)).text_ellipsis().whitespace_nowrap().text_color(tk(idx::TEXT_STRONG)).child(t.name.clone()))
+                .child(div().flex_none().text_color(tk(idx::TEXT_LINK)).group_hover(group, |s| s.underline()).child(cta)),
         )
-        .child(
-            div()
-                .text_size(z(14.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(Palette::TEXT_LINK))
-                .child(match t.message_count {
-                    1 => crate::t!("thread.one_message"),
-                    n => crate::t!("thread.messages", n = n),
-                }),
-        )
-        .child(icon(ChatIcon::ArrowRight, 14., c(Palette::TEXT_LINK)))
+        .children(bottom)
         .on_click(move |_, w, cx| {
             let t = t2.clone();
             e.update(cx, |a, cx| a.open_thread(t, w, cx));
         })
         .into_any_element()
+}
+
+/// .cozy_.hasThread_::after: the L from under the avatar to the thread card, 2px
+/// --spine-default left and bottom borders, bottom-left radius 8, bottom 29, at
+/// left = margin-horizontal + avatar / 2 - 1 and width = content margin - margin-horizontal
+/// - avatar / 2 - 4 (39 and 36 live); top 3rem (4.375rem with a reply), 1.75rem on a
+/// system line.
+pub fn thread_spine(top: f32) -> Div {
+    let mh = crate::theme::space::md();
+    let av = super::msg_avatar_size();
+    div()
+        .absolute()
+        .left(z(mh + av / 2. - 1.))
+        .top(crate::theme::fz(top))
+        .bottom(z(29.))
+        .w(z(super::msg_left() - mh - av / 2. - 4.))
+        .border_l_2()
+        .border_b_2()
+        .rounded_bl(z(8.))
+        .border_color(tk(idx::SPINE_DEFAULT))
 }
 
 /// Red "NEW" line drawn above the first unread message (divider_ .isUnread_, no content).

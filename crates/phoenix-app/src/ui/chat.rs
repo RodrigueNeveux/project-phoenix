@@ -264,6 +264,10 @@ pub(crate) fn msg_left() -> f32 {
 }
 
 /// `--chat-avatar-size` of a cozy message: 40px, 2.5rem under `.a11y-font-scaled-down`.
+pub(crate) fn msg_avatar_size() -> f32 {
+    msg_avatar()
+}
+
 fn msg_avatar() -> f32 {
     if crate::theme::font_scaled_down() { 40. * crate::theme::font_scale() } else { m::AVATAR }
 }
@@ -1143,7 +1147,7 @@ pub(crate) fn message(
         content = content.child(message_ext::reactions(app, entity, msg));
     }
     if let Some(t) = &msg.thread {
-        content = content.child(message_ext::thread_chip(app, entity, t));
+        content = content.child(message_ext::thread_chip(app, entity, t, false));
     }
     // Ephemeral (local system reply to a failed send): "Only you can see this — Dismiss message".
     if msg.flags & crate::model::FLAG_EPHEMERAL != 0 {
@@ -1524,6 +1528,7 @@ pub(crate) fn message(
             })
             .child(content)
     }
+    .when(!compact && msg.thread.is_some(), |d| d.child(message_ext::thread_spine(if msg.reply_to.is_some() { 70. } else { 48. })))
     .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
     let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
     // The list measures each row with `layout_as_root`, which ignores the

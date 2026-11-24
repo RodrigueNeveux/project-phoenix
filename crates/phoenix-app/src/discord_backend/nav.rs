@@ -246,6 +246,18 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
     }
 }
 
+/// A thread's latest message for its card (nick, else display name).
+fn recent_of(m: &api::Message) -> crate::thread_recent::Recent {
+    let name = m.member.as_ref().and_then(|mb| mb.nick.as_deref()).filter(|n| !n.is_empty()).unwrap_or(m.author.display_name());
+    crate::thread_recent::Recent {
+        author: id(m.author.id),
+        name: convert::collapse_ws(name).into(),
+        avatar: convert::user(&m.author).avatar,
+        content: m.content.clone().into(),
+        ts: (m.id.timestamp_ms() / 1000) as i64,
+    }
+}
+
 fn guild_extras(cache: &Cache, g: api::Snowflake) -> Vec<(Id, ChannelExtra)> {
     cache.guild_channels(g).iter().map(|c| (id(c.id), extra(cache, c))).collect()
 }
@@ -327,7 +339,15 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
                 }
             }
         }
+        GatewayEvent::MessageCreate(m) if cache.channel(m.channel_id).is_some_and(|c| c.kind.is_thread()) => {
+            crate::thread_recent::set(id(m.channel_id), recent_of(m));
+        }
         GatewayEvent::Unknown { name, data } if name == "THREAD_LIST_SYNC" => {
+            for m in data.get("most_recent_messages").and_then(Value::as_array).into_iter().flatten() {
+                if let Ok(m) = serde_json::from_value::<api::Message>(m.clone()) {
+                    crate::thread_recent::set(id(m.channel_id), recent_of(&m));
+                }
+            }
             let joined: Vec<u64> =
                 data.get("members").and_then(Value::as_array).into_iter().flatten().filter_map(|m| m.get("id").and_then(snowflake)).collect();
             for t in data.get("threads").and_then(Value::as_array).into_iter().flatten() {

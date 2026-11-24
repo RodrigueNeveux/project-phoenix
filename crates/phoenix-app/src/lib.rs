@@ -27,6 +27,7 @@ pub mod search_highlight;
 pub mod shortcuts;
 pub mod sounds;
 pub mod theme;
+pub mod thread_recent;
 #[cfg(target_os = "linux")]
 pub mod tray;
 #[cfg(not(target_os = "linux"))]
