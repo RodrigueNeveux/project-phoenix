@@ -643,11 +643,12 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
     Some(
         // jumpToPresentBar_ bottomBar_ barBase_: centred max-content pill (min 284x44),
         // --background-surface-highest, 1px --border-normal, --radius-lg, --shadow-medium,
-        // padding-block --space-8, padding-inline --space-16 --space-8, margin-bottom --space-8,
+        // padding 8px 12px (jumpToPresentBar_ overrides bottomBar_),
         // color --text-default.
         div()
             .absolute()
-            .bottom(z(8.))
+            // Live (ref-cache jump-present-bar-hover): pill bottom 20px above the form.
+            .bottom(z(20.))
             .left_0()
             .right(z(16.))
             .flex()
@@ -658,8 +659,7 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
                     .min_w(z(284.))
                     .min_h(z(44.))
                     .py(z(8.))
-                    .pl(z(16.))
-                    .pr(z(8.))
+                    .px(z(12.)) // live computed padding 8px 12px (jumpToPresentBar_ padding-inline --space-12)
                     .rounded(z(16.))
                     .border_1()
                     .border_color(c(tok(idx::BORDER_NORMAL)))
