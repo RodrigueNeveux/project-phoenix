@@ -869,6 +869,39 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 "switcher" => phoenix_app::ui::switcher::open(app, window, cx),
+                // Guild / channel / message dialogs, open only (nothing is saved).
+                "chansettings" | "createchannel" | "privacy" | "serverprofile" | "security" | "createevent" | "nickname" => {
+                    if let Some(g) = app.selected_guild {
+                        match kind.as_str() {
+                            "chansettings" => {
+                                if let Some(c) = app.selected_channel {
+                                    app.open_channel_settings(c, cx)
+                                }
+                            }
+                            "createchannel" => app.open_create_channel(g, None, phoenix_app::model::ChannelKind::Text, cx),
+                            "privacy" => app.open_privacy_settings(g, cx),
+                            "serverprofile" => app.open_server_profile(g, cx),
+                            "security" => app.open_security_actions(g, cx),
+                            "createevent" => app.open_create_event(g, cx),
+                            _ => app.open_nickname(g, None, cx),
+                        }
+                    }
+                }
+                // Reactions / forward dialogs on the last message with reactions (or the last one).
+                "reactions" | "forward" => {
+                    let pick = app.selected_channel.and_then(|c| {
+                        let msgs = &app.messages.get(&c)?.msgs;
+                        let m = msgs.iter().rev().find(|m| !m.reactions.is_empty()).or(msgs.last())?;
+                        Some((c, m.id))
+                    });
+                    if let Some((c, m)) = pick {
+                        if kind == "reactions" {
+                            app.open_reactions(c, m, 0, cx)
+                        } else {
+                            app.open_forward(c, m, cx)
+                        }
+                    }
+                }
                 // Server notification settings modal (open only).
                 "guildnotify" => {
                     if let Some(g) = app.selected_guild {
