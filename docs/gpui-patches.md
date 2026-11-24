@@ -52,3 +52,13 @@ device pixels at paint, so they close with no drift.
 | member list | 16.0 % | 12.3 % (patch 1) |
 | messages | 6.8 % | 5.4 % (patch 1) |
 | overall | 8.1 % | 6.7 % (patch 1) |
+
+## How the patch is wired (shared build cache)
+
+`Cargo.toml` patches `gpui-pre` with a **git rev of this repository**, not a path.
+Cargo gives a path dependency a different package id in every checkout or worktree, which
+rebuilt GPUI and everything above it (gpui-component, the platform crates…) once per worktree.
+A git rev has one id everywhere, so all checkouts share one compiled GPUI.
+
+After changing `vendor/gpui-pre`: commit and push it, then set `rev` in `Cargo.toml`
+to that commit and run `cargo update -p gpui-pre`.

@@ -23,4 +23,7 @@ debug = false
 
 # Vendored GPUI with the subpixel layout patch (docs/gpui-patches.md).
 [patch.crates-io]
-gpui-pre = { path = "vendor/gpui-pre" }
+# Pulled by git rev (not path) so every worktree shares one compiled GPUI: a path
+# dependency gets a different package id per checkout and rebuilds the whole GUI stack.
+# Update the rev after changing vendor/gpui-pre (see docs/gpui-patches.md).
+gpui-pre = { git = "https://github.com/RoxasYTB/project-phoenix", rev = "eea2827db5a821879e5de42267fab20d45cde8bf" }
