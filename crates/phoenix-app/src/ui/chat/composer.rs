@@ -357,8 +357,10 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
             // form_ padding-inline --space-xs; channelTextArea_ --chat-background-default,
             // 1px --border-muted, radius --radius-sm, margin-bottom --custom-chat-input-margin-bottom.
             // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom (= --space-xs).
+            // Live CDP (1.25x): cta border is 0.8px (1 phys px), so 56 + 1.6 = 57.6px; GPUI border_1 is 1px (58px),
+            // offset mb by -0.8px so top/bottom borders and inner icons align 1:1 with the client.
             // The typing row (inTextChannel_U9Tvvz) hangs above the form: top -24px, over the message list.
-            div().relative().px(z(crate::theme::space::xs())).mb(z(crate::theme::space::xs()))
+            div().relative().px(z(crate::theme::space::xs())).mb(z(crate::theme::space::xs() - 0.8))
             .child(div().absolute().top(z(-24.)).left_0().right_0().child(typing(app, window)))
             .child(
                 div()
@@ -473,7 +475,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                         d.child(
                                             div()
                                                 .absolute()
-                                                .top(z(text_pad_y()))
+                                                .top(z(text_pad_y() - 1.5))
                                                 .h(fz(22.))
                                                 // #1445 placeholder_ sits at the editor's x (496 in live form, glyph at 497.3).
                                                 .left_0()
@@ -489,11 +491,11 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                             .child(
                                 // buttons_ gap --space-8, margin-inline-end 6px; button_ 32px;
                                 // icons --chat-input-icon-size (20px).
-                                // #1452 buttons_ gap 8px, 12px to the right edge (#1437 ends 12px early);
+                                // #1452 buttons_ gap 8px, 12.8px to the right edge (0.8px border + 12px margin);
                                 // order: gift, GIF, sticker, emoji, app launcher (#1457–#1480).
                                 div()
                                     .when(blocked, |d| d.invisible())
-                                    .mr(z(12.))
+                                    .mr(z(13.))
                                     .h(z(56.)) // buttons_ height --custom-channel-textarea-text-area-height
                                     .flex()
                                     .gap(z(8.))

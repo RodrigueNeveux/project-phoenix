@@ -896,7 +896,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 4) // MANAGE_CHANNELS
     });
     let action = |i: Icon, path: Option<&'static str>| {
-        let col = t(idx::INTERACTIVE_TEXT_DEFAULT);
+        // Live CDP: on the selected channel row, action icons (invite, edit) use --interactive-text-active
+        // (~rgb(220,220,223)) rather than --interactive-text-default (~rgb(150,151,158)).
+        let col = t(if selected { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT });
         // iconItem_Wx6SnQ:hover .actionIcon_Wx6SnQ color --interactive-text-hover
         let hov = |s: gpui::StyleRefinement| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER));
         // actionIcon_Wx6SnQ:active color --interactive-text-active, translateY(.5px)
@@ -1145,6 +1147,17 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
         .pl(z(space::xs())) // --space-xs
         .pr(z(8.))
         .py(z(1.)) // `wrapper_TNyK-N` padding 1px 0 (live thread row 38px)
+        .child(
+            // `unread_TNyK-N`: 4x8 pill on the left edge when the thread has unread messages.
+            div()
+                .absolute()
+                .left(z(1.))
+                .top(z(15.))
+                .w(z(4.))
+                .h(z(8.))
+                .rounded_r(z(4.))
+                .when(unread && !selected, |d| d.bg(t(idx::INTERACTIVE_TEXT_ACTIVE))),
+        )
         .child(
             div()
                 // `spine_reDhww`: `--channels-spine-offset-left`, top 0, `--spine-default`;

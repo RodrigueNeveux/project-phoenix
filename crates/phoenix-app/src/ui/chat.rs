@@ -659,9 +659,13 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                             div()
                                 .flex_1()
                                 .min_w_0()
-                                .px(z(6.))
+                                // Live CDP: searchBar_ inner editor starts 8px from left border, 18px line-height
+                                // centres the 14px placeholder 2px higher than 22px line-height.
+                                .pl(z(8.))
+                                .pr(z(6.))
+                                .pb(z(1.))
                                 .text_size(z(14.))
-                                .line_height(z(22.))
+                                .line_height(z(18.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(tk(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT))
                                 .whitespace_nowrap()
@@ -669,7 +673,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                                 .text_ellipsis()
                                 .child(search_ph),
                         )
-                        .child(div().size(z(24.)).p(z(4.)).flex().items_center().child(icon(Icon::Search, 16. * crate::theme::zoom(), tk(idx::ICON_DEFAULT)))),
+                        .child(div().size(z(24.)).p(z(4.)).flex().items_center().child(icon(Icon::Search, 16. * crate::theme::zoom(), tk(idx::ICON_MUTED)))),
                 ),
         )
 }
