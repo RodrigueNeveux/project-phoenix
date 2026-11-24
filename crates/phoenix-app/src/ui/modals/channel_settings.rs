@@ -14,7 +14,7 @@ use crate::{
     app::PhoenixApp,
     model::{Channel, ChannelKind, Id},
     theme::{c, generated::idx, tok, z},
-    ui::controls::{BtnKind, button, marker_slider, switch},
+    ui::controls::{BtnKind, button, marker_slider, select_field, switch},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,6 +125,26 @@ pub struct State {
     pub loaded: bool,
     pub invites: Option<Vec<Value>>,
     pub integrations: Option<Vec<Value>>,
+    pub thread: Option<ThreadFields>,
+    pub open_select: Option<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ThreadFields {
+    pub auto0: u32,
+    pub auto: u32,
+}
+
+pub const AUTO_ARCHIVE: [(u32, &str); 4] = [(60, "thread.aa_1h"), (1440, "thread.aa_24h"), (4320, "thread.aa_3d"), (10_080, "thread.aa_1w")];
+
+pub fn thread_edit(name0: &str, name: &str, slow0: u32, slow: u32, t: &ThreadFields) -> phoenix_api::rest::guild_manage::ThreadEdit {
+    let name = name.trim();
+    phoenix_api::rest::guild_manage::ThreadEdit {
+        name: (name != name0 && !name.is_empty()).then(|| name.to_owned()),
+        slowmode: (slow != slow0).then_some(slow),
+        auto_archive_duration: (t.auto != t.auto0).then_some(t.auto),
+        ..Default::default()
+    }
 }
 
 impl State {
@@ -149,7 +169,25 @@ impl State {
             loaded: false,
             invites: None,
             integrations: None,
+            thread: None,
+            open_select: None,
         }
+    }
+
+    pub fn for_thread(ch: &Channel, info: &crate::model::ThreadInfo) -> Self {
+        let mut s = Self::new(ch);
+        s.slow0 = info.slowmode;
+        s.slow = info.slowmode;
+        s.thread = Some(ThreadFields { auto0: info.auto_archive, auto: info.auto_archive });
+        s.loaded = true;
+        s
+    }
+
+    fn thread_dirty(&self, cx: &gpui::App) -> Option<phoenix_api::rest::guild_manage::ThreadEdit> {
+        let t = self.thread.as_ref()?;
+        let name = self.name.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| self.name0.clone());
+        let e = thread_edit(&self.name0, &name, self.slow0, self.slow, t);
+        (e != Default::default()).then_some(e)
     }
 
     pub fn load_channel(&mut self, v: &Value) {
@@ -198,7 +236,7 @@ pub fn prepare(s: &mut State, mk: &mut dyn FnMut(SharedString, &str, bool) -> En
     if s.name.is_none() {
         s.name = Some(mk(SharedString::default(), &s.name0.clone(), false));
     }
-    if s.topic.is_none() && s.kind != ChannelKind::Category {
+    if s.topic.is_none() && s.kind != ChannelKind::Category && s.thread.is_none() {
         s.topic = Some(mk(crate::t!("admin.topic_ph"), &s.topic0.clone(), false));
     }
 }
@@ -494,7 +532,144 @@ pub fn integrations_list(list: Option<&[Value]>) -> gpui::Div {
     d
 }
 
+fn label(t: SharedString) -> gpui::Div {
+    div().pb(z(8.)).text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(t)
+}
+
+fn select(id: &'static str, which: u8, s: &State, opts: Vec<(SharedString, bool)>, on_pick: Rc<dyn Fn(usize)>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let cur = opts.iter().find(|o| o.1).map(|o| o.0.clone()).unwrap_or_default();
+    let mut d = div().flex().flex_col().child(select_field(id, cur).on_click(cx.listener(move |_, _, _, cx| {
+        with_state(|s| s.open_select = if s.open_select == Some(which) { None } else { Some(which) });
+        cx.notify();
+    })));
+    if s.open_select == Some(which) {
+        let mut list = div().mt(z(4.)).p(z(4.)).rounded(z(8.)).border_1().border_color(c(tok(idx::BORDER_SUBTLE))).bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER))).flex().flex_col();
+        for (k, (l, on)) in opts.into_iter().enumerate() {
+            let pick = on_pick.clone();
+            list = list.child(
+                div()
+                    .id((id, k))
+                    .h(z(36.))
+                    .px(z(8.))
+                    .rounded(z(4.))
+                    .flex()
+                    .items_center()
+                    .text_size(z(16.))
+                    .text_color(c(tok(idx::TEXT_STRONG)))
+                    .when(on, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+                    .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+                    .cursor_pointer()
+                    .child(l)
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        pick(k);
+                        with_state(|s| s.open_select = None);
+                        cx.notify();
+                    })),
+            );
+        }
+        d = d.child(list);
+    }
+    d
+}
+
+fn thread_overview(s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let mut d = div().flex().flex_col();
+    if let Some(i) = &s.name {
+        d = d.child(label(crate::t!("thread.name"))).child(input_box(i));
+    }
+    let slow: Vec<(SharedString, bool)> = SLOWMODE.iter().map(|x| (slowmode_label(*x).into(), *x == s.slow)).collect();
+    let auto: Vec<(SharedString, bool)> = AUTO_ARCHIVE.iter().map(|(m, k)| (crate::t!(k), *m == t.auto)).collect();
+    d.child(
+        div()
+            .mt(z(24.))
+            .child(label(crate::t!("admin.slowmode")))
+            .child(select("ts-slow", 1, s, slow, Rc::new(|k| with_state(|s| s.slow = SLOWMODE[k.min(SLOWMODE.len() - 1)])), cx))
+            .child(text(crate::t!("thread.slowmode_desc"), 14., idx::TEXT_SUBTLE).pt(z(8.))),
+    )
+    .child(
+        div()
+            .mt(z(24.))
+            .child(label(crate::t!("thread.hide_after")))
+            .child(select(
+                "ts-auto",
+                2,
+                s,
+                auto,
+                Rc::new(|k| {
+                    with_state(|s| {
+                        if let Some(t) = s.thread.as_mut() {
+                            t.auto = AUTO_ARCHIVE[k.min(AUTO_ARCHIVE.len() - 1)].0;
+                        }
+                    })
+                }),
+                cx,
+            ))
+            .child(text(crate::t!("thread.hide_after_desc"), 14., idx::TEXT_SUBTLE).pt(z(8.))),
+    )
+}
+
+fn render_thread(app: &PhoenixApp, s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let parent = app.backend.thread_info(s.channel).and_then(|i| i.parent).and_then(|p| app.channels.get(&p)).map(|p| p.name.to_string()).unwrap_or_default();
+    let items = vec![
+        SideItem::Header(format!("{}  {parent}", s.name0).into()),
+        SideItem::Item { label: crate::t!("admin.cs_overview"), index: 0, danger: false },
+        SideItem::Separator,
+        SideItem::Item { label: crate::t!("thread.delete"), index: 99, danger: true },
+    ];
+    let channel = s.channel;
+    let pick: Pick = Rc::new(move |n, a, cx| {
+        if n == 99 {
+            a.confirm_delete_thread(channel, false, cx);
+        }
+    });
+    let content = thread_overview(s, t, cx);
+    let notice = s.thread_dirty(cx).map(|_| {
+        let reset: Act = Rc::new(|_, w, cx| {
+            let mut input = None;
+            with_state(|s| {
+                s.slow = s.slow0;
+                if let Some(t) = s.thread.as_mut() {
+                    t.auto = t.auto0;
+                }
+                input = s.name.clone().map(|i| (i, s.name0.clone()));
+            });
+            if let Some((i, v)) = input {
+                i.update(cx, |st, cx| st.set_value(v, w, cx));
+            }
+        });
+        let save: Act = Rc::new(|a, _, cx| save_thread(a, cx));
+        unsaved_bar(reset, save, cx)
+    });
+    overlay("thread-settings", items, 0, pick, crate::t!("admin.cs_overview"), content.into_any_element(), notice, cx)
+}
+
+fn save_thread(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let mut out = None;
+    with_modal(|m| {
+        if let Some(Modal::ChannelSettings(s)) = m
+            && let Some(edit) = s.thread_dirty(cx)
+        {
+            if let Some(n) = &edit.name {
+                s.name0 = n.clone();
+            }
+            s.slow0 = s.slow;
+            if let Some(t) = s.thread.as_mut() {
+                t.auto0 = t.auto;
+            }
+            out = Some((s.channel, edit));
+        }
+    });
+    let Some((thread, edit)) = out else { return };
+    if let Some(n) = &edit.name {
+        a.apply_channel_overview(thread, n, "");
+    }
+    a.admin_toast(AdminCall::EditThread { thread: sf(thread), edit }, None, cx);
+}
+
 pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    if let Some(t) = s.thread.clone() {
+        return render_thread(app, s, &t, cx);
+    }
     let cat = s.kind == ChannelKind::Category;
     let prefix = if cat { String::new() } else { "# ".to_owned() };
     let mut items = vec![SideItem::Header(format!("{prefix}{}", s.name0).to_uppercase().into())];
@@ -617,5 +792,15 @@ mod tests {
         assert_eq!(s.overwrites[0].id, Id(1));
         assert_eq!(s.slow, 5);
         assert!(!s.overwrites_dirty());
+    }
+
+    #[test]
+    fn thread_settings_only_send_changes() {
+        let t = ThreadFields { auto0: 4320, auto: 4320 };
+        assert_eq!(thread_edit("a", " a ", 0, 0, &t), Default::default());
+        let e = thread_edit("a", "b", 0, 30, &ThreadFields { auto0: 4320, auto: 10_080 });
+        let body = phoenix_api::rest::guild_manage::thread_body(&e);
+        assert_eq!(body, serde_json::json!({"name": "b", "rate_limit_per_user": 30, "auto_archive_duration": 10_080}));
+        assert_eq!(thread_edit("a", "  ", 0, 0, &t).name, None);
     }
 }

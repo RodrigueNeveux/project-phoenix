@@ -41,6 +41,17 @@ fn open_forum(app: &PhoenixApp) -> Option<Id> {
     (app.channels.get(&id)?.kind == ChannelKind::Forum).then_some(id)
 }
 
+pub fn toggle_tag(applied: &[Id], tag: Id) -> Vec<Id> {
+    if applied.contains(&tag) {
+        return applied.iter().copied().filter(|t| *t != tag).collect();
+    }
+    let mut v = applied.to_vec();
+    if v.len() < 5 {
+        v.push(tag);
+    }
+    v
+}
+
 pub fn open_by_id(app: &mut PhoenixApp, thread: Id, cx: &mut Context<PhoenixApp>) {
     if app.channels.contains_key(&thread) {
         app.select_channel(thread, cx);
@@ -1194,5 +1205,13 @@ mod tests {
     #[test]
     fn snowflake_seconds() {
         assert_eq!(snowflake_time(Id(175928847299117063)), 1462015105);
+    }
+
+    #[test]
+    fn edit_tags_toggles_up_to_five() {
+        assert_eq!(toggle_tag(&[Id(1), Id(2)], Id(1)), vec![Id(2)]);
+        assert_eq!(toggle_tag(&[Id(1)], Id(3)), vec![Id(1), Id(3)]);
+        let full: Vec<Id> = (1..=5).map(Id).collect();
+        assert_eq!(toggle_tag(&full, Id(9)), full);
     }
 }

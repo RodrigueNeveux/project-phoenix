@@ -218,6 +218,40 @@ pub struct ThreadRef {
     pub message_count: u32,
 }
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ThreadInfo {
+    pub parent: Option<Id>,
+    pub owner: Option<Id>,
+    pub private: bool,
+    pub forum_post: bool,
+    pub joined: bool,
+    pub member_flags: u8,
+    pub member_muted: bool,
+    pub archived: bool,
+    pub locked: bool,
+    pub invitable: bool,
+    pub auto_archive: u32,
+    pub slowmode: u32,
+    pub flags: u64,
+    pub unread: bool,
+    pub mentions: u32,
+    pub member_count: u32,
+    pub message_count: u32,
+    pub last_message: Option<Id>,
+}
+
+impl ThreadInfo {
+    pub fn notify_level(&self) -> u8 {
+        if self.member_flags & 8 != 0 {
+            8
+        } else if self.member_flags & 4 != 0 {
+            4
+        } else {
+            2
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Message {
     pub id: Id,

@@ -321,10 +321,43 @@ impl Cache {
             GatewayEvent::GuildEmojisUpdate(e) => {
                 return modify_guild(&mut s, e.guild_id, |g| g.emojis = e.emojis.clone());
             }
-            GatewayEvent::ChannelCreate(c)
-            | GatewayEvent::ChannelUpdate(c)
-            | GatewayEvent::ThreadCreate(c)
-            | GatewayEvent::ThreadUpdate(c) => insert_channel(&mut s, (**c).clone()),
+            GatewayEvent::ChannelCreate(c) | GatewayEvent::ChannelUpdate(c) | GatewayEvent::ThreadCreate(c) => insert_channel(&mut s, (**c).clone()),
+            GatewayEvent::ThreadUpdate(c) => {
+                let mut c = (**c).clone();
+                if c.member.is_none() {
+                    c.member = s.channels.get(&c.id).and_then(|old| old.member.clone());
+                }
+                insert_channel(&mut s, c);
+            }
+            GatewayEvent::Unknown { name, data } if name == "THREAD_MEMBER_UPDATE" => {
+                let Some(id) = data.get("id").and_then(Value::as_str).and_then(|x| x.parse().ok()).map(Snowflake) else { return false };
+                let Some(ch) = s.channels.get_mut(&id) else { return false };
+                Arc::make_mut(ch).member = Some(data.clone());
+            }
+            GatewayEvent::Unknown { name, data } if name == "THREAD_MEMBERS_UPDATE" => {
+                let Some(me) = s.me.as_ref().map(|u| u.id.0.to_string()) else { return false };
+                let Some(id) = data.get("id").and_then(Value::as_str).and_then(|x| x.parse().ok()).map(Snowflake) else { return false };
+                let added = data
+                    .get("added_members")
+                    .and_then(Value::as_array)
+                    .and_then(|v| v.iter().find(|m| m.get("user_id").and_then(Value::as_str) == Some(me.as_str())))
+                    .cloned();
+                let removed = data
+                    .get("removed_member_ids")
+                    .and_then(Value::as_array)
+                    .is_some_and(|v| v.iter().any(|x| x.as_str() == Some(me.as_str())));
+                let count = data.get("member_count").and_then(Value::as_u64);
+                let Some(ch) = s.channels.get_mut(&id) else { return false };
+                let ch = Arc::make_mut(ch);
+                if let Some(m) = added {
+                    ch.member = Some(m);
+                } else if removed {
+                    ch.member = None;
+                }
+                if let Some(n) = count {
+                    ch.member_count = Some(n as u32);
+                }
+            }
             GatewayEvent::ChannelDelete(c) | GatewayEvent::ThreadDelete(c) => {
                 s.channels.remove(&c.id);
                 s.messages.remove(&c.id);

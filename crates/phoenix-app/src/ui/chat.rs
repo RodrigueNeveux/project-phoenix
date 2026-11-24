@@ -330,7 +330,11 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let topic = ch.and_then(|c| c.topic.clone());
     let is_forum = ch.is_some_and(|c| c.kind == ChannelKind::Forum);
     let topic = topic.filter(|_| !is_forum);
-    let thread_parent = ch.and_then(|c| app.nav.thread_parent(c.id)).and_then(|p| app.channels.get(&p));
+    let thread_parent = ch
+        .and_then(|c| app.nav.thread_parent(c.id).or_else(|| app.backend.thread_info(c.id).and_then(|i| i.parent)))
+        .and_then(|p| app.channels.get(&p));
+    let thread_info = thread_parent.and(ch).and_then(|c| app.backend.thread_info(c.id));
+    let parent_is_forum = thread_parent.is_some_and(|p| p.kind == ChannelKind::Forum);
     let kind = thread_parent.or(ch).map(|c| c.kind).unwrap_or(ChannelKind::Text);
     let locked = ch.is_some_and(|c| app.nav.extras.get(&c.id).is_some_and(|e| e.locked));
     let discoverable = !is_dm && !locked && thread_parent.is_none() && guild_discoverable(app);
@@ -521,10 +525,11 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         })))
                 })
                 .when(!is_dm, |d| {
-                    d.when(thread_parent.is_none() && !is_forum, |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
+                    d.when(!parent_is_forum && !is_forum, |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
                         .map(|d| {
                             let slashed = ch.is_some_and(|c| {
-                                c.muted
+                                thread_info.as_ref().is_some_and(|i| !i.joined || i.member_muted || i.notify_level() != 2)
+                                    || c.muted
                                     || app.backend.notify_prefs().is_some_and(|p| {
                                         p.header_bell_slashed(c.guild.map(|g| g.0), c.id.0, c.parent.map(|p| p.0))
                                     })
@@ -548,14 +553,14 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                                     .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
                             )
                         })
-                        .child(
-                            hdr_button("members", Icon::Members, if app.show_members { on } else { ic }, HDR_ICON).on_click(
+                        .when(!thread_info.as_ref().is_some_and(|i| i.archived), |d| {
+                            d.child(hdr_button("members", Icon::Members, if app.show_members { on } else { ic }, HDR_ICON).on_click(
                                 cx.listener(|a, _, _, cx| {
                                     a.show_members = !a.show_members;
                                     cx.notify();
                                 }),
-                            ),
-                        )
+                            ))
+                        })
                         .when_some(thread_parent.and(ch.map(|c| c.id)), |d, t| {
                             d.child(hdr_named("thread-more", "more-horizontal", ic).on_click(move |ev, w, _| {
                                 crate::ui::thread_menu::open(t, ev.position(), w)

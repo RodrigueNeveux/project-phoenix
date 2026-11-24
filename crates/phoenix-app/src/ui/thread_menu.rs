@@ -1,21 +1,21 @@
 use std::cell::RefCell;
 
-use gpui::{AnyElement, App, ClipboardItem, Context, Pixels, Point, Window};
+use gpui::{AnyElement, App, ClipboardItem, Context, Entity, Pixels, Point, Window};
 
 use crate::{
+    actions::thread::{Place, can_manage},
     app::PhoenixApp,
     model::Id,
-    ui::{
-        context_menu::{self, MenuItem},
-    },
+    ui::context_menu::{self, MenuItem},
 };
 
 thread_local! {
-    static OPEN: RefCell<Option<(Id, Point<Pixels>)>> = const { RefCell::new(None) };
+    static OPEN: RefCell<Option<(Id, Place, Point<Pixels>)>> = const { RefCell::new(None) };
     static POST: RefCell<Option<(crate::commands::ForumPost, Id, Point<Pixels>)>> = const { RefCell::new(None) };
 }
 
-const MANAGE_THREADS: u64 = 1 << 34;
+const MUTE_DURATIONS: [&str; 6] = ["menu.mute.15m", "menu.mute.1h", "menu.mute.3h", "menu.mute.8h", "menu.mute.24h", "menu.mute.forever"];
+const NOTIFY: [(u8, &str); 3] = [(2, "menu.notify.all"), (4, "thread.notify_mentions"), (8, "menu.notify.nothing")];
 
 pub fn open_post(post: crate::commands::ForumPost, forum: Id, pos: Point<Pixels>, window: &mut Window) {
     POST.with(|o| *o.borrow_mut() = Some((post, forum, pos)));
@@ -23,7 +23,11 @@ pub fn open_post(post: crate::commands::ForumPost, forum: Id, pos: Point<Pixels>
 }
 
 pub fn open(thread: Id, pos: Point<Pixels>, window: &mut Window) {
-    OPEN.with(|o| *o.borrow_mut() = Some((thread, pos)));
+    open_at(thread, Place::Toolbar, pos, window);
+}
+
+pub fn open_at(thread: Id, place: Place, pos: Point<Pixels>, window: &mut Window) {
+    OPEN.with(|o| *o.borrow_mut() = Some((thread, place, pos)));
     window.refresh();
 }
 
@@ -37,19 +41,127 @@ fn copy(label: gpui::SharedString, text: String) -> MenuItem {
     MenuItem::action(label, None, move |_, _, cx: &mut App| cx.write_to_clipboard(ClipboardItem::new_string(text.clone())))
 }
 
+fn act(e: &Entity<PhoenixApp>, label: gpui::SharedString, f: impl Fn(&mut PhoenixApp, &mut Window, &mut Context<PhoenixApp>) + 'static) -> MenuItem {
+    let e = e.clone();
+    MenuItem::action(label, None, move |_, w, cx: &mut App| e.update(cx, |a, cx| f(a, w, cx)))
+}
+
+fn stub(e: &Entity<PhoenixApp>, key: &'static str) -> MenuItem {
+    act(e, crate::t!(key), move |a, _, cx| a.stub(&crate::t!(key), cx))
+}
+
+fn guild_of(app: &PhoenixApp, t: Id) -> Option<Id> {
+    app.channels.get(&t).and_then(|c| c.guild).or_else(|| app.nav.find_thread(t).and_then(|c| c.guild)).or(app.selected_guild)
+}
+
+fn push_group(items: &mut Vec<MenuItem>, group: Vec<MenuItem>) {
+    if group.is_empty() {
+        return;
+    }
+    if !items.is_empty() {
+        items.push(MenuItem::Separator);
+    }
+    items.extend(group);
+}
+
+pub fn mute_item(app: &PhoenixApp, e: &Entity<PhoenixApp>, t: Id) -> MenuItem {
+    let st = app.thread_state(t);
+    if !st.joined {
+        return MenuItem::disabled(crate::t!("thread.mute"), None);
+    }
+    if st.member_muted {
+        return act(e, crate::t!("thread.unmute"), move |a, _, cx| a.unmute_thread(t, cx));
+    }
+    MenuItem::submenu(crate::t!("thread.mute"), MUTE_DURATIONS.iter().map(|k| stub(e, k)).collect())
+}
+
+pub fn notify_item(app: &PhoenixApp, e: &Entity<PhoenixApp>, t: Id) -> MenuItem {
+    let st = app.thread_state(t);
+    if !st.joined {
+        return MenuItem::disabled(crate::t!("menu.notify_settings"), None);
+    }
+    let cur = st.notify_level();
+    let radios = NOTIFY
+        .iter()
+        .map(|&(lv, key)| {
+            let e = e.clone();
+            MenuItem::radio(crate::t!(key), cur == lv, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.set_thread_notify(t, lv, cx)))
+        })
+        .collect();
+    MenuItem::submenu(crate::t!("menu.notify_settings"), radios)
+}
+
+pub fn items(app: &PhoenixApp, e: &Entity<PhoenixApp>, t: Id, place: Place) -> Vec<MenuItem> {
+    let st = app.thread_state(t);
+    let manage = can_manage(app, t);
+    let owner = st.owner == Some(app.me.id);
+    let guild = guild_of(app, t);
+    let link = guild.map(|g| copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, t.0)));
+    let id_item = app.prefs.synced.developer_mode.then(|| copy(crate::t!("menu.copy_thread_id"), t.0.to_string()).with_icon("id"));
+    let archive = (manage || owner).then(|| {
+        if st.archived {
+            act(e, crate::t!("thread.unarchive"), move |a, _, cx| a.set_thread_archived(t, false, cx))
+        } else {
+            act(e, crate::t!("thread.archive"), move |a, _, cx| a.set_thread_archived(t, true, cx))
+        }
+    });
+    let lock = manage.then(|| {
+        let locked = st.locked;
+        act(e, crate::t!(if locked { "thread.unlock" } else { "thread.lock" }), move |a, _, cx| a.set_thread_locked(t, !locked, cx))
+    });
+    let edit = (manage || owner).then(|| act(e, crate::t!("thread.edit"), move |a, _, cx| a.open_thread_settings(t, cx)));
+    let delete = manage.then(|| {
+        let e = e.clone();
+        MenuItem::danger(crate::t!("thread.delete"), None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_delete_thread(t, false, cx)))
+    });
+    let membership = if st.joined {
+        act(e, crate::t!("thread.leave"), move |a, _, cx| a.leave_thread(t, place, cx))
+    } else {
+        act(e, crate::t!("thread.join"), move |a, _, cx| a.join_thread(t, place, cx))
+    };
+    let mut out = Vec::new();
+    match place {
+        Place::ContextMenu => {
+            let (unread, _) = crate::ui::sidebar::thread_unread(app, t);
+            push_group(&mut out, vec![if unread {
+                act(e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(crate::ui::nav_menus::Target::Thread(t), cx))
+            } else {
+                MenuItem::disabled(crate::t!("menu.mark_read"), None)
+            }]);
+            push_group(&mut out, vec![crate::actions::channel::favorite_item(app, e, t)]);
+            push_group(&mut out, [archive, lock, edit, link].into_iter().flatten().collect());
+            push_group(&mut out, vec![mute_item(app, e, t), notify_item(app, e, t)]);
+            push_group(&mut out, delete.into_iter().collect());
+            push_group(&mut out, vec![membership]);
+            push_group(&mut out, id_item.into_iter().collect());
+        }
+        Place::Toolbar | Place::Sidebar | Place::ForumToolbar => {
+            let (join_first, leave_last) = if st.joined { (None, Some(membership)) } else { (Some(membership), None) };
+            let top = act(e, crate::t!("thread.jump_top"), move |a, _, cx| a.jump_thread_top(t, cx));
+            if place == Place::Sidebar {
+                let full = act(e, crate::t!("thread.open_full"), move |a, _, cx| a.open_thread_full(t, cx));
+                push_group(&mut out, join_first.into_iter().chain([full]).collect());
+                push_group(&mut out, [Some(top), edit].into_iter().flatten().collect());
+            } else {
+                push_group(&mut out, join_first.into_iter().collect());
+                let split = act(e, crate::t!("thread.open_split"), move |a, w, cx| a.open_thread_split(t, w, cx));
+                push_group(&mut out, [Some(top), edit, Some(split)].into_iter().flatten().collect());
+            }
+            push_group(&mut out, vec![crate::actions::channel::favorite_item(app, e, t)]);
+            push_group(&mut out, [archive, lock, delete].into_iter().flatten().collect());
+            push_group(&mut out, leave_last.into_iter().collect());
+            push_group(&mut out, [link, id_item].into_iter().flatten().collect());
+        }
+    }
+    out
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if let Some(menu) = render_post(app, cx) {
         return Some(menu);
     }
-    let (t, pos) = OPEN.with(|o| *o.borrow())?;
-    let guild = app.channels.get(&t).and_then(|c| c.guild).or(app.selected_guild);
-    let mut items = Vec::new();
-    if let Some(g) = guild {
-        items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, t.0)));
-    }
-    if app.prefs.synced.developer_mode {
-        items.push(copy(crate::t!("menu.copy_thread_id"), t.0.to_string()).with_icon("id"));
-    }
+    let (t, place, pos) = OPEN.with(|o| *o.borrow())?;
+    let items = items(app, &cx.entity(), t, place);
     if items.is_empty() {
         return None;
     }
@@ -61,42 +173,50 @@ fn render_post(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
     let e = cx.entity();
     let t = p.thread;
     let guild = app.channels.get(&forum).and_then(|c| c.guild).or(app.selected_guild);
-    let manage = guild.is_some_and(|g| crate::ui::inbox::has_perm(app.backend.guild_permissions(g), MANAGE_THREADS));
+    let manage = guild.is_some_and(|g| crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 34));
     let owner = p.owner == Some(app.me.id);
-    let stub = |key: &'static str| {
-        let e = e.clone();
-        MenuItem::action(crate::t!(key), None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!(key), cx)))
-    };
+    let followed = app.backend.is_thread_joined(t);
     let mut items = Vec::new();
     if crate::ui::forum::is_unread(app, &p) {
-        let e = e.clone();
-        items.push(MenuItem::action(crate::t!("menu.mark_read"), None, move |_, _, cx: &mut App| {
-            e.update(cx, |a, cx| a.mark_nav_read(crate::ui::nav_menus::Target::Channel(t), cx))
-        }));
+        items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(crate::ui::nav_menus::Target::Channel(t), cx)));
     } else {
         items.push(MenuItem::disabled(crate::t!("menu.mark_read"), None));
     }
     items.push(MenuItem::Separator);
     items.push(crate::actions::channel::favorite_item(app, &e, t));
     items.push(MenuItem::Separator);
-    items.push(stub("menu.post.follow"));
-    if (manage || owner) && !p.archived {
-        items.push(stub("menu.post.close"));
+    items.push(if followed {
+        act(&e, crate::t!("menu.post.unfollow"), move |a, _, cx| a.leave_thread(t, Place::ContextMenu, cx))
+    } else {
+        act(&e, crate::t!("menu.post.follow"), move |a, _, cx| a.join_thread(t, Place::ContextMenu, cx))
+    });
+    if manage || owner {
+        items.push(if p.archived {
+            act(&e, crate::t!("menu.post.open"), move |a, _, cx| a.set_thread_archived(t, false, cx))
+        } else {
+            act(&e, crate::t!("menu.post.close"), move |a, _, cx| a.set_thread_archived(t, true, cx))
+        });
     }
     if manage {
-        items.push(stub(if p.locked { "menu.post.unlock" } else { "menu.post.lock" }));
+        let locked = p.locked;
+        items.push(act(&e, crate::t!(if locked { "menu.post.unlock" } else { "menu.post.lock" }), move |a, _, cx| a.set_thread_locked(t, !locked, cx)));
     }
     if manage || owner {
-        items.push(stub("menu.post.edit"));
+        items.push(act(&e, crate::t!("menu.post.edit"), move |a, _, cx| a.open_thread_settings(t, cx)));
+        let applied = p.tags.clone();
         let tags: Vec<MenuItem> = app
             .backend
             .forum_tags(forum)
             .into_iter()
             .filter(|x| manage || !x.moderated)
             .map(|x| {
-                let on = p.tags.contains(&x.id);
+                let on = applied.contains(&x.id);
                 let e = e.clone();
-                MenuItem::check(x.name.clone(), on, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!("menu.post.edit_tags"), cx)))
+                let applied = applied.clone();
+                MenuItem::check(x.name.clone(), on, move |_, _, cx: &mut App| {
+                    let next = crate::ui::forum::toggle_tag(&applied, x.id);
+                    e.update(cx, |a, cx| a.set_thread_tags(t, next, cx))
+                })
             })
             .collect();
         if !tags.is_empty() {
@@ -107,15 +227,19 @@ fn render_post(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
         items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, t.0)));
     }
     items.push(MenuItem::Separator);
-    items.push(MenuItem::disabled(crate::t!("menu.post.mute"), None));
-    items.push(MenuItem::disabled(crate::t!("menu.notify_settings"), None));
+    if followed {
+        items.push(mute_item(app, &e, t));
+        items.push(notify_item(app, &e, t));
+    } else {
+        items.push(MenuItem::disabled(crate::t!("menu.post.mute"), None));
+        items.push(MenuItem::disabled(crate::t!("menu.notify_settings"), None));
+    }
     if manage {
         items.push(MenuItem::Separator);
-        items.push(stub(if p.pinned { "menu.post.unpin" } else { "menu.post.pin" }));
-        let e = e.clone();
-        items.push(MenuItem::danger(crate::t!("menu.post.delete"), None, move |_, _, cx: &mut App| {
-            e.update(cx, |a, cx| a.stub(&crate::t!("menu.post.delete"), cx))
-        }));
+        let pinned = p.pinned;
+        items.push(act(&e, crate::t!(if pinned { "menu.post.unpin" } else { "menu.post.pin" }), move |a, _, cx| a.set_thread_pinned(t, !pinned, cx)));
+        let e2 = e.clone();
+        items.push(MenuItem::danger(crate::t!("menu.post.delete"), None, move |_, _, cx: &mut App| e2.update(cx, |a, cx| a.confirm_delete_thread(t, true, cx))));
     }
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);

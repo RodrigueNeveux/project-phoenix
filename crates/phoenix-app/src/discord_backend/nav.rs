@@ -299,6 +299,13 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
             }));
         }
         GatewayEvent::ThreadDelete(c) => out.push(AppEvent::Nav(NavEvent::ThreadDelete(id(c.id)))),
+        GatewayEvent::Unknown { name, data } if name == "THREAD_MEMBER_UPDATE" || name == "THREAD_MEMBERS_UPDATE" => {
+            if let Some(c) = data.get("id").and_then(snowflake).and_then(|t| cache.channel(api::Snowflake(t)))
+                && let Some(t) = thread(&c)
+            {
+                out.push(AppEvent::Nav(NavEvent::ThreadUpsert(t)));
+            }
+        }
         GatewayEvent::Unknown { name, data } if name == "USER_SETTINGS_PROTO_UPDATE" => {
             let s = data.get("settings");
             if s.and_then(|s| s.get("type")).and_then(Value::as_u64) == Some(1)

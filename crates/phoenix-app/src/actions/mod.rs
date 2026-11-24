@@ -4,6 +4,7 @@ pub mod exec;
 pub mod message;
 pub mod mock;
 pub mod pins;
+pub mod thread;
 pub mod user;
 
 use std::cell::RefCell;

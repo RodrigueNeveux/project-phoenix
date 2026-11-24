@@ -554,6 +554,43 @@ impl Backend for DiscordBackend {
         s.cache.channel(sf(channel)).is_some_and(|c| c.member.is_some())
     }
 
+    fn thread_info(&self, thread: Id) -> Option<crate::model::ThreadInfo> {
+        let s = self.inner.session().ok()?;
+        let c = s.cache.channel(sf(thread))?;
+        if !c.kind.is_thread() {
+            return None;
+        }
+        let parent_forum = c.parent_id.and_then(|p| s.cache.channel(p)).is_some_and(|p| matches!(p.kind, api::ChannelType::GuildForum | api::ChannelType::GuildMedia));
+        let (unread, mentions) = {
+            let a = s.adapter.lock();
+            let joined = c.member.is_some();
+            let (u, m) = a.prefs.ctx().unread(&c);
+            (u && joined, if joined { m } else { 0 })
+        };
+        let md = c.thread_metadata.clone().unwrap_or_default();
+        let member = c.member.as_ref();
+        Some(crate::model::ThreadInfo {
+            parent: c.parent_id.map(|p| Id(p.0)),
+            owner: c.owner_id.map(|u| Id(u.0)),
+            private: c.kind == api::ChannelType::PrivateThread,
+            forum_post: parent_forum,
+            joined: member.is_some(),
+            member_flags: member.and_then(|m| m.get("flags")).and_then(serde_json::Value::as_u64).unwrap_or(0) as u8,
+            member_muted: member.and_then(|m| m.get("muted")).and_then(serde_json::Value::as_bool).unwrap_or(false),
+            archived: md.archived,
+            locked: md.locked,
+            invitable: md.invitable.unwrap_or(true),
+            auto_archive: md.auto_archive_duration.unwrap_or(4320),
+            slowmode: c.rate_limit_per_user.unwrap_or(0),
+            flags: c.flags,
+            unread,
+            mentions,
+            member_count: c.member_count.unwrap_or(0),
+            message_count: c.message_count.unwrap_or(0),
+            last_message: c.last_message_id.map(|m| Id(m.0)),
+        })
+    }
+
     fn guild_permissions(&self, guild: Id) -> u64 {
         let Ok(s) = self.inner.session() else { return 0 };
         s.cache.guild_channels(sf(guild)).first().map(|c| s.cache.permissions_in(c.id).bits()).unwrap_or(0)

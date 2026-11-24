@@ -134,3 +134,23 @@ fn cheap_concurrent_reads() {
     let b = cache.guild(Snowflake(300000000000000001)).unwrap();
     assert!(Arc::ptr_eq(&a, &b));
 }
+
+#[test]
+fn thread_membership_follows_member_events() {
+    let cache = Cache::default();
+    cache.apply(&parse_dispatch("READY", &fixture("ready_user.json")));
+    let me = cache.current_user().unwrap().id.0;
+    let raw = r#"{"id":"800000000000000001","type":11,"guild_id":"300000000000000001","parent_id":"400000000000000001","name":"t","member":{"id":"800000000000000001","flags":2,"muted":false},"thread_metadata":{"archived":false,"locked":false}}"#;
+    cache.apply(&parse_dispatch("THREAD_CREATE", raw));
+    let t = Snowflake(800000000000000001);
+    cache.apply(&parse_dispatch("THREAD_UPDATE", r#"{"id":"800000000000000001","type":11,"guild_id":"300000000000000001","parent_id":"400000000000000001","name":"t2","thread_metadata":{"archived":true,"locked":false}}"#));
+    let c = cache.channel(t).unwrap();
+    assert_eq!(c.name.as_deref(), Some("t2"));
+    assert_eq!(c.member.as_ref().unwrap()["flags"], 2);
+    let left = format!(r#"{{"id":"800000000000000001","guild_id":"300000000000000001","member_count":0,"removed_member_ids":["{me}"]}}"#);
+    cache.apply(&parse_dispatch("THREAD_MEMBERS_UPDATE", &left));
+    assert!(cache.channel(t).unwrap().member.is_none());
+    assert_eq!(cache.channel(t).unwrap().member_count, Some(0));
+    cache.apply(&parse_dispatch("THREAD_MEMBER_UPDATE", r#"{"id":"800000000000000001","guild_id":"300000000000000001","flags":4,"muted":true}"#));
+    assert_eq!(cache.channel(t).unwrap().member.as_ref().unwrap()["flags"], 4);
+}

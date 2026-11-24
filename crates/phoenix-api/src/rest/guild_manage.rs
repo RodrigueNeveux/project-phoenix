@@ -27,6 +27,24 @@ pub struct ChannelEdit {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
+pub struct ThreadEdit {
+    pub name: Option<String>,
+    pub archived: Option<bool>,
+    pub locked: Option<bool>,
+    pub invitable: Option<bool>,
+    pub auto_archive_duration: Option<u32>,
+    pub slowmode: Option<u32>,
+    pub flags: Option<u64>,
+    pub applied_tags: Option<Vec<Snowflake>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ThreadMemberPatch {
+    Flags(u8),
+    Muted(bool),
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct GuildEdit {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -50,6 +68,11 @@ pub enum AdminCall {
     CreateChannel { guild: Snowflake, name: String, kind: NewChannelKind, parent: Option<Snowflake>, private: bool, me: Snowflake },
     EditChannel { channel: Snowflake, edit: ChannelEdit },
     DeleteChannel { channel: Snowflake },
+    EditThread { thread: Snowflake, edit: ThreadEdit },
+    JoinThread { thread: Snowflake, location: String },
+    LeaveThread { thread: Snowflake, location: String },
+    AddThreadMember { thread: Snowflake, user: Snowflake, location: String },
+    ThreadMemberSettings { thread: Snowflake, patch: ThreadMemberPatch },
     Channel { channel: Snowflake },
     SetOverwrite { channel: Snowflake, target: Snowflake, kind: u8, allow: u64, deny: u64 },
     DeleteOverwrite { channel: Snowflake, target: Snowflake },
@@ -134,6 +157,20 @@ pub fn build(call: &AdminCall) -> ApiReq {
             req(Method::PATCH, format!("/channels/{channel}"), Some(b))
         }
         C::DeleteChannel { channel } => req(Method::DELETE, format!("/channels/{channel}"), None),
+        C::EditThread { thread, edit } => req(Method::PATCH, format!("/channels/{thread}"), Some(thread_body(edit))),
+        C::JoinThread { thread, location } => req(Method::POST, format!("/channels/{thread}/thread-members/@me?location={}", query_value(location)), None),
+        C::LeaveThread { thread, location } => req(Method::DELETE, format!("/channels/{thread}/thread-members/@me?location={}", query_value(location)), None),
+        C::AddThreadMember { thread, user, location } => {
+            req(Method::POST, format!("/channels/{thread}/thread-members/{user}?location={}", query_value(location)), None)
+        }
+        C::ThreadMemberSettings { thread, patch } => req(
+            Method::PATCH,
+            format!("/channels/{thread}/thread-members/@me/settings"),
+            Some(match patch {
+                ThreadMemberPatch::Flags(f) => json!({ "flags": f }),
+                ThreadMemberPatch::Muted(m) => json!({ "muted": m }),
+            }),
+        ),
         C::Channel { channel } => req(Method::GET, format!("/channels/{channel}"), None),
         C::SetOverwrite { channel, target, kind, allow, deny } => req(
             Method::PUT,
@@ -205,6 +242,47 @@ pub fn build(call: &AdminCall) -> ApiReq {
     }
 }
 
+fn query_value(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            c => {
+                let mut b = [0u8; 4];
+                c.encode_utf8(&mut b).bytes().map(|x| format!("%{x:02X}")).collect()
+            }
+        })
+        .collect()
+}
+
+pub fn thread_body(e: &ThreadEdit) -> Value {
+    let mut b = json!({});
+    if let Some(n) = &e.name {
+        b["name"] = json!(n.trim().chars().take(100).collect::<String>());
+    }
+    if let Some(v) = e.archived {
+        b["archived"] = json!(v);
+    }
+    if let Some(v) = e.locked {
+        b["locked"] = json!(v);
+    }
+    if let Some(v) = e.invitable {
+        b["invitable"] = json!(v);
+    }
+    if let Some(v) = e.auto_archive_duration {
+        b["auto_archive_duration"] = json!(v);
+    }
+    if let Some(v) = e.slowmode {
+        b["rate_limit_per_user"] = json!(v.min(21_600));
+    }
+    if let Some(v) = e.flags {
+        b["flags"] = json!(v);
+    }
+    if let Some(t) = &e.applied_tags {
+        b["applied_tags"] = json!(t);
+    }
+    b
+}
+
 fn role_body(e: &RoleEdit) -> Value {
     let mut b = json!({});
     if let Some(n) = &e.name {
@@ -249,6 +327,37 @@ mod tests {
         assert_eq!(b["parent_id"], "9");
         assert_eq!(b["permission_overwrites"][0]["deny"], (VIEW_CHANNEL | CONNECT).to_string());
         assert_eq!(b["permission_overwrites"][1]["id"], "5");
+    }
+
+    #[test]
+    fn thread_calls_match_the_client() {
+        let t = Snowflake(7);
+        let r = build(&AdminCall::EditThread { thread: t, edit: ThreadEdit { archived: Some(true), ..Default::default() } });
+        assert_eq!((r.method, r.path.as_str()), (Method::PATCH, "/channels/7"));
+        assert_eq!(r.body.unwrap(), json!({"archived": true}));
+        let r = build(&AdminCall::EditThread { thread: t, edit: ThreadEdit { locked: Some(false), archived: Some(false), ..Default::default() } });
+        assert_eq!(r.body.unwrap(), json!({"locked": false, "archived": false}));
+        let r = build(&AdminCall::EditThread {
+            thread: t,
+            edit: ThreadEdit { name: Some(format!("  {}  ", "n".repeat(120))), auto_archive_duration: Some(10_080), slowmode: Some(50_000), ..Default::default() },
+        });
+        let b = r.body.unwrap();
+        assert_eq!(b["name"].as_str().unwrap().len(), 100);
+        assert_eq!(b["auto_archive_duration"], 10_080);
+        assert_eq!(b["rate_limit_per_user"], 21_600);
+        let r = build(&AdminCall::EditThread { thread: t, edit: ThreadEdit { flags: Some(2), applied_tags: Some(vec![Snowflake(3)]), ..Default::default() } });
+        assert_eq!(r.body.unwrap(), json!({"flags": 2, "applied_tags": ["3"]}));
+        let r = build(&AdminCall::JoinThread { thread: t, location: "Toolbar Overflow".into() });
+        assert_eq!((r.method, r.path.as_str(), r.body), (Method::POST, "/channels/7/thread-members/@me?location=Toolbar%20Overflow", None));
+        let r = build(&AdminCall::LeaveThread { thread: t, location: "Context Menu".into() });
+        assert_eq!((r.method, r.path.as_str()), (Method::DELETE, "/channels/7/thread-members/@me?location=Context%20Menu"));
+        let r = build(&AdminCall::AddThreadMember { thread: t, user: Snowflake(9), location: "Members".into() });
+        assert_eq!((r.method, r.path.as_str()), (Method::POST, "/channels/7/thread-members/9?location=Members"));
+        let r = build(&AdminCall::ThreadMemberSettings { thread: t, patch: ThreadMemberPatch::Flags(4) });
+        assert_eq!((r.method, r.path.as_str()), (Method::PATCH, "/channels/7/thread-members/@me/settings"));
+        assert_eq!(r.body.unwrap(), json!({"flags": 4}));
+        let r = build(&AdminCall::ThreadMemberSettings { thread: t, patch: ThreadMemberPatch::Muted(false) });
+        assert_eq!(r.body.unwrap(), json!({"muted": false}));
     }
 
     #[test]

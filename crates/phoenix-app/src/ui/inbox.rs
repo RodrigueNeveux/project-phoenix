@@ -1271,9 +1271,27 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
     }
     let now = chrono::Local::now().timestamp();
     for t in list_src {
-        let r = crate::model::ThreadRef { id: t.id, name: t.name.clone(), message_count: 0 };
+        let tid = t.id;
         let created = ((t.id.0 >> 22) / 1000 + 1_420_070_400) as i64;
-        let sub = format!("{} • {}", crate::t!("threads.no_recent"), crate::ui::forum::ago(now, created));
+        let recent = crate::thread_recent::get(t.id);
+        let when = crate::thread_recent::ago(now - recent.as_ref().map_or(created, |r| r.ts));
+        let sub = match &recent {
+            Some(r) => {
+                let u = app.member_user(app.selected_guild, r.author);
+                let color = app.author_color_in(app.selected_guild, r.author).map(|c2| crate::theme::role_color(Some(c2))).unwrap_or_else(|| tk(idx::TEXT_STRONG));
+                div()
+                    .flex()
+                    .items_center()
+                    .min_w_0()
+                    .child(div().flex_none().mr(z(8.)).child(avatar(u.as_deref(), 16.)))
+                    .child(div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(r.name.clone()))
+                    .child(div().flex_none().child(": "))
+                    .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
+                    .child(div().flex_none().w(z(20.)).flex().justify_center().child("•"))
+                    .child(div().flex_none().child(when))
+            }
+            None => div().flex().items_center().child(crate::t!("threads.no_recent")).child(div().flex_none().w(z(20.)).flex().justify_center().child("•")).child(when),
+        };
         list = list.child(
             div()
                 .id(("thread-row", t.id.0))
@@ -1289,9 +1307,9 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .cursor_pointer()
                 .flex()
                 .items_center()
-                .on_click(cx.listener(move |a, _, w, cx| {
+                .on_click(cx.listener(move |a, _, _, cx| {
                     a.parity.threads_open = false;
-                    a.open_thread(r.clone(), w, cx);
+                    a.open_thread_full(tid, cx);
                 }))
                 .child(
                     div()
@@ -1300,7 +1318,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                         .flex()
                         .flex_col()
                         .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(t.name.clone()))
-                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(sub)),
+                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().child(sub)),
                 )
                 .when(!t.voice_users.is_empty(), |d| {
                     d.child(div().ml(z(16.)).flex().children(t.voice_users.iter().take(3).enumerate().map(|(k, u)| {
@@ -1801,10 +1819,10 @@ fn section_header(label: String) -> gpui::Div {
 }
 
 fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
-    let r = crate::model::ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
+    let tid = p.thread;
     let last = p.last_message.unwrap_or(p.thread);
     let secs = ((last.0 >> 22) / 1000 + 1_420_070_400) as i64;
-    let date = chrono::DateTime::from_timestamp(secs, 0).map(|d| crate::i18n::long_date(d.with_timezone(&chrono::Local).date_naive())).unwrap_or_default();
+    let date = crate::thread_recent::ago(chrono::Local::now().timestamp() - secs);
     let owner_cow = p.owner.and_then(|o| app.member_user(app.selected_guild, o));
     let owner = owner_cow.as_deref();
     let owner_name = p
@@ -1826,9 +1844,9 @@ fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Contex
         .cursor_pointer()
         .flex()
         .items_center()
-        .on_click(cx.listener(move |a, _, w, cx| {
+        .on_click(cx.listener(move |a, _, _, cx| {
             a.parity.threads_open = false;
-            a.open_thread(r.clone(), w, cx);
+            a.open_thread_full(tid, cx);
         }))
         .child(
             div()

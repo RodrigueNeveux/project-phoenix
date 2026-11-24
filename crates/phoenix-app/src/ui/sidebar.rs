@@ -1048,12 +1048,19 @@ fn top_line(e: impl IntoElement, connected: bool) -> AnyElement {
     }
 }
 
+pub fn thread_unread(app: &PhoenixApp, id: Id) -> (bool, u32) {
+    let live = app.channels.get(&id);
+    match app.backend.thread_info(id) {
+        Some(_) if app.selected_channel == Some(id) => (false, 0),
+        Some(i) => (i.unread && !i.member_muted, i.mentions),
+        None => (live.is_some_and(|c| c.unread), live.map(|c| c.mentions).unwrap_or(0)),
+    }
+}
+
 fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElement {
     let Some(th) = app.nav.find_thread(id) else { return div().into_any_element() };
     let selected = app.selected_channel == Some(id);
-    let live = app.channels.get(&id);
-    let unread = live.is_some_and(|c| c.unread);
-    let mentions = live.map(|c| c.mentions).unwrap_or(0);
+    let (unread, mentions) = thread_unread(app, id);
     let e = entity.clone();
     div()
         .id(("thread", id.0))

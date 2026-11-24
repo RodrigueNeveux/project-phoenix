@@ -276,6 +276,9 @@ impl Backend for ReadOnly {
     fn is_thread_joined(&self, c: Id) -> bool {
         self.0.is_thread_joined(c)
     }
+    fn thread_info(&self, c: Id) -> Option<phoenix_app::model::ThreadInfo> {
+        self.0.thread_info(c)
+    }
     fn channel_last_message(&self, c: Id) -> Option<Id> {
         self.0.channel_last_message(c)
     }
@@ -833,6 +836,16 @@ fn main() -> anyhow::Result<()> {
         pump(&mut cx, 500);
     }
     eprintln!("[{:.1}s] waited", t0.elapsed().as_secs_f32());
+    if let Some(c) = channel {
+        let missed = cx.update(|cx| v.read(cx).selected_channel != Some(c));
+        if missed {
+            eprintln!("location: {} not selected after the wait, opening it again", c.0);
+            cx.update(|cx| v.update(cx, |app, cx| phoenix_app::ui::forum::open_by_id(app, c, cx)));
+            pump(&mut cx, 4000);
+            let ok = cx.update(|cx| v.read(cx).selected_channel == Some(c));
+            eprintln!("location: second try {}", if ok { "ok" } else { "failed" });
+        }
+    }
     if std::env::var_os("PHX_DEBUG_UNREADS").is_some() {
         cx.update(|cx| {
             let a = v.read(cx);
@@ -898,6 +911,34 @@ fn main() -> anyhow::Result<()> {
                 "bell" => {
                     if let Some(ch) = app.selected_channel {
                         phoenix_app::ui::nav_menus::toggle_bell(ch, gpui::point(gpui::px(820.), gpui::px(48.)), window);
+                    }
+                }
+                "threadmenu" => {
+                    let mut it = arg.split(',');
+                    let id = it.next().and_then(|x| x.parse::<u64>().ok()).map(phoenix_app::model::Id).or(app.selected_channel);
+                    let place = match it.next() {
+                        Some("ctx") => phoenix_app::actions::thread::Place::ContextMenu,
+                        Some("panel") => phoenix_app::actions::thread::Place::Sidebar,
+                        _ => phoenix_app::actions::thread::Place::Toolbar,
+                    };
+                    let x = it.next().and_then(|x| x.parse::<f32>().ok()).unwrap_or(700.);
+                    let y = it.next().and_then(|x| x.parse::<f32>().ok()).unwrap_or(60.);
+                    if let Some(id) = id {
+                        if place == phoenix_app::actions::thread::Place::ContextMenu {
+                            phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Thread(id), gpui::point(px(x), px(y)), window);
+                        } else {
+                            phoenix_app::ui::thread_menu::open_at(id, place, gpui::point(px(x), px(y)), window);
+                        }
+                    }
+                }
+                "threadsettings" | "threaddelete" | "threadpanel" => {
+                    let id = arg.parse::<u64>().ok().map(phoenix_app::model::Id).or(app.selected_channel);
+                    if let Some(id) = id {
+                        match kind.as_str() {
+                            "threadsettings" => app.open_thread_settings(id, cx),
+                            "threaddelete" => app.confirm_delete_thread(id, false, cx),
+                            _ => app.open_thread_split(id, window, cx),
+                        }
                     }
                 }
                 "pins" => app.toggle_pins(cx),

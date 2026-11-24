@@ -712,11 +712,11 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
                             .pl(z(10.))
                             .flex()
                             .gap(z(10.))
-                            .when(!is_post, |d| d.child(btn("thread-notify", "bell").tip(crate::t!("menu.notify_settings")).on_click(cx.listener(|a, _, _, cx| {
-                                a.stub(&crate::t!("menu.notify_settings"), cx)
-                            }))))
+                            .when(!is_post, |d| d.child(btn("thread-notify", "bell").tip(crate::t!("menu.notify_settings")).on_click(move |ev, w, _| {
+                                crate::ui::nav_menus::toggle_bell(id, ev.position(), w)
+                            })))
                             .child(btn("thread-more", "more-horizontal").tip(crate::t!("header.more")).on_click(move |ev, w, _| {
-                                crate::ui::thread_menu::open(id, ev.position(), w)
+                                crate::ui::thread_menu::open_at(id, crate::actions::thread::Place::Sidebar, ev.position(), w)
                             }))
                             .child(btn("close-thread", "close").on_click(cx.listener(|a, _, _, cx| a.close_thread(cx))))
                     }),

@@ -503,6 +503,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
             }
         }
+        Target::ChannelBell(id) if app.backend.thread_info(id).is_some() => {
+            items.push(crate::ui::thread_menu::mute_item(app, &e, id));
+            items.push(MenuItem::Separator);
+            if let MenuItem::Submenu { items: radios, .. } = crate::ui::thread_menu::notify_item(app, &e, id) {
+                items.extend(radios);
+            } else {
+                items.push(crate::ui::thread_menu::notify_item(app, &e, id));
+            }
+        }
         Target::ChannelBell(id) => {
             let ch = app.channels.get(&id)?;
             let guild = ch.guild;
@@ -518,37 +527,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(MenuItem::Separator);
             items.extend(notify_radios(app, &e, guild, Some(id)));
         }
-        Target::Thread(id) => {
-            let live = app.channels.get(&id);
-            let guild = live.and_then(|c| c.guild).or(app.selected_guild);
-            let unread = live.is_some_and(|c| c.unread);
-            let muted = live.is_some_and(|c| c.muted);
-            if unread {
-                items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Channel(id), cx)));
-            } else {
-                items.push(MenuItem::disabled(crate::t!("menu.mark_read"), None));
-            }
-            items.push(MenuItem::Separator);
-            items.push(crate::actions::channel::favorite_item(app, &e, id));
-            if let Some(g) = guild {
-                items.push(MenuItem::Separator);
-                items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, id.0)));
-            }
-            items.push(MenuItem::Separator);
-            items.push(mute_item(
-                &e,
-                crate::t!("menu.mute_channel"),
-                crate::t!("menu.unmute_channel"),
-                muted,
-                guild,
-                Some(id),
-            ));
-            items.push(notify_item(app, &e, guild, Some(id)).with_subtext(level_label(app, guild, Some(id))));
-            if dev {
-                items.push(MenuItem::Separator);
-                items.push(copy(crate::t!("menu.copy_thread_id"), id.0.to_string()).with_icon("id"));
-            }
-        }
+        Target::Thread(id) => items.extend(crate::ui::thread_menu::items(app, &e, id, crate::actions::thread::Place::ContextMenu)),
         Target::Folder(f) => {
             items.push(act(&e, crate::t!("menu.mark_folder_read"), move |a, _, cx| {
                 let gs: Vec<Id> = a.nav.folders.iter().filter(|x| x.id == Some(f)).flat_map(|x| x.guilds.clone()).collect();
