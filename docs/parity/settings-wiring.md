@@ -21,8 +21,8 @@ where its value is stored and what it changes in the UI.
 
 | id | control | storage | effect in Phoenix | status |
 |---|---|---|---|---|
-| data-improve | Use data to improve Discord | session only | — | ❌ |
-| data-personalize | Use data to customize my Discord experience | session only | — | ❌ |
+| data-improve | Use data to improve Discord | REST `/users/@me/consent` usage_statistics | grant/revoke on Discord | ✅ |
+| data-personalize | Use data to customize my Discord experience | REST `/users/@me/consent` personalization | grant/revoke on Discord | ✅ |
 | data-sponsored | Use my Discord activity to personalize sponsored content | session only | — | ❌ |
 | data-third | Use third-party data to personalize sponsored content | session only | — | ❌ |
 | data-discovery | Show my message content from Discoverable channels on web pages | session only | — | ❌ |
@@ -54,11 +54,11 @@ where its value is stored and what it changes in the UI.
 | n-react | Someone reacts to my messages | settings-proto `notifications.reaction_notifications` (7, 7) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
 | notif-sounds | Disable all notification sounds | local prefs (settings.json) | existing | ✅ |
 | badge | Enable Unread Message Badge | local prefs (settings.json) | — | 🟡 stored, no effect yet |
-| e-comm | Communication emails | session only | — | ❌ |
-| e-social | Social emails | session only | — | ❌ |
-| e-news | Announcements and updates | session only | — | ❌ |
-| e-tips | Tips emails | session only | — | ❌ |
-| e-recs | Recommendations emails | session only | — | ❌ |
+| e-comm | Communication emails | REST `/users/@me/email-settings` categories.communication | e-mails sent by Discord | ✅ |
+| e-social | Social emails | REST `/users/@me/email-settings` categories.social | e-mails sent by Discord | ✅ |
+| e-news | Announcements and updates | REST `/users/@me/email-settings` categories.updates_and_announcements | e-mails sent by Discord | ✅ |
+| e-tips | Tips emails | REST `/users/@me/email-settings` categories.tips | e-mails sent by Discord | ✅ |
+| e-recs | Recommendations emails | REST `/users/@me/email-settings` categories.recommendations_and_events | e-mails sent by Discord | ✅ |
 | push-delay | Mobile push notification delay | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | tts | Allow playback and usage of /tts command | settings-proto `text_and_images.enable_tts_command` (6, 16) | — | 🟡 stored, no effect yet |
 | read-all | Read all messages out loud | local prefs (settings.json) | — | 🟡 stored, no effect yet |
@@ -69,7 +69,7 @@ where its value is stored and what it changes in the UI.
 | media-uploads | When uploaded directly to Discord | settings-proto `text_and_images.inline_attachment_media` (6, 9) | uploaded images/videos render as file cards when off (chat.rs attachment) | ✅ |
 | embeds | Show embeds and preview website links | settings-proto `text_and_images.render_embeds` (6, 12) | all embeds hidden when off (chat.rs show_embed) | ✅ |
 | reactions | Show emoji reactions | settings-proto `text_and_images.render_reactions` (6, 13) | reaction bar hidden when off (chat.rs) | ✅ |
-| spoilers | Show spoiler content | settings-proto `text_and_images.render_spoilers` (6, 4) | "Always" reveals text + media spoilers (richtext, media::is_revealed); "If moderator" = on click | ✅ |
+| spoilers | Show spoiler content | settings-proto `text_and_images.render_spoilers` (6, 4) | "Always" reveals text + media spoilers (richtext, media::is_revealed); "If moderator" reveals them where I have Manage Messages / Administrator | ✅ |
 | split-threads | Open threads in split view | settings-proto `text_and_images.use_thread_sidebar` (6, 3) | — | 🟡 stored, no effect yet |
 | avatars | Show user avatars (available in compact message display) | settings-proto `text_and_images.display_compact_avatars` (6, 41) | Compact mode: show an avatar beside each message header; default/cozy mode keeps its normal group avatars | ⚠ wired; synthetic enabled/disabled render checked, official enabled geometry not compared |
 | favs | Show favorite servers | local prefs (settings.json) | — | 🟡 stored, no effect yet |
@@ -79,25 +79,25 @@ where its value is stored and what it changes in the UI.
 | ac-games | Show games in autocomplete | settings-proto `text_and_images.include_game_mentions_in_autocomplete` (6, 39) | gate the `@game` search/suggestion flow; selected result inserts a Discord game mention/embed | 🟡 stored, no effect yet; game catalog/search route and result shape not yet established |
 | send-btn | Show the Send Message button | local prefs (settings.json) | button appears for a nonempty, sendable draft and calls the existing submit path | ⚠ wired; visibility rule and screenshot not yet compared with the official client |
 | dm-search | By default, search in DMs… | settings-proto `text_and_images.is_cross_dm_search_enabled` (6, 36) | — | 🟡 stored, no effect yet |
-| streamer | Enable Streamer Mode | local prefs (settings.json) | — | 🟡 stored, no effect yet |
+| streamer | Enable Streamer Mode | local prefs | with st-info: e-mail/phone stay masked; with st-notifs: desktop notifications muted | ✅ |
 | streamer-auto | Automatically enable if OBS or XSplit is running | local prefs (settings.json) | — | 🟡 stored, no effect yet |
-| st-info | Hide personal information like email, connected accounts and notes | local prefs (settings.json) | — | 🟡 stored, no effect yet |
+| st-info | Hide personal information like email, connected accounts and notes | local prefs | account e-mail / phone cannot be revealed (settings/view.rs) | ✅ |
 | st-invites | Hide invite links to my Discord servers | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | st-sounds | Disable all sound effects | local prefs (settings.json) | — | 🟡 stored, no effect yet |
-| st-notifs | Disable notifications | local prefs (settings.json) | — | 🟡 stored, no effect yet |
+| st-notifs | Disable notifications | local prefs | desktop notifications off while streaming (LocalPrefs::notifications_on) | ✅ |
 | underline | Always underline links | local prefs (settings.json) | links underlined (richtext run_for) | ✅ |
 | name-styles | Display name styles | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | density | UI Density | local prefs (settings.json) | --space-* tokens (existing) | ✅ |
 | display | Chat message display | settings-proto (modelled field) | compact mode (existing) | ✅ |
 | sat-custom | Apply saturation to custom colors | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | contrast | Enable High Contrast Mode | local prefs (settings.json) | — | 🟡 stored, no effect yet |
-| roles | Role colors | local prefs (settings.json) | "Hide"/"Next to names" stop tinting names (app.member_color); dot not drawn | ✅ |
+| roles | Role colors | local prefs | 0 tints names; 1 draws an 8px role dot after the name; 2 none (app.member_color / author_role_dot) | ✅ |
 | indicators | Show switch indicators | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | reduced-motion | Enable Reduced Motion | local prefs (settings.json) | modal, tooltip zoom, rail tip and guild pill animations ~0 ms (effects::motion) | ✅ |
 | motion-sync | Sync with computer settings | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | gifs | Play GIFs when Discord is focused | settings-proto `text_and_images.gif_auto_play` (6, 11) | gifv embeds show the still frame when off (chat.rs embed) | ✅ |
-| anim-emoji | Play animated emoji | local prefs (settings.json) | custom emoji animate (media::emoji, existing) | ✅ |
-| stickers | Sticker animations | settings-proto `text_and_images.animate_stickers` (6, 15) | — | 🟡 stored, no effect yet |
+| anim-emoji | Play animated emoji | settings-proto `text_and_images.animate_emoji` (6, 14) | custom emoji animate (media::emoji) | ✅ |
+| stickers | Sticker animations | settings-proto `text_and_images.animate_stickers` (6, 15) | animated stickers show their first frame unless Always (chat.rs still_sticker); hover-to-play not done | ✅ |
 | alt-text | Show image descriptions | settings-proto `text_and_images.view_image_descriptions` (6, 7) | — | 🟡 stored, no effect yet |
 | legacy-input | Use the legacy chat input | settings-proto `text_and_images.use_legacy_chat_input` (6, 24) | — | 🟡 stored, no effect yet |
 | startup | Open Discord when your computer starts | local prefs (settings.json) | — | 🟡 stored, no effect yet |
@@ -116,11 +116,7 @@ where its value is stored and what it changes in the UI.
 | saturation (slider) | Saturation | local prefs | theme tokens desaturated (`theme::saturate`) | ✅ |
 
 ## Known gaps
-* `anim-emoji` is synced in the client (`text_and_images.animate_emoji`, 6/14) but stays a local pref here.
-* Stored but without effect yet: game autocomplete,
-  streamer mode, high contrast, sticker animations, split thread view,
-  the notification toggles (server-side behaviour, nothing to render), system tray/startup/hw-accel.
-* Compact avatars are now gated by `display_compact_avatars`; the 40px size/offset still needs comparison in the official enabled state.
-* Role colors "Next to names" should draw a colored dot; currently it just stops tinting.
-* Spoilers "If moderator" behaves as "On click".
-* Gateway `USER_SETTINGS_PROTO_UPDATE` is not applied live (values refresh on the next load/save).
+* Session only, field not identified: data-sponsored, data-third, data-discovery (privacy ad/3p fields not mapped with certainty), share-profile (`privacy.profile_visibility` enum values unknown), n-stream.
+* Stored, no effect yet: high contrast (needs the client's high-contrast token set), st-invites / st-sounds, game autocomplete, split thread view, startup / hardware acceleration.
+* Compact avatars are gated by `display_compact_avatars`; the 40px size/offset still needs comparison in the official enabled state.
+* Live updates: USER_SETTINGS_PROTO_UPDATE (type 1) now reloads the synced settings (`AppEvent::SettingsChanged`).
