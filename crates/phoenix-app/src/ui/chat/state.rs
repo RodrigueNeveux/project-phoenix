@@ -256,6 +256,8 @@ impl PhoenixApp {
         if self.chat.pins.as_ref().is_some_and(|p| p.channel != channel) {
             self.chat.pins = None;
         }
+        // The threads browser lists the open channel's threads.
+        self.parity.threads_open = false;
         if self.chat.unread_marker.is_some_and(|(c, _)| c != channel) {
             self.chat.unread_marker = None;
         }

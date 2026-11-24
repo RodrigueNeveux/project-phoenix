@@ -443,6 +443,12 @@ pub trait Backend: Send + Sync + 'static {
         None
     }
     /// Newest message id of a channel (Browse Channels "last activity").
+    /// Inbox > Unreads channels in the client's order (`ui::inbox_unreads`),
+    /// from the read states and settings the backend holds. Read-only.
+    fn inbox_unreads(&self, _guild_order: &[Id]) -> Vec<crate::ui::inbox_unreads::Entry> {
+        Vec::new()
+    }
+
     fn channel_last_message(&self, _channel: Id) -> Option<Id> {
         None
     }

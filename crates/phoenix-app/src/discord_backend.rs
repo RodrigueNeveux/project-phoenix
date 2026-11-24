@@ -20,6 +20,7 @@ mod thread_members;
 mod pins;
 mod member_list_id;
 mod history;
+mod inbox;
 mod msg_cache;
 mod snapshot;
 #[cfg(test)]
@@ -93,6 +94,8 @@ struct Session {
     last_typing: Mutex<Option<(u64, Instant)>>,
     /// Notification levels / mutes for desktop notifications.
     notify: Mutex<crate::notifications::NotifyPrefs>,
+    /// READY `notification_settings` USE_NEW_NOTIFICATIONS (inbox unreads setting).
+    new_notifications: bool,
 }
 
 struct Inner {
@@ -309,6 +312,7 @@ fn start_session(
             ready.user_guild_settings.as_ref(),
             ready.guilds.iter().map(|g| (g.id.0, crate::notifications::Level::from_default(g.properties.default_message_notifications))).collect(),
         )),
+        new_notifications: inbox::new_notifications(ready.notification_settings.as_ref()),
     });
     pins::init(&session.cache);
     *inner.session.lock() = Some(session.clone());
@@ -532,6 +536,15 @@ impl Backend for DiscordBackend {
     fn channel_opted_in(&self, channel: Id) -> Option<bool> {
         let s = self.inner.session().ok()?;
         Some(s.adapter.lock().prefs.mutes.opted_in.contains(&channel.0))
+    }
+
+    fn inbox_unreads(&self, guild_order: &[Id]) -> Vec<crate::ui::inbox_unreads::Entry> {
+        let Ok(s) = self.inner.session() else { return Vec::new() };
+        // Clone first: never hold the notify and adapter locks together.
+        let notify = s.notify.lock().clone();
+        let adapter = s.adapter.lock();
+        let now = chrono::Utc::now().timestamp_millis().max(0) as u64;
+        inbox::Ctx { cache: &s.cache, prefs: &adapter.prefs, notify: &notify, new_notifications: s.new_notifications }.entries(guild_order, now)
     }
 
     fn channel_last_message(&self, channel: Id) -> Option<Id> {

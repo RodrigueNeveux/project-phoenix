@@ -325,6 +325,10 @@ impl Backend for ReadOnly {
         }
     }
     // Pins, expression pickers and search (PHX_OPEN): read-only GETs.
+    /// Inbox > Unreads: computed from the cached read states, no request.
+    fn inbox_unreads(&self, order: &[Id]) -> Vec<phoenix_app::ui::inbox_unreads::Entry> {
+        self.0.inbox_unreads(order)
+    }
     fn load_pins(&self, c: Id) -> BoxFuture<Vec<Message>> {
         self.0.load_pins(c)
     }

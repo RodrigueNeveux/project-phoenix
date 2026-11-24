@@ -1341,7 +1341,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         if ui::settings::on_escape(self, cx) {
             return;
         }
@@ -1356,6 +1356,8 @@ impl PhoenixApp {
         } else if self.people.any_overlay() {
             self.people.close_overlays();
             cx.notify();
+        } else if self.escape_header_popouts(cx) {
+            // Inbox / threads / pins: Esc closes them and never marks read.
         } else if self.switcher.is_some() {
             self.close_switcher(window, cx);
         } else if self.chat_escape(window, cx) {

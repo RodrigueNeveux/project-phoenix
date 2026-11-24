@@ -1117,6 +1117,19 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
         .child(
             div()
                 .id("search-popout")
+                .debug_selector(|| "search-options-popout".into())
+                // Live client: the options popout closes when the search bar loses
+                // focus; its layer lets the press through (no `trapClicks_`).
+                .on_mouse_down_out(cx.listener(|a, ev: &gpui::MouseDownEvent, w, cx| {
+                    let bar = gpui::Bounds::new(
+                        gpui::point(w.viewport_size().width - z(8. + 244.), z(layout::TITLE_BAR_H + 8.)),
+                        gpui::size(z(244.), z(32.)),
+                    );
+                    // A filter popover (date picker, combobox) draws outside the popout.
+                    if !bar.contains(&ev.position) && !crate::ui::search_filters::is_open(cx) {
+                        close(a, w, cx);
+                    }
+                }))
                 .absolute()
                 .top(z(layout::TITLE_BAR_H + layout::HEADER_H - 3.))
                 .right(z(12.))

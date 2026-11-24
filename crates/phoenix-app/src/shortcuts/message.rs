@@ -246,14 +246,15 @@ impl PhoenixApp {
         false
     }
 
-    /// Ctrl+Shift+E: mark the inbox's listed unread channels read (inbox open only).
+    /// Ctrl+Shift+E: mark the top channel of Inbox > Unreads read (inbox open
+    /// only; the tip of the empty state: "mark your top message as read").
     pub fn mark_inbox_read(&mut self, cx: &mut Context<Self>) {
-        if !self.parity.inbox.open {
+        let i = &self.parity.inbox;
+        if !i.open || i.tab != crate::commands::state::InboxTab::Unreads {
             return;
         }
-        let ids: Vec<Id> = self.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).map(|c| c.id).collect();
-        for id in ids {
-            self.mark_nav_read(crate::ui::nav_menus::Target::Channel(id), cx);
+        if let Some(id) = i.unreads.iter().find(|c| c.loaded).map(|c| c.entry.channel) {
+            self.mark_unread_card_read(id, cx);
         }
     }
 

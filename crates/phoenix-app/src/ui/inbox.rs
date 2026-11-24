@@ -80,6 +80,92 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    /// Inbox, threads browser and pins: the header popouts. Closes them all;
+    /// true when one was open (Esc, a click outside, a channel switch).
+    pub fn close_header_popouts(&mut self, cx: &mut Context<Self>) -> bool {
+        let open = self.header_popout_open();
+        self.parity.inbox.open = false;
+        self.parity.inbox.filter_menu = false;
+        self.parity.threads_open = false;
+        self.chat.pins = None;
+        if open {
+            cx.notify();
+        }
+        open
+    }
+
+    pub fn header_popout_open(&self) -> bool {
+        self.parity.inbox.open || self.parity.threads_open || self.chat.pins.is_some()
+    }
+
+    /// Esc: the Mentions filter menu first, then the popout itself.
+    pub fn escape_header_popouts(&mut self, cx: &mut Context<Self>) -> bool {
+        if self.parity.inbox.open && self.parity.inbox.filter_menu {
+            self.parity.inbox.filter_menu = false;
+            cx.notify();
+            return true;
+        }
+        self.close_header_popouts(cx)
+    }
+
+    /// Inbox > Unreads: the client's channel list (`ui::inbox_unreads`), built
+    /// from the read states the backend holds; no request, no ack.
+    fn load_unreads(&mut self, cx: &mut Context<Self>) {
+        use crate::ui::inbox_unreads::Kind;
+        let order = crate::ui::server_bar::flat_guild_order(self);
+        let entries = self.backend.inbox_unreads(&order);
+        let i = &mut self.parity.inbox;
+        i.unreads_gen += 1;
+        i.unreads_loading = false;
+        i.unreads = entries
+            .into_iter()
+            .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false })
+            .collect();
+        self.load_next_unread(cx);
+        cx.notify();
+    }
+
+    /// Loads the next card: `GET messages?around=<ack>&limit=30` (read-only).
+    /// A card with nothing to show is dropped; the client acks it
+    /// (`ACK_INBOX_CHANNEL_NO_MESSAGES`), Phoenix does not.
+    pub(crate) fn load_next_unread(&mut self, cx: &mut Context<Self>) {
+        use crate::ui::inbox_unreads::{FETCH_LIMIT, Kind, shown_messages};
+        let i = &mut self.parity.inbox;
+        if i.unreads_loading {
+            return;
+        }
+        let Some(card) = i.unreads.iter().find(|c| !c.loaded) else { return };
+        let entry = card.entry.clone();
+        i.unreads_loading = true;
+        let generation = i.unreads_gen;
+        let fut = self.backend.load_messages_at(entry.channel, crate::backend::HistoryAt::Around(entry.oldest_read), FETCH_LIMIT);
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |a, cx| {
+                let i = &mut a.parity.inbox;
+                if i.unreads_gen != generation {
+                    return;
+                }
+                i.unreads_loading = false;
+                if let Some(card) = i.unreads.iter_mut().find(|c| c.entry.channel == entry.channel) {
+                    card.loaded = true;
+                    if let Ok(msgs) = res {
+                        (card.msgs, card.more) = shown_messages(&entry, msgs);
+                    }
+                }
+                i.unreads.retain(|c| !c.loaded || c.entry.kind != Kind::Messages || !c.msgs.is_empty());
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// The check button of a card (and Ctrl+Shift+E on the top one): ack it.
+    pub fn mark_unread_card_read(&mut self, channel: Id, cx: &mut Context<Self>) {
+        self.parity.inbox.unreads.retain(|c| c.entry.channel != channel);
+        self.mark_nav_read(crate::ui::nav_menus::Target::Channel(channel), cx);
+    }
+
     fn set_inbox_tab(&mut self, tab: InboxTab, cx: &mut Context<Self>) {
         self.parity.inbox.tab = tab;
         self.parity.inbox.filter_menu = false;
@@ -104,16 +190,17 @@ impl PhoenixApp {
                 ParityRequest::Mentions {
                     before: i.mentions.last().map(|m| m.id),
                     guild: if i.this_server { self.selected_guild } else { None },
+                    everyone: i.everyone,
+                    roles: i.roles,
                 }
             }
             InboxTab::Saved => ParityRequest::SavedMessages,
             InboxTab::Reminders => return self.load_reminders_tab(cx),
             InboxTab::Scheduled => ParityRequest::ScheduledMessages,
-            InboxTab::Unreads => return,
+            InboxTab::Unreads => return self.load_unreads(cx),
         };
         i.loading = true;
         let tab = i.tab;
-        let (everyone, roles) = (i.everyone, i.roles);
         let me = self.me.id;
         self.parity_request(req, cx, move |a, res, cx| {
             let i = &mut a.parity.inbox;
@@ -122,9 +209,9 @@ impl PhoenixApp {
                 Ok(ParityReply::Messages(msgs)) => match tab {
                     InboxTab::Mentions => {
                         i.reached_end = msgs.len() < 25;
-                        // The endpoint flags are applied locally too (cheap, and
-                        // the toggles act at once on what is loaded).
-                        i.mentions.extend(msgs.into_iter().filter(|m| keep_mention(m, me, everyone, roles)));
+                        // The endpoint applies the filters (`everyone`, `roles`,
+                        // `guild_id`), like the client's fetchRecentMentions.
+                        i.mentions.extend(msgs);
                     }
                     InboxTab::Scheduled => {
                         i.scheduled = msgs.into_iter().map(|m| Message { author: me, ..m }).collect();
@@ -241,20 +328,6 @@ impl PhoenixApp {
             }
         });
     }
-}
-
-fn keep_mention(m: &Message, me: Id, everyone: bool, roles: bool) -> bool {
-    let direct = m.content.contains(&format!("<@{}>", me.0)) || m.content.contains(&format!("<@!{}>", me.0));
-    if direct {
-        return true;
-    }
-    if m.mention_everyone {
-        return everyone;
-    }
-    if m.content.contains("<@&") {
-        return roles;
-    }
-    true
 }
 
 /// Rail order as `guild_folders`: guilds outside folders first (one lone
@@ -817,6 +890,101 @@ fn message_entry(
         .into_any_element()
 }
 
+/// One Inbox > Unreads card (client `n5` header + `n3` messages): the channel
+/// head with its mark-read button, then up to 25 unread messages, grouped like
+/// the chat (same author within 7 minutes), with day dividers unless the first
+/// one is from today, and "View all" when more are unread.
+fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let ch = card.entry.channel;
+    let first = card.msgs.first().map(|m| m.id);
+    let head = div()
+        .id(("inbox-unread", ch.0))
+        .cursor_pointer()
+        .on_click(cx.listener(move |a, _, _, cx| match first {
+            Some(id) => a.jump_from_inbox(ch, id, cx),
+            None => {
+                a.parity.inbox.open = false;
+                a.select_channel(ch, cx);
+            }
+        }))
+        .child(channel_head(
+            app,
+            ch,
+            vec![sm_icon_button(("inbox-unread-read", ch.0), "check").on_click(cx.listener(move |a, _, _, cx| {
+                cx.stop_propagation();
+                a.mark_unread_card_read(ch, cx);
+            }))],
+        ));
+    let local_day = |ts: i64| chrono::DateTime::from_timestamp(ts, 0).map(|d| d.with_timezone(&chrono::Local).date_naive());
+    let today = chrono::Local::now().date_naive();
+    let days = card.msgs.first().is_some_and(|m| local_day(m.timestamp) != Some(today));
+    let mut body = div().py(z(8.)).flex().flex_col();
+    let mut prev: Option<&Message> = None;
+    for m in &card.msgs {
+        let day = local_day(m.timestamp);
+        if days && prev.is_none_or(|p| local_day(p.timestamp) != day) {
+            if let Some(d) = day {
+                body = body.child(day_divider(crate::i18n::long_date(d).into()));
+            }
+            prev = None;
+        }
+        let start = prev.is_none_or(|p| p.author != m.author || m.timestamp - p.timestamp > 7 * 60);
+        let id = m.id;
+        let row = if start {
+            cozy_message(app, m, 2., cx)
+        } else {
+            div()
+                .pl(z(80.))
+                .pr(z(20.))
+                .py(z(1.))
+                .text_size(z(16.))
+                .line_height(z(22.))
+                .text_color(tk(idx::TEXT_DEFAULT))
+                .child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id))
+        };
+        // Hover "Jump" pill (`jumpButton_`), top-end of the message.
+        let group: SharedString = format!("inbox-unread-msg-{}", id.0).into();
+        body = body.child(
+            div().relative().group(group.clone()).child(row).child(
+                div()
+                    .absolute()
+                    .top(z(0.))
+                    .right(z(12.))
+                    .opacity(0.)
+                    .group_hover(group, |s| s.opacity(1.))
+                    .child(sm_text_button(("inbox-unread-jump", id.0), crate::t!("inbox.jump"), false).on_click(cx.listener(move |a, _, _, cx| a.jump_from_inbox(ch, id, cx)))),
+            ),
+        );
+        prev = Some(m);
+    }
+    if card.more
+        && let Some(last) = card.msgs.last().map(|m| m.id)
+    {
+        body = body.child(
+            div()
+                .pt(z(8.))
+                .flex()
+                .justify_center()
+                .child(sm_text_button(("inbox-unread-all", ch.0), crate::t!("inbox.view_all"), true).on_click(cx.listener(move |a, _, _, cx| a.jump_from_inbox(ch, last, cx)))),
+        );
+    }
+    inbox_box().child(head).child(body).into_any_element()
+}
+
+/// Day divider of the unread cards (`divider_` with the "LL" date).
+fn day_divider(label: SharedString) -> gpui::Div {
+    let line = || div().flex_1().h(z(1.)).bg(tk(idx::BORDER_SUBTLE));
+    div()
+        .mx(z(16.))
+        .my(z(8.))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .child(line())
+        .child(div().text_size(z(12.)).line_height(z(13.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_MUTED)).child(label))
+        .child(line())
+}
+
 /// Filter dropdown of the Mentions tab (a `menu_M3qk4j` with checkbox rows).
 fn filter_menu(i: &crate::commands::state::InboxState, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let toggle = |f: fn(&mut crate::commands::state::InboxState)| {
@@ -887,10 +1055,11 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let mut controls = div().ml_auto().flex().items_center().gap(z(8.));
     match i.tab {
         InboxTab::Unreads => {
+            // markAllRead: acks the listed channels only (user action).
             controls = controls.child(sm_icon_button("inbox-read-all", "inbox/read-all").on_click(cx.listener(|a, _, _, cx| {
-                let ids: Vec<Id> = a.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).map(|c| c.id).collect();
+                let ids: Vec<Id> = a.parity.inbox.unreads.iter().map(|c| c.entry.channel).collect();
                 for id in ids {
-                    a.mark_nav_read(crate::ui::nav_menus::Target::Channel(id), cx);
+                    a.mark_unread_card_read(id, cx);
                 }
             })))
         }
@@ -933,7 +1102,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         .child(tab_bar(i.tab, cx));
 
     // scroller_0JZW4Z: padding 16 16 0.
-    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().flex().flex_col();
+    let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&INBOX_SCROLL.with(|h| h.clone())).flex().flex_col();
     let scroller = |l: gpui::Stateful<gpui::Div>| l.pt(z(16.)).px(z(16.));
     match i.tab {
         InboxTab::Mentions => {
@@ -1008,32 +1177,18 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             ));
         }
         InboxTab::Unreads => {
-            let mut unread: Vec<_> = app.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).collect();
-            unread.sort_by_key(|c| (std::cmp::Reverse(c.mentions), c.guild, c.position));
-            if unread.is_empty() {
+            // Cards render once loaded (`hasLoadedAnything`), in list order; a
+            // loaded card with nothing to show is dropped.
+            if i.unreads.is_empty() {
                 list = list.child(caught_up(Some(crate::t!("inbox.unreads_tip"))));
             } else {
                 list = scroller(list);
             }
-            for ch in unread.into_iter().take(50) {
-                let id = ch.id;
-                list = list.child(
-                    div()
-                        .id(("inbox-unread", id.0))
-                        .cursor_pointer()
-                        .on_click(cx.listener(move |a, _, _, cx| {
-                            a.parity.inbox.open = false;
-                            a.select_channel(id, cx);
-                        }))
-                        .child(inbox_box().child(channel_head(
-                            app,
-                            id,
-                            vec![sm_icon_button(("inbox-unread-read", id.0), "check").on_click(cx.listener(move |a, _, _, cx| {
-                                cx.stop_propagation();
-                                a.mark_nav_read(crate::ui::nav_menus::Target::Channel(id), cx);
-                            }))],
-                        ))),
-                );
+            for card in i.unreads.iter().filter(|c| c.loaded) {
+                list = list.child(unread_card(app, card, cx));
+            }
+            if i.unreads_loading {
+                list = list.child(div().pb(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")));
             }
         }
     }
@@ -1048,6 +1203,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         gpui::deferred(
             div()
                 .id("inbox-popout")
+                .debug_selector(|| "inbox-popout".into())
                 .absolute()
                 .top(z(m::TITLE_BAR_H + 4.)) // container_uTMZTY y 36 (vanilla-inbox-1 #2620)
                 .right(z(crate::ui::title_bar::inbox_right_inset())) // right edge = inbox button's
@@ -1227,6 +1383,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
         gpui::deferred(
             div()
                 .id("threads-popout")
+                .debug_selector(|| "threads-popout".into())
                 .absolute()
                 .top(z(m::TITLE_BAR_H + m::HEADER_H - 3.))
                 .right(z(HDR_RIGHT_THREADS))
@@ -1336,9 +1493,11 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
         );
     }
     let right = if is_dm { hdr_right(2.) } else { hdr_right(1.) };
-    Some(
+    // Deferred: drawn over the click trap of `popouts` like the inbox.
+    Some(gpui::deferred(
         div()
             .id("pins-popout")
+            .debug_selector(|| "pins-popout".into())
             .absolute()
             .top(z(m::HEADER_H - 3.))
             .right(z(right))
@@ -1365,13 +1524,39 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                     .child(div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(crate::t!("pins.title"))),
             )
             .child(list)
-            .children(footer)
-            .into_any_element(),
+            .children(footer),
     )
+    .with_priority(10)
+    .into_any_element())
+}
+
+thread_local! {
+    static INBOX_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+}
+
+/// The client's `clickTrapContainer_ trapClicks_` under a header popout: a
+/// full-window layer that closes it on any press outside and swallows that
+/// press (the trigger button included, so a second click closes).
+fn click_trap(cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let close = |a: &mut PhoenixApp, _: &gpui::MouseDownEvent, _: &mut Window, cx: &mut Context<PhoenixApp>| {
+        a.close_header_popouts(cx);
+    };
+    div()
+        .id("popout-click-trap")
+        .absolute()
+        .inset_0()
+        .occlude()
+        .on_mouse_down(gpui::MouseButton::Left, cx.listener(close))
+        .on_mouse_down(gpui::MouseButton::Right, cx.listener(close))
+        .on_mouse_down(gpui::MouseButton::Middle, cx.listener(close))
+        .into_any_element()
 }
 
 pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out = Vec::new();
+    if app.header_popout_open() {
+        out.push(click_trap(cx));
+    }
     out.extend(inbox(app, cx));
     out.extend(threads(app, cx));
     out
@@ -1404,6 +1589,15 @@ pub fn svg_asset(path: &str) -> Option<&'static str> {
 
 /// Build the inputs that need a `Window` (group DM search).
 pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    // Unreads loads the next card while the list end is within 2000px of the
+    // viewport bottom (client `maybeLoadMore`).
+    let i = &app.parity.inbox;
+    if i.open && i.tab == InboxTab::Unreads && !i.unreads_loading && i.unreads.iter().any(|c| !c.loaded) {
+        let near = INBOX_SCROLL.with(|h| h.max_offset().y + h.offset().y < gpui::px(2000.));
+        if near {
+            app.load_next_unread(cx);
+        }
+    }
     if let Some(p) = app.parity.group_dm.as_mut()
         && p.search.is_none()
     {
@@ -1820,13 +2014,10 @@ mod tests {
     }
 
     #[test]
-    fn mention_filters() {
-        let me = Id(5);
-        let m = |content: &str, everyone| Message { content: content.to_owned().into(), mention_everyone: everyone, ..Default::default() };
-        assert!(keep_mention(&m("<@5> hi", true), me, false, false));
-        assert!(!keep_mention(&m("@everyone", true), me, false, true));
-        assert!(!keep_mention(&m("<@&9>", false), me, true, false));
-        assert!(keep_mention(&m("<@&9>", false), me, true, true));
+    fn mention_filters_default_on() {
+        // Client RecentMentionsStore: {guildFilter: ALL_SERVERS, everyoneFilter: true, roleFilter: true}.
+        let i = crate::commands::state::InboxState::default();
+        assert!(i.everyone && i.roles && !i.this_server);
     }
 
     #[test]

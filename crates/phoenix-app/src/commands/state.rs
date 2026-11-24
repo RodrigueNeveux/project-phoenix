@@ -145,7 +145,16 @@ pub enum InboxTab {
     Scheduled,
 }
 
-#[derive(Default)]
+/// One channel card of Inbox > Unreads.
+pub struct UnreadCard {
+    pub entry: crate::ui::inbox_unreads::Entry,
+    /// Unread messages shown (oldest first, at most 25).
+    pub msgs: Vec<Message>,
+    /// More unread messages than shown: "View all" button.
+    pub more: bool,
+    pub loaded: bool,
+}
+
 pub struct InboxState {
     pub open: bool,
     pub tab: InboxTab,
@@ -160,6 +169,33 @@ pub struct InboxState {
     pub this_server: bool,
     pub everyone: bool,
     pub roles: bool,
+    /// Inbox > Unreads, in the client's order; cards load one at a time.
+    pub unreads: Vec<UnreadCard>,
+    pub unreads_loading: bool,
+    /// Bumped on every rebuild: drops loads of a previous opening.
+    pub unreads_gen: u64,
+}
+
+impl Default for InboxState {
+    fn default() -> Self {
+        // Client RecentMentionsStore defaults: all servers, @everyone and roles on.
+        Self {
+            open: false,
+            tab: InboxTab::default(),
+            mentions: Vec::new(),
+            saved: Vec::new(),
+            scheduled: Vec::new(),
+            loading: false,
+            reached_end: false,
+            filter_menu: false,
+            this_server: false,
+            everyone: true,
+            roles: true,
+            unreads: Vec::new(),
+            unreads_loading: false,
+            unreads_gen: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

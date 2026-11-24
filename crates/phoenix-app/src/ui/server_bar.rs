@@ -58,6 +58,17 @@ fn rail(app: &PhoenixApp) -> Vec<RailItem<'_>> {
     out
 }
 
+/// Guild ids in rail order, folders flattened (client `getFlattenedGuildIds`).
+pub fn flat_guild_order(app: &PhoenixApp) -> Vec<Id> {
+    rail(app)
+        .into_iter()
+        .flat_map(|item| match item {
+            RailItem::Guild(g, _) => vec![g.id],
+            RailItem::Folder { guilds, .. } => guilds.iter().map(|g| g.id).collect(),
+        })
+        .collect()
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     let scroll = RAIL_SCROLL.with(|h| h.clone());

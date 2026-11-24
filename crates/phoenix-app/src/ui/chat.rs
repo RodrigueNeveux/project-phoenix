@@ -326,7 +326,7 @@ fn hdr(id: &'static str, path: SharedString, color: gpui::Hsla) -> gpui::Statefu
         "dm-profile" => crate::t!("header.profile_show"),
         _ => crate::t!("header.more"),
     };
-    crate::ui::states::header_button(id, path, selected, label)
+    crate::ui::states::header_button(id, path, selected, label).debug_selector(move || format!("hdr-{id}"))
 }
 
 thread_local! {

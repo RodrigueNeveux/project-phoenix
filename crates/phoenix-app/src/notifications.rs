@@ -50,6 +50,9 @@ pub struct ChannelPrefs {
     pub muted: bool,
     /// `mute_config.end_time` in ms (temporary mute).
     pub until: Option<i64>,
+    /// Override flags (FAVORITED 2048, UNREADS_ALL_MESSAGES 1024,
+    /// UNREADS_ONLY_MENTIONS 512, OPT_IN_ENABLED 4096).
+    pub flags: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +68,8 @@ pub struct GuildPrefs {
     /// The entry carried its own `message_notifications`; otherwise `level`
     /// is the server default (`{...H(e), ...entry}` in the client store).
     pub explicit_level: bool,
+    /// Guild flags (UNREADS_ALL_MESSAGES 2048, UNREADS_ONLY_MENTIONS 4096).
+    pub flags: u64,
 }
 
 impl Default for GuildPrefs {
@@ -85,6 +90,7 @@ impl GuildPrefs {
             suppress_roles: false,
             channels: HashMap::new(),
             explicit_level: false,
+            flags: 0,
         }
     }
 }
@@ -146,6 +152,7 @@ fn parse_entry(e: &Value, default: Level, now_ms: i64) -> GuildPrefs {
         suppress_everyone: e.get("suppress_everyone").and_then(Value::as_bool).unwrap_or(false),
         suppress_roles: e.get("suppress_roles").and_then(Value::as_bool).unwrap_or(false),
         channels: HashMap::new(),
+        flags: e.get("flags").and_then(Value::as_u64).unwrap_or(0),
     };
     let overrides = e.get("channel_overrides");
     let list: Vec<&Value> = match overrides {
@@ -156,7 +163,13 @@ fn parse_entry(e: &Value, default: Level, now_ms: i64) -> GuildPrefs {
     for o in list {
         if let Some(id) = snowflake(o.get("channel_id")) {
             let (muted, until) = read_mute(o, now_ms);
-            g.channels.insert(id, ChannelPrefs { level: Level::from_value(o.get("message_notifications")), muted, until });
+            g.channels.insert(id, ChannelPrefs {
+                    level: Level::from_value(o.get("message_notifications")),
+                    muted,
+                    until,
+                    flags: o.get("flags").and_then(Value::as_u64).unwrap_or(0),
+                },
+            );
         }
     }
     g

@@ -35,6 +35,9 @@ pub struct Ready {
     pub read_state: Option<Value>,
     #[serde(default)]
     pub user_guild_settings: Option<Value>,
+    /// Account notification settings (`flags & 16` = USE_NEW_NOTIFICATIONS).
+    #[serde(default)]
+    pub notification_settings: Option<Value>,
     #[serde(default)]
     pub user_settings: Option<Value>,
     #[serde(default)]

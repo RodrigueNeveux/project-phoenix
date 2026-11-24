@@ -18,6 +18,9 @@ pub mod focus_ring;
 pub mod forum;
 pub mod group_dm;
 pub mod inbox;
+pub mod inbox_unreads;
+#[cfg(test)]
+mod popout_tests;
 pub mod context_menu;
 pub mod controls;
 pub mod guild_menu;

@@ -30,6 +30,7 @@ fn title(app: &PhoenixApp) -> (Icon, SharedString) {
 fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
+        .debug_selector(move || id.to_owned())
         .size(z(24.))
         .flex_none()
         .flex()

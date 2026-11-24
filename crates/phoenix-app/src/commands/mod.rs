@@ -120,7 +120,8 @@ pub enum ParityRequest {
     },
     /// Modal submit: `fields` = (custom_id, value) of each text input.
     ModalSubmit { guild: Option<Id>, channel: Id, app: Id, modal: Id, custom_id: String, fields: Vec<(String, String)> },
-    Mentions { before: Option<Id>, guild: Option<Id> },
+    /// `GET /users/@me/mentions` with the inbox filters (`everyone`, `roles`).
+    Mentions { before: Option<Id>, guild: Option<Id>, everyone: bool, roles: bool },
     DismissMention(Id),
     SavedMessages,
     /// `GET /users/@me/scheduled-messages` (Inbox > Scheduled), read-only.

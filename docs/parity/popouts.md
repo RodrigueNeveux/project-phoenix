@@ -271,3 +271,61 @@ The `vanilla-picker-*`, `-quickswitcher`, `-inbox-*`, `-pins`, `-threads` and `-
 | pins | pins #2595 `messagesPopoutWrap_6bgemo` | 420x387 | `inbox.rs` 420 | ✅ |
 | threads | threads #2606 `browser_l-3BKx` | 480x449 | `inbox.rs` 480 | ✅ |
 | search popout | vanilla-search-popout-2 #1354 `container_cbVzxY` | 356×289 at x 891 y 81 (viewport 1259: right gap 12), padding 12 8; Filtres group only (history empty) | search.rs WIDTH 356, options_popout: 356×290 at right 12, y 78 | ✅ boxes match within 1–3 px (dump PNG taken after the layer closed, so no pixel score) |
+
+## Dismissal of the popouts — live CDP pass (2026-11-24, wt/popouts)
+
+Measured on the live client by opening each popout and then: a press outside (on the composer),
+Esc, a second press on the trigger, and a `window` blur event. Nothing was confirmed. Layer
+markup: every header popout sits in `layerContainer_VVADeK` > `clickTrapContainer_VVADeK
+trapClicks_VVADeK`, a full-window layer. `elementFromPoint` on the composer returns the trap, so
+the press that closes the popout never reaches what lies under it.
+
+| popout | press outside | Esc | trigger again | window blur | Phoenix | status |
+|---|---|---|---|---|---|---|
+| inbox (title bar) | closes, press swallowed | closes | closes | stays open | `inbox.rs` `click_trap` + `escape_header_popouts`; GPUI test `inbox_closes_like_the_client` | ✅ (was: never closed; Esc fell through to "mark channel read" and acked the channel) |
+| inbox Mentions filter menu | closes with the inbox | closes the menu first | — | — | `escape_header_popouts` | ✅ test `inbox_filter_menu_closes_first_on_escape` |
+| pinned messages | closes, press swallowed | closes | closes | — | trap + deferred pins popout; test `pins_popout_closes_like_the_client` | ✅ (was: no outside press) |
+| threads browser | closes, press swallowed | closes | closes | — | trap; closes on channel switch; test `threads_popout_closes_like_the_client` | ✅ (was: no outside press, no Esc) |
+| channel notification menu (bell) | closes, press swallowed | closes | closes | — | the header bell has no menu in Phoenix yet | ❌ not built |
+| guild header menu | closes, press swallowed | closes | closes | — | `guild_menu.rs` backdrop (already) | ✅ |
+| search options popout | closes, the press goes through (trap without `trapClicks_`) | closes and blurs | — | — | `search.rs` `on_mouse_down_out` (press outside the bar and the popout closes the search; the press reaches what is under it) | ✅ ⚠ the typed query is dropped; the client keeps it in the bar |
+| context menus, profile popout, status picker, voice popout, pickers, switcher | — | — | — | — | full-window backdrops (already) | ✅ code audit (not re-measured) |
+| account popout (user panel) | not detected by the layer probe | — | — | — | `people.status_picker` backdrop | ➖ not measured |
+
+Channel switch: not measured on the live client (it would move the user's navigation). Phoenix
+closes the pins and the threads browser, which list the open channel's content, and keeps the
+inbox open.
+
+## Inbox > Unreads — the client's algorithm (2026 bundle, inbox chunk) — wt/popouts
+
+The Unreads tab could not be compared in the DOM. Opening it in the live client sent two acks
+without any click: `POST /channels/<id>/messages/<last>/ack` on two channels the user had not
+opened. It was not reopened. The bundle explains these
+acks: when a channel card loads and has no message to show, the client acks it by itself
+(`ACK_INBOX_CHANNEL_NO_MESSAGES`, `objectType: ACK_AUTOMATIC`). Forum cards with no new post get
+the same treatment (`ACK_INBOX_FORUM_NO_POSTS`). Phoenix never acks from the inbox; it only hides
+such cards. The list is rebuilt from the code instead (`ui/inbox_unreads.rs`, unit tests).
+
+| rule | client | Phoenix | status |
+|---|---|---|---|
+| walk order | sorted DMs, then `getFlattenedGuildIds` (rail, folders flattened): each guild's selectable channels in list order, each followed by its active joined unread threads | `server_bar::flat_guild_order` + `discord_backend/inbox.rs` `Ctx::entries` | ✅ |
+| skipped | muted guild / category / channel (threads: their own mute), no READ_MESSAGE_HISTORY, ack ≥ last message, DM without a mention, guild channel without mentions whose unreads setting is not "all messages" | `inbox_unreads::build` | ✅ |
+| ack fallback | never read: the guild `joined_at` as a snowflake; no join date: skipped | `Candidate::joined` | ✅ |
+| unreads setting | `USE_NEW_NOTIFICATIONS` (READY `notification_settings.flags & 16`) off: all messages; on: channel / parent override flags 1024 / 512, guild flags 2048 / 4096, else "all messages" iff the resolved level is all messages | `Ctx::unreads_all` | ✅ |
+| order | stable sort: favourite (override flag 2048) 0, DM 1, mention 2 (low importance 3), last message > 10 days 8, > 2 days 6, then level: all 4, default 5, nothing 7 | `sort_order` | ✅ low-importance mentions are counted as 2 |
+| messages | `fetchMessages({limit: 30, jump: {messageId: ack}})` = `GET …/messages?around=<ack>&limit=30`; kept: ack < id ≤ last message; 25 shown; "View all unreads ›" when the last one shown is older than the last message | `load_next_unread` + `shown_messages` (read-only GET, no ack) | ✅ |
+| loading | one card at a time while the list end is within 2000 px of the bottom; a card renders once loaded | `inbox::prepare` | ✅ |
+| card | guild icon, chevron, name + guild › category, bell (notification menu) and check (ack, a user action); day dividers unless the first message is from today; author groups | `unread_card` | ✅ ⚠ no bell button; no blocked-message collapse; forum cards show the header only (the client lists the new posts) |
+| guild events card | `guild-events` read state (sortOrder 5) | — | ❌ not built |
+| Ctrl+Shift+E | marks the top card read | `mark_inbox_read` | ✅ (was: acked every unread channel) |
+| Mark All Read | acks the listed channels | header button | ✅ (was: every unread guild channel) |
+
+## Inbox > Mentions and "For You"
+
+- Filters: the client store defaults to `{guildFilter: ALL_SERVERS, everyoneFilter: true,
+  roleFilter: true}` and sends them to `GET /users/@me/mentions?limit=25&roles=&everyone=&guild_id=`.
+  Phoenix started with both filters off and dropped @everyone and role mentions locally. ✅ fixed:
+  both start on and are sent to the endpoint, with no local filter (`InboxState::default`,
+  `ParityRequest::Mentions`).
+- "For You": not in the 2026 client. The inbox chunk has no For You tab, and the tab bar has
+  five tabs: Unreads, Mentions, Saved, Reminders, Scheduled (vanilla-inbox dumps). ➖

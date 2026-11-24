@@ -121,8 +121,8 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             rest.create_interaction(body).await.map_err(e)?;
             ParityReply::Done
         }
-        ParityRequest::Mentions { before, guild } => {
-            let q = MentionsQuery { before: before.map(sf), guild: guild.map(sf), ..Default::default() };
+        ParityRequest::Mentions { before, guild, everyone, roles } => {
+            let q = MentionsQuery { before: before.map(sf), guild: guild.map(sf), everyone, roles, ..Default::default() };
             let msgs = rest.get_mentions(q).await.map_err(e)?;
             emit_users(&emit, &msgs.iter().collect::<Vec<_>>());
             ParityReply::Messages(msgs.iter().map(message).collect())
