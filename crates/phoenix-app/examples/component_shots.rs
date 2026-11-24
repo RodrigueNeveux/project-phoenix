@@ -76,6 +76,7 @@ fn main() -> anyhow::Result<()> {
     phoenix_app::ui::activity_traits::seed(vec![
         entry(1, 5, "Fortnite", false, false),
         entry(2, 13, "VALORANT", true, false),
+        InventoryEntry { content_type: 8, ..entry(6, 9, "Word Bomb", false, false) },
         entry(3, 17, "Roblox", false, true),
         entry(4, 19, "Minecraft", false, false),
     ]);
@@ -92,13 +93,22 @@ fn main() -> anyhow::Result<()> {
             if let Some(u) = app.users.get_mut(&Id(5)) {
                 u.nameplate = Some((plate.clone().into(), Some(0x5865f2)));
             }
+            // Emoji in channel names, like "〢❓・aide-membres" on real servers.
+            for ch in app.channels.values_mut() {
+                match ch.name.as_ref() {
+                    "help" => ch.name = "〢❓・help".into(),
+                    "off-topic" => ch.name = "〢📞・off-topic".into(),
+                    "memes" => ch.name = "〢🎟️・memes".into(),
+                    _ => {}
+                }
+            }
             if let Some(u) = app.users.get_mut(&Id(13)) {
                 u.display_name = "Quartz (a very long display name)".into();
             }
             app.member_list.remeasure();
         });
     })?;
-    pump(&mut cx, 6);
+    pump(&mut cx, 60); // let Twemoji images load
     let shot = |cx: &mut HeadlessAppContext| -> anyhow::Result<image::RgbaImage> {
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
         pump(cx, 2);

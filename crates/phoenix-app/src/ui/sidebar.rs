@@ -423,7 +423,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                                 .line_height(z(18.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_ellipsis()
-                                .child(ch.name.clone()),
+                                .child(crate::ui::emoji_text::label(ch.name.clone(), 14.)),
                         )
                         .child(
                             icon(Icon::Chevron, 12., t(idx::CHANNELS_DEFAULT))
@@ -912,7 +912,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                         (is_dm && !is_group).then(|| ch.voice_users.first().and_then(|u| app.users.get(u))).flatten(),
                                         false,
                                     )
-                                    .child(name),
+                                    .child(crate::ui::emoji_text::label(name, 16.)),
                                 )
                                 // 1:1 DM: server tag chiplet after the name, chipletContainerInner_ margin-left 4px
                                 // (vanilla-dm #677).
@@ -1018,7 +1018,7 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                         .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE))) // wrapper_TNyK-N:active
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_thread(id, cx)))
-                .child(div().flex_1().min_w_0().text_ellipsis().child(th.name.clone()))
+                .child(div().flex_1().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(th.name.clone(), 16.)))
                 .when(mentions > 0, |d| d.child(badge(mentions).bg(c(Palette::NOTIFICATION)))),
         )
         .into_any_element()

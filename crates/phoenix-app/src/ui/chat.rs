@@ -402,7 +402,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .line_height(z(20.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(tk(idx::TEXT_STRONG))
-                        .child(name),
+                        .child(crate::ui::emoji_text::label(name, 16.)),
                 )
                 .when(discoverable, |d| {
                     // vanilla-guild-text #1060 dot_GxzgQj: 4px, --background-mod-strong, margin-inline 4 12;

@@ -18,6 +18,9 @@
 use std::{path::PathBuf, sync::OnceLock};
 
 const PREFIX: &str = "Phx ";
+/// The system color emoji font (`fc-match emoji`), which Chromium uses for
+/// emoji-presentation characters before walking the font stack.
+pub const EMOJI_FAMILY: &str = "Noto Color Emoji";
 /// `--font-primary` after "gg sans".
 const STACK: [&str; 4] = ["Noto Sans", "Helvetica Neue", "Helvetica", "Arial"];
 /// How many families of the fontconfig sort get private single-name copies.
@@ -123,6 +126,12 @@ pub fn register(cx: &mut gpui::App) {
         if ok {
             chain[i] = new;
         }
+    }
+    // The color emoji font, loaded as is so `EMOJI_FAMILY` resolves (ui::emoji_text).
+    if let Some(file) = fc(&["emoji"], "%{file}").into_iter().next()
+        && let Ok(bytes) = std::fs::read(&file)
+    {
+        blobs.push(bytes.into());
     }
     if have_web && let Some(i) = chain.iter().position(|f| f == "Phx Noto Sans" || f == "Noto Sans") {
         chain[i] = web_name;
