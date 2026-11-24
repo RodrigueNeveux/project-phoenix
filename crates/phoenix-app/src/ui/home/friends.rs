@@ -246,14 +246,49 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
         });
     let mut col = div().id("friends-list").flex_1().min_h_0().overflow_y_scroll().pb(z(8.)).flex().flex_col();
     if rows.is_empty() {
-        let msg = match tab {
-            FriendsTab::Online => crate::t!("friends.empty_online"),
-            FriendsTab::Pending => crate::t!("friends.empty_pending"),
-            FriendsTab::Blocked => crate::t!("friends.empty_blocked"),
-            _ => crate::t!("friends.empty_all"),
+        // `FriendsEmptyState` (2026 web bundle): only the note, no illustration (the
+        // light/dark sources are declared but never rendered). `friendsEmpty_Bb-Yop`
+        // flex-grow 1, centred; `wrapper_PDJTSB` max-width 440; `text_PDJTSB marginTop8_`
+        // body-md/normal --text-muted, centred. All adds a primary "Add Friend"
+        // (`button_Bb-Yop` margin-top 20); an unmatched search shows SECTION_NO_RESULTS.
+        let msg = if !q.is_empty() {
+            crate::t!("friends.empty_search")
+        } else {
+            match tab {
+                FriendsTab::Online => crate::t!("friends.empty_online"),
+                FriendsTab::Pending => crate::t!("friends.empty_pending"),
+                FriendsTab::Blocked => crate::t!("friends.empty_blocked"),
+                _ => crate::t!("friends.empty_all"),
+            }
         };
+        let add = (q.is_empty() && tab == FriendsTab::All).then(|| {
+            crate::ui::controls::button("friends-empty-add", crate::t!("friends.add_tab"), crate::ui::controls::BtnKind::Primary)
+                .mt(z(20.))
+                .on_click(cx.listener(|a, _, _, cx| {
+                    a.nav.friends_tab = FriendsTab::AddFriend;
+                    a.nav.add_friend_result = None;
+                    cx.notify();
+                }))
+        });
         col = col.child(
-            div().flex_1().pt(z(160.)).flex().justify_center().text_size(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(msg),
+            div().flex_1().flex().items_center().justify_center().child(
+                div()
+                    .w_full()
+                    .max_w(z(440.))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(
+                        div()
+                            .mt(z(8.))
+                            .text_center()
+                            .text_size(z(16.))
+                            .line_height(z(20.))
+                            .text_color(c(tok(idx::TEXT_MUTED)))
+                            .child(msg),
+                    )
+                    .children(add),
+            ),
         );
     } else {
         // `sectionTitle_wVFOQW` per section; the client strings (fr bundle): "En ligne — N",
