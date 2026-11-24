@@ -1544,17 +1544,17 @@ thread_local! {
     static INBOX_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
-/// The client puts header popouts in a `clickTrapContainer_ trapClicks_`
-/// layer: a press anywhere outside closes the popout and goes no further (the
-/// trigger button included, so pressing it again closes). Done here on the
-/// popout itself, in the capture phase, from the bounds it was painted at: it
-/// depends neither on a full-window layer nor on hitbox stacking.
 #[cfg(test)]
 thread_local! {
     /// Presses seen by `close_on_press_outside` (tests).
     pub(crate) static PRESS_LOG: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
+/// The client puts header popouts in a `clickTrapContainer_ trapClicks_`
+/// layer: a press anywhere outside closes the popout and goes no further (the
+/// trigger button included, so pressing it again closes). Done here on the
+/// popout itself, in the capture phase, from the bounds it was painted at: it
+/// depends neither on a full-window layer nor on hitbox stacking.
 fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     let app = cx.entity().downgrade();
     // A canvas covering the popout: its paint bounds are the popout's drawn box.
