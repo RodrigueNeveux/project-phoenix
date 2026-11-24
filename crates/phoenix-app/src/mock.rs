@@ -157,6 +157,8 @@ impl MockBackend {
                 owner: Some(Id(2)),
                 discoverable: gi == 0,
                 community: true,
+                boosts: [18, 3, 0, 7, 1, 14][gi % 6],
+                boost_tier: [2, 1, 0, 2, 0, 3][gi % 6],
             });
             let layout: &[(&str, &[(&str, ChannelKind)])] = &[
                 (

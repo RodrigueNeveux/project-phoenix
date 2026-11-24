@@ -61,6 +61,10 @@ pub struct Guild {
     pub discoverable: bool,
     /// Guild feature `COMMUNITY` (channel list unread / mention bars).
     pub community: bool,
+    /// `premium_subscription_count` (boost settings stats row).
+    pub boosts: u32,
+    /// `premium_tier` 0..=3.
+    pub boost_tier: u8,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

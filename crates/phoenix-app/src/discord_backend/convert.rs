@@ -691,6 +691,8 @@ pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model:
         owner: g.owner_id().map(id),
         discoverable: g.properties.features.iter().any(|f| f == "DISCOVERABLE"),
         community: g.properties.features.iter().any(|f| f == "COMMUNITY"),
+        boosts: g.properties.premium_subscription_count.unwrap_or(0),
+        boost_tier: g.properties.premium_tier.unwrap_or(0),
     }
 }
 

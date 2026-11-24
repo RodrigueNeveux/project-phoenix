@@ -170,7 +170,39 @@ fn guild_cards(app: &PhoenixApp) -> Div {
                         .gap(z(12.))
                         .min_w_0()
                         .child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 40.))
-                        .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT, g.name.clone())),
+                        // guildDetails_rH8mBz: column gap 2; statsRow_rH8mBz gap --space-8:
+                        // statGroup (gap 2) 14px gem + body-xs --text-muted count, 4px
+                        // --text-muted dotSeparator, level (vanilla-settings-16-1 #2752..2759).
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(z(2.))
+                                .min_w_0()
+                                .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT, g.name.clone()))
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(z(8.))
+                                        .child(
+                                            div()
+                                                .flex()
+                                                .items_center()
+                                                .gap(z(2.))
+                                                .child(icon("boost", 14., idx::GUILD_BOOSTING_PINK))
+                                                .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("sp.bo.count", n = g.boosts))),
+                                        )
+                                        .child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_MUTED))))
+                                        .child(text(
+                                            12.,
+                                            16.,
+                                            FontWeight::NORMAL,
+                                            idx::TEXT_MUTED,
+                                            if g.boost_tier == 0 { tr("sp.bo.no_level") } else { crate::t!("sp.bo.level", n = g.boost_tier) },
+                                        )),
+                                ),
+                        ),
                 )
                 .child(
                     controls::button_sm(eid(format!("boost-{}", g.id.0)), SharedString::default(), BtnKind::Secondary)

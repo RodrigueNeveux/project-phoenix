@@ -139,7 +139,10 @@ pub struct Guild {
 
 impl From<RawGuild> for Guild {
     fn from(r: RawGuild) -> Self {
-        let properties = r.properties.unwrap_or(r.top);
+        // User READY nests `properties` but keeps the boost count at the top level.
+        let boosts = r.top.premium_subscription_count;
+        let mut properties = r.properties.unwrap_or(r.top);
+        properties.premium_subscription_count = properties.premium_subscription_count.or(boosts);
         let mut g = Guild {
             id: r.id,
             properties,

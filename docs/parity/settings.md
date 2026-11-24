@@ -115,7 +115,7 @@ The live sidebar (FR) matches `NAV` exactly: Compte, Données et confidentialit�
 |---|---|---|---|---|---|
 | Boost de serveur | #2727 `header_xDn2Ui` | header | gap 32, mb 32; title heading-xl + gem, lead body-sm --text-subtle; 300x169 video card r10 | `boost::header` | ✅ structure (video thumbnail art is the client's asset: plain surface + title + play button) |
 | Boost de serveur | #2742 `guildBoostUnavailableNotice_Jru8ph` | notice pill | white/.1, 2px white, r9999, p 8 16 | `boost::notice` | ✅ (shown because the account is in a Nitro Squad) |
-| Boost de serveur | #2749 `card_rH8mBz` | guild cards | --background-surface-high, 1px --border-muted, r16, p12, 40px icon, sm secondary button | `boost::guild_cards` | ✅ layout; ❌ boost count / level stats row (no guild boost data in the model) |
+| Boost de serveur | #2749 `card_rH8mBz` | guild cards | --background-surface-high, 1px --border-muted, r16, p12, 40px icon, sm secondary button | `boost::guild_cards` | ✅ layout + statsRow_rH8mBz (14px gem, body-xs --text-muted count, 4px dot, level; `Guild.boosts` / `boost_tier` from `premium_subscription_count` / `premium_tier`) |
 | Boost de serveur | #2799 `table_twYJsJ` | perks table | rows p16 0, 1px --border-normal, 4 flex cells p0 16, check 24px --text-strong | `boost::perks_table` | ✅ |
 | Boost de serveur | #2923 `card_dgf5AJ` | community cards | 2x2, r16, p12, 42px --icon-muted glyph | `boost::community` | ✅ (our glyphs) |
 | Boost de serveur | #2938 `listItem_eICevE` | FAQ | r8 p12 gap 4, 18px chevron | `boost::faq` | ✅ collapsed + expanded (`listItemExpanded_` surface-highest / border-normal, `answer_` pt 8, chevron up; answers from the client strings, each row toggles independently) |
