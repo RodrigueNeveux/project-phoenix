@@ -20,6 +20,9 @@ pub struct Ready {
     pub guilds: Vec<Guild>,
     #[serde(default, deserialize_with = "null_default")]
     pub private_channels: Vec<Channel>,
+    /// Linked third-party accounts (Settings > Connections), kept raw.
+    #[serde(default, deserialize_with = "null_default")]
+    pub connected_accounts: Vec<serde_json::Value>,
     #[serde(default, deserialize_with = "null_default")]
     pub relationships: Vec<Relationship>,
     /// Users referenced by id elsewhere in the payload.

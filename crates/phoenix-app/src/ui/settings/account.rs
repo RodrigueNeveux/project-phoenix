@@ -241,6 +241,17 @@ fn bracket_runs(t: &str, style: gpui::HighlightStyle) -> (String, Vec<(std::ops:
     (plain, hl)
 }
 
+/// READY `connected_accounts` count.
+static CONNECTIONS: RwLock<Option<usize>> = RwLock::new(None);
+
+pub fn set_connections(n: usize) {
+    *CONNECTIONS.write() = Some(n);
+}
+
+pub fn connections() -> Option<usize> {
+    *CONNECTIONS.read()
+}
+
 pub fn sessions() -> Option<usize> {
     *SESSIONS.read()
 }
