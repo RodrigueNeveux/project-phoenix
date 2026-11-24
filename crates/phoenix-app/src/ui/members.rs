@@ -408,9 +408,11 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 .items_center()
                                 .child(div().mr(z(6.)).child(crate::ui::avatar(user, 16.)))
                                 .child(
-                                    // userName_g7esM5: --channels-default, 14px / 1.2857, 500,
-                                    // ellipsis, max-width 85%; a display name style paints its
-                                    // gradient (first stop) in its font, never the role color.
+                                    // userName_g7esM5: 14px / 1.2857, 500, ellipsis, max-width 85%.
+                                    // Client bundle (content inventory card user section): the
+                                    // name gets the member's role colorString (else the class
+                                    // color --channels-default) and only the display name
+                                    // style's FONT (displayNameStylesFont), never its colors.
                                     crate::fonts::styled_name(
                                         div()
                                             .min_w_0()
@@ -419,10 +421,14 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                             .text_size(z(14.))
                                             .line_height(z(18.))
                                             .font_weight(FontWeight::MEDIUM)
-                                            .text_color(c(crate::theme::tok(crate::theme::generated::idx::CHANNELS_DEFAULT)))
+                                            .text_color(
+                                                mem.and_then(|m| app.member_color(g, m))
+                                                    .map(c)
+                                                    .unwrap_or_else(|| c(crate::theme::tok(crate::theme::generated::idx::CHANNELS_DEFAULT))),
+                                            )
                                             .text_ellipsis(),
                                         user,
-                                        true,
+                                        false,
                                     )
                                     .child(crate::fonts::name_text(name, user, 14.)),
                                 ),
