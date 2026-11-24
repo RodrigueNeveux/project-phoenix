@@ -251,24 +251,49 @@ fn community() -> Div {
 /// wrapper_eICevE (gap 16): heading-xl + list gap 4 of `listItem_eICevE`
 /// (--background-surface-high, 1px --border-subtle, r8, p12, pointer);
 /// question heading-sm/semibold --text-subtle, 18px chevron, gap 12.
+/// Open FAQ rows (bit i = question i); every row toggles on its own like the client.
+static FAQ_OPEN: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
+
 fn faq() -> Div {
+    use std::sync::atomic::Ordering;
+    let open = FAQ_OPEN.load(Ordering::Relaxed);
     let mut list = div().flex().flex_col().gap(z(4.));
     for (i, q) in FAQ.iter().enumerate() {
-        list = list.child(
-            div()
-                .id(eid(format!("boost-faq-{i}")))
-                .flex()
-                .items_center()
-                .gap(z(12.))
-                .p(z(12.))
-                .rounded(z(8.))
-                .border_1()
-                .border_color(c(tok(idx::BORDER_SUBTLE)))
-                .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
-                .cursor_pointer()
-                .child(div().flex_1().min_w_0().child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE, tr(q))))
-                .child(icon("chevron", 18., idx::TEXT_DEFAULT)),
-        );
+        let expanded = open & (1 << i) != 0;
+        // listItem_eICevE (surface-high, border-subtle) → listItemExpanded_
+        // (surface-highest, border-normal); questionWrapper_ gap 12; answer_ padding-top 8.
+        let (bg, border) = if expanded {
+            (idx::BACKGROUND_SURFACE_HIGHEST, idx::BORDER_NORMAL)
+        } else {
+            (idx::BACKGROUND_SURFACE_HIGH, idx::BORDER_SUBTLE)
+        };
+        let mut row = div()
+            .id(eid(format!("boost-faq-{i}")))
+            .flex()
+            .flex_col()
+            .gap(z(4.))
+            .p(z(12.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(border)))
+            .bg(c(tok(bg)))
+            .cursor_pointer()
+            .on_click(move |_, window, _| {
+                FAQ_OPEN.fetch_xor(1 << i, Ordering::Relaxed);
+                window.refresh();
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z(12.))
+                    .child(div().flex_1().min_w_0().child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE, tr(q))))
+                    .child(icon(if expanded { "chevron-up" } else { "chevron" }, 18., idx::TEXT_DEFAULT)),
+            );
+        if expanded {
+            row = row.child(div().pt(z(8.)).child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, tr(&format!("{q}a")))));
+        }
+        list = list.child(row);
     }
     div().flex().flex_col().gap(z(16.)).w(relative(1.)).child(heading_xl(tr("sp.bo.faq"))).child(list)
 }

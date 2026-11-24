@@ -31,7 +31,7 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Video embed (YouTube) | `embedVideoActions_` centred; `wrapper_lj7V-K` --opacity-black-60, radius 24, h 48, p 12; `iconWrapper_` opacity .6 → 1, 24px play + external | | ui/chat/attach.rs `video_embed_actions` | ✅ |
 | Image attachment | `visualMediaItemContainer_` max 550x350, radius 8 | | ui/chat.rs `media_image` | ✅ |
 | Image mosaic (2–10) | `mosaicItem_` rows | | ui/chat/mosaic.rs | ✅ |
-| Spoiler image | blurred + "SPOILER" pill | | ui/chat.rs `spoiler_cover` | ⚠ (no CSS check yet) |
+| Spoiler image | `spoilerContainer_0_7_Rr.attachmentContainer_` radius-sm 8, bg --__spoiler-background-color--hidden; `hiddenSpoiler_` blur 44px (no dark overlay); `spoilerWarning_` r20 15px semibold uppercase, bg --opacity-black-60 → black-88 on hover, text --primary-200 → white | | ui/chat.rs `spoiler_cover` | ✅ (CSS; blur approximated by an upscaled 1/24 thumbnail; no live example found to dump) |
 | Video attachment chrome | `wrapper_FJ99sr` radius, `playPausePop_` --opacity-black-60 p12 icon 24, `videoControls_` 32px --opacity-black-60 on hover | | ui/chat/attach.rs `video_card` | ✅ |
 | Audio player | `wrapperAudio_ newMosaicStyle_` 432, p16, radius 8, --background-base-lower, 1px --border-subtle; `audioControls_` --opacity-black-28 radius-sm mt 4; `controlIcon_` 24+4; duration --font-code 12/12 500; seek `mediaBarWrapper_` 6px | | ui/chat/attach.rs `audio_card` | ✅ |
 | Generic file card | `fileWrapper_` 432; `file_` --background-surface-high, 1px --border-subtle, radius 8, --shadow-low, p16; icon 30x40 mr 8; name 16/20 --text-link hover underline; size body-xs 12/16 --text-muted (dump vanilla-thread-channel node fileWrapper_) | | ui/chat/attach.rs `file_card` | ✅ |
@@ -46,7 +46,7 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | System: join, boost, pin, thread, call | `systemMessage_SY_P2T` content at +80, `iconContainer_bLMKT5` 72x22 at +8, text 16/22 | | ui/chat/system.rs | ✅ (live dump; the join welcome card `systemMessageContainer_g2fiji` with its wave button is not done) |
 | `(edited)` label | `edited_2i8Bfm` .625rem, line-height 1, normal weight, --text-muted | | ui/chat.rs `edited_marker` | ✅ (live dump: 10px / 10px, 400) |
 
-Coverage: 37 ✅ / 1 ⚠ / 0 ❌ of 38 rows (spoiler image: none found in 16 scanned channels).
+Coverage: 38 ✅ / 0 ⚠ / 0 ❌ of 38 rows (spoiler image from CSS only: none found in 16 scanned channels). Open: join welcome card with wave button.
 Live dumps (2026-11-24, user asleep, read-only, view restored): ref-cache/message-content-<channel>.json.
 Colours are not compared from the dumps: the user's theme differs from the generated dark tokens.
 Still "✅ (CSS)": `<t:…>` timestamps and inline code (no example in the scanned channels). No real-data compare score for these

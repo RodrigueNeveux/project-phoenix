@@ -11,7 +11,7 @@ use crate::{
     media,
     model::{Attachment, AttachmentKind, ChannelKind, Embed, Id, Message},
     richtext::{ClickTarget, RBlock, RenderedMessage, RichText},
-    theme::{FONT_MONO, Palette, c, ca, fz, generated::idx, m, space, tok, z},
+    theme::{FONT_MONO, Palette, c, fz, generated::idx, m, space, tok, z},
     ui::{avatar, icon, members, sidebar::channel_icon},
 };
 
@@ -1517,18 +1517,30 @@ fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> 
             .rounded(z(8.))
             .overflow_hidden()
             .cursor_pointer()
-            .bg(c(Palette::BG_SECONDARY))
+            // `spoilerContainer_0_7_Rr.attachmentContainer_` radius-sm 8; hidden bg
+            // `--__spoiler-background-color--hidden`.
+            .bg(tk(idx::SPOILER_BACKGROUND_COLOR_HIDDEN))
+            .group("spoiler-cover")
+            // `hiddenSpoiler_` blur(--custom-message-attachment-spoiler-blur-radius 44px):
+            // approximated by a 1/24 thumbnail upscaled; no dark overlay in the client.
             .child(img(tiny).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover))
             .child(
-                div().absolute().inset_0().bg(ca(0x00000099)).flex().items_center().justify_center().child(
+                div().absolute().inset_0().flex().items_center().justify_center().child(
+                    // `spoilerWarning_0_7_Rr`: radius 20, 15px semibold uppercase,
+                    // bg --__spoiler-warning-background-color (black-60, hover black-88),
+                    // text --__spoiler-warning-text-color (primary-200, hover white).
                     div()
                         .px(z(12.))
                         .py(z(6.))
-                        .rounded_full()
-                        .bg(ca(0x000000CC))
+                        .rounded(z(20.))
+                        .bg(tk(idx::SPOILER_WARNING_BACKGROUND_COLOR))
                         .text_size(z(15.))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(gpui::white())
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(tk(idx::SPOILER_WARNING_TEXT_COLOR))
+                        .group_hover("spoiler-cover", |s| {
+                            s.bg(tk(idx::SPOILER_WARNING_BACKGROUND_COLOR_HOVER))
+                                .text_color(tk(idx::SPOILER_WARNING_TEXT_COLOR_HOVER))
+                        })
                         .child(crate::t!("chat.spoiler")),
                 ),
             )

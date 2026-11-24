@@ -105,7 +105,7 @@ Added rows:
 | marker slider grabber | hover | 16 → 20 | `controls::marker_slider` (grabber painted above the hit zones, non-blocking hitbox) | ✅ |
 | select field | open / focus | `selectField_vWC4bk:focus-within` 2px outline --input-border-active, offset -2 | `pages::dropdown` overlay ring | ✅ |
 | input / select | hover | `wrapper_UcGqzv:hover` border --input-border-hover | `controls::select_field` `.hover` | ✅ |
-| switch / button | pressed | not measured (pressing a switch would toggle it); buttons use the CSS `:active` tokens | `controls::button` | ✅ buttons, ❌ switch :active |
+| switch / button | pressed | not measured (pressing a switch would toggle it); buttons use the CSS `:active` tokens | `controls::button` | ✅ buttons, ❌ switch :active (`--switch-background-active` blurple-65 exists but no CSS rule uses it: driven by JS; `switch()` has no element id, so it needs per-caller keys) |
 
 ## Billing pages (vanilla-settings-16-1/2/3, 2026-11-24)
 
@@ -118,7 +118,7 @@ The live sidebar (FR) matches `NAV` exactly: Compte, Données et confidentialit�
 | Boost de serveur | #2749 `card_rH8mBz` | guild cards | --background-surface-high, 1px --border-muted, r16, p12, 40px icon, sm secondary button | `boost::guild_cards` | ✅ layout; ❌ boost count / level stats row (no guild boost data in the model) |
 | Boost de serveur | #2799 `table_twYJsJ` | perks table | rows p16 0, 1px --border-normal, 4 flex cells p0 16, check 24px --text-strong | `boost::perks_table` | ✅ |
 | Boost de serveur | #2923 `card_dgf5AJ` | community cards | 2x2, r16, p12, 42px --icon-muted glyph | `boost::community` | ✅ (our glyphs) |
-| Boost de serveur | #2938 `listItem_eICevE` | FAQ | r8 p12 gap 4, 18px chevron | `boost::faq` | ✅ collapsed; ❌ expanding answers |
+| Boost de serveur | #2938 `listItem_eICevE` | FAQ | r8 p12 gap 4, 18px chevron | `boost::faq` | ✅ collapsed + expanded (`listItemExpanded_` surface-highest / border-normal, `answer_` pt 8, chevron up; answers from the client strings, each row toggles independently) |
 | Abonnements | `content_NedsCW` | title, description, credit fieldset | heading-lg, 16/20, legend body-lg/medium | `gift::subscriptions` | ✅ static text; ❌ subscription card / members / credit rows (no billing data) |
 | Inventaire des cadeaux | `container_J9WkLo` | gift card promo | 90deg --expressive-gradient-blue, r16, min-h 180, p 16 16 16 28, overlay-primary sm buttons | `gift::promo` | ✅ (lottie replaced by our gift glyph) |
 | Inventaire des cadeaux | `container_VhFsFg` | redeem codes | label + description, 40px input, md primary | `gift::redeem` | ✅ (field is inert) |
