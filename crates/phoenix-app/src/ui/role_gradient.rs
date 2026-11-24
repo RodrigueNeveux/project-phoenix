@@ -40,6 +40,17 @@ pub fn for_member(app: &crate::app::PhoenixApp, guild: Id, m: &crate::model::Mem
     get(top.id)
 }
 
+/// Gradient of `user`'s top coloured role in the selected guild (when role
+/// colours are shown in names, matching `PhoenixApp::author_color`).
+pub fn for_author(app: &crate::app::PhoenixApp, user: Id) -> Option<[u32; 3]> {
+    if app.prefs.local.pick("roles", 0) != 0 {
+        return None;
+    }
+    let g = app.selected_guild?;
+    let m = crate::member_index::find(app.members.get(&g)?, g, user)?;
+    for_member(app, g, m)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

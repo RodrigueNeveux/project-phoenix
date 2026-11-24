@@ -1234,15 +1234,18 @@ fn message(
                     ru.as_deref(),
                     false,
                 )
-                .child(crate::fonts::name_text(
-                    SharedString::from(format!(
+                .child({
+                    let reply_text = SharedString::from(format!(
                         "{}{}",
                         if msg.reply_mentions_author { "@" } else { "" }, // "@" only when the reply pinged
                         rnick.map(|n| n.to_string()).or_else(|| ru.as_deref().map(|u| u.display_name.to_string())).unwrap_or_else(|| crate::t!("common.unknown").to_string())
-                    )),
-                    ru.as_deref(),
-                    14.,
-                )),
+                    ));
+                    // Live client (2026-11-24 CDP): repliedMessage_ username also uses twoColorGradient_ / usernameGradient_.
+                    match ru.as_deref().and_then(|u| crate::ui::role_gradient::for_author(app, u.id)) {
+                        Some(stops) => crate::fonts::name_text_with(reply_text, ru.as_deref(), 14., Some(stops)),
+                        None => crate::fonts::name_text(reply_text, ru.as_deref(), 14.),
+                    }
+                }),
             )
             .when_some(ru.and_then(|u| u.tag.clone()), |d, tg| d.child(server_tag_chip(&tg, true).opacity(0.64)))
             .child(
@@ -1318,7 +1321,11 @@ fn message(
         .cursor_pointer()
         .hover(|s| s.underline())
         .on_click(message_ext::open_author(entity, msg))
-        .child(crate::ui::emoji_text::label(name, 16.))
+        // Live client (2026-11-24 CDP): message username_ applies twoColorGradient_ / usernameGradient_ (100px tile).
+        .child(match crate::ui::role_gradient::for_author(app, msg.author) {
+            Some(stops) => crate::fonts::name_text_with(name, author, 16., Some(stops)),
+            None => crate::fonts::name_text(name, author, 16.),
+        })
         // roleDot_: 8px circle in the role colour, 4px after the name.
         .children(role_dot.map(|col| div().flex_none().ml(z(4.)).size(z(8.)).rounded_full().bg(c(col))));
 
@@ -2123,8 +2130,9 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed, cx: &App) -> AnyElement {
             })))
             .into_any_element();
     }
-    // Small thumbnail on the right for article/link embeds, big image below otherwise.
-    let side_thumb = e.image.is_none() && e.kind.as_deref() != Some("video");
+    // Discord promotes `article` and `video` embed thumbnails to full-width media
+    // below the description (`sanitizeEmbed`, verified live on immich.app article embed).
+    let side_thumb = e.image.is_none() && !matches!(e.kind.as_deref(), Some("video" | "article"));
     let thumb = e.thumbnail.clone().filter(|_| side_thumb);
     let big = e.image.clone().or_else(|| e.thumbnail.clone().filter(|_| !side_thumb));
     // Merged multi-image posts (model::merge_embeds_on_url) draw their images in
