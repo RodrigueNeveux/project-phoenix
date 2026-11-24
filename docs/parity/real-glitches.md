@@ -82,6 +82,8 @@ Open items of round 1 (search embeds, Favoris preview, trending tile) are fixed 
 | Server settings | Close button pushed against / past the right edge by the roles list | Close button no longer shrinks, 20px margin |
 | Account popout (user panel) | No profile widget card under the bio (client shows the first Board widget) | Same compact widget card as the profile popout |
 | Invite / join dialogs | No close button | Top-right close button |
+| Server notification settings modal | Long descriptions ran off the modal and pushed the mute / alert / push switches out of view | Text column shrinks and wraps, switches never shrink |
+| Invite dialog | Title under the new close button | 28px side padding on the dialog titles |
 
 Harness: `PHX_OPEN` chanmenu/catmenu/guildmenu/guilddrop/usermenu/switcher/statuspicker/leave/invite,
 `emoji:<row>`, `PHX_PROFILE=member:<n>`, `PHX_GUILD` alone, `PHX_DEBUG_GIF`.
