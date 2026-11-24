@@ -305,9 +305,10 @@ fn rich_text_mut(b: &mut RBlock) -> Option<&mut RichText> {
 }
 
 /// Search highlights over rendered markdown (`span.highlight` of the client's
-/// search results): every block but code blocks, every text run but mentions,
-/// timestamps and sound mentions (nodes without a string content in the client's
-/// markdown tree), never over an inline emoji. Runs are split at the ranges.
+/// search results): every block but code blocks, every text run including the
+/// "@name" / channel name of mentions (their parse rules give them a text
+/// content), but not timestamps, sound mentions or emoji (nodes without a string
+/// content in the client's markdown tree). Runs are split at the ranges.
 pub fn apply_highlights(parsed: &[Block], blocks: &mut [RBlock], hl: &crate::search_highlight::Highlighter) {
     if hl.is_empty() {
         return;
@@ -318,7 +319,7 @@ pub fn apply_highlights(parsed: &[Block], blocks: &mut [RBlock], hl: &crate::sea
         let skip: Vec<Range<usize>> = inl
             .spans
             .iter()
-            .filter(|s| s.style.has(Style::MENTION) || s.style.has(Style::TIMESTAMP) || s.style.has(Style::SOUNDBOARD) || s.mention.is_some())
+            .filter(|s| s.style.has(Style::TIMESTAMP) || s.style.has(Style::SOUNDBOARD))
             .map(|s| s.range.clone())
             .chain(t.emoji.iter().map(|(r, _)| r.clone()))
             .collect();
@@ -424,7 +425,7 @@ mod emoji_tests {
     use super::*;
 
     #[test]
-    fn highlights_split_runs_and_skip_mentions_and_emoji() {
+    fn highlights_split_runs_and_skip_emoji() {
         struct R;
         impl MentionResolver for R {
             fn user(&self, _: u64) -> Option<String> {
@@ -450,8 +451,8 @@ mod emoji_tests {
             assert_eq!(at, t.text.len());
             out
         };
-        // Bold, link and inline code are highlighted; the mention and the emoji are not.
-        assert_eq!(lit(&blocks[0]), ["serveur", "serveur", "serveur"]);
+        // Bold, the mention's "@Serveur", link and inline code are highlighted; the emoji is not.
+        assert_eq!(lit(&blocks[0]), ["serveur", "Serveur", "serveur", "serveur"]);
         assert!(matches!(blocks.last(), Some(RBlock::Code { .. })));
     }
     #[test]
