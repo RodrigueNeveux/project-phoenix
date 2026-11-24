@@ -153,7 +153,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .h_full()
         .flex()
         .flex_col()
-        .bg(c(Palette::BG_SECONDARY))
+        .bg(c(Palette::BG_TERTIARY)) // the client's sidebar_ is transparent over bg_ (the rail colour) in every theme (CDP 2026-11-24)
         .rounded_tl(z(m::FRAME_RADIUS))
         .overflow_hidden()
         .relative()
@@ -272,7 +272,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                             div().absolute().bottom_0().left_0().right_0().h(z(40.)).bg(gpui::linear_gradient(
                                 180.,
                                 gpui::linear_color_stop(gpui::transparent_black(), 0.),
-                                gpui::linear_color_stop(c(Palette::BG_SECONDARY).opacity(0.8), 1.),
+                                gpui::linear_color_stop(c(Palette::BG_TERTIARY).opacity(0.8), 1.),
                             )),
                         )
                 })
@@ -773,7 +773,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 app,
                 id,
                 32. * crate::theme::zoom(),
-                if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_SECONDARY) },
+                if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_TERTIARY) },
             ),
             _ => div()
                 .size(z(32.))
@@ -796,7 +796,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             u,
             32.,
             p,
-            c(Palette::BG_SECONDARY),
+            c(Palette::BG_TERTIARY),
             move |d| {
                 if selected {
                     d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED))
@@ -829,7 +829,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             col,
             extra.is_some_and(|e| e.locked),
             extra.is_some_and(|e| e.nsfw),
-            if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_SECONDARY) },
+            if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_TERTIARY) },
             (!selected && app.voice_channel != Some(id)).then(|| SharedString::from(format!("chrow{}", id.0))),
         )
     };

@@ -622,7 +622,7 @@ fn results_panel(
         let mut i = 0;
         while i < page.messages.len() {
             let ch = page.messages[i].channel;
-            let mut group = div().mb(z(24.)).flex().flex_col().child(group_header(app, ch));
+            let mut group = div().mb(z(24.)).flex().flex_col().child(channel_group_header(app, ch));
             while i < page.messages.len() && page.messages[i].channel == ch {
                 group = group.child(result_card(app, i, &page.messages[i], cx));
                 i += 1;
@@ -662,7 +662,7 @@ fn results_panel(
 /// `channelNameContainer_` (22px, margin-bottom 8): 16px channel glyph (padding-end 4),
 /// name body-md/medium --text-strong; on the right `parentChannelName_` (folder glyph
 /// 16×12 + category body-xs/medium --text-default, one line).
-fn group_header(app: &PhoenixApp, ch: Id) -> gpui::Div {
+fn channel_group_header(app: &PhoenixApp, ch: Id) -> gpui::Div {
     let channel = app.channels.get(&ch);
     let name: SharedString = channel.map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("common.unknown_lower"));
     let glyph = channel.map(|c| crate::ui::sidebar::channel_icon(c.kind)).unwrap_or(Icon::Hash);
@@ -728,7 +728,6 @@ fn empty_state(text: SharedString, error: bool) -> gpui::Div {
 /// 0 12 0 8 / 0 8 0 12), 28px round page buttons (radius 14, 16 semibold; the current one
 /// --brand-500 with white text) 8px apart and "…" (14/18 semibold).
 fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
-    let goto = move |p: u32, cx: &mut Context<PhoenixApp>| cx.listener(move |a, _, _, cx| rerun(a, |r| r.offset = (p - 1) * PAGE, cx));
     let caret = |next: bool| {
         let g = named("chevron-right", 16., tk(idx::TEXT_STRONG));
         if next { g } else { g.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))) }
@@ -756,7 +755,7 @@ fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let mut nav = div().flex().items_center().gap(z(8.));
     let mut prev = end("search-prev", crate::t!("search.prev_page"), false, cur > 1);
     if cur > 1 {
-        prev = prev.on_click(goto(cur - 1, cx));
+        prev = prev.on_click(cx.listener(move |a, _, _, cx| go_page(a, cur - 1, cx)));
     }
     nav = nav.child(prev);
     for (k, item) in page_items(cur, pages).into_iter().enumerate() {
@@ -786,17 +785,22 @@ fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                     .line_height(z(16.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .when(on, |d| d.bg(tk(idx::BRAND_500)).text_color(tk(idx::WHITE)))
-                    .when(!on, |d| d.text_color(tk(idx::TEXT_STRONG)).cursor_pointer().hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE))).on_click(goto(p, cx)))
+                    .when(!on, |d| d.text_color(tk(idx::TEXT_STRONG)).cursor_pointer().hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE))).on_click(cx.listener(move |a, _, _, cx| go_page(a, p, cx))))
                     .child(p.to_string())
             }
         });
     }
     let mut next = end("search-next", crate::t!("common.next"), true, cur < pages);
     if cur < pages {
-        next = next.on_click(goto(cur + 1, cx));
+        next = next.on_click(cx.listener(move |a, _, _, cx| go_page(a, cur + 1, cx)));
     }
     nav = nav.child(next);
     div().flex_none().h(z(56.)).px(z(16.)).flex().items_center().justify_center().child(nav)
+}
+
+/// Show page `p` (1-based) of the current search.
+fn go_page(app: &mut PhoenixApp, p: u32, cx: &mut Context<PhoenixApp>) {
+    rerun(app, |r| r.offset = p.saturating_sub(1) * PAGE, cx);
 }
 
 /// "Trier" menu (`menu_ flexible_`): 144 wide under the button, right-aligned, 1px
