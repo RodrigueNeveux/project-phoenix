@@ -174,6 +174,14 @@ pub fn bio(bio: &str, clamp: bool, color: Hsla) -> Div {
         }
         return col;
     }
+    // descriptionClamp_: one block clamped to 3 lines with `overflow-wrap: break-word`,
+    // so a long URL wraps onto the next line instead of being cut. Lines with emoji keep
+    // the per-line rows (inline images cannot sit inside one StyledText).
+    let joined = lines.join("\n");
+    let t = line_rich(&joined, color, false);
+    if t.emoji.is_empty() {
+        return col.child(div().child(text_el(id, &t, 0..t.text.len())).line_clamp(3).max_h(z(54.)).overflow_hidden());
+    }
     let more = lines.len() > 3;
     for (n, l) in lines.iter().take(3).enumerate() {
         let t = line_rich(l, color, more && n == 2);
