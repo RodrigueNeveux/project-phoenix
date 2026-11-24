@@ -23,3 +23,7 @@ ref-cache/mention-pill-default.json, voice-user-row-default.json, voice-user-row
 | popout "In a voice channel" card | `clickableContainer_Bu4Al8` | card metrics | activity-card padding 8 / --radius-sm / header body-xs/medium / heading-xs/semibold | voice_row.rs voice_activity_card | ❌ structure from class list only, boxes not measured |
 
 Compare score: not available, the 2026-11-24 01:15 run was discarded (an overlay was open in Discord).
+
+| voice row speaking ring | live `avatarSmall_YUoOxm` 24x24 (vanilla-voice-sidebar #avatar, name at x+32) | box | ring drawn inside the 24px avatar, 2px --green-360 | voice_panel.rs speaking_ring | ✅ box matches dump (was 28px, shifted the name 4px) |
+| voice row options container | `voiceUser_:not(:hover) .optionsButtonContainer_{display:none}` | layout | takes no room when not hovered | voice_panel.rs voice_user_row | ✅ icons end at row-10 like `icons_YUoOxm` 361..397 |
+| LIVE badge | `liveIcon_YUoOxm base_lMvXrQ baseShapeRound_` | height / radius / bg | 16 / --radius-round / --background-feedback-notification | voice_panel.rs | ✅ CSS (font not in CSS bundle, not verified live) |

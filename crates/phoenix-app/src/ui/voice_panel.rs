@@ -359,18 +359,26 @@ fn signal_bars(color: Hsla) -> impl IntoElement {
         .children([6., 10., 14.].map(|h| div().w(z(3.)).h(z(h)).rounded(z(1.)).bg(color)))
 }
 
-/// Wrap an avatar in the green speaking ring (Discord: 2px ring with a gap).
+/// Overlay the speaking ring on an avatar without changing its box: live
+/// `avatarSmall_YUoOxm` stays 24x24 while speaking (vanilla-voice-sidebar: name at
+/// avatar.x + 24 + gap 8), the ring is an inset 2px `--green-360` circle
+/// (same green as `iconPriortySpeakerSpeaking_YUoOxm`).
 pub fn speaking_ring(avatar: AnyElement, size: f32, speaking: bool) -> AnyElement {
     div()
-        .size(px(size + 4.))
+        .size(px(size))
         .flex_none()
-        .rounded_full()
-        .border_2()
-        .border_color(if speaking { c(Palette::GREEN) } else { gpui::transparent_black() })
-        .flex()
-        .items_center()
-        .justify_center()
+        .relative()
         .child(avatar)
+        .when(speaking, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .rounded_full()
+                    .border_2()
+                    .border_color(t(idx::GREEN_360)),
+            )
+        })
         .into_any_element()
 }
 
@@ -648,7 +656,8 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                         div()
                             .h(z(16.))
                             .px(z(6.))
-                            .rounded(z(8.))
+                            // base_lMvXrQ height 16 + baseShapeRound_ --radius-round.
+                            .rounded_full()
                             .bg(t(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
                             .flex()
                             .items_center()
@@ -668,11 +677,12 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
                 .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state))),
         )
-        // optionsButtonContainer_: only while the row is hovered (display:none otherwise).
+        // optionsButtonContainer_: `display:none` unless the row is hovered, so the
+        // state icons sit at the right padding edge (live icons_YUoOxm right = row - 10).
         .child(
             div()
-                .invisible()
-                .group_hover("voice-user-row", |s| s.visible())
+                .hidden()
+                .group_hover("voice-user-row", |s| s.flex())
                 .child(crate::ui::voice_row::options_button(user, guild, in_call)),
         )
         .on_mouse_down(MouseButton::Right, move |ev, window, cx| {
