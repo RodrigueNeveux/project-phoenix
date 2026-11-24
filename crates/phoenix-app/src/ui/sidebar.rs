@@ -15,7 +15,7 @@ use crate::{
     assets::Icon,
     model::{ChannelKind, Id},
     theme::{Palette, c, generated::idx, m, tok, z},
-    ui::{avatar_with_status, badge, icon},
+    ui::{badge, icon},
 };
 
 /// Colour of a generated CSS token.
@@ -712,7 +712,16 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     } else if is_dm {
         let u = ch.voice_users.first().and_then(|u| app.users.get(u));
         let p = ch.voice_users.first().map(|u| app.presence_of(*u)).unwrap_or_default();
-        crate::ui::avatar_deco::decorate(avatar_with_status(u, 32., p, c(Palette::BG_SECONDARY)), u, 32.).into_any_element()
+        // the status cut shows the row's hover / selected background like the mask
+        let g = SharedString::from(format!("chrow{}", id.0));
+        let ring = crate::ui::avatar_with_status_overlay(u, 32., p, c(Palette::BG_SECONDARY), move |d| {
+            if selected {
+                d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED))
+            } else {
+                d.group_hover(g, |s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)))
+            }
+        });
+        crate::ui::avatar_deco::decorate(ring, u, 32.).into_any_element()
     } else {
         // `icon_TNyK-N` `--channel-icon`; muted `--icon-muted`; unread `--icon-subtle`.
         // `iconLive_Wx6SnQ`: the channel we're connected to tints its icon
@@ -1089,6 +1098,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .gap(z(8.))
                 .rounded(z(4.))
                 .cursor_pointer()
+                .group("user-panel-avatar")
                 .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
                 // The decoration plays while the panel is hovered (ui::avatar_deco).
@@ -1099,7 +1109,9 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 }))
                 .overflow_hidden()
                 .child(crate::ui::avatar_deco::decorate_hover(
-                    avatar_with_status(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT)),
+                    crate::ui::avatar_with_status_overlay(Some(&app.me), 32., app.presence, c(Palette::BG_SECONDARY_ALT), |d| {
+                        d.group_hover("user-panel-avatar", |s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                    }),
                     Some(&app.me),
                     32.,
                     Some(crate::ui::avatar_deco::hover_key(3, 0)),

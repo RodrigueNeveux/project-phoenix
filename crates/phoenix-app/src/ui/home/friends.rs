@@ -398,7 +398,14 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
         .on_click(cx.listener(move |a, _, _, cx| a.open_dm_with(user, cx)))
         // avatar_jPuNMC 32px, margin-right 12
-        .child(div().mr(z(12.)).child(crate::ui::avatar_deco::decorate(avatar_with_status(u, 32., p, c(Palette::BG_PRIMARY)), u, 32.)))
+        // the status cut shows the row's hover background like the mask
+        .child(div().mr(z(12.)).child(crate::ui::avatar_deco::decorate(
+            crate::ui::avatar_with_status_overlay(u, 32., p, c(Palette::BG_PRIMARY), |d| {
+                d.group_hover("friend-row", |s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+            }),
+            u,
+            32.,
+        )))
         .child(
             div()
                 .flex_1()
@@ -621,9 +628,17 @@ fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     .flex()
                     .items_center()
                     .gap(z(12.))
+                    .group("active-card-head")
                     .bg(c(Palette::BG_MSG_HOVER))
                     .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                    .child(crate::ui::avatar_deco::decorate(avatar_with_status(u, 32., app.presence_of(user), c(Palette::BG_SECONDARY)), u, 32.))
+                    .child(crate::ui::avatar_deco::decorate(
+                        // the cut shows the card head's background (and its hover) like the mask
+                        crate::ui::avatar_with_status_overlay(u, 32., app.presence_of(user), c(Palette::BG_PRIMARY), |d| {
+                            d.bg(c(Palette::BG_MSG_HOVER)).group_hover("active-card-head", |s| s.bg(c(Palette::BG_MOD_HOVER)))
+                        }),
+                        u,
+                        32.,
+                    ))
                     .child(
                         div()
                             .flex_1()
