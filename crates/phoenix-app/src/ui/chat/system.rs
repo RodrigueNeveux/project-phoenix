@@ -194,7 +194,10 @@ fn welcome_cta(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> 
     };
     let (e, channel) = (entity.clone(), msg.channel);
     Some(
+        // flex row: the button keeps its content width (as a block child it stretched to
+        // the whole message column)
         div()
+            .flex()
             .pl(z(80.))
             .pt(z(4.))
             .mb(z(2.)) // welcomeCTA_eZQ1Gc margin-bottom 2px
