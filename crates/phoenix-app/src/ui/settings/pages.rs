@@ -173,8 +173,25 @@ pub(super) fn dropdown(
     on_pick: impl Fn(&mut PhoenixApp, usize, &mut Cx) + Clone + 'static,
     cx: &mut Cx,
 ) -> AnyElement {
+    let field = controls::select_field(eid(format!("sel-{id}")), opts.get(cur).cloned().unwrap_or_default());
+    dropdown_with(app, id, field, opts, cur, width, on_pick, cx)
+}
+
+/// [`dropdown`] around a custom closed `field` (e.g. the ghost select of
+/// the content filters).
+#[allow(clippy::too_many_arguments)]
+fn dropdown_with(
+    app: &PhoenixApp,
+    id: &'static str,
+    field: gpui::Stateful<Div>,
+    opts: Vec<SharedString>,
+    cur: usize,
+    width: f32,
+    on_pick: impl Fn(&mut PhoenixApp, usize, &mut Cx) + Clone + 'static,
+    cx: &mut Cx,
+) -> AnyElement {
     let open = app.settings.as_ref().is_some_and(|s| s.open_select == Some(id));
-    let field = controls::select_field(eid(format!("sel-{id}")), opts.get(cur).cloned().unwrap_or_default())
+    let field = field
         .w(z(width))
         // selectField_ :focus-within: 2px outline --input-border-active, offset -2
         .when(open, |d| {
@@ -607,6 +624,104 @@ pub fn blocks(p: Page) -> &'static [B] {
     }
 }
 
+/// "Filtres de contenu sensible" (vanilla-settings-03 #2700-#2749): header
+/// (16/500 title, 14/18 description + link), then tabbedSettingsContainer_
+/// (gap 48): a 226px vertical tabBar_ (40px tabs, padding 10 8, 2px
+/// --text-brand left border when selected, else 1px --border-subtle and
+/// --text-subtle) beside the panel of selectItemRow_ rows (49px, 1px bottom
+/// border) with a borderless 140px select (16px state icon + label, 18px
+/// chevron) and the tab's 14/18 --text-muted note.
+fn content_filters(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    const TABS: [(&str, &str); 2] = [("sp.cs.tab_sexual", "sp.cs.tab_sexual_d"), ("sp.cs.tab_violent", "sp.cs.tab_violent_d")];
+    const ROWS: [[(&str, &str, usize); 3]; 2] = [
+        [("cf-friends", "sp.cs.f_friends", 0), ("cf-others", "sp.cs.f_others", 2), ("cf-servers", "sp.cs.f_servers", 0)],
+        [("cfv-friends", "sp.cs.f_friends", 0), ("cfv-others", "sp.cs.f_others", 1), ("cfv-servers", "sp.cs.f_servers", 0)],
+    ];
+    const ICONS: [&str; 3] = ["chat/eye", "blur", "deny"];
+    let tab = get_pick(app, "cf-tab", Pick::Ui(0)).min(1);
+    let header = div()
+        .flex()
+        .flex_col()
+        .gap(z(4.))
+        .child(title_text(tr("sp.cs.sensitive")))
+        .child(super::account::linked_desc(format!("{} [{}]", tr("sp.cs.sensitive_d"), tr("sp.learn_more")).into()));
+    let tabs = div().w(z(226.)).flex_none().pt(z(12.)).flex().flex_col().gap(z(16.)).children(TABS.iter().enumerate().map(|(i, (t, _))| {
+        let on = i == tab;
+        div()
+            .id(eid(format!("cf-tab-{i}")))
+            .h(z(40.))
+            .px(z(16.))
+            .flex()
+            .items_center()
+            .cursor_pointer()
+            .text_size(z(16.))
+            .line_height(z(20.))
+            .when(on, |d| d.border_l_2().border_color(c(tok(idx::TEXT_BRAND))).text_color(c(tok(idx::TEXT_BRAND))))
+            .when(!on, |d| {
+                d.border_l_1()
+                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    .text_color(c(tok(idx::TEXT_SUBTLE)))
+                    .hover(|s| s.text_color(c(tok(idx::TEXT_DEFAULT))))
+            })
+            .on_click(cx.listener(move |a, _, _, cx| set_pick(a, "cf-tab", Pick::Ui(0), i, cx)))
+            .child(tr(t))
+    }));
+    let opts: Vec<SharedString> = SHOW_BLOCK.iter().map(|o| tr(o)).collect();
+    let rows = ROWS[tab].iter().map(|&(id, label, def)| {
+        let cur = get_pick(app, id, Pick::Ui(def)).min(2);
+        let field = div()
+            .id(eid(format!("sel-{id}")))
+            .h(z(40.))
+            .pl(z(12.))
+            .pr(z(8.))
+            .flex()
+            .items_center()
+            .gap(z(8.))
+            .rounded(z(8.))
+            .cursor_pointer()
+            .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .gap(z(8.))
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .child(gpui::svg().path(crate::icons::path(ICONS[cur])).size(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))))
+                    .child(opts[cur].clone()),
+            )
+            .child(gpui::svg().path("icons/chevron.svg").size(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))));
+        let dd = dropdown_with(app, id, field, opts.clone(), cur, 140., move |a, i, cx| set_pick(a, id, Pick::Ui(def), i, cx), cx);
+        div()
+            .h(z(49.))
+            .py(z(4.))
+            .flex()
+            .items_center()
+            .border_b_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .child(div().flex_1().min_w_0().child(title_text(tr(label))))
+            .child(dd)
+    });
+    let panel = div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .gap(z(16.))
+        .child(div().flex().flex_col().children(rows))
+        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(tr(TABS[tab].1)));
+    div()
+        .py(z(10.))
+        .flex()
+        .flex_col()
+        .gap(z(16.))
+        .child(header)
+        .child(div().flex().gap(z(48.)).child(tabs).child(panel))
+        .into_any_element()
+}
+
 // "Jeux enregistrés" (vanilla-settings-12 dump): Current Game / Added Games
 // with the IGDB note, then Related Settings → Activity Privacy.
 static GAMES: &[B] = &[
@@ -881,10 +996,7 @@ const SHOW_BLOCK: &[&str] = &["sp.cs.show", "sp.cs.blur", "sp.cs.block"];
 
 static CONTENT: &[B] = &[
     B::Title("sp.cs.t1"),
-    B::Lead("sp.cs.sensitive_d"),
-    B::Select("cf-friends", "sp.cs.f_friends", "", SHOW_BLOCK, Pick::Ui(0)),
-    B::Select("cf-others", "sp.cs.f_others", "", SHOW_BLOCK, Pick::Ui(2)),
-    B::Select("cf-servers", "sp.cs.f_servers", "", SHOW_BLOCK, Pick::Ui(0)),
+    B::Custom("sp.cs.sensitive", content_filters),
     B::Switch("age-cmds", "sp.cs.age_cmds", "sp.cs.age_cmds_d", Bind::Ui(false)),
     B::Switch("age-ios", "sp.cs.age_ios", "sp.cs.age_ios_d", Bind::Ui(false)),
     B::Related("image", "settings.page.appearance", "sp.cs.appearance_d", Page::Appearance),
