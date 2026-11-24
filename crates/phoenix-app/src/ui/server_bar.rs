@@ -506,12 +506,16 @@ fn guild_inner(g: &Guild, size: f32) -> AnyElement {
         // The tile's `--radius-md` must clip the image itself (GPUI doesn't clip children).
         ImageRef::Url(u) => img(u.clone()).size(z(size)).rounded(z(ICON_RADIUS * size / ICON)).into_any_element(),
         _ => div()
+            // live client acronym_JJ-hgR (inline size): "T-B", "Tdg", "LRèr" 16px,
+            // a 6-character acronym 12px (5 characters assumed 14px).
             .text_size(z(if size < 30. {
                 7.
-            } else if g.acronym.len() > 2 {
-                14.
             } else {
-                16.
+                match g.acronym.chars().count() {
+                    0..=4 => 16.,
+                    5 => 14.,
+                    _ => 12.,
+                }
             }))
             .font_weight(FontWeight::MEDIUM)
             .child(g.acronym.clone())
