@@ -129,6 +129,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/menu/remove-reactions.svg" => s!(r#"<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/><path d="M8 12h8"/>"#),
         "icons/menu/remove-all-reactions.svg" => s!(r#"<circle cx="11" cy="11" r="8"/><path d="M15 19h6"/>"#),
         "icons/menu/open-link.svg" => s!(r#"<path d="M9 6h9v9M18 6 6 18"/>"#),
+        "icons/link-external.svg" => s!(r#"<path d="M9 6h9v9M18 6 6 18"/>"#),
         "icons/viewer/zoom.svg" => s!(r#"<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6m-3-3h6"/>"#),
         "icons/heart.svg" => s!(r#"<path d="M12 20s-7.5-4.6-9-9.3C2 7.4 4.3 4.5 7.4 4.5c2 0 3.6 1.2 4.6 2.8 1-1.6 2.6-2.8 4.6-2.8 3.1 0 5.4 2.9 4.4 6.2C19.5 15.4 12 20 12 20z"/>"#),
         "icons/tag.svg" => s!(r#"<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="8" cy="8" r="1.5"/>"#),
