@@ -688,11 +688,23 @@ pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model:
 pub struct Prefs {
     pub reads: HashMap<u64, ReadMark>,
     pub mutes: MuteSettings,
+    /// Blocked users: the client never counts their mentions
+    /// (`isBlockedOrIgnoredForMessage`).
+    pub blocked: HashSet<u64>,
 }
 
 impl Prefs {
     pub fn from_ready(r: &Ready) -> Self {
-        Self { reads: parse_read_state(r.read_state.as_ref()), mutes: parse_mutes(r.user_guild_settings.as_ref()) }
+        Self {
+            reads: parse_read_state(r.read_state.as_ref()),
+            mutes: parse_mutes(r.user_guild_settings.as_ref()),
+            blocked: r
+                .relationships
+                .iter()
+                .filter(|x| x.kind == api::RelationshipType::Blocked)
+                .map(|x| x.id.0)
+                .collect(),
+        }
     }
     pub fn ctx(&self) -> ReadCtx<'_> {
         ReadCtx { reads: &self.reads, mutes: &self.mutes }
@@ -846,6 +858,44 @@ impl Adapter {
         Self { me, prefs, lists: HashMap::new(), chunked: HashMap::new(), statuses: HashMap::new() }
     }
 
+    /// Client `isMentioned` for `m`: a direct mention, @everyone unless the
+    /// guild suppresses it, or a role of mine unless the guild suppresses
+    /// roles; never for my own or a blocked author's messages.
+    pub fn mentions_me(&self, cache: &Cache, m: &api::Message) -> bool {
+        if m.author.id == self.me || self.prefs.blocked.contains(&m.author.id.0) {
+            return false;
+        }
+        let g = m.guild_id.map(|g| g.0);
+        let sup_every = g.is_some_and(|g| self.prefs.mutes.suppress_everyone.contains(&g));
+        let sup_roles = g.is_some_and(|g| self.prefs.mutes.suppress_roles.contains(&g));
+        m.mentions_user(self.me)
+            || (m.mention_everyone && !sup_every)
+            || (!sup_roles
+                && m.guild_id.and_then(|g| cache.member(g, self.me)).is_some_and(|me| m.mention_roles.iter().any(|r| me.roles.contains(r))))
+    }
+
+    /// The client's read-state rebuild: once the latest page reaches back to
+    /// the last-read message, the mention count is recounted from the loaded
+    /// messages after it. Returns the guild's new badge state when it changed.
+    pub fn recount_mentions(&mut self, cache: &Cache, channel: u64, latest_page: &[api::Message]) -> Option<AppEvent> {
+        let last_read = self.prefs.reads.get(&channel).map(|r| r.last_read)?;
+        let oldest = latest_page.iter().map(|m| m.id.0).min()?;
+        if oldest > last_read {
+            return None; // unread messages beyond the page: keep the server count
+        }
+        let n = latest_page.iter().filter(|m| m.id.0 > last_read && self.mentions_me(cache, m)).count() as u32;
+        let e = self.prefs.reads.entry(channel).or_default();
+        if e.mentions == n {
+            return None;
+        }
+        e.mentions = n;
+        let g = cache.channel(api::Snowflake(channel))?.guild_id?;
+        let gg = cache.guild(g)?;
+        let chs = guild_channels(cache, g, &self.prefs.ctx());
+        let mg = guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.0));
+        Some(AppEvent::GuildUnread { guild: mg.id, unread: mg.unread, mentions: mg.mentions })
+    }
+
     /// Mark a channel read up to `msg` (local state; the REST ack is separate).
     pub fn mark_read(&mut self, channel: u64, msg: u64) {
         let e = self.prefs.reads.entry(channel).or_default();
@@ -937,17 +987,7 @@ impl Adapter {
                 let mut users = Vec::new();
                 message_users(m, &mut users);
                 out.push(AppEvent::Users(users));
-                // Client `isMentioned`: direct mention, @everyone unless the guild
-                // suppresses it, a role of mine unless the guild suppresses roles.
-                let mentioned = {
-                    let g = m.guild_id.map(|g| g.0);
-                    let sup_every = g.is_some_and(|g| self.prefs.mutes.suppress_everyone.contains(&g));
-                    let sup_roles = g.is_some_and(|g| self.prefs.mutes.suppress_roles.contains(&g));
-                    m.mentions_user(self.me)
-                        || (m.mention_everyone && !sup_every)
-                        || (!sup_roles
-                            && m.guild_id.and_then(|g| cache.member(g, self.me)).is_some_and(|me| m.mention_roles.iter().any(|r| me.roles.contains(r))))
-                };
+                let mentioned = self.mentions_me(cache, m);
                 if m.author.id == self.me {
                     self.mark_read(m.channel_id.0, m.id.0);
                 } else if mentioned {

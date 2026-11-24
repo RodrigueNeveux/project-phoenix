@@ -612,6 +612,12 @@ impl Backend for DiscordBackend {
                 }
             }
             let out = msgs.iter().map(convert::message).collect();
+            if before.is_none() {
+                let ev = s.adapter.lock().recount_mentions(&s.cache, channel.0, &msgs);
+                if let Some(ev) = ev {
+                    inner.emit(ev);
+                }
+            }
             s.cache.insert_messages(sf(channel), msgs);
             Ok(out)
         })

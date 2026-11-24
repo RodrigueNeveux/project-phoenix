@@ -499,7 +499,21 @@ impl Backend for MockBackend {
             self.emit_later(Duration::from_millis(30), move || {
                 AppEvent::Nav(crate::ui::home::data::NavEvent::Snapshot {
                     relationships: rels,
-                    folders: vec![],
+                    // PHX_MOCK_FOLDERS=1: a closed folder of 4 guilds (one unread, one
+                    // with a mention) and a colourless 2-guild folder, for rail renders.
+                    folders: if std::env::var_os("PHX_MOCK_FOLDERS").is_some() {
+                        vec![
+                            crate::ui::home::data::GuildFolder {
+                                id: Some(1),
+                                name: Some("Desktop".into()),
+                                color: Some(0x5865F2),
+                                guilds: (104..108).map(Id).collect(),
+                            },
+                            crate::ui::home::data::GuildFolder { id: Some(2), name: None, color: None, guilds: vec![Id(108), Id(109)] },
+                        ]
+                    } else {
+                        vec![]
+                    },
                     threads: vec![],
                     extras: vec![],
                     message_requests: vec![],
