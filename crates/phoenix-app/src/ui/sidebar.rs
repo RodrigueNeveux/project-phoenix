@@ -786,7 +786,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         && ch.voice_users.first().and_then(|u| app.users.get(u)).is_some_and(|u| u.nameplate.is_some());
     let close = is_dm.then(|| {
         let e = entity.clone();
-        let fg = if plated { gpui::hsla(0., 0., 1., 0.9) } else { gpui::Hsla::from(c(fg)) };
+        let fg = if plated { gpui::hsla(0., 0., 1., 0.9) } else { c(fg) };
         div()
             .flex()
             .flex_none()
