@@ -313,6 +313,10 @@ pub trait Backend: Send + Sync + 'static {
     fn recent_activity(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_activity::RecentGame>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Settings > Connections: authorized apps (`GET /oauth2/tokens`).
+    fn authorized_apps(&self) -> BoxFuture<Option<Vec<crate::ui::settings::authorized_apps::AuthorizedApp>>> {
+        Box::pin(async { Ok(None) })
+    }
     /// Settings > Billing: payment sources, country, transactions (GETs).
     fn billing(&self) -> BoxFuture<Option<crate::ui::settings::billing::Billing>> {
         Box::pin(async { Ok(None) })

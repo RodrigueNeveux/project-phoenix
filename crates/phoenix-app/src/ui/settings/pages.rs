@@ -1612,7 +1612,7 @@ static CONNECTIONS: &[B] = &[
     B::Divider,
     B::Title("sp.cn.t2"),
     B::Lead("sp.cn.t2_d"),
-    B::Note("sp.cn.none"),
+    B::Custom("sp.cn.t2", super::authorized_apps::render),
 ];
 
 

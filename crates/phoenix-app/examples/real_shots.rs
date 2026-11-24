@@ -151,6 +151,10 @@ impl Backend for ReadOnly {
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
+    /// Settings > Connections authorized apps (read-only GET).
+    fn authorized_apps(&self) -> BoxFuture<Option<Vec<phoenix_app::ui::settings::authorized_apps::AuthorizedApp>>> {
+        self.0.authorized_apps()
+    }
     /// Settings > Billing (read-only GETs).
     fn billing(&self) -> BoxFuture<Option<phoenix_app::ui::settings::billing::Billing>> {
         self.0.billing()

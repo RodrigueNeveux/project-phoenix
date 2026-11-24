@@ -192,3 +192,13 @@ impl DiscordBackend {
         })
     }
 }
+
+impl DiscordBackend {
+    /// Settings > Connections: `GET /oauth2/tokens` (read-only).
+    pub(super) fn authorized_apps_impl(&self) -> BoxFuture<Option<Vec<crate::ui::settings::authorized_apps::AuthorizedApp>>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.request_json(reqwest::Method::GET, "/oauth2/tokens", None).await.map_err(api_err)?;
+            Ok(Some(crate::ui::settings::authorized_apps::parse(&v)))
+        })
+    }
+}

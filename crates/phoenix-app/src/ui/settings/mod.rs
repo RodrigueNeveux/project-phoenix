@@ -7,6 +7,7 @@
 
 pub mod account;
 mod art;
+pub mod authorized_apps;
 pub mod billing;
 mod boost;
 mod gift;
@@ -316,6 +317,7 @@ pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         app.settings = Some(SettingsState::default());
         account::fetch_sessions(app, cx);
         billing::fetch(app, cx);
+        authorized_apps::fetch(app, cx);
         cx.notify();
     }
 }
