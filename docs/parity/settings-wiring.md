@@ -103,9 +103,9 @@ where its value is stored and what it changes in the UI.
 | stickers | Sticker animations | settings-proto `text_and_images.animate_stickers` (6, 15) | animated stickers show their first frame unless Always (chat.rs still_sticker); hover-to-play not done | ✅ |
 | alt-text | Show image descriptions | settings-proto `text_and_images.view_image_descriptions` (6, 7) | — | 🟡 stored, no effect yet |
 | legacy-input | Use the legacy chat input | settings-proto `text_and_images.use_legacy_chat_input` (6, 24) | — | 🟡 stored, no effect yet |
-| startup | Open Discord when your computer starts | local prefs (settings.json) | — | 🟡 stored, no effect yet |
-| tray | Minimize Discord to the tray | local prefs (minimize_to_tray) | close hides to the tray icon (tray agent) | ✅ |
-| hwaccel | Enable hardware acceleration | local prefs (settings.json) | — | 🟡 stored, no effect yet |
+| startup | Open Discord when your computer starts | the autostart file itself, like the client (`autoStart/linux`: `getOpenOnStart` = file exists) | writes / removes `$XDG_CONFIG_HOME/autostart/discord-phoenix.desktop` with the client's keys (`Type`, `Exec`, `Hidden=false`, `NoDisplay=false`, `Name`, `Icon`, `Comment=Text and voice chat for gamers.`, `X-GNOME-Autostart-enabled=true`); `PHOENIX_AUTOSTART_DIR` overrides the folder (tests); the binary path is refreshed at start when it moved (`UPDATE_OPEN_ON_STARTUP`) | ✅ (`autostart.rs`, tested in a temp dir) |
+| tray | Minimize Discord to the tray | local prefs (minimize_to_tray), client `MINIMIZE_TO_TRAY` default true | the title bar X and the compositor close request (`on_window_should_close`) minimise instead of quitting while the tray icon runs. The client hides the window; GPUI on Wayland cannot unmap a toplevel without destroying it, so Phoenix minimises | ✅ / ⚠ minimise instead of hide |
+| hwaccel | Enable hardware acceleration | local prefs `ui.hwaccel` (client `enableHardwareAcceleration` in its native settings.json, default true) | the switch opens the client's confirm (`si()`: title "Changer l'accélération matérielle", body `LYXRxL` when enabling / `uDP3Kz` when disabling, "Changer et redémarrer"), saves and relaunches Phoenix. Off = before GPUI starts, `LIBGL_ALWAYS_SOFTWARE=1` and `VK_DRIVER_FILES`/`VK_ICD_FILENAMES` = Mesa lavapipe, so wgpu only sees CPU adapters (llvmpipe / lavapipe), the equivalent of Chromium's `disableHardwareAcceleration()`; the warning banner stays (`j7S6IX`) | ✅ (`hwaccel.rs`; relaunch not run on the user's Phoenix) |
 | time-format | Time format | settings-proto `appearance.timestamp_hour_cycle` (13, 9) | 12h/24h clocks and <t:..:t/T> (i18n::clock, markdown) | ✅ |
 | act-share | Share my activity | settings-proto `status.show_current_game` (11, 3) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
 | act-online | Share when I come online | settings-proto `notifications.notify_friends_on_come_online` (7, 25) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
@@ -119,6 +119,7 @@ where its value is stored and what it changes in the UI.
 | saturation (slider) | Saturation | local prefs | theme tokens desaturated (`theme::saturate`) | ✅ |
 
 ## Known gaps
-* Stored, no effect yet: high contrast (needs the client's high-contrast token set), st-invites / st-sounds, game autocomplete, split thread view, startup / hardware acceleration.
+* Stored, no effect yet: high contrast (needs the client's high-contrast token set), st-invites / st-sounds, game autocomplete, split thread view.
+* "Start Discord minimized" (`OS_START_MINIMIZED`) is Windows-only in the client (predicate `uF`), so it is not shown on Linux, like the client.
 * Compact avatars are gated by `display_compact_avatars`; the 40px size/offset still needs comparison in the official enabled state.
 * Live updates: USER_SETTINGS_PROTO_UPDATE (type 1) now reloads the synced settings (`AppEvent::SettingsChanged`).

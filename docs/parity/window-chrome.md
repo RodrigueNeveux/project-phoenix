@@ -24,3 +24,19 @@ CSS: ~/discord-phoenix-ref/current-client/css/300559.*.css. Dump: vanilla-guild-
 
 State coverage: default, hover, active (min/max), close hover. No focus/tooltip on window buttons in the client.
 | close button | client "Minimize to tray" (default on) | behaviour | hide to tray | title_bar win-close → minimize when tray is up (Wayland cannot unmap); tray.rs SNI Open/Quit | ✅ (needs live check) |
+
+## System tray (`tray.rs`)
+
+Reference: `discord_desktop_core` `systemTray` module (core.asar of app 1.0.171, read 2026-11-24) and the
+web client's `SystemTrayManager` (strings `CK()`, states `C$()`).
+
+| Item | Client | Phoenix | Status |
+|---|---|---|---|
+| Protocol | Electron `Tray` on Linux = StatusNotifierItem + dbusmenu | zbus SNI (`org.kde.StatusNotifierItem-<pid>-1`) + `com.canonical.dbusmenu` | ✅ |
+| Left click | `click` → `onTrayClicked` (show the window) | `Activate` / `SecondaryActivate` → activate the window | ✅ / ⚠ KWin only raises a minimised window when the request carries a fresh input serial: the SNI activation token (`ProvideXdgActivationToken`) cannot be handed to GPUI yet |
+| Tooltip | `setToolTip(appName)` | `ToolTip` = "Discord Phoenix" | ✅ |
+| Menu | `[Open {app}]`, then, connected only, `Rendre muet` / `Mettre en sourdine` (checkboxes) and `Ouvrir les paramètres vocaux et vidéo`, then `Rechercher les mises à jour…` / `Remerciements`, then `Quitter {app}`; a separator before each non-empty group | same order and labels (fr/en from the client's strings), checkmarks follow the panel mute/deafen, Voice settings opens Settings > Voix & vidéo, Remerciements opens `discord.com/acknowledgements` | ✅ / ➖ no "Check for updates" (Phoenix has no updater) |
+| Icons | `tray`, `tray-unread`, `tray-connected`, `tray-speaking`, `tray-muted`, `tray-deafened` from `app/images/systemtray/linux`; priority connected → deafened > muted > speaking > connected, else unread, else default | the same PNGs loaded at runtime from the local Discord install (never committed), app icon as fallback; state polled every 500 ms, `NewIcon` / `LayoutUpdated` signals | ✅ / ⚠ unread = any mention or unread DM (client `hasAnyUnread`), server mute/suppress not modelled |
+| Close hint balloon | `displayBalloon` (Windows only) | — | ➖ |
+
+Tests run on a separate process only: the user's Phoenix and windows are never closed or minimised.

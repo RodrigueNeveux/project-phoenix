@@ -43,7 +43,7 @@ Source: the live 2026 client's shortcuts modal (Ctrl+/), read on 2026-11-24, plu
 | Page Up / Page Down | Scroll the chat | ✅ |
 | Shift+Page Up | Jump to the oldest unread message | ✅ |
 | Any key | Focus the composer and type the character at the caret | ✅ |
-| Alt+R | Record a voice message | ➖ **besoin utilisateur**. Listed in the live Ctrl+/ modal ("Enregistrer un message vocal", Alt R, checked 2026-11-24), but pressing it in the client opens the recorder, which asks for and uses the microphone and leads to an upload: not triggered, the campaign forbids mic capture and sends. Phoenix opens a placeholder only; nothing is recorded or sent. Measuring the recorder needs the user (or a throwaway account) to open it |
+| Alt+R | Record a voice message | ✅ opens the recorder bar like the client's `RECORD_VOICE_MESSAGE` handler (see `voice-messages.md`). The measured account lacks the desktop recording experiment, so its live client does nothing on Alt+R; Phoenix follows the enabled code path. The microphone is only opened when the user presses it |
 | Ctrl+Shift+U | Upload a file | ✅ |
 | Ctrl+Shift+L | Copy channel link | ✅ |
 
