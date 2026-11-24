@@ -27,7 +27,7 @@ fn main() -> anyhow::Result<()> {
         anyhow::bail!("usage: upload_probe <file> \"<what is tested>\" [chunk KiB]");
     };
     let chunk = args.get(3).and_then(|c| c.parse::<usize>().ok()).map_or(phoenix_api::rest::uploads::UPLOAD_CHUNK, |k| k * 1024);
-    anyhow::ensure!(chunk % (256 * 1024) == 0, "chunk must be a multiple of 256 KiB");
+    anyhow::ensure!(chunk.is_multiple_of(256 * 1024), "chunk must be a multiple of 256 KiB");
     let bytes = std::fs::read(path)?;
     let filename = std::path::Path::new(path).file_name().unwrap().to_string_lossy().into_owned();
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
