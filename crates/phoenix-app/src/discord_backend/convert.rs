@@ -1137,7 +1137,8 @@ impl Adapter {
                 if let Some(u) = t.member.as_ref().and_then(|m| m.user.as_ref()) {
                     out.push(AppEvent::Users(vec![user(u)]));
                 }
-                out.push(AppEvent::TypingStart { channel: id(t.channel_id), user: id(t.user_id) });
+                let nick = t.member.as_ref().and_then(|m| m.nick.clone()).map(SharedString::from);
+                out.push(AppEvent::TypingStart { channel: id(t.channel_id), user: id(t.user_id), nick });
             }
             GatewayEvent::PresenceUpdate(p) => {
                 // Profile changed (avatar / names): the cache merged it.

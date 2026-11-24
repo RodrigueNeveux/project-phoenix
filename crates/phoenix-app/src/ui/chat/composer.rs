@@ -334,8 +334,6 @@ fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Pho
     let reply = reply_bar(app, cx);
     let has_banner = reply.is_some();
     let tray = upload_tray(app, cx);
-    let typing_active = app.selected_channel.and_then(|c| app.typing.get(&c)).is_some_and(|v| !v.is_empty())
-        || app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.slowmode > 0);
     // No SEND_MESSAGES: disabled text area with the client's notice, no buttons (CSS only).
     let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
     let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
@@ -350,7 +348,11 @@ fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Pho
         .child(
             // form_ padding-inline --space-xs; channelTextArea_ --chat-background-default,
             // 1px --border-muted, radius --radius-sm, margin-bottom --custom-chat-input-margin-bottom.
-            div().px(z(crate::theme::space::xs())).mb(z(if typing_active { 24. } else { crate::theme::space::xs() })).child( // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom
+            // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom (= --space-xs).
+            // The typing row (inTextChannel_U9Tvvz) hangs above the form: top -24px, over the message list.
+            div().relative().px(z(crate::theme::space::xs())).mb(z(crate::theme::space::xs()))
+            .child(div().absolute().top(z(-24.)).left_0().right_0().child(typing(app)))
+            .child(
                 div()
                     .flex()
                     .flex_col()
@@ -498,8 +500,6 @@ fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Pho
                     ),
             ),
         )
-        // base_U9Tvvz: absolute, bottom 1px, height 24px, inset-inline --space-16 16px.
-        .child(div().absolute().bottom(z(1.)).left(z(16.)).right(z(16.)).child(typing(app)))
 }
 
 /// Edit button of an upload: the client's "Modify Attachment" modal (JS
@@ -623,15 +623,36 @@ fn cooldown(app: &PhoenixApp) -> Option<gpui::AnyElement> {
     )
 }
 
-/// "**Name** is typing…" with bouncing dots, from real TYPING_START events.
+/// Opacity and scale of typing dot `i` at `t` (0..1 of the 1.2 s loop).
+/// dot_U9Tvvz: typing-dot-pulse 1.2s steps(12) infinite, delays -1.2s / -1.05s / -0.9s;
+/// keyframes 0%,50%,100% {opacity .32; scale .8}, 25% {opacity 1; scale 1}.
+/// The timing function applies per keyframe segment, so each segment jumps in 12 steps.
+pub(crate) fn dot_frame(i: usize, t: f32) -> (f32, f32) {
+    let p = (t + 1.0 - i as f32 * 0.125).rem_euclid(1.0);
+    let step = |x: f32| (x * 12.).floor() / 12.;
+    let k = if p < 0.25 {
+        step(p / 0.25)
+    } else if p < 0.5 {
+        1. - step((p - 0.25) / 0.25)
+    } else {
+        0.
+    };
+    (0.32 + 0.68 * k, 0.8 + 0.2 * k)
+}
+
+/// TypingUsers (inTextChannel): dots, then "**Name** est en train d'écrire..." with the
+/// name from `getName(guild, channel, user)` (nick → global name → username); 4+ typers
+/// give "**Plusieurs personnes** sont en train d'écrire...". Slowmode countdown on the right.
 fn typing(app: &PhoenixApp) -> impl IntoElement {
     let names: Vec<SharedString> = app
         .selected_channel
-        .and_then(|c| app.typing.get(&c))
-        .map(|v| v.iter().filter_map(|(u, _)| app.users.get(u).map(|u| u.display_name.clone())).collect())
+        .and_then(|c| app.typing.get(&c).map(|v| (c, v)))
+        .map(|(c, v)| v.iter().filter_map(|(u, _)| app.typing_name(c, *u)).collect())
         .unwrap_or_default();
-    let bold = |s: SharedString| div().font_weight(FontWeight::BOLD).child(s);
-    let mut line = div().flex().items_center().gap(z(0.)).min_w_0();
+    // inTextChannel_ .text_ > strong: --text-default, --font-weight-semibold.
+    let bold = |s: SharedString| div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(super::tk(idx::TEXT_DEFAULT)).child(s);
+    // text_: margin-inline-start calc(--space-md + --space-8), nowrap, ellipsis.
+    let mut line = div().flex().items_center().min_w_0().overflow_hidden().whitespace_nowrap().ml(z(crate::theme::space::md() + 8.));
     match names.as_slice() {
         [] => {}
         [a] => line = line.child(bold(a.clone())).child(crate::t!("chat.typing_suffix_one")),
@@ -645,42 +666,58 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
                 .child(bold(c3.clone()))
                 .child(crate::t!("chat.typing_suffix_many"))
         }
-        _ => line = line.child(crate::t!("chat.typing_many_ellipsis")),
+        _ => line = line.child(bold(crate::t!("chat.typing_several"))).child(crate::t!("chat.typing_suffix_many")),
     }
     let active = !names.is_empty();
+    // dot_: 7px circle, currentColor = dots_ color --text-default; scale animated around the centre.
     let dot = |i: usize| {
-        div().size(z(7.)).rounded_full().bg(super::tk(idx::TEXT_DEFAULT)).with_animation(
-            ("typing-dot", i),
-            Animation::new(Duration::from_millis(1200)).repeat(),
-            move |d, t| {
-                let phase = ((t * 3. - i as f32 * 0.5).rem_euclid(3.) / 3. * std::f32::consts::TAU).sin();
-                d.opacity(0.32 + 0.68 * phase.max(0.))
-            },
+        div().size(z(7.)).flex().items_center().justify_center().child(
+            div().rounded_full().bg(super::tk(idx::TEXT_DEFAULT)).with_animation(
+                ("typing-dot", i),
+                Animation::new(Duration::from_millis(1200)).repeat(),
+                move |d, t| {
+                    let (o, s) = dot_frame(i, t);
+                    d.size(z(7. * s)).opacity(o)
+                },
+            ),
         )
     };
-    // base_ (typing): height 24px, 12px / 16px, weight 500, --text-subtle; dots_ gap 2px;
-    // text_ margin-inline-start 4px.
+    // base_U9Tvvz: height 24px, 12px / 16px, weight 500, --text-subtle;
+    // inTextChannel_: padding-inline-start --space-md; typingDots_ padding-inline-start 8px;
+    // dots_ gap 2px, margin -1px, padding 1px.
     div()
         .h(z(24.))
+        .pl(z(crate::theme::space::md()))
         .flex()
         .items_center()
-        .gap(z(4.))
         .text_size(z(12.))
         .line_height(z(16.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(super::tk(idx::TEXT_SUBTLE))
-        .when(active, |d| {
-            d.child(div().flex().gap(z(2.)).child(dot(0)).child(dot(1)).child(dot(2))).child(line)
-        })
+        .child(
+            div().flex_1().min_w_0().overflow_hidden().flex().items_center().pl(z(8.)).when(active, |d| {
+                d.child(div().flex_none().flex().items_center().gap(z(2.)).child(dot(0)).child(dot(1)).child(dot(2))).child(line)
+            }),
+        )
         .when_some(app.chat.error.clone(), |d, err| {
-            d.child(div().flex_1()).child(div().text_color(c(Palette::RED)).text_ellipsis().child(err))
+            d.child(div().text_color(c(Palette::RED)).text_ellipsis().child(err))
         })
         .children(cooldown(app))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{char_count, format_cooldown};
+    use super::{char_count, dot_frame, format_cooldown};
+
+    #[test]
+    fn typing_dots_follow_the_keyframes() {
+        // Dot 0 starts its loop at 0 (delay -1.2s): rest, peak at 25 %, back to rest at 50 %.
+        assert_eq!(dot_frame(0, 0.0), (0.32, 0.8));
+        assert_eq!(dot_frame(0, 0.25), (1.0, 1.0));
+        assert_eq!(dot_frame(0, 0.6), (0.32, 0.8));
+        // Dot 1 lags by 0.15s (1/8 of the loop).
+        assert_eq!(dot_frame(1, 0.375), (1.0, 1.0));
+    }
 
     #[test]
     fn counter_follows_the_client() {

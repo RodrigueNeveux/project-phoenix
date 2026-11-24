@@ -654,7 +654,7 @@ impl Backend for MockBackend {
         };
         // Simulate someone answering.
         if content.to_lowercase().contains("wumpus") || content.ends_with('?') {
-            self.emit_later(Duration::from_millis(400), move || AppEvent::TypingStart { channel, user: Id(2) });
+            self.emit_later(Duration::from_millis(400), move || AppEvent::TypingStart { channel, user: Id(2), nick: None });
             let inner2 = self.inner.clone();
             let reply_to = msg.id;
             self.emit_later(Duration::from_millis(2600), move || {

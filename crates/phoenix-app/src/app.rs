@@ -139,6 +139,8 @@ pub struct PhoenixApp {
     pub editing: Option<Id>,
     pub typing: HashMap<Id, Vec<(Id, Instant)>>,
     pub typing_label: Option<SharedString>,
+    /// Server nick sent with TYPING_START, keyed by (channel, user).
+    pub typing_nicks: HashMap<(Id, Id), SharedString>,
 
     // Self state
     pub presence: Presence,
@@ -388,6 +390,7 @@ impl PhoenixApp {
             editing: None,
             typing: HashMap::new(),
             typing_label: None,
+            typing_nicks: HashMap::new(),
             presence: Presence::Online,
             mic_muted: self_mute,
             deafened: self_deaf,
@@ -816,8 +819,12 @@ impl PhoenixApp {
                     self.messages.insert(channel, e);
                 }
             }
-            AppEvent::TypingStart { channel, user } => {
+            AppEvent::TypingStart { channel, user, nick } => {
                 if user != self.me.id {
+                    match nick {
+                        Some(n) => { self.typing_nicks.insert((channel, user), n); }
+                        None => { self.typing_nicks.remove(&(channel, user)); }
+                    }
                     let list = self.typing.entry(channel).or_default();
                     list.retain(|(u, _)| *u != user);
                     list.push((user, Instant::now()));
@@ -1008,15 +1015,21 @@ impl PhoenixApp {
         }
     }
 
+    /// Name the client shows for a typer (`getName(guild, channel, user)`):
+    /// member nick, then global display name, then username.
+    pub fn typing_name(&self, channel: Id, user: Id) -> Option<SharedString> {
+        self.typing_nicks
+            .get(&(channel, user))
+            .cloned()
+            .or_else(|| self.member_nick(user))
+            .or_else(|| self.users.get(&user).map(|u| u.display_name.clone()))
+    }
+
     fn update_typing_label(&mut self) {
-        let names: Vec<&str> = self
+        let names: Vec<SharedString> = self
             .selected_channel
-            .and_then(|c| self.typing.get(&c))
-            .map(|v| {
-                v.iter()
-                    .filter_map(|(u, _)| self.users.get(u).map(|u| u.display_name.as_ref()))
-                    .collect()
-            })
+            .and_then(|c| self.typing.get(&c).map(|v| (c, v)))
+            .map(|(c, v)| v.iter().filter_map(|(u, _)| self.typing_name(c, *u)).collect())
             .unwrap_or_default();
         self.typing_label = match names.as_slice() {
             [] => None,
