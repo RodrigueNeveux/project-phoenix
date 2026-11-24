@@ -469,6 +469,38 @@ fn subnav(rows: Vec<SharedString>) -> Div {
         })))
 }
 
+/// Sidebar footer (vanilla-settings-01 #2646-#2663): footnote 10/12
+/// --text-muted build line "stable 679055 1.0.170 x64", then the
+/// --text-link legal links with bullets and a muted "Plus".
+fn footer() -> Div {
+    static INFO: std::sync::OnceLock<phoenix_api::build_info::BuildInfo> = std::sync::OnceLock::new();
+    let b = INFO.get_or_init(phoenix_api::build_info::BuildInfo::detect_fast);
+    let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+    let line = format!("{} {} {} {arch}", b.release_channel, b.build_number, b.client_version);
+    let note = |t: SharedString, col: usize| div().text_size(z(10.)).line_height(z(12.)).text_color(c(tok(col))).child(t);
+    let bullet = || note("•".into(), idx::TEXT_MUTED);
+    div()
+        .px(z(10.))
+        .pt(z(8.))
+        .pb(z(16.))
+        .flex()
+        .flex_col()
+        .gap(z(4.))
+        .child(note(line.into(), idx::TEXT_MUTED))
+        .child(
+            div()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(z(4.))
+                .child(note(crate::t!("settings.footer.privacy"), idx::TEXT_LINK))
+                .child(bullet())
+                .child(note(crate::t!("settings.footer.terms"), idx::TEXT_LINK))
+                .child(bullet())
+                .child(note(crate::t!("settings.footer.more"), idx::TEXT_MUTED)),
+        )
+}
+
 fn subnav_rows(p: Page) -> Vec<SharedString> {
     match p {
         // vanilla-settings-01 #2518..#2527: four rows incl. "Family Centre".
@@ -674,11 +706,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
                 }
                 cx.notify();
             })));
-            sec = sec.child(div().px(z(10.)).pt(z(8.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_MUTED))).child(concat!(
-                "Discord Phoenix ",
-                env!("CARGO_PKG_VERSION"),
-                " (Linux)"
-            )));
+            sec = sec.child(footer());
         }
         list = list.child(sec);
     }
