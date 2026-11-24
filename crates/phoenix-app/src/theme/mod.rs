@@ -364,6 +364,12 @@ pub fn font_scale() -> f32 {
     FONT_PX.load(Ordering::Relaxed) as f32 / 16.
 }
 
+/// `html.a11y-font-scaled-down` (font size below 16px): the cozy avatar becomes 2.5rem at
+/// 1rem from the edge and the content starts at 4.5rem.
+pub fn font_scaled_down() -> bool {
+    FONT_PX.load(Ordering::Relaxed) < 16
+}
+
 /// A layout length scaled by the UI zoom. Use instead of `px()` for sizes.
 pub fn z(v: f32) -> Pixels {
     px(v * zoom())

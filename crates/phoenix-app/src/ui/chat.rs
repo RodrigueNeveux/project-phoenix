@@ -257,8 +257,14 @@ const HDR_ICON: f32 = 20.;
 
 /// --custom-message-margin-left-content-cozy = avatar + 2 × --space-md
 /// (density-aware; cozy: dump -channels-N-N+ #1184 padding-left 80px).
+/// `.a11y-font-scaled-down` (font under 16px) pins it to 4.5rem.
 pub(crate) fn msg_left() -> f32 {
-    m::AVATAR + 2. * space::md()
+    if crate::theme::font_scaled_down() { 72. * crate::theme::font_scale() } else { m::AVATAR + 2. * space::md() }
+}
+
+/// `--chat-avatar-size` of a cozy message: 40px, 2.5rem under `.a11y-font-scaled-down`.
+fn msg_avatar() -> f32 {
+    if crate::theme::font_scaled_down() { 40. * crate::theme::font_scale() } else { m::AVATAR }
 }
 
 fn hdr_button(id: &'static str, i: Icon, color: gpui::Hsla, size: f32) -> gpui::Stateful<gpui::Div> {
@@ -1125,14 +1131,14 @@ fn message(
         // --custom-message-reply-indent (.625rem).
         div()
             .relative()
-            .h(z(if compact { 20. } else { 18. })) // cozy: vanilla-guild-text-groups #2624 repliedMessage_ 18px (line-height 1.125rem); compact #1185 20px
+            .h(fz(if compact { 20. } else { 18. })) // cozy: vanilla-guild-text-groups #2624 repliedMessage_ 18px (line-height 1.125rem); compact #1185 20px
             .when(!compact, |d| d.mb(z(4.)))
             .when(compact, |d| d.ml(z(-24.)).pl(z(10.)))
             .flex()
             .items_center()
             .gap(z(4.)) // replyAvatar_ margin-inline-end --custom-message-meta-space
             .text_size(fz(14.))
-            .line_height(z(18.))
+            .line_height(fz(18.))
             .text_color(tk(idx::TEXT_DEFAULT))
             .child(
                 // messageSpine_:before — 2px --spine-default, radius 6px, top 50%, bottom 0,
@@ -1296,15 +1302,17 @@ fn message(
         // Compact (Discord's IRC-like layout): "[time] Name" sits inline at the
         // start of the first line and wrapped lines are indented to 80 px,
         // like the web client's negative text-indent.
-        base.pl(z(80.))
-            .py(z(2.))
+        // compact_ wrapper: padding-inline-start --custom-message-margin-compact-indent (5rem),
+        // padding-block --custom-message-padding-vertical-container-compact (.125rem).
+        base.pl(fz(80.))
+            .py(fz(2.))
             .when_some(reply, |d, reply| d.child(reply))
             .when(compact_avatars, |d| {
                 d.child(
                     div()
                         .absolute()
                         .left(z(16.))
-                        .top(z(if msg.reply_to.is_some() { 24. } else { 2. }))
+                        .top(fz(if msg.reply_to.is_some() { 24. } else { 2. }))
                         .id(("msg-avatar-compact", id.0))
                         .cursor_pointer()
                         .rounded_full()
@@ -1337,7 +1345,7 @@ fn message(
                 div()
                     .absolute()
                     .left(z(compact_header_left))
-                    .top(z(if msg.reply_to.is_some() { 24. } else { 2. }))
+                    .top(fz(if msg.reply_to.is_some() { 24. } else { 2. }))
                     .h(fz(22.))
                     .flex()
                     .items_center()
@@ -1347,8 +1355,8 @@ fn message(
                         div()
                             .id(("msg-time", id.0))
                             .flex_none()
-                            .mr(z(4.))
-                            .text_size(z(11.))
+                            .mr(fz(4.))
+                            .text_size(fz(11.))
                             .text_color(tk(idx::TEXT_MUTED))
                             .tooltip(time_tooltip(ts))
                             .child(r.time_short.clone()),
@@ -1363,7 +1371,7 @@ fn message(
             .child(content)
     } else {
         base.pl(z(msg_left())) // --custom-message-margin-left-content-cozy (#1184 80px)
-            .py(z(2.))
+            .py(fz(2.)) // --custom-message-spacing-vertical-container-cozy (.125rem)
             .when_some(reply, |d, reply| d.child(reply))
             .when(r.group_start, |d| {
                 d.child(
@@ -1372,9 +1380,14 @@ fn message(
                         // avatar_: inset-inline-start --custom-message-margin-horizontal,
                         // margin-top 4px - cozy vertical padding (so 4px below the row top,
                         // after the reply line when there is one).
-                        .left(z(space::md())) // #1200 left 20px
-                        // #1200: 2px row padding + 18px reply + 4px --reply-spacing + 2px margin-top.
-                        .top(z(if msg.reply_to.is_some() { 26. } else { 4. })) // #2640: 2 + 18 reply + 4 + 2
+                        // Under .a11y-font-scaled-down: inset 1rem, margin-top .25rem - .125rem.
+                        .left(if crate::theme::font_scaled_down() { fz(16.) } else { z(space::md()) }) // #1200 left 20px
+                        // #1200: .125rem row padding + 1.125rem reply + 4px --reply-spacing + (4px - .125rem)
+                        // margin-top; #2640: 2 + 18 + 4 + 2 at 16px.
+                        .top({
+                            let pad = if crate::theme::font_scaled_down() { 4. * crate::theme::font_scale() } else { 4. };
+                            z(if msg.reply_to.is_some() { 18. * crate::theme::font_scale() + 4. + pad } else { pad })
+                        })
                         .id(("msg-avatar", id.0))
                         .cursor_pointer()
                         .rounded_full()
@@ -1391,14 +1404,14 @@ fn message(
                         // avatar_2i8Bfm.clickable_:active translateY(1px)
                         .active(|s| s.mt(z(1.)))
                         .on_click(message_ext::open_author(entity, msg))
-                        .child(avatar(author, m::AVATAR))
+                        .child(avatar(author, msg_avatar()))
                         .when_some(author.and_then(|u| u.decoration.clone()), |d, deco| {
                             // avatarDecoration_2i8Bfm: --custom-message-avatar-decoration-size = avatar × 1.2
                             // (--decoration-to-avatar-ratio), centred on the avatar (−(deco−avatar)/2),
                             // z-index 1, no pointer events. Drawn inside the avatar box so the
                             // :active translateY(1px) moves it too, like the client.
-                            let s = m::AVATAR * 1.2;
-                            let off = (s - m::AVATAR) / 2.;
+                            let s = msg_avatar() * 1.2;
+                            let off = (s - msg_avatar()) / 2.;
                             d.child(
                                 gpui::img(crate::ui::avatar_deco::src_for(&deco, crate::ui::avatar_deco::hover_key(2, id.0)))
                                     .absolute()
@@ -1460,7 +1473,8 @@ fn message(
     // The list measures each row with `layout_as_root`, which ignores the
     // root's own margins: group spacing must be padding on a wrapper or rows
     // get painted over each other.
-    let gap = if !r.group_start { 0. } else if compact { 4. } else { 17. };
+    // groupStart_ margin-top --custom-group-spacing-start (1.0625rem with group-spacing-16).
+    let gap = if !r.group_start { 0. } else if compact { 4. } else { 17. * crate::theme::font_scale() };
     row_wrapper()
         .when_some(r.day_divider.clone(), |d, label| d.child(dated_divider(label, new_marker)))
         .when(new_marker && r.day_divider.is_none(), |d| d.child(message_ext::new_divider(r.group_start)))
