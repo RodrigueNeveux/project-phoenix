@@ -118,6 +118,9 @@ impl SyncedSettings {
                 for e in synced_map::ENTRIES.iter().filter(|e| Some(e.path) == path) {
                     self.proto.insert(e.id, *v);
                 }
+                if *id == "favs" {
+                    self.favorites.guild_visible = Some(phoenix_api::rest::settings::BoolValue { value: *v != 0 });
+                }
             }
             SettingsPatch::Density(d) => self.density = *d,
             SettingsPatch::Favorites(f) => self.favorites = (**f).clone(),

@@ -14,10 +14,7 @@ pub fn data(app: &PhoenixApp) -> &Favorites {
 }
 
 pub fn enabled(app: &PhoenixApp) -> bool {
-    match app.prefs.synced.proto.get("favs") {
-        Some(v) => *v != 0,
-        None => data(app).guild_enabled(),
-    }
+    data(app).guild_enabled()
 }
 
 pub fn is_favorite(app: &PhoenixApp, channel: Id) -> bool {
