@@ -36,3 +36,29 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 - Reply previews draw mentions as plain text, without the mention colour.
 - Some large attachments (probably big GIFs) stay on the loading placeholder after 45 s in `real_shots`.
 - Group DM "a ajouté quelqu'un au groupe." does not name the added user, because the model does not keep message mentions.
+
+## Overlays & pages
+
+Found on offscreen `real_shots` renders of the real account (scale 1.25, `PHX_OPEN=…`,
+`PHX_VIEW=…`, `PHX_PROFILE=peer`); renders stay private in
+`/mnt/windata/project-phoenix/compare/realov`.
+
+| Where | Glitch | Fix |
+|---|---|---|
+| Inbox mentions, pinned messages | Custom emoji shown as the raw `<:name:id>` token | `components::markdown_in` passes the message context so emoji render as images (a10c2a5) |
+| Expression picker (DM) | Drawn over the DM profile panel, flush with the window edge | Right offset accounts for the 320px DM panel and the 268px member list, not a fixed 240 (5171e81) |
+| Picker / search errors | English backend strings in the French UI ("Search isn't available.", "Discord is still indexing…") | Backend errors go through i18n (`backend.*`, `search.nothing`, `search.indexing`) (3c50aaa) |
+| GIF picker home | "GIF à la une" tile without its preview image | Preview falls back to `gif_src` when Tenor's `src` is a video (1f12e76); still empty on the real account, cause not found yet |
+| Search results | Sidebar overlaid the chat: messages and composer buttons (GIF, emoji…) cut off | The chat reserves the 420px column instead of the member list / DM panel (d1c5e0d) |
+| Profile modal | Last tab "17 serveurs en con" cut mid-word | The mutual servers tab shrinks with an ellipsis like the client ("9 s…") |
+| Search results | Raw message text (`<@id>`, markdown, emoji tokens) | Results rendered with `markdown_in` (7a40a6a) |
+
+Harness: `real_shots` gained `PHX_OPEN` (pins, threads, search, settings pages, server settings,
+pickers, message menu), `PHX_PROFILE=peer`, and read-only forwards for pins, stickers, GIFs and search.
+
+Checked, not bugs: Friends "Tous les amis - N" vs "Envoyée(s) — N" (client strings), "Marquer un message"
+(client string), server settings fully black (user's Midnight theme overrides `PHX_THEME` once the synced
+settings arrive), inbox tab ellipsis (client also ellipsizes at this width).
+
+Open: trending GIF tile preview (see above); search results don't render embeds (embed-only messages show an empty card); GIF "Favoris" tile has no
+preview of a favourite.
