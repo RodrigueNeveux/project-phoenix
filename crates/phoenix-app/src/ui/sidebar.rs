@@ -615,7 +615,13 @@ pub(crate) fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
 
 /// Channel glyph with Discord's small corner badges (lock for private
 /// channels, "!" for age-restricted ones).
-fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool, bg: gpui::Hsla) -> AnyElement {
+/// `hover`: row group whose hover turns the glyph `--interactive-text-hover` (live
+/// ref-cache/voice-channel-row-hover.json: `icon_TNyK-N` oklab(.895) like the name).
+fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool, bg: gpui::Hsla, hover: Option<SharedString>) -> AnyElement {
+    let hov = move |g: gpui::Svg| match hover.clone() {
+        Some(h) => g.group_hover(h, |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
+        None => g,
+    };
     div()
         .relative()
         .size(z(20.))
@@ -623,8 +629,8 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
         // Vanilla icon picker: NSFW wins over lock; locked channels swap to the
         // dedicated *LockIcon glyph (live aria "Salon privé (verrouillé)").
         .map(|d| match lock_icon_name(kind).filter(|_| locked && !nsfw) {
-            Some(name) => d.child(gpui::svg().path(crate::icons::path(name)).size(z(20.)).flex_none().text_color(color)),
-            None => d.child(icon(channel_icon(kind), 20., color)),
+            Some(name) => d.child(hov(gpui::svg().path(crate::icons::path(name)).size(z(20.)).flex_none().text_color(color))),
+            None => d.child(hov(icon(channel_icon(kind), 20., color))),
         })
         .when(nsfw, |d| {
             d.child(
@@ -798,6 +804,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             extra.is_some_and(|e| e.locked),
             extra.is_some_and(|e| e.nsfw),
             if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_SECONDARY) },
+            (!selected && app.voice_channel != Some(id)).then(|| SharedString::from(format!("chrow{}", id.0))),
         )
     };
     let name: SharedString = extra.and_then(|e| e.group_name.clone()).filter(|_| is_dm).unwrap_or_else(|| ch.name.clone());
