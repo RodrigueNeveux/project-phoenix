@@ -8,7 +8,7 @@ use gpui_component::Sizable as _;
 
 use gpui::{
     Animation, AnimationExt, Context, FontWeight, IntoElement, KeyDownEvent, ParentElement, SharedString,
-    Styled, Window, div, img, prelude::*, relative,
+    Styled, Window, div, img, prelude::*,
 };
 
 use super::{

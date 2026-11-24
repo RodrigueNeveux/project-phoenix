@@ -336,18 +336,6 @@ pub fn video_embed_actions(url: SharedString) -> AnyElement {
         .into_any_element()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::human_size;
-
-    #[test]
-    fn sizes_match_client_labels() {
-        assert_eq!(human_size(512).as_ref(), "512 bytes");
-        assert_eq!(human_size(2048).as_ref(), "2.00 KB");
-        assert_eq!(human_size(4_213_337).as_ref(), "4.02 MB");
-    }
-}
-
 /// Upload in flight under its optimistic message, like the client's message
 /// list upload row (`fileWrapper_`/`file_` card; `filenameWrapper_`: name, then
 /// "— size" while bytes go out; `progressContainer_` 16px row with the bar,
@@ -440,4 +428,16 @@ pub fn upload_progress_card(
             })
             .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::human_size;
+
+    #[test]
+    fn sizes_match_client_labels() {
+        assert_eq!(human_size(512).as_ref(), "512 bytes");
+        assert_eq!(human_size(2048).as_ref(), "2.00 KB");
+        assert_eq!(human_size(4_213_337).as_ref(), "4.02 MB");
+    }
 }
