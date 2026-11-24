@@ -1216,6 +1216,7 @@ fn main() -> anyhow::Result<()> {
         for _ in 0..40 {
             pump(&mut cx, 500);
             connected = cx.update(|cx| v.read(cx).voice.status == phoenix_app::voice::VoiceStatus::Connected);
+            eprintln!("voice-trace: ui status {:?}", cx.update(|cx| v.read(cx).voice.status));
             if connected {
                 break;
             }

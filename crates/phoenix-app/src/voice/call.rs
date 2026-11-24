@@ -208,6 +208,15 @@ impl VoiceManager {
     }
 
     pub fn on_gateway(&self, emit: &Emit, me: u64, ev: &GatewayEvent) {
+        if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() {
+            match ev {
+                GatewayEvent::VoiceStateUpdate(v) if v.user_id.0 == me => {
+                    eprintln!("voice-trace: own voice state channel={:?} self_video={}", v.channel_id.map(|c| c.0), v.self_video)
+                }
+                GatewayEvent::VoiceServerUpdate(s) => eprintln!("voice-trace: server update endpoint_set={}", s.endpoint.is_some()),
+                _ => {}
+            }
+        }
         let mut st = self.state.lock();
         let Some(target) = st.target else { return };
         match ev {
@@ -295,6 +304,9 @@ impl VoiceManager {
             while let Some(ev) = events.recv().await {
                 if manager().state.lock().generation != generation {
                     return;
+                }
+                if std::env::var_os("PHOENIX_VOICE_TRACE").is_some() && !matches!(ev, VoiceEvent::Video { .. } | VoiceEvent::Stats(_) | VoiceEvent::Ping(_)) {
+                    eprintln!("voice-trace: {ev:?}");
                 }
                 let e = match ev {
                     VoiceEvent::Connected { mode, .. } => {
