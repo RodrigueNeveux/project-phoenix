@@ -18,7 +18,7 @@ use crate::{
     app::{PhoenixApp, format_time_full},
     assets::Icon,
     model::Message,
-    theme::{Palette, c, ca, z},
+    theme::{Palette, c, z},
     ui::{avatar, context_menu, icon_button, modal},
 };
 
@@ -512,6 +512,7 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
 
 /// Full-area overlay shown while files are dragged over the chat.
 pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
+    use crate::theme::generated::idx;
     let name = app.selected_channel.and_then(|c| app.channels.get(&c)).map(|c| c.name.clone()).unwrap_or_default();
     div()
         .absolute()
@@ -520,40 +521,49 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
         .size_full()
         .invisible()
         .group_drag_over::<gpui::ExternalPaths>("chat-drop", |s| s.visible())
-        .bg(ca(0x000000B3))
+        .bg(super::tk(idx::OPACITY_BLACK_80)) // uploadArea_ --opacity-black-80
         .flex()
         .items_center()
         .justify_center()
         .child(
+            // uploadDropModal_ 310x170; bgScale_ --brand-500 radius 10; inner_ 2px dashed
+            // --opacity-white-40 radius 6, centred column; title_ 22px bold white; instructions_
+            // 12/16 white, margin-top 4. (The three animated file icons are Discord art: one glyph.)
             div()
                 .w(z(310.))
-                .p(z(8.))
+                .h(z(170.))
                 .rounded(z(10.))
-                .bg(c(Palette::BLURPLE))
+                .bg(super::tk(idx::BRAND_500))
+                .flex()
                 .child(
                     div()
-                        .p(z(16.))
-                        .pt(z(48.))
-                        .rounded(z(8.))
+                        .flex_1()
+                        .rounded(z(6.))
                         .border_2()
                         .border_dashed()
-                        .border_color(ca(0xFFFFFF80))
+                        .border_color(super::tk(idx::OPACITY_WHITE_40))
                         .flex()
                         .flex_col()
                         .items_center()
-                        .gap(z(8.))
+                        .justify_center()
                         .child(icon(ChatIcon::Upload, 48., gpui::white()))
                         .child(
                             div()
-                                .text_size(z(20.))
+                                .px(z(8.))
+                                .text_size(z(22.))
                                 .font_weight(FontWeight::BOLD)
                                 .text_color(gpui::white())
+                                .text_center()
                                 .child(crate::t!("chat.upload_to", name = name)),
                         )
                         .child(
                             div()
-                                .text_size(z(14.))
+                                .mt(z(4.))
+                                .px(z(8.))
+                                .text_size(z(12.))
+                                .line_height(z(16.))
                                 .text_color(gpui::white())
+                                .text_center()
                                 .child(crate::t!("chat.upload_hint")),
                         ),
                 ),

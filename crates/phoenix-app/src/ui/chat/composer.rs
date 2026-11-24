@@ -93,33 +93,71 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
     if app.chat.uploads.is_empty() {
         return None;
     }
+    // channelAttachmentArea_: flex, gap 24, padding 20 10 10, overflow-x auto.
     let mut tray = div()
         .id("upload-tray")
-        .p(z(16.))
-        .pb(z(4.))
+        .pt(z(20.))
+        .px(z(10.))
+        .pb(z(10.))
         .flex()
         .gap(z(24.))
-        .overflow_x_scroll()
-        .border_b_1()
-        .border_color(c(Palette::DIVIDER));
+        .overflow_x_scroll();
     for (ix, f) in app.chat.uploads.iter().enumerate() {
         let preview = match &f.image {
             Some(i) => img(i.clone())
                 .size_full()
-                .rounded(z(3.))
+                .rounded(z(12.)) // media_ border-radius --radius-sm
                 .object_fit(gpui::ObjectFit::Contain)
                 .into_any_element(),
-            None => icon(ChatIcon::Upload, 64., c(Palette::BLURPLE)).into_any_element(),
+            None => icon(ChatIcon::Upload, 64., super::tk(idx::TEXT_BRAND)).into_any_element(),
         };
+        // actionBar_ (hover-bar popover): --background-surface-high, 1px --border-muted,
+        // radius 8, padding 2; translate(25%, -25%) from the card's top-right corner.
+        let button = |id: (&'static str, usize), glyph: ChatIcon, color: gpui::Hsla| {
+            div()
+                .id(id)
+                .size(z(28.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(z(6.))
+                .cursor_pointer()
+                .hover(|s| s.bg(super::tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+                .child(icon(glyph, 20., color)) // actionBarIcon_ 20px
+        };
+        let bar = div()
+            .absolute()
+            .top(z(-16.))
+            .right(z(-16.))
+            .p(z(2.))
+            .flex()
+            .rounded(z(8.))
+            .bg(super::tk(idx::BACKGROUND_SURFACE_HIGH))
+            .border_1()
+            .border_color(super::tk(idx::BORDER_MUTED))
+            .shadow(crate::ui::inbox::low_shadow())
+            .child(
+                button(("up-spoiler", ix), ChatIcon::Eye, super::tk(if f.spoiler { idx::TEXT_BRAND } else { idx::INTERACTIVE_TEXT_DEFAULT }))
+                    .on_click(cx.listener(move |a, _, _, cx| a.toggle_upload_spoiler(ix, cx))),
+            )
+            .child(
+                button(("up-remove", ix), ChatIcon::Trash, super::tk(idx::TEXT_FEEDBACK_CRITICAL))
+                    .on_click(cx.listener(move |a, _, _, cx| a.remove_upload(ix, cx))),
+            );
         tray = tray.child(
+            // upload_JyxBSo: 200x200, padding 8, --background-surface-high, 1px --border-normal,
+            // radius --radius-sm (12), --shadow-low.
             div()
                 .relative()
                 .flex_none()
-                .w(z(216.))
-                .h(z(216.))
+                .w(z(200.))
+                .h(z(200.))
                 .p(z(8.))
-                .rounded(z(4.))
-                .bg(c(Palette::BG_SECONDARY))
+                .rounded(z(12.))
+                .bg(super::tk(idx::BACKGROUND_SURFACE_HIGH))
+                .border_1()
+                .border_color(super::tk(idx::BORDER_NORMAL))
+                .shadow(crate::ui::inbox::low_shadow())
                 .flex()
                 .flex_col()
                 .child(
@@ -129,56 +167,26 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
                         .flex()
                         .items_center()
                         .justify_center()
-                        .when(f.spoiler, |d| d.opacity(0.3))
+                        .overflow_hidden()
+                        .rounded(z(12.))
+                        // spoiler_: blur(--custom-channel-attachment-upload-spoiler-blur-radius 44px);
+                        // GPUI has no blur filter, so the preview is dimmed instead.
+                        .when(f.spoiler, |d| d.opacity(0.15).bg(super::tk(idx::BACKGROUND_MOD_STRONG)))
                         .child(preview),
                 )
                 .child(
+                    // filenameContainer_ margin-top auto; filename_ margin-top 8, ellipsis.
                     div()
                         .mt(z(8.))
-                        .text_size(z(14.))
-                        .text_color(c(Palette::TEXT_NORMAL))
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .text_color(super::tk(idx::TEXT_DEFAULT))
+                        .overflow_hidden()
+                        .whitespace_nowrap()
                         .text_ellipsis()
                         .child(f.name.clone()),
                 )
-                .child(
-                    div()
-                        .absolute()
-                        .top(z(-12.))
-                        .right(z(-12.))
-                        .flex()
-                        .rounded(z(4.))
-                        .bg(c(Palette::BG_PRIMARY))
-                        .border_1()
-                        .border_color(c(Palette::HEADER_SHADOW))
-                        .child(
-                            div()
-                                .id(("up-spoiler", ix))
-                                .size(z(32.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .hover(|s| s.bg(c(0x3D3E45)))
-                                .child(icon(
-                                    ChatIcon::Eye,
-                                    20.,
-                                    c(if f.spoiler { Palette::BLURPLE } else { Palette::INTERACTIVE }),
-                                ))
-                                .on_click(cx.listener(move |a, _, _, cx| a.toggle_upload_spoiler(ix, cx))),
-                        )
-                        .child(
-                            div()
-                                .id(("up-remove", ix))
-                                .size(z(32.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .cursor_pointer()
-                                .hover(|s| s.bg(c(0x3D3E45)))
-                                .child(icon(ChatIcon::Trash, 20., c(Palette::RED)))
-                                .on_click(cx.listener(move |a, _, _, cx| a.remove_upload(ix, cx))),
-                        ),
-                ),
+                .child(bar),
         );
     }
     Some(tray)
@@ -271,6 +279,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                     .border_1()
                     .border_color(super::tk(idx::BORDER_MUTED))
                     .bg(super::tk(idx::CHAT_BACKGROUND_DEFAULT))
+                    .relative() // autocompleteAttached_ is positioned against channelTextArea_
+                    .children(crate::ui::autocomplete::render(app, cx))
                     .children(reply)
                     .children(tray)
                     .child(
@@ -279,14 +289,19 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                             .min_h(z(56.)) // #1437 56px (17px padding + 22px line)
                             .when(has_banner, |d| d.rounded_b(z(8.)))
                             .relative()
-                            .when(remaining < 200, |d| {
+                            // Client CharacterCount: visible once remaining <= max/10 (200 of 2000);
+                            // characterCount_ absolute bottom 10 / inset-inline-end 14; body-sm/semibold
+                            // tabular, --text-default, --text-feedback-critical when over the limit.
+                            .when(remaining <= 200, |d| {
                                 d.child(
                                     div()
                                         .absolute()
-                                        .right(z(16.))
-                                        .bottom(z(-18.))
-                                        .text_size(z(12.))
-                                        .text_color(c(if remaining < 0 { Palette::RED } else { Palette::TEXT_MUTED }))
+                                        .right(z(14.))
+                                        .bottom(z(10.))
+                                        .text_size(z(14.))
+                                        .line_height(z(18.))
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(super::tk(if remaining < 0 { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_DEFAULT }))
                                         .child(SharedString::from(remaining.to_string())),
                                 )
                             })

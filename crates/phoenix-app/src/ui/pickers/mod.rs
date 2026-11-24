@@ -385,9 +385,6 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
         };
         cx.defer_in(window, move |app, window, cx| open(app, Tab::Emoji, target, window, cx));
     }
-    if let Some(el) = ui::autocomplete::render(app, cx) {
-        out.push(el);
-    }
     if let Some(el) = ui::search::render(app, window, cx) {
         out.push(el);
     }

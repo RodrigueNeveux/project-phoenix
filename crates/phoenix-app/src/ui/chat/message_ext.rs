@@ -234,7 +234,7 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
     let link = |id: &'static str, label: gpui::SharedString| {
         div()
             .id(id)
-            .text_color(c(Palette::TEXT_LINK))
+            .text_color(tk(idx::TEXT_LINK)) // operations_ > a --text-link
             .cursor_pointer()
             .hover(|s| s.underline())
             .child(label)
@@ -269,12 +269,14 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
                     .child(ui::icon(Icon::Emoji, 22., c(Palette::INTERACTIVE))),
             )
             .child(
+                // operations_h_zE4S: 12px medium --text-default, padding 7px 0; links --text-link.
                 div()
-                    .py(z(4.))
+                    .py(z(7.))
                     .flex()
                     .gap(z(4.))
                     .text_size(z(12.))
-                    .text_color(c(Palette::TEXT_NORMAL))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(tk(idx::TEXT_DEFAULT))
                     .child(crate::t!("edit.escape_to"))
                     .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| a.cancel_edit(w, cx))))
                     .child(crate::t!("edit.enter_to"))

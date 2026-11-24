@@ -4,13 +4,17 @@
 
 use gpui::{
     AnyElement, App, Context, Focusable, FontWeight, ParentElement, SharedString, Styled, Window,
-    div, prelude::*, px,
+    div, prelude::*,
 };
+
+fn tk(i: usize) -> gpui::Hsla {
+    c(tok(i))
+}
 
 use crate::{
     app::PhoenixApp,
     model::{ChannelKind, Id},
-    theme::{Palette, c, m as layout},
+    theme::{c, generated::idx, tok, z},
     ui::{
         avatar, icon,
         pickers::{
@@ -269,92 +273,100 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Kind::Mention => if a.query.is_empty() { crate::t!("members.members") } else { crate::t!("ac.members", q = a.query) },
         Kind::Channel => if a.query.is_empty() { crate::t!("ac.text_channels") } else { crate::t!("ac.channels", q = a.query) },
     };
-    let mut rows = div().flex().flex_col().p(px(8.)).pt(px(0.));
+    // 790340 autocompleteInner_ padding-bottom 8; rows are base_ (padding 8, radius 3)
+    // inside autocompleteRow_ (padding 0 8, 14/16 medium).
+    let mut rows = div().flex().flex_col().pb(z(8.));
     for (i, item) in a.items.iter().enumerate() {
         let selected = i == a.selected;
         let (lead, main, hint): (AnyElement, SharedString, Option<SharedString>) = match item {
-            Item::Emoji(pi) => (item_element(pi, tone, 20.), format!(":{}:", pi.name()).into(), None),
+            Item::Emoji(pi) => (item_element(pi, tone, 20.), format!(":{}:", pi.name()).into(), None), // emojiImage_ 20px
             Item::User(id) => {
                 let u = app.users.get(id);
                 (
-                    avatar(u, 24.),
+                    avatar(u, 24.), // not in the CSS (avatar component size): 24px, unverified
                     u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown")),
                     u.map(|u| u.name.clone()),
                 )
             }
             Item::Role { name, color, .. } => (
-                div().w(px(24.)).text_color(c(color.unwrap_or(Palette::TEXT_MUTED))).child("@").into_any_element(),
+                div().w(z(16.)).text_color(color.map(c).unwrap_or_else(|| tk(idx::INTERACTIVE_TEXT_DEFAULT))).child("@").into_any_element(),
                 format!("@{name}").into(),
                 Some(crate::t!("ac.role")),
             ),
             Item::Everyone(e) => (
-                div().w(px(24.)).child("@").into_any_element(),
+                div().w(z(16.)).child("@").into_any_element(),
                 format!("@{e}").into(),
                 Some(if *e == "here" { crate::t!("ac.here") } else { crate::t!("ac.everyone") }),
             ),
             Item::Channel(id) => {
                 let ch = app.channels.get(id);
-                let parent = ch.and_then(|c| c.parent).and_then(|p| app.channels.get(&p)).map(|p| p.name.to_uppercase().into());
+                let parent = ch.and_then(|c| c.parent).and_then(|p| app.channels.get(&p)).map(|p| p.name.clone());
                 (
-                    icon(channel_icon(ch.map_or(ChannelKind::Text, |c| c.kind)), 20., c(Palette::CHANNEL_ICON)).into_any_element(),
+                    // icon_CAMiwx 16px --interactive-text-default
+                    icon(channel_icon(ch.map_or(ChannelKind::Text, |c| c.kind)), 16., tk(idx::INTERACTIVE_TEXT_DEFAULT)).into_any_element(),
                     ch.map(|c| c.name.clone()).unwrap_or_default(),
                     parent,
                 )
             }
         };
         rows = rows.child(
-            div()
-                .id(("ac", i))
-                .h(px(36.))
-                .px(px(8.))
-                .rounded(px(4.))
-                .flex()
-                .items_center()
-                .gap(px(10.))
-                .cursor_pointer()
-                .when(selected, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |a, _, w, cx| accept(a, i, w, cx)))
-                .child(lead)
-                .child(
-                    div()
-                        .text_size(px(15.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(if selected { Palette::TEXT_HEADER } else { Palette::TEXT_NORMAL }))
-                        .child(main),
-                )
-                .child(div().flex_1())
-                .when_some(hint, |d, h| d.child(div().text_size(px(12.)).text_color(c(Palette::TEXT_MUTED)).child(h))),
+            div().px(z(8.)).child(
+                div()
+                    .id(("ac", i))
+                    .p(z(8.)) // base_ padding 8, radius 3
+                    .rounded(z(3.))
+                    .flex()
+                    .items_center()
+                    .cursor_pointer()
+                    // [aria-selected=true] / :hover -> --interactive-background-hover
+                    .when(selected, |d| d.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+                    .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(cx.listener(move |a, _, w, cx| accept(a, i, w, cx)))
+                    .text_size(z(14.)) // autocompleteRow_ 14/16 medium
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)) // autocompleteRowContent_
+                    .child(div().flex_none().mr(z(8.)).child(lead)) // autocompleteRowIcon_ margin-inline-end 8
+                    .child(div().flex_shrink(1.).min_w_0().overflow_hidden().whitespace_nowrap().child(main)) // ContentPrimary
+                    .when_some(hint, |d, h| {
+                        // autocompleteRowContentSecondary_: grows, margin-inline-start 16, text-align end
+                        d.child(div().flex_1().ml(z(16.)).min_w_0().overflow_hidden().whitespace_nowrap().flex().justify_end().child(h))
+                    }),
+            ),
         );
     }
-    let left = layout::SERVER_BAR_W + crate::ui::sidebar_resize::width() + 16.;
-    let right = 16. + if app.show_members && app.selected_guild.is_some() { layout::MEMBER_LIST_W } else { 0. };
-    let bottom = 84. + if app.replying_to.is_some() || app.editing.is_some() { 34. } else { 0. };
+    // autocompleteAttached_: bottom calc(100% + 8px), inset-inline 8 / 16 of channelTextArea_;
+    // autocomplete_rg6La1 radius 5 + --shadow-border, --shadow-high; autocomplete_CAMiwx
+    // --background-surface-high.
     Some(
         div()
             .absolute()
-            .left(px(left))
-            .right(px(right))
-            .bottom(px(bottom))
-            .rounded(px(8.))
-            .bg(c(Palette::BG_SECONDARY))
-            .border_1()
-            .border_color(c(Palette::BG_TERTIARY))
-            .shadow_lg()
-            .occlude()
+            .left(z(8.))
+            .right(z(16.))
+            .bottom(gpui::relative(1.))
+            .pb(z(8.))
             .child(
                 div()
-                    .h(px(32.))
-                    .px(px(16.))
-                    .flex()
-                    .items_center()
-                    .text_size(px(12.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(Palette::TEXT_MUTED))
-                    .child(title.to_uppercase()),
+                    .rounded(z(5.))
+                    .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                    .shadow(crate::ui::inbox::popout_shadow())
+                    .occlude()
+                    .overflow_hidden()
+                    .child(
+                        // contentTitle_: 14px medium --interactive-text-default, padding 4px 0
+                        // (inside a row: 0 8 + base_ 8).
+                        div()
+                            .px(z(16.))
+                            .pt(z(12.))
+                            .pb(z(4.))
+                            .text_size(z(14.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                            .child(title),
+                    )
+                    .child(rows),
             )
-            .child(rows)
             .into_any_element(),
     )
 }

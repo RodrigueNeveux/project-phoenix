@@ -1,6 +1,7 @@
 //! Offscreen renders (mock data) of the keyboard-shortcut UI at the live dump's
 //! 1536x840 viewport: `cargo run -p phoenix-app --example shortcuts_shot -- out.png <scene>`
 //! scene: modal (Ctrl+/ combos) | focus (keyboard-focused message) | thread ("Nouveau fil" sidebar)
+//! | mention / emoji / channel (composer autocomplete) | long (character counter) | upload (attachment tray)
 
 use std::{sync::Arc, time::Duration};
 
@@ -69,6 +70,24 @@ fn main() -> anyhow::Result<()> {
         v.update(cx, |app, cx| match scene.as_str() {
             "focus" => {
                 app.focus_last_message(window, cx);
+            }
+            // Composer states (docs/parity/composer.md).
+            "mention" | "emoji" | "channel" | "long" => {
+                let text = match scene.as_str() {
+                    "mention" => "@".to_string(),
+                    "emoji" => ":sm".to_string(),
+                    "channel" => "#".to_string(),
+                    _ => "x".repeat(1900),
+                };
+                app.composer.update(cx, |s, cx| {
+                    s.set_value(text, window, cx);
+                    s.focus(window, cx);
+                });
+                phoenix_app::ui::autocomplete::refresh(app, window, cx);
+            }
+            "upload" => {
+                let icon = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icon.png"));
+                app.add_paths(vec![icon], cx);
             }
             "thread" => {
                 if let Some(ch) = app.selected_channel {
