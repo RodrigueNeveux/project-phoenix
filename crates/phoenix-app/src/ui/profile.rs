@@ -677,12 +677,26 @@ fn popout_card(
     app: &PhoenixApp,
     uid: Id,
     guild: Option<Id>,
+    note: Option<&gpui::Entity<InputState>>,
+    cx: &mut Context<PhoenixApp>,
+) -> Div {
+    let themed = app.people.profiles.get(&uid).is_some_and(|p| p.theme.is_some());
+    // `.custom-user-profile-theme` re-declares the text/control tokens on the card.
+    crate::ui::profile_theme::scoped(themed, || popout_card_inner(app, uid, guild, note, cx))
+}
+
+fn popout_card_inner(
+    app: &PhoenixApp,
+    uid: Id,
+    guild: Option<Id>,
     _note: Option<&gpui::Entity<InputState>>,
     cx: &mut Context<PhoenixApp>,
 ) -> Div {
     ensure_avatar_colour(app, uid, cx);
     let i = info(app, uid, guild);
-    let bg = tok(idx::BACKGROUND_SURFACE_HIGH); // outer_P1YEjQ background
+    let theme = i.prof.and_then(|p| p.theme);
+    // outer_P1YEjQ background; themed, the avatar ring is the overlay over the primary colour.
+    let bg = theme.map(|(p, _)| crate::ui::profile_theme::composite(p)).unwrap_or(tok(idx::BACKGROUND_SURFACE_HIGH));
     let e = cx.entity();
     let e_full = e.clone();
     // header_NOlkhE: banner (105) + 35px; avatar_WRLIGC popout at
@@ -692,7 +706,8 @@ fn popout_card(
         .relative()
         .flex_none()
         .min_h(z(105. + 35.))
-        .child(banner(&i, 105., 8.))
+        // themed: inner_P1YEjQ radius --radius-sm - --custom-user-profile-theme-padding (2px)
+        .child(banner(&i, 105., if theme.is_some() { 6. } else { 8. }))
         .child(
             div()
                 .id(("profile-avatar", uid.0))
@@ -802,24 +817,28 @@ fn popout_card(
     let frame = frame_sku.and_then(|s| crate::ui::profile_fx::product(app, s, cx)).and_then(|c| c.frame);
     // outer_P1YEjQ.user-profile-popout: --background-surface-high, --radius-sm,
     // --shadow-border + --shadow-high. inner_P1YEjQ: gap 8px, padding-bottom 4px.
+    let inner = div().flex().flex_col().gap(z(8.)).pb(z(4.)).min_h_0().child(header).child(body).children(footer);
     let card = div()
         .relative()
         .w_full()
         .max_h_full()
         .flex()
         .flex_col()
-        .gap(z(8.))
-        .pb(z(4.))
         .rounded(z(8.))
-        .bg(c(bg))
         .shadow_lg()
         .border_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .overflow_hidden()
-        .child(header)
-        .child(body)
-        .children(footer)
-        .children(effect);
+        .overflow_hidden();
+    let card = match theme {
+        None => card.bg(c(bg)).child(inner),
+        // :where(.outer_P1YEjQ).custom-user-profile-theme: padding 2px over the
+        // primary (105px) -> secondary gradient; inner_P1YEjQ radius 6px with
+        // the uniform --profile-gradient-overlay on top.
+        Some(t) => card.p(z(2.)).children(theme_backdrop(t, 0.)).child(
+            inner.relative().rounded(z(6.)).overflow_hidden().bg(crate::ui::profile_theme::overlay()),
+        ),
+    }
+    .children(effect);
     match frame {
         None => card,
         Some(f) => div()

@@ -1,5 +1,6 @@
 pub mod autocomplete;
 pub mod avatar_deco;
+pub mod profile_theme;
 pub mod call_view;
 pub mod chat;
 pub mod components;

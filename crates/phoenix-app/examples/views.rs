@@ -174,7 +174,11 @@ fn main() -> anyhow::Result<()> {
                                     mutual_friends: app.users.values().filter(|u| u.id != uid && u.id != app.me.id).take(2).cloned().collect(),
                                     mutual_guild_ids: app.guilds.iter().take(3).map(|g| g.id).collect(),
                                     badges: Vec::new(),
-                                    theme: None,
+                                    // PHX_PROFILE_THEME=RRGGBB,RRGGBB renders a Nitro-themed profile.
+                                    theme: std::env::var("PHX_PROFILE_THEME").ok().and_then(|v| {
+                                        let (a, b) = v.split_once(',')?;
+                                        Some((u32::from_str_radix(a, 16).ok()?, u32::from_str_radix(b, 16).ok()?))
+                                    }),
                                     ..Default::default()
                                 },
                             );

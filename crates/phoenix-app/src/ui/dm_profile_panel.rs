@@ -65,6 +65,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let uid = peer(app)?;
     ensure_profile(app, uid, cx);
     ensure_avatar_colour(app, uid, cx);
+    let themed = app.people.profiles.get(&uid).is_some_and(|p| p.theme.is_some());
+    // `.custom-user-profile-theme` re-declares the text/control tokens on the card.
+    Some(crate::ui::profile_theme::scoped(themed, || panel(app, uid, cx)))
+}
+
+fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let i = info(app, uid, None);
     // `:where(.outer_P1YEjQ).user-profile-sidebar-redesign:not(.custom-user-profile-theme)`
     // background --chat-background-default (dump vanilla-dm-profile-panel #1548).
@@ -75,11 +81,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     // --profile-gradient-start = color-mix(in oklab, overlay 100%, primary) is the
     // overlay itself (black / .6 in dark themes) painted over the outer gradient,
     // so the composited colour is 40% of each channel.
-    let mix = |rgb: u32| {
-        let ch = |sh: u32| (((rgb >> sh) & 0xFF) as f32 * 0.4).round() as u32;
-        (ch(16) << 16) | (ch(8) << 8) | ch(0)
-    };
-    let ring_bg = theme.map(|(p, _)| mix(p)).unwrap_or(card_bg);
+    let ring_bg = theme.map(|(p, _)| crate::ui::profile_theme::composite(p)).unwrap_or(card_bg);
     // `profileEffects_ZjcCyW` (vanilla-dm #2060): the applied effect over the 300px inner card.
     let effect = i
         .prof
@@ -172,8 +174,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .on_click(move |_, _, cx| e3.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
             .child(crate::t!("profile.view_full")),
     );
-    Some(
-        div()
+    div()
             .w(z(320.)) // aside_HbUF2J 320px, padding 8
             .flex_none()
             .h_full()
@@ -196,7 +197,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                             .overflow_hidden()
                             // inner_P1YEjQ: linear-gradient(start, start 105px, end) where
                             // start = end = the overlay colour (oklab(0 0 0 / .6))
-                            .when(theme.is_some(), |d| d.bg(gpui::hsla(0., 0., 0., 0.6)))
+                            .when(theme.is_some(), |d| d.bg(crate::ui::profile_theme::overlay()))
                             .flex()
                             .flex_col()
                             .child(div().id("dm-panel-scroll").flex_1().min_h_0().overflow_y_scroll().child(header).child(body))
@@ -204,6 +205,5 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                             .children(effect),
                     ),
             )
-            .into_any_element(),
-    )
+            .into_any_element()
 }

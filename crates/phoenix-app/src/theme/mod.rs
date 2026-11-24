@@ -239,6 +239,9 @@ fn theme_index(t: AppTheme) -> u8 {
 /// are returned unchanged.
 pub fn resolve(hex: u32) -> u32 {
     if is_token(hex) {
+        if let Some(v) = crate::ui::profile_theme::lookup((hex & 0xFFFF) as usize) {
+            return v;
+        }
         generated::THEMES[THEME.load(Ordering::Relaxed) as usize][(hex & 0xFFFF) as usize]
     } else {
         hex
