@@ -1091,14 +1091,16 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
         .relative()
         .pl(z(10.)) // --space-xs (.density-cozy)
         .pr(z(8.))
+        .py(z(1.)) // `wrapper_TNyK-N` padding 1px 0 (live thread row 38px)
         .child(
             div()
-                // `spine_reDhww`: `--channels-spine-offset-left`, `--spine-default`.
+                // `spine_reDhww`: `--channels-spine-offset-left`, top 0, `--spine-default`;
+                // live box 10x20 at the row's top, curving into the row's middle.
                 .absolute()
                 .left(z(28.)) // --channels-spine-offset-left (.density-cozy 28px)
-                .top(z(-14.))
-                .w(z(12.))
-                .h(z(28.))
+                .top_0()
+                .w(z(10.))
+                .h(z(19.))
                 .border_l_1()
                 .border_b_1()
                 .rounded_bl(z(8.))
@@ -1116,7 +1118,7 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .text_size(z(16.))
+                .text_size(z(14.)) // `typeThread_ .name_` body-sm/medium (live 14px)
                 .line_height(z(28.)) // --channels-name-line-height (cozy)
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t(if selected || unread { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNELS_DEFAULT }))
@@ -1126,7 +1128,7 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                         .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE))) // wrapper_TNyK-N:active
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_thread(id, cx)))
-                .child(div().flex_1().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(th.name.clone(), 16.)))
+                .child(div().flex_1().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(th.name.clone(), 14.)))
                 .when(mentions > 0, |d| d.child(badge(mentions).bg(c(Palette::NOTIFICATION)))),
         )
         .into_any_element()
