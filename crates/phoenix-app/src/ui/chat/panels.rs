@@ -19,7 +19,7 @@ use crate::{
     assets::Icon,
     model::Message,
     theme::{Palette, c, z},
-    ui::{avatar, context_menu, icon_button, modal},
+    ui::{avatar, context_menu, modal},
 };
 
 /// Everything drawn above the whole window (root `children` hook).
@@ -332,69 +332,107 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
         }
     }
     let empty = t.input.read(cx).value().is_empty();
+    // Same chat sidebar frame as the "New Thread" sidebar (ref-cache
+    // create-thread-sidebar-header / -frame; see ui/thread_create.rs).
+    let tk = |i: usize| c(crate::theme::tok(i));
+    use crate::theme::generated::idx;
     Some(
         div()
-            .w(z(420.))
+            .w(z(480.)) // chatLayerWrapper_ 480
             .flex_none()
             .h_full()
             .border_l_1()
-            .border_color(c(Palette::HEADER_SHADOW))
-            .bg(c(Palette::BG_PRIMARY))
+            .border_t_1()
+            .rounded_tl(z(12.)) // container_FrbQJp border-radius 12px 0 0
+            .border_color(tk(idx::BORDER_SUBTLE))
+            .bg(tk(idx::BACKGROUND_BASE_LOWER))
             .flex()
             .flex_col()
             .child(
+                // container_ybUK7Z: height 49, padding 8 8 8 20, 1px --border-subtle bottom
                 div()
-                    .h(z(48.))
+                    .h(z(49.))
                     .flex_none()
-                    .px(z(16.))
+                    .pt(z(8.))
+                    .pr(z(8.))
+                    .pb(z(8.))
+                    .pl(z(20.))
                     .flex()
                     .items_center()
-                    .gap(z(8.))
                     .border_b_1()
-                    .border_color(c(Palette::HEADER_SHADOW))
-                    .child(icon(ChatIcon::Thread, 22., c(Palette::CHANNEL_ICON)))
+                    .border_color(tk(idx::BORDER_SUBTLE))
+                    // iconWrapper_ 32, svg 20 --icon-muted
                     .child(
+                        div().size(z(32.)).flex_none().flex().items_center().justify_center().child(
+                            gpui::svg().path(crate::icons::path("chat/thread")).size(z(20.)).flex_none().text_color(tk(idx::ICON_MUTED)),
+                        ),
+                    )
+                    .child(
+                        // titleWrapper_ > h1 body-md/medium 16/20 --text-strong
                         div()
                             .flex_1()
                             .min_w_0()
                             .text_ellipsis()
                             .text_size(z(16.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(Palette::TEXT_HEADER))
+                            .line_height(z(20.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(tk(idx::TEXT_STRONG))
                             .child(t.thread.name.clone()),
                     )
                     .child(
-                        icon_button("close-thread", Icon::Close, c(Palette::INTERACTIVE), 20.)
+                        // toolbar_ padding-left 10; iconWrapper_ clickable 32, svg 20
+                        div()
+                            .id("close-thread")
+                            .ml(z(10.))
+                            .size(z(32.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .child(
+                                gpui::svg()
+                                    .path(crate::icons::path("close"))
+                                    .size(z(20.))
+                                    .flex_none()
+                                    .text_color(tk(idx::INTERACTIVE_ICON_DEFAULT)),
+                            )
                             .on_click(cx.listener(|a, _, _, cx| a.close_thread(cx))),
                     ),
             )
             .child(body)
             .child(
-                div().p(z(16.)).pt(z(0.)).child(
-                    div()
-                        .min_h(z(44.))
-                        .px(z(16.))
-                        .rounded(z(8.))
-                        .bg(c(Palette::INPUT_BG))
-                        .relative()
-                        .flex()
-                        .items_center()
-                        .text_size(z(16.))
-                        .child(div().flex_1().min_w_0().child(Input::new(&t.input).appearance(false).bordered(false)))
-                        .when(empty, |d| {
-                            d.child(
-                                div()
-                                    .absolute()
-                                    .left(z(18.))
-                                    .top_0()
-                                    .bottom_0()
-                                    .flex()
-                                    .items_center()
-                                    .text_color(c(0x6D6F78))
-                                    .child(crate::t!("chat.placeholder_thread", name = t.thread.name)),
-                            )
-                        }),
-                ),
+                // channelTextArea_: margin 0 10 10, radius 8, 1px --border-subtle;
+                // inner --chat-background-default, textArea 16/22
+                div()
+                    .flex_none()
+                    .mx(z(10.))
+                    .mb(z(10.))
+                    .min_h(z(58.))
+                    .px(z(16.))
+                    .rounded(z(8.))
+                    .border_1()
+                    .border_color(tk(idx::BORDER_SUBTLE))
+                    .bg(tk(idx::CHAT_BACKGROUND_DEFAULT))
+                    .relative()
+                    .flex()
+                    .items_center()
+                    .text_size(z(16.))
+                    .line_height(z(22.))
+                    .child(div().flex_1().min_w_0().child(Input::new(&t.input).appearance(false).bordered(false)))
+                    .when(empty, |d| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .left(z(18.))
+                                .top_0()
+                                .bottom_0()
+                                .flex()
+                                .items_center()
+                                .text_color(tk(idx::TEXT_MUTED))
+                                .child(crate::t!("chat.placeholder_thread", name = t.thread.name)),
+                        )
+                    }),
             )
             .into_any_element(),
     )
