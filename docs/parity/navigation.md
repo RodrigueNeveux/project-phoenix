@@ -174,3 +174,29 @@ Source: `~/discord-phoenix-ref/current-client/css/`, using the default density (
 Notes:
 - Font sizes are set from JS text variants and don't appear in the CSS: channel 16/medium, category 14/medium sentence case, status 16/semibold. They were checked against the current client by eye.
 - Not done yet: the title bar back/forward buttons (`backForwardButtons_nS9Yqn`, they need a navigation history), and the account popout that replaces the old status picker.
+
+## Favorites server (client JS 2026-11-24, local cache `web.b63d846b329d6470.js`)
+
+The account has no favorites and `favorites.guild_visible` unset, so the client shows no star:
+everything below comes from the client JS and the CSS, not from a live render. Nothing was
+written to the account; the write path is covered by unit tests only.
+
+| element | source | property | value | our code | status |
+|---|---|---|---|---|---|
+| proto | `discord_protos.discord_users.v1.Favorites` (PreloadedUserSettings 15) | fields | 1 `favorite_channels` map<fixed64, FavoriteChannel>, 2 `muted`, 3 `guild_visible` BoolValue, 4 `auto_add_joined_threads`, 5 `prune_inactive_threads` BoolValue, 6 `prune_inactive_threads_days` uint32, 7 `prune_all_favorited_threads`, 8 `auto_add_joined_threads_per_guild`; FavoriteChannel 1 nickname, 2 type (UNSET 0, REFERENCE_ORIGINAL 1, CATEGORY 2), 3 position uint32, 4 parent_id fixed64, 5 channel_type UInt32Value, 6 collapsed | phoenix-api rest/favorites.rs | ✅ wire test |
+| read | `FavoriteStore` (module 181079) | source | READY / `GET settings-proto/1` and `USER_SETTINGS_PROTO_UPDATE` (already reloads the synced settings) | account.rs synced_raw → `SyncedSettings::favorites` | ✅ |
+| shown | FavoriteStore `favoriteGuildEnabled` | rule | `guild_visible.value ?? (map not empty)` | favorites::enabled | ✅ |
+| write | `j()` → `updateAsync("favorites", …)` | request | `PATCH /users/@me/settings-proto/1` with only field 15, the whole new Favorites message | `RestClient::patch_favorites`, `SettingsPatch::Favorites` | ✅ unit tests, never sent |
+| add | module 794412 `K` | logic | skip existing; limit 3 (200 with `premium_type` 2), 200 entries max, categories do not count; position = max + 1; parent kept only if it is a category; first add turns `guild_visible` on when the server was hidden | Favorites::add / add_to_category | ✅ tests |
+| remove | `X` | logic | delete; children of a removed category go back to parent 0 | Favorites::remove | ✅ test |
+| prune | `x` | logic | drop unknown channels (threads by `channel_type` 10/11/12 kept) and channels without VIEW_CHANNEL; fill a missing `channel_type` | Favorites::prune | ✅ test (Phoenix only knows "missing" / "visible") |
+| new category id | `W` | id | snowflake of now (`fromTimestamp(Date.now())`) | snowflake_at | ✅ |
+| rail | GuildsBar `rn` | order | home, Favorites, unread DMs, separator | server_bar favorites | ✅ |
+| rail tile | `eZ` (NavItem + StarIcon 20×20, BlobMask) | look | home-like tile, blurple when selected / hovered, mention badge = sum of the favorite channels' mentions, unread pill unless `muted`; tooltip "Favoris" (`wMWyci`) | server_bar favorites | ✅ (tooltip voice-user strip not done ❌) |
+| route | `@favorites` / guild id "373" | — | `/channels/@favorites/<channel>`; the last channel is reopened | `app.favorites_view`, `favorites_last` | ✅ (the selected guild stays the channel's real one, so permissions, members and search keep working) |
+| list | GuildChannelStore `k` + `R` (module 774452) | order | uncategorized first, then categories by position; inside each, text-like then voice, by position; nickname replaces the name except for DMs; category record = favorite `nickname` | Favorites::rows, favorites::rows | ✅ test |
+| collapsed | FavoriteChannel 6 | — | the client syncs it (`es`, batched PATCH) | read once into the local collapsed set; toggling stays local | ⚠ |
+| header | — | — | "Favoris" title (favorites guild name `YC`) | sidebar favorites_header | ⚠ dropdown menu of the favorites server not reproduced |
+| menu | `m_` + dumps vanilla-menu-channel / -dm / -group-dm | rows | "Ajouter aux favoris" > "Favoris" + one row per category; checked row removes, another row moves | actions/channel.rs favorite_item | ✅ (was a local file before) |
+| empty view | `D5SN5/`, `6uDHk6` | — | welcome text + "Ajouter un salon" | — | ❌ falls back to Home |
+| real_shots | example | env | `PHX_VIEW=favorites PHX_FAVORITES="id,id|Catégorie:id,id"` builds favorites in memory only (save_settings is denied there) | examples/real_shots.rs | ✅ |

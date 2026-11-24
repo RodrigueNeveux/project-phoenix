@@ -186,6 +186,7 @@ pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
         proto: Default::default(),
         rest: Default::default(),
         density: density_from_proto(p.ui_density()).unwrap_or(d.density),
+        favorites: Default::default(),
     }
 }
 
