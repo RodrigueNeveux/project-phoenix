@@ -59,6 +59,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             }
         }))
         .child(header(app, cx))
+        .children(crate::ui::dm_call::render(app, cx))
         .child(
             div()
                 .flex_1()

@@ -6,6 +6,7 @@ pub mod profile_board;
 pub mod profile_wishlist;
 pub mod call_view;
 pub mod incoming_call;
+pub mod dm_call;
 pub mod chat;
 pub mod code_copy;
 pub mod components;
