@@ -1506,6 +1506,6 @@ fn guild_top(app: &PhoenixApp) -> impl IntoElement {
         .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"))))
         .child(item("g-boosts", "boost", crate::t!("guild.top.boosts")))
         // vanilla-inbox-0 #645 sectionDivider_: margin-top 15, inline 20 / 11, 1px.
-        .child(div().mt(z(15.)).ml(z(20.)).mr(z(11.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
+        .child(div().mt(z(15.)).ml(z(20.)).mr(z(20.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE))) // sectionDivider_ysO7Gy 100..396 (11 + the 9px gutter from the list edge)
         .child(div().h(z(12.)))
 }
