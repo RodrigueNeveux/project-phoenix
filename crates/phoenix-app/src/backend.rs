@@ -187,6 +187,14 @@ pub trait Backend: Send + Sync + 'static {
         let _ = (channel, msg, pinned);
         Box::pin(async { Ok(()) })
     }
+    /// The channel's pins changed since they were last seen (header pin dot).
+    fn has_unread_pins(&self, _channel: Id) -> bool {
+        false
+    }
+    /// Mark the channel's pins seen (the pins popout opened).
+    fn ack_pins(&self, _channel: Id) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     /// Pinned messages of a channel, newest first.
     fn load_pins(&self, channel: Id) -> BoxFuture<Vec<Message>> {
         let _ = channel;

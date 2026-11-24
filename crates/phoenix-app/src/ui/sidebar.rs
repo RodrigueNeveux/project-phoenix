@@ -15,7 +15,7 @@ use crate::{
     ui::home::data::HomeView,
     assets::Icon,
     model::{ChannelKind, Id},
-    theme::{Palette, c, generated::idx, m, tok, z},
+    theme::{Palette, c, generated::idx, m, space, tok, z},
     ui::{badge, icon},
 };
 
@@ -415,12 +415,12 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .group("cat")
                 // dump -channels-N-N+ #655/#656: li padding-top 16, row 24px,
                 // `.enlarge-target-size .wrapper_yOdhm_` padding-inline 20 / 6 (cozy).
-                .pt(z(16.))
+                .pt(z(space::category_before()))
                 .pl(z(20.))
                 // padding-inline-end 6 + the scroller's 8px stable gutter (live
                 // `wrapper_yOdhm_` 327px wide in a 335px scroller, like the channel rows).
                 .pr(z(6. + 8.))
-                .h(z(40.))
+                .h(z(24. + space::category_before()))
                 .w_full()
                 .flex()
                 .items_center()
@@ -979,7 +979,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .group(group)
                 // `link_TNyK-N` 36px, padding 4/10 (dump #629); DM `link_zln_tS` 48px, pl 10 (me #658).
                 // Connected voice row: `link_` 52px (linkTop 28 + linkBottom 16 + padding 4/4).
-                .h(z(if is_dm { 48. } else if connected { 52. } else { 36. }))
+                .h(z(if is_dm { 48. } else if connected { space::channels_name_lh() + 24. } else { space::channels_name_lh() + 8. }))
                 .pl(z(10.))
                 .pr(z(if is_dm { 0. } else { 10. })) // DM `link_zln_tS` padding 0 0 0 10 (#663)
                 .rounded(z(ROW_RADIUS))
@@ -1052,7 +1052,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .child(
                             div()
                                 .text_size(z(16.))
-                                .line_height(z(if is_dm { 20. } else { 28. })) // --channels-name-line-height (.density-cozy 28px)
+                                .line_height(z(if is_dm { 20. } else { space::channels_name_lh() })) // --channels-name-line-height
                                 .font_weight(FontWeight::MEDIUM) // --font-weight-semibold-1x-light-theme (500)
                                 .flex()
                                 .items_center()
@@ -1118,7 +1118,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
 /// icon, name, hover actions and timer, with the status line under it.
 fn top_line(e: impl IntoElement, connected: bool) -> AnyElement {
     if connected {
-        div().self_start().mt(z(4.)).h(z(28.)).flex().items_center().flex_none().child(e).into_any_element()
+        div().self_start().mt(z(4.)).h(z(space::channels_name_lh())).flex().items_center().flex_none().child(e).into_any_element()
     } else {
         e.into_any_element()
     }
@@ -1135,7 +1135,7 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
     div()
         .id(("thread", id.0))
         .relative()
-        .pl(z(10.)) // --space-xs (.density-cozy)
+        .pl(z(space::xs())) // --space-xs
         .pr(z(8.))
         .py(z(1.)) // `wrapper_TNyK-N` padding 1px 0 (live thread row 38px)
         .child(
@@ -1143,7 +1143,7 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                 // `spine_reDhww`: `--channels-spine-offset-left`, top 0, `--spine-default`;
                 // live box 10x20 at the row's top, curving into the row's middle.
                 .absolute()
-                .left(z(28.)) // --channels-spine-offset-left (.density-cozy 28px)
+                .left(z(space::spine_left())) // --channels-spine-offset-left
                 .top_0()
                 .w(z(10.))
                 .h(z(19.))
@@ -1157,15 +1157,15 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                 .id(("threadrow", id.0))
                 // `typeThread_TNyK-N.wrapper`: margin `28px + --space-xs` from the list
                 // (8px of it is the row inset); link padding 4px / `--space-xs`.
-                .ml(z(28.))
-                .h(z(36.))
+                .ml(z(space::spine_left()))
+                .h(z(space::channels_name_lh() + 8.))
                 .px(z(10.))
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
                 .cursor_pointer()
                 .text_size(z(14.)) // `typeThread_ .name_` body-sm/medium (live 14px)
-                .line_height(z(28.)) // --channels-name-line-height (cozy)
+                .line_height(z(space::channels_name_lh())) // --channels-name-line-height
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t(if selected || unread { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNELS_DEFAULT }))
                 .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))

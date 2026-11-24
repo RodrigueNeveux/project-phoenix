@@ -546,6 +546,10 @@ impl PhoenixApp {
         }
         let Some(channel) = self.selected_channel else { return };
         self.chat.pins = Some(PinsState { channel, loading: true, msgs: Vec::new() });
+        // The client's pins popout acks on mount when it has unread pins.
+        if self.backend.has_unread_pins(channel) {
+            drop(self.backend.ack_pins(channel));
+        }
         let fut = self.backend.load_pins(channel);
         cx.spawn(async move |this, cx| {
             let res = fut.await;

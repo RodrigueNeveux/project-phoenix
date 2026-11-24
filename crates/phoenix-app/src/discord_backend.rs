@@ -17,6 +17,7 @@ mod profile_widgets;
 pub(crate) mod profile_games;
 mod collectibles_shop;
 mod thread_members;
+mod pins;
 mod member_list_id;
 mod history;
 mod msg_cache;
@@ -306,6 +307,7 @@ fn start_session(
         last_typing: Mutex::new(None),
         notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready(ready.user_guild_settings.as_ref())),
     });
+    pins::init(&session.cache);
     *inner.session.lock() = Some(session.clone());
     if let Some(e) = convert::self_activities(ready) {
         inner.emit(e);
@@ -340,7 +342,9 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
         account::on_gateway(&s, &ev);
         crate::voice::start_time::on_gateway(&ev);
         thread_members::on_gateway(&ev);
+        pins::on_gateway(&ev);
         if let GatewayEvent::Ready(r) = &ev {
+            pins::init(&s.cache);
             // Reconnected without RESUME: the cache was rebuilt, rebuild the UI too.
             crate::commands::set_session_id(&r.session_id);
             let prefs = Prefs::from_ready(r);
@@ -848,6 +852,22 @@ impl Backend for DiscordBackend {
             }
             inner.emit(AppEvent::Users(users));
             Ok(msgs.iter().map(convert::message).collect())
+        })
+    }
+
+    fn has_unread_pins(&self, channel: Id) -> bool {
+        pins::has_unread(channel.0)
+    }
+
+    /// The client acks when its pins popout mounts with unread pins (`ackPins`):
+    /// `POST /channels/{id}/pins/ack`. Never in read-only mode.
+    fn ack_pins(&self, channel: Id) -> BoxFuture<()> {
+        let send = pins::mark_seen(channel.0) && !acks_disabled();
+        self.with_session(move |_, s| async move {
+            if send {
+                s.rest.request_json(reqwest::Method::POST, &format!("/channels/{}/pins/ack", channel.0), None).await.map_err(api_err)?;
+            }
+            Ok(())
         })
     }
 

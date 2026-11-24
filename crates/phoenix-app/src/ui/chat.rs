@@ -273,6 +273,33 @@ fn hdr_button(id: &'static str, i: Icon, color: gpui::Hsla, size: f32) -> gpui::
     hdr(id, i.path(), color)
 }
 
+/// Pins button with the client's unread-pins badge (`badge: {type: "unread",
+/// position: "bottom"}` while `ReadStateStore.hasUnreadPins`): `iconBadge_ybUK7Z`
+/// 8×8, radius 8, `iconBadgeStyleUnread_` --background-brand, and the 20px icon
+/// cut by `svg-mask-header-bar-badge-bottom` (circle cx=cy=.75, r=.25 → centre
+/// 15,15 r 5 in the icon, read live over CDP). The icon sits at 6,6 in the 32px
+/// box, so the cut is a 10px disc of the header background at 16,16 and the dot
+/// is centred in it at 17,17.
+fn pin_button(app: &PhoenixApp, color: gpui::Hsla) -> gpui::Stateful<gpui::Div> {
+    let b = hdr_button("pin", Icon::Pin, color, HDR_ICON);
+    let unread = app.selected_channel.is_some_and(|c| app.backend.has_unread_pins(c)) && app.chat.pins.is_none();
+    b.when(unread, |b| {
+        b.child(
+            div()
+                .absolute()
+                .left(z(16.))
+                .top(z(16.))
+                .size(z(10.))
+                .rounded_full()
+                .bg(c(Palette::BG_PRIMARY))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(div().size(z(8.)).rounded(z(8.)).bg(tk(idx::BACKGROUND_BRAND))),
+        )
+    })
+}
+
 /// Header toolbar button whose glyph comes from the runtime icon provider by name
 /// (iconWrapper_ .clickable_: 32px box, 20px svg).
 fn hdr_named(id: &'static str, name: &str, color: gpui::Hsla) -> gpui::Stateful<gpui::Div> {
@@ -554,7 +581,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     d.child(hdr_named("dm-call", "phone-call", ic))
                         .child(hdr_named("dm-video", "video-call", ic))
                         .child(
-                            hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
+                            pin_button(app, if app.chat.pins.is_some() { on } else { ic })
                                 .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
                         )
                         .child(hdr_named(if is_group_dm { "gdm-add" } else { "dm-add" }, "add-to-dm", ic))
@@ -577,7 +604,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         })
                         .when(!is_forum, |d| {
                             d.child(
-                                hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
+                                pin_button(app, if app.chat.pins.is_some() { on } else { ic })
                                     .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
                             )
                         })

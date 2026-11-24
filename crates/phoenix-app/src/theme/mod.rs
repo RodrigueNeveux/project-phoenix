@@ -237,6 +237,13 @@ pub mod space {
     pub fn lg() -> f32 { density().scale()[4] }
     pub fn xl() -> f32 { density().scale()[5] }
     pub fn xxl() -> f32 { density().scale()[6] }
+    /// `--channels-name-line-height` (`.density-compact` 20, `.density-default` 24, `.density-cozy` 28).
+    pub fn channels_name_lh() -> f32 { [20., 24., 28.][density() as usize] }
+    /// `--channels-spine-offset-left` (20 / 24 / 28).
+    pub fn spine_left() -> f32 { [20., 24., 28.][density() as usize] }
+    /// `--custom-category-channel-space-before-category`: `:root` 16px,
+    /// `.density-compact` `var(--space-8)`.
+    pub fn category_before() -> f32 { if density() == super::Density::Compact { 8. } else { 16. } }
 }
 /// Bumped whenever theme, zoom or font size change, so views that cache
 /// resolved colours or measured heights know to rebuild them.
