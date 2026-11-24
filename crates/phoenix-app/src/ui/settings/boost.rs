@@ -172,7 +172,7 @@ fn guild_cards(app: &PhoenixApp) -> Div {
                         .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT, g.name.clone())),
                 )
                 .child(
-                    controls::button_sm(eid(format!("boost-{}", g.id)), SharedString::default(), BtnKind::Secondary)
+                    controls::button_sm(eid(format!("boost-{}", g.id.0)), SharedString::default(), BtnKind::Secondary)
                         .gap(z(4.))
                         .child(icon("boost", 16., idx::CONTROL_SECONDARY_TEXT_DEFAULT))
                         .child(tr("sp.bo.boost_btn")),
