@@ -19,6 +19,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
         kind,
         original: SharedString::default(),
         spoiler: false,
+        description: None,
     };
     let now = ts;
 

@@ -53,6 +53,8 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         author: media::current_author(),
     };
     let video = a.kind == AttachmentKind::Video;
+    let alt = if video { None } else { super::alt_text::description(a, spoiler) };
+    let alt_key = a.url.clone();
     let original = viewer.original.clone();
     let mut im = img(src.clone());
     if let Some(cache) = media::lru::chat() {
@@ -94,6 +96,7 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
                 }),
         )
         .when(spoiler, |d| d.child(div().absolute().inset_0().bg(ca(0x000000E6))))
+        .children(alt.map(|t| super::alt_text::badge(alt_key, t)))
         .when(video, |d| {
             d.child(
                 div().absolute().inset_0().flex().items_center().justify_center().child(

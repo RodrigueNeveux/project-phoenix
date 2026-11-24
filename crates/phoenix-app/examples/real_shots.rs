@@ -1202,6 +1202,20 @@ fn main() -> anyhow::Result<()> {
             pump(&mut cx, 100);
         }
     }
+    if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
+        let (x, y) = v.split_once(',')?;
+        Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))
+    }) {
+        let ev = gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+            position: gpui::point(px(x), px(y)),
+            pressed_button: None,
+            modifiers: gpui::Modifiers::default(),
+        });
+        cx.update_window(win.into(), |_, window, cx| {
+            window.dispatch_event(ev, cx);
+        })?;
+        pump(&mut cx, 200);
+    }
     let shoot = |cx: &mut HeadlessAppContext, path: &str| -> anyhow::Result<()> {
         let mut img = None;
         for _ in 0..2 {

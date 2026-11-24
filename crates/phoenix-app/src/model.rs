@@ -199,6 +199,7 @@ pub struct Attachment {
     pub original: SharedString,
     /// Hidden behind the spoiler cover (attachment flag IS_SPOILER or `SPOILER_` name).
     pub spoiler: bool,
+    pub description: Option<SharedString>,
 }
 
 impl Attachment {

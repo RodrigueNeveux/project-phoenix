@@ -272,6 +272,7 @@ pub fn message(m: &api::Message) -> model::Message {
                     // IS_SPOILER (1 << 3): what the client sends now (`is_spoiler`), the
                     // name keeps its spelling. Older uploads use the SPOILER_ prefix.
                     spoiler: a.flags & 8 != 0 || a.filename.starts_with("SPOILER_"),
+                    description: a.description.clone().filter(|d| !d.is_empty()).map(Into::into),
                 }
             })
             .chain(m.sticker_items.iter().map(|st| {

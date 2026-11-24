@@ -12,6 +12,7 @@ static GIF_AUTOPLAY: AtomicBool = AtomicBool::new(true);
 static UNDERLINE_LINKS: AtomicBool = AtomicBool::new(false);
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
 static INLINE_ATTACHMENTS: AtomicBool = AtomicBool::new(true);
+static ALT_TEXT: AtomicBool = AtomicBool::new(false);
 /// `animate_stickers`: 0 always, 1 on interaction (hover), 2 never.
 static STICKER_MODE: AtomicU8 = AtomicU8::new(0);
 
@@ -37,6 +38,7 @@ pub fn sync(app: &PhoenixApp) {
     REDUCED_MOTION.store(p.local.reduced_motion, Relaxed);
     STICKER_MODE.store(p.synced.pick("stickers") as u8, Relaxed);
     INLINE_ATTACHMENTS.store(p.synced.flag("media-uploads"), Relaxed);
+    ALT_TEXT.store(p.synced.flag("alt-text"), Relaxed);
 }
 
 /// "Show spoiler content: Always".
@@ -82,6 +84,10 @@ pub fn sticker_hover_plays() -> bool {
 /// Images/videos uploaded to Discord render inline (else as file cards).
 pub fn inline_attachments() -> bool {
     INLINE_ATTACHMENTS.load(Relaxed)
+}
+
+pub fn alt_text() -> bool {
+    ALT_TEXT.load(Relaxed)
 }
 
 /// Accessibility "Always underline links".

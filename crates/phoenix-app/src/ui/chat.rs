@@ -28,6 +28,7 @@ pub mod mosaic;
 pub mod panels;
 pub mod pending;
 pub mod scrollbar;
+pub mod alt_text;
 pub mod state;
 pub mod thread_banner;
 pub mod blocked;
@@ -1937,8 +1938,10 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 return div().mt(z(4.)).child(attach::video_card(a, size, cx)).into_any_element();
             }
             let link = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
+            let alt = alt_text::description(a, false);
             return div()
                 .mt(z(4.))
+                .relative()
                 // Right-click on the image adds the image rows to the message menu.
                 .on_mouse_down(gpui::MouseButton::Right, move |_, _, _| panels::set_menu_media(link.clone()))
                 // GIF uploads follow "Play GIFs when Discord is focused": off = first frame, played on hover.
@@ -1948,6 +1951,7 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                     let im = media_image_with(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size, still);
                     if gif { media::gif_hover(a.url.clone(), im).into_any_element() } else { im.into_any_element() }
                 })
+                .children(alt.map(|t| alt_text::badge(a.url.clone(), t)))
                 .into_any_element();
         }
         AttachmentKind::Audio => return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element(),
