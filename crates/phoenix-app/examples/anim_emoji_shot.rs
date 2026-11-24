@@ -1,7 +1,8 @@
 //! Offscreen frames of animated custom emoji as Phoenix draws them (message size,
 //! jumbo, reaction, picker tile at rest and hovered-off):
-//! `anim_emoji_shot <out-prefix> <emoji-id>...` writes `<out-prefix>-<n>.png`,
-//! one frame every 150 ms. Ids come from the command line, none are bundled.
+//! `anim_emoji_shot <out-prefix> <dir> <id>...` writes `<out-prefix>-<n>.png`,
+//! one frame every 150 ms. `<dir>` holds generated test art `<id>.gif` (playing)
+//! and `<id>.png` (still), served through the `local/` asset path: no real emoji.
 
 use std::{sync::Arc, time::Duration};
 
@@ -39,6 +40,9 @@ impl Render for Shot {
 fn main() -> anyhow::Result<()> {
     let mut args = std::env::args().skip(1);
     let out = args.next().unwrap_or_else(|| "anim".into());
+    if let Some(dir) = args.next() {
+        emoji::set_local_dir(dir);
+    }
     let ids: Vec<String> = args.filter(|a| a.chars().all(|c| c.is_ascii_digit())).collect();
     let text = gpui_platform::current_platform(true).text_system();
     let mut cx = HeadlessAppContext::with_platform(text, Arc::new(Assets), gpui_platform::current_headless_renderer);

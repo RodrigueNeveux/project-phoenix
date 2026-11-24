@@ -30,14 +30,29 @@ impl CustomEmoji {
     /// `.webp?size=N`, plus `&animated=true` for animated emoji (dumps:
     /// `emojis/<id>.webp?size=60&animated=true`).
     pub fn url(&self, size: u32) -> SharedString {
+        if let Some(d) = LOCAL_DIR.get() {
+            let ext = if self.animated { "gif" } else { "png" };
+            return format!("local/{d}/{}.{ext}", self.id).into();
+        }
         let anim = if self.animated { "&animated=true" } else { "" };
         format!("https://cdn.discordapp.com/emojis/{}.webp?size={}{anim}", self.id, cdn_size(size)).into()
     }
 
     /// First frame only: the same URL without `animated=true`.
     pub fn static_url(&self, size: u32) -> SharedString {
+        if let Some(d) = LOCAL_DIR.get() {
+            return format!("local/{d}/{}.png", self.id).into();
+        }
         format!("https://cdn.discordapp.com/emojis/{}.webp?size={}", self.id, cdn_size(size)).into()
     }
+}
+
+/// Offscreen renders: serve emoji `<id>.gif` (playing) / `<id>.png` (still) from
+/// this directory through the `local/` asset path instead of the CDN.
+static LOCAL_DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn set_local_dir(dir: String) {
+    let _ = LOCAL_DIR.set(dir);
 }
 
 /// "Play animated emoji" (Accessibility) and whether the window has focus; the
