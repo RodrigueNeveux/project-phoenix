@@ -1,6 +1,7 @@
 //! Friends page (Online / All / Pending / Blocked / Add Friend) with the
 //! crate::t!("friends.active_now") column, and the Message Requests page.
 
+use crate::ui::tooltip::Tipped as _;
 use crate::theme::z;
 use gpui::{
     AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div,
@@ -204,7 +205,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .items_center()
                         .justify_center()
                         .cursor_pointer()
-                        .tooltip(crate::ui::tooltip::tip(crate::t!("friends.new_group_dm")))
+                        .tip(crate::t!("friends.new_group_dm"))
                         .child(
                             gpui::svg()
                                 .path(crate::icons::path("new-group-dm"))
@@ -382,7 +383,7 @@ fn round_button(id: (&'static str, u64), name: &str, hover: Hsla, tip: SharedStr
         .justify_center()
         .cursor_pointer()
         // tooltips from the client bundle: Message, More, Accept, Ignore, Cancel, Unblock
-        .tooltip(crate::ui::tooltip::tip(tip))
+        .tip(tip)
         .child(
             gpui::svg()
                 .path(crate::icons::path(name))

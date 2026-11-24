@@ -1,6 +1,7 @@
 //! Emoji tab: sectioned grid (frequently used, guild emoji, unicode
 //! categories), category sidebar, skin tone selector and preview bar.
 
+use crate::ui::tooltip::Tipped as _;
 use gpui::{
     AnyElement, App, Context, FontWeight, ListOffset, ParentElement, SharedString, Styled, div,
     img, list, prelude::*, px,
@@ -514,7 +515,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                             .size(px(24.))
                             .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)),
                     )
-                    .tooltip(crate::ui::tooltip::tip(crate::t!("picker.see_nitro_emoji"))),
+                    .tip(crate::t!("picker.see_nitro_emoji")),
             ),
         );
     }

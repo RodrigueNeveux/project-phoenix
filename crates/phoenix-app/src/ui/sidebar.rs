@@ -4,6 +4,7 @@
 /// `--radius-sm`: channel and DM rows in the refreshed client.
 const ROW_RADIUS: f32 = 8.;
 
+use crate::ui::tooltip::Tipped as _;
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled,
     Transformation, div, list, percentage, prelude::*, px,
@@ -599,12 +600,12 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                             btn("dm-more", gpui::svg().path(crate::icons::path("more-horizontal")))
                                 .opacity(0.)
                                 .group_hover("dm-header", |s| s.opacity(1.))
-                                .tooltip(crate::ui::tooltip::tip(crate::t!("header.more")))
+                                .tip(crate::t!("header.more"))
                                 .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("More", cx))),
                         )
                         .child(
                             btn("new-dm", icon(Icon::Plus, 16., t(idx::ICON_MUTED)))
-                                .tooltip(crate::ui::tooltip::tip(crate::t!("groupdm.create")))
+                                .tip(crate::t!("groupdm.create"))
                                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_group_dm_picker(cx))),
                         )
                 }),
@@ -852,7 +853,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     .mr(z(6.))
                     .when(!plated, |d| d.opacity(0.7).hover(|s| s.opacity(1.)))
                     // aria-label "Close DM" / "Leave Group" (#681 / #806)
-                    .tooltip(crate::ui::tooltip::tip(if is_group { crate::t!("menu.leave_group") } else { crate::t!("menu.close_dm") }))
+                    .tip(if is_group { crate::t!("menu.leave_group") } else { crate::t!("menu.close_dm") })
                     .on_click(move |_, _, cx| {
                         cx.stop_propagation();
                         e.update(cx, |a, cx| a.close_dm(id, cx));
@@ -1339,7 +1340,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 ))
                 .child(
                     panel_button("settings", panel_glyph(Icon::Gear, false), false)
-                        .tooltip(crate::ui::tooltip::tip(crate::t!("settings.user_settings")))
+                        .tip(crate::t!("settings.user_settings"))
                         .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
                 ),
         )

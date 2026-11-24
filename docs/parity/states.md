@@ -161,3 +161,5 @@ renders the mock app with the mouse at each point (pressed with `,down`).
 81 rows: 79 ✅, 2 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.
+
+| shared tooltip (`tooltip::Tipped`) | position / delay / flip | client TooltipLayer: centred on the element, card 11px away, caret toward it, top by default, flipped below near the top edge, nudged 12px inside the window, shown on the first hover frame, 100ms zoom-in, wraps at 200px (ref-cache tooltip-*-appear) | ui/tooltip.rs `Tipped::tip` (21 call sites moved off gpui's cursor tooltip) | ✅ (offscreen check pending) |

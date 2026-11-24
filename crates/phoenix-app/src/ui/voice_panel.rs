@@ -1,6 +1,7 @@
 //! crate::t!("voice.connected") panel above the user panel, and the speaking ring used
 //! on voice channel member avatars.
 
+use crate::ui::tooltip::Tipped as _;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -188,7 +189,7 @@ pub fn audio_button(
                 .w(z(32.))
                 .rounded_l(z(8.))
                 .child(panel_glyph(i, red))
-                .tooltip(crate::ui::tooltip::tip(tip))
+                .tip(tip)
                 .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx))),
         )
         .child(
@@ -201,10 +202,10 @@ pub fn audio_button(
                     16. * crate::theme::zoom(),
                     t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE }),
                 ))
-                .tooltip(crate::ui::tooltip::tip(match kind {
+                .tip(match kind {
                     Audio::Mic => crate::t!("voice.input_options"),
                     Audio::Deafen => crate::t!("voice.output_options"),
-                }))
+                })
                 .on_click(cx.listener(move |_, ev: &gpui::ClickEvent, _, cx| {
                     let now = AUDIO_MENU.with(|m| m.borrow().as_ref().map(|(k, _, _)| *k));
                     let next = (now != Some(kind)).then(|| {
@@ -328,7 +329,7 @@ fn action_button(id: &'static str, path: &'static str, label: SharedString, cx: 
         .items_center()
         .justify_center()
         .child(asset_icon(path, 20. * crate::theme::zoom(), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
-        .tooltip(crate::ui::tooltip::tip(label.clone()))
+        .tip(label.clone())
         .on_click(cx.listener(move |a, _, _, cx| a.stub(&label, cx)))
 }
 
@@ -513,11 +514,11 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                 false,
                             )
                             .when(noise, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
-                            .tooltip(crate::ui::tooltip::tip(if noise {
+                            .tip(if noise {
                                 crate::t!("voice.noise_off")
                             } else {
                                 crate::t!("voice.noise_on")
-                            }))
+                            })
                             .on_click(cx.listener(|_, _, _, cx| {
                                 update(|p| p.noise_suppression = !p.noise_suppression, true);
                                 cx.notify();
@@ -525,7 +526,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                         )
                         .child(
                             panel_button("hangup", panel_glyph(Icon::PhoneHangup, false), false)
-                                .tooltip(crate::ui::tooltip::tip(crate::t!("voice.disconnect")))
+                                .tip(crate::t!("voice.disconnect"))
                                 .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
                         ),
                 ),

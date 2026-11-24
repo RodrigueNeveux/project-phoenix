@@ -9,6 +9,7 @@
 //! body-lg/semibold --text-strong margin-bottom 2, subtitle body-md/normal
 //! --text-default margin-bottom 24; actions_dcNks8 flex gap 8.
 
+use crate::ui::tooltip::Tipped as _;
 use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
 
 use crate::{
@@ -72,7 +73,7 @@ fn action(id: &'static str, icon: &'static str, bg: usize, hover: usize, tip: Sh
         .bg(c(tok(bg)))
         .hover(move |s| s.bg(c(tok(hover))))
         .cursor_pointer()
-        .tooltip(crate::ui::tooltip::tip(tip))
+        .tip(tip)
         .child(gpui::svg().path(crate::icons::path(icon)).size(z(24.)).text_color(c(tok(idx::WHITE))))
 }
 

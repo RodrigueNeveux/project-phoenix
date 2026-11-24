@@ -1,5 +1,6 @@
 //! Chat area: header, virtualized message list, composer, typing indicator.
 
+use crate::ui::tooltip::Tipped as _;
 use gpui::{
     AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement,
     SharedString, StyledText, Styled, InteractiveText, Window, div, img, list, prelude::*,
@@ -862,7 +863,7 @@ fn new_member_badge(id: Id) -> gpui::Stateful<gpui::Div> {
         .mt(z(1.))
         .cursor_pointer()
         .child(gpui::svg().path(crate::icons::path("new-user")).size_full().text_color(tk(idx::TEXT_FEEDBACK_POSITIVE)))
-        .tooltip(crate::ui::tooltip::tip(crate::t!("chat.new_member")))
+        .tip(crate::t!("chat.new_member"))
 }
 
 /// Discord's "APP" tag next to bot authors (vanilla-guild-text-groups botTagCozy_ /

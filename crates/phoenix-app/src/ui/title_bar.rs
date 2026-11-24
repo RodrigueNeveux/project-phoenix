@@ -2,6 +2,7 @@
 //! spans the whole window above the guild list, channel list and page, shows
 //! the current place centered and the inbox / help buttons on the right.
 
+use crate::ui::tooltip::Tipped as _;
 use gpui::{Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
 
 use crate::{
@@ -38,7 +39,7 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpu
         // `--interactive-icon-hover`; selected `--interactive-icon-active`.
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
         .child(icon(i, 18. * zoom(), c(tok(if active { idx::INTERACTIVE_ICON_ACTIVE } else { idx::ICON_MUTED }))))
-        .tooltip(crate::ui::tooltip::tip(tip))
+        .tip(tip)
 }
 
 /// `backForwardButtons_nS9Yqn` half (dump -channels-N-N+ #20/#22): 26×24, 18px

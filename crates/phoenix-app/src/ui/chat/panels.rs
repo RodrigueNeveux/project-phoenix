@@ -2,6 +2,7 @@
 //! pinned-messages popout, thread panel, "new messages" / "jump to present"
 //! bars, drag & drop target.
 
+use crate::ui::tooltip::Tipped as _;
 use std::rc::Rc;
 
 use gpui::{
@@ -403,7 +404,7 @@ fn forum_post_bar(app: &PhoenixApp, thread: crate::model::Id, scroll: &gpui::Scr
             .flex()
             .items_center()
             .justify_center()
-            .tooltip(crate::ui::tooltip::tip(tip))
+            .tip(tip)
             .child(gpui::svg().path(crate::icons::path(path)).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
     };
     let top = scroll.clone();

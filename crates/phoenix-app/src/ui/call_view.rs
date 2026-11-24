@@ -7,6 +7,7 @@
 //! `current-client/css` (classes `_hbKzX7`, `_K9Xq13`, `_p87Rny`, `_7NOr2f`).
 //! Box sizes in comments are the dump's CSS px.
 
+use crate::ui::tooltip::Tipped as _;
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
@@ -373,11 +374,11 @@ fn strip_button(open: bool, fade: f32, cx: &mut Context<PhoenixApp>) -> impl Int
             .hover(|s| s.bg(t(idx::PRIMARY_700)))
             .shadow(crate::ui::inbox::popout_shadow())
             .cursor_pointer()
-            .tooltip(crate::ui::tooltip::tip(if open {
+            .tip(if open {
                 crate::t!("call.hide_members")
             } else {
                 crate::t!("call.show_members")
-            }))
+            })
             .child(named(if open { "chevron" } else { "chevron-up" }, 24., white))
             .child(named("members", 24., white))
             .on_click(cx.listener(|_, _, _, cx| {
@@ -432,11 +433,11 @@ fn top_bar(_app: &PhoenixApp, name: SharedString, cx: &mut Context<PhoenixApp>) 
                         .items_center()
                         .justify_center()
                         .cursor_pointer()
-                        .tooltip(crate::ui::tooltip::tip(if open {
+                        .tip(if open {
                             crate::t!("call.hide_chat")
                         } else {
                             crate::t!("call.show_chat")
-                        }))
+                        })
                         .child(named(
                             "chat",
                             24.,
@@ -619,7 +620,7 @@ fn center_button(
         .when(caret, |d| d.rounded_l(z(8.)))
         .when(!caret, |d| d.rounded(z(8.)))
         .cursor_pointer()
-        .tooltip(crate::ui::tooltip::tip(tip))
+        .tip(tip)
         .child(icon)
         .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx)));
     let mut wrap = div().group(group.clone()).flex().items_center().child(btn);
@@ -667,7 +668,7 @@ fn tray_icon(id: &'static str, icon: gpui::Svg, tip: SharedString) -> AnyElement
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .tooltip(crate::ui::tooltip::tip(tip))
+        .tip(tip)
         .child(icon)
         .into_any_element()
 }
@@ -795,7 +796,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         .bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT))
                         .hover(|s| s.bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER)))
                         .cursor_pointer()
-                        .tooltip(crate::ui::tooltip::tip(crate::t!("voice.disconnect")))
+                        .tip(crate::t!("voice.disconnect"))
                         .child(crate::ui::icon(
                             crate::assets::Icon::PhoneHangup,
                             20. * crate::theme::zoom(),
