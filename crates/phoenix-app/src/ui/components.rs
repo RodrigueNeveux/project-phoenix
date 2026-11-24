@@ -80,7 +80,8 @@ fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool, ctx: Option<(&Ent
         .text_size(px(16. * k))
         .line_height(px(22. * k))
         .text_color(c(Palette::TEXT_NORMAL));
-    for b in blocks {
+    let n = blocks.len();
+    for (bi, b) in blocks.into_iter().enumerate() {
         col = col.child(match b {
             RBlock::Code { code, .. } => div()
                 .my(px(4.))
@@ -99,9 +100,11 @@ fn markdown_sized(app: &PhoenixApp, text: &str, reduced: bool, ctx: Option<(&Ent
                 .child(div().w(px(4.)).rounded(px(4.)).bg(c(Palette::INTERACTIVE_MUTED)))
                 .child(StyledText::new(t.text).with_runs(t.runs))
                 .into_any_element(),
-            // Headings keep their size in sizeReduced_ text (h2 20px / 27.5px, margin 0).
+            // markup_ h1/h2/h3 margin 16px 0 8px; markdownContainer_ h*:first-child margin-top 0,
+            // h*:not(:has(+*)) margin-bottom 0 (vanilla-guild-chat-busy honeypot: h3 mb 8px).
             RBlock::Heading(l, t) => div()
-                .when(!reduced, |d| d.mt(px(8.)))
+                .when(bi > 0, |d| d.mt(px(16.)))
+                .when(bi + 1 < n, |d| d.mb(px(8.)))
                 .text_size(px(match l {
                     1 => 24.,
                     2 => 20.,
@@ -223,9 +226,10 @@ fn comp_el(app: &PhoenixApp, k: &Ctx, comp: &Comp, ix: usize) -> AnyElement {
                 .into_any_element()
         }
         Comp::Separator { divider, spacing } => {
-            let m = if *spacing >= 2 { 16. } else { 8. };
+            // divider_pdtj88 margin 0 (the container's 8px gap spaces it), spacingLarge_ 8px 0.
+            let m = if *spacing >= 2 { 8. } else { 0. };
             div()
-                .my(px(m / 2.))
+                .my(px(m))
                 .h(px(if *divider { 1. } else { 0. }))
                 .bg(c(Palette::DIVIDER))
                 .into_any_element()
