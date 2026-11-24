@@ -158,3 +158,16 @@ crates point at the same rev, kept on the `gpui-marks` branch of origin (it is
 `gpui-ellipsis` + `vendor/gpui-pre-wgpu`). Only the two `[[package]]` entries of
 `Cargo.lock` change when the rev moves: edit them by hand, because `cargo update -p` also
 re-resolves unrelated crates (itertools, windows-sys).
+
+## 7. Text box width (`src/elements/text.rs`, `ceil_to_layout_unit`)
+
+**Problem.** After patches 5 and 6 the bot name had the client's advances but still got an
+ellipsis: the "✓ APP" badge beside it was 46px wide against 44.7px in the client (compare
+finish/ellipsis-1280x720, DPR 1.5). Upstream rounds every measured text box up to a whole
+logical pixel, so "APP" in gg sans 12px/600 (23.16px, CDP `getBoundingClientRect`) took 24px.
+
+**Patch.** The measured width is rounded up to 1/64 px (Chromium's LayoutUnit) instead. It still
+never rounds down, so a text given its own measured width does not re-wrap. Unit test
+`text_width_rounds_up_to_a_layout_unit`. Search `PHOENIX PATCH (text width)`.
+
+Rev: `265d2211` on `gpui-marks` (patches 4 to 7).
