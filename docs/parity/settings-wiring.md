@@ -86,7 +86,7 @@ where its value is stored and what it changes in the UI.
 | streamer-auto | Automatically enable if OBS or XSplit is running | local in the client too (StreamerModeStore `autoToggle`, default true) → local prefs | — (no process scan) | 🟡 stored, no effect yet |
 | st-info | Hide personal information like email, connected accounts and notes | local prefs | account e-mail / phone cannot be revealed (settings/view.rs) | ✅ |
 | st-invites | Hide invite links to my Discord servers | local in the client too (StreamerModeStore `hideInstantInvites`, default true) → local prefs | — | 🟡 stored, no effect yet |
-| st-sounds | Disable all sound effects | local in the client too (StreamerModeStore `disableSounds`, default true) → local prefs | — Phoenix plays no sound effects (Discord sounds are not bundled) | 🟡 stored, nothing to mute |
+| st-sounds | Disable all sound effects | local in the client too (StreamerModeStore `disableSounds`, default true) → local prefs | mutes every cue while Streamer Mode is on (see sounds.md) | ✅ |
 | st-notifs | Disable notifications | local prefs | desktop notifications off while streaming (LocalPrefs::notifications_on) | ✅ |
 | underline | Always underline links | local prefs (settings.json) | links underlined (richtext run_for) | ✅ |
 | name-styles | Display name styles | local prefs (settings.json) | — | 🟡 stored, no effect yet |

@@ -769,8 +769,28 @@ static LOWER: &[B] = &[
         "sp.vo.stream_adv",
         "sp.vo.stream_adv_d",
         &[B::Custom("sp.vo.stream_att", stream_attenuation), B::Custom("sp.vo.stream_att_force", stream_strength)],
-    ),
+    ),    // SOUNDS_CATEGORY: "Sons", the collapsible list, the link back to Notifications.
+    B::Divider,
+    B::Title("sp.vo.sounds"),
+    B::Custom("sp.snd.deafen", voice_sounds),
+    B::Related("bell", "settings.page.notifications", "sp.vo.sounds_d", super::Page::Notifications),
 ];
+
+fn voice_sounds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let notice = (!app.prefs.local.notification_sounds).then(|| {
+        // `useInlineNotice`: warning when "Disable all notification sounds" is on.
+        div()
+            .p(z(8.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .text_color(c(tok(idx::TEXT_DEFAULT)))
+            .child(crate::t!("sp.snd.off_notice"))
+    });
+    div().flex().flex_col().gap(z(10.)).children(notice).child(super::pages::render(app, super::pages::VOICE_SOUNDS, cx)).into_any_element()
+}
 
 /// Divider closing the untitled voice category: #2859 sits 40px under the
 /// advanced expander (the shared divider margin is 50).

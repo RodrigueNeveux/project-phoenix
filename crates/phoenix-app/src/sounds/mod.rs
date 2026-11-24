@@ -279,8 +279,7 @@ pub fn on_message(prefs: &crate::notifications::NotifyPrefs, cache: &phoenix_api
     });
     let f = crate::notifications::facts(cache, me, m);
     let notify = crate::notifications::should_notify(prefs, &f);
-    // Probe with a direct mention: true unless muted or set to "nothing".
-    let allow_any = crate::notifications::should_notify(prefs, &crate::notifications::MessageFacts { mentions_me: true, ..f });
+    let allow_any = !prefs.allow_no_messages(f.guild, f.channel, f.parent);
     let c = *ctx();
     for s in message_sounds(&c, &f, m.flags, blocked, notify, allow_any) {
         play(s, VOLUME);

@@ -65,12 +65,56 @@ pub enum B {
     Related(&'static str, &'static str, &'static str, Page),
     /// Collapsed "Show advanced ..." row revealing more blocks.
     Expand(&'static str, &'static str, &'static str, &'static [B]),
+    /// The client's collapsible list (`collapseAfter`): the first `n` blocks, then a
+    /// "Show N more" / "Hide N" row revealing the rest.
+    Collapse(&'static str, usize, &'static [B]),
     KeyGroup(&'static str, &'static str, &'static [(&'static str, &'static [&'static str])]),
 
     Divider,
     /// Custom control; the key is used for search.
     Custom(&'static str, Render),
 }
+
+/// Sound behind a `B::Sound` id (see `crate::sounds::setting_id`).
+fn sound_for(id: &str) -> String {
+    match id {
+        "snd-msg" => "message1".into(),
+        // `SELECTED_CHANNEL_NOTIFICATIONS` previews `message3`.
+        "snd-msg-cur" => "message3".into(),
+        "snd-ring" => "call_ringing".into(),
+        i => i.strip_prefix("snd-").unwrap_or(i).into(),
+    }
+}
+
+/// Voice & Video > Sounds (`VOICE_AND_VIDEO_SOUNDS_LIST`, `collapseAfter: 4`).
+pub static VOICE_SOUNDS: &[B] = &[B::Collapse(
+    "vo-sounds",
+    4,
+    &[
+        B::Sound("snd-deafen", "sp.snd.deafen"),
+        B::Sound("snd-undeafen", "sp.snd.undeafen"),
+        B::Sound("snd-mute", "sp.snd.mute"),
+        B::Sound("snd-unmute", "sp.snd.unmute"),
+        B::Sound("snd-camera_on", "sp.snd.camera_on"),
+        B::Sound("snd-camera_off", "sp.snd.camera_off"),
+        B::Sound("snd-disconnect", "sp.snd.disconnect"),
+        B::Sound("snd-ptt_start", "sp.snd.ptt_start"),
+        B::Sound("snd-ptt_stop", "sp.snd.ptt_stop"),
+        B::Sound("snd-user_join", "sp.snd.user_join"),
+        B::Sound("snd-user_leave", "sp.snd.user_leave"),
+        B::Sound("snd-user_moved", "sp.snd.user_moved"),
+        B::Sound("snd-call_calling", "sp.snd.call_calling"),
+        B::Sound("snd-stream_started", "sp.snd.stream_started"),
+        B::Sound("snd-stream_ended", "sp.snd.stream_ended"),
+        B::Sound("snd-stream_user_joined", "sp.snd.stream_user_joined"),
+        B::Sound("snd-stream_user_left", "sp.snd.stream_user_left"),
+        B::Sound("snd-activity_launch", "sp.snd.activity_launch"),
+        B::Sound("snd-activity_end", "sp.snd.activity_end"),
+        B::Sound("snd-activity_user_join", "sp.snd.activity_user_join"),
+        B::Sound("snd-activity_user_left", "sp.snd.activity_user_left"),
+        B::Sound("snd-reconnect", "sp.snd.reconnect"),
+    ],
+)];
 
 fn eid(s: impl Into<String>) -> ElementId {
     ElementId::Name(SharedString::from(s.into()))
@@ -449,9 +493,74 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
             out.push(switch_row(app, id, tr(t), desc, *bind, cx));
         }
         B::Sound(id, t) => {
-            // the preview link (anchor_R6ReNl, 14/18 --text-link)
-            let link = div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_LINK))).child(tr("sp.sound_preview"));
-            out.push(switch_row(app, id, tr(t), Some(link.into_any_element()), Bind::Pref(*id != "snd-msg-cur"), cx)); // vanilla-settings-04: current-channel sound off
+            // the preview link (anchor_R6ReNl, 14/18 --text-link): `aQ(sound)` plays it.
+            let name = sound_for(id);
+            let link = div()
+                .id(eid(format!("snd-preview-{id}")))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .text_color(c(tok(idx::TEXT_LINK)))
+                .cursor_pointer()
+                .hover(|s| s.underline())
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    crate::sounds::preview(&name);
+                })
+                .child(tr("sp.sound_preview"));
+            let bind = Bind::Pref(*id != "snd-msg-cur"); // vanilla-settings-04: current-channel sound off
+            if app.prefs.local.notification_sounds {
+                out.push(switch_row(app, id, tr(t), Some(link.into_any_element()), bind, cx));
+            } else {
+                // `useDisabled: getDisableAllSounds()`, value `!isSoundDisabled && !disabled`: off and dimmed.
+                let row = item_ex(
+                    tr(t),
+                    Some(div().opacity(0.5).child(link).into_any_element()),
+                    Some(div().opacity(0.5).child(controls::switch(eid(format!("sw-knob-{id}")), false)).into_any_element()),
+                    true,
+                    true,
+                );
+                out.push(row.id(eid(format!("sw-{id}"))).cursor(gpui::CursorStyle::OperationNotAllowed).into_any_element());
+            }
+        }
+        B::Collapse(id, n, inner) => {
+            let open = app.settings.as_ref().is_some_and(|s| s.expanded.contains(id));
+            for b in inner.iter().take(*n) {
+                render_block(app, b, out, cx);
+            }
+            let rest = inner.len().saturating_sub(*n);
+            if open {
+                for b in inner.iter().skip(*n) {
+                    render_block(app, b, out, cx);
+                }
+            }
+            let id = *id;
+            let label = if open { crate::t!("sp.snd.hide", n = rest) } else { crate::t!("sp.snd.show", n = rest) };
+            out.push(
+                item(
+                    label,
+                    None,
+                    Some(
+                        gpui::svg()
+                            .path(crate::icons::path("chevron"))
+                            .size(z(24.))
+                            .text_color(c(tok(idx::ICON_STRONG)))
+                            .when(open, |s| s.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))))
+                            .into_any_element(),
+                    ),
+                    true,
+                )
+                .id(eid(format!("col-{id}")))
+                .cursor_pointer()
+                .on_click(cx.listener(move |a, _, _, cx| {
+                    if let Some(s) = a.settings.as_mut()
+                        && !s.expanded.remove(id)
+                    {
+                        s.expanded.insert(id);
+                    }
+                    cx.notify();
+                }))
+                .into_any_element(),
+            );
         }
         B::Radios(id, t, d, opts, p) => {
             let mut col = div().flex().flex_col().py(z(12.));
@@ -577,6 +686,7 @@ fn push_texts(blocks: &'static [B], out: &mut Vec<&'static str>) {
                 out.extend([*t, *d]);
                 push_texts(inner, out);
             }
+            B::Collapse(_, _, inner) => push_texts(inner, out),
             B::KeyGroup(l, d, rows) => {
                 out.extend([*l, *d]);
                 out.extend(rows.iter().map(|r| r.0));
