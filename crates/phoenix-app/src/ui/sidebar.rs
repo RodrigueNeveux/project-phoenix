@@ -943,8 +943,20 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     (is_dm && !is_group)
                         .then(|| ch.voice_users.first().and_then(|u| app.users.get(u)))
                         .flatten()
-                        .and_then(|u| crate::ui::nameplate::layer(u, 48., crate::ui::nameplate::Place::Channel, false, selected)),
-                    |d, l| d.child(l),
+                        // Only the selected row and the hovered one draw it (vanilla-home-friends:
+                        // no `container_AFi54G` under idle rows); hovered `.channel_.hover_` opacity .4.
+                        .and_then(|u| crate::ui::nameplate::layer(u, 48., crate::ui::nameplate::Place::Channel, !selected, selected)),
+                    |d, l| {
+                        d.child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full()
+                                .when(!selected, |w| w.opacity(0.).group_hover(SharedString::from(format!("chrow{}", id.0)), |s| s.opacity(1.)))
+                                .child(l),
+                        )
+                    },
                 )
                 .child(top_line(lead, connected))
                 .child(
