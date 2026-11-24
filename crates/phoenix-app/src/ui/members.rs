@@ -639,6 +639,15 @@ pub fn member_row_in(
     // memberInner_Iy0c7A padding 4px 0 (42px); avatar 32 + margin-right 12.
     div().py(z(1.)).child(div()
         .id(("member", mem.user.0))
+        // Decorations play while the row is hovered (ui::avatar_deco).
+        .on_hover({
+            let e = e.clone();
+            move |h, _, cx| {
+                if crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(1, uid.0), *h) {
+                    e.update(cx, |_, cx| cx.notify());
+                }
+            }
+        })
         .ml(z(8.))
         // live client: member_Iy0c7A is 44px with a sub line (name 18 + sub 16),
         // 42px without (avatar 32), both including its 1px block padding.
@@ -685,7 +694,7 @@ pub fn member_row_in(
                 .when_some(user.and_then(|u| u.decoration.clone()), |d, deco| {
                     // avatarDecorationContainer_: inset/top --custom-avatar-avatar-decoration-border-position
                     // = (1 − 1.2)/2 × 100%, size 120% of the 32px avatar.
-                    d.child(gpui::img(deco).absolute().size(z(32. * 1.2)).left(z(-3.2)).top(z(-3.2)))
+                    d.child(gpui::img(crate::ui::avatar_deco::src_for(&deco, crate::ui::avatar_deco::hover_key(1, uid.0))).absolute().size(z(32. * 1.2)).left(z(-3.2)).top(z(-3.2)))
                 }),
         )
         .child(

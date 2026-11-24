@@ -922,6 +922,15 @@ fn message(
     let base = div()
         .id(("msg", id.0))
         .group("msg")
+        // Author decorations play while the message is hovered (ui::avatar_deco).
+        .on_hover({
+            let e = entity.clone();
+            move |h, _, cx| {
+                if crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(2, id.0), *h) {
+                    e.update(cx, |_, cx| cx.notify());
+                }
+            }
+        })
         .on_mouse_down(gpui::MouseButton::Right, message_ext::on_right_click(entity, msg))
         .relative()
         .pr(z(space::xl())) // message_ padding-inline-end --space-xl (#1184)
@@ -1007,7 +1016,7 @@ fn message(
                     let s = m::AVATAR * 1.2;
                     let off = (s - m::AVATAR) / 2.;
                     d.child(
-                        gpui::img(deco)
+                        gpui::img(crate::ui::avatar_deco::src_for(&deco, crate::ui::avatar_deco::hover_key(2, id.0)))
                             .absolute()
                             .size(z(s))
                             .left(z(space::md() - off))

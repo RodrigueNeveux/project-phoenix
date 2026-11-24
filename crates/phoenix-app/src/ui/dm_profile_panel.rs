@@ -65,9 +65,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let uid = peer(app)?;
     ensure_profile(app, uid, cx);
     ensure_avatar_colour(app, uid, cx);
-    let themed = app.people.profiles.get(&uid).is_some_and(|p| p.theme.is_some());
+    let theme = app.people.profiles.get(&uid).and_then(|p| p.theme);
     // `.custom-user-profile-theme` re-declares the text/control tokens on the card.
-    Some(crate::ui::profile_theme::scoped(themed, || panel(app, uid, cx)))
+    Some(crate::ui::profile_theme::scoped(theme, || panel(app, uid, cx)))
 }
 
 fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -81,7 +81,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
     // --profile-gradient-start = color-mix(in oklab, overlay 100%, primary) is the
     // overlay itself (black / .6 in dark themes) painted over the outer gradient,
     // so the composited colour is 40% of each channel.
-    let ring_bg = theme.map(|(p, _)| crate::ui::profile_theme::composite(p)).unwrap_or(card_bg);
+    let ring_bg = theme.map(|t| crate::ui::profile_theme::composite(t, t.0)).unwrap_or(card_bg);
     // `profileEffects_ZjcCyW` (vanilla-dm #2060): the applied effect over the 300px inner card.
     let effect = i
         .prof
@@ -197,7 +197,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                             .overflow_hidden()
                             // inner_P1YEjQ: linear-gradient(start, start 105px, end) where
                             // start = end = the overlay colour (oklab(0 0 0 / .6))
-                            .when(theme.is_some(), |d| d.bg(crate::ui::profile_theme::overlay()))
+                            .when_some(theme, |d, t| d.bg(crate::ui::profile_theme::overlay(t)))
                             .flex()
                             .flex_col()
                             .child(div().id("dm-panel-scroll").flex_1().min_h_0().overflow_y_scroll().child(header).child(body))

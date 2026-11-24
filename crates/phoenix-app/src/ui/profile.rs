@@ -331,7 +331,9 @@ pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> Div {
         .h(z(h))
         .w_full()
         .flex_none()
-        .bg(c(i.accent))
+        // Themed, banner_vNEdYY is transparent (live: background none) and the
+        // card's primary colour shows through.
+        .when(i.prof.is_none_or(|p| p.theme.is_none()), |d| d.bg(c(i.accent)))
         .rounded_t(z(radius))
         .overflow_hidden()
         .border_b_1()
@@ -350,7 +352,8 @@ pub(crate) fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> D
         .when_some(i.prof.and_then(|p| p.decoration.clone()), |d, deco| {
             // Avatar decorations are drawn at 1.2x the avatar, centred.
             let s = size * 1.2;
-            d.child(img(deco).absolute().size(z(s)).left(z(ring - (s - size) / 2.)).top(z(ring - (s - size) / 2.)))
+            // Popouts, the full profile and the DM panel play it (animated WebP).
+            d.child(img(crate::ui::avatar_deco::src(&deco, true)).absolute().size(z(s)).left(z(ring - (s - size) / 2.)).top(z(ring - (s - size) / 2.)))
         })
 }
 
@@ -624,10 +627,16 @@ pub(crate) fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui:
 /// `footer` is --custom-user-profile-footer-height: the gradient ends at
 /// `calc(100% - footer)` and the secondary colour fills the rest (72px in
 /// `.user-profile-sidebar.user-profile-sidebar-redesign`, 0 by default).
-pub(crate) fn theme_backdrop((primary, secondary): (u32, u32), footer: f32) -> [Div; 3] {
+pub(crate) fn theme_backdrop(t: (u32, u32), footer: f32) -> [Div; 3] {
+    theme_backdrop_at(t, 105., footer)
+}
+
+/// [`theme_backdrop`] with the primary colour held for `banner` px
+/// (modal-v2 `profile_s3DB6Y`: --custom-user-profile-banner-height 140px).
+pub(crate) fn theme_backdrop_at((primary, secondary): (u32, u32), banner: f32, footer: f32) -> [Div; 3] {
     [
-        div().absolute().top_0().left_0().right_0().h(z(105.)).bg(c(primary)),
-        div().absolute().top(z(105.)).left_0().right_0().bottom(z(footer)).bg(gpui::linear_gradient(
+        div().absolute().top_0().left_0().right_0().h(z(banner)).bg(c(primary)),
+        div().absolute().top(z(banner)).left_0().right_0().bottom(z(footer)).bg(gpui::linear_gradient(
             180.,
             gpui::linear_color_stop(c(primary), 0.),
             gpui::linear_color_stop(c(secondary), 1.),
@@ -680,9 +689,9 @@ fn popout_card(
     note: Option<&gpui::Entity<InputState>>,
     cx: &mut Context<PhoenixApp>,
 ) -> Div {
-    let themed = app.people.profiles.get(&uid).is_some_and(|p| p.theme.is_some());
+    let theme = app.people.profiles.get(&uid).and_then(|p| p.theme);
     // `.custom-user-profile-theme` re-declares the text/control tokens on the card.
-    crate::ui::profile_theme::scoped(themed, || popout_card_inner(app, uid, guild, note, cx))
+    crate::ui::profile_theme::scoped(theme, || popout_card_inner(app, uid, guild, note, cx))
 }
 
 fn popout_card_inner(
@@ -696,7 +705,7 @@ fn popout_card_inner(
     let i = info(app, uid, guild);
     let theme = i.prof.and_then(|p| p.theme);
     // outer_P1YEjQ background; themed, the avatar ring is the overlay over the primary colour.
-    let bg = theme.map(|(p, _)| crate::ui::profile_theme::composite(p)).unwrap_or(tok(idx::BACKGROUND_SURFACE_HIGH));
+    let bg = theme.map(|t| crate::ui::profile_theme::composite(t, t.0)).unwrap_or(tok(idx::BACKGROUND_SURFACE_HIGH));
     let e = cx.entity();
     let e_full = e.clone();
     // header_NOlkhE: banner (105) + 35px; avatar_WRLIGC popout at
@@ -836,7 +845,7 @@ fn popout_card_inner(
         // primary (105px) -> secondary gradient; inner_P1YEjQ radius 6px with
         // the uniform --profile-gradient-overlay on top.
         Some(t) => card.p(z(2.)).children(theme_backdrop(t, 0.)).child(
-            inner.relative().rounded(z(6.)).overflow_hidden().bg(crate::ui::profile_theme::overlay()),
+            inner.relative().rounded(z(6.)).overflow_hidden().bg(crate::ui::profile_theme::overlay(t)),
         ),
     }
     .children(effect);
@@ -910,9 +919,16 @@ fn mutual_row(id: impl Into<gpui::ElementId>, icon: AnyElement, name: SharedStri
 /// Full profile, modal v2 (`root_ZhNJfE`, `profileContentInner_s3DB6Y`):
 /// profile card column on the left, tab panel on the right.
 fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut Context<PhoenixApp>) -> Div {
+    let theme = app.people.profiles.get(&uid).and_then(|p| p.theme);
+    crate::ui::profile_theme::scoped(theme, || modal_card_inner(app, uid, guild, vw, cx))
+}
+
+fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut Context<PhoenixApp>) -> Div {
     let i = info(app, uid, guild);
     let e = cx.entity();
-    let card_bg = tok(idx::BACKGROUND_SURFACE_HIGH); // profile_s3DB6Y background
+    let theme = i.prof.and_then(|p| p.theme);
+    // profile_s3DB6Y background; themed, the avatar ring is the overlay over the primary.
+    let card_bg = theme.map(|t| crate::ui::profile_theme::composite(t, t.0)).unwrap_or(tok(idx::BACKGROUND_SURFACE_HIGH));
     // --custom-modal-v2-profile-width: min(max(300px, 45.5vw - 0.91*--space-48), 400px)
     let pw = (f32::from(vw) * 0.455 - 48. * 0.91).clamp(300., 400.);
     // --custom-modal-v2-padding (--space-48 from 1025px, else --space-32)
@@ -1012,7 +1028,13 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .flex()
         .flex_col()
         .overflow_y_scroll()
-        .bg(c(card_bg))
+        .when(theme.is_none(), |d| d.bg(c(card_bg)))
+        // themed: linear-gradient(primary, primary 140px, secondary) with the
+        // ::before --profile-gradient-overlay-color layer on top.
+        .when_some(theme, |d, t| {
+            d.children(theme_backdrop_at(t, BANNER, 0.))
+                .child(div().absolute().top_0().left_0().right_0().bottom_0().bg(crate::ui::profile_theme::overlay(t)))
+        })
         .rounded_t(z(16.)) // --radius-lg --radius-lg 0 0
         .border_1()
         .border_color(c(tok(idx::BORDER_MUTED))) // outline 1px --border-muted
@@ -1169,7 +1191,19 @@ fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut
         .rounded(z(16.))
         .border_1()
         .border_color(c(tok(idx::BORDER_NORMAL)))
-        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+        .when(theme.is_none(), |d| d.bg(c(tok(idx::BACKGROUND_BASE_LOWER))))
+        // themed modal-v2: outer --profile-gradient-modal-background-color, inner
+        // linear-gradient(mix(overlay 80%, modal bg), mix(overlay 20%, modal bg) 300px).
+        .when_some(theme, |d, t| {
+            use crate::ui::profile_theme::{modal_background, modal_inner};
+            d.bg(modal_background(t))
+                .child(div().absolute().top_0().left_0().right_0().h(z(300.)).bg(gpui::linear_gradient(
+                    180.,
+                    gpui::linear_color_stop(modal_inner(t, 0.8), 0.),
+                    gpui::linear_color_stop(modal_inner(t, 0.2), 1.),
+                )))
+                .child(div().absolute().top(z(300.)).left_0().right_0().bottom_0().bg(modal_inner(t, 0.2)))
+        })
         .shadow_lg()
         .pt(z(pad + SYSTEM_BAR))
         .pl(z(pad))
