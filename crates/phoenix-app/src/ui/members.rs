@@ -203,7 +203,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         .pr(z(8.))
                         .pb(z(10.)), // members_86es0b padding-bottom 10px
                 )
-                // members_86es0b is `thin_tqapBM fade_tqapBM`: the bar shows on hover.
                 .children(crate::ui::chat::scrollbar::thin_fade_scrollbar(&app.member_list)),
         )
 }

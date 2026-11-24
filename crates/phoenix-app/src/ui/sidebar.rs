@@ -165,8 +165,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .relative()
                 .group(crate::ui::chat::scrollbar::THIN_FADE_GROUP)
                 .child(list(app.sidebar_list.clone(), move |ix, _w, cx| row(&entity, ix, cx)).size_full())
-                // The channel and DM scrollers are `thin_tqapBM fade_tqapBM` (8px gutter, CDP
-                // 2026-11-24): the bar shows on hover.
                 .children(crate::ui::chat::scrollbar::thin_fade_scrollbar(&app.sidebar_list))
                 .children(crate::ui::channel_unread_bar::render(app)),
         )
