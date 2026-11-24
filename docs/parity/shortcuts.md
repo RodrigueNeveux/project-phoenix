@@ -34,7 +34,7 @@ Source: the live 2026 client's shortcuts modal (Ctrl+/), read on 2026-11-24, plu
 | Shift+Esc | Mark server read | ✅ |
 | Esc | Mark channel read (and jump to present) | ✅ |
 | Ctrl+Shift+T | Create a group DM | ✅ |
-| Ctrl+Shift+Alt+N | Create a thread | ✅ for the focused message (opens the thread form). Standalone threads ❌ (the backend needs a starter message) |
+| Ctrl+Shift+Alt+N | Create a thread | ✅ Focused message: opens the thread form. Otherwise: opens the “Nouveau fil” sidebar (rebuilt from ref-cache create-thread-sidebar-*.json), which sends `POST /channels/{id}/threads` and then the starter message |
 | Ctrl+P | Toggle pins popout | ✅ |
 | Ctrl+I | Toggle inbox popout | ✅ |
 | Ctrl+Shift+E | Mark the inbox's listed channels read (only while the inbox is open) | ✅ |
@@ -69,7 +69,7 @@ We have not checked how the client itself enters message focus (CDP can't send r
 | Ctrl+Shift+H, F1 | Get help (opens support site) | ✅ |
 | Ctrl+F, Ctrl+Shift+F | Search | ✅ |
 | Shift+F10 | Open context menu (focused message) | ✅ |
-| Ctrl+/ (also Ctrl+Shift+/) | Keyboard combos modal (Esc closes it) | ✅. Rebuilt from the live modal (ref-cache `shortcuts-modal-default.json`). Card measures 950x672 in both at 1536x840, keybind cards are 180x81 with a 24px gap, and caps are 23px high. Missing: the Discord Revolution arrows decoration (Discord's SVG assets, not copied), real SVG arrow caps (we use ↑↓←→ glyphs), and the grid's per-column max-content widths (we wrap) |
+| Ctrl+/ (also Ctrl+Shift+/) | Keyboard combos modal (Esc closes it) | ✅. Rebuilt from the live modal (ref-cache `shortcuts-modal-default.json`). Card measures 950x672 in both at 1536x840, keybind cards are 180x81 with a 24px gap, and caps are 23px high. Missing: the Discord Revolution arrows decoration (Discord's SVG assets, not copied), real SVG arrow caps (we use ↑↓←→ glyphs), Grid columns follow `repeat(auto-fill, minmax(180px, max-content))`, with free space shared out when a row is too wide |
 | H H Right N K | Easter egg | ❌ |
 | Ctrl+Alt+Shift+W | Lo-fi Wumpus | ❌ |
 
