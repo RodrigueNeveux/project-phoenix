@@ -686,7 +686,8 @@ fn user_limit_pill(users: u32, limit: u32) -> AnyElement {
                 .border_1()
                 .border_color(t(idx::BORDER_NORMAL))
                 .bg(t(idx::BACKGROUND_BASE_LOW))
-                .child(cell(format!("{users:02}")).w(z(28.)).px(z(4.)))
+                // `users_QQRrAh` width 28; `.extraLong_` (3+ digits) width auto.
+                .child(cell(format!("{users:02}")).when(users < 100 && limit < 100, |d| d.w(z(28.))).px(z(4.)))
                 .child(
                     cell(format!("{limit:02}"))
                         .relative()
