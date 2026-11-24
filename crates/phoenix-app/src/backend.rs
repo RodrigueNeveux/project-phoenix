@@ -186,6 +186,10 @@ pub trait Backend: Send + Sync + 'static {
     fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Stop the incoming call ringing for us (`POST /channels/{id}/call/stop-ringing`).
+    fn stop_ringing(&self, _channel: Id) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn send_sticker(&self, _channel: Id, _sticker: Id) -> BoxFuture<()> {
         Box::pin(async { Err(BackendError("Stickers aren't available.".into())) })
     }

@@ -195,6 +195,9 @@ impl PhoenixApp {
         if self.screen != Screen::Main || self.settings.is_some() || self.switcher.is_some() {
             return false;
         }
+        if crate::ui::incoming_call::on_key(self, ks, cx) {
+            return true;
+        }
         let m = ks.modifiers;
         let in_composer = composer_focused(self, window, cx);
         let at_root = self.focus.is_focused(window);

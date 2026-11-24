@@ -713,6 +713,13 @@ impl Backend for DiscordBackend {
     fn sticker_packs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::StickerPackData>> {
         self.with_session(|_, s| expressions::sticker_packs(s))
     }
+    fn stop_ringing(&self, channel: Id) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            let path = format!("/channels/{}/call/stop-ringing", channel.0);
+            s.rest.request_json(reqwest::Method::POST, &path, Some(serde_json::json!({}))).await.map_err(api_err)?;
+            Ok(())
+        })
+    }
     fn send_sticker(&self, channel: Id, sticker: Id) -> BoxFuture<()> {
         self.with_session(move |_, s| expressions::send_sticker(s, channel, sticker))
     }

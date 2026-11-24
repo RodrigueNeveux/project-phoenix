@@ -24,6 +24,8 @@ pub enum ParityEvent {
     InteractionFailed,
     /// `MESSAGE_POLL_VOTE_ADD/REMOVE`.
     PollVote { channel: Id, message: Id, user: Id, answer: u32, add: bool },
+    /// `CALL_CREATE` / `CALL_UPDATE` (`ringing` user ids) and `CALL_DELETE` (empty).
+    Call { channel: Id, ringing: Vec<Id> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -114,6 +116,14 @@ pub fn from_gateway(ev: &GatewayEvent) -> Option<ParityEvent> {
     match name.as_str() {
         "INTERACTION_MODAL_CREATE" => ModalSpec::from_value(data).map(ParityEvent::Modal),
         "INTERACTION_FAILURE" => Some(ParityEvent::InteractionFailed),
+        "CALL_CREATE" | "CALL_UPDATE" | "CALL_DELETE" => Some(ParityEvent::Call {
+            channel: sf(data.get("channel_id"))?,
+            ringing: if name == "CALL_DELETE" {
+                Vec::new()
+            } else {
+                data.get("ringing").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| sf(Some(v))).collect()).unwrap_or_default()
+            },
+        }),
         "MESSAGE_POLL_VOTE_ADD" | "MESSAGE_POLL_VOTE_REMOVE" => Some(ParityEvent::PollVote {
             channel: sf(data.get("channel_id"))?,
             message: sf(data.get("message_id"))?,
@@ -220,6 +230,8 @@ pub struct GroupDmPicker {
 #[derive(Default)]
 pub struct ParityUi {
     pub inbox: InboxState,
+    /// DM / group call ringing us (incoming call popup).
+    pub incoming_call: Option<Id>,
     pub threads_open: bool,
     /// Archived threads per channel for the threads browser ("older threads").
     pub archived_threads: HashMap<Id, Vec<ForumPost>>,
@@ -303,6 +315,7 @@ pub fn on_event(app: &mut App, ev: ParityEvent, cx: &mut Context<App>) {
                 app.refresh_message(channel, message);
             }
         }
+        ParityEvent::Call { channel, ringing } => crate::ui::incoming_call::on_call(app, channel, &ringing),
     }
     cx.notify();
 }

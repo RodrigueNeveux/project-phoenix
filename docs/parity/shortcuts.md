@@ -23,8 +23,8 @@ Source: the live 2026 client's shortcuts modal (Ctrl+/), read on 2026-11-24, plu
 |---|---|---|
 | Ctrl+Shift+M | Toggle mute | ✅ |
 | Ctrl+Shift+D | Toggle deafen | ✅ |
-| Ctrl+Enter | Answer an incoming call | ❌ |
-| Esc | Decline an incoming call | ❌ |
+| Ctrl+Enter | Answer an incoming call | ✅ `ui::incoming_call` (popup `root_dcNks8` while CALL_CREATE/UPDATE rings us; joins the call) |
+| Esc | Decline an incoming call | ✅ POST `call/stop-ringing`, like the client keydown handler |
 | Ctrl+' | Start a call in a DM or group DM | ✅ (1:1 DM: opens our call UI) |
 | Ctrl+Shift+B | Toggle the soundboard | Bound, opens the same placeholder as the voice panel's button. No soundboard reference dump yet (needs a voice call), so the popout UI is ❌ |
 
