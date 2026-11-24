@@ -526,9 +526,14 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         // `sectionDivider_u88IQl` (#648): 1px, margin 12/8, `--border-subtle`.
         .child(div().mx(z(8.)).my(z(12.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
         .child(
-            // `privateChannelsHeaderContainer_Bce46W` (#649): 24px, padding 0 6 4 20,
-            // `body-sm/medium` 14/18 `--channels-default`; 24px action (padding 4, 16px glyph).
+            // `privateChannelsHeaderContainer_Bce46W` (vanilla-home-friends #652): 24px, padding
+            // 0 6 4 20, `body-sm/medium` 14/18 `--channels-default`, :hover `--interactive-text-hover`.
+            // `headerActions_` (#654) gap 4: `moreButton_` (opacity 0 until the header is
+            // hovered) then "Create DM"; `iconWrapper_ybUK7Z clickable_` 24px (padding 4) with a
+            // 16px glyph, `--icon-muted`, :hover `--icon-subtle`.
             div()
+                .id("dm-header")
+                .group("dm-header")
                 .h(z(24.))
                 .pl(z(20.))
                 .pr(z(6.))
@@ -540,16 +545,37 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                 .line_height(z(18.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(t(idx::CHANNELS_DEFAULT))
-                .child(div().min_w_0().text_ellipsis().child(crate::t!("dm.header")))
-                .child(
+                .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                // headerText_Bce46W margin-right 10
+                .child(div().flex_1().min_w_0().mr(z(10.)).text_ellipsis().child(crate::t!("dm.header")))
+                .child({
+                    let btn = |id: &'static str, glyph: gpui::Svg| {
+                        div()
+                            .id(id)
+                            .group(id)
+                            .size(z(24.))
+                            .p(z(4.))
+                            .flex()
+                            .cursor_pointer()
+                            .child(glyph.size(z(16.)).text_color(t(idx::ICON_MUTED)).group_hover(id, |s| s.text_color(t(idx::ICON_SUBTLE))))
+                    };
+                    let e2 = e.clone();
                     div()
-                        .id("new-dm")
-                        .size(z(24.))
-                        .p(z(4.))
-                        .cursor_pointer()
-                        .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_group_dm_picker(cx)))
-                        .child(icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::TEXT_MUTED))),
-                ),
+                        .flex()
+                        .gap(z(4.))
+                        .child(
+                            btn("dm-more", gpui::svg().path(crate::icons::path("more-horizontal")))
+                                .opacity(0.)
+                                .group_hover("dm-header", |s| s.opacity(1.))
+                                .tooltip(crate::ui::tooltip::tip(crate::t!("header.more")))
+                                .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("More", cx))),
+                        )
+                        .child(
+                            btn("new-dm", icon(Icon::Plus, 16., t(idx::ICON_MUTED)))
+                                .tooltip(crate::ui::tooltip::tip(crate::t!("groupdm.create")))
+                                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_group_dm_picker(cx))),
+                        )
+                }),
         )
 }
 
@@ -750,17 +776,46 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         .then(|| ch.voice_users.first().and_then(|u| app.users.get(u)).and_then(|u| u.tag.clone()))
         .flatten();
     let group = SharedString::from(format!("chrow{}", id.0));
+    // `iconsContainer_zln_tS` (vanilla-home-friends #680/#695): padding-inline-start 4,
+    // min-width 32 when nameplated. `closeButton_zln_tS` is display:none until the row is
+    // hovered, then 24px (padding 3, margin-right 6), opacity .7 (1 on its own hover or
+    // when plated); `innerCloseButton_` padding 1, radius 50%, 16px `closeIcon_`.
+    // Plated: `--custom-nameplate-neutral` plate and a white .9 glyph (#681..#683).
+    let plated = is_dm
+        && !is_group
+        && ch.voice_users.first().and_then(|u| app.users.get(u)).is_some_and(|u| u.nameplate.is_some());
     let close = is_dm.then(|| {
         let e = entity.clone();
+        let fg = if plated { gpui::hsla(0., 0., 1., 0.9) } else { gpui::Hsla::from(c(fg)) };
         div()
-            .id(("dm-close", id.0))
-            .opacity(0.)
-            .group_hover(group.clone(), |s| s.opacity(1.))
-            .on_click(move |_, _, cx| {
-                cx.stop_propagation();
-                e.update(cx, |a, cx| a.close_dm(id, cx));
-            })
-            .child(icon(Icon::Close, 16., t(idx::INTERACTIVE_TEXT_DEFAULT)))
+            .flex()
+            .flex_none()
+            .justify_end()
+            .items_center()
+            .pl(z(4.))
+            .when(plated, |d| d.min_w(z(32.)))
+            .child(
+                div()
+                    .id(("dm-close", id.0))
+                    .hidden()
+                    .group_hover(group.clone(), |s| s.flex())
+                    .size(z(24.))
+                    .p(z(3.))
+                    .mr(z(6.))
+                    .when(!plated, |d| d.opacity(0.7).hover(|s| s.opacity(1.)))
+                    .tooltip(crate::ui::tooltip::tip(crate::t!("menu.close_dm")))
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        e.update(cx, |a, cx| a.close_dm(id, cx));
+                    })
+                    .child(
+                        div()
+                            .p(z(1.))
+                            .rounded_full()
+                            .when(plated, |d| d.bg(gpui::hsla(0., 0., 0., 0.5)).hover(|s| s.bg(gpui::hsla(0., 0., 0., 0.6))))
+                            .child(icon(Icon::Close, 16., fg)),
+                    ),
+            )
     });
     // `children_TNyK-N` (vanilla-guild-text #691): margin -4 -4 -4 0, then 24px
     // `iconItem_Wx6SnQ` boxes (padding 4, 16px `actionIcon`): "Invite" and, with
@@ -860,7 +915,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 // Connected voice row: `link_` 52px (linkTop 28 + linkBottom 16 + padding 4/4).
                 .h(z(if is_dm { 48. } else if connected { 52. } else { 36. }))
                 .pl(z(10.))
-                .pr(z(if is_dm { 4. } else { 10. }))
+                .pr(z(if is_dm { 0. } else { 10. })) // DM `link_zln_tS` padding 0 0 0 10 (#663)
                 .rounded(z(ROW_RADIUS))
                 .flex()
                 .items_center()
