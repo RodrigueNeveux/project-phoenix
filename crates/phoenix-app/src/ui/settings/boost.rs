@@ -90,7 +90,8 @@ fn header() -> Div {
         .mb(z(32.))
         .child(
             div()
-                .flex_1()
+                .w(z(364.)) // #2728 content_xDn2Ui width
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap(z(4.)) // content_xDn2Ui gap
@@ -195,7 +196,7 @@ fn perks_table() -> Div {
     let cell = || div().flex_1().min_w_0().px(z(16.));
     let tier = || cell().flex().flex_col().items_center().justify_center();
     let row = || div().flex().items_center().py(z(16.)).border_b_1().border_color(c(tok(idx::BORDER_NORMAL)));
-    let mut head = row().child(cell().child(text(20., 24., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT, tr("sp.bo.perks"))));
+    let mut head = row().items_start().child(cell().child(text(20., 24., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT, tr("sp.bo.perks"))));
     for (lvl, n) in [("sp.bo.lvl1", "sp.bo.n2"), ("sp.bo.lvl2", "sp.bo.n7"), ("sp.bo.lvl3", "sp.bo.n14")] {
         head = head.child(
             tier()
