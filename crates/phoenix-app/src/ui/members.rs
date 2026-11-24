@@ -17,7 +17,7 @@ use crate::{
     backend::AppEvent,
     model::{Id, Member, Presence},
     presence::{ListEntry, ranges_for},
-    theme::{Palette, c, generated::idx, m, role_color, tok},
+    theme::{Palette, c, generated::idx, m, role_color, space, tok},
 };
 
 /// `AppEvent::MemberListRows` / `AppEvent::Activities`.
@@ -180,7 +180,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         ensure_thread_list(app, g, cx);
     }
     div()
-        .w(z(m::MEMBER_LIST_W)) // --custom-member-list-width
+        .w(z(m::member_list_w())) // --custom-member-list-width
         .flex_none()
         .h_full()
         .flex()
@@ -276,10 +276,10 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
     let muted = c(Palette::TEXT_MUTED);
     let mut col = div().flex_none().flex().flex_col().child(
         div()
-            .pt(z(24.)) // membersGroup_86es0b padding 24px 4px 4px 20px
-            .pb(z(4.))
-            .pl(z(20.))
-            .pr(z(4.))
+            .pt(z(space::lg())) // membersGroup_86es0b padding-block --space-lg --space-xxs, inline --space-md --space-xxs
+            .pb(z(space::xxs()))
+            .pl(z(space::md()))
+            .pr(z(space::xxs()))
             .child(
                 div()
                     .h(z(24.))
@@ -392,7 +392,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .ml(z(8.))
                 // live container_g7esM5 box 252x69.33 (vanilla-members #1512: 52px cardRow
                 // + 2x8 padding + 2x0.667 border); 70 drifted every following row by 2/3px per card.
-                .w(z(252.)) // fixed: long names must not widen it
+                .w(z(m::member_list_w() - 16.)) // cardPlacement_ max-width: list width - 2 × 8px; fixed so long names cannot widen it
                 .h(z(52. + 16. + 2. * 0.667))
                 .overflow_hidden()
                 .p(z(8.)) // padding 8px
@@ -533,10 +533,10 @@ pub fn header(t: SharedString) -> AnyElement {
     // uppercased in the 2026 client; 14px/500 (Text sm/medium).
     // Dump node 1598: padding 24px 4px 4px 20px, 46px tall.
     div()
-        .pt(z(24.))
-        .pb(z(4.))
-        .pl(z(20.))
-        .pr(z(4.))
+        .pt(z(space::lg()))
+        .pb(z(space::xxs()))
+        .pl(z(space::md()))
+        .pr(z(space::xxs()))
         .text_size(z(14.))
         .line_height(z(18.))
         .font_weight(FontWeight::MEDIUM)
@@ -556,10 +556,10 @@ fn group_header(app: &PhoenixApp, g: Id, id: &str, count: u32) -> AnyElement {
         .ok()
         .and_then(|r| app.roles.get(&g)?.iter().find(|x| x.id == Id(r))?.icon.clone());
     div()
-        .pt(z(24.))
-        .pb(z(4.))
-        .pl(z(20.))
-        .pr(z(4.))
+        .pt(z(space::lg()))
+        .pb(z(space::xxs()))
+        .pl(z(space::md()))
+        .pr(z(space::xxs()))
         .child(
             div()
                 .h(z(18.))
@@ -707,7 +707,7 @@ pub fn member_row_in(
         // live client: member_Iy0c7A is 44px with a sub line (name 18 + sub 16),
         // 42px without (avatar 32), both including its 1px block padding.
         .h(px(if two_lines { m::MEMBER_ROW_H } else { m::MEMBER_ROW_H - 2. }))
-        .pl(z(10.))
+        .pl(z(space::xs())) // childContainer_J1Adu_ padding-inline-start --space-xs
         // childContainer_J1Adu_ padding-right 8px, 32px with `nameplated_J1Adu_`
         // (vanilla-members row at y 718): names ellipsize before the nameplate art.
         .pr(z(if user.is_some_and(|u| u.nameplate.is_some()) { 32. } else { 8. }))

@@ -461,7 +461,7 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
             } else if app.selected_guild.is_some()
                 || app.selected_channel.is_some_and(|c| crate::ui::dm_profile_panel::is_group_dm(app, c))
             {
-                crate::theme::m::MEMBER_LIST_W
+                crate::theme::m::member_list_w()
             } else {
                 0.
             };

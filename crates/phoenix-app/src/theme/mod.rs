@@ -407,9 +407,15 @@ pub mod m {
     pub const GUILD_ICON: f32 = g::GUILDBAR_AVATAR_SIZE;
     /// `--custom-guild-sidebar-width`.
     pub const SIDEBAR_W: f32 = g::CUSTOM_GUILD_SIDEBAR_WIDTH;
-    /// `--custom-member-list-width` under `.density-cozy` (the default density
-    /// class on <html>, overriding the 264px base value).
-    pub const MEMBER_LIST_W: f32 = 268.;
+    /// `--custom-member-list-width`: 264px, overridden by `.density-cozy` (268px) and
+    /// `.density-compact` (256px).
+    pub fn member_list_w() -> f32 {
+        match super::density() {
+            super::Density::Compact => 256.,
+            super::Density::Default => g::CUSTOM_MEMBER_LIST_WIDTH,
+            super::Density::Cozy => 268.,
+        }
+    }
     /// `--custom-channel-header-height` (includes the 1px bottom border).
     pub const HEADER_H: f32 = g::CUSTOM_CHANNEL_HEADER_HEIGHT;
     /// `--custom-app-top-bar-height`.

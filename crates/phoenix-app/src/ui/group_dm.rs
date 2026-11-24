@@ -97,7 +97,7 @@ pub fn members_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
     Some(
         div()
             .id("group-members")
-            .w(z(m::MEMBER_LIST_W)) // --custom-member-list-width
+            .w(z(m::member_list_w())) // --custom-member-list-width
             .flex_none()
             .h_full()
             .flex()
