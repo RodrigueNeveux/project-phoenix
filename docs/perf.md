@@ -97,18 +97,45 @@ thread at backend creation.
 The preload finishes before the window in real_shots; in the app the parse
 (~150–200 ms) overlaps window creation instead of following it.
 
+### Round 3: RESUME across launches, off-thread layout (90c930a…79bcfec)
+
+Every dispatch after READY is appended to `session/journal.log` by one
+writer thread; at launch READY + supplemental + journal are replayed through
+the same cache and adapter code, so the state is the one at exit. If the
+journal was written less than 150 s ago and its owner process is gone,
+the gateway sends RESUME (falls back to IDENTIFY + resync on INVALID_SESSION).
+A second Phoenix running at the same time writes nothing and never resumes.
+
+| step | IDENTIFY (READY) | RESUME |
+|---|---|---|
+| `connect_start` → live session in the UI (`ready_applied`) | 1450–1820 ms | **263–376 ms** |
+| of which gateway | 1327–1426 ms (READY) | 0 (session built from disk after `rest_get_me`, ~210–245 ms) |
+| snapshot load (read + parse + replay + build) | 238–381 ms, on the preload thread | same |
+
+Message layout off the UI thread, first page of a cached channel → frame
+(load average 7–9 during all runs, other agents building):
+
+| variant | runs |
+|---|---|
+| UI thread (round 2) | 115, 135, 139, 140, 150, 167, 206, 229 ms |
+| GPUI background executor | 211, 213, 271 ms; 600–870 ms when it ran during the RESUME burst (queued behind image decodes) |
+| dedicated thread per page | 596, 611, 622, 670, 677 ms |
+
+Under contention every thread hop made the first page slower, so the open
+channel is laid out inline again; only pages for channels no longer on
+screen go off-thread. The 91 → 160 ms "regression" of round 2 matches the
+load: same code, 115–229 ms over 8 runs at load 7–9, the cache lookup itself
+stays under 1 ms.
+
 ## What's next
 
 - The snapshot cost is now the JSON parse (150–200 ms). A compact binary
   snapshot needs serde on the UI model types (`model.rs`, `SharedString`,
   `ImageRef`) and on the nav events: not done.
-- Messages in state take ~95 ms the first time (markdown/rich text of 50
-  messages on the UI thread) and ~9 ms when warm: build `RenderedMessage`s
-  off-thread.
-- Gateway RESUME across restarts: deferred. A resume replays only events
-  after the saved seq, but the UI would rebuild from the READY saved at the
-  start of the previous run, so everything that changed during that run would
-  be lost: read states (channels read become unread again), channel edits,
-  presences. It needs a snapshot of the live cache at exit first.
+- First page layout (~100–200 ms cold) is inline; re-measure off-thread
+  layout on an idle machine, and look at what is cold the first time
+  (it is 8–15 ms warm).
+- RESUME: relationships / user settings changes of the previous run come
+  from READY in `nav::snapshot`, so they are stale until the next READY.
 - Prefetch the channels with unread mentions after READY (now only the 6
   most recently viewed channels and hovered rows).
