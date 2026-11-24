@@ -350,9 +350,9 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                     .flex_1()
                                     .min_w_0()
                                     .relative()
-                                    // textArea_ padding 17px 0, 16/22. gpui-component's Textarea fixes its
-                                    // line height at 1.25rem (20px): 18px padding keeps the 56px single-line box.
-                                    .py(z(18.))
+                                    // textArea_ padding 17px 0, 16/22. gpui-component's Input sets 1.25rem on its
+                                    // frame, then applies our refinement: the line height set on the Textarea wins.
+                                    .py(z(17.))
                                     .text_size(z(16.))
                                     .line_height(z(22.))
                                     .text_color(c(Palette::TEXT_NORMAL))
@@ -363,6 +363,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                                 .appearance(false)
                                                 .bordered(false)
                                                 .xsmall()
+                                                .line_height(z(22.)) // textArea_ line-height 22px
                                                 .disabled(blocked),
                                         ),
                                     )
@@ -370,8 +371,8 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                         d.child(
                                             div()
                                                 .absolute()
-                                                .top(z(18.))
-                                                .h(z(20.))
+                                                .top(z(17.))
+                                                .h(z(22.))
                                                 // #1445 placeholder_ sits at the editor's x (496 in live form, glyph at 497.3).
                                                 .left_0()
                                                 .right_0()
