@@ -18,6 +18,25 @@ use crate::{
 /// The pane right of the sidebar: chat, or the Friends / Message Requests
 /// page when Home is open without a DM.
 pub fn main_pane(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let page = page_content(app, window, cx);
+    // `.theme-midnight .page_pog62O` (and `.high-contrast-mode`): border-inline-start
+    // 1px `--border-subtle` between the channel list and the page (box-sizing border-box).
+    if crate::theme::active() == crate::ui::settings::AppTheme::Onyx {
+        use gpui::{ParentElement, Styled};
+        return gpui::div()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .flex()
+            .border_l_1()
+            .border_color(crate::theme::c(crate::theme::tok(crate::theme::generated::idx::BORDER_SUBTLE)))
+            .child(page)
+            .into_any_element();
+    }
+    page
+}
+
+fn page_content(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if let Some(call) = crate::ui::call_view::render(app, window, cx) {
         return call;
     }
