@@ -187,8 +187,9 @@ pub enum MessageKind {
     /// Server boost, with the tier reached (0 = plain boost).
     Boost(u8),
     ThreadCreated,
-    RecipientAdd,
-    RecipientRemove,
+    /// Added / removed group DM member (`message.mentions[0]`); `None` = unknown.
+    RecipientAdd(Option<Id>),
+    RecipientRemove(Option<Id>),
     Call,
     ChannelNameChange,
     /// Stage instance started / ended (content = topic), new speaker, topic change.

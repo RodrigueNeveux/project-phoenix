@@ -40,6 +40,17 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .get(&msg.author)
         .map(|u| u.display_name.clone())
         .unwrap_or_else(|| crate::t!("sys.someone"));
+    // Group DM add/remove name the other member ("X a ajouté Y au groupe."); leaving
+    // the group on one's own keeps the single-name line.
+    let target = |t: Option<crate::model::Id>| t.filter(|t| *t != msg.author);
+    let other: Option<(SharedString, SharedString)> = match msg.kind {
+        MessageKind::RecipientAdd(t) | MessageKind::RecipientRemove(t) => target(t).map(|t| {
+            let n = app.users.get(&t).map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("sys.someone"));
+            let tail = if matches!(msg.kind, MessageKind::RecipientAdd(_)) { "sys.recipient_add_tail" } else { "sys.recipient_kick_tail" };
+            (n, crate::i18n::t(tail, &[]))
+        }),
+        _ => None,
+    };
     let (icon, color, before, after): (ChatIcon, u32, SharedString, SharedString) = match msg.kind {
         MessageKind::Join => {
             let (b, a) = join_text(msg.id.0);
@@ -59,8 +70,14 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             "".into(),
             crate::t!("sys.thread", c = msg.content),
         ),
-        MessageKind::RecipientAdd => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.recipient_add")),
-        MessageKind::RecipientRemove => (ChatIcon::Join, Palette::RED, "".into(), crate::t!("sys.recipient_remove")),
+        MessageKind::RecipientAdd(t) => match target(t) {
+            Some(_) => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.recipient_add_named")),
+            None => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.recipient_add")),
+        },
+        MessageKind::RecipientRemove(t) => match target(t) {
+            Some(_) => (ChatIcon::Join, Palette::RED, "".into(), crate::t!("sys.recipient_kick_named")),
+            None => (ChatIcon::Join, Palette::RED, "".into(), crate::t!("sys.recipient_remove")),
+        },
         MessageKind::Call => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.call")),
         MessageKind::ChannelNameChange => (
             ChatIcon::Edit,
@@ -115,6 +132,17 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
                 .child(name),
         )
         .child(after)
+        .when_some(other, |d, (n, tail)| {
+            d.child(
+                div()
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(Palette::TEXT_HEADER))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .child(n),
+            )
+            .child(tail)
+        })
         .child(
             div()
                 .ml(z(6.))

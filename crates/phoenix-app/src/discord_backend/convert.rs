@@ -275,7 +275,11 @@ pub fn message(m: &api::Message) -> model::Message {
                 emoji_id: r.emoji.id.map(id),
             })
             .collect(),
-        kind: message_kind(m.kind),
+        kind: match message_kind(m.kind) {
+            model::MessageKind::RecipientAdd(_) => model::MessageKind::RecipientAdd(m.mentions.first().map(|x| id(x.user.id))),
+            model::MessageKind::RecipientRemove(_) => model::MessageKind::RecipientRemove(m.mentions.first().map(|x| id(x.user.id))),
+            k => k,
+        },
         pinned: m.pinned,
         mention_everyone: m.mention_everyone,
         thread: m.thread.as_ref().map(|t| model::ThreadRef {
@@ -299,8 +303,8 @@ fn message_kind(k: api::MessageType) -> model::MessageKind {
         T::GuildBoostTier2 => K::Boost(2),
         T::GuildBoostTier3 => K::Boost(3),
         T::ThreadCreated => K::ThreadCreated,
-        T::RecipientAdd => K::RecipientAdd,
-        T::RecipientRemove => K::RecipientRemove,
+        T::RecipientAdd => K::RecipientAdd(None),
+        T::RecipientRemove => K::RecipientRemove(None),
         T::Call => K::Call,
         T::ChannelNameChange => K::ChannelNameChange,
         T::StageStart => K::StageStart,
