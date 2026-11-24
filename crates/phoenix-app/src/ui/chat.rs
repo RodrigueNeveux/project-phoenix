@@ -1674,7 +1674,7 @@ fn embed_markdown(src: &str, size: f32) -> AnyElement {
                     click_targets: vec![],
                     emoji: vec![],
                 });
-                let el = div().child(StyledText::new(t.text).with_runs(t.runs));
+                let el = embed_text(&t, size);
                 match b {
                     RBlock::Heading(..) => el.font_weight(FontWeight::BOLD).text_size(z(size + 2.)),
                     RBlock::Subtext(_) => el.text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)),
@@ -1686,6 +1686,43 @@ fn embed_markdown(src: &str, size: f32) -> AnyElement {
         });
     }
     d.into_any_element()
+}
+
+/// Embed text block with its inline emoji drawn as images (custom `<:name:id>` tokens
+/// showed raw in bot embeds): text segments, emoji and newlines as flex-wrap items, like
+/// message text but without click targets.
+fn embed_text(t: &RichText, size: f32) -> gpui::Div {
+    if t.emoji.is_empty() {
+        return div().child(StyledText::new(t.text.clone()).with_runs(t.runs.clone()));
+    }
+    let mut row = div().flex().flex_wrap().items_center();
+    let push = |mut row: gpui::Div, range: std::ops::Range<usize>| -> gpui::Div {
+        let mut start = range.start;
+        for (i, piece) in t.text[range.clone()].split('\n').enumerate() {
+            let r = start..start + piece.len();
+            if i > 0 {
+                row = row.child(div().w_full().h_0());
+            }
+            if !r.is_empty() {
+                let runs = message_ext::slice_runs(&t.runs, r.clone());
+                let text: SharedString = t.text[r.clone()].to_owned().into();
+                row = row.child(div().flex_none().max_w_full().child(StyledText::new(text).with_runs(runs)));
+            }
+            start = r.end + 1;
+        }
+        row
+    };
+    let mut last = 0;
+    for (r, token) in &t.emoji {
+        if r.start < last {
+            continue;
+        }
+        row = push(row, last..r.start);
+        // `.emoji` 1.375em of the embed text
+        row = row.child(div().mx(z(1.)).child(crate::media::emoji::emoji_element(token, size * 1.375)));
+        last = r.end;
+    }
+    push(row, last..t.text.len())
 }
 
 fn embed(e: &Embed) -> AnyElement {

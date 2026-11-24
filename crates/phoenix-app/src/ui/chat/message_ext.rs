@@ -399,7 +399,7 @@ pub fn open_author(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&gpui:
 }
 
 /// Text runs covering `range` of a run list that covers the whole text.
-fn slice_runs(runs: &[gpui::TextRun], range: std::ops::Range<usize>) -> Vec<gpui::TextRun> {
+pub(crate) fn slice_runs(runs: &[gpui::TextRun], range: std::ops::Range<usize>) -> Vec<gpui::TextRun> {
     let mut out = Vec::new();
     let mut pos = 0;
     for r in runs {
