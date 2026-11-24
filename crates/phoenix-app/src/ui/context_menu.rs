@@ -281,7 +281,10 @@ impl MenuItem {
 pub const MENU_W: f32 = 220.;
 const MENU_MIN_W: f32 = 188.; // --custom-menu-flexible-min-width
 const MENU_MAX_W: f32 = 320.; // flexible_M3qk4j max-width
-const VIEWPORT_PAD: f32 = 16.; // --custom-menu-viewport-padding
+/// ReferencePositionLayer (web.*.js nudgeTopAlignment / calculateMaxHeight):
+/// menus are nudged 12px inside the window and capped at window - top - 12.
+/// (--custom-menu-viewport-padding 16 is only the CSS fallback, never used.)
+const VIEWPORT_PAD: f32 = 12.;
 const SUB_OVERLAP: f32 = 4.; // live: submenu x = parent right - 4
 const CHEVRON: &str = "chevron-right";
 const CHECK: &str = "check";
