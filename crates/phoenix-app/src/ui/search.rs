@@ -311,14 +311,49 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, cx: &mut Context<Phoeni
                 .id(("search-hit", ix))
                 .p(z(8.))
                 .rounded(z(8.))
-                .bg(c(Palette::BG_PRIMARY))
+                // searchResult_N3Anbl: --background-base-lower, 1px --border-subtle, radius 8,
+                // no hover background; container_:hover shows buttonsContainer_ (Jump).
+                .bg(c(crate::theme::tok(idx::BACKGROUND_BASE_LOWER)))
                 .border_1()
-                .border_color(c(Palette::BG_TERTIARY))
+                .border_color(c(crate::theme::tok(idx::BORDER_SUBTLE)))
+                .relative()
+                .group("search-hit")
                 .flex()
                 .gap(z(12.))
                 .cursor_pointer()
-                .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
                 .on_click(cx.listener(move |a, _, _, cx| a.select_channel(channel, cx)))
+                .child(
+                    // buttonsContainer_N3Anbl: top 8, right 8, display none until hovered;
+                    // button_N3Anbl 24px, padding 4, radius 3, --background-base-lowest,
+                    // --text-default → --interactive-text-hover, :active 1px down.
+                    div()
+                        .absolute()
+                        .top(z(8.))
+                        .right(z(8.))
+                        .invisible()
+                        .group_hover("search-hit", |s| s.visible())
+                        .child(
+                            div()
+                                .id(("search-jump", ix))
+                                .h(z(24.))
+                                .p(z(4.))
+                                .rounded(z(3.))
+                                .flex()
+                                .items_center()
+                                .bg(c(crate::theme::tok(idx::BACKGROUND_BASE_LOWEST)))
+                                .text_size(z(12.))
+                                .line_height(z(16.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(crate::theme::tok(idx::TEXT_DEFAULT)))
+                                .hover(|s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_HOVER))))
+                                .active(|s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_ACTIVE))).mt(z(1.)))
+                                .on_click(cx.listener(move |a, _, _, cx| {
+                                    cx.stop_propagation();
+                                    a.select_channel(channel, cx)
+                                }))
+                                .child(crate::t!("inbox.jump")),
+                        ),
+                )
                 .child(avatar(author, 32.))
                 .child(
                     div()

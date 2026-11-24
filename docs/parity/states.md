@@ -105,6 +105,30 @@ Source: CSS `_M3qk4j` rules + dumps vanilla-menu-{channel,guild,dm,member,messag
 | settings sidebar | selected | `--background-mod-normal`, background-color .3s ease on selection | `states::fade_to` 300ms | ✅ (added) |
 | settings sidebar destructive (Log Out) | hover | `--background-feedback-mod-critical` | ✅ | ✅ |
 
+## Context menu entry order (dumps vanilla-menu-*, mock renders via `states_shots x,y,right`)
+
+| menu | client order (dump) | ours | status |
+|---|---|---|---|
+| text channel | Mark As Read (disabled) \| Favorites > \| Invite, Pin to Top, Copy Link \| Mute >, Notification Settings > \| Move To > \| Edit, Duplicate, Create Text Channel, Delete \| Copy ID | same (admin rows behind permissions) | ✅ |
+| category | Mark As Read \| Collapse, Collapse All \| Mute >, Notifications > \| Move To > \| Edit, Delete \| Copy ID | same | ✅ |
+| guild | Mark As Read \| Invite \| Mute >, Notifications >, Hide Muted, Show All \| Server Settings >, Privacy, Per-server Profile \| Create Channel/Category/Event \| Move To > \| Security Actions, Leave \| Copy ID | same (render: non-admin mock) | ✅ |
+| folder | Mark Folder As Read \| Move To > \| Folder Settings, Close All Folders | same | ✅ |
+| DM / group DM | as in nav_menus.rs header comment | same | ✅ |
+| member (friend) | Profile, Mention, Message, Call, Add Note, Friend Nickname \| Apps >, Invite to Server >, Remove Friend, Ignore, Block \| Roles > \| moderator rows \| Copy ID | same (render) | ✅ |
+| message | quick reactions, Add Reaction >, View Reactions \| Reply, Forward, Create Thread \| Copy Text, Pin, Bookmark, Remind Me >, Apps >, Mark Unread, Copy Link, Speak \| delete/report \| Copy ID | same (render) | ✅ |
+
+## Buttons, modals, search
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| Mana button `button_F7qvhY` (secondary / primary / critical-primary) | hover | background + text + border `--control-*-hover` | controls.rs `button` | ✅ (text + border added) |
+| Mana button | active | `--control-*-background/-text/-border-active` | `.active()` | ✅ (added) |
+| confirm modal (leave server, delete…) `container_dvN-MP` | layout / close hover | 400px, header 16 24 8, close 40px `--control-icon-only-background-hover`, equal-width footer buttons (ref-cache modal-confirm-leave.json) | modal.rs `confirm` | ✅ |
+| search result `searchResult_N3Anbl` | rest / hover | `--background-base-lower`, 1px `--border-subtle`, radius 8, no hover tint; hover shows the Jump button top-right | search.rs | ✅ (was the old palette + hover tint) |
+| search Jump `button_N3Anbl` | hover / active | 24px, `--background-base-lowest`, `--text-default` → `--interactive-text-hover`, active 1px down | search.rs | ✅ (added) |
+| pins / inbox popouts | all | owned by the mentions/inbox agent (inbox.rs) | | ➖ not touched |
+| thread list rows | hover | the only dump (vanilla-threads) shows the empty state | | ➖ no reference yet |
+
 ## Transitions
 
 `states.rs` has a small colour-fade helper: `track` + `fade_layer` (a bg layer animated
@@ -119,6 +143,6 @@ renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-61 rows: 60 ✅, 1 ➖, 0 ❌.
+75 rows: 72 ✅, 3 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.

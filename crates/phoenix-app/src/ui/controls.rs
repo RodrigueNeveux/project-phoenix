@@ -226,25 +226,43 @@ pub enum BtnKind {
 }
 
 pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {
-    let (bg, hover, fg, border) = match kind {
-        BtnKind::Secondary => (
-            idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT,
-            idx::CONTROL_SECONDARY_BACKGROUND_HOVER,
-            idx::CONTROL_SECONDARY_TEXT_DEFAULT,
-            idx::CONTROL_SECONDARY_BORDER_DEFAULT,
-        ),
-        BtnKind::Primary => (
-            idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT,
-            idx::CONTROL_PRIMARY_BACKGROUND_HOVER,
-            idx::CONTROL_PRIMARY_TEXT_DEFAULT,
-            idx::CONTROL_PRIMARY_BORDER_DEFAULT,
-        ),
-        BtnKind::Critical => (
-            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT,
-            idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER,
-            idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT,
-            idx::CONTROL_CRITICAL_PRIMARY_BORDER_DEFAULT,
-        ),
+    // [default, hover, active] × (background, text, border) per variant:
+    // `.secondary_F7qvhY` / `.primary_F7qvhY` / `.critical-primary_F7qvhY` (:hover, :active).
+    use idx::*;
+    let [bg, fg, border, hbg, hfg, hborder, abg, afg, aborder] = match kind {
+        BtnKind::Secondary => [
+            CONTROL_SECONDARY_BACKGROUND_DEFAULT,
+            CONTROL_SECONDARY_TEXT_DEFAULT,
+            CONTROL_SECONDARY_BORDER_DEFAULT,
+            CONTROL_SECONDARY_BACKGROUND_HOVER,
+            CONTROL_SECONDARY_TEXT_HOVER,
+            CONTROL_SECONDARY_BORDER_HOVER,
+            CONTROL_SECONDARY_BACKGROUND_ACTIVE,
+            CONTROL_SECONDARY_TEXT_ACTIVE,
+            CONTROL_SECONDARY_BORDER_ACTIVE,
+        ],
+        BtnKind::Primary => [
+            CONTROL_PRIMARY_BACKGROUND_DEFAULT,
+            CONTROL_PRIMARY_TEXT_DEFAULT,
+            CONTROL_PRIMARY_BORDER_DEFAULT,
+            CONTROL_PRIMARY_BACKGROUND_HOVER,
+            CONTROL_PRIMARY_TEXT_HOVER,
+            CONTROL_PRIMARY_BORDER_HOVER,
+            CONTROL_PRIMARY_BACKGROUND_ACTIVE,
+            CONTROL_PRIMARY_TEXT_ACTIVE,
+            CONTROL_PRIMARY_BORDER_ACTIVE,
+        ],
+        BtnKind::Critical => [
+            CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT,
+            CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT,
+            CONTROL_CRITICAL_PRIMARY_BORDER_DEFAULT,
+            CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER,
+            CONTROL_CRITICAL_PRIMARY_TEXT_HOVER,
+            CONTROL_CRITICAL_PRIMARY_BORDER_HOVER,
+            CONTROL_CRITICAL_PRIMARY_BACKGROUND_ACTIVE,
+            CONTROL_CRITICAL_PRIMARY_TEXT_ACTIVE,
+            CONTROL_CRITICAL_PRIMARY_BORDER_ACTIVE,
+        ],
     };
     div()
         .id(id.into())
@@ -259,7 +277,9 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Bt
         .border_1()
         .border_color(c(tok(border)))
         .bg(c(tok(bg)))
-        .hover(move |s| s.bg(c(tok(hover))))
+        // button_F7qvhY transition is 50ms ease-in: close enough to instant.
+        .hover(move |s| s.bg(c(tok(hbg))).text_color(c(tok(hfg))).border_color(c(tok(hborder))))
+        .active(move |s| s.bg(c(tok(abg))).text_color(c(tok(afg))).border_color(c(tok(aborder))))
         .cursor_pointer()
         .text_size(z(16.))
         .line_height(z(20.))
