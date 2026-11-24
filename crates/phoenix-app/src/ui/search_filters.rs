@@ -4,14 +4,21 @@
 //! Mentions, Date, Type d'auteur, Épinglé) and an action bar
 //! "Effacer les filtres" / "Annuler" / "Appliquer les filtres".
 //! Applying turns the fields into `key:value` tokens appended to the query.
+//!
+//! Date rows (live dumps search-date, search-date-operator, search-date-calendar,
+//! 2026-11-24): "Ajouter une date" adds a `dateFilter_R726Px` row (120px type select
+//! "Avant le…" / "Après le…" / "Le…", the date field with its calendar glyph, a 40px
+//! trash button) and stays below for another date; the field opens the
+//! `calendarPicker_7yAVe6` react-datepicker (future days disabled).
 
+use chrono::{Datelike, Days, Months, NaiveDate};
 use gpui::{AnyElement, App, Context, Entity, FontWeight, ParentElement, SharedString, Styled, Window, div, prelude::*};
 use gpui_component::input::{Input, InputState};
 
 use crate::{
     app::PhoenixApp,
     theme::{c, generated::idx, tok, z},
-    ui::controls::{BtnKind, button},
+    ui::controls::{BtnKind, button, button_icon},
 };
 
 /// (search key, label, description) in dump order.
@@ -24,10 +31,61 @@ const FIELDS: [(&str, &str, &str); 6] = [
     ("pinned:", "search.m_pinned", "search.m_pinned_desc"),
 ];
 
+/// Date filter type (`Changer le type de filtre de date`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateOp {
+    Before,
+    After,
+    During,
+}
+
+const DATE_OPS: [DateOp; 3] = [DateOp::Before, DateOp::After, DateOp::During];
+
+impl DateOp {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Before => "before:",
+            Self::After => "after:",
+            Self::During => "during:",
+        }
+    }
+    fn label(self) -> SharedString {
+        match self {
+            Self::Before => crate::t!("search.m_date_before"),
+            Self::After => crate::t!("search.m_date_after"),
+            Self::During => crate::t!("search.m_date_during"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DateRow {
+    op: DateOp,
+    day: NaiveDate,
+}
+
 pub struct FiltersModal {
     fields: Vec<Entity<InputState>>,
-    /// "Ajouter une date" turns into a `during:` date field.
-    date: Option<Entity<InputState>>,
+    /// "Ajouter une date" rows; a new one is "Avant le…" today.
+    dates: Vec<DateRow>,
+    /// Calendar popover: (row, first day of the month shown).
+    calendar: Option<(usize, NaiveDate)>,
+    /// Open type list (row).
+    op_menu: Option<usize>,
+}
+
+fn today() -> NaiveDate {
+    chrono::Local::now().date_naive()
+}
+
+fn month_start(d: NaiveDate) -> NaiveDate {
+    d.with_day(1).unwrap_or(d)
+}
+
+fn with_modal(cx: &mut App, f: impl FnOnce(&mut FiltersModal)) {
+    if let Some(m) = cx.default_global::<Filters>().0.as_mut() {
+        f(m);
+    }
 }
 
 #[derive(Default)]
@@ -60,8 +118,30 @@ pub fn open(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
         let ph = placeholder(app, k);
         fields.push(cx.new(|cx| InputState::new(window, cx).placeholder(ph)));
     }
-    cx.default_global::<Filters>().0 = Some(FiltersModal { fields, date: None });
+    cx.default_global::<Filters>().0 = Some(FiltersModal { fields, dates: Vec::new(), calendar: None, op_menu: None });
     cx.notify();
+}
+
+/// Add a date row (today, "Avant le…"), optionally with its calendar open
+/// (the button's action; real_shots `PHX_OPEN=filters:date|calendar`).
+pub fn add_date(cx: &mut App, open_calendar: bool) {
+    with_modal(cx, |m| {
+        m.dates.push(DateRow { op: DateOp::Before, day: today() });
+        m.calendar = open_calendar.then(|| (m.dates.len() - 1, month_start(today())));
+        m.op_menu = None;
+    });
+}
+
+/// Escape closes the open calendar / type list first; false when none was open.
+pub fn close_popover(cx: &mut Context<PhoenixApp>) -> bool {
+    let mut closed = false;
+    with_modal(cx, |m| {
+        closed = m.calendar.take().is_some() | m.op_menu.take().is_some();
+    });
+    if closed {
+        cx.notify();
+    }
+    closed
 }
 
 pub fn close(cx: &mut Context<PhoenixApp>) {
@@ -102,11 +182,8 @@ fn tokens(m: &FiltersModal, cx: &App) -> String {
             }
         }
     }
-    if let Some(d) = &m.date {
-        let v = d.read(cx).value().trim().to_string();
-        if !v.is_empty() {
-            out.push(format!("during:{v}"));
-        }
+    for d in &m.dates {
+        out.push(format!("{}{}", d.op.key(), d.day.format("%Y-%m-%d")));
     }
     out.join(" ")
 }
@@ -142,33 +219,359 @@ fn field(input: &Entity<InputState>) -> gpui::Div {
         )
 }
 
+/// Date section: label, one `dateFilter_R726Px` row per date, then the md secondary
+/// "Ajouter une date" button with its 20px plus (8px under the label, 12px under a row).
+fn date_section(dates: &[DateRow], calendar: Option<(usize, NaiveDate)>, op_menu: Option<usize>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let mut sec = div().pb(z(20.)).flex().flex_col().child(label(crate::t!("search.m_date"), crate::t!("search.m_date_desc")));
+    for (i, row) in dates.iter().enumerate() {
+        let cal = calendar.filter(|c| c.0 == i).map(|c| c.1);
+        sec = sec.child(date_row(i, *row, op_menu == Some(i), cal, cx));
+    }
+    sec.child(
+        div().mt(z(if dates.is_empty() { 8. } else { 12. })).child(
+            button_icon("search-filters-date", "plus", crate::t!("search.m_add_date"), BtnKind::Secondary).w_full().justify_center().on_click(
+                cx.listener(|_, _, _, cx| {
+                    add_date(cx, false);
+                    cx.notify();
+                }),
+            ),
+        ),
+    )
+}
+
+/// Bordered 40px control shared by the type select and the date field
+/// (`selectField_vWC4bk` / `container_tafmhI`: 1px --input-border-default, radius 8,
+/// --input-background-default).
+fn date_control(id: gpui::ElementId) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(z(40.))
+        .flex()
+        .items_center()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .cursor_pointer()
+}
+
+/// `dateFilter_R726Px`: 40px, gap 8: 120px type select (text padding-left 12,
+/// 36px chevron), the date field (padding 8 12, gap 8, 16/20 --text-default, 18px
+/// calendar glyph) and the 40px `removeDateFilterButton_R726Px` (24px trash, --icon-muted).
+fn date_row(i: usize, row: DateRow, menu_open: bool, cal: Option<NaiveDate>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let op = date_control(gpui::ElementId::Name(format!("search-date-op-{i}").into()))
+        .w(z(120.))
+        .flex_none()
+        .on_click(cx.listener(move |_, _, _, cx| {
+            with_modal(cx, |m| {
+                m.op_menu = if m.op_menu == Some(i) { None } else { Some(i) };
+                m.calendar = None;
+            });
+            cx.notify();
+        }))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .pl(z(12.))
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .truncate()
+                .child(row.op.label()),
+        )
+        .child(
+            div()
+                .w(z(36.))
+                .h_full()
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .pr(z(4.))
+                .child(gpui::svg().path("icons/chevron.svg").size(z(20.)).text_color(c(tok(idx::TEXT_STRONG)))),
+        );
+    let mut op_wrap = div().relative().flex_none().child(op);
+    if menu_open {
+        // listBox_b5PEJH: padding 4, 40px rows (radius 4, text padding-left 8).
+        let list = div()
+            .id(gpui::ElementId::Name(format!("search-date-ops-{i}").into()))
+            .absolute()
+            .top(z(44.))
+            .left_0()
+            .w(z(120.))
+            .p(z(4.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
+            .shadow_lg()
+            .occlude()
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .children(DATE_OPS.into_iter().map(|o| {
+                div()
+                    .id(gpui::ElementId::Name(format!("search-date-op-{i}-{o:?}").into()))
+                    .h(z(40.))
+                    .px(z(8.))
+                    .rounded(z(4.))
+                    .flex()
+                    .items_center()
+                    .cursor_pointer()
+                    .when(o == row.op, |d| d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
+                    .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        with_modal(cx, |m| {
+                            if let Some(r) = m.dates.get_mut(i) {
+                                r.op = o;
+                            }
+                            m.op_menu = None;
+                        });
+                        cx.notify();
+                    }))
+                    .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).truncate().child(o.label()))
+            }));
+        op_wrap = op_wrap.child(gpui::deferred(list).with_priority(2));
+    }
+    let field = date_control(gpui::ElementId::Name(format!("search-date-field-{i}").into()))
+        .px(z(12.))
+        .gap(z(8.))
+        .on_click(cx.listener(move |_, _, _, cx| {
+            with_modal(cx, |m| {
+                let open = m.calendar.is_some_and(|c| c.0 == i);
+                m.calendar = if open { None } else { m.dates.get(i).map(|r| (i, month_start(r.day))) };
+                m.op_menu = None;
+            });
+            cx.notify();
+        }))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .truncate()
+                .child(crate::i18n::medium_date(row.day)),
+        )
+        .child(gpui::svg().path(crate::icons::path("calendar")).flex_none().size(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))));
+    let mut field_wrap = div().relative().flex_1().min_w_0().child(field);
+    if let Some(month) = cal {
+        field_wrap = field_wrap.child(gpui::deferred(calendar(i, month, row.day, cx)).with_priority(2));
+    }
+    div()
+        .mt(z(8.))
+        .h(z(40.))
+        .flex()
+        .gap(z(8.))
+        .child(op_wrap)
+        .child(field_wrap)
+        .child(
+            div()
+                .id(gpui::ElementId::Name(format!("search-date-remove-{i}").into()))
+                .size(z(40.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    with_modal(cx, |m| {
+                        if i < m.dates.len() {
+                            m.dates.remove(i);
+                        }
+                        m.calendar = None;
+                        m.op_menu = None;
+                    });
+                    cx.notify();
+                }))
+                .child(gpui::svg().path(crate::icons::path("chat/trash")).size(z(24.)).text_color(c(tok(idx::ICON_MUTED)))),
+        )
+}
+
+/// The weeks shown for `month`: Monday first (Sunday first in English), through the
+/// week holding the last day of the month.
+fn month_weeks(month: NaiveDate, sunday_first: bool) -> Vec<[NaiveDate; 7]> {
+    let lead = if sunday_first { month.weekday().num_days_from_sunday() } else { month.weekday().num_days_from_monday() };
+    let mut d = month - Days::new(u64::from(lead));
+    let next = month + Months::new(1);
+    let mut weeks = Vec::new();
+    while d < next {
+        weeks.push(std::array::from_fn(|k| d + Days::new(k as u64)));
+        d = d.checked_add_days(Days::new(7)).unwrap_or(next);
+    }
+    weeks
+}
+
+/// `calendarPicker_7yAVe6` react-datepicker, 8px under the field: 280px month in 20px
+/// padding, --background-surface-higher, 1px --border-subtle, radius .3rem,
+/// legacy-elevation border + high shadows. Header: uppercase month 13/20 semibold
+/// --text-strong, 20px under it a 1px rule (Dark --primary-800 30%, Light --primary-200
+/// 20%), 10px gap; 18px previous/next buttons at 20,20 (1px --primary-800 / -200, radius 2);
+/// day names 13px medium uppercase (--primary-100 / -500 at 60%), 10px gap. Days 40x40
+/// 12.8px --text-strong with 1px --border-subtle left/top rules, the last column and
+/// row closed by --primary-800 (-200); outside / disabled 500 at 30%, disabled on
+/// --primary-630 (Light --opacity-black-4, text --opacity-black-20); today bold;
+/// selected has a 3px --brand-500 bar; hover --brand-500 with white text.
+fn calendar(i: usize, month: NaiveDate, selected: NaiveDate, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let light = crate::theme::is_light();
+    let edge = c(tok(if light { idx::PRIMARY_200 } else { idx::PRIMARY_800 }));
+    let rule = if light { c(tok(idx::PRIMARY_200)).opacity(0.2) } else { c(tok(idx::PRIMARY_800)).opacity(0.3) };
+    let ink = c(tok(if light { idx::PRIMARY_500 } else { idx::PRIMARY_100 }));
+    let now = today();
+    let sunday_first = crate::i18n::locale() == "en";
+    let weeks = month_weeks(month, sunday_first);
+    let n_weeks = weeks.len();
+    let title = format!("{} {}", crate::t!(&format!("month.{}", month.month())).to_uppercase(), month.year());
+    let nav = |id: &'static str, to: NaiveDate, next: bool, cx: &mut Context<PhoenixApp>| {
+        let arrow = gpui::svg().path(crate::icons::path("chevron-right")).size(z(12.)).text_color(c(tok(idx::TEXT_STRONG)));
+        div()
+            .id(gpui::ElementId::Name(format!("{id}-{i}").into()))
+            .absolute()
+            .top(z(20.))
+            .when(next, |d| d.right(z(20.)))
+            .when(!next, |d| d.left(z(20.)))
+            .size(z(18.))
+            .rounded(z(2.))
+            .border_1()
+            .border_color(edge)
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .on_click(cx.listener(move |_, _, _, cx| {
+                with_modal(cx, |m| m.calendar = Some((i, to)));
+                cx.notify();
+            }))
+            .child(if next { arrow } else { arrow.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))) })
+    };
+    let first_wd = weeks.first().map(|w| w[0]).unwrap_or(month);
+    let names = div().mb(z(10.)).flex().children((0..7u64).map(|k| {
+        let wd = (first_wd + Days::new(k)).weekday().num_days_from_monday();
+        let name: String = crate::t!(&format!("weekday.{wd}")).chars().take(2).collect::<String>().to_uppercase();
+        div()
+            .w(z(40.))
+            .flex()
+            .justify_center()
+            .text_size(z(13.))
+            .line_height(z(13.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(ink.opacity(0.6))
+            .child(name)
+    }));
+    let mut grid = div().flex().flex_col();
+    for (wi, week) in weeks.into_iter().enumerate() {
+        let last_row = wi + 1 == n_weeks;
+        let mut row = div().flex();
+        for (k, d) in week.into_iter().enumerate() {
+            let disabled = d > now;
+            let outside = d.month() != month.month();
+            let muted = disabled || outside;
+            let fg = if disabled && light { c(tok(idx::OPACITY_BLACK_20)) } else if muted { ink.opacity(0.3) } else { c(tok(idx::TEXT_STRONG)) };
+            let weight = if d == now { FontWeight::BOLD } else if muted { FontWeight::MEDIUM } else { FontWeight::NORMAL };
+            let cell = div()
+                .id(gpui::ElementId::Name(format!("search-date-day-{i}-{d}").into()))
+                .relative()
+                .size(z(40.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .border_l_1()
+                .border_t_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .when(wi == 0 && k == 0, |e| e.rounded_tl(z(3.)))
+                .when(wi == 0 && k == 6, |e| e.rounded_tr(z(3.)))
+                .when(last_row && k == 0, |e| e.rounded_bl(z(3.)))
+                .when(last_row && k == 6, |e| e.rounded_br(z(3.)))
+                .when(disabled, |e| e.bg(c(tok(if light { idx::OPACITY_BLACK_4 } else { idx::PRIMARY_630 }))))
+                .text_size(z(12.8))
+                .font_weight(weight)
+                .text_color(fg)
+                .child(d.day().to_string())
+                // Last column / row: border-inline-end / border-bottom in --primary-800 (-200).
+                .when(k == 6, |e| e.child(div().absolute().top_0().bottom_0().right_0().w(z(1.)).bg(edge)))
+                .when(last_row, |e| e.child(div().absolute().left_0().right_0().bottom_0().h(z(1.)).bg(edge)))
+                .when(d == selected, |e| e.child(div().absolute().left_0().right_0().bottom_0().h(z(3.)).bg(c(tok(idx::BRAND_500)))))
+                .when(!disabled, |e| {
+                    e.cursor_pointer().hover(|s| s.bg(c(tok(idx::BRAND_500))).text_color(c(tok(idx::WHITE)))).on_click(cx.listener(
+                        move |_, _, _, cx| {
+                            with_modal(cx, |m| {
+                                if let Some(r) = m.dates.get_mut(i) {
+                                    r.day = d;
+                                }
+                                m.calendar = None;
+                            });
+                            cx.notify();
+                        },
+                    ))
+                });
+            row = row.child(cell);
+        }
+        grid = grid.child(row);
+    }
+    let prev = nav("search-date-prev", month - Months::new(1), false, cx);
+    let next = (month < month_start(now)).then(|| nav("search-date-next", month + Months::new(1), true, cx));
+    div()
+        .id(gpui::ElementId::Name(format!("search-date-calendar-{i}").into()))
+        .absolute()
+        .top(z(48.))
+        .left_0()
+        .w(z(322.))
+        .p(z(20.))
+        .rounded(z(4.8))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
+        .shadow(vec![
+            gpui::BoxShadow {
+                color: gpui::Rgba { r: 30. / 255., g: 31. / 255., b: 34. / 255., a: 0.6 }.into(),
+                offset: gpui::point(z(0.), z(0.)),
+                blur_radius: z(0.),
+                spread_radius: z(1.),
+                inset: false,
+            },
+            gpui::BoxShadow {
+                color: gpui::hsla(0., 0., 0., 0.2),
+                offset: gpui::point(z(0.), z(2.)),
+                blur_radius: z(10.),
+                spread_radius: z(0.),
+                inset: false,
+            },
+        ])
+        .occlude()
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            div()
+                .pb(z(20.))
+                .mb(z(10.))
+                .border_b_1()
+                .border_color(rule)
+                .flex()
+                .justify_center()
+                .text_size(z(13.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(title),
+        )
+        .child(names)
+        .child(grid)
+        .child(prev)
+        .children(next)
+}
+
 pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let m = cx.try_global::<Filters>()?.0.as_ref()?;
     let fields = m.fields.clone();
-    let date = m.date.clone();
+    let (dates, calendar, op_menu) = (m.dates.clone(), m.calendar, m.op_menu);
+    // "Effacer les filtres (n)": filled fields + date rows.
+    let set = fields.iter().filter(|f| !f.read(cx).value().trim().is_empty()).count() + dates.len();
     // filterSection_R726Px: padding-bottom 20 (first one also 12 on top, last 12 below).
     let mut body = div().flex().flex_col().pt(z(12.)).pb(z(12.));
     for (i, ((key, title, desc), f)) in FIELDS.iter().zip(&fields).enumerate() {
         if *key == "authorType:" {
-            // Date section (labelContainer_R726Px + full-width md secondary button) sits before "Type d'auteur".
-            let mut sec = div().pb(z(20.)).flex().flex_col().child(label(crate::t!("search.m_date"), crate::t!("search.m_date_desc")));
-            sec = match &date {
-                Some(d) => sec.child(field(d)),
-                None => sec.child(
-                    div().mt(z(8.)).child(
-                        button("search-filters-date", crate::t!("search.m_add_date"), BtnKind::Secondary).w_full().on_click(cx.listener(|_, _, w, cx| {
-                            let ph = crate::t!("search.hint.date");
-                            let d = cx.new(|cx| InputState::new(w, cx).placeholder(ph));
-                            d.update(cx, |s, cx| s.focus(w, cx));
-                            if let Some(m) = cx.default_global::<Filters>().0.as_mut() {
-                                m.date = Some(d);
-                            }
-                            cx.notify();
-                        })),
-                    ),
-                ),
-            };
-            body = body.child(sec);
+            // Date section sits before "Type d'auteur".
+            body = body.child(date_section(&dates, calendar, op_menu, cx));
         }
         let last = i + 1 == FIELDS.len();
         body = body.child(div().pb(z(if last { 0. } else { 20. })).flex().flex_col().child(label(crate::t!(title), crate::t!(desc))).child(field(f)));
@@ -230,12 +633,18 @@ pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
                         .hover(|s| s.underline())
                         .on_click(cx.listener(|_, _, w, cx| {
                             let Some(m) = cx.global::<Filters>().0.as_ref() else { return };
-                            let inputs: Vec<_> = m.fields.iter().cloned().chain(m.date.clone()).collect();
+                            let inputs = m.fields.clone();
                             for i in inputs {
                                 i.update(cx, |s, cx| s.set_value("", w, cx));
                             }
+                            with_modal(cx, |m| {
+                                m.dates.clear();
+                                m.calendar = None;
+                                m.op_menu = None;
+                            });
+                            cx.notify();
                         }))
-                        .child(crate::t!("search.m_clear")),
+                        .child(if set > 0 { format!("{} ({set})", crate::t!("search.m_clear")).into() } else { crate::t!("search.m_clear") }),
                 )
                 .child(button("search-filters-cancel", crate::t!("common.cancel"), BtnKind::Secondary).on_click(cx.listener(|_, _, _, cx| close(cx))))
                 .child(button("search-filters-apply", crate::t!("search.m_apply"), BtnKind::Primary).on_click(cx.listener(|a, _, w, cx| {
@@ -274,7 +683,20 @@ pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
 
 #[cfg(test)]
 mod tests {
-    use super::value_for;
+    use super::{month_weeks, value_for};
+    use chrono::NaiveDate;
+
+    #[test]
+    fn calendar_weeks() {
+        // Live dump search-date-calendar: November 2026 runs Mon 26 Oct .. Sun 6 Dec (6 weeks).
+        let nov = NaiveDate::from_ymd_opt(2026, 11, 1).unwrap();
+        let w = month_weeks(nov, false);
+        assert_eq!(w.len(), 6);
+        assert_eq!(w[0][0], NaiveDate::from_ymd_opt(2026, 10, 26).unwrap());
+        assert_eq!(w[5][6], NaiveDate::from_ymd_opt(2026, 12, 6).unwrap());
+        // Sunday first: 1 Nov 2026 is a Sunday, so 5 weeks.
+        assert_eq!(month_weeks(nov, true).len(), 5);
+    }
 
     #[test]
     fn normalises_values() {

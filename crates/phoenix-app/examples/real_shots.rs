@@ -16,7 +16,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse].
+//! `PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse].
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
@@ -819,6 +819,14 @@ fn main() -> anyhow::Result<()> {
                     phoenix_app::ui::search::open(app, window, cx);
                     if let Ok(req) = phoenix_app::ui::search::build_request(app, if arg.is_empty() { "a" } else { &arg }) {
                         phoenix_app::ui::search::run(app, req, cx);
+                    }
+                }
+                "filters" => {
+                    // Search "More filters" modal; `:date` adds a date row, `:calendar` opens its picker.
+                    phoenix_app::ui::search::open(app, window, cx);
+                    phoenix_app::ui::search_filters::open(app, window, cx);
+                    if arg == "date" || arg == "calendar" {
+                        phoenix_app::ui::search_filters::add_date(cx, arg == "calendar");
                     }
                 }
                 "settings" => {

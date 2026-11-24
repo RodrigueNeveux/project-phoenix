@@ -195,7 +195,9 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
 
 pub fn on_key(app: &mut PhoenixApp, key: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) -> bool {
     if key == "escape" && crate::ui::search_filters::is_open(cx) {
-        crate::ui::search_filters::close(cx);
+        if !crate::ui::search_filters::close_popover(cx) {
+            crate::ui::search_filters::close(cx);
+        }
         return true;
     }
     if key == "escape" {
