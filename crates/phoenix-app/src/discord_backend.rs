@@ -347,13 +347,16 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
             inner.emit(AppEvent::Parity(e));
         }
         nav::on_gateway(&s.cache, &ev).into_iter().for_each(|e| inner.emit(e));
-        let events = s.adapter.lock().map(&s.cache, &ev);
+        // Mark the open channel read BEFORE mapping, so the guild pill / mention
+        // badge computed for this message doesn't flash on while it's being read.
         if let GatewayEvent::MessageCreate(m) = &ev
             && *s.selected_channel.lock() == Some(m.channel_id)
             && m.author.id != s.adapter.lock().me
         {
+            s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             schedule_ack(&s, m.channel_id, m.id);
         }
+        let events = s.adapter.lock().map(&s.cache, &ev);
         let fatal = matches!(ev, GatewayEvent::Fatal { .. });
         for e in events {
             inner.emit(e);

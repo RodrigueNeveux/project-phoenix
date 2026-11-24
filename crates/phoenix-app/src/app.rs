@@ -797,14 +797,23 @@ impl PhoenixApp {
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
             AppEvent::HistoryRefresh { channel, messages } => crate::history_ui::on_refresh(self, channel, messages, cx),
             AppEvent::MessageDelete { channel, id } => {
-                if let Some(e) = self.messages.get_mut(&channel)
-                    && let Some(ix) = e.index_of(id)
-                {
-                    e.msgs.remove(ix);
-                    e.rendered.remove(ix);
-                    if self.selected_channel == Some(channel) {
-                        self.message_list.splice(ix + 1..ix + 2, 0);
+                if let Some(mut e) = self.messages.remove(&channel) {
+                    if let Some(ix) = e.index_of(id) {
+                        e.msgs.remove(ix);
+                        e.rendered.remove(ix);
+                        let selected = self.selected_channel == Some(channel);
+                        if selected {
+                            self.message_list.splice(ix + 1..ix + 2, 0);
+                        }
+                        // The next message may now start a group / day (deleted group head).
+                        if ix < e.msgs.len() {
+                            e.rendered[ix] = self.render_msg(&e.msgs[ix], ix.checked_sub(1).map(|p| &e.msgs[p]));
+                            if selected {
+                                self.message_list.splice(ix + 1..ix + 2, 1);
+                            }
+                        }
                     }
+                    self.messages.insert(channel, e);
                 }
             }
             AppEvent::TypingStart { channel, user } => {

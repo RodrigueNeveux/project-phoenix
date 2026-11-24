@@ -1004,13 +1004,24 @@ impl Adapter {
                 let mut users = Vec::new();
                 message_users(m, &mut users);
                 out.push(AppEvent::Users(users));
-                let mentioned = self.mentions_me(cache, m);
+                // Every DM message counts as a mention (client ReadStateStore:
+                // private channels bump mentionCount for each foreign message).
+                let mentioned = self.mentions_me(cache, m)
+                    || (m.guild_id.is_none() && m.author.id != self.me && !self.prefs.blocked.contains(&m.author.id.0));
                 if m.author.id == self.me {
                     self.mark_read(m.channel_id.0, m.id.0);
                 } else if mentioned {
                     self.prefs.reads.entry(m.channel_id.0).or_default().mentions += 1;
                 }
                 out.push(AppEvent::MessageCreate(message(m)));
+                // The read state is authoritative (own messages from another client
+                // stay read, mentions include @everyone/roles): override the UI's guess.
+                if let Some(c) = cache.channel(m.channel_id)
+                    && c.guild_id.is_some()
+                {
+                    let (unread, mentions) = self.prefs.ctx().unread(&c);
+                    out.push(AppEvent::ChannelUnread { channel: id(m.channel_id), unread, mentions });
+                }
                 if let Some(g) = m.guild_id
                     && let Some(gg) = cache.guild(g)
                 {
@@ -1132,8 +1143,15 @@ impl Adapter {
                 }
             }
             GatewayEvent::GuildUpdate(g) => {
+                // Name, icon, features, boosts: upsert the whole guild (the UI's
+                // GuildCreate replaces an existing entry in place).
                 if let Some(gg) = cache.guild(g.id) {
-                    out.push(AppEvent::GuildRoles { guild: id(g.id), roles: roles(&gg) });
+                    let chs = guild_channels(cache, g.id, &self.prefs.ctx());
+                    out.push(AppEvent::GuildCreate {
+                        guild: guild(&gg, &chs, self.prefs.mutes.guilds.contains(&g.id.0)),
+                        channels: chs,
+                        roles: roles(&gg),
+                    });
                 }
             }
             GatewayEvent::GuildDelete(d) => {
@@ -1157,6 +1175,17 @@ impl Adapter {
             GatewayEvent::GuildMemberUpdate(m) if m.user_id() == Some(self.me) => {
                 if let Some(g) = m.guild_id {
                     self.guild_state(cache, g, &mut out);
+                }
+            }
+            GatewayEvent::GuildMemberUpdate(m) => {
+                // Avatar / name changes of others reach us here (chat headers, voice rows).
+                if let Some(u) = &m.user {
+                    out.push(AppEvent::Users(vec![user(u)]));
+                }
+                if let (Some(g), Some(u)) = (m.guild_id, m.user_id())
+                    && self.chunked.get(&g.0).is_some_and(|c| c.contains(&u))
+                {
+                    self.emit_members(cache, g, &mut out);
                 }
             }
             GatewayEvent::ChannelCreate(c) | GatewayEvent::ChannelUpdate(c) | GatewayEvent::ChannelDelete(c) => {
@@ -1198,6 +1227,8 @@ pub fn fatal_message(code: u16, reason: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod live_tests;
 
 /// `available_tags` of a forum / media channel.
 pub fn forum_tags(c: &api::Channel) -> Vec<crate::commands::ForumTag> {
