@@ -930,7 +930,7 @@ fn mutual_row(id: impl Into<gpui::ElementId>, icon: AnyElement, name: SharedStri
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(c(tok(idx::TEXT_STRONG)))
                         .text_ellipsis()
-                        .child(name),
+                        .child(crate::ui::emoji_text::label(name, 16.)),
                 )
                 .when_some(sub, |d, s| {
                     d.child(

@@ -1133,7 +1133,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(t(idx::TEXT_STRONG))
                                 .text_ellipsis()
-                                .child(app.me.display_name.clone()),
+                                .child(crate::ui::emoji_text::label(app.me.display_name.clone(), 14.)),
                         )
                         .child(
                             div()

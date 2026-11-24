@@ -301,7 +301,9 @@ pub fn emoji_ranges(text: &str) -> Vec<(Range<usize>, SharedString)> {
         let cp = ch as u32;
         let start_ok = cp >= 0x1F000 || (0x2190..0x2BFF).contains(&cp) || (0x2600..0x27C0).contains(&cp);
         let keycap = ch.is_ascii_digit() || ch == '#' || ch == '*';
-        if !start_ok && !keycap {
+        // Any other symbol with VS16 (U+FE0F) asks for emoji presentation ("ℹ️", "‼️").
+        let vs16 = !ch.is_ascii() && text[i + ch.len_utf8()..].starts_with('\u{FE0F}');
+        if !start_ok && !keycap && !vs16 {
             continue;
         }
         let mut end = i + ch.len_utf8();

@@ -51,5 +51,7 @@ mod tests {
         assert_eq!(r.len(), 1);
         assert_eq!(&t[r[0].0.clone()], "❓");
         assert!(crate::richtext::emoji_ranges("〢・general").is_empty());
+        // VS16 asks for emoji presentation even outside the usual blocks.
+        assert_eq!(crate::richtext::emoji_ranges("ℹ\u{FE0F} Informations").len(), 1);
     }
 }

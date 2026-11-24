@@ -956,7 +956,7 @@ fn message(
         .cursor_pointer()
         .hover(|s| s.underline())
         .on_click(message_ext::open_author(entity, msg))
-        .child(name);
+        .child(crate::ui::emoji_text::label(name, 16.));
 
     let base = div()
         .id(("msg", id.0))

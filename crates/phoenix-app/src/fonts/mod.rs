@@ -326,7 +326,8 @@ pub fn name_text_with(
         .map_or(0., |(_, ls)| ls);
     let stops: Vec<gpui::Hsla> = stops.map(|s| s.iter().map(|&c| gpui::rgb(c).into()).collect()).unwrap_or_default();
     if ls <= 0. && stops.is_empty() {
-        return text.into_any_element();
+        // Plain names: emoji in the color emoji font (ui::emoji_text).
+        return crate::ui::emoji_text::label(text, size);
     }
     name_paint::NameText::new(text, crate::theme::z(ls * size), stops, Some(crate::theme::z(100.))).into_any_element()
 }

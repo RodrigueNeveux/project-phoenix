@@ -632,7 +632,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                         // listDefault_ .clickable_:hover .username_ --interactive-text-hover
                         .group_hover("voice-user-row", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                         .text_ellipsis()
-                        .child(crate::ui::sidebar::voice_user_name(app, user)),
+                        .child(crate::ui::emoji_text::label(crate::ui::sidebar::voice_user_name(app, user), 14.)),
                 )
                 .when_some(tag, |d, t| d.child(server_tag(&t, 12.))),
         )
