@@ -595,7 +595,9 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
     let local_muted = !me && prefs().lock().user(user).muted;
     let speaking = app.voice.is_speaking(user) && !local_muted;
     let mut f = flags(user);
-    if me {
+    // My row follows the local buttons only while Phoenix holds the call; when
+    // another client of mine is connected, the gateway voice state is the truth.
+    if me && app.voice.status != crate::voice::VoiceStatus::Idle {
         f.self_mute = app.mic_muted;
         f.self_deaf = app.deafened;
     }

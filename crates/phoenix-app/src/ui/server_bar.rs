@@ -406,7 +406,7 @@ fn voice_badge(app: &PhoenixApp, g: &Guild) -> Option<AnyElement> {
     if !busy {
         return None;
     }
-    if !connected && app.backend.notify_prefs().and_then(|p| p.guilds.get(&g.id.0).map(|x| x.muted)).unwrap_or(false) {
+    if !connected && app.backend.notify_prefs().is_some_and(|p| p.is_guild_muted(Some(g.id.0))) {
         return None;
     }
     let bg = tok(if connected { idx::STATUS_POSITIVE } else { idx::ICON_OVERLAY_DARK });

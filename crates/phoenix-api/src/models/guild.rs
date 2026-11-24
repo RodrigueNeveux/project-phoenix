@@ -78,6 +78,10 @@ pub struct GuildProperties {
     pub vanity_url_code: Option<String>,
     #[serde(default)]
     pub max_members: Option<u32>,
+    /// Server default notification level (0 all, 1 mentions): what the
+    /// client's UserGuildSettingsStore uses when no settings entry exists.
+    #[serde(default)]
+    pub default_message_notifications: Option<u8>,
     /// Server Guide header art (`home-headers/{g}/{hash}`).
     #[serde(default)]
     pub home_header: Option<String>,

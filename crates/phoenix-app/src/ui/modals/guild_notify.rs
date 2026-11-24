@@ -40,7 +40,7 @@ pub struct State {
 
 impl State {
     pub fn new(app: &PhoenixApp, guild: Id) -> Self {
-        let p = app.backend.notify_prefs().and_then(|p| p.guilds.get(&guild.0).cloned()).unwrap_or_default();
+        let p = app.backend.notify_prefs().map(|p| p.guild(Some(guild.0))).unwrap_or_default();
         use crate::notifications::Level::*;
         let level = match p.level {
             All => 0,
@@ -180,7 +180,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
 /// justify-around strip of 20px checkboxes (all / mentions / nothing / mute).
 fn override_table(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
     use crate::notifications::Level;
-    let prefs = app.backend.notify_prefs().and_then(|p| p.guilds.get(&s.guild.0).cloned()).unwrap_or_default();
+    let prefs = app.backend.notify_prefs().map(|p| p.guild(Some(s.guild.0))).unwrap_or_default();
     let mut rows: Vec<_> = prefs
         .channels
         .iter()

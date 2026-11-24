@@ -101,24 +101,25 @@ fn level_code(l: crate::notifications::Level) -> u8 {
     }
 }
 
-/// The account's stored level for this scope (`user_guild_settings`).
+/// The account's stored level for this scope (`user_guild_settings`); a
+/// guild without an entry reads its server default, like the client's `W(e)`.
 fn stored_level(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> Option<u8> {
     let p = app.backend.notify_prefs()?;
-    let g = p.guilds.get(&guild.map_or(0, |g| g.0))?;
+    let g = guild.map(|g| g.0);
     Some(match channel {
-        Some(ch) => g.channels.get(&ch.0).map_or(3, |c| level_code(c.level)),
-        None => level_code(g.level),
+        Some(ch) => p.guilds.get(&g.unwrap_or(0))?.channels.get(&ch.0).map_or(3, |c| level_code(c.level)),
+        None => level_code(p.guild(g).level),
     })
 }
 
 fn guild_muted(app: &PhoenixApp, g: Id) -> bool {
     MUTED_GUILDS.with(|m| m.borrow().get(&g).copied()).unwrap_or_else(|| {
-        app.backend.notify_prefs().and_then(|p| p.guilds.get(&g.0).map(|x| x.muted)).unwrap_or(false)
+        app.backend.notify_prefs().is_some_and(|p| p.is_guild_muted(Some(g.0)))
     })
 }
 
 fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
-    let default = if channel.is_some() { 3 } else { 1 };
+    let default = if channel.is_some() { 3 } else { 0 };
     let cur = LEVELS
         .with(|l| l.borrow().get(&(guild, channel)).copied())
         .or_else(|| stored_level(app, guild, channel))
@@ -130,7 +131,9 @@ fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>
         let in_category = app.channels.get(&ch).and_then(|c| c.parent).is_some();
         opts.insert(0, (if in_category { "menu.notify.default_category" } else { "menu.notify.default" }, 3));
     }
-    let inherited = level_label(app, guild, None);
+    // "Use Category Default" shows what the category resolves to.
+    let parent = channel.and_then(|c| app.channels.get(&c)).and_then(|c| c.parent);
+    let inherited = level_label(app, guild, parent);
     let items = opts
         .into_iter()
         .map(|(l, lv)| {
@@ -145,16 +148,19 @@ fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>
     MenuItem::submenu(crate::t!("menu.notify_settings"), items)
 }
 
-/// Label of the level a scope resolves to (the "Notification Settings" subtext).
+/// Label of the level a scope resolves to (the "Notification Settings" subtext):
+/// `resolvedMessageNotifications`, channel then parent category then server,
+/// with the levels picked in this session first.
 fn level_label(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> gpui::SharedString {
-    let own = LEVELS.with(|l| l.borrow().get(&(guild, channel)).copied()).or_else(|| stored_level(app, guild, channel));
-    let lv = match own {
-        Some(3) | None if channel.is_some() => {
-            LEVELS.with(|l| l.borrow().get(&(guild, None)).copied()).or_else(|| stored_level(app, guild, None)).unwrap_or(1)
-        }
-        Some(l) => l,
-        None => 1,
-    };
+    let level = |c: Option<Id>| LEVELS.with(|l| l.borrow().get(&(guild, c)).copied()).or_else(|| stored_level(app, guild, c));
+    let parent = channel.and_then(|c| app.channels.get(&c)).and_then(|c| c.parent);
+    let lv = [channel, parent]
+        .into_iter()
+        .flatten()
+        .map(|c| level(Some(c)))
+        .find_map(|l| l.filter(|l| *l != 3))
+        .or_else(|| level(None))
+        .unwrap_or(0);
     crate::t!(match lv {
         0 => "menu.notify.all",
         2 => "menu.notify.nothing",

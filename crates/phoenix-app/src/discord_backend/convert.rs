@@ -443,7 +443,8 @@ pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
         _ => return out,
     };
     for e in entries {
-        let muted = e.get("muted").and_then(Value::as_bool).unwrap_or(false);
+        // Temporary mutes end at `mute_config.end_time` (client `tG`).
+        let muted = crate::notifications::mute_now(e);
         if muted && let Some(g) = e.get("guild_id").and_then(snowflake_value) {
             out.guilds.insert(g);
         }
@@ -461,7 +462,7 @@ pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
         if let Some(Value::Array(ovs)) = e.get("channel_overrides") {
             for o in ovs {
                 let Some(c) = o.get("channel_id").and_then(snowflake_value) else { continue };
-                if o.get("muted").and_then(Value::as_bool).unwrap_or(false) {
+                if crate::notifications::mute_now(o) {
                     out.channels.insert(c);
                 }
                 if o.get("flags").and_then(Value::as_u64).unwrap_or(0) & 4096 != 0 {
@@ -760,7 +761,10 @@ pub fn guild_with_threads(cache: &Cache, g: &api::Guild, channels: &[model::Chan
 }
 
 pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model::Guild {
-    let visible = channels.iter().filter(|c| !c.muted);
+    // GuildReadStateStore: a channel counts for the guild's unread unless
+    // `isGuildOrCategoryOrChannelMuted` (its own mute or its category's).
+    let muted_cats: HashSet<Id> = channels.iter().filter(|c| c.kind == model::ChannelKind::Category && c.muted).map(|c| c.id).collect();
+    let visible = channels.iter().filter(|c| !c.muted && !c.parent.is_some_and(|p| muted_cats.contains(&p)));
     model::Guild {
         id: id(g.id),
         name: g.name().to_owned().into(),
@@ -1281,6 +1285,9 @@ impl Adapter {
                         roles: roles(&gg),
                     });
                 }
+                // GUILD_CREATE carries the voice states of a lazily sent guild:
+                // their rows need the mute / deafen flags too, not only the user.
+                out.extend(voice_flag_events(cache, Some(g.id)));
             }
             GatewayEvent::GuildUpdate(g) => {
                 // Name, icon, features, boosts: upsert the whole guild (the UI's
@@ -1405,6 +1412,18 @@ pub fn forum_tags(c: &api::Channel) -> Vec<crate::commands::ForumTag> {
             },
             moderated: t.moderated,
         })
+        .collect()
+}
+
+/// `VoiceFlags` for every voice state the cache holds for `guild`: the
+/// channel list takes the users from the cache (`guild_channels`), and the
+/// flags store lives on the UI thread, so it is fed by events.
+pub fn voice_flag_events(cache: &Cache, guild: Option<api::Snowflake>) -> Vec<AppEvent> {
+    cache
+        .voice_states(guild)
+        .iter()
+        .filter(|v| v.channel_id.is_some())
+        .map(|v| AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) })
         .collect()
 }
 

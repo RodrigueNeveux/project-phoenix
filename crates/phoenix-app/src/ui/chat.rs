@@ -595,8 +595,17 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     // Inside a thread the toolbar has no Threads button (vanilla-thread-channel #1208).
                     d.when(thread_parent.is_none() && !is_forum, |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
                         .map(|d| {
-                            // Muted channel/thread: BellSlashIcon (compare thread-more-1713).
-                            if ch.is_some_and(|c| c.muted) {
+                            // Chat header `nH`: BellSlashIcon when `isChannelMuted ||
+                            // resolvedMessageNotifications !== ALL_MESSAGES` (the level is
+                            // inherited from the category, then the server). A muted
+                            // thread too (compare thread-more-1713).
+                            let slashed = ch.is_some_and(|c| {
+                                c.muted
+                                    || app.backend.notify_prefs().is_some_and(|p| {
+                                        p.header_bell_slashed(c.guild.map(|g| g.0), c.id.0, c.parent.map(|p| p.0))
+                                    })
+                            });
+                            if slashed {
                                 d.child(hdr_named("bell", "bell-slash", ic))
                             } else {
                                 d.child(hdr_button("bell", Icon::Bell, ic, HDR_ICON))

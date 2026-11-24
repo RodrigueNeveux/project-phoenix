@@ -278,6 +278,41 @@ mod tests {
             })
             .unwrap();
     }
+
+    /// Start-up order seen on the real account: the disk snapshot is shown,
+    /// READY_SUPPLEMENTAL puts a user in a voice channel, then the live
+    /// ReadyData (built from READY, before the supplemental, so without voice
+    /// users) replaces the snapshot. The voice row must survive.
+    #[gpui::test]
+    fn voice_users_survive_ready_after_supplemental(cx: &mut gpui::TestAppContext) {
+        use crate::backend::AppEvent;
+        let backend = std::sync::Arc::new(MockBackend::synchronous());
+        let ready = || futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
+        let first = ready();
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|w, cx| App::new(backend.clone(), w, cx));
+        window
+            .update(cx, |app, _, cx| {
+                app.apply_ready(first, cx);
+                let vc = app.channels.values().find(|c| c.kind == crate::model::ChannelKind::Voice && c.guild.is_some()).map(|c| c.id).unwrap();
+                let user = crate::model::Id(4242);
+                app.handle_event(AppEvent::VoiceStateUpdate { channel: Some(vc), user }, cx);
+                let flags = crate::model::VoiceFlags { self_mute: true, self_deaf: true, ..Default::default() };
+                app.handle_event(AppEvent::VoiceFlags { user, flags }, cx);
+                let mut live = ready();
+                for c in live.channels.iter_mut() {
+                    c.voice_users.retain(|u| *u != user);
+                }
+                on_resync(app, Resync(live), cx);
+                assert!(app.channels[&vc].voice_users.contains(&user), "voice row lost by the ReadyData after READY_SUPPLEMENTAL");
+                let f = crate::ui::voice_panel::flags(user);
+                assert!(f.self_mute && f.self_deaf);
+                // A later leave still removes it.
+                app.handle_event(AppEvent::VoiceStateUpdate { channel: None, user }, cx);
+                assert!(!app.channels[&vc].voice_users.contains(&user));
+            })
+            .unwrap();
+    }
 }
 
 /// One `scheduled-events` entry; `None` without an id.

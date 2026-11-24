@@ -514,6 +514,15 @@ impl PhoenixApp {
     pub fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
         // Own activities are emitted during login, before this runs (convert::self_activities).
         let mine = self.people.activities.remove(&r.me.id);
+        // READY_SUPPLEMENTAL voice states can land before this ReadyData, on the
+        // channels of the disk snapshot (resync) or of a previous session, and
+        // `clear_session` drops those channels: keep their voice users.
+        let old_voice: HashMap<Id, Vec<Id>> = self
+            .channels
+            .values()
+            .filter(|c| c.guild.is_some() && !c.voice_users.is_empty())
+            .map(|c| (c.id, c.voice_users.clone()))
+            .collect();
         self.clear_session();
         if let Some(a) = mine {
             self.people.custom_status = a.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom).and_then(|x| x.state.clone());
@@ -533,9 +542,10 @@ impl PhoenixApp {
             // READY_SUPPLEMENTAL (guild voice_states) can be delivered before this ReadyData:
             // keep the voice users it already put on the channel.
             if ch.voice_users.is_empty()
-                && let Some(old) = self.channels.get(&ch.id)
+                && ch.guild.is_some()
+                && let Some(old) = old_voice.get(&ch.id)
             {
-                ch.voice_users = old.voice_users.clone();
+                ch.voice_users = old.clone();
             }
             if ch.guild.is_some() {
                 for (u, _) in self.pending_voice.iter().filter(|(_, c)| **c == ch.id) {

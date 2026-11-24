@@ -218,6 +218,12 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
             crate::notifications::on_message(&s.notify.lock(), &s.cache, me, viewing, m);
         }
         GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => s.notify.lock().update(data),
+        // Server default level, used where no settings entry overrides it.
+        GatewayEvent::GuildCreate(g) | GatewayEvent::GuildUpdate(g) => {
+            if let Some(d) = g.properties.default_message_notifications {
+                s.notify.lock().set_default(g.id.0, crate::notifications::Level::from_default(Some(d)));
+            }
+        }
         _ => {}
     }
 }

@@ -305,7 +305,10 @@ fn start_session(
         pending_acks: Mutex::new(HashSet::new()),
         subscribed: Mutex::new(HashMap::new()),
         last_typing: Mutex::new(None),
-        notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready(ready.user_guild_settings.as_ref())),
+        notify: Mutex::new(crate::notifications::NotifyPrefs::from_ready_with_defaults(
+            ready.user_guild_settings.as_ref(),
+            ready.guilds.iter().map(|g| (g.id.0, crate::notifications::Level::from_default(g.properties.default_message_notifications))).collect(),
+        )),
     });
     pins::init(&session.cache);
     *inner.session.lock() = Some(session.clone());
@@ -316,6 +319,11 @@ fn start_session(
         inner.emit(e);
     }
     nav::snapshot(&session.cache, ready).into_iter().for_each(|e| inner.emit(e));
+    // Voice users already in the cache are put on the channels of `data`;
+    // their mute / deafen flags go through the UI-thread store.
+    for g in &ready.guilds {
+        convert::voice_flag_events(&session.cache, Some(g.id)).into_iter().for_each(|e| inner.emit(e));
+    }
     history::warm_recent(inner, &session);
     tokio::spawn(pump(inner.clone(), session, rx));
     data
