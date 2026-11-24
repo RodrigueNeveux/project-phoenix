@@ -1543,6 +1543,7 @@ fn click_trap(cx: &mut Context<PhoenixApp>) -> AnyElement {
     };
     div()
         .id("popout-click-trap")
+        .debug_selector(|| "popout-click-trap".into())
         .absolute()
         .inset_0()
         .occlude()

@@ -149,6 +149,26 @@ impl Harness {
         self.click(point(px(30.), vp.height - px(30.)));
     }
 
+    /// Press inside a popout; on failure, say where everything was.
+    fn press_inside(&mut self, selector: &'static str, is_open: fn(&PhoenixApp) -> bool) {
+        let pop = self.bounds(selector);
+        let at = header_point(pop);
+        let trap = self.vcx.debug_bounds("popout-click-trap");
+        let vp = self.vcx.update(|w, _| w.viewport_size());
+        self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
+        self.vcx.run_until_parked();
+        self.vcx.simulate_mouse_down(at, gpui::MouseButton::Left, Modifiers::none());
+        self.vcx.run_until_parked();
+        let after_down = self.read(is_open);
+        self.vcx.simulate_mouse_up(at, gpui::MouseButton::Left, Modifiers::none());
+        self.vcx.run_until_parked();
+        let after_up = self.read(is_open);
+        assert!(
+            after_down && after_up,
+            "press inside {selector} closed it: popout {pop:?}, press {at:?}, trap {trap:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}"
+        );
+    }
+
     fn escape(&mut self) {
         self.act(|a, w, cx| a.on_escape(&crate::app::Escape, w, cx));
     }
@@ -177,9 +197,7 @@ fn inbox_closes_like_the_client(cx: &mut TestAppContext) {
 
     // A press inside keeps it, a press outside closes it.
     open(&mut h);
-    let pop = h.bounds("inbox-popout");
-    h.click(header_point(pop));
-    assert!(h.read(|a| a.parity.inbox.open), "press inside the inbox closed it");
+    h.press_inside("inbox-popout", |a| a.parity.inbox.open);
     h.click_outside();
     assert!(!h.read(|a| a.parity.inbox.open), "press outside did not close the inbox");
     // The trap swallowed the press: nothing under it (user panel) reacted.
@@ -232,9 +250,7 @@ fn threads_popout_closes_like_the_client(cx: &mut TestAppContext) {
         assert!(h.read(|a| a.parity.threads_open));
     };
     open(&mut h);
-    let pop = h.bounds("threads-popout");
-    h.click(header_point(pop));
-    assert!(h.read(|a| a.parity.threads_open), "press inside the threads browser closed it");
+    h.press_inside("threads-popout", |a| a.parity.threads_open);
     h.click_outside();
     assert!(!h.read(|a| a.parity.threads_open), "press outside did not close the threads browser");
 
@@ -265,9 +281,7 @@ fn pins_popout_closes_like_the_client(cx: &mut TestAppContext) {
         assert!(h.read(|a| a.chat.pins.is_some()));
     };
     open(&mut h);
-    let pop = h.bounds("pins-popout");
-    h.click(header_point(pop));
-    assert!(h.read(|a| a.chat.pins.is_some()), "press inside the pins closed them");
+    h.press_inside("pins-popout", |a| a.chat.pins.is_some());
     h.click_outside();
     assert!(h.read(|a| a.chat.pins.is_none()), "press outside did not close the pins");
 
