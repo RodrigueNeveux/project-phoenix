@@ -56,16 +56,25 @@ pub fn marker_slider(
                 .flex()
                 .flex_col()
                 .items_center()
-                .child(
-                    div()
+                .child({
+                    // markValue_OnqacX (vanilla-settings-09 #2777-#2795): 12/16 500,
+                    // --text-subtle, the default one --text-default; the end labels
+                    // align to the bar edges instead of centring on their marker.
+                    let label = div()
                         .whitespace_nowrap()
-                        // markValue_OnqacX: 10px bold --text-muted, default --text-default
-                        .text_size(z(10.))
-                        .line_height(z(12.))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(c(tok(if is_def { idx::TEXT_DEFAULT } else { idx::TEXT_MUTED })))
-                        .child(l.clone()),
-                )
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(tok(if is_def { idx::TEXT_DEFAULT } else { idx::TEXT_SUBTLE })))
+                        .child(l.clone());
+                    if i == 0 {
+                        div().w(z(0.)).flex().justify_start().child(label.ml(z(-1.)))
+                    } else if i + 1 == labels.len() {
+                        div().w(z(0.)).flex().justify_end().child(label)
+                    } else {
+                        div().child(label)
+                    }
+                })
                 // marker dash crossing the bar
                 .child(div().mt(z(8.)).w(z(2.)).h(z(24.)).rounded(z(12.)).bg(c(tok(idx::SLIDER_TRACK_BACKGROUND)))),
         );
