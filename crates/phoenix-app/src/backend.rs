@@ -199,10 +199,10 @@ pub trait Backend: Send + Sync + 'static {
         Box::pin(async { Ok(()) })
     }
     fn send_sticker(&self, _channel: Id, _sticker: Id) -> BoxFuture<()> {
-        Box::pin(async { Err(BackendError("Stickers aren't available.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.stickers_unavailable").to_string())) })
     }
     fn gif_trending(&self) -> BoxFuture<crate::ui::pickers::types::GifHome> {
-        Box::pin(async { Err(BackendError("GIFs aren't available.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.gifs_unavailable").to_string())) })
     }
     fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
         Box::pin(async { Ok(Vec::new()) })
@@ -211,7 +211,7 @@ pub trait Backend: Send + Sync + 'static {
         Box::pin(async { Ok(Vec::new()) })
     }
     fn search_messages(&self, _req: crate::ui::search::SearchRequest) -> BoxFuture<crate::ui::search::SearchPage> {
-        Box::pin(async { Err(BackendError("Search isn't available.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.search_unavailable").to_string())) })
     }
     /// Second-factor methods offered by the pending password login.
     fn mfa_options(&self) -> crate::auth::MfaOptions {
@@ -223,7 +223,7 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// Text an MFA code; resolves to the redacted phone number.
     fn send_mfa_sms(&self) -> BoxFuture<String> {
-        Box::pin(async { Err(BackendError("SMS isn't available.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.sms_unavailable").to_string())) })
     }
     /// Start a QR code login. Progress arrives as [`AppEvent::RemoteAuth`];
     /// resolves once the phone confirmed (empty error when cancelled/expired).
@@ -270,7 +270,7 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// Navigation REST calls: invites, relationships, leaving a guild...
     fn nav(&self, _req: crate::ui::home::data::NavRequest) -> BoxFuture<crate::ui::home::data::NavReply> {
-        Box::pin(async { Err(BackendError("Not available offline.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.offline").to_string())) })
     }
     /// Op 37 member list ranges for the open channel (sidebar scrolling).
     fn subscribe_member_ranges(&self, _guild: Id, _channel: Id, _ranges: Vec<[u32; 2]>) -> BoxFuture<()> {
@@ -282,7 +282,7 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// `GET /users/{id}/profile` (+ note).
     fn user_profile(&self, _user: Id, _guild: Option<Id>) -> BoxFuture<crate::presence::Profile> {
-        Box::pin(async { Err(BackendError("Profiles aren't available.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.profiles_unavailable").to_string())) })
     }
     fn set_note(&self, _user: Id, _note: String) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
@@ -290,7 +290,7 @@ pub trait Backend: Send + Sync + 'static {
     /// Profile editor save: `PATCH /users/@me` + `/users/@me/profile`, or
     /// `PATCH /guilds/{id}/members/@me` for a per-server profile.
     fn update_profile(&self, _guild: Option<Id>, _patch: crate::ui::settings::profile_editor::ProfilePatch) -> BoxFuture<()> {
-        Box::pin(async { Err(BackendError("Profile editing isn't available.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.profile_edit_unavailable").to_string())) })
     }
     /// Profile Board application widgets (profile + application identities +
     /// widget configs, all GETs).
@@ -330,7 +330,7 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// Slash commands, interactions, inbox, moderation, forums, polls (`crate::commands`).
     fn parity(&self, _req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
-        Box::pin(async { Err(BackendError("Not available offline.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.offline").to_string())) })
     }
     /// Our guild-level permission bits (moderation menu entries).
     fn guild_permissions(&self, _guild: Id) -> u64 {
@@ -346,7 +346,7 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// Context menu actions (`crate::actions`).
     fn action(&self, _req: crate::actions::ActionRequest) -> BoxFuture<crate::actions::ActionReply> {
-        Box::pin(async { Err(BackendError("Not available offline.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.offline").to_string())) })
     }
     /// Guild feature flags (`COMMUNITY`, ...).
     fn guild_features(&self, _guild: Id) -> Vec<String> {
@@ -362,6 +362,6 @@ pub trait Backend: Send + Sync + 'static {
     }
     /// Open (or create) the DM with `user`; emits `DmUpsert` first.
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
-        Box::pin(async { Err(BackendError("DMs can't be opened here.".into())) })
+        Box::pin(async { Err(BackendError(crate::t!("backend.dm_unavailable").to_string())) })
     }
 }

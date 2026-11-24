@@ -137,7 +137,7 @@ pub(super) async fn search(inner: Arc<Inner>, s: Arc<Session>, req: SearchReques
         let out = match (req.guild, req.channel) {
             (Some(g), _) => s.rest.search_guild_messages(sf(g), &q).await,
             (None, Some(c)) => s.rest.search_channel_messages(sf(c), &q).await,
-            (None, None) => return Err(BackendError("Nothing to search.".into())),
+            (None, None) => return Err(BackendError(crate::t!("search.nothing").to_string())),
         }
         .map_err(api_err)?;
         match out {
@@ -153,5 +153,5 @@ pub(super) async fn search(inner: Arc<Inner>, s: Arc<Session>, req: SearchReques
             SearchOutcome::Indexing { retry_after } => tokio::time::sleep(Duration::from_secs_f64(retry_after)).await,
         }
     }
-    Err(BackendError("Discord is still indexing this server. Try again in a moment.".into()))
+    Err(BackendError(crate::t!("search.indexing").to_string()))
 }
