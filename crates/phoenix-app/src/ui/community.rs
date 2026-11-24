@@ -373,6 +373,98 @@ fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>
         .into_any_element()
 }
 
+/// "My profile" column of the Customize tab (vanilla-channels-roles #1166–#1198):
+/// 288 wide beside the questions (scroller gap 16), padding-bottom 32;
+/// heading-sm/semibold title, body-xs --text-muted subtitle; profileCard_ margin-top
+/// 16, padding 16, radius 8 (black on onyx: a base background, ⚠ which one); 80px
+/// round avatar; display name body-lg/medium 20/24 --text-strong (margin 16 0 4);
+/// bio body-sm 14/18 --text-muted; separator 1px --border-subtle (margin 16 0);
+/// "Roles" 14/500 --text-muted + 8; role pills (padding 4 8, gap 4, radius 16,
+/// --background-mod-normal, 8px colour dot, body-xs/medium --text-strong), gap 4.
+fn profile_column(app: &PhoenixApp, guild: Id) -> gpui::Div {
+    let me = app.me.id;
+    let info = crate::ui::profile::info(app, me, Some(guild));
+    let bio = info.prof.map(|p| p.bio.clone()).filter(|b| !b.is_empty());
+    let mut roles = div().flex().flex_wrap().gap(z(4.));
+    for r in &info.roles {
+        roles = roles.child(
+            div()
+                .py(z(4.))
+                .px(z(8.))
+                .rounded(z(16.))
+                .bg(t(idx::BACKGROUND_MOD_NORMAL))
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .min_w_0()
+                // Roles without a colour use the default role grey (#99aab5 in the dump).
+                .child(div().size(z(8.)).flex_none().rounded_full().bg(c(r.color.unwrap_or(0x99aab5))))
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_ellipsis()
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(t(idx::TEXT_STRONG))
+                        .child(crate::ui::emoji_text::label(r.name.clone(), 12.)),
+                ),
+        );
+    }
+    let card = div()
+        .mt(z(16.))
+        .p(z(16.))
+        .rounded(z(8.))
+        .bg(t(idx::BACKGROUND_BASE_LOWEST))
+        .flex()
+        .flex_col()
+        .child(crate::ui::avatar(info.user.as_deref(), 80.))
+        .child(
+            div()
+                .mt(z(16.))
+                .mb(z(4.))
+                .text_ellipsis()
+                .text_size(z(20.))
+                .line_height(z(24.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(t(idx::TEXT_STRONG))
+                .child(crate::ui::emoji_text::label(info.display.clone(), 20.)),
+        )
+        .when_some(bio, |d, b| d.child(crate::ui::profile_bio::bio(&b, false, t(idx::TEXT_MUTED))))
+        .when(!info.roles.is_empty(), |d| {
+            d.child(div().my(z(16.)).h(px(1.)).bg(t(idx::BORDER_SUBTLE)))
+                .child(div().mb(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(t(idx::TEXT_MUTED)).child(crate::t!("community.roles")))
+                .child(roles)
+        });
+    div()
+        .w(z(288.))
+        .flex_none()
+        .pb(z(32.))
+        .flex()
+        .flex_col()
+        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(t(idx::TEXT_STRONG)).child(crate::t!("community.my_profile")))
+        .child(div().text_size(z(12.)).line_height(z(16.)).text_color(t(idx::TEXT_MUTED)).child(crate::t!("community.my_profile_sub")))
+        .child(card)
+}
+
+/// The guild profile of the current user (bio, nick, roles), fetched once per guild.
+fn ensure_my_profile(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) {
+    thread_local!(static ASKED: std::cell::RefCell<std::collections::HashSet<Id>> = Default::default());
+    let me = app.me.id;
+    if app.people.profiles.contains_key(&me) || !ASKED.with(|a| a.borrow_mut().insert(guild)) {
+        return;
+    }
+    let fut = app.backend.user_profile(me, Some(guild));
+    cx.spawn(async move |this, cx| {
+        let Ok(p) = fut.await else { return };
+        let _ = this.update(cx, |a, cx| {
+            a.people.profiles.entry(me).or_insert(p);
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
 /// checkboxIndicator_vTUVyc (20px, radius 4, 1px border): selected
 /// --checkbox-background/border-selected-default with the white check.
 fn checkbox(on: bool) -> gpui::Div {
@@ -422,6 +514,10 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         crate::ui::locale_inputs::keep_placeholder(i, "community.search_channels", window, cx);
     }
     let query = browse_input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default();
+    if browse_input.is_none() {
+        let guild = cx.try_global::<Slot>()?.0.as_ref()?.guild;
+        ensure_my_profile(app, guild, cx);
+    }
     let page = cx.try_global::<Slot>()?.0.as_ref()?;
     let header = div()
         .h(z(48.))
@@ -505,6 +601,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         );
     }
     let mut body = div()
+        .flex_1()
+        .min_w_0()
         .pr(z(16.))
         .flex()
         .flex_col()
@@ -531,7 +629,17 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             .bg(t(idx::BACKGROUND_BASE_LOWER))
             .child(header)
             .child(tabs)
-            .child(div().id("community-scroll").flex_1().min_h_0().overflow_y_scroll().pt(z(32.)).px(z(32.)).pb(z(32.)).child(body.max_w(z(744.)))) // pageBody_ 727 + padding-right 16 beside the profile column
+            // scroller_pHGfKY: padding 32 32 0, gap 16; pageBody_ (727 + padding-right 16) then the 288px profile column.
+            .child(
+                div()
+                    .id("community-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .pt(z(32.))
+                    .px(z(32.))
+                    .child(div().flex().items_start().gap(z(16.)).child(body.pb(z(32.))).child(profile_column(app, page.guild))),
+            )
             .into_any_element(),
     )
 }
