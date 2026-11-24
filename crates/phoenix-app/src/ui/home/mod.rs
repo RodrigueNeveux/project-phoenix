@@ -44,7 +44,7 @@ fn page_content(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     if let Some(page) = crate::ui::guide::render(app, cx) {
         return page;
     }
-    if let Some(page) = crate::ui::community::render(app, cx) {
+    if let Some(page) = crate::ui::community::render(app, window, cx) {
         return page;
     }
     if app.selected_guild.is_none() && app.nav.home == HomeView::Shop {

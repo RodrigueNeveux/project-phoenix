@@ -8,7 +8,8 @@
 //! (radius 12, padding 12 16, 22px emoji + margin 12, body-md/medium title,
 //! body-xs/normal description). Read-only: options are shown, never answered.
 
-use gpui::{AnyElement, App, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*, px};
+use gpui::{AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*, px};
+use gpui_component::input::{Input, InputEvent, InputState};
 
 use crate::{
     app::PhoenixApp,
@@ -20,6 +21,10 @@ use crate::{
 #[derive(Default)]
 struct Slot(Option<Page>);
 impl gpui::Global for Slot {}
+
+/// Browse Channels search field: (guild, input). Local filter only.
+struct Search(Id, Entity<InputState>, gpui::Subscription);
+impl gpui::Global for Search {}
 
 struct Page {
     guild: Id,
@@ -163,6 +168,14 @@ fn update_page(cx: &mut App, f: impl FnOnce(&mut Page)) {
 /// Browse Channels groups in sidebar order: channels without a category first,
 /// then each category with its channels (`None` = no category header).
 fn browse_groups(app: &PhoenixApp, guild: Id) -> Vec<(Option<Id>, Vec<Id>)> {
+    browse_groups_matching(app, guild, "")
+}
+
+/// [`browse_groups`] keeping the channels whose name, or category name, contains
+/// `query` (case-insensitive; empty = all).
+fn browse_groups_matching(app: &PhoenixApp, guild: Id, query: &str) -> Vec<(Option<Id>, Vec<Id>)> {
+    let q = query.trim().to_lowercase();
+    let hit = |id: Option<Id>| id.and_then(|id| app.channels.get(&id)).is_some_and(|c| c.name.to_lowercase().contains(&q));
     let list = app.guild_channels.get(&guild).cloned().unwrap_or_default();
     let kind = |id: Id| app.channels.get(&id).map(|c| c.kind);
     let mut out: Vec<(Option<Id>, Vec<Id>)> = vec![(None, Vec::new())];
@@ -176,6 +189,9 @@ fn browse_groups(app: &PhoenixApp, guild: Id) -> Vec<(Option<Id>, Vec<Id>)> {
             continue;
         }
         let parent = app.channels.get(&id).and_then(|c| c.parent);
+        if !q.is_empty() && !hit(Some(id)) && !hit(parent) {
+            continue;
+        }
         let at = parent.and_then(|p| out.iter().position(|(cat, _)| *cat == Some(p))).unwrap_or(0);
         out[at].1.push(id);
     }
@@ -186,7 +202,7 @@ fn browse_groups(app: &PhoenixApp, guild: Id) -> Vec<(Option<Id>, Vec<Id>)> {
 /// "Browse Channels" tab (dumps/vanilla-browse-channels, 2026-11-24). Read-only:
 /// the follow switches and checkboxes show the READY `OPT_IN_ENABLED` overrides and
 /// never change them.
-fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>, cx: &Context<PhoenixApp>) -> AnyElement {
+fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>, input: Option<Entity<InputState>>, cx: &Context<PhoenixApp>) -> AnyElement {
     let now = chrono::Utc::now().timestamp();
     let opted = |id: Id| app.backend.channel_opted_in(id);
     // header_fTKmdS: margin 0 24 20 8 inside the 8px scroller padding; the search field
@@ -210,7 +226,9 @@ fn browse_body(app: &PhoenixApp, page: &Page, groups: Vec<(Option<Id>, Vec<Id>)>
         .child(div().size(z(30.)).flex().items_center().justify_center().child(
             gpui::svg().path(crate::icons::path("search")).size(z(20.)).flex_none().text_color(t(idx::TEXT_DEFAULT)),
         ))
-        .child(div().text_size(z(16.)).line_height(z(20.)).text_color(t(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)).child(crate::t!("community.search_channels")));
+        .when_some(input, |d, i| {
+            d.child(div().flex_1().min_w_0().child(Input::new(&i).appearance(false).bordered(false).pl(z(0.)).text_size(z(16.)).line_height(z(20.))))
+        });
     // browser_fTKmdS starts 8px in, its content_ adds 8 each side, then a 16px scrollbar gutter:
     // rows span page-left + 16 to page-right - 32 like the search field.
     let mut list = div().pl(z(16.)).pr(z(8.)).pb(z(4.)).flex().flex_col();
@@ -376,10 +394,34 @@ fn checkbox(on: bool) -> gpui::Div {
         .when(on, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(t(idx::CHECKBOX_ICON_ACTIVE))))
 }
 
-pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+/// The Browse Channels search input of `guild`, created on first use.
+fn search_input(guild: Id, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Entity<InputState> {
+    if let Some(s) = cx.try_global::<Search>().filter(|s| s.0 == guild) {
+        return s.1.clone();
+    }
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("community.search_channels")));
+    let sub = cx.subscribe_in(&input, window, |_: &mut PhoenixApp, _, ev: &InputEvent, _w, cx| {
+        if let InputEvent::Change = ev {
+            cx.notify();
+        }
+    });
+    cx.set_global(Search(guild, input.clone(), sub));
+    input
+}
+
+pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if !is_open(app, cx) {
         return None;
     }
+    let browse_input = {
+        let p = cx.try_global::<Slot>()?.0.as_ref()?;
+        p.browse.then_some(p.guild)
+    }
+    .map(|g| search_input(g, window, cx));
+    if let Some(i) = &browse_input {
+        crate::ui::locale_inputs::keep_placeholder(i, "community.search_channels", window, cx);
+    }
+    let query = browse_input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default();
     let page = cx.try_global::<Slot>()?.0.as_ref()?;
     let header = div()
         .h(z(48.))
@@ -402,8 +444,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .child(crate::t!("guild.top.channels_roles")),
         );
     let browse = page.browse;
-    let channels = browse_groups(app, page.guild);
-    let count: usize = channels.iter().map(|(_, v)| v.len()).sum();
+    // The tab badge counts every channel; the list follows the search.
+    let count: usize = browse_groups(app, page.guild).iter().map(|(_, v)| v.len()).sum();
+    let channels = browse_groups_matching(app, page.guild, &query);
     let tab = |id: &'static str, label: SharedString, on: bool, to_browse: bool| {
         div()
             .id(id)
@@ -457,7 +500,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .bg(t(idx::BACKGROUND_BASE_LOWER))
                 .child(header)
                 .child(tabs)
-                .child(browse_body(app, page, channels, cx))
+                .child(browse_body(app, page, channels, browse_input, cx))
                 .into_any_element(),
         );
     }
