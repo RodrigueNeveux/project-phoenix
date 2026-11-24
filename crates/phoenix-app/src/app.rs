@@ -173,6 +173,9 @@ pub(crate) struct Resolver<'a> {
     members: &'a HashMap<Id, Vec<Member>>,
     soundboard_sounds: &'a [crate::model::SoundboardSound],
     me: Id,
+    /// Guild of the message: `@user` shows the member's nick there (live sandbox
+    /// 2026-11-24: "@Yohan", the server nick, not the global name).
+    guild: Option<Id>,
 }
 impl Resolver<'_> {
     fn find_role(&self, id: u64) -> Option<&Role> {
@@ -194,7 +197,11 @@ impl MentionResolver for Resolver<'_> {
             .is_some_and(|m| m.roles.contains(&Id(id)))
     }
     fn user(&self, id: u64) -> Option<String> {
-        self.users.get(&Id(id)).map(|u| u.display_name.to_string())
+        let nick = self
+            .guild
+            .and_then(|g| crate::member_index::find(self.members.get(&g)?, g, Id(id)))
+            .and_then(|m| m.nick.as_ref().map(ToString::to_string));
+        nick.or_else(|| self.users.get(&Id(id)).map(|u| u.display_name.to_string()))
     }
     fn channel(&self, id: u64) -> Option<String> {
         self.channels.get(&Id(id)).map(|c| c.name.to_string())
@@ -682,17 +689,18 @@ impl PhoenixApp {
     }
 
     pub(crate) fn resolver(&self) -> Resolver<'_> {
-        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles, members: &self.members, soundboard_sounds: &[], me: self.me.id }
+        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles, members: &self.members, soundboard_sounds: &[], me: self.me.id, guild: self.selected_guild }
     }
 
-    fn resolver_with_sounds<'a>(&'a self, sounds: &'a [crate::model::SoundboardSound]) -> Resolver<'a> {
-        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles, members: &self.members, soundboard_sounds: sounds, me: self.me.id }
+    fn resolver_with_sounds<'a>(&'a self, sounds: &'a [crate::model::SoundboardSound], channel: Id) -> Resolver<'a> {
+        let guild = self.channels.get(&channel).or_else(|| self.nav.find_thread(channel)).and_then(|c| c.guild).or(self.selected_guild);
+        Resolver { users: &self.users, channels: &self.channels, roles: &self.roles, members: &self.members, soundboard_sounds: sounds, me: self.me.id, guild }
     }
 
     pub(crate) fn render_msg(&self, m: &Message, prev: Option<&Message>) -> RenderedMessage {
         let revealed = |i: usize| self.revealed.contains(&(m.id, i));
         let (parsed, mut blocks, mentions_me, preview) =
-            richtext::build(&m.content, &self.resolver_with_sounds(&m.soundboard_sounds), self.me.id, &revealed);
+            richtext::build(&m.content, &self.resolver_with_sounds(&m.soundboard_sounds, m.channel), self.me.id, &revealed);
         // messageContent_.isFailed_: the whole text in --text-feedback-critical.
         if m.send_state == crate::model::SendState::Failed {
             blocks = richtext::render_blocks(&parsed, &revealed, ui::chat::tk(crate::theme::generated::idx::TEXT_FEEDBACK_CRITICAL));
