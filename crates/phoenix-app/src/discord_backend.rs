@@ -639,6 +639,10 @@ impl Backend for DiscordBackend {
         self.load_messages_impl(channel, before, limit)
     }
 
+    fn load_messages_at(&self, channel: Id, at: crate::backend::HistoryAt, limit: u32) -> BoxFuture<Vec<Message>> {
+        self.load_messages_at_impl(channel, at, limit)
+    }
+
     fn prefetch_messages(&self, channel: Id) {
         self.prefetch_impl(channel)
     }

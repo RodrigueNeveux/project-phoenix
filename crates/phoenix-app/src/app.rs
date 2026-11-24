@@ -67,6 +67,8 @@ pub struct ChannelMessages {
     pub loading: bool,
     pub loaded_once: bool,
     pub reached_start: bool,
+    /// Showing a page around a jumped-to message, not the latest (history_detached).
+    pub detached: bool,
 }
 
 impl ChannelMessages {
@@ -282,6 +284,7 @@ impl PhoenixApp {
             if ev.visible_range.start == 0 {
                 let _ = weak.update(cx, |this, cx| this.load_older(cx));
             }
+            let _ = weak.update(cx, |this, cx| this.detached_on_scroll(ev, cx));
             let _ = weak.update(cx, |this, cx| this.chat_on_scroll(ev, cx));
         });
 
@@ -734,6 +737,14 @@ impl PhoenixApp {
         let mention = m.content.contains(&format!("<@{}>", self.me.id.0));
         if let Some(t) = self.typing.get_mut(&ch) {
             t.retain(|(u, _)| *u != m.author);
+        }
+        // Detached page on screen: appending would leave a gap; count it instead.
+        if self.messages.get(&ch).is_some_and(|e| e.detached) {
+            if selected {
+                self.chat_note_incoming(false, m.timestamp);
+            }
+            cx.notify();
+            return;
         }
         let Some(mut entry) = self.messages.remove(&ch) else {
             if let Some(c) = self.channels.get_mut(&ch) {

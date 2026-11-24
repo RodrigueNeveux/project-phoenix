@@ -10,6 +10,13 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::model::{Channel, Guild, Id, Member, Message, Presence, Reaction, Role, User};
 
+/// Anchor for [`Backend::load_messages_at`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HistoryAt {
+    Around(Id),
+    After(Id),
+}
+
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = Result<T, BackendError>> + Send + 'static>>;
 
 #[derive(Clone, Debug)]
@@ -125,6 +132,11 @@ pub trait Backend: Send + Sync + 'static {
     fn select_channel(&self, channel: Id) -> BoxFuture<()>;
     /// Newest-last page of history, `before` a message id when paging up.
     fn load_messages(&self, channel: Id, before: Option<Id>, limit: u32) -> BoxFuture<Vec<Message>>;
+    /// Detached history (jump to a message): the page `around` a message, or the
+    /// page `after` one when scrolling back down. Newest-last. Read-only GETs.
+    fn load_messages_at(&self, _channel: Id, _at: HistoryAt, _limit: u32) -> BoxFuture<Vec<Message>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     fn send_message(&self, channel: Id, content: String, reply_to: Option<Id>) -> BoxFuture<Message>;
     fn edit_message(&self, channel: Id, id: Id, content: String) -> BoxFuture<Message>;
     fn trigger_typing(&self, channel: Id) -> BoxFuture<()>;

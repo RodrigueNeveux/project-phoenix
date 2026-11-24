@@ -221,6 +221,8 @@ impl PhoenixApp {
 
     /// Hook from `select_channel`.
     pub fn chat_on_select(&mut self, channel: Id) {
+        // Leaving / reopening a channel shows the present again, like the client.
+        self.messages.retain(|_, e| !e.detached);
         self.chat.edit = None;
         self.chat.menu = None;
         self.chat.confirm_delete = None;
@@ -262,6 +264,12 @@ impl PhoenixApp {
     }
 
     pub fn jump_to_present(&mut self, cx: &mut Context<Self>) {
+        if self.leave_detached(cx) {
+            self.chat.at_bottom = true;
+            self.chat.new_messages = None;
+            cx.notify();
+            return;
+        }
         self.message_list.scroll_to_end();
         self.chat.at_bottom = true;
         self.chat.new_messages = None;
@@ -563,11 +571,19 @@ impl PhoenixApp {
             self.flash_message(id, cx);
             return;
         }
-        if pages == 0 || e.reached_start || e.loading || !e.loaded_once {
+        if e.loading || !e.loaded_once {
             return;
         }
         // Snowflakes are time-ordered: a reply target newer than our oldest row was deleted.
         if e.msgs.first().is_some_and(|m| m.id.0 < id.0) {
+            return;
+        }
+        // Client: jump with ?around= into a detached page (older pages stay pageable).
+        if pages == JUMP_MAX_PAGES {
+            self.jump_around(channel, id, cx);
+            return;
+        }
+        if pages == 0 || e.reached_start {
             return;
         }
         let before = e.msgs.first().map(|m| m.id);
@@ -585,7 +601,7 @@ impl PhoenixApp {
         .detach();
     }
 
-    fn flash_message(&mut self, id: Id, cx: &mut Context<Self>) {
+    pub(crate) fn flash_message(&mut self, id: Id, cx: &mut Context<Self>) {
         self.chat.flash = Some(id);
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(FLASH_HOLD).await;

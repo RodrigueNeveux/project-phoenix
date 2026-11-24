@@ -635,7 +635,8 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
 
 /// "You're viewing older messages — Jump To Present" above the composer.
 pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
-    let scrolled_up = !app.chat.at_bottom && app.message_list.is_scrolled_to_end() == Some(false);
+    let scrolled_up = (!app.chat.at_bottom && app.message_list.is_scrolled_to_end() == Some(false))
+        || crate::history_detached::is_detached(app);
     if !scrolled_up {
         return None;
     }

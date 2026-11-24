@@ -193,6 +193,25 @@ impl DiscordBackend {
         })
     }
 
+    /// Detached history pages (jump to a message, scroll down from there). Never
+    /// cached on disk: the disk cache only holds the latest page.
+    pub(super) fn load_messages_at_impl(&self, channel: Id, at: crate::backend::HistoryAt, limit: u32) -> BoxFuture<Vec<Message>> {
+        self.spawn(move |inner| async move {
+            let s = inner.session()?;
+            let limit = limit.clamp(1, 100) as u8;
+            let q = match at {
+                crate::backend::HistoryAt::Around(m) => MessageQuery::around(sf(m), limit),
+                crate::backend::HistoryAt::After(m) => MessageQuery::after(sf(m), limit),
+            };
+            let mut msgs = s.rest.get_messages(sf(channel), q).await.map_err(api_err)?;
+            msgs.sort_by_key(|m| m.id);
+            after_page(&inner, &s, channel, &msgs, false);
+            let out: Vec<Message> = msgs.iter().map(convert::message).collect();
+            s.cache.insert_messages(sf(channel), msgs);
+            Ok(out)
+        })
+    }
+
     /// Warm a channel the pointer is on (or likely to be opened). Never acks.
     pub(super) fn prefetch_impl(&self, channel: Id) {
         let Ok(s) = self.inner.session() else { return };
