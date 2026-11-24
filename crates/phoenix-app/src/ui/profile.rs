@@ -761,6 +761,7 @@ fn popout_card_inner(
         }
     }
     // container_M2WrKU (padding-bottom 8px): activity cards
+    body = body.children(crate::ui::voice_row::voice_activity_card(app, uid, cx.entity()));
     for a in i.acts {
         if let Some(b) = activity_block(a, false) {
             body = body.child(div().pb(z(8.)).child(b));

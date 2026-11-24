@@ -64,6 +64,107 @@ pub fn options_button(user: Id, guild: Option<Id>, in_call: bool) -> AnyElement 
         .into_any_element()
 }
 
+/// "In a voice channel" card in the profile popout (`clickableContainer_Bu4Al8` in
+/// `cardsList_M2WrKU`, live vanilla popout opened from a voice row): same card
+/// metrics as the activity cards (padding 8px, --radius-sm, border --border-subtle,
+/// header body-xs/medium), body = guild circle + channel name heading-xs/semibold
+/// with the speaker icon (`voiceIcon_Bu4Al8`) and the guild name. Clicking opens the
+/// channel's text chat; it never joins voice.
+pub fn voice_activity_card(app: &crate::app::PhoenixApp, user: Id, entity: gpui::Entity<crate::app::PhoenixApp>) -> Option<AnyElement> {
+    use gpui::{FontWeight, prelude::FluentBuilder};
+    let ch = app.channels.values().find(|c| c.voice_users.contains(&user))?;
+    let (cid, cname) = (ch.id, ch.name.clone());
+    let g = ch.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    let gname = g.map(|g| g.name.clone());
+    let acronym = g.map(|g| g.acronym.clone()).unwrap_or_default();
+    Some(
+        div()
+            .id(("profile-voice-card", user.0))
+            .pb(z(8.)) // container_M2WrKU card spacing
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(z(8.)) // card_Bu4Al8 gap
+                    .p(z(8.)) // --custom-activity-card-padding (popout)
+                    .rounded(z(8.)) // --radius-sm
+                    .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND_HOVER)))
+                    .border_1()
+                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .text_size(z(12.)) // header_Bu4Al8 body-xs/medium
+                            .line_height(z(16.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .child(crate::t!("members.in_voice")),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(z(8.)) // content_Bu4Al8 gap
+                            .child(
+                                // container_vg4rr1 circle_vg4rr1
+                                div()
+                                    .size(z(48.))
+                                    .flex_none()
+                                    .rounded_full()
+                                    .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_size(z(14.))
+                                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                                    .child(acronym),
+                            )
+                            .child(
+                                div()
+                                    .min_w_0()
+                                    .flex()
+                                    .flex_col()
+                                    .gap(z(4.)) // details_Bu4Al8 gap
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(z(4.))
+                                            .child(svg().path(crate::icons::path("speaker")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_DEFAULT))))
+                                            .child(
+                                                div()
+                                                    .min_w_0()
+                                                    .text_size(z(14.)) // heading-xs/semibold
+                                                    .line_height(z(18.))
+                                                    .font_weight(FontWeight::SEMIBOLD)
+                                                    .text_color(c(tok(idx::TEXT_STRONG)))
+                                                    .text_ellipsis()
+                                                    .child(cname),
+                                            ),
+                                    )
+                                    .when_some(gname, |d, n| {
+                                        d.child(
+                                            div()
+                                                .text_size(z(12.)) // body-xs
+                                                .line_height(z(16.))
+                                                .text_color(c(tok(idx::TEXT_MUTED)))
+                                                .text_ellipsis()
+                                                .child(n),
+                                        )
+                                    }),
+                            ),
+                    ),
+            )
+            .on_click(move |_, _, cx| {
+                entity.update(cx, |a, cx| {
+                    a.people.popout = None;
+                    a.open_channel_chat(cid, cx);
+                })
+            })
+            .into_any_element(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
