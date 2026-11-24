@@ -758,7 +758,11 @@ fn gallery(items: &[api::GalleryItem], msg: Id, ix: usize, cx: &App) -> AnyEleme
         many => {
             let refs: Vec<&crate::model::Attachment> = many.iter().collect();
             if refs.len() >= 2 {
-                crate::ui::chat::mosaic::grid(&refs, 600., cx).into_any_element()
+                // In the fit-content v2 column a 100% width is indefinite and the rows'
+                // aspect ratio + 350px cap would shrink the mosaic (525 instead of 566 for
+                // three squares, live sandbox dump): ask for the full 600px instead, the
+                // column then clamps it to the space it has.
+                div().w(z(600.)).max_w_full().child(crate::ui::chat::mosaic::grid(&refs, 600., cx)).into_any_element()
             } else {
                 crate::ui::chat::attachment(refs[0], cx)
             }
