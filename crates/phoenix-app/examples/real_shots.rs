@@ -507,6 +507,14 @@ fn main() -> anyhow::Result<()> {
                 });
                 println!("dm {} group={group}", d.0);
             }
+            for g in &app.guilds {
+                println!("guild {} name={:?}", g.id.0, g.name.as_ref());
+            }
+            for c in app.channels.values() {
+                if let Some(g) = c.guild {
+                    println!("channel {} guild={} kind={:?} name={:?}", c.id.0, g.0, c.kind, c.name.as_ref());
+                }
+            }
             // Every guild's active threads (READY / GUILD_CREATE), not just the
             // sidebar rows of the selected guild.
             for (parent, list) in &app.nav.threads {
