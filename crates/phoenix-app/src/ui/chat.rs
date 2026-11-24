@@ -268,7 +268,11 @@ fn hdr(id: &'static str, path: SharedString, color: gpui::Hsla) -> gpui::Statefu
         "members" => crate::t!("header.members_show"),
         "dm-call" => crate::t!("header.voice_call"),
         "dm-video" => crate::t!("header.video_call"),
+        // aria-labels of vanilla-dm / vanilla-group-dm toolbars.
         "dm-add" => crate::t!("header.add_to_dm"),
+        "gdm-add" => crate::t!("header.add_to_gdm"),
+        "gdm-members" if selected => crate::t!("header.members_hide"),
+        "gdm-members" => crate::t!("header.members_show"),
         "dm-profile" if selected => crate::t!("header.profile_hide"),
         "dm-profile" => crate::t!("header.profile_show"),
         _ => crate::t!("header.more"),
@@ -299,6 +303,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     // container_ .clickable_ .icon_ color: --icon-muted; .selected_: --icon-strong.
     let ic = tk(idx::ICON_MUTED);
     let on = tk(idx::ICON_STRONG);
+    let is_group_dm = ch.is_some_and(|c| crate::ui::dm_profile_panel::is_group_dm(app, c.id));
     let peer = ch.filter(|c| !crate::ui::dm_profile_panel::is_group_dm(app, c.id)).and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u));
     let scope: SharedString = if is_dm {
         peer.map(|u| u.name.clone()).unwrap_or_else(|| name.clone())
@@ -456,8 +461,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                             hdr_button("pin", Icon::Pin, if app.chat.pins.is_some() { on } else { ic }, HDR_ICON)
                                 .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
                         )
-                        .child(hdr_named("dm-add", "add-to-dm", ic))
-                        .child(hdr_named("dm-profile", "user-profile", if app.show_members { on } else { ic }).on_click(cx.listener(|a, _, _, cx| {
+                        .child(hdr_named(if is_group_dm { "gdm-add" } else { "dm-add" }, "add-to-dm", ic))
+                        .child(hdr_named(if is_group_dm { "gdm-members" } else { "dm-profile" }, "user-profile", if app.show_members { on } else { ic }).on_click(cx.listener(|a, _, _, cx| {
                             a.show_members = !a.show_members;
                             cx.notify();
                         })))

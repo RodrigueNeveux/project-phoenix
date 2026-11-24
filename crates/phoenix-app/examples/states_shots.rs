@@ -61,6 +61,11 @@ fn main() -> anyhow::Result<()> {
             });
         })?;
         pump(&mut cx, 30);
+        // `PHX_SETTINGS=1`: start on the settings modal (nav rows).
+        if std::env::var_os("PHX_SETTINGS").is_some() {
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, phoenix_app::ui::settings::open))?;
+            pump(&mut cx, 10);
+        }
     }
     std::fs::create_dir_all(&out)?;
     for (n, p) in std::iter::once("0,0".to_string()).chain(points).enumerate() {

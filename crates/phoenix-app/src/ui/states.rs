@@ -5,7 +5,7 @@
 
 use crate::theme::{c, generated::idx, tok, z};
 use crate::ui::Icon;
-use gpui::{Div, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, svg};
+use gpui::{AnimationExt, Div, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, svg};
 
 /// 32px composer button (attach, gift, GIF, sticker, emoji, apps), 20px glyph
 /// (`--chat-input-icon-size`). The glyph follows the button's hover/active state.
@@ -150,7 +150,8 @@ pub fn below_tip(text: gpui::SharedString, button_w: f32, button_h: f32) -> gpui
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(tok(idx::TEXT_DEFAULT)))
         .whitespace_nowrap()
-        .child(text);
+        .child(text)
+        .with_animation("tip-zoom", tip_zoom(), zoom_card);
     let tip = deferred(
         anchored().position_mode(AnchoredPositionMode::Local).position(point(z(button_w / 2. - SPAN / 2.), z(button_h + 6.))).child(
             div().w(z(SPAN)).flex().flex_col().items_center().child(caret).child(card),
@@ -205,4 +206,33 @@ pub fn fade_to(key: u64, on: bool, rest: gpui::Hsla, hover: gpui::Hsla, ms: u64,
         }
     });
     fade_layer(key, rest, hover, ms, radius)
+}
+
+/// Tooltip enter zoom: the client's spring takes the card from ~0.95 to 1 in ~100ms
+/// (ref-cache tooltip-{header,rail}-appear.json: 43→45 / 140→148px wide), opacity 1.
+pub fn tip_zoom() -> gpui::Animation {
+    gpui::Animation::new(std::time::Duration::from_millis(100)).with_easing(ease_out)
+}
+
+/// gpui has no CSS transform on divs, so the zoom scales the card's own metrics
+/// (padding, radius, 14/18 text) by 0.95 → 1, which is what `scale()` looks like for a text card.
+pub fn zoom_card(d: Div, t: f32) -> Div {
+    zoom_card_sized(d, t, 14., 18.)
+}
+
+/// [`zoom_card`] for cards with another text size / line height (rail tooltip: 16/20).
+pub fn zoom_card_sized(d: Div, t: f32, font: f32, line: f32) -> Div {
+    let k = 0.95 + 0.05 * t;
+    d.px(z(12. * k)).py(z(8. * k)).rounded(z(8. * k)).text_size(z(font * k)).line_height(z(line * k))
+}
+
+/// Drop the remembered state of `key`, so the next [`fade_to`] with `on = true` animates
+/// from `rest` (used for one-way transitions such as a settings row becoming selected).
+pub fn forget(key: u64) {
+    HOVER.with(|h| {
+        let mut h = h.borrow_mut();
+        if h.get(&key).is_none_or(|s| s.0) {
+            h.insert(key, (false, std::time::Instant::now() - std::time::Duration::from_secs(1)));
+        }
+    });
 }

@@ -19,7 +19,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | folder `folderIcon_RTMSuZ` | hover | `--background-mod-subtle` bg | `--background-mod-subtle` | ✅ |
 | rail tooltip `tooltip_ZDdyhE` | position | card starts 12px right of the tile (x 72 for a 20..60 tile), vertically centred, caret left | anchor at tile right + 12 − 5 | ✅ (fixed) |
 | rail tooltip | style | `--background-surface-high`, 8px radius, inset 1px `--border-subtle` + `--shadow-high`, padding 8 12, body-md/semibold 16/20 | tokens | ✅ (fixed: was old palette) |
-| rail tooltip | appear | no delay (~60ms), opacity 1, slides 4px leftwards over ~100ms (ref-cache tooltip-rail-appear.json) | 100ms ease-out-quint 4px slide, no fade | ✅ |
+| rail tooltip | appear | no delay (~60ms), opacity 1, slides 4px leftwards over ~100ms (ref-cache tooltip-rail-appear.json) | 100ms 4px slide + `zoom_card_sized` 0.95 → 1, no fade | ✅ |
 
 ## Channel list
 
@@ -63,7 +63,7 @@ Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ th
 | component | state | client | ours | status |
 |---|---|---|---|---|
 | header icon `clickable_ybUK7Z .icon` | hover / selected | no background; glyph `--icon-muted` → `--icon-subtle`, selected `--icon-strong` | states.rs `header_button` | ✅ (removed the old hover tile) |
-| header tooltip | position | shows ~50ms after hover (no delay), centred, card 11px below the button, caret up, body-sm/medium 14/18, scale-in ~100ms (ref-cache tooltip-header-appear.json) | states.rs `below_tip`: centred, card top 11px below, no delay (offscreen: card y 84 = live 84) | ✅ (scale-in not reproduced) |
+| header tooltip | position | shows ~50ms after hover (no delay), centred, card 11px below the button, caret up, body-sm/medium 14/18, scale-in ~100ms (ref-cache tooltip-header-appear.json) | states.rs `below_tip`: centred, card top 11px below, no delay (offscreen: card y 84 = live 84) | ✅ (enter zoom 0.95 → 1 in 100ms via `states::zoom_card`) |
 | user panel button `button_Y-8oZW` | hover | `--control-secondary-background-hover`, glyph `--interactive-text-hover`, background .2s ease (`states::fade_layer`) | bg + glyph via `panel-btn` group | ✅ (added) |
 | user panel red (muted/deafened) | rest / hover | `--opacity-red-12` → `--opacity-red-24` | voice_panel.rs | ✅ |
 | user panel | active | none in CSS | | ➖ |
@@ -87,6 +87,24 @@ Source: CSS `_M3qk4j` rules + dumps vanilla-menu-{channel,guild,dm,member,messag
 | submenu row | hover opens, caret 20px `--text-muted` → white when focused | `Submenu` | ✅ |
 | checkbox / radio | checked colours `--control-brand-foreground-new` | `Check` | ✅ |
 
+## Header labels (DM)
+
+| component | state | client (dump aria-label) | ours | status |
+|---|---|---|---|---|
+| DM toolbar tooltips | label | vanilla-dm: Démarrer un appel vocal / vidéo, Messages épinglés, Ajouter au MP, Masquer le profil d'utilisateur | fr.yml `header.*` | ✅ (relabelled from the dump) |
+| group DM toolbar tooltips | label | vanilla-group-dm: … Inviter dans le groupe privé, Masquer la liste des membres | `gdm-add` / `gdm-members` | ✅ (added) |
+
+## Popouts and settings
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| emoji picker cell `emojiItem_6OcK5D` | hovered / selected | `--interactive-background-selected` | pickers/grid.rs | ✅ |
+| picker category rail `categoryItemDefaultCategory_` | hover / selected | hover `--interactive-background-hover`; selected `--background-base-low` | grid.rs `rail_item` | ✅ |
+| picker tabs (GIF / Stickers / Emoji) | hover / active | `--control-secondary-background-hover`; active `--background-mod-normal` (+ strong on hover) | pickers/mod.rs | ✅ |
+| settings sidebar `item_xyJHva` | hover | `--background-mod-muted`, label + glyph `--text-strong` | settings/view.rs `nav_item` | ✅ (glyph + label tint added) |
+| settings sidebar | selected | `--background-mod-normal`, background-color .3s ease on selection | `states::fade_to` 300ms | ✅ (added) |
+| settings sidebar destructive (Log Out) | hover | `--background-feedback-mod-critical` | ✅ | ✅ |
+
 ## Transitions
 
 `states.rs` has a small colour-fade helper: `track` + `fade_layer` (a bg layer animated
@@ -101,6 +119,6 @@ renders the mock app with the mouse at each point (pressed with `,down`).
 
 ## Coverage
 
-52 rows: 51 ✅, 1 ➖, 0 ❌.
+61 rows: 60 ✅, 1 ➖, 0 ❌.
 Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
 .1s–.2s ease-out colour fades.

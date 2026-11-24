@@ -337,8 +337,29 @@ fn page_icon(p: Page) -> &'static str {
 fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, selected: bool, destructive: bool) -> Stateful<Div> {
     let fg = if selected { idx::TEXT_STRONG } else { idx::TEXT_MUTED };
     let label_fg = if destructive { idx::TEXT_FEEDBACK_CRITICAL } else { fg };
+    let id: String = id.into();
+    let group: SharedString = format!("nav-{id}").into();
+    let fade_key = crate::ui::states::key(("settings-nav", id.as_str()));
     div()
         .id(eid(id))
+        .group(group.clone())
+        .relative()
+        // item_xyJHva.active_: background-color .3s ease when it becomes selected
+        // (from the hover colour; leaving the selection is instant).
+        .when(selected, |d| {
+            d.child(crate::ui::states::fade_to(
+                fade_key,
+                true,
+                c(tok(idx::BACKGROUND_MOD_MUTED)),
+                c(tok(idx::BACKGROUND_MOD_NORMAL)),
+                300,
+                8.,
+            ))
+        })
+        .when(!selected, |d| {
+            crate::ui::states::forget(fade_key);
+            d
+        })
         .p(z(10.))
         .rounded(z(8.))
         .flex()
@@ -346,12 +367,19 @@ fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, s
         .gap(z(10.))
         .cursor_pointer()
         .text_color(c(tok(fg)))
-        .when(selected, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
         .when(!selected && !destructive, |d| {
             d.hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_MUTED))).text_color(c(tok(idx::TEXT_STRONG))))
         })
         .when(destructive, |d| d.hover(|s| s.bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_CRITICAL)))))
-        .child(gpui::svg().path(crate::icons::path(icon)).size(z(20.)).flex_none().text_color(c(tok(fg))))
+        .child(
+            gpui::svg()
+                .path(crate::icons::path(icon))
+                .size(z(20.))
+                .flex_none()
+                .text_color(c(tok(fg)))
+                // item_xyJHva:hover color --text-strong (the glyph uses currentColor)
+                .when(!destructive, |d| d.group_hover(group, |s| s.text_color(c(tok(idx::TEXT_STRONG))))),
+        )
         .child(
             div()
                 .flex_1()
@@ -359,7 +387,8 @@ fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, s
                 .text_size(z(16.))
                 .line_height(z(20.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(tok(label_fg)))
+                // Non-destructive labels inherit the row colour, so the row's :hover tint reaches them.
+                .when(destructive, |d| d.text_color(c(tok(label_fg))))
                 .child(label.into()),
         )
 }

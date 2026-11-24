@@ -301,7 +301,8 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
         .line_height(z(20.))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(c(Palette::TEXT_NORMAL))
-        .child(text);
+        .child(text)
+        .with_animation("rail-tip-zoom", crate::ui::states::tip_zoom(), |d, t| crate::ui::states::zoom_card_sized(d, t, 16., 20.));
     // Left-pointing 5px triangle, drawn as stacked 1px slices.
     let mut pointer = div().flex().flex_col().justify_center().items_end().w(z(5.));
     for i in 0..9 {
