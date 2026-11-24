@@ -77,6 +77,8 @@ pub fn voice_activity_card(app: &crate::app::PhoenixApp, user: Id, entity: gpui:
     let g = ch.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
     let gname = g.map(|g| g.name.clone());
     let acronym = g.map(|g| g.acronym.clone()).unwrap_or_default();
+    // `.theme-light :where(.overlay_P1YEjQ)` borders the card
+    let light = crate::ui::profile_theme::is_light();
     Some(
         div()
             .id(("profile-voice-card", user.0))
@@ -88,9 +90,11 @@ pub fn voice_activity_card(app: &crate::app::PhoenixApp, user: Id, entity: gpui:
                     .gap(z(8.)) // card_Bu4Al8 gap
                     .p(z(8.)) // --custom-activity-card-padding (popout)
                     .rounded(z(8.)) // --radius-sm
-                    .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND_HOVER)))
-                    .border_1()
-                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    // :where(.overlay_P1YEjQ): --user-profile-overlay-background, 1px
+                    // --border-muted on light cards only; clickableContainer_:hover → -hover.
+                    .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)))
+                    .hover(|s| s.bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND_HOVER))))
+                    .when(light, |d| d.border_1().border_color(c(tok(idx::BORDER_MUTED))))
                     .cursor_pointer()
                     .child(
                         div()
@@ -106,12 +110,17 @@ pub fn voice_activity_card(app: &crate::app::PhoenixApp, user: Id, entity: gpui:
                             .items_center()
                             .gap(z(8.)) // content_Bu4Al8 gap
                             .child(
-                                // container_vg4rr1 circle_vg4rr1
+                                // container_vg4rr1: 60px, --radius-sm, 1px --border-subtle,
+                                // --card-background-default under a --background-mod-subtle layer
                                 div()
-                                    .size(z(48.))
+                                    .size(z(60.))
                                     .flex_none()
-                                    .rounded_full()
-                                    .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                                    .rounded(z(8.))
+                                    .border_1()
+                                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                                    .bg(c(tok(idx::CARD_BACKGROUND_DEFAULT)))
+                                    .child(div().absolute().inset_0().rounded(z(8.)).bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+                                    .relative()
                                     .flex()
                                     .items_center()
                                     .justify_center()

@@ -106,6 +106,17 @@ pub fn lookup(i: usize) -> Option<u32> {
     })
 }
 
+/// Scheme of the themed card being built, if any.
+pub fn active_scheme() -> Option<Scheme> {
+    ACTIVE.with(Cell::get).map(scheme)
+}
+
+/// Whether the element being built sits on a light surface (the themed card's
+/// `theme-light` class, else the app theme).
+pub fn is_light() -> bool {
+    active_scheme().map_or_else(app_is_light, |s| s == Scheme::Light)
+}
+
 /// Runs `f` with the overrides of a card themed `theme` (none when `None`).
 pub fn scoped<R>(theme: Option<(u32, u32)>, f: impl FnOnce() -> R) -> R {
     let prev = ACTIVE.with(|s| s.replace(theme));
