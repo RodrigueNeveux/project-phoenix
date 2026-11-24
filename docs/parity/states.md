@@ -1,0 +1,78 @@
+# Interactive states parity (hover / active / selected / tooltip)
+
+Source: live vanilla client (CDP, CSSOM rules matched against the on-screen elements with
+`:hover`/`:active` stripped, 2026-11-24), the current-client CSS bundles, and the
+`vanilla-tooltip-guild` / `vanilla-tooltip-header` dumps. Values only, no CSS copied.
+
+Legend: ✅ implemented and traced to the CSS rule, ❌ missing or wrong, ➖ the state does not exist in the client.
+
+## Guild rail
+
+| component | state | client (CSS source) | ours | status |
+|---|---|---|---|---|
+| pill `item__o8_Xq` | rest / unread | 8px, opacity 0 → 1 with `.visible`, translateX(-4px → 0) | server_bar.rs `pill` | ✅ |
+| pill | hover | height 20px | `pill` | ✅ |
+| pill | selected | height 40px | `pill` | ✅ |
+| pill | transition | height/opacity/transform .2s ease-out | `PILL_MS` 200 | ✅ |
+| guild icon | squircle | fixed squircle mask path (`svg_hqZPsU`), no radius morph on hover in the refresh | `ICON_RADIUS` 12 | ✅ |
+| home / add / discover tile `childWrapper_JJ-hgR` | hover, selected | `--background-brand` bg, `--white` glyph, scale 1.1 (`childWrapperHoverScale`), .15s ease-out | brand bg + white glyph | ❌ scale 1.1 missing |
+| folder `folderIcon_RTMSuZ` | hover | `--background-mod-subtle` bg | `--background-mod-subtle` | ✅ |
+| rail tooltip `tooltip_ZDdyhE` | position | card starts 12px right of the tile (x 72 for a 20..60 tile), vertically centred, caret left | anchor at tile right + 12 − 5 | ✅ (fixed) |
+| rail tooltip | style | `--background-surface-high`, 8px radius, inset 1px `--border-subtle` + `--shadow-high`, padding 8 12, body-md/semibold 16/20 | tokens | ✅ (fixed: was old palette) |
+| rail tooltip | appear | fade + slide in (JS spring) | 100ms fade + 6px slide | ❌ timing not measured (CDP lock held by another agent) |
+
+## Channel list
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| channel row `wrapper_TNyK-N .link` | hover | `--interactive-background-hover` bg, name `--interactive-text-hover` | sidebar.rs channel row | ✅ |
+| channel row | active (pressed) | `--background-modifier-active` → `--interactive-background-active` | `.active()` | ✅ (added) |
+| channel row | selected | `--interactive-background-selected` | ✅ | ✅ |
+| channel row muted `modeMuted_` | hover | name `--interactive-text-hover` | opacity 1 + hover colour | ✅ |
+| thread row | hover / active | same as channel row | `.active()` | ✅ (added) |
+| DM home nav rows (Friends, Nitro, Shop, Quests) | hover / active | same link rules | `.active()` | ✅ (added) |
+| row action icons `actionIcon_Wx6SnQ` (invite, settings) | reveal on hover | `iconVisibility:hover .iconItem` display block, `.channelInfo` hidden | | ❌ |
+| row action icons | hover / active | `--icon-muted` → `--interactive-text-hover`; active `--interactive-text-active` + translateY(.5px) | | ❌ |
+| category `wrapper_yOdhm_` | hover | name + chevron `--interactive-text-hover` | sidebar.rs:408 | ✅ |
+
+## Member list
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| member row `clickable_J1Adu_ .childContainer` | hover | `--interactive-background-hover`, avatar opacity 1 | members.rs | ✅ (now token) |
+| member row | active | `--interactive-background-active`, text `--interactive-text-active` | `.active()` | ✅ (added bg) |
+| offline member | hover | opacity back to 1 | ✅ | ✅ |
+
+## Messages
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| avatar `avatar_2i8Bfm.clickable` | hover | drop-shadow `--elevation-medium` (full motion) | | ❌ |
+| avatar | active | translateY(1px) (decoration too) | | ❌ |
+| username `.clickable` | hover | underline | | ❌ to verify |
+| reaction `reaction_MmKct8` | hover / active | `--reaction-background-hover/-active`, border + count colours | | ❌ to verify |
+| add-reaction button `reactionBtn_` | reveal | opacity 1 while `.reactions` hovered | | ❌ to verify |
+| reply preview `repliedTextPreview_` | hover | `--text-strong` | | ❌ to verify |
+| reply spine | hover | border `--interactive-text-default` | | ❌ |
+| hover toolbar | reveal / button hover | (not re-measured: lock busy) | chat/message_ext.rs | ❌ to measure |
+
+## Header, user panel, composer
+
+| component | state | client | ours | status |
+|---|---|---|---|---|
+| header icon `clickable_ybUK7Z .icon` | hover | glyph `--icon-subtle` | | ❌ to verify |
+| header tooltip | position | below the button, caret on top, body-sm/medium 14/18 | gpui tooltip under the cursor | ❌ position follows the cursor |
+| user panel button `button_Y-8oZW` | hover | `--control-secondary-background-hover`, glyph `--interactive-text-hover`, .2s ease | bg only | ❌ glyph colour |
+| user panel red (muted/deafened) | rest / hover | `--opacity-red-12` → `--opacity-red-24` | voice_panel.rs | ✅ |
+| user panel | active | none in CSS | | ➖ |
+| audio button pair `audioButtonParent_` | hover | pair `--background-mod-muted`, hovered half `--control-secondary-background-hover` | voice_panel.rs | ✅ |
+| composer buttons `button_hfM7yP` (attach, gift, GIF, sticker, emoji) | hover | glyph `--interactive-text-hover`, 8px tile `--interactive-background-selected`, .2s | states.rs `composer_button` | ✅ (added) |
+| composer buttons | active | glyph `--interactive-text-active` | `group_active` | ✅ (added) |
+| app launcher button | hover | same rules | | ❌ |
+| shared tooltip (`tooltip.rs`) | style | `tooltip_ZDdyhE` tokens, 14/18 medium | ✅ | ✅ |
+
+## Coverage
+
+40 rows: 23 ✅, 1 ➖, 16 ❌ (several of them "to verify" with a live CDP hover session).
+Transitions are instant in our app apart from the pill and the rail tooltip; the client uses
+.1s–.2s ease-out colour fades.

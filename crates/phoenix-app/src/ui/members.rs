@@ -636,7 +636,10 @@ pub fn member_row_in(
         .gap(z(12.))
         .cursor_pointer()
         .when(offline, |d| d.opacity(0.3))
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)).opacity(1.))
+        // clickable_J1Adu_:hover .childContainer_J1Adu_ / .avatar opacity 1
+        .hover(|s| s.bg(c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_HOVER))).opacity(1.))
+        // clickable_J1Adu_:active .childContainer_J1Adu_
+        .active(|s| s.bg(c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_ACTIVE))))
         // `nameplated_J1Adu_`: nameplate layer behind the row content.
         .relative()
         .when_some(

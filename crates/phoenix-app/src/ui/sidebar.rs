@@ -494,6 +494,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                     // (#657 `questHomeHeroBackgroundImage_`) is opacity 0 at rest.
                     let hover_fg = if id == "quests" { idx::TEXT_STRONG } else { idx::INTERACTIVE_TEXT_HOVER };
                     d.hover(move |s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(hover_fg)))
+                        .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE))) // wrapper_TNyK-N:active
                 })
                 .on_click(move |_, _, cx| {
                     e.update(cx, |a, cx| match view {
@@ -859,6 +860,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     d.hover(|s| {
                         s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)).opacity(1.)
                     })
+                    // wrapper_TNyK-N:active .link_TNyK-N background
+                    .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_channel(id, cx)))
                 .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
@@ -999,6 +1002,7 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                 .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
                 .when(!selected, |d| {
                     d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                        .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE))) // wrapper_TNyK-N:active
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_thread(id, cx)))
                 .child(div().flex_1().min_w_0().text_ellipsis().child(th.name.clone()))

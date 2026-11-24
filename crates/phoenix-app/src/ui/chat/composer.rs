@@ -310,9 +310,7 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                 // #1438 inner_ padding-inline-start 15px; #1439 attachWrapper_ padding 12px 14px;
                                 // #1440 attachButton_ 32px, radius 8px, margin 0 10px 0 -16px, PlusLargeIcon 20px.
                                 div().pl(z(15.)).child(div().px(z(14.)).child(
-                                    icon_button("attach", Icon::Plus, ic, 20.)
-                                        .size(z(32.))
-                                        .rounded(z(8.))
+                                    crate::ui::states::composer_button("attach", Icon::Plus)
                                         .ml(z(-16.))
                                         .mr(z(10.))
                                         .on_click(cx.listener(|a, _, _, cx| a.prompt_attach(cx))),
@@ -353,10 +351,10 @@ pub fn render(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixAp
                                     .flex()
                                     .gap(z(8.))
                                     .items_center()
-                                    .child(icon_button("gift", Icon::Gift, ic, 20.).size(z(32.)).rounded(z(8.)))
-                                    .child(icon_button("gif", Icon::Gif, ic, 20.).size(z(32.)).rounded(z(8.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(icon_button("sticker", Icon::Sticker, ic, 20.).size(z(32.)).rounded(z(8.)).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(icon_button("emoji", Icon::Emoji, ic, 20.).size(z(32.)).rounded(z(8.)).on_click(cx.listener(
+                                    .child(crate::ui::states::composer_button("gift", Icon::Gift))
+                                    .child(crate::ui::states::composer_button("gif", Icon::Gif).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(crate::ui::states::composer_button("sticker", Icon::Sticker).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    .child(crate::ui::states::composer_button("emoji", Icon::Emoji).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
                                     )))
                                     .child(

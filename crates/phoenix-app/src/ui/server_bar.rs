@@ -288,9 +288,9 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
         .px(z(12.))
         .py(z(8.))
         .rounded(z(8.))
-        .bg(c(Palette::BG_FLOATING))
+        .bg(c(crate::theme::tok(crate::theme::generated::idx::BACKGROUND_SURFACE_HIGH))) // tooltip_ZDdyhE
         .border_1()
-        .border_color(c(Palette::PANEL_BORDER))
+        .border_color(c(crate::theme::tok(crate::theme::generated::idx::BORDER_SUBTLE))) // inset 1px --border-subtle
         .shadow_lg()
         .text_size(z(16.))
         .line_height(z(20.))
@@ -301,10 +301,14 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
     let mut pointer = div().flex().flex_col().justify_center().items_end().w(z(5.));
     for i in 0..9 {
         let w = 5. - (4. - i as f32).abs();
-        pointer = pointer.child(div().w(z(w)).h(z(1.)).bg(c(Palette::BG_FLOATING)));
+        pointer = pointer.child(div().w(z(w)).h(z(1.)).bg(c(crate::theme::tok(crate::theme::generated::idx::BACKGROUND_SURFACE_HIGH))));
     }
     let tip = deferred(
-        anchored().position_mode(AnchoredPositionMode::Local).position(point(z(m::SERVER_BAR_W), z(0.))).child(
+        // vanilla-tooltip-guild #2089: the card starts 12px right of the 40px tile (x 72 for
+        // a tile at 20..60), with the 5px caret in that gap.
+        anchored()
+            .position_mode(AnchoredPositionMode::Local)
+            .position(point(z((m::SERVER_BAR_W + item_h) / 2. + 12. - 5.), z(0.))).child(
             div()
                 .h(z(item_h))
                 .flex()
