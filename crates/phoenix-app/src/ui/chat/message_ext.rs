@@ -496,9 +496,11 @@ pub fn rich_with_emoji_scaled(
             let r = start..start + piece.len();
             if i > 0 {
                 row = row.child(div().w_full().h_0());
-                if piece.is_empty() && r.end < range.end {
-                    row = row.child(div().w_full().h(z(22. * k)));
-                }
+            }
+            // An empty line (between two newlines, or a newline opening the block) keeps
+            // its line height, as in the single StyledText it replaces.
+            if piece.is_empty() && r.end < range.end && (i > 0 || range.start == 0) {
+                row = row.child(div().w_full().h(z(22. * k)));
             }
             row = push_text(row, r.clone(), seg);
             start = r.end + 1;
