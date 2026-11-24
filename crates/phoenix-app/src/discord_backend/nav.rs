@@ -209,7 +209,14 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
         })
     };
     let group = c.kind == ChannelType::GroupDm;
+    // Read-only permission check for the composer (the cache's overwrite computation).
+    let perms = cache.permissions_in(c.id);
+    let send_bit = if c.kind.is_thread() { api::Permissions::SEND_MESSAGES_IN_THREADS } else { api::Permissions::SEND_MESSAGES };
     ChannelExtra {
+        slowmode: c.rate_limit_per_user.unwrap_or(0),
+        bypass_slowmode: perms.intersects(api::Permissions::MANAGE_MESSAGES | api::Permissions::MANAGE_CHANNELS),
+        // Empty = roles not cached yet: don't lock the composer on missing data.
+        send_blocked: c.guild_id.is_some() && !perms.is_empty() && !perms.contains(send_bit),
         nsfw: c.nsfw,
         locked: everyone_denied(c),
         group_icon: c

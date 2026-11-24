@@ -50,6 +50,12 @@ pub struct ChannelExtra {
     /// Group DM only: recipient ids (without us) and the group owner.
     pub members: Vec<Id>,
     pub owner: Option<Id>,
+    /// `rate_limit_per_user` seconds (0 = off).
+    pub slowmode: u32,
+    /// MANAGE_MESSAGES / MANAGE_CHANNELS: slowmode doesn't apply.
+    pub bypass_slowmode: bool,
+    /// Guild channel where we lack SEND_MESSAGES (SEND_MESSAGES_IN_THREADS in threads).
+    pub send_blocked: bool,
 }
 
 #[derive(Clone, Debug)]
