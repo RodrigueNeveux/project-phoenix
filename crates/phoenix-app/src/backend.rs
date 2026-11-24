@@ -207,6 +207,10 @@ pub trait Backend: Send + Sync + 'static {
     fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    /// Favorite GIFs and emoji/sticker frecency synced with the account.
+    fn expression_frecency(&self) -> BoxFuture<crate::ui::pickers::types::Frecency> {
+        Box::pin(async { Ok(Default::default()) })
+    }
     fn gif_search(&self, _query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
         Box::pin(async { Ok(Vec::new()) })
     }

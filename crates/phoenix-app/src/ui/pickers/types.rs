@@ -67,3 +67,14 @@ pub struct GifHome {
     pub trending_preview: Option<SharedString>,
     pub categories: Vec<GifCategoryTile>,
 }
+
+/// Account-synced expression usage (`settings-proto/2`, read-only).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Frecency {
+    /// Emoji keys, most used first: custom emoji id, or unicode name / glyph.
+    pub emojis: Vec<SharedString>,
+    /// Sticker ids, most used first.
+    pub stickers: Vec<Id>,
+    /// Favorite GIFs, newest first.
+    pub favorite_gifs: Vec<GifItem>,
+}

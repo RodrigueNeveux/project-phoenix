@@ -95,6 +95,9 @@ pub struct Pickers {
     pub prefs: Prefs,
     pub gifs: GifState,
     pub stickers: StickerState,
+    /// Account frecency (settings-proto/2): "Frequently used" + favorite GIFs.
+    pub frecency: Option<types::Frecency>,
+    pub frecency_loading: bool,
 }
 
 impl gpui::Global for Pickers {}
@@ -109,6 +112,8 @@ pub fn install(composer: &Entity<gpui_component::input::TextareaState>, window: 
         prefs: Prefs::load(),
         gifs: GifState::default(),
         stickers: StickerState::default(),
+        frecency: None,
+        frecency_loading: false,
     });
     let keys = cx.intercept_keystrokes(move |ev, window, cx| {
         let Some(app) = weak.upgrade() else { return };
@@ -263,7 +268,31 @@ fn on_query(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     cx.notify();
 }
 
+/// Fetch the account frecency once; rebuild the open emoji grid when it lands.
+fn load_frecency(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let p = cx.global_mut::<Pickers>();
+    if p.frecency.is_some() || p.frecency_loading {
+        return;
+    }
+    p.frecency_loading = true;
+    let fut = app.backend.expression_frecency();
+    cx.spawn(async move |this, cx| {
+        let res = fut.await;
+        let _ = this.update(cx, |app, cx| {
+            let p = cx.global_mut::<Pickers>();
+            p.frecency_loading = false;
+            p.frecency = Some(res.unwrap_or_default());
+            if matches!(open_tab(cx), Some((Tab::Emoji, _))) {
+                on_query(app, cx);
+            }
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
 fn ensure_tab_data(app: &mut PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) {
+    load_frecency(app, cx);
     match tab {
         Tab::Gif => gif::load_home(app, cx),
         Tab::Sticker => sticker::load_packs(app, cx),

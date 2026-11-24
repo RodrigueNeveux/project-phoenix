@@ -90,6 +90,18 @@ pub fn run(app: &mut PhoenixApp, q: String, cx: &mut Context<PhoenixApp>) {
     cx.notify();
 }
 
+/// Favorites grid (no request: the list comes from the account frecency).
+fn show_favorites(cx: &mut Context<PhoenixApp>) {
+    let p = cx.global_mut::<Pickers>();
+    let favs = p.frecency.as_ref().map(|f| f.favorite_gifs.clone()).unwrap_or_default();
+    p.gifs.seq += 1;
+    p.gifs.loading = false;
+    p.gifs.error = None;
+    p.gifs.shown = Some(crate::t!("picker.favorites").to_string());
+    p.gifs.results = favs;
+    cx.notify();
+}
+
 fn send(app: &mut PhoenixApp, gif: &GifItem, window: &mut gpui::Window, cx: &mut Context<PhoenixApp>) {
     let Some(ch) = app.selected_channel else { return };
     let fut = app.backend.send_message(ch, gif.url.to_string(), None);
@@ -138,11 +150,15 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let col_w = (PICKER_W - 2. - 2. * PAD - COL_GAP) / 2.;
     let content: AnyElement = if g.shown.is_none() && !typed {
         // Home: trending tile + categories.
+        let favs = p.frecency.as_ref().map(|f| f.favorite_gifs.clone()).unwrap_or_default();
         let Some(home) = g.home.clone() else {
             return empty_state(if g.home_loading { crate::t!("picker.loading_gifs") } else { crate::t!("picker.gifs_unavailable") });
         };
         let mut tiles: Vec<AnyElement> = vec![
-            tile(("gif-favorites", 0), crate::t!("picker.favorites"), None, col_w, true, None).into_any_element(),
+            // Favorites tile shows the newest favorite behind the blurple fade (dump: img gif_H8nOze).
+            tile(("gif-favorites", 0), crate::t!("picker.favorites"), favs.first().map(|g| g.preview.clone()), col_w, true, None)
+                .on_click(|_, w, cx| with_app(cx, w, |_, _, cx| show_favorites(cx)))
+                .into_any_element(),
             tile(("gif-trending", 0), crate::t!("picker.trending"), home.trending_preview.clone(), col_w, false, Some("picker/trending"))
                 .on_click(|_, w, cx| with_app(cx, w, |a, _, cx| run(a, String::new(), cx)))
                 .into_any_element(),

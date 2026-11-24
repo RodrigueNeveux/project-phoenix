@@ -239,6 +239,9 @@ impl Backend for ReadOnly {
     fn gif_trending_gifs(&self) -> BoxFuture<Vec<phoenix_app::ui::pickers::types::GifItem>> {
         self.0.gif_trending_gifs()
     }
+    fn expression_frecency(&self) -> BoxFuture<phoenix_app::ui::pickers::types::Frecency> {
+        self.0.expression_frecency()
+    }
     fn gif_search(&self, q: String) -> BoxFuture<Vec<phoenix_app::ui::pickers::types::GifItem>> {
         self.0.gif_search(q)
     }

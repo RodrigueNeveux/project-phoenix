@@ -753,6 +753,9 @@ impl Backend for DiscordBackend {
     fn gif_trending_gifs(&self) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
         self.with_session(|_, s| expressions::gif_trending_gifs(s))
     }
+    fn expression_frecency(&self) -> BoxFuture<crate::ui::pickers::types::Frecency> {
+        self.with_session(|_, s| expressions::frecency(s))
+    }
     fn gif_search(&self, query: String) -> BoxFuture<Vec<crate::ui::pickers::types::GifItem>> {
         self.with_session(move |_, s| expressions::gif_search(s, query))
     }

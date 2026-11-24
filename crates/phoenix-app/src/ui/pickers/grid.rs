@@ -19,7 +19,8 @@ pub const COLS: usize = 9;
 /// (--custom-emoji-picker-constants-emoji-size-medium).
 const CELL: f32 = 48.;
 const EMOJI_PX: f32 = 40.;
-const FREQUENT: usize = 18;
+// Frequently used: the dump's section holds 42 emoji (4 rows of 9 + 6).
+const FREQUENT: usize = 42;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum PickItem {
@@ -159,7 +160,32 @@ pub fn build(app: &PhoenixApp, query: &str, cx: &App) -> Grid {
     let q = query.trim().trim_matches(':').to_lowercase();
     if q.is_empty() {
         let now = chrono::Utc::now().timestamp();
-        let freq = cx.try_global::<Pickers>().map(|p| p.prefs.frequent(FREQUENT, now)).unwrap_or_default();
+        // Account frecency first (what the official client shows), then local picks.
+        let mut freq: Vec<PickItem> = Vec::new();
+        if let Some(f) = cx.try_global::<Pickers>().and_then(|p| p.frecency.as_ref()) {
+            for key in &f.emojis {
+                let item = match key.parse::<u64>() {
+                    Ok(id) => customs.iter().flat_map(|(_, es)| es).find(|e| e.id.0 == id).cloned().map(PickItem::Custom),
+                    Err(_) => emoji::by_shortcode(key).or_else(|| emoji::index_of(key)).map(PickItem::Unicode),
+                };
+                if let Some(it) = item
+                    && !freq.contains(&it)
+                {
+                    freq.push(it);
+                }
+                if freq.len() >= FREQUENT {
+                    break;
+                }
+            }
+        }
+        for it in cx.try_global::<Pickers>().map(|p| p.prefs.frequent(FREQUENT, now)).unwrap_or_default() {
+            if freq.len() >= FREQUENT {
+                break;
+            }
+            if !freq.contains(&it) {
+                freq.push(it);
+            }
+        }
         grid.push_section(crate::t!("picker.frequent"), SectionIcon::Frequent, freq, true);
         for (g, es) in customs {
             let items = es.into_iter().map(PickItem::Custom).collect();
@@ -337,7 +363,8 @@ pub(crate) fn rail_shell(list: impl IntoElement, shortcut: impl IntoElement) -> 
         )
 }
 
-/// Selection pill on the rail's left edge (wrapper__o8_Xq small, item 8px; active: 20px tall).
+/// Selection pill on the rail's left edge (wrapper__o8_Xq small: item 8px wide,
+/// `.small__o8_Xq .item__o8_Xq.selected__o8_Xq` height 24px, radius 0 round round 0).
 pub(crate) fn rail_pill(active: bool) -> impl IntoElement {
     div()
         .absolute()
@@ -347,7 +374,7 @@ pub(crate) fn rail_pill(active: bool) -> impl IntoElement {
         .w(px(8.))
         .flex()
         .items_center()
-        .when(active, |d| d.child(div().w(px(4.)).h(px(20.)).rounded_r(px(4.)).bg(tk(idx::INTERACTIVE_TEXT_ACTIVE))))
+        .when(active, |d| d.child(div().w(px(4.)).h(px(24.)).rounded_r(px(12.)).bg(tk(idx::INTERACTIVE_TEXT_ACTIVE))))
 }
 
 /// Default-category rail item (categoryItemDefaultCategory_ufks4w): 24px icon + 4px
@@ -368,7 +395,8 @@ pub(crate) fn rail_item(id: (&'static str, usize), guild: bool, active: bool, mb
         .cursor_pointer()
         .when(!guild && active, |d| d.bg(tk(idx::BACKGROUND_BASE_LOW)))
         .when(!guild && !active, |d| d.hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER))))
-        .when(guild, |d| d.child(rail_pill(active)))
+        // Default categories get the pill too (recent: categoryPill_ufks4w in the dump).
+        .child(rail_pill(active))
 }
 
 /// Guild icon in the rail (32px squircle; fallback guildIcon_WScet3 on --background-base-low).
@@ -473,6 +501,23 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
 
     let mut list_el = rail();
     let mut first_unicode = None;
+    if !searching && !op.grid.premium {
+        // Non-Nitro: "Voir les émojis Nitro" upsell row on top (row_3MXiRB: border-bottom
+        // --custom-emoji-picker-constants-category-separator-size --border-subtle,
+        // padding-bottom/margin-bottom --custom-emoji-picker-constants-guild-category-icon-margin-verical = 8px).
+        list_el = list_el.child(
+            div().flex_none().flex().justify_center().pb(px(8.)).mb(px(8.)).border_b_1().border_color(tk(idx::BORDER_SUBTLE)).child(
+                rail_item(("emoji-nitro", 0), false, false, 0.)
+                    .child(
+                        gpui::svg()
+                            .path(crate::icons::path("picker/nitro"))
+                            .size(px(24.))
+                            .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)),
+                    )
+                    .tooltip(crate::ui::tooltip::tip(crate::t!("picker.see_nitro_emoji"))),
+            ),
+        );
+    }
     if !searching {
         let n = op.grid.sections.len();
         for (si, s) in op.grid.sections.iter().enumerate() {

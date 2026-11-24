@@ -18,6 +18,7 @@ pub mod threads;
 pub mod thread_create;
 pub mod content_inventory;
 pub mod collectibles;
+pub mod frecency;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};

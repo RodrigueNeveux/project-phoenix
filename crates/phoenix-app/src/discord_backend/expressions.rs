@@ -100,6 +100,34 @@ pub(super) async fn gif_trending(s: Arc<Session>) -> Result<GifHome, BackendErro
     })
 }
 
+/// Tenor media URLs carry the format in the last 5 chars of the id segment
+/// (`AAAPo` = mp4, `AAAAM` = tinygif): favorites are stored as mp4, the UI
+/// only decodes images.
+fn tenor_still(src: &str) -> String {
+    if let Some(rest) = src.strip_prefix("https://media.tenor.com/")
+        && let Some((seg, file)) = rest.split_once('/')
+        && seg.len() > 5
+        && file.ends_with(".mp4")
+    {
+        let stem = file.trim_end_matches(".mp4");
+        return format!("https://media.tenor.com/{}AAAAM/{stem}.gif", &seg[..seg.len() - 5]);
+    }
+    src.to_owned()
+}
+
+pub(super) async fn frecency(s: Arc<Session>) -> Result<crate::ui::pickers::types::Frecency, BackendError> {
+    let f = s.rest.get_frecency_settings().await.map_err(api_err)?;
+    Ok(crate::ui::pickers::types::Frecency {
+        emojis: f.emojis_ranked().into_iter().map(Into::into).collect(),
+        stickers: f.stickers_ranked().into_iter().map(Id).collect(),
+        favorite_gifs: f
+            .favorite_gifs()
+            .into_iter()
+            .map(|(url, g)| GifItem { url: url.into(), preview: tenor_still(&g.src).into(), width: g.width, height: g.height })
+            .collect(),
+    })
+}
+
 pub(super) async fn gif_trending_gifs(s: Arc<Session>) -> Result<Vec<GifItem>, BackendError> {
     let locale = s.rest.properties().system_locale.clone();
     Ok(s.rest.gif_trending_gifs(&locale, PREVIEW).await.map_err(api_err)?.iter().map(gif).collect())

@@ -120,6 +120,22 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
             sections.push((pack.name.clone(), None, st, false));
         }
     }
+    // "Frequently used" on top (categoryItemRecentEmoji, clock icon), from the account frecency.
+    let mut has_frequent = false;
+    if q.is_empty()
+        && let Some(f) = p.frecency.as_ref()
+    {
+        let freq: Vec<StickerData> = f
+            .stickers
+            .iter()
+            .filter_map(|id| sections.iter().flat_map(|s| s.2.iter()).find(|d| d.id == *id).cloned())
+            .take(16)
+            .collect();
+        if !freq.is_empty() {
+            sections.insert(0, (crate::t!("picker.frequent"), None, freq, false));
+            has_frequent = true;
+        }
+    }
     if sections.is_empty() {
         return empty_state(if p.stickers.loading { crate::t!("picker.loading_stickers") } else { crate::t!("picker.no_stickers") });
     }
@@ -130,10 +146,16 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     let mut body = div().id("sticker-scroll").track_scroll(&scroll).size_full().overflow_y_scroll().pl(px(8.));
     let mut rail = grid::rail();
     for (si, (title, gicon, st, locked)) in sections.iter().enumerate() {
-        let lead = gicon.as_ref().and_then(|(i, _)| match i {
-            ImageRef::Url(u) => Some(img(u.clone()).size(px(16.)).rounded(px(4.)).flex_none().into_any_element()),
-            _ => None,
-        });
+        let is_frequent = has_frequent && si == 0;
+        let clock = |size: f32| gpui::svg().path(crate::icons::path("picker/clock")).size(px(size)).flex_none();
+        let lead = if is_frequent {
+            Some(clock(16.).text_color(tk(idx::TEXT_DEFAULT)).into_any_element())
+        } else {
+            gicon.as_ref().and_then(|(i, _)| match i {
+                ImageRef::Url(u) => Some(img(u.clone()).size(px(16.)).rounded(px(4.)).flex_none().into_any_element()),
+                _ => None,
+            })
+        };
         // packHeader_dCw_12 bleedHeader: margin-left -8px (bleeds over the list padding).
         body = body.child(section_header(lead, title.clone()).ml(px(-8.)));
         let mut sec = div().flex().flex_col().pb(px(12.));
@@ -147,6 +169,9 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
         }
         body = body.child(sec);
         let content: AnyElement = match gicon {
+            _ if is_frequent => clock(24.)
+                .text_color(tk(if si == 0 { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT }))
+                .into_any_element(),
             Some((i, a)) => grid::rail_guild_icon(i, a),
             None => crate::ui::icon(crate::assets::Icon::Sticker, 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)).into_any_element(),
         };
