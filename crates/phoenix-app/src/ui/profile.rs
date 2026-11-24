@@ -906,6 +906,8 @@ pub const TAB_BOARD: u8 = 3;
 pub const TAB_WISHLIST: u8 = 4;
 
 thread_local! {
+    /// Full-profile right column scroller (drives its thin scrollbar).
+    static PANEL_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
     /// Selected full-profile tab: 0 Activity, 1 Mutual Friends, 2 Mutual Servers, 3 Board, 4 Wishlist.
     static MODAL_TAB: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
@@ -913,6 +915,8 @@ thread_local! {
 /// Select a full profile tab (also used by the offscreen screenshots).
 pub fn set_modal_tab(t: u8) {
     MODAL_TAB.with(|c| c.set(t));
+    // each tab panel (and each newly opened profile) starts at the top
+    PANEL_SCROLL.with(|h| h.set_offset(gpui::Point::default()));
 }
 
 /// Row of the Mutual Friends / Mutual Servers panels (`row_wt-YD5`: padding
@@ -1055,7 +1059,15 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .text_size(z(14.))
                 .line_height(z(18.))
                 .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .child(format_date(p.created))
+                // memberSince_ gap 4px: 16px ClydeIcon (discordIcon_EhAvF-, --text-subtle) + date
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(z(4.))
+                        .child(gpui::svg().path(crate::icons::path("discord-logo")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_SUBTLE))))
+                        .child(format_date(p.created)),
+                )
                 .when_some(p.joined, |d, j| {
                     let gicon = guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| {
                         crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16.)
@@ -1278,17 +1290,48 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .child(tab(2, crate::t!("profile.mutual_servers", n = mutual_s))),
         )
         // tabBarPanel_y4ZEM5: padding-inline-start gutter (scroller margin -12px)
-        .child(
+        // tabPanelScroller_y4ZEM5 is a `thin_ fade_ scrollbarGutterStable_` scroller: an
+        // 8px gutter always reserved on the right, the thumb (--scrollbar-thin-thumb,
+        // 2px transparent border, radius 4, min 40) shown only while hovered.
+        .child({
+            let h = PANEL_SCROLL.with(|h| h.clone());
+            let vh = f32::from(h.bounds().size.height);
+            let max = f32::from(h.max_offset().y);
+            let thumb = (vh > 0. && max > 0.).then(|| {
+                let off = (-f32::from(h.offset().y)).clamp(0., max);
+                let len = (vh * vh / (vh + max)).max(f32::from(z(40.))).min(vh);
+                let top = (vh - len) * off / max;
+                div()
+                    .absolute()
+                    .top(gpui::px(top) + z(2.))
+                    .h(gpui::px(len) - z(4.))
+                    .right(z(2.))
+                    .w(z(4.))
+                    .rounded(z(4.))
+                    .group_hover("profile-modal-panel", |s| s.bg(c(tok(idx::SCROLLBAR_THIN_THUMB))))
+            });
             div()
-                .id("profile-modal-panel")
+                .group("profile-modal-panel")
+                .relative()
                 .flex_1()
                 .min_h_0()
-                // Board / Activity / Wishlist cards line up with the tab bar (live: both at the
-                // gutter); the mutual lists bleed 12px left for their row hover.
-                .pl(z(if matches!(sel, 1 | 2) { GUTTER - 12. } else { GUTTER }))
-                .overflow_y_scroll()
-                .child(panel),
-        );
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .id("profile-modal-panel")
+                        .flex_1()
+                        .min_h_0()
+                        // Board / Activity / Wishlist cards line up with the tab bar (live: both at
+                        // the gutter); the mutual lists bleed 12px left for their row hover.
+                        .pl(z(if matches!(sel, 1 | 2) { GUTTER - 12. } else { GUTTER }))
+                        .pr(z(8.))
+                        .overflow_y_scroll()
+                        .track_scroll(&h)
+                        .child(panel),
+                )
+                .children(thumb)
+        });
 
     let e3 = e.clone();
     // modalHeaderButtons_ZhNJfE: top --space-8 (header-button-top), end --space-8
