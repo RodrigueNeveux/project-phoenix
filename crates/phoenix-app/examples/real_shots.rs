@@ -151,6 +151,10 @@ impl Backend for ReadOnly {
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
+    /// Settings > Billing (read-only GETs).
+    fn billing(&self) -> BoxFuture<Option<phoenix_app::ui::settings::billing::Billing>> {
+        self.0.billing()
+    }
     /// Settings > Account devices count (read-only GET).
     fn session_count(&self) -> BoxFuture<Option<usize>> {
         self.0.session_count()

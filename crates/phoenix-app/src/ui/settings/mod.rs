@@ -7,6 +7,7 @@
 
 pub mod account;
 mod art;
+pub mod billing;
 mod boost;
 mod gift;
 mod pages;
@@ -314,6 +315,7 @@ pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if app.screen == crate::app::Screen::Main {
         app.settings = Some(SettingsState::default());
         account::fetch_sessions(app, cx);
+        billing::fetch(app, cx);
         cx.notify();
     }
 }

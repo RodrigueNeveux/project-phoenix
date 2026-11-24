@@ -894,14 +894,65 @@ static GIFTS: &[B] = &[
 /// Phoenix doesn't call, so those rows stay empty.
 fn billing_sources(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     let line = || div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))); // divider_ZaYWLb
+    let data = super::billing::get().unwrap_or_default();
+    let has_sources = !data.sources.is_empty();
+    // #3469 paymentSourceRow_: 32x22 card glyph, brand 16/20 + "Par défaut"
+    // pill (body-xs/semibold, #4f505a, r3, padding 0 4), sub-line 14/18
+    // --text-subtle, sm secondary "Modifier".
+    let source_rows = data.sources.iter().enumerate().map(|(i, src)| {
+        div()
+            .mt(z(if i == 0 { 26. } else { 16. }))
+            .h(z(42.))
+            .flex()
+            .items_center()
+            .gap(z(10.))
+            .child(
+                div().w(z(32.)).h(z(22.)).flex_none().rounded(z(3.)).bg(c(tok(idx::BACKGROUND_MOD_STRONG))).flex().items_center().justify_center()
+                    .text_size(z(8.)).font_weight(FontWeight::BOLD).text_color(c(tok(idx::TEXT_STRONG))).child(src.brand.clone()),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(z(4.))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(z(8.))
+                            .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(src.brand.clone()))
+                            .when(src.default, |d| {
+                                d.child(
+                                    div().px(z(4.)).rounded(z(3.)).bg(gpui::rgb(0x4f505a)).text_size(z(12.)).line_height(z(14.)).font_weight(FontWeight::SEMIBOLD)
+                                        .text_color(gpui::white()).child(tr("sp.bl.default")),
+                                )
+                            }),
+                    )
+                    .child(desc_text(src.sub.clone().into())),
+            )
+            .child(controls::button_sm(eid(format!("billing-edit-{i}")), tr("common.edit"), BtnKind::Secondary))
+            .into_any_element()
+    });
+    let country = data.country.as_deref().map(|cc| {
+        let key = format!("country.{cc}");
+        let name = tr(&key);
+        let name = if *name == *key { cc.to_owned().into() } else { name };
+        // #3462 body-sm --text-subtle, 4px under the 32px heading
+        div().mt(z(-20.)).child(desc_text(crate::t!("sp.bl.country", name = name)))
+    });
     div()
         .mt(z(-10.)) // title pb 24 + column gap 10 → line 24px under the heading
         .flex()
         .flex_col()
+        .children(country)
+        .children(source_rows)
+        .when(has_sources, |d| d.child(line().mt(z(16.))))
         .child(
             // #3482 paymentSourceRow_ (gift card balance): 32px icon, 14/18 500 label at +46, sm secondary "Utiliser"
             div()
-                .mt(z(50.)) // #3482 (no source rows): 26 + the 24px the empty spacer #3465 leaves
+                .mt(z(if has_sources { 32. } else { 50. })) // #3482 (no source rows): 26 + the 24px the empty spacer #3465 leaves
                 .h(z(32.))
                 .flex()
                 .items_center()
@@ -927,6 +978,7 @@ fn billing_sources(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
 /// bottom border; #3513-#3515 12/12 600 Date 122px at +21, Description at +151,
 /// Montant right).
 fn billing_history(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let pays = super::billing::get().map(|b| b.payments).unwrap_or_default();
     let col = |t: &str| div().text_size(z(12.)).line_height(z(12.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr(t));
     div()
         .mt(z(-10.)) // #3505 line 24px under the heading
@@ -948,9 +1000,33 @@ fn billing_history(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .border_color(c(tok(idx::BORDER_SUBTLE)))
                 .child(div().ml(z(21.)).w(z(130.)).flex_none().child(col("sp.bl.date")))
                 .child(div().flex_1().child(col("sp.bl.desc")))
-                .child(div().mr(z(64.)).child(col("sp.bl.amount")))),
+                .child(div().mr(z(64.)).child(col("sp.bl.amount"))))
+                // #3518 payment_ rows: 57px, 1px bottom border, padding-inline 16,
+                // date 14/18 (131px), 20px shop glyph + 16px description,
+                // orb/fiat amount, 24px expand chevron.
+                .children(pays.iter().enumerate().map(|(i, p)| {
+                    div()
+                        .h(z(57.))
+                        .px(z(16.))
+                        .flex()
+                        .items_center()
+                        .gap(z(16.))
+                        .when(i + 1 < pays.len(), |d| d.border_b_1().border_color(c(tok(idx::BORDER_SUBTLE))))
+                        .child(div().w(z(131.)).flex_none().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(p.date.clone()))
+                        .child(
+                            div().flex_1().min_w_0().flex().items_center().gap(z(10.))
+                                .child(gpui::svg().path(crate::icons::path("shop")).size(z(20.)).flex_none().text_color(c(tok(idx::TEXT_STRONG))))
+                                .child(div().text_size(z(16.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_STRONG))).truncate().child(p.description.clone())),
+                        )
+                        .child(
+                            div().flex().items_center().gap(z(4.)).text_size(z(16.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_STRONG)))
+                                .when(p.orbs, |d| d.child(gpui::svg().path(crate::icons::path("orbs")).size(z(16.)).text_color(c(tok(idx::TEXT_STRONG)))))
+                                .child(p.amount.clone()),
+                        )
+                        .child(gpui::svg().path("icons/chevron.svg").size(z(24.)).text_color(c(tok(idx::TEXT_STRONG))))
+                })),
         )
-        .child(div().pt(z(16.)).child(desc_text(tr("sp.billing.web"))))
+        .when(pays.is_empty(), |d| d.child(div().pt(z(16.)).child(desc_text(tr("sp.billing.web")))))
         .into_any_element()
 }
 

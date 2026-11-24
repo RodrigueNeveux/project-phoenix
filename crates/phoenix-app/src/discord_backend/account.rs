@@ -173,3 +173,22 @@ impl DiscordBackend {
         })
     }
 }
+
+impl DiscordBackend {
+    /// Settings > Billing: three read-only GETs.
+    pub(super) fn billing_impl(&self) -> BoxFuture<Option<crate::ui::settings::billing::Billing>> {
+        use crate::ui::settings::billing as b;
+        self.with_session(move |_, s| async move {
+            let get = |p: &'static str| {
+                let rest = s.rest.clone();
+                async move { rest.request_json(reqwest::Method::GET, p, None).await.ok() }
+            };
+            let sources = get("/users/@me/billing/payment-sources").await.map(|v| b::parse_sources(&v)).unwrap_or_default();
+            let payments = get("/users/@me/billing/payments?limit=10").await.map(|v| b::parse_payments(&v)).unwrap_or_default();
+            let country = get("/users/@me/billing/country-code")
+                .await
+                .and_then(|v| v.get("country_code").and_then(serde_json::Value::as_str).map(str::to_owned));
+            Ok(Some(b::Billing { country, sources, payments }))
+        })
+    }
+}

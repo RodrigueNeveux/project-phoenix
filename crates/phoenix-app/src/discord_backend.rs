@@ -855,6 +855,9 @@ impl Backend for DiscordBackend {
     fn collectible_product(&self, sku: u64) -> BoxFuture<Option<crate::ui::settings::collectibles::Collectible>> {
         self.collectible_product_impl(sku)
     }
+    fn billing(&self) -> BoxFuture<Option<crate::ui::settings::billing::Billing>> {
+        self.billing_impl()
+    }
     fn session_count(&self) -> BoxFuture<Option<usize>> {
         self.session_count_impl()
     }
