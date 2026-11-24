@@ -372,6 +372,18 @@ fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
         .child(t.name.clone())
 }
 
+/// Hover / pressed of a clickable tag pill (`pill_snX-u4 clickable_`, live client
+/// 2026-11-24): --background-mod-subtle → hover --background-mod-normal → pressed
+/// --background-mod-strong (same values as the control-secondary tokens), text unchanged.
+/// A selected pill keeps its blurple fill.
+fn pill_states(d: gpui::Stateful<gpui::Div>, on: bool) -> gpui::Stateful<gpui::Div> {
+    if on {
+        return d;
+    }
+    d.hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+        .active(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE))))
+}
+
 /// Tag shown on a card (`tags_nLtnFF` row, 24px high).
 fn card_tag(t: &ForumTag) -> gpui::Div {
     div()
@@ -464,8 +476,17 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
             .border_1()
             .border_color(c(tok(idx::BORDER_SUBTLE)))
             .cursor_pointer()
-            // container_SOY5H6:hover: --background-surface-high, --border-strong
-            .hover(|s| s.bg(c(tok(idx::BACKGROUND_SURFACE_HIGH))).border_color(c(tok(idx::BORDER_STRONG))))
+            // container_SOY5H6 (live client 2026-11-24, transitions 0.2s ease-out not animated):
+            // :hover --background-surface-high, --border-strong, --shadow-low;
+            // :active --interactive-background-active, --border-strong, --shadow-border + --shadow-high.
+            .hover(|s| {
+                s.bg(c(tok(idx::BACKGROUND_SURFACE_HIGH))).border_color(c(tok(idx::BORDER_STRONG))).shadow(crate::ui::inbox::low_shadow())
+            })
+            .active(|s| {
+                s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
+                    .border_color(c(tok(idx::BORDER_STRONG)))
+                    .shadow(crate::ui::inbox::popout_shadow())
+            })
             .flex()
             .items_start()
             .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
@@ -672,8 +693,7 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], cx: &mut Cont
         let on = comp.tags.contains(&t.id);
         let id = t.id;
         tag_list = tag_list.child(
-            div()
-                .id(("compose-tag", id.0))
+            pill_states(tag_pill(t, on).h(z(24.)).px(z(8.)).text_size(z(12.)).line_height(z(16.)).id(("compose-tag", id.0)), on)
                 .cursor_pointer()
                 .on_click(cx.listener(move |a, _, _, cx| {
                     if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
@@ -684,8 +704,7 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], cx: &mut Cont
                         }
                     }
                     cx.notify();
-                }))
-                .child(tag_pill(t, on).h(z(24.)).px(z(8.)).text_size(z(12.)).line_height(z(16.))),
+                })),
         );
     }
     let secondary = |id: &'static str, path: &'static str| {
@@ -959,11 +978,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             let on = v.tags.contains(&t.id);
             let id = t.id;
             list = list.child(
-                div()
-                    .id(("forum-tag", id.0))
+                pill_states(tag_pill(t, on).id(("forum-tag", id.0)), on)
                     .cursor_pointer()
-                    .on_click(cx.listener(move |a, _, _, cx| a.toggle_forum_tag(forum, id, cx)))
-                    .child(tag_pill(t, on)),
+                    .on_click(cx.listener(move |a, _, _, cx| a.toggle_forum_tag(forum, id, cx))),
             );
         }
         // tagList_BkGrJJ: flex-shrink 1, height 32, overflow hidden
@@ -1186,8 +1203,7 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
         let on = comp.tags.contains(&t.id);
         let id = t.id;
         tag_row = tag_row.child(
-            div()
-                .id(("compose-tag", id.0))
+            pill_states(tag_pill(t, on).id(("compose-tag", id.0)), on)
                 .cursor_pointer()
                 .on_click(cx.listener(move |a, _, _, cx| {
                     if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
@@ -1198,8 +1214,7 @@ pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
                         }
                     }
                     cx.notify();
-                }))
-                .child(tag_pill(t, on)),
+                })),
         );
     }
     let field = |el: AnyElement, h: f32| {
