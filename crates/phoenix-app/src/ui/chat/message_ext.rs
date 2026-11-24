@@ -105,16 +105,23 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         let e = e.clone();
         move |_, _, cx| e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
-    bar = bar.child(tool_button("tb-reply", id.0, Icon::Reply.path(), 20.).on_click({
-        let e = e.clone();
-        move |_, w, cx| e.update(cx, |a, cx| a.start_reply(id, w, cx))
-    }));
+    // Vanilla dumps (guild-chat-busy, inbox, apps-launcher): others' messages show
+    // Add reaction / Reply / Forward / More, own messages Add reaction / Edit / Forward / More.
     if own {
         bar = bar.child(tool_button("tb-edit", id.0, ChatIcon::Edit.path(), 18.).on_click({
             let e = e.clone();
             move |_, w, cx| e.update(cx, |a, cx| a.start_edit(id, w, cx))
         }));
+    } else {
+        bar = bar.child(tool_button("tb-reply", id.0, Icon::Reply.path(), 20.).on_click({
+            let e = e.clone();
+            move |_, w, cx| e.update(cx, |a, cx| a.start_reply(id, w, cx))
+        }));
     }
+    bar = bar.child(tool_button("tb-forward", id.0, crate::icons::path("nav/forward"), 20.).on_click({
+        let e = e.clone();
+        move |_, _, cx| e.update(cx, |a, cx| a.open_forward(ch, id, cx))
+    }));
     if shift && own {
         bar = bar.child(
             // .button_.dangerous_ --control-critical-secondary-text-default
