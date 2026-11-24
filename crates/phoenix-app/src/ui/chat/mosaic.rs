@@ -195,8 +195,8 @@ pub fn grid(items: &[&Attachment], max_w: f32, cx: &App) -> gpui::Div {
                 ratio_box(row_aspect(its), 280.).child(cell(its[0], k, cx).absolute().inset_0()).into_any_element()
             }
             Row::Two => {
-                let ar = row_aspect(its) * 2.;
-                ratio_box(ar, 280.)
+                // oneByTwoGrid_idVBIj: two square 1:1 cells (measured live 2026-11-24: 550x273, 273x273 per cell), max-height 280px.
+                ratio_box(2., 280.)
                     .child(
                         div()
                             .absolute()
