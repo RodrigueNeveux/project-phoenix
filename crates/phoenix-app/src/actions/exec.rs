@@ -46,6 +46,11 @@ pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> R
             let c = rest.create_thread_from_message(sf(channel), sf(msg), &name).await.map_err(e)?;
             ActionReply::Channel(id(c.id))
         }
+        R::CreateStandaloneThread { channel, name, private, announcement } => {
+            let kind = phoenix_api::rest::thread_create::thread_type(private, announcement);
+            let c = rest.create_standalone_thread(sf(channel), &name, kind, 4320).await.map_err(e)?;
+            ActionReply::Channel(id(c.id))
+        }
         R::Remind { channel, msg, due_unix } => {
             rest.set_reminder(sf(channel), sf(msg), due_unix).await.map_err(e)?;
             ActionReply::Done

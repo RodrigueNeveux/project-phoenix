@@ -248,15 +248,19 @@ impl PhoenixApp {
         }
     }
 
-    /// Ctrl+Shift+Alt+N: the thread creation form for the focused message.
-    /// Standalone threads (no starter message) aren't supported by our backend yet.
-    pub fn create_thread_shortcut(&mut self, cx: &mut Context<Self>) {
+    /// Ctrl+Shift+Alt+N: the thread form for the focused message, else the
+    /// "Nouveau fil" sidebar (standalone thread) for the open channel.
+    pub fn create_thread_shortcut(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         match focused() {
             Some((ch, id)) if self.channels.get(&ch).is_some_and(|c| c.guild.is_some()) => {
                 set_focused(None);
                 self.open_thread_form(ch, id, cx);
             }
-            _ => self.stub(&crate::t!("shortcuts.thread"), cx),
+            _ => {
+                if let Some(ch) = self.selected_channel {
+                    self.open_create_thread(ch, window, cx);
+                }
+            }
         }
     }
 

@@ -37,7 +37,7 @@ pub(crate) fn tk(i: usize) -> gpui::Hsla {
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
     let show_members = app.show_members && app.selected_guild.is_some();
-    let show_members = show_members && app.chat.thread.is_none();
+    let show_members = show_members && app.chat.thread.is_none() && !crate::ui::thread_create::is_open(cx);
     // The call view's side chat has no member list.
     let show_members = show_members && !crate::ui::call_view::active(app);
     div()
@@ -97,7 +97,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .when(show_members, |d| d.child(members::render(app, cx)))
                 .children(crate::ui::dm_profile_panel::render(app, cx))
                 .children(crate::ui::group_dm::members_panel(app, cx))
-                .children(panels::thread_panel(app, cx)),
+                .children(panels::thread_panel(app, cx))
+                .children(crate::ui::thread_create::panel(app, cx)),
         )
         .children(panels::pins_popout(app, cx))
 }

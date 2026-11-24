@@ -25,6 +25,7 @@ pub fn reply(req: ActionRequest, users: Vec<User>) -> Result<ActionReply, Backen
         R::ReportMenu(t) => ActionReply::ReportMenu(Box::new(report_menu(t.menu_name()))),
         R::Reminders => ActionReply::Messages(Vec::new()),
         R::CreateThread { channel, .. } | R::CloneChannel { channel, .. } => ActionReply::Channel(channel),
+        R::CreateStandaloneThread { channel, .. } => ActionReply::Channel(channel),
         R::Admin(c) => ActionReply::Json(super::admin::mock_reply(&c)),
         _ => ActionReply::Done,
     })

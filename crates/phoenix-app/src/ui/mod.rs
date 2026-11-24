@@ -40,6 +40,7 @@ pub mod role_gradient;
 pub mod switcher;
 pub mod nav_menus;
 pub mod thread_menu;
+pub mod thread_create;
 pub mod title_bar;
 pub mod tooltip;
 pub mod channel_unread_bar;

@@ -37,6 +37,8 @@ pub enum ActionRequest {
     /// Forward `msg` to each channel of `to`, then post `comment` after it.
     Forward { from: Id, msg: Id, guild: Option<Id>, to: Vec<Id>, comment: String },
     CreateThread { channel: Id, msg: Id, name: String },
+    /// Thread without a starter message (`POST /channels/{id}/threads`).
+    CreateStandaloneThread { channel: Id, name: String, private: bool, announcement: bool },
     Remind { channel: Id, msg: Id, due_unix: u64 },
     Reminders,
     /// Users who reacted with `emoji` (first 100).

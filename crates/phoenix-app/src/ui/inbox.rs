@@ -1116,7 +1116,11 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::INPUT_PLACEHOLDER_TEXT_DEFAULT)).whitespace_nowrap().child(crate::t!("threads.search"))),
         )
         .child(div().flex_1())
-        .child(div().ml(z(8.)).child(sm_text_button("threads-create", crate::t!("threads.create"), true)));
+        .child(div().ml(z(8.)).child(sm_text_button("threads-create", crate::t!("threads.create"), true).on_click(cx.listener(|a, _, w, cx| {
+            if let Some(ch) = a.selected_channel {
+                a.open_create_thread(ch, w, cx);
+            }
+        }))));
     // list_6_wQXw: padding 0 16.
     let mut list = div().id("threads-list").flex_1().min_h_0().overflow_y_scroll().px(z(16.)).flex().flex_col();
     if list_src.is_empty() && archived.is_empty() {
@@ -1137,7 +1141,11 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .child(div().text_size(z(16.)).line_height(z(20.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::t!("threads.empty_body")))
                 .child(
                     div().mt(z(24.)).child(
-                        sm_text_button("threads-create-cta", crate::t!("threads.create_thread"), true).h(z(40.)).px(z(16.)).text_size(z(16.)).line_height(z(20.)),
+                        sm_text_button("threads-create-cta", crate::t!("threads.create_thread"), true).on_click(cx.listener(|a, _, w, cx| {
+                            if let Some(ch) = a.selected_channel {
+                                a.open_create_thread(ch, w, cx);
+                            }
+                        })).h(z(40.)).px(z(16.)).text_size(z(16.)).line_height(z(20.)),
                     ),
                 ),
         );
