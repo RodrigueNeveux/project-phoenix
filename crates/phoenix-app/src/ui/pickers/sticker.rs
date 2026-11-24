@@ -48,19 +48,31 @@ fn send(app: &mut PhoenixApp, id: crate::model::Id, window: &mut gpui::Window, c
 pub(crate) fn sticker_graphic(s: &StickerData, size: f32) -> AnyElement {
     match sticker_url(s.id.0, s.format) {
         Some(u) => img(u).size(px(size)).flex_none().into_any_element(),
-        // Lottie stickers can't be drawn yet: show the name.
-        None => div()
-            .size(px(size))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .overflow_hidden()
-            .text_size(px(12.))
-            .text_color(tk(idx::TEXT_MUTED))
-            .child(s.name.clone())
-            .into_any_element(),
+        // Lottie: the first frame (the picker shows stills until hovered).
+        None => {
+            let name = s.name.clone();
+            crate::media::lottie::image(crate::media::lottie::url(s.id.0), (size * 2.) as u32, true)
+                .size(px(size))
+                .flex_none()
+                .with_fallback(move || lottie_name(name.clone(), size))
+                .into_any_element()
+        }
     }
+}
+
+/// Text stand-in when a Lottie sticker can't be drawn.
+fn lottie_name(name: SharedString, size: f32) -> AnyElement {
+    div()
+        .size(px(size))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .overflow_hidden()
+        .text_size(px(12.))
+        .text_color(tk(idx::TEXT_MUTED))
+        .child(name)
+        .into_any_element()
 }
 
 fn cell(s: &StickerData, section: SharedString, inspected: bool, locked: bool) -> AnyElement {

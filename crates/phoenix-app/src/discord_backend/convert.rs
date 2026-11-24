@@ -263,7 +263,7 @@ pub fn message(m: &api::Message) -> model::Message {
                 };
                 model::Attachment {
                     filename: st.name.clone().into(),
-                    url: crate::media::sticker_url(st.id.0, format).unwrap_or_default(),
+                    url: crate::media::sticker_url(st.id.0, format).unwrap_or_else(|| crate::media::lottie::url(st.id.0)),
                     width: 160,
                     height: 160,
                     kind: model::AttachmentKind::Sticker(format),

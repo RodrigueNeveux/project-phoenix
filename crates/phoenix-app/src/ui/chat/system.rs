@@ -179,7 +179,7 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
 }
 
 /// Greeting stickers the client cycles through for "Wave to say hi!"
-/// (id, is APNG); the rest are Lottie, which we can't draw yet.
+/// (id, is APNG); the rest are Lottie.
 const WAVE_STICKERS: [(u64, bool); 6] = [
     (749054660769218631, false),
     (751606379340365864, false),
@@ -205,21 +205,19 @@ fn welcome_cta(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> 
     }
     let (sticker, apng) = wave_sticker(app.me.id.0, msg.id.0);
     let label = crate::t!("sys.wave");
-    let button = if apng {
-        let url = SharedString::from(format!("https://media.discordapp.net/stickers/{sticker}.png?size=40"));
-        crate::ui::controls::button(("wave-cta", msg.id.0), SharedString::default(), crate::ui::controls::BtnKind::Secondary)
-            .h(z(32.))
-            .px(z(12.))
-            .text_size(z(14.))
-            .gap(z(4.))
-            .child(gpui::img(url).flex_none().size(z(20.)))
-            .child(label)
+    // The greeting sticker as a 20px still (Lottie ones rasterized from their JSON).
+    let icon = if apng {
+        gpui::img(SharedString::from(format!("https://media.discordapp.net/stickers/{sticker}.png?size=40")))
     } else {
-        crate::ui::controls::button_icon(("wave-cta", msg.id.0), "sticker", label, crate::ui::controls::BtnKind::Secondary)
-            .h(z(32.))
-            .px(z(12.))
-            .text_size(z(14.))
+        crate::media::lottie::image(crate::media::lottie::url(sticker), 40, true)
     };
+    let button = crate::ui::controls::button(("wave-cta", msg.id.0), SharedString::default(), crate::ui::controls::BtnKind::Secondary)
+        .h(z(32.))
+        .px(z(12.))
+        .text_size(z(14.))
+        .gap(z(4.))
+        .child(icon.flex_none().size(z(20.)))
+        .child(label);
     let (e, channel) = (entity.clone(), msg.channel);
     Some(
         // flex row: the button keeps its content width (as a block child it stretched to

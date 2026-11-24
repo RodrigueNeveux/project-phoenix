@@ -1638,6 +1638,17 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
     // "Display images, videos and lolcats: when uploaded directly" (inline_attachment_media).
     let inline = crate::ui::settings::effects::inline_attachments();
     match a.kind {
+        AttachmentKind::Sticker(media::StickerFormat::Lottie) if !a.url.is_empty() => {
+            let name = a.filename.clone();
+            // 160px sticker, rasterized at 200 device px (scale 1.25) and played in a loop.
+            return media::lottie::image(a.url.clone(), 200, false)
+                .id(gpui::ElementId::Name(a.url.clone()))
+                .mt(z(4.))
+                .size(z(160.))
+                .object_fit(gpui::ObjectFit::Contain)
+                .with_fallback(move || sticker_name(name.clone()))
+                .into_any_element();
+        }
         AttachmentKind::Sticker(fmt) => {
             let name = a.filename.clone();
             return match media::sticker_url(0, fmt).and(Some(a.url.clone())).filter(|u| !u.is_empty()) {
