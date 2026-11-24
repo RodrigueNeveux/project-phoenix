@@ -324,7 +324,7 @@ pub(crate) fn width_probe(cell: &'static std::thread::LocalKey<std::cell::Cell<f
 /// 483 → 135, 433 → 85, 383 → 64; see docs/parity/responsive.md.
 fn header_search_w() -> f32 {
     let w = HEADER_W.with(std::cell::Cell::get);
-    if w <= 0. { 244. } else { (w - 28. - 320.).clamp(64., 244.) }
+    if w <= 0. { 244. } else { (w - space::md() - 8. - 320.).clamp(64., 244.) }
 }
 
 /// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
@@ -363,7 +363,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .child(width_probe(&HEADER_W))
         .h(z(m::HEADER_H + 1.))
         .flex_none()
-        .pl(z(20.))
+        // padding-inline-start --custom-message-margin-horizontal (--space-md); a group DM's
+        // section is half that (vanilla-group-dm #1059: 10px), its hoverable name box adds the rest.
+        .pl(z(if is_group_dm { space::md() / 2. } else { space::md() }))
         .pr(z(8.))
         .py(z(8.))
         .flex()
@@ -380,10 +382,40 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .overflow_hidden()
                 .flex()
                 .items_center()
-                .child(if let Some(gc) = ch.map(|c| c.id).filter(|c| is_dm && crate::ui::dm_profile_panel::is_group_dm(app, *c)) {
-                    // vanilla-group-dm #1064 hoverableContainer_9yrrgG padding 0 10px, gap 10px;
-                    // #1065 gdmIcon_9yrrgG 24px, margin-inline-end 4px (name at +38px).
-                    div().ml(z(10.)).mr(z(14.)).child(crate::ui::group_dm::group_avatar(app, gc, 24. * crate::theme::zoom(), c(Palette::BG_PRIMARY))).into_any_element()
+                .child(if let Some(gc) = ch.map(|c| c.id).filter(|_| is_group_dm) {
+                    // vanilla-group-dm #1064 hoverableContainer_9yrrgG: h 32, radius 8, padding-inline and
+                    // gap --custom-message-margin-horizontal / 2, hover --background-mod-subtle with a 16px
+                    // pencil (editIcon_, display none until hover); #1065 gdmIcon_ 24px, margin-inline-end 4px;
+                    // #1067 name body-md/medium 16/20 --text-strong.
+                    let half = space::md() / 2.;
+                    div()
+                        .id("gdm-name")
+                        .group("gdm-name")
+                        .flex_shrink_0()
+                        .h(z(32.))
+                        .px(z(half))
+                        .gap(z(half))
+                        .rounded(z(8.))
+                        .flex()
+                        .items_center()
+                        .whitespace_nowrap()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE)))
+                        .child(div().mr(z(4.)).child(crate::ui::group_dm::group_avatar(app, gc, 24. * crate::theme::zoom(), c(Palette::BG_PRIMARY))))
+                        .child(
+                            div()
+                                .text_size(z(16.))
+                                .line_height(z(20.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(tk(idx::TEXT_STRONG))
+                                .child(crate::ui::emoji_text::label(name.clone(), 16.)),
+                        )
+                        .child(
+                            div().hidden().group_hover("gdm-name", |s| s.flex()).child(
+                                gpui::svg().path(crate::icons::path("pen")).size(z(16.)).flex_none().text_color(tk(idx::TEXT_DEFAULT)),
+                            ),
+                        )
+                        .into_any_element()
                 } else if is_dm {
                     // avatar_ 20px, margin-inline-end 8px (#1092).
                     div().mr(z(8.)).child(avatar(peer, 20. * crate::theme::zoom())).into_any_element()
@@ -430,7 +462,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         ),
                     )
                 })
-                .child(
+                .when(!is_group_dm, |d| d.child(
                     // titleWrapper_ margin-inline-end 8px; h1 body-md/medium 16px/20px --text-strong (#1047);
                     // thread title #1198 is flex 0 1 auto, overflow hidden, nowrap (clipped by children_).
                     // 1:1 DM: the recipient's name style font (vanilla-dm header `dnsFont_`).
@@ -451,8 +483,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .line_height(z(20.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(tk(idx::TEXT_STRONG))
-                        .child(crate::ui::emoji_text::label(name, 16.)),
-                )
+                        .child(crate::ui::emoji_text::label(name.clone(), 16.)),
+                ))
                 .when(kind == ChannelKind::Announcement && thread_parent.is_none(), |d| d.child(crate::ui::forum::follow_button()))
                 .when(discoverable, |d| {
                     // vanilla-guild-text #1060 dot_GxzgQj: 4px, --background-mod-strong, margin-inline 4 12;
@@ -502,12 +534,13 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 }),
         )
         .child(
+            // toolbar_ybUK7Z: gap and padding-inline-start --space-xs (cozy 10, default 8, compact 6).
             div()
                 .flex_none()
-                .pl(z(10.))
+                .pl(z(space::xs()))
                 .flex()
                 .items_center()
-                .gap(z(10.))
+                .gap(z(space::xs()))
                 .when(is_dm, |d| {
                     // DM toolbar (#1101–#1109): voice call, video call, pins, add to DM, user profile.
                     d.child(hdr_named("dm-call", "phone-call", ic))
@@ -563,7 +596,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .ml(z(4.))
                         .flex_none()
                         .w(z(header_search_w()))
-                        .h(z(32.))
+                        // `.density-compact .searchBar_i16Ad0` is 28px tall.
+                        .h(z(if crate::theme::density() == crate::theme::Density::Compact { 28. } else { 32. }))
                         .rounded(z(8.))
                         .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
                         .border_1()
