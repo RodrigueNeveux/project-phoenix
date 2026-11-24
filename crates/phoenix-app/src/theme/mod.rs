@@ -1,6 +1,6 @@
 //! Discord theme tokens (Dark, Light, Ash, Onyx), UI zoom and font scale, and layout metrics.
 
-use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 
 use gpui::{App, Hsla, Pixels, Rgba, Window, px, rgb, rgba};
 use gpui_component::theme::{Theme, ThemeMode};
@@ -159,6 +159,12 @@ fn is_token(hex: u32) -> bool {
 }
 
 static THEME: AtomicU8 = AtomicU8::new(0);
+/// Accessibility "Enable High Contrast mode" (`.high-contrast-mode` on <html>).
+static HIGH_CONTRAST: AtomicBool = AtomicBool::new(false);
+
+pub fn high_contrast() -> bool {
+    HIGH_CONTRAST.load(Ordering::Relaxed)
+}
 static ZOOM: AtomicU32 = AtomicU32::new(100);
 static FONT_PX: AtomicU32 = AtomicU32::new(16);
 static DENSITY: AtomicU8 = AtomicU8::new(Density::Cozy as u8);
@@ -262,7 +268,8 @@ pub fn resolve(hex: u32) -> u32 {
         if let Some(v) = crate::ui::profile_theme::lookup((hex & 0xFFFF) as usize) {
             return v;
         }
-        saturate(generated::THEMES[THEME.load(Ordering::Relaxed) as usize][(hex & 0xFFFF) as usize])
+        let tables = if high_contrast() { &generated::THEMES_HC } else { &generated::THEMES };
+        saturate(tables[THEME.load(Ordering::Relaxed) as usize][(hex & 0xFFFF) as usize])
     } else {
         hex
     }
@@ -300,6 +307,10 @@ pub fn sync(prefs: &crate::ui::settings::Prefs, window: &mut Window, cx: &mut Ap
     let pf = FONT_PX.swap(prefs.local.font_size.round().clamp(12., 24.) as u32, Ordering::Relaxed);
     let pd = DENSITY.swap(prefs.synced.density as u8, Ordering::Relaxed);
     let ps = SATURATION.swap(prefs.local.saturation.min(100), Ordering::Relaxed);
+    let hc = prefs.local.flag("contrast", false);
+    if HIGH_CONTRAST.swap(hc, Ordering::Relaxed) != hc {
+        STYLE_GEN.fetch_add(1, Ordering::Relaxed);
+    }
     if ps != prefs.local.saturation.min(100) {
         STYLE_GEN.fetch_add(1, Ordering::Relaxed);
     }

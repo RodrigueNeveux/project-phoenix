@@ -1,5 +1,5 @@
 //! Offscreen render of the main window in a given theme and zoom.
-//! `cargo run -p phoenix-app --example theme_shots -- out.png [dark|light|ash|onyx] [zoom%]`
+//! `cargo run -p phoenix-app --example theme_shots -- out.png [dark|light|ash|onyx] [zoom%]` (PHOENIX_HC=1: high contrast)
 //! Env: `PHX_COMPACT` (compact mode), `PHX_DM` (open a DM).
 
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
@@ -67,6 +67,10 @@ fn main() -> anyhow::Result<()> {
         cx.update_window(win.into(), |_, _, cx| {
             v.update(cx, |app, cx| {
                 app.prefs.synced.theme = theme;
+                // PHOENIX_HC=1: Accessibility "Enable High Contrast mode".
+                if std::env::var_os("PHOENIX_HC").is_some() {
+                    app.prefs.local.ui.insert("contrast".into(), 1);
+                }
                 app.prefs.local.zoom = zoom;
                 app.prefs.synced.compact = std::env::var_os("PHX_COMPACT").is_some();
                 // PHX_DM=1: open the first direct message instead of the guild channel.
