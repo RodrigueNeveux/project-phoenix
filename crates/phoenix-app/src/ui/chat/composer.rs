@@ -640,9 +640,6 @@ pub(crate) fn dot_frame(i: usize, t: f32) -> (f32, f32) {
     (0.32 + 0.68 * k, 0.8 + 0.2 * k)
 }
 
-/// TypingUsers (inTextChannel): dots, then "**Name** est en train d'écrire..." with the
-/// name from `getName(guild, channel, user)` (nick → global name → username); 4+ typers
-/// give "**Plusieurs personnes** sont en train d'écrire...". Slowmode countdown on the right.
 thread_local! {
     /// Last laid-out width of the typingDots_ box (the client's `getBoundingClientRect`).
     static DOTS_BOX_W: std::cell::Cell<f32> = const { std::cell::Cell::new(f32::MAX) };
@@ -655,6 +652,9 @@ fn text_w(window: &Window, text: &str, weight: FontWeight) -> f32 {
     f32::from(window.text_system().layout_line(text, z(12.), &[run], None).width)
 }
 
+/// TypingUsers (inTextChannel): dots, then "**Name** est en train d'écrire..." with the
+/// name from `getName(guild, channel, user)` (nick → global name → username); 4+ typers
+/// give "**Plusieurs personnes** sont en train d'écrire...". Slowmode countdown on the right.
 fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement {
     let names: Vec<SharedString> = app
         .selected_channel
