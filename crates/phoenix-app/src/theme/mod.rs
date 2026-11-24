@@ -409,6 +409,18 @@ pub mod m {
     /// `--custom-guild-list-width` = avatar 40 + 2 × `--custom-guild-list-padding`
     /// (`--space-md`, 20px under `.density-cozy`). Dump -channels-N-N+ #50 `nav.guilds_` 80px.
     pub const SERVER_BAR_W: f32 = 80.;
+    /// The rail at the active density: 80 / 72 / 64px (live, 2026-11-24). The channel list
+    /// takes what the rail gives up, so rail + list keep the dragged width.
+    pub fn server_bar_w() -> f32 {
+        GUILD_ICON_BOX + 2. * super::space::md()
+    }
+    /// The 40px guild icon the rail width is built from (`--guildbar-avatar-size` without
+    /// `refresh-fast-follow-avatars`).
+    const GUILD_ICON_BOX: f32 = 40.;
+    /// Extra channel list width when the rail is narrower than the cozy 80px.
+    pub fn sidebar_extra_w() -> f32 {
+        SERVER_BAR_W - server_bar_w()
+    }
     /// `--guildbar-avatar-size` (default density).
     pub const GUILD_ICON: f32 = g::GUILDBAR_AVATAR_SIZE;
     /// `--custom-guild-sidebar-width`.

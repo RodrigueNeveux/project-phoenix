@@ -148,7 +148,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         }
     });
     div()
-        .w(z(crate::ui::sidebar_resize::width()))
+        .w(z(crate::ui::sidebar_resize::width() + m::sidebar_extra_w()))
         .flex_none()
         .h_full()
         .flex()
@@ -221,7 +221,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
         Some(g) => {
             let hash = app.nav.banners.get(&g.id).cloned();
             // The refreshed client only shows a banner when the guild has one.
-            let full_h = (crate::ui::sidebar_resize::width() * 9. / 21.).round();
+            let full_h = ((crate::ui::sidebar_resize::width() + m::sidebar_extra_w()) * 9. / 21.).round();
             // Live client (`animatedContainer_XH4OpX`, 2026-11-23): the banner scrolls up with
             // the list and is gone (opacity 0) once only the header bar is left.
             let top = app.sidebar_list.logical_scroll_top();
@@ -1186,14 +1186,14 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         // behind its 10px margin: overlap them by that margin and leave it transparent.
         .mt(z(-10.))
         .relative()
-        .child(div().absolute().top(z(10.)).bottom_0().left_0().w(z(m::SERVER_BAR_W)).bg(c(Palette::BG_TERTIARY)))
+        .child(div().absolute().top(z(10.)).bottom_0().left_0().w(z(m::server_bar_w())).bg(c(Palette::BG_TERTIARY)))
         .child(
             div()
                 .absolute()
                 .top(z(10.))
                 .bottom_0()
                 .right_0()
-                .left(z(m::SERVER_BAR_W))
+                .left(z(m::server_bar_w()))
                 .border_l_1()
                 .border_color(c(Palette::APP_FRAME_BORDER))
                 .bg(c(Palette::BG_SECONDARY)),

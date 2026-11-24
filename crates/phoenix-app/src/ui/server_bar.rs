@@ -67,10 +67,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .overflow_y_scroll()
         .track_scroll(&scroll)
         .pt(z(PAD_TOP))
-        .pb(z(PAD_BOTTOM))
+        .pb(z(pad_bottom()))
         .flex()
         .flex_col()
-        .gap(z(GAP))
+        .gap(z(gap()))
         .child(home(app, &entity));
     // `stack_TWWX0S` "Direct messages" (vanilla-dm-profile-panel #69): one 40px
     // `listItem_` per DM with unread mentions, same 10px rail gap.
@@ -94,7 +94,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             RailItem::Folder { guilds, open: true, .. } => {
                 // Header (48) + `folderGuildsList_` margin-top (GAP - FOLDER_PAD), then 40px rows 10px apart.
                 for (k, g) in guilds.iter().enumerate().filter(|(_, g)| is_unread(g)) {
-                    let y = FOLDER + GAP - FOLDER_PAD + k as f32 * (ICON + GAP);
+                    let y = FOLDER + gap() - FOLDER_PAD + k as f32 * (ICON + gap());
                     spans.push(Span { ix: base + i, y, h: ICON, mentions: g.mentions });
                 }
             }
@@ -121,7 +121,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         });
     let (above, below, m_above, m_below) = offscreen_unread(&scroll, &spans);
     div()
-        .w(z(m::SERVER_BAR_W))
+        .w(z(m::server_bar_w()))
         .flex_none()
         .h_full()
         .relative()
@@ -251,13 +251,17 @@ const FOLDER: f32 = 48.;
 const ICON_RADIUS: f32 = 12.;
 /// `--radius-lg`: open folder background.
 const FOLDER_RADIUS: f32 = 16.;
-/// `--space-xs` (`.density-cozy` = 10px): `stack_TWWX0S scroller_5dqHTG` gap.
+/// `--space-xs` (cozy 10, default 8, compact 6): `stack_TWWX0S scroller_5dqHTG` gap.
 /// Dump -channels-N-N+ #55 gap 10px.
-const GAP: f32 = 10.;
+fn gap() -> f32 {
+    crate::theme::space::xs()
+}
 /// `scroller_5dqHTG` padding-top is 0 on `.platform-linux` (dump #55 starts at y=32).
 const PAD_TOP: f32 = 0.;
 /// `scroller_5dqHTG` padding-bottom: `calc(var(--space-xs) + 16px)` = 26px (dump #55).
-const PAD_BOTTOM: f32 = 26.;
+fn pad_bottom() -> f32 {
+    gap() + 16.
+}
 /// `--custom-folder-padding`: `(--guildbar-folder-size - --guildbar-avatar-size) / 2`.
 const FOLDER_PAD: f32 = (FOLDER - ICON) / 2.;
 /// `--custom-folder-preview-padding` (`--space-4`).
@@ -323,7 +327,7 @@ pub fn right_tooltip(text: SharedString, item_h: f32) -> AnyElement {
         // a tile at 20..60), with the 5px caret in that gap.
         anchored()
             .position_mode(AnchoredPositionMode::Local)
-            .position(point(z((m::SERVER_BAR_W + item_h) / 2. + 12. - 5.), z(0.))).child(
+            .position(point(z((m::server_bar_w() + item_h) / 2. + 12. - 5.), z(0.))).child(
             div()
                 .h(z(item_h))
                 .flex()
@@ -728,7 +732,7 @@ fn folder(
     }
     // `folderGuildsList_RTMSuZ>:first-child` margin-top: `--space-xs - --custom-folder-padding`.
     let mut body =
-        div().w_full().mt(z(GAP - FOLDER_PAD)).flex().flex_col().gap(z(GAP)).pb(z(FOLDER_PAD));
+        div().w_full().mt(z(gap() - FOLDER_PAD)).flex().flex_col().gap(z(gap())).pb(z(FOLDER_PAD));
     for g in guilds {
         body = body.child(guild(app, entity, g, true));
     }
@@ -743,7 +747,7 @@ fn folder(
                 .absolute()
                 .top_0()
                 .bottom_0()
-                .left(z((m::SERVER_BAR_W - FOLDER) / 2.))
+                .left(z((m::server_bar_w() - FOLDER) / 2.))
                 .w(z(FOLDER))
                 .rounded(z(FOLDER_RADIUS))
                 .border_1()

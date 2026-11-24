@@ -1439,8 +1439,8 @@ fn message(
                             // timestampInline_ margin-inline-start .25rem.
                             div()
                                 .id(("msg-time", id.0))
-                                .ml(z(4.))
-                                .text_size(z(12.))
+                                .ml(fz(4.))
+                                .text_size(fz(12.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(tk(idx::CHAT_TEXT_MUTED))
                                 .tooltip(time_tooltip(ts))
@@ -1454,14 +1454,15 @@ fn message(
                         .id(("msg-time", id.0))
                         .absolute()
                         .left_0()
-                        .top(z(2.))
-                        .w(z(56.))
+                        .top(fz(2.))
+                        .w(if crate::theme::font_scaled_down() { fz(56.) } else { z(56.) })
                         .h(fz(22.))
                         .flex()
                         .items_center()
                         .justify_end()
-                        // .cozy_ .timestamp_.alt_: .6875rem, --text-muted, width 56px.
-                        .text_size(z(11.))
+                        // .cozy_ .timestamp_.alt_: .6875rem, --text-muted, width 56px
+                        // (3.5rem under .a11y-font-scaled-down).
+                        .text_size(fz(11.))
                         .text_color(gpui::transparent_black())
                         .group_hover("msg", |s| s.text_color(tk(idx::TEXT_MUTED)))
                         .tooltip(time_tooltip(ts))
