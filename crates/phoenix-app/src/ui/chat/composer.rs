@@ -464,10 +464,10 @@ fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Pho
                                     .flex()
                                     .gap(z(8.))
                                     .items_center()
-                                    .child(crate::ui::states::composer_button("gift", Icon::Gift))
+                                    .child(crate::ui::states::composer_button_ext("gift", Icon::Gift, 20., false))
                                     .child(crate::ui::states::composer_button("gif", Icon::Gif).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
                                     .child(crate::ui::states::composer_button("sticker", Icon::Sticker).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(crate::ui::states::composer_button("emoji", Icon::Emoji).on_click(cx.listener(
+                                    .child(crate::ui::states::composer_button_ext("emoji", Icon::Emoji, 18., true).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
                                     )))
                                     .child(

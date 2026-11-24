@@ -6,15 +6,21 @@
 use crate::theme::{c, generated::idx, tok, z};
 use crate::ui::Icon;
 use gpui::{AnimationExt, Div, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, svg};
+use gpui::prelude::FluentBuilder as _;
 
 /// 32px composer button (attach, gift, GIF, sticker, emoji, apps), 20px glyph
 /// (`--chat-input-icon-size`). The glyph follows the button's hover/active state.
 pub fn composer_button(id: &'static str, i: Icon) -> gpui::Stateful<Div> {
+    composer_button_ext(id, i, 20., true)
+}
+
+/// `glyph` px icon; `hover_bg` false = `noHover_hfM7yP` (gift button: no hover fill).
+pub fn composer_button_ext(id: &'static str, i: Icon, glyph: f32, hover_bg: bool) -> gpui::Stateful<Div> {
     let k = key(("composer-btn", id));
     track(div().id(id), k)
         .relative()
         // button_hfM7yP:not(.noHover) transition-duration .2s (ease)
-        .child(fade_layer(k, gpui::transparent_black(), c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED)), 200, 8.))
+        .when(hover_bg, |d| d.child(fade_layer(k, gpui::transparent_black(), c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED)), 200, 8.)))
         .group(id)
         .size(z(32.))
         .flex_none()
@@ -26,7 +32,7 @@ pub fn composer_button(id: &'static str, i: Icon) -> gpui::Stateful<Div> {
         .child(
             svg()
                 .path(i.path())
-                .size(z(20.))
+                .size(z(glyph))
                 .flex_none()
                 .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))) // button_hfM7yP color
                 .group_hover(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))) // :hover color
