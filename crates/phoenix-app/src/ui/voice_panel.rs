@@ -148,6 +148,7 @@ pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool
         .cursor_pointer()
         .group("panel-btn")
         .child(div().relative().child(glyph))
+        .map(|d| crate::ui::focus_ring::ring(d, key, 8.))
 }
 
 /// Glyph colour of a panel button (`--icon-subtle` / `--icon-feedback-critical`).

@@ -1099,7 +1099,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .when(ch.mentions == 0, |d| d.children(invite_hover.map(|h| top_line(h, connected))))
                 .children(timer.map(|t| top_line(t, connected)))
                 .children(limit_pill)
-                .children(close),
+                .children(close)
+                // Tab focus ring, inset 4px inside the row like the member list rows.
+                .map(|d| crate::ui::focus_ring::ring_inset(d, crate::ui::states::key(("chrow", id.0)), ROW_RADIUS, 4., 4.)),
         )
         .into_any_element()
 }

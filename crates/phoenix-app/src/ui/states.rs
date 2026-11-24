@@ -225,6 +225,8 @@ pub fn header_button(id: &'static str, path: gpui::SharedString, selected: bool,
                 .group_hover(id, move |s| s.text_color(hover)),
         )
         .children(hovered(k).then(|| below_tip(label, 32., 32.)))
+        // Tab focus ring on the 32px box; the wrapper has no radius, so the ring's 4px default.
+        .map(|d| crate::ui::focus_ring::ring(d, k, 4.))
 }
 
 /// [`fade_layer`] for elements that already know their hover state (e.g. the guild rail's

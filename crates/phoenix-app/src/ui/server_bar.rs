@@ -425,11 +425,13 @@ fn voice_badge(app: &PhoenixApp, g: &Guild) -> Option<AnyElement> {
 
 /// One 72px-wide rail row holding a centred 40px tile.
 fn row(id: impl Into<ElementId>, key: u64, entity: &Entity<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
-    track_hover(
+    let row = track_hover(
         div().id(id).w_full().h(z(ICON)).flex_none().flex().justify_center().relative().cursor_pointer(),
         key,
         entity,
-    )
+    );
+    // Tab focus ring around the centred 40px tile (16px in from the 72px row), tile radius 12.
+    crate::ui::focus_ring::ring_inset(row, crate::ui::states::key(("rail-row", key)), ICON_RADIUS, (m::SERVER_BAR_W - ICON) / 2., 0.)
 }
 
 const HOME_KEY: u64 = 1;
