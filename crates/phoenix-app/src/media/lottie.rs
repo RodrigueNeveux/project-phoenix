@@ -526,7 +526,7 @@ fn load(url: &SharedString, px: u32, still: bool, cx: &mut App) -> Option<Result
             Err(_) => false,
         };
         let img = if ok { cx.background_spawn(async move { rasterize(&bytes, &renderer, px, still) }).await } else { None };
-        let _ = cx.update(|cx| {
+        cx.update(|cx| {
             if let Some(e) = cx.default_global::<Store>().anims.get_mut(&key) {
                 e.0 = match img {
                     Some(i) => State::Ready(Arc::new(i)),
