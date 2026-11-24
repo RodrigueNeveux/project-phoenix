@@ -1584,7 +1584,7 @@ fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> 
     )
 }
 
-fn attachment(a: &Attachment, cx: &App) -> AnyElement {
+pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
     let remote = attach::loadable(&a.url);
     let spoiler = a.filename.starts_with("SPOILER_");
     match a.kind {
@@ -1754,7 +1754,7 @@ fn embed_text(t: &RichText, size: f32) -> gpui::Div {
     push(row, last..t.text.len())
 }
 
-fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
+pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
     let has_text = e.title.is_some() || e.description.is_some() || e.author.is_some() || !e.fields.is_empty();
     // gifv embeds always render as bare media, even with a provider/title (Tenor).
     let media_only = e.kind.as_deref() == Some("gifv") || (e.kind.as_deref() == Some("image") && !has_text);
