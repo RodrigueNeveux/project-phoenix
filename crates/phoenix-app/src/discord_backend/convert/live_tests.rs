@@ -35,6 +35,7 @@ fn msg(id: u64, channel: u64, guild: bool, author: u64, everyone: bool) -> Gatew
     }
     m["author"]["id"] = Value::String(author.to_string());
     m["mentions"] = Value::Array(vec![]);
+    m["mention_roles"] = Value::Array(vec![]);
     m["mention_everyone"] = Value::Bool(everyone);
     parse_dispatch("MESSAGE_CREATE", &m.to_string())
 }
