@@ -383,6 +383,15 @@ pub trait Backend: Send + Sync + 'static {
     fn guild_features(&self, _guild: Id) -> Vec<String> {
         Vec::new()
     }
+    /// Browse Channels: the channel's (or category's) override follows it
+    /// (`OPT_IN_ENABLED`); `None` when the settings are unknown.
+    fn channel_opted_in(&self, _channel: Id) -> Option<bool> {
+        None
+    }
+    /// Newest message id of a channel (Browse Channels "last activity").
+    fn channel_last_message(&self, _channel: Id) -> Option<Id> {
+        None
+    }
     /// Boost count (`premium_subscription_count`) and `premium_progress_bar_enabled`.
     fn guild_boosts(&self, _guild: Id) -> Option<(u32, bool)> {
         None

@@ -511,6 +511,16 @@ impl Backend for DiscordBackend {
         s.cache.guild(sf(guild)).map(|g| g.properties.features.clone()).unwrap_or_default()
     }
 
+    fn channel_opted_in(&self, channel: Id) -> Option<bool> {
+        let s = self.inner.session().ok()?;
+        Some(s.adapter.lock().prefs.mutes.opted_in.contains(&channel.0))
+    }
+
+    fn channel_last_message(&self, channel: Id) -> Option<Id> {
+        let s = self.inner.session().ok()?;
+        s.cache.channel(sf(channel))?.last_message_id.map(|m| Id(m.0))
+    }
+
     fn guild_boosts(&self, guild: Id) -> Option<(u32, bool)> {
         let s = self.inner.session().ok()?;
         let g = s.cache.guild(sf(guild))?;

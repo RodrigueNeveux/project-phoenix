@@ -16,7 +16,7 @@
 //! `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 //! `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 //! mentions|unreads|saved|reminders|scheduled).
-//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community.
+//! `PHX_OPEN` = pins|threads|search[:q]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|leave|invite|post[:n]|events|community[:browse].
 //! `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 //! `PHX_FX_STILL=1` = still profile effects (reduce motion).
 //! `PHX_WAIT` = seconds to wait for messages and images (default 15).
@@ -188,6 +188,13 @@ impl Backend for ReadOnly {
     }
     fn channel_user_limit(&self, c: Id) -> Option<u32> {
         self.0.channel_user_limit(c)
+    }
+    // Browse Channels tab (PHX_OPEN=community:browse): READY settings and cache only.
+    fn channel_opted_in(&self, c: Id) -> Option<bool> {
+        self.0.channel_opted_in(c)
+    }
+    fn channel_last_message(&self, c: Id) -> Option<Id> {
+        self.0.channel_last_message(c)
     }
     fn guild_features(&self, g: Id) -> Vec<String> {
         self.0.guild_features(g)
@@ -936,9 +943,10 @@ fn main() -> anyhow::Result<()> {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink { guild, link: None }, cx);
                     }
                 }
+                // `community:browse` opens the Browse Channels tab.
                 "community" => {
                     if let Some(g) = app.selected_guild {
-                        phoenix_app::ui::community::open(app, g, cx);
+                        phoenix_app::ui::community::open_tab(app, g, arg == "browse", cx);
                     }
                 }
                 "events" => {

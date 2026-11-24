@@ -398,6 +398,9 @@ pub struct MuteSettings {
     /// Guilds with `flags & OPT_IN_CHANNELS_ON` (16384): "browse channels"
     /// mode, where the client hides resource channels from the list.
     pub opt_in: HashSet<u64>,
+    /// Channels and categories whose override has `flags & OPT_IN_ENABLED`
+    /// (4096): followed in "Browse Channels".
+    pub opted_in: HashSet<u64>,
 }
 
 impl MuteSettings {
@@ -409,6 +412,7 @@ impl MuteSettings {
         if let Some(Value::Array(ovs)) = entry.get("channel_overrides") {
             for c in ovs.iter().filter_map(|o| o.get("channel_id").and_then(snowflake_value)) {
                 self.channels.remove(&c);
+                self.opted_in.remove(&c);
             }
         }
         let new = parse_mutes(Some(&Value::Array(vec![entry.clone()])));
@@ -417,6 +421,7 @@ impl MuteSettings {
         self.suppress_everyone.extend(new.suppress_everyone);
         self.suppress_roles.extend(new.suppress_roles);
         self.opt_in.extend(new.opt_in);
+        self.opted_in.extend(new.opted_in);
     }
 }
 
@@ -448,10 +453,12 @@ pub fn parse_mutes(v: Option<&Value>) -> MuteSettings {
         }
         if let Some(Value::Array(ovs)) = e.get("channel_overrides") {
             for o in ovs {
-                if o.get("muted").and_then(Value::as_bool).unwrap_or(false)
-                    && let Some(c) = o.get("channel_id").and_then(snowflake_value)
-                {
+                let Some(c) = o.get("channel_id").and_then(snowflake_value) else { continue };
+                if o.get("muted").and_then(Value::as_bool).unwrap_or(false) {
                     out.channels.insert(c);
+                }
+                if o.get("flags").and_then(Value::as_u64).unwrap_or(0) & 4096 != 0 {
+                    out.opted_in.insert(c);
                 }
             }
         }

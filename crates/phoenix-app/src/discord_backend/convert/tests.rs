@@ -93,3 +93,23 @@ fn guild_resource_channels_are_listed_but_not_unread() {
     let chs = guild_channels(&cache, g, &prefs.ctx());
     assert!(!chs.iter().any(|c| c.id == Id(700000000000000077)));
 }
+
+#[test]
+fn opt_in_channel_overrides_are_followed() {
+    let v = serde_json::json!([{
+        "guild_id": "1",
+        "flags": 16384,
+        "channel_overrides": [
+            { "channel_id": "10", "flags": 4096, "muted": false },
+            { "channel_id": "11", "flags": 0, "muted": true }
+        ]
+    }]);
+    let m = parse_mutes(Some(&v));
+    assert!(m.opt_in.contains(&1));
+    assert!(m.opted_in.contains(&10));
+    assert!(!m.opted_in.contains(&11));
+    assert!(m.channels.contains(&11));
+    let mut m = m;
+    m.apply_guild_entry(1, &serde_json::json!({ "guild_id": "1", "channel_overrides": [{ "channel_id": "10", "flags": 0 }] }));
+    assert!(!m.opted_in.contains(&10));
+}
