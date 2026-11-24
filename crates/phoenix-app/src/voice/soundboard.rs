@@ -143,7 +143,7 @@ fn play_locally(app: &PhoenixApp, sound: Id, sound_volume: f32, user: Id, cx: &m
     let generation = playing().lock().generation;
     log("load", sound, user, volume);
     cx.spawn(async move |this, cx| {
-        let Some(pcm) = cx.background_spawn(async move { load(sound) }).await else {
+        let Some(pcm) = cx.background_executor().spawn(async move { load(sound) }).await else {
             log("failed", sound, user, volume);
             return;
         };

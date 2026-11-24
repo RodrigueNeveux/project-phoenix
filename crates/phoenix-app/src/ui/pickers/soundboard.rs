@@ -602,7 +602,7 @@ fn render_row(ix: usize, cx: &mut App) -> AnyElement {
                 .gap(px(8.))
                 .pl(px(8.))
                 .pb(px(8.))
-                .children(s.sounds[start..end].iter().enumerate().map(|(i, x)| sound_button(app, x, s.locked, (section, start + i))))
+                .children(s.sounds[start..end].iter().enumerate().map(|(i, x)| sound_button(app, x, s.locked || !x.available, (section, start + i))))
                 .into_any_element()
         }
     }
