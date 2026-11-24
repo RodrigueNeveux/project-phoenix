@@ -1988,7 +1988,7 @@ chat.blocked_dm: "Tu ne peux pas envoyer de message à un utilisateur que tu as 
 chat.slowmode_on: "Mode lent activé."
 chat.slowmode_immune: "Immunité au mode lent"
 chat.slowmode_tip: "Mode lent activé. Les membres peuvent envoyer un message toutes les "
-chat.slowmode_s_alone_one: "secondes"
+chat.slowmode_s_alone_one: "{n} seconde"
 chat.slowmode_s_alone: "{n} secondes"
 chat.slowmode_h_one: "{n} heure"
 chat.slowmode_h: "{n} heures"
