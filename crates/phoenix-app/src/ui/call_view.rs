@@ -500,8 +500,10 @@ fn solo_tile(w: f32, h: f32) -> AnyElement {
         .into_any_element()
 }
 
+type FrameCache = std::collections::HashMap<u64, (u64, std::sync::Arc<gpui::RenderImage>)>;
+
 thread_local! {
-    static REMOTE_FRAMES: std::cell::RefCell<std::collections::HashMap<u64, (u64, std::sync::Arc<gpui::RenderImage>)>> = std::cell::RefCell::new(std::collections::HashMap::new());
+    static REMOTE_FRAMES: std::cell::RefCell<FrameCache> = std::cell::RefCell::new(FrameCache::new());
 }
 
 pub fn remote_image(user: Id) -> Option<std::sync::Arc<gpui::RenderImage>> {

@@ -84,8 +84,10 @@ fn ui(emit: &Emit, e: VoiceUiEvent) {
 
 pub const CAMERA_SIZE: (u32, u32, u32) = (1280, 720, 30);
 
-fn remote() -> &'static Mutex<std::collections::HashMap<u64, phoenix_voice::media::ffmpeg::FfmpegDecoder>> {
-    static R: OnceLock<Mutex<std::collections::HashMap<u64, phoenix_voice::media::ffmpeg::FfmpegDecoder>>> = OnceLock::new();
+type Decoders = std::collections::HashMap<u64, phoenix_voice::media::ffmpeg::FfmpegDecoder>;
+
+fn remote() -> &'static Mutex<Decoders> {
+    static R: OnceLock<Mutex<Decoders>> = OnceLock::new();
     R.get_or_init(Default::default)
 }
 
