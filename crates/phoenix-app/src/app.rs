@@ -825,6 +825,9 @@ impl PhoenixApp {
                 }
             }
             AppEvent::PresenceUpdate { user, presence } => {
+                if user == self.me.id {
+                    self.presence = presence; // own status dot in the user panel
+                }
                 self.people.on_presence(user, presence);
                 self.presences.insert(user, presence);
                 for ms in self.members.values_mut() {

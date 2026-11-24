@@ -1285,6 +1285,25 @@ fn voice_flags(v: &phoenix_api::models::VoiceState) -> crate::model::VoiceFlags 
     }
 }
 
+/// Own status (online/idle/dnd/invisible) for the user panel avatar dot:
+/// PreloadedUserSettings.status (11).status (1, StringValue .value 1), else
+/// the READY `sessions` "all" entry.
+pub fn self_status(r: &phoenix_api::gateway::events::Ready) -> Option<AppEvent> {
+    let proto = r.user_settings_proto.as_deref().and_then(|b| base64::engine::general_purpose::STANDARD.decode(b.trim()).ok());
+    let from_proto = proto.as_deref().and_then(|b| {
+        let st = super::nav::fields(b).into_iter().find(|f| f.0 == 11 && f.1 == 2)?.2;
+        let sv = super::nav::fields(st).into_iter().find(|f| f.0 == 1 && f.1 == 2)?.2;
+        let v = super::nav::fields(sv).into_iter().find(|f| f.0 == 1 && f.1 == 2)?.2;
+        std::str::from_utf8(v).ok().filter(|t| !t.is_empty()).map(str::to_owned)
+    });
+    let status = from_proto.or_else(|| {
+        let sessions = r.sessions.as_ref()?.as_array()?;
+        let s = sessions.iter().find(|s| s.get("session_id").and_then(Value::as_str) == Some("all")).or_else(|| sessions.first())?;
+        s.get("status").and_then(Value::as_str).map(str::to_owned)
+    })?;
+    Some(AppEvent::PresenceUpdate { user: id(r.user.id), presence: presence(&status) })
+}
+
 /// Own activities (custom status, games) from READY `sessions`, which the
 /// gateway doesn't echo back as a PRESENCE_UPDATE: the user panel subtext
 /// shows the custom status from them (vanilla-guild-text user panel).

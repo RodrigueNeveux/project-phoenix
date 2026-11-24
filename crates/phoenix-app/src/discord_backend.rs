@@ -306,6 +306,9 @@ fn start_session(
     if let Some(e) = convert::self_activities(ready) {
         inner.emit(e);
     }
+    if let Some(e) = convert::self_status(ready) {
+        inner.emit(e);
+    }
     nav::snapshot(&session.cache, ready).into_iter().for_each(|e| inner.emit(e));
     history::warm_recent(inner, &session);
     tokio::spawn(pump(inner.clone(), session, rx));

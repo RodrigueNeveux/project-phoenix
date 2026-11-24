@@ -218,6 +218,7 @@ fn load() -> Option<(Ui, Core)> {
     let data = convert::build_ready(&cache, &ready, &adapter.prefs);
     crate::perf::span("snapshot_built", t0);
     let mut events: Vec<AppEvent> = convert::self_activities(&ready).into_iter().collect();
+    events.extend(convert::self_status(&ready));
     events.extend(nav::snapshot(&cache, &ready));
     let resume = (fresh && other_owner().is_none())
         .then_some(last_seq)
