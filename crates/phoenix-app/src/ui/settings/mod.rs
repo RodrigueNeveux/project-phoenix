@@ -84,6 +84,8 @@ pub struct SyncedSettings {
     pub proto: std::collections::HashMap<&'static str, u64>,
     /// UI density (`appearance.ui_density`, synced like in the client).
     pub density: crate::theme::Density,
+    /// Consent / e-mail switches ([`synced_map::REST`]); missing = default.
+    pub rest: std::collections::HashMap<&'static str, bool>,
 }
 
 impl Default for SyncedSettings {
@@ -96,6 +98,7 @@ impl Default for SyncedSettings {
             allow_server_dms: true,
             proto: Default::default(),
             density: crate::theme::Density::default(),
+            rest: Default::default(),
         }
     }
 }
@@ -110,6 +113,8 @@ pub enum SettingsPatch {
     /// A [`synced_map`] entry set to a wire value.
     Proto(&'static str, u64),
     Density(crate::theme::Density),
+    /// A [`synced_map::REST`] switch.
+    Rest(&'static str, bool),
 }
 
 impl SyncedSettings {
@@ -123,6 +128,9 @@ impl SyncedSettings {
                 self.locale = l.clone()
             }
             SettingsPatch::AllowServerDms(v) => self.allow_server_dms = *v,
+            SettingsPatch::Rest(id, v) => {
+                self.rest.insert(id, *v);
+            }
             SettingsPatch::Proto(id, v) => {
                 // Entries sharing a field (flag bits) share the value.
                 let path = synced_map::entry(id).map(|e| e.path);
@@ -135,6 +143,9 @@ impl SyncedSettings {
     }
     /// Synced switch value (client default when unset).
     pub fn flag(&self, id: &str) -> bool {
+        if let Some((_, d)) = synced_map::rest(id) {
+            return self.rest.get(id).copied().unwrap_or(d);
+        }
         synced_map::get_bool(&self.proto, id)
     }
     /// Synced radio / select index (client default when unset).
@@ -425,6 +436,9 @@ pub fn save(app: &mut PhoenixApp, patch: SettingsPatch, cx: &mut Context<Phoenix
                     // Backends that don't echo every entry (mock) keep ours.
                     for (k, v) in &this.prefs.synced.proto {
                         s.proto.entry(*k).or_insert(*v);
+                    }
+                    for (k, v) in &this.prefs.synced.rest {
+                        s.rest.entry(*k).or_insert(*v);
                     }
                     crate::i18n::set_locale(&s.locale);
                     this.prefs.synced = s

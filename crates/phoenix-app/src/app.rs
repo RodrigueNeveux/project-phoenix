@@ -978,6 +978,7 @@ impl PhoenixApp {
                 }
             }
             AppEvent::Nav(e) => self.on_nav_event(e, cx),
+            AppEvent::SettingsChanged => ui::settings::on_ready(self, cx),
             ev @ (AppEvent::MemberListRows { .. } | AppEvent::Activities { .. }) => {
                 // Own custom status changed from another client (SESSIONS_REPLACE).
                 if let AppEvent::Activities { user, activities } = &ev
@@ -1347,7 +1348,7 @@ impl Render for PhoenixApp {
         crate::perf::on_render(self.selected_channel.map(|c| c.0), true);
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
-        crate::media::emoji::sync_motion(self.prefs.local.animate_emoji, window.is_window_active());
+        crate::media::emoji::sync_motion(self.prefs.synced.flag("anim-emoji"), window.is_window_active());
         crate::ui::settings::effects::sync(&self.prefs);
         self.chat_sync_style();
         let body = match self.screen {

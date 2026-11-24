@@ -61,6 +61,7 @@ pub static ENTRIES: &[Entry] = &[
     en("stickers", &[6, 15], true, &[0, 1, 2], 0),
     b("tts", &[6, 16], true),            // enable_tts_command
     b("age-ios", &[6, 20], false),       // view_nsfw_guilds
+    b("anim-emoji", &[6, 14], true),     // animate_emoji
     b("emoticons", &[6, 21], true),      // convert_emoticons
     b("age-cmds", &[6, 23], false),      // view_nsfw_commands
     b("legacy-input", &[6, 24], false),  // use_legacy_chat_input
@@ -109,6 +110,44 @@ pub static ENTRIES: &[Entry] = &[
     // --- Clips (19)
     b("data-clips", &[19, 1], true),     // allow_voice_recording
 ];
+
+/// Account settings outside settings-proto (REST routes of the client).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rest {
+    /// `/users/@me/consent` type.
+    Consent(&'static str),
+    /// `/users/@me/email-settings` category.
+    Email(&'static str),
+}
+
+/// (control id, route, client default)
+pub static REST: &[(&str, Rest, bool)] = &[
+    ("data-improve", Rest::Consent("usage_statistics"), true),
+    ("data-personalize", Rest::Consent("personalization"), true),
+    ("e-comm", Rest::Email("communication"), true),
+    ("e-social", Rest::Email("social"), true),
+    ("e-news", Rest::Email("updates_and_announcements"), false),
+    ("e-tips", Rest::Email("tips"), false),
+    ("e-recs", Rest::Email("recommendations_and_events"), false),
+];
+
+pub fn rest(id: &str) -> Option<(Rest, bool)> {
+    REST.iter().find(|r| r.0 == id).map(|r| (r.1, r.2))
+}
+
+/// Values found in the consent and email-settings responses.
+pub fn read_rest(consent: Option<&serde_json::Value>, email: Option<&serde_json::Value>) -> std::collections::HashMap<&'static str, bool> {
+    let cats = email.and_then(|e| e.get("categories").or_else(|| e.get("settings").and_then(|s| s.get("categories"))));
+    REST.iter()
+        .filter_map(|&(id, r, _)| {
+            let v = match r {
+                Rest::Consent(k) => consent?.get(k)?.get("consented")?.as_bool()?,
+                Rest::Email(k) => cats?.get(k)?.as_bool()?,
+            };
+            Some((id, v))
+        })
+        .collect()
+}
 
 pub fn entry(id: &str) -> Option<&'static Entry> {
     ENTRIES.iter().find(|e| e.id == id)
@@ -219,6 +258,17 @@ mod tests {
         m.insert("fr-fof", bool_wire(&m, "fr-fof", false));
         assert_eq!(m["fr-fof"], 4 | 8);
         assert!(!get_bool(&m, "fr-fof"));
+    }
+
+    #[test]
+    fn rest_responses() {
+        let c = serde_json::json!({"usage_statistics": {"consented": false}, "personalization": {"consented": true}});
+        let e = serde_json::json!({"initialized": true, "categories": {"social": false, "tips": true}});
+        let m = read_rest(Some(&c), Some(&e));
+        assert_eq!(m.get("data-improve"), Some(&false));
+        assert_eq!(m.get("e-social"), Some(&false));
+        assert_eq!(m.get("e-tips"), Some(&true));
+        assert!(!m.contains_key("e-comm"));
     }
 
     #[test]

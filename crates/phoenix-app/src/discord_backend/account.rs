@@ -96,28 +96,44 @@ impl DiscordBackend {
 
     pub(super) fn load_settings_impl(&self) -> BoxFuture<SyncedSettings> {
         self.with_session(move |_, s| async move {
-            let r = match s.rest.get_settings_proto_raw().await {
-                Ok(raw) => synced_raw(&raw),
+            let mut out = match s.rest.get_settings_proto_raw().await {
+                Ok(raw) => synced_raw(&raw)?,
                 Err(_) => {
                     let v = s.rest.get_settings_json().await.map_err(api_err)?;
-                    Ok(synced(&api_settings::from_json(&v)))
+                    synced(&api_settings::from_json(&v))
                 }
             };
-            if let Ok(set) = &r {
-                s.rest.set_locale(&set.locale);
-            }
-            r
+            s.rest.set_locale(&out.locale);
+            // Consents and e-mail preferences live on their own routes (best effort).
+            let consent = s.rest.get_consent().await.ok();
+            let email = s.rest.get_email_settings().await.ok();
+            out.rest = crate::ui::settings::synced_map::read_rest(consent.as_ref(), email.as_ref());
+            Ok(out)
         })
     }
 
     pub(super) fn save_settings_impl(&self, patch: SettingsPatch) -> BoxFuture<SyncedSettings> {
         self.with_session(move |_, s| async move {
+            if let SettingsPatch::Rest(id, v) = &patch {
+                use crate::ui::settings::synced_map::{Rest, rest};
+                match rest(id).map(|r| r.0) {
+                    Some(Rest::Consent(k)) => s.rest.set_consent(k, *v).await.map_err(api_err)?,
+                    Some(Rest::Email(k)) => s.rest.patch_email_setting(k, *v).await.map(|_| ()).map_err(api_err)?,
+                    None => return Err(err(format!("unknown setting {id}"))),
+                }
+                // The caller replaces its whole copy: return the full synced state.
+                let raw = s.rest.get_settings_proto_raw().await.map_err(api_err)?;
+                let mut out = synced_raw(&raw)?;
+                out.rest.insert(*id, *v);
+                return Ok(out);
+            }
             let change = match &patch {
                 SettingsPatch::Theme(t) => SettingChange::Theme(theme_to_api(*t)),
                 SettingsPatch::Compact(b) => SettingChange::Compact(*b),
                 SettingsPatch::DeveloperMode(b) => SettingChange::DeveloperMode(*b),
                 SettingsPatch::Locale(l) => SettingChange::Locale(l.to_string()),
                 SettingsPatch::AllowServerDms(b) => SettingChange::DefaultGuildsRestricted(!*b),
+                SettingsPatch::Rest(..) => unreachable!("handled above"),
                 SettingsPatch::Proto(id, v) => {
                     crate::ui::settings::synced_map::change(id, *v).ok_or_else(|| err(format!("unknown setting {id}")))?
                 }

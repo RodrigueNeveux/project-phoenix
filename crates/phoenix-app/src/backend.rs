@@ -93,6 +93,8 @@ pub enum AppEvent {
     Disconnected(String),
     /// Friends, guild folders, threads, channel decorations (`ui::home`).
     Nav(crate::ui::home::data::NavEvent),
+    /// Synced settings were changed by another client (USER_SETTINGS_PROTO_UPDATE): reload them.
+    SettingsChanged,
     /// Server-ordered lazy member list of a guild (groups + members).
     MemberListRows { guild: Id, rows: Vec<crate::presence::ListEntry> },
     /// Rich presence of a user (empty = no activity).

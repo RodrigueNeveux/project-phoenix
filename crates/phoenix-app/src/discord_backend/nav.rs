@@ -304,6 +304,7 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
             if s.and_then(|s| s.get("type")).and_then(Value::as_u64) == Some(1)
                 && let Some(p) = s.and_then(|s| s.get("proto")).and_then(Value::as_str)
             {
+                out.push(AppEvent::SettingsChanged);
                 let f = folders_from_proto(p);
                 if !f.is_empty() {
                     out.push(AppEvent::Nav(NavEvent::Folders(f)));
@@ -540,13 +541,13 @@ mod tests {
         assert_eq!(f[0].id, Some(9));
         assert_eq!(f[0].name.as_deref(), Some("ab"));
         assert_eq!(f[0].color, Some(255));
-        // Live update from another client: folders replaced; other setting types ignored.
+        // Live update from another client: settings reloaded, folders replaced; other setting types ignored.
         let upd = |t: u64| GatewayEvent::Unknown {
             name: "USER_SETTINGS_PROTO_UPDATE".into(),
             data: json!({"settings": {"type": t, "proto": b64}, "partial": true}),
         };
         let out = on_gateway(&Cache::default(), &upd(1));
-        assert!(matches!(out.as_slice(), [AppEvent::Nav(NavEvent::Folders(f))] if f.len() == 1));
+        assert!(matches!(out.as_slice(), [AppEvent::SettingsChanged, AppEvent::Nav(NavEvent::Folders(f))] if f.len() == 1));
         assert!(on_gateway(&Cache::default(), &upd(2)).is_empty());
     }
 

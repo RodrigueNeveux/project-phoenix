@@ -447,6 +447,32 @@ impl RestClient {
         STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))
     }
 
+    /// `GET /users/@me/consent`: `{"usage_statistics": {"consented": bool}, "personalization": {...}}`.
+    pub async fn get_consent(&self) -> Result<Value> {
+        self.call(Method::GET, "/users/@me/consent", Body::None).await
+    }
+
+    /// `POST /users/@me/consent` granting or revoking one consent type.
+    pub async fn set_consent(&self, kind: &str, granted: bool) -> Result<()> {
+        let (grant, revoke): (Vec<&str>, Vec<&str>) = if granted { (vec![kind], vec![]) } else { (vec![], vec![kind]) };
+        self.call_empty(Method::POST, "/users/@me/consent", Body::Json(json!({ "grant": grant, "revoke": revoke }))).await
+    }
+
+    /// `GET /users/@me/email-settings` (`categories`: communication, social, ...).
+    pub async fn get_email_settings(&self) -> Result<Value> {
+        self.call(Method::GET, "/users/@me/email-settings", Body::None).await
+    }
+
+    /// `PATCH /users/@me/email-settings` for one category, like the client.
+    pub async fn patch_email_setting(&self, category: &str, on: bool) -> Result<Value> {
+        self.call(
+            Method::PATCH,
+            "/users/@me/email-settings",
+            Body::Json(json!({ "settings": { "categories": { category: on } } })),
+        )
+        .await
+    }
+
     /// Legacy JSON `GET /users/@me/settings` (fallback).
     pub async fn get_settings_json(&self) -> Result<Value> {
         self.call(Method::GET, "/users/@me/settings", Body::None).await

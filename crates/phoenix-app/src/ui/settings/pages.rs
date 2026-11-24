@@ -132,6 +132,7 @@ fn set_bool(app: &mut PhoenixApp, id: &'static str, b: Bind, v: bool, cx: &mut C
         }
         Bind::Local(_, s) => update_local(app, |p| s(p, v), cx),
         Bind::Synced(_, p) => save(app, p(v), cx),
+        Bind::Proto if super::synced_map::rest(id).is_some() => save(app, SettingsPatch::Rest(id, v), cx),
         Bind::Proto => {
             let w = super::synced_map::bool_wire(&app.prefs.synced.proto, id, v);
             save(app, SettingsPatch::Proto(id, w), cx)
@@ -1062,8 +1063,8 @@ static DATA: &[B] = &[
     B::Custom("sp.data.core", |_, _| {
         item(tr("sp.data.core"), Some(desc_text(tr("sp.data.core_d")).into_any_element()), None, false).into_any_element()
     }),
-    B::Switch("data-improve", "sp.data.improve", "sp.data.improve_d", Bind::Ui(true)),
-    B::Switch("data-personalize", "sp.data.personalize", "sp.data.personalize_d", Bind::Ui(true)),
+    B::Switch("data-improve", "sp.data.improve", "sp.data.improve_d", Bind::Proto),
+    B::Switch("data-personalize", "sp.data.personalize", "sp.data.personalize_d", Bind::Proto),
     B::Switch("data-sponsored", "sp.data.sponsored", "sp.data.sponsored_d", Bind::Ui(false)),
     B::Switch("data-third", "sp.data.third", "sp.data.third_d", Bind::Ui(false)),
     B::Switch("data-discovery", "sp.data.discovery", "sp.data.discovery_d", Bind::Ui(false)),
@@ -1161,11 +1162,11 @@ static NOTIF: &[B] = &[
     B::Switch("badge", "sp.no.badge", "sp.no.badge_d", Bind::Pref(true)),
     B::Divider,
     B::Title("sp.no.t4"),
-    B::Switch("e-comm", "sp.no.e_comm", "sp.no.e_comm_d", Bind::Ui(true)),
-    B::Switch("e-social", "sp.no.e_social", "sp.no.e_social_d", Bind::Ui(true)),
-    B::Switch("e-news", "sp.no.e_news", "sp.no.e_news_d", Bind::Ui(false)),
-    B::Switch("e-tips", "sp.no.e_tips", "sp.no.e_tips_d", Bind::Ui(false)),
-    B::Switch("e-recs", "sp.no.e_recs", "sp.no.e_recs_d", Bind::Ui(false)),
+    B::Switch("e-comm", "sp.no.e_comm", "sp.no.e_comm_d", Bind::Proto),
+    B::Switch("e-social", "sp.no.e_social", "sp.no.e_social_d", Bind::Proto),
+    B::Switch("e-news", "sp.no.e_news", "sp.no.e_news_d", Bind::Proto),
+    B::Switch("e-tips", "sp.no.e_tips", "sp.no.e_tips_d", Bind::Proto),
+    B::Switch("e-recs", "sp.no.e_recs", "sp.no.e_recs_d", Bind::Proto),
     B::Action("sp.no.unsub", "", "sp.no.unsub_b", true),
     B::Divider,
     B::Title("sp.no.t5"),
@@ -1451,7 +1452,7 @@ static A11Y: &[B] = &[
     B::Switch("reduced-motion", "sp.ac.motion", "sp.ac.motion_d", Bind::Local(|p| p.reduced_motion, |p, v| p.reduced_motion = v)),
     B::Switch("motion-sync", "sp.ac.motion_sync", "", Bind::Pref(true)),
     B::Switch("gifs", "sp.ac.gifs", "", Bind::Proto),
-    B::Switch("anim-emoji", "sp.ac.anim_emoji", "", Bind::Local(|p| p.animate_emoji, |p, v| p.animate_emoji = v)),
+    B::Switch("anim-emoji", "sp.ac.anim_emoji", "", Bind::Proto),
     B::Radios(
         "stickers",
         "sp.ac.stickers",
