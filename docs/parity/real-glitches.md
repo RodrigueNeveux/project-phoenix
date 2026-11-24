@@ -27,11 +27,13 @@ private and stay in `/mnt/windata/project-phoenix/compare/hunt/`.
 | 18 | Friends page, forum | "Search" and "Search or create a post..." in English in the French UI; "Tous les amis - 196" used a hyphen | Inputs created before the synced settings set the locale kept the English placeholder | Refresh input placeholders when the synced locale arrives (friends and forum search); the French counts now use "—" |
 | 19 | Member list, bot with a multi-line custom status | The status still stacked on 3 lines over the name after #8 | The status text held newlines | Fold newlines in one-line emoji labels such as member custom statuses |
 | 20 | Rich text that opens on a blank line next to an emoji | The blank line was lost after #5 | The newline split dropped an empty first line | Keep blank lines that open a rich text block |
+| 21 | Announcement, after #4 | The `#` icon ended one line and the channel name started the next | Icon and name were separate flex items | Keep a channel mention's icon and name together when the line wraps |
+| 22 | Embeds and messages with an emoji, narrow window | The text after an emoji jumped to a new line (`🎶` alone, then "Started playing …") | Each text run between emoji was one flex item, so it could not flow on the emoji's line | Flow message and embed text word by word around inline emoji |
 
 ## Seen but not fixed (known limits)
 
 - Lottie stickers (Discord's own "Wave") show the "Autocollant : Wave" text fallback, because Lottie is not rendered.
-- Text before an inline emoji still ends its flex line. A word after the emoji starts on a new line instead of flowing on the same line, as Chromium's inline layout does. Fixing it needs inline boxes in GPUI's text layout.
+- GPUI paints a text with the wrap from its last measure. When Taffy then shrinks that text as a flex item, it spills out of its box. #4, #17 and #22 work around it per site (`min-width: 0`, `flex: 1`, or no shrinking). The root fix is to re-wrap at the final width in GPUI's `TextLayout::prepaint`.
 - Clamped profile bios cut a long URL on the line instead of wrapping it with `break-word` inside the 3-line clamp.
 - Reply previews draw mentions as plain text, without the mention colour.
 - Some large attachments (probably big GIFs) stay on the loading placeholder after 45 s in `real_shots`.
