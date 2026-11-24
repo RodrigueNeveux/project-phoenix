@@ -115,7 +115,8 @@ impl RenderOnce for CustomEmojiImage {
                     }
                 })
             })
-            .child(img(src).size(px(size)).with_fallback(fallback))
+            // The id keeps the frame index and timer: without it GPUI never advances the frames.
+            .child(img(src).id("frames").size(px(size)).with_fallback(fallback))
             .into_any_element()
     }
 }

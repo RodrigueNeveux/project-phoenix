@@ -22,9 +22,10 @@ pub fn geometry(size: f32) -> (f32, f32) {
 /// avatar's own (relative) box. Avatars with a status take it through
 /// [`crate::ui::avatar_with_status_deco`] so the status cut-out and glyph
 /// are painted above it.
-pub fn layer(src: SharedString, size: f32) -> gpui::Img {
+pub fn layer(src: SharedString, size: f32) -> gpui::Stateful<gpui::Img> {
     let (off, side) = geometry(size);
-    img(src).absolute().left(px(off)).top(px(off)).size(px(side))
+    // The id lets GPUI advance the animated WebP's frames (media::anim_id).
+    img(src.clone()).id(crate::media::anim_id(&src)).absolute().left(px(off)).top(px(off)).size(px(side))
 }
 
 /// The user's decoration source, animated while row `key` is hovered.

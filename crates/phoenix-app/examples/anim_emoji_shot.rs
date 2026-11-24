@@ -3,11 +3,19 @@
 //! `anim_emoji_shot <out-prefix> <dir> <id>...` writes `<out-prefix>-<n>.png`,
 //! one frame every 150 ms. `<dir>` holds generated test art `<id>.gif` (playing)
 //! and `<id>.png` (still), served through the `local/` asset path: no real emoji.
+//!
+//! Then it measures playback: the colour at the centre of the first 22px emoji
+//! is sampled every 20 ms for 3 s (`fps` = colour changes per second), and the
+//! process CPU time is read from `/proc/self/stat` over 5 s of 60 Hz redraws,
+//! once with the emoji playing and once with `Play animated emoji` off.
 
 use std::{sync::Arc, time::Duration};
 
 use gpui::{AppContext, Context, HeadlessAppContext, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb, size};
 use phoenix_app::{assets::Assets, media::emoji};
+
+/// "Play animated emoji" for the CPU comparison.
+static PLAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 struct Shot {
     ids: Vec<String>,
@@ -15,7 +23,7 @@ struct Shot {
 
 impl Render for Shot {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        emoji::sync_motion(true, true);
+        emoji::sync_motion(PLAY.load(std::sync::atomic::Ordering::Relaxed), true);
         let row = |size: f32, hover_only: bool, ids: &[String]| {
             let mut r = div().flex().items_center().gap(px(8.));
             for id in ids {
@@ -66,5 +74,41 @@ fn main() -> anyhow::Result<()> {
         img.save(format!("{out}-{n}.png"))?;
     }
     println!("wrote {out}-0..5.png");
+
+    // Effective frame rate of the first inline emoji (centre of the 22px box at 16,16).
+    let scale = cx.update_window(win.into(), |_, window, _| window.scale_factor())?;
+    let at = ((16. + 11.) * scale) as u32;
+    let mut last = None;
+    let mut changes = 0;
+    let t0 = std::time::Instant::now();
+    while t0.elapsed() < Duration::from_secs(3) {
+        std::thread::sleep(Duration::from_millis(20));
+        cx.update_window(win.into(), |_, window, _| window.refresh())?;
+        cx.run_until_parked();
+        let px = cx.capture_screenshot(win.into())?.get_pixel(at, at).0;
+        if last.is_some_and(|l| l != px) {
+            changes += 1;
+        }
+        last = Some(px);
+    }
+    println!("fps {:.1} ({changes} frame changes in {:.1} s)", changes as f32 / t0.elapsed().as_secs_f32(), t0.elapsed().as_secs_f32());
+
+    // CPU of 5 s of 60 Hz redraws, playing then still.
+    let cpu = || -> f64 {
+        let stat = std::fs::read_to_string("/proc/self/stat").unwrap_or_default();
+        let f: Vec<&str> = stat.rsplit_once(')').map_or("", |(_, r)| r).split_whitespace().collect();
+        let ticks = |i: usize| f.get(i).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.);
+        (ticks(11) + ticks(12)) / 100.
+    };
+    for (label, play) in [("playing", true), ("still", false)] {
+        PLAY.store(play, std::sync::atomic::Ordering::Relaxed);
+        let (c0, t0) = (cpu(), std::time::Instant::now());
+        while t0.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(16));
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.run_until_parked();
+        }
+        println!("cpu {label}: {:.1} % of one core", (cpu() - c0) / t0.elapsed().as_secs_f64() * 100.);
+    }
     Ok(())
 }

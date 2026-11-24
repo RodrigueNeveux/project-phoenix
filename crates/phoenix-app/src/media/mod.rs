@@ -80,6 +80,12 @@ pub fn gifv_animated(url: &str, w: f32) -> Option<SharedString> {
             return Some(format!("https://media.tenor.com/{}{variant}/{stem}.gif", &code[..code.len() - 5]).into());
         }
     }
+    // Klipy (the client's GIF provider since 2026): the embed thumbnail is the
+    // provider's animated WebP (live: 72 frames, ~160 KB), the video an mp4.
+    if let Some(i) = url.find("static.klipy.com/") {
+        let path = &url[i..];
+        return [".webp", ".gif"].iter().any(|x| path.ends_with(x)).then(|| format!("https://{path}").into());
+    }
     if let Some(i) = url.find("giphy.com/media/") {
         let rest = &url[i + "giphy.com/media/".len()..];
         let id = rest.split('/').next().filter(|s| !s.is_empty())?;
@@ -127,7 +133,8 @@ pub fn avatar_image(url: SharedString, size: f32) -> AnyElement {
         .group(group.clone())
         .child(img(static_variant(&url)).size(px(size)).rounded_full())
         .child(
-            img(url)
+            img(url.clone())
+                .id(anim_id(&url))
                 .absolute()
                 .top_0()
                 .left_0()
@@ -137,6 +144,51 @@ pub fn avatar_image(url: SharedString, size: f32) -> AnyElement {
                 .group_hover(group, |s| s.visible()),
         )
         .into_any_element()
+}
+
+thread_local! {
+    /// The GIF under the pointer (gifv embed or GIF attachment), which plays even
+    /// with "Play GIFs when Discord is focused" off, like the client.
+    static HOVERED_GIF: std::cell::RefCell<Option<SharedString>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Whether the GIF keyed `key` should play: autoplay on, or hovered. GPUI then
+/// only advances frames while the window is active (focus pause, as the client).
+pub fn gif_plays(key: &SharedString) -> bool {
+    crate::ui::settings::effects::gif_autoplay() || HOVERED_GIF.with(|h| h.borrow().as_ref() == Some(key))
+}
+
+/// Wraps a GIF so hovering it plays it when autoplay is off (re-render on change).
+pub fn gif_hover(key: SharedString, child: impl IntoElement) -> gpui::Stateful<gpui::Div> {
+    div().id(gpui::ElementId::Name(format!("gif-hover-{key}").into())).child(child).on_hover(move |h, window, _| {
+        let changed = HOVERED_GIF.with(|cur| {
+            let mut cur = cur.borrow_mut();
+            let next = if *h { Some(key.clone()) } else if cur.as_ref() == Some(&key) { None } else { cur.clone() };
+            let changed = *cur != next;
+            *cur = next;
+            changed
+        });
+        if changed && !crate::ui::settings::effects::gif_autoplay() {
+            window.refresh();
+        }
+    })
+}
+
+/// GPUI only plays frames of an `img` that has an element id (its frame index
+/// and timer live in the element state); an id-less `img` of a GIF or animated
+/// WebP stays on its first frame forever. Every image that may animate gets one.
+pub fn anim_id(src: &SharedString) -> gpui::ElementId {
+    gpui::ElementId::Name(src.clone())
+}
+
+/// Playing URL of a sticker in a message. APNG stickers come as the CDN's
+/// animated WebP (`.webp?animated=true`, measured: 25 frames, 180 KB against
+/// 471 KB for the APNG), since GPUI decodes APNG as a single frame.
+pub fn sticker_play_url(id: u64, format: StickerFormat) -> Option<SharedString> {
+    match format {
+        StickerFormat::Apng => Some(format!("https://media.discordapp.net/stickers/{id}.webp?size=320&animated=true").into()),
+        _ => sticker_url(id, format),
+    }
 }
 
 pub fn sticker_url(id: u64, format: StickerFormat) -> Option<SharedString> {
@@ -248,6 +300,12 @@ mod tests {
             Some("https://media.giphy.com/media/xyz/200w.webp")
         );
         assert_eq!(g("https://example.com/a.mp4"), None);
+        // Klipy: the animated WebP thumbnail plays, the mp4 does not.
+        assert_eq!(
+            g("https://images-ext-1.discordapp.net/external/q/https/static.klipy.com/ii/k/4f/0f/x.webp?format=webp&width=4").as_deref(),
+            Some("https://static.klipy.com/ii/k/4f/0f/x.webp")
+        );
+        assert_eq!(g("https://static.klipy.com/ii/k/4f/0f/y.mp4"), None);
     }
 
     use super::*;

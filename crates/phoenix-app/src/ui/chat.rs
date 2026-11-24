@@ -1333,6 +1333,7 @@ fn message(
                             let offset = (size - m::AVATAR) / 2.;
                             d.child(
                                 gpui::img(crate::ui::avatar_deco::src_for(&deco, crate::ui::avatar_deco::hover_key(2, id.0)))
+                                    .id("deco-frames")
                                     .absolute()
                                     .size(z(size))
                                     .left(z(-offset))
@@ -1414,6 +1415,7 @@ fn message(
                             let off = (s - msg_avatar()) / 2.;
                             d.child(
                                 gpui::img(crate::ui::avatar_deco::src_for(&deco, crate::ui::avatar_deco::hover_key(2, id.0)))
+                                    .id("deco-frames")
                                     .absolute()
                                     .size(z(s))
                                     .left(z(-off))
@@ -1723,8 +1725,20 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bo
 
 /// Clickable image (opens the viewer). `w x h` is the drawn size; the proxy
 /// is asked for 2x for HiDPI.
-fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, oh): (u32, u32), (w, h): (f32, f32)) -> gpui::Stateful<gpui::Img> {
-    let src = media::resized(url, (w * 2.) as u32, (h * 2.) as u32);
+fn media_image(url: &str, original: SharedString, filename: SharedString, size_o: (u32, u32), size: (f32, f32)) -> gpui::Stateful<gpui::Img> {
+    media_image_with(url, original, filename, size_o, size, false)
+}
+
+/// [`media_image`]; `still` asks the proxy for the first frame (`format=webp`).
+fn media_image_with(
+    url: &str,
+    original: SharedString,
+    filename: SharedString,
+    (ow, oh): (u32, u32),
+    (w, h): (f32, f32),
+    still: bool,
+) -> gpui::Stateful<gpui::Img> {
+    let src = if still { media::video_poster(url, (w * 2.) as u32, (h * 2.) as u32) } else { media::resized(url, (w * 2.) as u32, (h * 2.) as u32) };
     let viewer = media::ViewerImage {
         url: media::resized(url, ow.min(2048), oh.min(2048)),
         original: if original.is_empty() { url.to_owned().into() } else { original },
@@ -1808,6 +1822,10 @@ fn still_sticker(u: SharedString, fmt: media::StickerFormat) -> SharedString {
     if !animated || crate::ui::settings::effects::sticker_autoplay() || !u.contains("media.discordapp.net") {
         return u;
     }
+    // APNG stickers play as `.webp?…&animated=true`: the still is the same URL without it.
+    if u.contains("&animated=true") {
+        return u.replace("&animated=true", "").into();
+    }
     let sep = if u.contains('?') { '&' } else { '?' };
     format!("{u}{sep}passthrough=false").into()
 }
@@ -1832,7 +1850,8 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
         AttachmentKind::Sticker(fmt) => {
             let name = a.filename.clone();
             return match media::sticker_url(0, fmt).and(Some(a.url.clone())).filter(|u| !u.is_empty()) {
-                Some(u) => img(still_sticker(u, fmt))
+                Some(u) => img(still_sticker(u.clone(), fmt))
+                    .id(media::anim_id(&u))
                     .mt(z(4.))
                     .size(z(160.))
                     .object_fit(gpui::ObjectFit::Contain)
@@ -1854,7 +1873,13 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 .mt(z(4.))
                 // Right-click on the image adds the image rows to the message menu.
                 .on_mouse_down(gpui::MouseButton::Right, move |_, _, _| panels::set_menu_media(link.clone()))
-                .child(media_image(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size))
+                // GIF uploads follow "Play GIFs when Discord is focused": off = first frame, played on hover.
+                .child({
+                    let gif = a.filename.to_ascii_lowercase().ends_with(".gif");
+                    let still = gif && !media::gif_plays(&a.url);
+                    let im = media_image_with(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size, still);
+                    if gif { media::gif_hover(a.url.clone(), im).into_any_element() } else { im.into_any_element() }
+                })
                 .into_any_element();
         }
         AttachmentKind::Audio => return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element(),
@@ -2013,11 +2038,14 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed, cx: &App) -> AnyElement {
         // gifv: play the animated gif rendition (GPUI animates GIF frames only while the
         // row is laid out, i.e. on screen in the virtual list, and the window is active).
         // Accessibility "Play GIFs when Discord is focused" (gif_auto_play): off = still frame.
-        let animated = (e.kind.as_deref() == Some("gifv") && crate::ui::settings::effects::gif_autoplay())
+        // Off: the still frame, playing while hovered (client gifv rule).
+        let gifv = e.kind.as_deref() == Some("gifv");
+        let animated = (gifv && media::gif_plays(&original))
             .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url, size.0)))
             .flatten();
         let Some(src) = animated else {
-            return div().mt(z(4.)).child(media_image(&m.url, original, "".into(), (m.width, m.height), size)).into_any_element();
+            let still = media_image(&m.url, original.clone(), "".into(), (m.width, m.height), size);
+            return div().mt(z(4.)).child(media::gif_hover(original, still)).into_any_element();
         };
         // While the animated rendition downloads/decodes, show the embed's static
         // thumbnail (proxied, resized) instead of an empty box, then swap. The thumbnail
@@ -2025,9 +2053,10 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed, cx: &App) -> AnyElement {
         // (megabytes, tens of seconds), so the box stayed empty. The client asks for the
         // single-frame webp (`?format=webp&width=&height=`, ~4 KB).
         let still = media::video_poster(&m.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
+        let key = original.clone();
         return div()
             .mt(z(4.))
-            .child(media_image(&src, original, "".into(), (m.width, m.height), size).with_loading(move || {
+            .child(media::gif_hover(key, media_image(&src, original, "".into(), (m.width, m.height), size).with_loading(move || {
                 let mut im = img(still.clone());
                 if let Some(cache) = media::lru::chat() {
                     im = im.image_cache(&cache);
@@ -2037,7 +2066,7 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed, cx: &App) -> AnyElement {
                     .object_fit(gpui::ObjectFit::Cover)
                     .with_loading(|| div().size_full().rounded(z(8.)).bg(c(Palette::BG_SECONDARY)).into_any_element())
                     .into_any_element()
-            }))
+            })))
             .into_any_element();
     }
     // Small thumbnail on the right for article/link embeds, big image below otherwise.

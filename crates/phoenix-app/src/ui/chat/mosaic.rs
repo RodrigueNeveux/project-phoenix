@@ -54,7 +54,7 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
     };
     let video = a.kind == AttachmentKind::Video;
     let original = viewer.original.clone();
-    let mut im = img(src.clone());
+    let mut im = img(src.clone()).id("frames");
     if let Some(cache) = media::lru::chat() {
         im = im.image_cache(&cache);
     }

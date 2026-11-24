@@ -257,7 +257,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                             .inset_0()
                                             .opacity(0.)
                                             .group_hover("guild-banner", |s| s.opacity(1.))
-                                            .child(gpui::img(url("gif")).size_full().object_fit(gpui::ObjectFit::Cover)),
+                                            .child(gpui::img(url("gif")).id("banner-frames").size_full().object_fit(gpui::ObjectFit::Cover)),
                                     )
                                 })
                         })
