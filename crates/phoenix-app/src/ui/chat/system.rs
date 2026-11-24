@@ -60,6 +60,11 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             "".into(),
             crate::t!("sys.rename", c = msg.content),
         ),
+        // Stage system lines (real stage chat showed bare "⋯ name time" rows).
+        MessageKind::StageStart => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.stage_start", c = msg.content)),
+        MessageKind::StageEnd => (ChatIcon::Join, Palette::RED, "".into(), crate::t!("sys.stage_end", c = msg.content)),
+        MessageKind::StageSpeaker => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.stage_speaker")),
+        MessageKind::StageTopic => (ChatIcon::Edit, Palette::INTERACTIVE, "".into(), crate::t!("sys.stage_topic", c = msg.content)),
         _ => (
             ChatIcon::More,
             Palette::INTERACTIVE,

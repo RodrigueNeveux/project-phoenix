@@ -303,6 +303,10 @@ fn message_kind(k: api::MessageType) -> model::MessageKind {
         T::RecipientRemove => K::RecipientRemove,
         T::Call => K::Call,
         T::ChannelNameChange => K::ChannelNameChange,
+        T::StageStart => K::StageStart,
+        T::StageEnd => K::StageEnd,
+        T::StageSpeaker => K::StageSpeaker,
+        T::StageTopic => K::StageTopic,
         _ => K::OtherSystem,
     }
 }

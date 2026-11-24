@@ -191,6 +191,11 @@ pub enum MessageKind {
     RecipientRemove,
     Call,
     ChannelNameChange,
+    /// Stage instance started / ended (content = topic), new speaker, topic change.
+    StageStart,
+    StageEnd,
+    StageSpeaker,
+    StageTopic,
     /// Any other non-user type: shown as a generic system line.
     OtherSystem,
 }
