@@ -770,7 +770,18 @@ pub fn member_row_in(
                                 .text_size(z(16.))
                                 .line_height(z(20.))
                                 .font_weight(FontWeight::MEDIUM)
-                                .text_color(role_color(g.and_then(|g| app.member_color(g, mem))))
+                                // container_J1Adu_ color --channels-default; :hover
+                                // --interactive-text-hover, selected --interactive-text-active
+                                // (role colours keep their own colour).
+                                .map(|d| match g.and_then(|g| app.member_color(g, mem)) {
+                                    Some(col) => d.text_color(role_color(Some(col))),
+                                    None if app.people.popout.as_ref().is_some_and(|p| p.user == uid) => {
+                                        d.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))
+                                    }
+                                    None => d
+                                        .text_color(c(tok(idx::CHANNELS_DEFAULT)))
+                                        .group_hover("member-row", |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))),
+                                })
                                 // name_ ellipsis: only the name shrinks, the decorators keep their width
                                 .min_w_0()
                                 .overflow_hidden()
