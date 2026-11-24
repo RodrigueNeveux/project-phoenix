@@ -6,6 +6,8 @@
 //!   saved as JSON in `$XDG_CONFIG_HOME/discord-phoenix/settings.json`.
 
 mod art;
+mod boost;
+mod gift;
 mod pages;
 pub(crate) mod profile_editor;
 pub mod collectible_picker;

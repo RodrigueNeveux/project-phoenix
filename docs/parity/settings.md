@@ -102,4 +102,35 @@ Added rows:
 | switch | hover target | only the indicator itself (hovering the row label changes nothing) | `controls::switch` | ✅ |
 | slider grabber | hover / drag | 16px → 20px, 1px --border-normal, shadow 0 1 4 .14 | `voice::slider` grabber | ✅ |
 | select field | hover | no visual change (transition border-color .1s only on focus) | `pages::dropdown` | ✅ |
-| marker slider grabber | hover | 16 → 20 | `controls::marker_slider` (hit zones cover the grabber) | ❌ |
+| marker slider grabber | hover | 16 → 20 | `controls::marker_slider` (grabber painted above the hit zones, non-blocking hitbox) | ✅ |
+| select field | open / focus | `selectField_vWC4bk:focus-within` 2px outline --input-border-active, offset -2 | `pages::dropdown` overlay ring | ✅ |
+| input / select | hover | `wrapper_UcGqzv:hover` border --input-border-hover | `controls::select_field` `.hover` | ✅ |
+| switch / button | pressed | not measured (pressing a switch would toggle it); buttons use the CSS `:active` tokens | `controls::button` | ✅ buttons, ❌ switch :active |
+
+## Billing pages (vanilla-settings-16-1/2/3, 2026-11-24)
+
+The live sidebar (FR) matches `NAV` exactly: Compte, Données et confidentialité, Permissions de messagerie, Notifications / Nitro, Boost de serveur, Abonnements, Inventaire des cadeaux, Facturation / Voix & Vidéo, Apparence, Accessibilité, Système, Langue et heure / Jeux enregistrés, Confidentialité des activités, Applications connectées / Développeur, Déconnexion. Clips, Keybinds, Streamer mode, What's New, Merch, HypeSquad, Family Centre and Authorized apps are no longer top-level pages in the 2026 client.
+
+| page | dump node | element | CSS | our code | status |
+|---|---|---|---|---|---|
+| Boost de serveur | #2727 `header_xDn2Ui` | header | gap 32, mb 32; title heading-xl + gem, lead body-sm --text-subtle; 300x169 video card r10 | `boost::header` | ✅ structure (video thumbnail art is the client's asset: plain surface + title + play button) |
+| Boost de serveur | #2742 `guildBoostUnavailableNotice_Jru8ph` | notice pill | white/.1, 2px white, r9999, p 8 16 | `boost::notice` | ✅ (shown because the account is in a Nitro Squad) |
+| Boost de serveur | #2749 `card_rH8mBz` | guild cards | --background-surface-high, 1px --border-muted, r16, p12, 40px icon, sm secondary button | `boost::guild_cards` | ✅ layout; ❌ boost count / level stats row (no guild boost data in the model) |
+| Boost de serveur | #2799 `table_twYJsJ` | perks table | rows p16 0, 1px --border-normal, 4 flex cells p0 16, check 24px --text-strong | `boost::perks_table` | ✅ |
+| Boost de serveur | #2923 `card_dgf5AJ` | community cards | 2x2, r16, p12, 42px --icon-muted glyph | `boost::community` | ✅ (our glyphs) |
+| Boost de serveur | #2938 `listItem_eICevE` | FAQ | r8 p12 gap 4, 18px chevron | `boost::faq` | ✅ collapsed; ❌ expanding answers |
+| Abonnements | `content_NedsCW` | title, description, credit fieldset | heading-lg, 16/20, legend body-lg/medium | `gift::subscriptions` | ✅ static text; ❌ subscription card / members / credit rows (no billing data) |
+| Inventaire des cadeaux | `container_J9WkLo` | gift card promo | 90deg --expressive-gradient-blue, r16, min-h 180, p 16 16 16 28, overlay-primary sm buttons | `gift::promo` | ✅ (lottie replaced by our gift glyph) |
+| Inventaire des cadeaux | `container_VhFsFg` | redeem codes | label + description, 40px input, md primary | `gift::redeem` | ✅ (field is inert) |
+| Inventaire des cadeaux | `container_qZFuGA` | gifting badge | content p32 r12 top --background-mod-subtle, 6 x 96px badge items, footer p24 surface-high + "Send a gift" | `gift::badges` | ✅ layout (badge art = our glyph) |
+| Inventaire des cadeaux | — | gifts purchased | "No gifts." + line | `gift::purchased` | ✅ |
+
+## Server settings visible to members (guild menu, vanilla-guild-privacy-modal / vanilla-guild-notifications-modal, 2026-11-24)
+
+| modal | dump node | element | CSS value | our code | status |
+|---|---|---|---|---|---|
+| Privacy Settings | `container_dvN-MP size-sm` | box | 400 wide, r12, p 8 0 16, header 16 24 8, title "Privacy Settings—<server>" heading-lg/semibold | `modals::privacy::render_privacy` + `card(400.)` | ✅ |
+| Privacy Settings | `container_VhFsFg` | rows | DMs, Message Requests, Share my activity, Activity Joining; 16 apart, label body-md/medium, description body-sm --text-muted, switch top-aligned, gap 24 | `privacy::row` | ✅ (two activity rows added, keys `activity_restricted_guild_ids` / `activity_joining_restricted_guild_ids`) |
+| Privacy Settings | label/description opacity | requests disabled | .5 while DMs are off | `render_privacy` | ✅ |
+| Privacy Settings | `actionBar_dvN-MP` | footer | full-width md primary "Done" | `render_privacy` | ✅ |
+| Notification Settings | `container_dvN-MP` 480px | sections | mute (saved), server level radios (saved), community alerts, suppress @everyone / roles / highlights / new events / mobile push (session), override picker label | `modals::guild_notify` (replaces the menu stub) | ✅ structure; ❌ override table and channel picker, highlights / events / mobile push not persisted |

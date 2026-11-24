@@ -113,20 +113,25 @@ pub fn marker_slider(
                 .bg(c(tok(idx::SLIDER_TRACK_BACKGROUND)))
                 .child(div().h_full().w(relative(frac)).rounded(z(2.)).bg(c(tok(idx::SLIDER_INDICATOR_BACKGROUND)))),
         )
-        // grabber
+        .child(hits)
+        // grabber, above the hit zones so it gets its own hover (ref-cache
+        // settings-grab0-hover: 16 -> 20px, centre kept by -2 margins); its
+        // hitbox doesn't block the zones underneath.
         .child(
             div().absolute().top(z(26.)).left(relative(frac)).w(z(0.)).flex().justify_center().child(
                 div()
+                    .id(ElementId::Name(format!("{id}-grab").into()))
                     .flex_none()
                     .size(z(16.))
                     .rounded_full()
                     .bg(gpui::white())
                     .border_1()
                     .border_color(c(tok(idx::BORDER_NORMAL))) // slider_ .grabber_ border --border-normal
-                    .shadow_sm(),
+                    .shadow_sm()
+                    .cursor_pointer()
+                    .hover(|d| d.size(z(20.)).m(z(-2.))),
             ),
         )
-        .child(hits)
 }
 
 /// Pick the marker index nearest to `value`.

@@ -5,6 +5,7 @@
 pub mod channel_settings;
 pub mod create_channel;
 pub mod forward;
+pub mod guild_notify;
 pub mod member;
 pub mod privacy;
 pub mod reactions;
@@ -65,6 +66,7 @@ pub enum Modal {
     ChannelSettings(channel_settings::State),
     Privacy(privacy::Privacy),
     Security(privacy::Security),
+    GuildNotify(guild_notify::State),
 }
 
 /// Create the inputs that need a `Window`.
@@ -116,6 +118,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::ChannelSettings(s) => channel_settings::render(app, s, cx),
             Modal::Privacy(p) => privacy::render_privacy(app, p, cx),
             Modal::Security(s) => privacy::render_security(s, cx),
+            Modal::GuildNotify(s) => guild_notify::render(app, s, cx),
         })
     })
 }

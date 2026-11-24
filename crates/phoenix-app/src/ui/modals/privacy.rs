@@ -17,6 +17,8 @@ use crate::{
 
 pub const DMS_KEY: &str = "restricted_guilds";
 pub const REQUESTS_KEY: &str = "message_request_restricted_guild_ids";
+pub const ACTIVITY_KEY: &str = "activity_restricted_guild_ids";
+pub const JOINING_KEY: &str = "activity_joining_restricted_guild_ids";
 
 pub struct Privacy {
     pub guild: Id,
@@ -47,13 +49,15 @@ impl Privacy {
     }
 }
 
+/// `container_VhFsFg` row (vanilla-guild-privacy-modal): label body-md/medium
+/// --text-strong, description body-sm --text-muted (gap 4), 48px switch
+/// top-aligned 24px to the right.
 fn row(id: &'static str, title: SharedString, desc: SharedString, on: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .flex()
-        .items_center()
-        .gap(z(16.))
-        .py(z(12.))
+        .items_start()
+        .gap(z(24.))
         .cursor_pointer()
         .child(
             div()
@@ -62,7 +66,7 @@ fn row(id: &'static str, title: SharedString, desc: SharedString, on: bool) -> g
                 .flex_col()
                 .gap(z(4.))
                 .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(title))
-                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(desc)),
+                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(desc)),
         )
         .child(switch(on))
 }
@@ -82,20 +86,32 @@ pub fn render_privacy(app: &PhoenixApp, p: &Privacy, cx: &mut Context<PhoenixApp
         }
     };
     // Switch on = allowed: the guild is NOT in the restriction list.
+    // Rows 16 apart (`categorySubGroup_`), no separators; "Message requests"
+    // is dimmed to .5 and inert while server DMs are off.
+    let dms = !p.listed(DMS_KEY);
+    let requests = row("priv-requests", crate::t!("admin.privacy_requests"), crate::t!("admin.privacy_requests_desc"), dms && !p.listed(REQUESTS_KEY));
     let body = div()
         .flex()
         .flex_col()
-        .child(row("priv-dms", crate::t!("admin.privacy_dms"), crate::t!("admin.privacy_dms_desc"), !p.listed(DMS_KEY)).on_click(cx.listener(toggle(DMS_KEY))))
-        .child(div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))))
+        .gap(z(16.))
+        .child(row("priv-dms", crate::t!("admin.privacy_dms"), crate::t!("admin.privacy_dms_desc"), dms).on_click(cx.listener(toggle(DMS_KEY))))
+        .child(if dms { requests.on_click(cx.listener(toggle(REQUESTS_KEY))) } else { requests.opacity(0.5).cursor_default() })
         .child(
-            row("priv-requests", crate::t!("admin.privacy_requests"), crate::t!("admin.privacy_requests_desc"), !p.listed(REQUESTS_KEY))
-                .on_click(cx.listener(toggle(REQUESTS_KEY))),
-        );
-    let footer = button("priv-done", crate::t!("common.done"), BtnKind::Primary).on_click({
+            row("priv-activity", crate::t!("admin.privacy_activity"), crate::t!("admin.privacy_activity_desc"), !p.listed(ACTIVITY_KEY))
+                .on_click(cx.listener(toggle(ACTIVITY_KEY))),
+        )
+        .child(
+            row("priv-joining", crate::t!("admin.privacy_joining"), crate::t!("admin.privacy_joining_desc"), !p.listed(JOINING_KEY))
+                .on_click(cx.listener(toggle(JOINING_KEY))),
+        )
+        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("admin.privacy_safety_note")));
+    // actionBar_: one full-width md primary "Done".
+    let footer = button("priv-done", crate::t!("common.done"), BtnKind::Primary).flex_1().on_click({
         let close = close_action(cx);
         move |_, w, cx| close(w, cx)
     });
-    card(440., crate::t!("menu.privacy_settings"), Some(name.into()), body.into_any_element(), Some(footer.into_any_element()), cx)
+    let title = format!("{}—{}", crate::t!("menu.privacy_settings"), name);
+    card(400., title.into(), None, body.into_any_element(), Some(footer.into_any_element()), cx)
 }
 
 /// Pause durations of Security Actions (seconds).

@@ -49,6 +49,10 @@ fn run(a: &mut PhoenixApp, guild: Id, item: Item, cx: &mut Context<PhoenixApp>) 
             a.save_nav_prefs();
         }
         Item::Leave => a.show_overlay(Overlay::LeaveGuild(guild), cx),
+        Item::Notifications => {
+            let st = crate::ui::modals::guild_notify::State::new(a, guild);
+            crate::actions::open_modal(crate::ui::modals::Modal::GuildNotify(st), None);
+        }
         other => a.stub(&other.label(), cx),
     }
     cx.notify();

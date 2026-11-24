@@ -175,7 +175,12 @@ pub(super) fn dropdown(
     let open = app.settings.as_ref().is_some_and(|s| s.open_select == Some(id));
     let field = controls::select_field(eid(format!("sel-{id}")), opts.get(cur).cloned().unwrap_or_default())
         .w(z(width))
-        .when(open, |d| d.border_color(c(tok(idx::INPUT_BORDER_ACTIVE))))
+        // selectField_ :focus-within: 2px outline --input-border-active, offset -2
+        .when(open, |d| {
+            d.relative().child(
+                div().absolute().top(z(-1.)).bottom(z(-1.)).left(z(-1.)).right(z(-1.)).rounded(z(8.)).border_2().border_color(c(tok(idx::INPUT_BORDER_ACTIVE))),
+            )
+        })
         .on_click(cx.listener(move |a, _, _, cx| {
             if let Some(s) = a.settings.as_mut() {
                 s.open_select = if s.open_select == Some(id) { None } else { Some(id) };
@@ -734,9 +739,20 @@ fn nitro_page(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
         );
     div().flex().flex_col().child(tier).child(gift).into_any_element()
 }
-static BOOST: &[B] = &[B::Title("settings.page.server_boost"), B::Lead("sp.billing.web")];
-static SUBSCRIPTIONS: &[B] = &[B::Title("settings.page.subscriptions"), B::Lead("sp.billing.web")];
-static GIFTS: &[B] = &[B::Title("settings.page.gift_inventory"), B::Lead("sp.billing.web")];
+static BOOST: &[B] = &[B::Custom("sp.bo.title", super::boost::page)];
+static SUBSCRIPTIONS: &[B] = &[B::Custom("sp.su.title", super::gift::subscriptions)];
+static GIFTS: &[B] = &[
+    B::Custom("sp.gi.buy", super::gift::promo),
+    B::Divider,
+    B::Title("sp.gi.codes"),
+    B::Custom("sp.gi.code_label", super::gift::redeem),
+    B::Divider,
+    B::Title("sp.gi.badge"),
+    B::Custom("sp.gi.footer", super::gift::badges),
+    B::Divider,
+    B::Title("sp.gi.bought"),
+    B::Custom("sp.gi.none", super::gift::purchased),
+];
 /// Facturation (vanilla-settings-06c, #3454-#3517): the data-free frame of the
 /// page. Payment sources, balance and transactions need the billing API, which
 /// Phoenix doesn't call, so those rows stay empty.
