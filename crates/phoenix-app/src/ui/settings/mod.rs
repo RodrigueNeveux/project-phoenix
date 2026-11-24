@@ -12,6 +12,7 @@ pub mod billing;
 mod boost;
 mod gift;
 mod pages;
+pub mod synced_map;
 pub(crate) mod profile_editor;
 pub mod collectible_picker;
 pub mod collectibles;
@@ -71,6 +72,9 @@ pub struct SyncedSettings {
     /// Privacy: allow DMs from members of servers (inverse of
     /// `default_guilds_restricted`).
     pub allow_server_dms: bool,
+    /// Every other synced control, by settings id ([`synced_map::ENTRIES`]),
+    /// as its wire value; missing = client default.
+    pub proto: std::collections::HashMap<&'static str, u64>,
 }
 
 impl Default for SyncedSettings {
@@ -81,6 +85,7 @@ impl Default for SyncedSettings {
             developer_mode: false,
             locale: "en-US".into(),
             allow_server_dms: true,
+            proto: Default::default(),
         }
     }
 }
@@ -92,6 +97,8 @@ pub enum SettingsPatch {
     DeveloperMode(bool),
     Locale(SharedString),
     AllowServerDms(bool),
+    /// A [`synced_map`] entry set to a wire value.
+    Proto(&'static str, u64),
 }
 
 impl SyncedSettings {
@@ -105,7 +112,22 @@ impl SyncedSettings {
                 self.locale = l.clone()
             }
             SettingsPatch::AllowServerDms(v) => self.allow_server_dms = *v,
+            SettingsPatch::Proto(id, v) => {
+                // Entries sharing a field (flag bits) share the value.
+                let path = synced_map::entry(id).map(|e| e.path);
+                for e in synced_map::ENTRIES.iter().filter(|e| Some(e.path) == path) {
+                    self.proto.insert(e.id, *v);
+                }
+            }
         }
+    }
+    /// Synced switch value (client default when unset).
+    pub fn flag(&self, id: &str) -> bool {
+        synced_map::get_bool(&self.proto, id)
+    }
+    /// Synced radio / select index (client default when unset).
+    pub fn pick(&self, id: &str) -> usize {
+        synced_map::get_pick(&self.proto, id)
     }
 }
 
@@ -127,6 +149,9 @@ pub struct LocalPrefs {
     /// Windows/Linux settings "Minimize to tray" (client default on): the close
     /// button hides the window to the tray icon instead of quitting.
     pub minimize_to_tray: bool,
+    /// Client-only controls without a dedicated field, by settings id
+    /// (switch 0/1 or option index). Missing = client default.
+    pub ui: std::collections::BTreeMap<String, u64>,
 }
 
 impl Default for LocalPrefs {
@@ -141,6 +166,7 @@ impl Default for LocalPrefs {
             saturation: 100,
             density: crate::theme::Density::default(),
             minimize_to_tray: true,
+            ui: Default::default(),
         }
     }
 }
@@ -153,6 +179,14 @@ fn config_path() -> Option<PathBuf> {
 }
 
 impl LocalPrefs {
+    /// Client-only switch `id` (see [`Self::ui`]).
+    pub fn flag(&self, id: &str, default: bool) -> bool {
+        self.ui.get(id).map(|v| *v != 0).unwrap_or(default)
+    }
+    /// Client-only option index `id`.
+    pub fn pick(&self, id: &str, default: usize) -> usize {
+        self.ui.get(id).map(|v| *v as usize).unwrap_or(default)
+    }
     pub fn from_json(v: &Value) -> Self {
         let d = Self::default();
         let f = |k: &str| v.get(k).and_then(Value::as_f64);
@@ -167,6 +201,11 @@ impl LocalPrefs {
             saturation: f("saturation").map(|x| (x as u32).min(100)).unwrap_or(d.saturation),
             density: v.get("density").and_then(Value::as_str).and_then(crate::theme::Density::from_key).unwrap_or(d.density),
             minimize_to_tray: b("minimize_to_tray", d.minimize_to_tray),
+            ui: v
+                .get("ui")
+                .and_then(Value::as_object)
+                .map(|o| o.iter().filter_map(|(k, v)| Some((k.clone(), v.as_u64()?))).collect())
+                .unwrap_or_default(),
         }
     }
     pub fn to_json(&self) -> Value {
@@ -180,6 +219,7 @@ impl LocalPrefs {
             "saturation": self.saturation,
             "density": self.density.key(),
             "minimize_to_tray": self.minimize_to_tray,
+            "ui": self.ui,
         })
     }
     pub fn load() -> Self {
@@ -374,7 +414,11 @@ pub fn save(app: &mut PhoenixApp, patch: SettingsPatch, cx: &mut Context<Phoenix
         let res = fut.await;
         let _ = this.update(cx, |this, cx| {
             match res {
-                Ok(s) => {
+                Ok(mut s) => {
+                    // Backends that don't echo every entry (mock) keep ours.
+                    for (k, v) in &this.prefs.synced.proto {
+                        s.proto.entry(*k).or_insert(*v);
+                    }
                     crate::i18n::set_locale(&s.locale);
                     this.prefs.synced = s
                 }

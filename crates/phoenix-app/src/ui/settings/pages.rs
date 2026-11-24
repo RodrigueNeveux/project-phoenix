@@ -36,6 +36,10 @@ pub enum Bind {
     Ui(bool),
     Local(fn(&LocalPrefs) -> bool, fn(&mut LocalPrefs, bool)),
     Synced(fn(&SyncedSettings) -> bool, fn(bool) -> SettingsPatch),
+    /// Synced through settings-proto ([`super::synced_map`] entry = the id).
+    Proto,
+    /// Client-only, saved in `LocalPrefs::ui` under the id; client default.
+    Pref(bool),
 }
 
 /// Where a radio group / select reads/writes its index.
@@ -44,6 +48,8 @@ pub enum Pick {
     Ui(usize),
     Local(fn(&LocalPrefs) -> usize, fn(&mut LocalPrefs, usize)),
     Synced(fn(&SyncedSettings) -> usize, fn(usize) -> SettingsPatch),
+    Proto,
+    Pref(usize),
 }
 
 /// One block of a settings page. Strings are i18n keys ("" = none).
@@ -112,6 +118,8 @@ fn get_bool(app: &PhoenixApp, id: &str, b: Bind) -> bool {
         Bind::Ui(d) => app.settings.as_ref().and_then(|s| s.toggles.get(id).copied()).unwrap_or(d),
         Bind::Local(g, _) => g(&app.prefs.local),
         Bind::Synced(g, _) => g(&app.prefs.synced),
+        Bind::Proto => app.prefs.synced.flag(id),
+        Bind::Pref(d) => app.prefs.local.flag(id, d),
     }
 }
 
@@ -125,6 +133,13 @@ fn set_bool(app: &mut PhoenixApp, id: &'static str, b: Bind, v: bool, cx: &mut C
         }
         Bind::Local(_, s) => update_local(app, |p| s(p, v), cx),
         Bind::Synced(_, p) => save(app, p(v), cx),
+        Bind::Proto => {
+            let w = super::synced_map::bool_wire(&app.prefs.synced.proto, id, v);
+            save(app, SettingsPatch::Proto(id, w), cx)
+        }
+        Bind::Pref(_) => update_local(app, |p| {
+            p.ui.insert(id.to_owned(), v as u64);
+        }, cx),
     }
 }
 
@@ -133,6 +148,8 @@ fn get_pick(app: &PhoenixApp, id: &str, p: Pick) -> usize {
         Pick::Ui(d) => app.settings.as_ref().and_then(|s| s.picks.get(id).copied()).unwrap_or(d),
         Pick::Local(g, _) => g(&app.prefs.local),
         Pick::Synced(g, _) => g(&app.prefs.synced),
+        Pick::Proto => app.prefs.synced.pick(id),
+        Pick::Pref(d) => app.prefs.local.pick(id, d),
     }
 }
 
@@ -149,6 +166,10 @@ fn set_pick(app: &mut PhoenixApp, id: &'static str, p: Pick, v: usize, cx: &mut 
         }
         Pick::Local(_, s) => update_local(app, |pr| s(pr, v), cx),
         Pick::Synced(_, f) => save(app, f(v), cx),
+        Pick::Proto => save(app, SettingsPatch::Proto(id, super::synced_map::pick_wire(id, v)), cx),
+        Pick::Pref(_) => update_local(app, |p| {
+            p.ui.insert(id.to_owned(), v as u64);
+        }, cx),
     }
 }
 
@@ -412,7 +433,7 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
         B::Sound(id, t) => {
             // the preview link (anchor_R6ReNl, 14/18 --text-link)
             let link = div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_LINK))).child(tr("sp.sound_preview"));
-            out.push(switch_row(app, id, tr(t), Some(link.into_any_element()), Bind::Ui(*id != "snd-msg-cur"), cx)); // vanilla-settings-04: current-channel sound off
+            out.push(switch_row(app, id, tr(t), Some(link.into_any_element()), Bind::Pref(*id != "snd-msg-cur"), cx)); // vanilla-settings-04: current-channel sound off
         }
         B::Radios(id, t, d, opts, p) => {
             let mut col = div().flex().flex_col().py(z(12.));
@@ -667,7 +688,9 @@ fn content_filters(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     }));
     let opts: Vec<SharedString> = SHOW_BLOCK.iter().map(|o| tr(o)).collect();
     let rows = ROWS[tab].iter().map(|&(id, label, def)| {
-        let cur = get_pick(app, id, Pick::Ui(def)).min(2);
+        // settings-proto explicit/gore_content_settings (synced_map entries).
+        let pk = if super::synced_map::entry(id).is_some() { Pick::Proto } else { Pick::Ui(def) };
+        let cur = get_pick(app, id, pk).min(2);
         let field = div()
             .id(eid(format!("sel-{id}")))
             .h(z(40.))
@@ -692,7 +715,7 @@ fn content_filters(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
                     .child(opts[cur].clone()),
             )
             .child(gpui::svg().path("icons/chevron.svg").size(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))));
-        let dd = dropdown_with(app, id, field, opts.clone(), cur, 140., move |a, i, cx| set_pick(a, id, Pick::Ui(def), i, cx), cx);
+        let dd = dropdown_with(app, id, field, opts.clone(), cur, 140., move |a, i, cx| set_pick(a, id, pk, i, cx), cx);
         div()
             .h(z(49.))
             .py(z(4.))
@@ -1047,7 +1070,7 @@ static DATA: &[B] = &[
     B::Switch("data-sponsored", "sp.data.sponsored", "sp.data.sponsored_d", Bind::Ui(false)),
     B::Switch("data-third", "sp.data.third", "sp.data.third_d", Bind::Ui(false)),
     B::Switch("data-discovery", "sp.data.discovery", "sp.data.discovery_d", Bind::Ui(false)),
-    B::Switch("data-clips", "sp.data.clips", "sp.data.clips_d", Bind::Ui(true)),
+    B::Switch("data-clips", "sp.data.clips", "sp.data.clips_d", Bind::Proto),
     B::Action("sp.data.request", "sp.data.request_d", "sp.data.request_b", false),
     B::Related("apps", "sp.games", "sp.games_d", Page::RegisteredGames),
     B::Divider,
@@ -1060,11 +1083,11 @@ static DATA: &[B] = &[
         &[("sp.data.sp_all", "sp.data.sp_all_d"), ("sp.data.sp_small", "sp.data.sp_small_d"), ("sp.data.sp_friends", "sp.data.sp_friends_d")],
         Pick::Ui(0),
     ),
-    B::Switch("share-update", "sp.data.share_update", "sp.data.share_update_d", Bind::Ui(true)),
+    B::Switch("share-update", "sp.data.share_update", "sp.data.share_update_d", Bind::Proto),
     B::Related("user-profile", "settings.page.activity", "sp.activity_related_d", Page::ActivityPrivacy),
     B::Divider,
     B::Title("sp.data.t3"),
-    B::Switch("e2ee-codes", "sp.data.codes", "sp.data.codes_d", Bind::Ui(false)),
+    B::Switch("e2ee-codes", "sp.data.codes", "sp.data.codes_d", Bind::Pref(false)),
 ];
 
 const SHOW_BLOCK: &[&str] = &["sp.cs.show", "sp.cs.blur", "sp.cs.block"];
@@ -1072,12 +1095,12 @@ const SHOW_BLOCK: &[&str] = &["sp.cs.show", "sp.cs.blur", "sp.cs.block"];
 static CONTENT: &[B] = &[
     B::Title("sp.cs.t1"),
     B::Custom("sp.cs.sensitive", content_filters),
-    B::Switch("age-cmds", "sp.cs.age_cmds", "sp.cs.age_cmds_d", Bind::Ui(false)),
-    B::Switch("age-ios", "sp.cs.age_ios", "sp.cs.age_ios_d", Bind::Ui(false)),
+    B::Switch("age-cmds", "sp.cs.age_cmds", "sp.cs.age_cmds_d", Bind::Proto),
+    B::Switch("age-ios", "sp.cs.age_ios", "sp.cs.age_ios_d", Bind::Proto),
     B::Related("image", "settings.page.appearance", "sp.cs.appearance_d", Page::Appearance),
     B::Divider,
     B::Title("sp.cs.t2"),
-    B::Radios("spam", "sp.cs.spam", "sp.cs.spam_d", &[("sp.cs.spam_all", ""), ("sp.cs.spam_nf", ""), ("sp.cs.spam_none", "")], Pick::Ui(1)),
+    B::Radios("spam", "sp.cs.spam", "sp.cs.spam_d", &[("sp.cs.spam_all", ""), ("sp.cs.spam_nf", ""), ("sp.cs.spam_none", "")], Pick::Proto),
     B::Divider,
     B::Title("sp.cs.t3"),
     B::Switch(
@@ -1086,20 +1109,20 @@ static CONTENT: &[B] = &[
         "sp.cs.dms_d",
         Bind::Synced(|s| s.allow_server_dms, SettingsPatch::AllowServerDms),
     ),
-    B::Switch("msg-requests", "sp.cs.requests", "sp.cs.requests_d", Bind::Ui(true)),
+    B::Switch("msg-requests", "sp.cs.requests", "sp.cs.requests_d", Bind::Proto),
     B::Divider,
     B::Title("sp.cs.t4"),
     B::Lead("sp.cs.t4_d"),
     B::Legend("sp.cs.fr_from"),
-    B::Switch("fr-everyone", "sp.cs.fr_everyone", "", Bind::Ui(true)),
-    B::Switch("fr-fof", "sp.cs.fr_fof", "", Bind::Ui(true)),
-    B::Switch("fr-members", "sp.cs.fr_members", "sp.cs.fr_members_d", Bind::Ui(true)),
-    B::Switch("fr-msg", "sp.cs.fr_msg", "sp.cs.fr_msg_d", Bind::Ui(true)),
+    B::Switch("fr-everyone", "sp.cs.fr_everyone", "", Bind::Proto),
+    B::Switch("fr-fof", "sp.cs.fr_fof", "", Bind::Proto),
+    B::Switch("fr-members", "sp.cs.fr_members", "sp.cs.fr_members_d", Bind::Proto),
+    B::Switch("fr-msg", "sp.cs.fr_msg", "sp.cs.fr_msg_d", Bind::Proto),
     B::Divider,
     B::Title("sp.cs.t5"),
     B::Lead("sp.cs.t5_d"),
-    B::Switch("game-dms", "sp.cs.game_dms", "sp.cs.game_dms_d", Bind::Ui(true)),
-    B::Radios("ingame", "sp.cs.ingame", "sp.cs.ingame_d", &[("sp.cs.ig_all", ""), ("sp.cs.ig_players", ""), ("sp.cs.ig_none", "")], Pick::Ui(0)),
+    B::Switch("game-dms", "sp.cs.game_dms", "sp.cs.game_dms_d", Bind::Proto),
+    B::Radios("ingame", "sp.cs.ingame", "sp.cs.ingame_d", &[("sp.cs.ig_all", ""), ("sp.cs.ig_players", ""), ("sp.cs.ig_none", "")], Pick::Proto),
     B::Related("apps", "sp.cs.authorized", "sp.cs.authorized_d", Page::Connections),
     B::Divider,
     B::Title("sp.cs.t6"),
@@ -1119,11 +1142,11 @@ static NOTIF: &[B] = &[
     ),
     B::Legend("sp.no.when"),
     B::Switch("n-stream", "sp.no.stream", "", Bind::Ui(true)),
-    B::Switch("n-anniv", "sp.no.anniv", "", Bind::Ui(true)),
-    B::Switch("n-online", "sp.no.online", "", Bind::Ui(true)),
-    B::Switch("n-event", "sp.no.event", "", Bind::Ui(true)),
-    B::Switch("n-profile", "sp.no.profile", "", Bind::Ui(true)),
-    B::Select("n-react", "sp.no.react", "", &["sp.no.r_all", "sp.no.r_dm", "sp.no.r_never"], Pick::Ui(0)),
+    B::Switch("n-anniv", "sp.no.anniv", "", Bind::Proto),
+    B::Switch("n-online", "sp.no.online", "", Bind::Proto),
+    B::Switch("n-event", "sp.no.event", "", Bind::Proto),
+    B::Switch("n-profile", "sp.no.profile", "", Bind::Proto),
+    B::Select("n-react", "sp.no.react", "", &["sp.no.r_all", "sp.no.r_dm", "sp.no.r_never"], Pick::Proto),
     B::Divider,
     B::Title("sp.no.t2"),
     B::Sound("snd-msg", "sp.no.msg"),
@@ -1138,7 +1161,7 @@ static NOTIF: &[B] = &[
     B::Related("speaker", "settings.page.voice_video", "sp.no.voice_d", Page::VoiceVideo),
     B::Divider,
     B::Title("sp.no.t3"),
-    B::Switch("badge", "sp.no.badge", "sp.no.badge_d", Bind::Ui(true)),
+    B::Switch("badge", "sp.no.badge", "sp.no.badge_d", Bind::Pref(true)),
     B::Divider,
     B::Title("sp.no.t4"),
     B::Switch("e-comm", "sp.no.e_comm", "sp.no.e_comm_d", Bind::Ui(true)),
@@ -1154,9 +1177,9 @@ static NOTIF: &[B] = &[
         "sp.no.adv",
         "sp.no.adv_d",
         &[
-            B::Select("push-delay", "sp.no.push", "sp.no.push_d", &["sp.no.min1", "sp.no.min5", "sp.no.min10"], Pick::Ui(0)),
-            B::Switch("tts", "sp.no.tts", "sp.no.tts_d", Bind::Ui(true)),
-            B::Radios("read-all", "sp.no.read_all", "sp.no.read_all_d", &[("sp.no.ra_all", ""), ("sp.no.ra_cur", ""), ("sp.no.r_never", "")], Pick::Ui(2)),
+            B::Select("push-delay", "sp.no.push", "sp.no.push_d", &["sp.no.min1", "sp.no.min5", "sp.no.min10"], Pick::Pref(0)),
+            B::Switch("tts", "sp.no.tts", "sp.no.tts_d", Bind::Proto),
+            B::Radios("read-all", "sp.no.read_all", "sp.no.read_all_d", &[("sp.no.ra_all", ""), ("sp.no.ra_cur", ""), ("sp.no.r_never", "")], Pick::Pref(2)),
         ],
     ),
 ];
@@ -1297,13 +1320,13 @@ fn limited_theme(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
 
 static APPEARANCE: &[B] = &[
     B::Custom("sp.ap.t1", theme_title),
-    B::Switch("theme-sync", "sp.ap.sync", "sp.ap.sync_d", Bind::Ui(false)),
+    B::Switch("theme-sync", "sp.ap.sync", "sp.ap.sync_d", Bind::Pref(false)),
     B::Custom("sp.ap.defaults", theme_row),
     B::Custom("sp.ap.banner", theme_banner),
     B::Custom("sp.ap.limited", limited_theme),
     B::Custom("sp.ap.colors", nitro_themes),
-    B::Switch("theme-devices", "sp.ap.sync_devices", "", Bind::Ui(true)),
-    B::Switch("theme-profiles", "sp.ap.apply_profiles", "", Bind::Ui(true)),
+    B::Switch("theme-devices", "sp.ap.sync_devices", "", Bind::Pref(true)),
+    B::Switch("theme-profiles", "sp.ap.apply_profiles", "", Bind::Pref(true)),
     B::Related("help", "settings.page.accessibility", "sp.ap.a11y_d", Page::Accessibility),
     // vanilla-settings-08b: "Icône de l'appli" follows the theme category.
     B::Divider,
@@ -1311,34 +1334,34 @@ static APPEARANCE: &[B] = &[
     B::Divider,
     B::Title("sp.ap.t2"),
     B::Legend("sp.ap.media"),
-    B::Switch("media-links", "sp.ap.links", "", Bind::Ui(true)),
-    B::Switch("media-uploads", "sp.ap.uploads", "", Bind::Ui(true)),
-    B::Switch("embeds", "sp.ap.embeds", "", Bind::Ui(true)),
-    B::Switch("reactions", "sp.ap.reactions", "", Bind::Ui(true)),
-    B::Select("spoilers", "sp.ap.spoilers", "", &["sp.ap.sp_click", "sp.ap.sp_always", "sp.ap.sp_mod"], Pick::Ui(0)),
-    B::Switch("split-threads", "sp.ap.split", "", Bind::Ui(true)),
-    B::Switch("avatars", "sp.ap.avatars", "sp.ap.avatars_d", Bind::Ui(true)),
-    B::Switch("favs", "sp.ap.favs", "sp.ap.favs_d", Bind::Ui(true)),
+    B::Switch("media-links", "sp.ap.links", "", Bind::Proto),
+    B::Switch("media-uploads", "sp.ap.uploads", "", Bind::Proto),
+    B::Switch("embeds", "sp.ap.embeds", "", Bind::Proto),
+    B::Switch("reactions", "sp.ap.reactions", "", Bind::Proto),
+    B::Select("spoilers", "sp.ap.spoilers", "", &["sp.ap.sp_click", "sp.ap.sp_always", "sp.ap.sp_mod"], Pick::Proto),
+    B::Switch("split-threads", "sp.ap.split", "", Bind::Proto),
+    B::Switch("avatars", "sp.ap.avatars", "sp.ap.avatars_d", Bind::Proto),
+    B::Switch("favs", "sp.ap.favs", "sp.ap.favs_d", Bind::Pref(true)),
     B::Related("help", "settings.page.accessibility", "sp.ap.density_d", Page::Accessibility),
     B::Divider,
     B::Title("sp.ap.t3"),
-    B::Switch("md-preview", "sp.ap.preview", "", Bind::Ui(true)),
-    B::Switch("emoticons", "sp.ap.emoticons", "sp.ap.emoticons_d", Bind::Ui(true)),
-    B::Switch("ac-stickers", "sp.ap.stickers", "", Bind::Ui(true)),
-    B::Switch("ac-games", "sp.ap.games_ac", "", Bind::Ui(true)),
-    B::Switch("send-btn", "sp.ap.send_btn", "", Bind::Ui(false)),
+    B::Switch("md-preview", "sp.ap.preview", "", Bind::Proto),
+    B::Switch("emoticons", "sp.ap.emoticons", "sp.ap.emoticons_d", Bind::Proto),
+    B::Switch("ac-stickers", "sp.ap.stickers", "", Bind::Proto),
+    B::Switch("ac-games", "sp.ap.games_ac", "", Bind::Proto),
+    B::Switch("send-btn", "sp.ap.send_btn", "", Bind::Pref(false)),
     B::Divider,
     B::Title("sp.ap.t4"),
-    B::Radios("dm-search", "sp.ap.dm_search", "", &[("sp.ap.dm_sel", ""), ("sp.ap.dm_all", "")], Pick::Ui(0)),
+    B::Radios("dm-search", "sp.ap.dm_search", "", &[("sp.ap.dm_sel", ""), ("sp.ap.dm_all", "")], Pick::Proto),
     B::Divider,
     B::Title("sp.ap.t5"),
-    B::Switch("streamer", "sp.ap.streamer", "sp.ap.streamer_d", Bind::Ui(false)),
-    B::Switch("streamer-auto", "sp.ap.streamer_auto", "", Bind::Ui(true)),
+    B::Switch("streamer", "sp.ap.streamer", "sp.ap.streamer_d", Bind::Pref(false)),
+    B::Switch("streamer-auto", "sp.ap.streamer_auto", "", Bind::Pref(true)),
     B::Legend("sp.ap.streamer_when"),
-    B::Switch("st-info", "sp.ap.hide_info", "", Bind::Ui(true)),
-    B::Switch("st-invites", "sp.ap.hide_invites", "", Bind::Ui(true)),
-    B::Switch("st-sounds", "sp.ap.no_sounds", "", Bind::Ui(true)),
-    B::Switch("st-notifs", "sp.ap.no_notifs", "", Bind::Ui(true)),
+    B::Switch("st-info", "sp.ap.hide_info", "", Bind::Pref(true)),
+    B::Switch("st-invites", "sp.ap.hide_invites", "", Bind::Pref(true)),
+    B::Switch("st-sounds", "sp.ap.no_sounds", "", Bind::Pref(true)),
+    B::Switch("st-notifs", "sp.ap.no_notifs", "", Bind::Pref(true)),
 ];
 
 fn slider_row(title: &'static str, desc: &'static str, s: Div) -> AnyElement {
@@ -1368,8 +1391,8 @@ static A11Y: &[B] = &[
             super::view::slider("font", &[12., 14., 15., 16., 18., 20., 24.], "px", fs, 16., |a, v, cx| update_local(a, |p| p.font_size = v, cx), cx),
         )
     }),
-    B::Switch("underline", "sp.ac.underline", "sp.ac.underline_d", Bind::Ui(false)),
-    B::Switch("name-styles", "sp.ac.name_styles", "sp.ac.name_styles_d", Bind::Ui(true)),
+    B::Switch("underline", "sp.ac.underline", "sp.ac.underline_d", Bind::Pref(false)),
+    B::Switch("name-styles", "sp.ac.name_styles", "sp.ac.name_styles_d", Bind::Pref(true)),
     B::Divider,
     B::Title("sp.ac.t2"),
     // Compacte / Par défaut / Spacieuse = Density::ALL order
@@ -1421,35 +1444,35 @@ static A11Y: &[B] = &[
             ),
         )
     }),
-    B::Switch("sat-custom", "sp.ac.sat_custom", "sp.ac.sat_custom_d", Bind::Ui(false)),
-    B::Switch("contrast", "sp.ac.contrast", "sp.ac.contrast_d", Bind::Ui(false)),
-    B::Select("roles", "sp.ac.roles", "sp.ac.roles_d", &["sp.ac.r_names", "sp.ac.r_next", "sp.ac.r_none"], Pick::Ui(0)),
-    B::Switch("indicators", "sp.ac.indicators", "sp.ac.indicators_d", Bind::Ui(false)),
+    B::Switch("sat-custom", "sp.ac.sat_custom", "sp.ac.sat_custom_d", Bind::Pref(false)),
+    B::Switch("contrast", "sp.ac.contrast", "sp.ac.contrast_d", Bind::Pref(false)),
+    B::Select("roles", "sp.ac.roles", "sp.ac.roles_d", &["sp.ac.r_names", "sp.ac.r_next", "sp.ac.r_none"], Pick::Pref(0)),
+    B::Switch("indicators", "sp.ac.indicators", "sp.ac.indicators_d", Bind::Pref(false)),
     B::Related("emoji", "settings.page.appearance", "sp.ac.appearance_d", Page::Appearance),
     B::Divider,
     B::Title("sp.ac.t4"),
     B::Switch("reduced-motion", "sp.ac.motion", "sp.ac.motion_d", Bind::Local(|p| p.reduced_motion, |p, v| p.reduced_motion = v)),
-    B::Switch("motion-sync", "sp.ac.motion_sync", "", Bind::Ui(true)),
-    B::Switch("gifs", "sp.ac.gifs", "", Bind::Ui(true)),
+    B::Switch("motion-sync", "sp.ac.motion_sync", "", Bind::Pref(true)),
+    B::Switch("gifs", "sp.ac.gifs", "", Bind::Proto),
     B::Switch("anim-emoji", "sp.ac.anim_emoji", "", Bind::Local(|p| p.animate_emoji, |p, v| p.animate_emoji = v)),
     B::Radios(
         "stickers",
         "sp.ac.stickers",
         "",
         &[("sp.ac.st_always", ""), ("sp.ac.st_inter", "sp.ac.st_inter_d"), ("sp.ac.st_never", "")],
-        Pick::Ui(0),
+        Pick::Proto,
     ),
     B::Divider,
     B::Title("sp.ac.t5"),
-    B::Switch("alt-text", "sp.ac.alt", "sp.ac.alt_d", Bind::Ui(false)),
-    B::Switch("legacy-input", "sp.ac.legacy", "sp.ac.legacy_d", Bind::Ui(false)),
+    B::Switch("alt-text", "sp.ac.alt", "sp.ac.alt_d", Bind::Proto),
+    B::Switch("legacy-input", "sp.ac.legacy", "sp.ac.legacy_d", Bind::Proto),
 ];
 
 static SYSTEM: &[B] = &[
     B::Title("sp.sy.t1"),
-    B::Switch("startup", "sp.sy.startup", "", Bind::Ui(false)),
+    B::Switch("startup", "sp.sy.startup", "", Bind::Pref(false)),
     B::Switch("tray", "sp.sy.tray", "sp.sy.tray_d", Bind::Local(|p| p.minimize_to_tray, |p, v| p.minimize_to_tray = v)),
-    B::Switch("hwaccel", "sp.sy.hwaccel", "sp.sy.hwaccel_d", Bind::Ui(true)),
+    B::Switch("hwaccel", "sp.sy.hwaccel", "sp.sy.hwaccel_d", Bind::Pref(true)),
     B::Custom("sp.sy.hwaccel", hwaccel_banner),
     B::Divider,
     B::Custom("sp.sy.t2", custom_keybinds),
@@ -1577,24 +1600,24 @@ fn language_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElemen
 
 static LANGUAGE: &[B] = &[
     B::Custom("sp.la.select", language_row),
-    B::Radios("time-format", "sp.la.time", "", &[("sp.la.auto", ""), ("sp.la.h12", ""), ("sp.la.h24", "")], Pick::Ui(0)),
+    B::Radios("time-format", "sp.la.time", "", &[("sp.la.auto", ""), ("sp.la.h12", ""), ("sp.la.h24", "")], Pick::Proto),
 ];
 
 static ACTIVITY: &[B] = &[
     B::Title("sp.at.t1"),
-    B::Switch("act-share", "sp.at.share", "sp.at.share_d", Bind::Ui(true)),
-    B::Switch("act-online", "sp.at.online", "sp.at.online_d", Bind::Ui(true)),
-    B::Switch("act-stream", "sp.at.stream", "sp.at.stream_d", Bind::Ui(true)),
+    B::Switch("act-share", "sp.at.share", "sp.at.share_d", Bind::Proto),
+    B::Switch("act-online", "sp.at.online", "sp.at.online_d", Bind::Proto),
+    B::Switch("act-stream", "sp.at.stream", "sp.at.stream_d", Bind::Proto),
     B::Related("apps", "sp.games", "sp.games_d", Page::RegisteredGames),
     B::Divider,
     B::Title("sp.at.t2"),
-    B::Radios("act-where", "sp.at.auto", "sp.at.auto_d", &[("sp.at.a_all", ""), ("sp.at.a_small", ""), ("sp.at.a_none", "")], Pick::Ui(0)),
+    B::Radios("act-where", "sp.at.auto", "sp.at.auto_d", &[("sp.at.a_all", ""), ("sp.at.a_small", ""), ("sp.at.a_none", "")], Pick::Proto),
     B::Related("lock", "settings.page.privacy", "sp.data.t2_d", Page::DataPrivacy),
     B::Divider,
     B::Title("sp.at.t3"),
     B::Lead("sp.at.t3_d"),
-    B::Switch("act-friends", "sp.at.friends", "sp.at.friends_d", Bind::Ui(true)),
-    B::Switch("act-voice", "sp.at.voice", "sp.at.voice_d", Bind::Ui(true)),
+    B::Switch("act-friends", "sp.at.friends", "sp.at.friends_d", Bind::Proto),
+    B::Switch("act-voice", "sp.at.voice", "sp.at.voice_d", Bind::Proto),
 ];
 
 fn connection_tiles(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyElement {
@@ -1719,7 +1742,7 @@ fn info_notice(text: SharedString, action: Option<gpui::Stateful<Div>>) -> Div {
 /// #2728): padding 8, --radius-xs, --background-feedback-mod-warning, 1px
 /// --icon-feedback-warning border, 20px warning icon + 10px margin, body-sm/medium.
 fn hwaccel_banner(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
-    if get_bool(app, "hwaccel", Bind::Ui(true)) {
+    if get_bool(app, "hwaccel", Bind::Pref(true)) {
         return div().into_any_element();
     }
     div()

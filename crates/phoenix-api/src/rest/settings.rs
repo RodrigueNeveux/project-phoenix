@@ -142,6 +142,9 @@ impl PreloadedUserSettings {
         let bytes = STANDARD.decode(s.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))?;
         <Self as prost::Message>::decode(bytes.as_slice()).map_err(|e| Error::Protocol(format!("settings proto: {e}")))
     }
+    pub fn decode_raw(bytes: &[u8]) -> Result<Self> {
+        <Self as prost::Message>::decode(bytes).map_err(|e| Error::Protocol(format!("settings proto: {e}")))
+    }
     pub fn encode_base64(&self) -> String {
         STANDARD.encode(prost::Message::encode_to_vec(self))
     }
@@ -205,6 +208,101 @@ pub enum SettingChange {
     Compact(bool),
     Locale(String),
     DefaultGuildsRestricted(bool),
+    /// Any scalar at a field path of `PreloadedUserSettings` (tags, outermost
+    /// first). `wrapper`: the last tag is a `google.protobuf.*Value` message
+    /// whose field 1 holds the value.
+    Path { path: Vec<u32>, wrapper: bool, value: ProtoValue },
+}
+
+/// A scalar read from / written to the settings blob.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProtoValue {
+    Int(u64),
+    Str(String),
+}
+
+fn read_varint(b: &[u8], i: &mut usize) -> Option<u64> {
+    let mut v = 0u64;
+    let mut shift = 0;
+    loop {
+        let byte = *b.get(*i)?;
+        *i += 1;
+        v |= ((byte & 0x7f) as u64) << shift;
+        if byte < 0x80 {
+            return Some(v);
+        }
+        shift += 7;
+        if shift > 63 {
+            return None;
+        }
+    }
+}
+
+/// Every `(tag, wire type, varint | bytes)` field of one message level.
+fn fields(b: &[u8]) -> Vec<(u32, u8, u64, &[u8])> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let Some(key) = read_varint(b, &mut i) else { break };
+        let (tag, wt) = ((key >> 3) as u32, (key & 7) as u8);
+        match wt {
+            0 => match read_varint(b, &mut i) {
+                Some(v) => out.push((tag, 0, v, &b[0..0])),
+                None => break,
+            },
+            1 | 5 => {
+                let n = if wt == 1 { 8 } else { 4 };
+                let Some(raw) = b.get(i..i + n) else { break };
+                let mut v = 0u64;
+                for (k, x) in raw.iter().enumerate() {
+                    v |= (*x as u64) << (8 * k);
+                }
+                out.push((tag, wt, v, &b[0..0]));
+                i += n;
+            }
+            2 => {
+                let Some(n) = read_varint(b, &mut i) else { break };
+                let Some(d) = b.get(i..i + n as usize) else { break };
+                out.push((tag, 2, 0, d));
+                i += n as usize;
+            }
+            _ => break,
+        }
+    }
+    out
+}
+
+/// Read the scalar at `path` from a raw `PreloadedUserSettings` blob with
+/// protobuf merge semantics (the last occurrence wins, sub-messages merge).
+/// `as_str` reads a string; a present wrapper without field 1 is the
+/// default (0 / "").
+pub fn proto_read(raw: &[u8], path: &[u32], wrapper: bool, as_str: bool) -> Option<ProtoValue> {
+    let (&first, rest) = path.split_first()?;
+    let mut found = None;
+    for (tag, wt, v, d) in fields(raw) {
+        if tag != first {
+            continue;
+        }
+        let got = if !rest.is_empty() {
+            if wt != 2 {
+                continue;
+            }
+            proto_read(d, rest, wrapper, as_str)
+        } else if wrapper {
+            if wt != 2 {
+                continue;
+            }
+            Some(proto_read(d, &[1], false, as_str).unwrap_or(if as_str { ProtoValue::Str(String::new()) } else { ProtoValue::Int(0) }))
+        } else if as_str {
+            (wt == 2).then(|| ProtoValue::Str(String::from_utf8_lossy(d).into_owned()))
+        } else {
+            (wt != 2).then_some(ProtoValue::Int(v))
+        };
+        if got.is_some() {
+            found = got;
+        }
+    }
+    found
 }
 
 fn varint(mut v: u64, out: &mut Vec<u8>) {
@@ -256,6 +354,27 @@ impl SettingChange {
                 field_varint(4, *b as u64, &mut inner);
                 field_bytes(8, &inner, &mut out);
             }
+            Self::Path { path, wrapper, value } => {
+                let Some((&last, outer)) = path.split_last() else { return out };
+                let put = |tag: u32, o: &mut Vec<u8>| match value {
+                    ProtoValue::Int(v) => field_varint(tag, *v, o),
+                    ProtoValue::Str(s) => field_bytes(tag, s.as_bytes(), o),
+                };
+                let mut cur = Vec::new();
+                if *wrapper {
+                    let mut w = Vec::new();
+                    put(1, &mut w);
+                    field_bytes(last, &w, &mut cur);
+                } else {
+                    put(last, &mut cur);
+                }
+                for &tag in outer.iter().rev() {
+                    let mut o = Vec::new();
+                    field_bytes(tag, &cur, &mut o);
+                    cur = o;
+                }
+                out = cur;
+            }
         }
         out
     }
@@ -297,6 +416,22 @@ impl RestClient {
             .call(Method::PATCH, "/users/@me/settings-proto/1", Body::Json(json!({ "settings": STANDARD.encode(raw) })))
             .await?;
         PreloadedUserSettings::decode_base64(&b.settings)
+    }
+
+    /// `GET /users/@me/settings-proto/1` as raw protobuf bytes.
+    pub async fn get_settings_proto_raw(&self) -> Result<Vec<u8>> {
+        let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/1", Body::None).await?;
+        STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))
+    }
+
+    /// [`Self::patch_setting`] returning the merged blob as raw bytes.
+    pub async fn patch_setting_raw(&self, change: &SettingChange) -> Result<Vec<u8>> {
+        let mut raw = self.get_settings_proto_raw().await?;
+        raw.extend(change.encode());
+        let b: ProtoBody = self
+            .call(Method::PATCH, "/users/@me/settings-proto/1", Body::Json(json!({ "settings": STANDARD.encode(raw) })))
+            .await?;
+        STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))
     }
 
     /// Legacy JSON `GET /users/@me/settings` (fallback).
@@ -373,6 +508,28 @@ mod tests {
         raw.extend(SettingChange::Theme(Theme::Ash).encode());
         let d = PreloadedUserSettings::decode_base64(&STANDARD.encode(&raw)).unwrap();
         assert_eq!(d.theme(), Theme::Ash);
+    }
+
+    #[test]
+    fn path_changes_roundtrip() {
+        let base = PreloadedUserSettings::patch_appearance(Theme::Light, true);
+        let mut raw = prost::Message::encode_to_vec(&base);
+        let ch = |path: &[u32], wrapper, value| SettingChange::Path { path: path.to_vec(), wrapper, value };
+        // text_and_images.render_embeds = false (wrapper present, empty value)
+        raw.extend(ch(&[6, 12], true, ProtoValue::Int(0)).encode());
+        // text_and_images.render_spoilers = "ALWAYS"
+        raw.extend(ch(&[6, 4], true, ProtoValue::Str("ALWAYS".into())).encode());
+        // appearance.timestamp_hour_cycle = H23 (plain enum)
+        raw.extend(ch(&[13, 9], false, ProtoValue::Int(2)).encode());
+        assert_eq!(proto_read(&raw, &[6, 12], true, false), Some(ProtoValue::Int(0)));
+        assert_eq!(proto_read(&raw, &[6, 4], true, true), Some(ProtoValue::Str("ALWAYS".into())));
+        assert_eq!(proto_read(&raw, &[13, 9], false, false), Some(ProtoValue::Int(2)));
+        assert_eq!(proto_read(&raw, &[6, 13], true, false), None);
+        raw.extend(ch(&[6, 12], true, ProtoValue::Int(1)).encode());
+        assert_eq!(proto_read(&raw, &[6, 12], true, false), Some(ProtoValue::Int(1)));
+        let d = PreloadedUserSettings::decode_base64(&STANDARD.encode(&raw)).unwrap();
+        assert_eq!(d.theme(), Theme::Light, "untouched field kept");
+        assert!(d.developer_mode());
     }
 
     #[test]

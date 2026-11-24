@@ -95,8 +95,8 @@ impl DiscordBackend {
 
     pub(super) fn load_settings_impl(&self) -> BoxFuture<SyncedSettings> {
         self.with_session(move |_, s| async move {
-            match s.rest.get_settings_proto().await {
-                Ok(p) => Ok(synced(&p)),
+            match s.rest.get_settings_proto_raw().await {
+                Ok(raw) => synced_raw(&raw),
                 Err(_) => {
                     let v = s.rest.get_settings_json().await.map_err(api_err)?;
                     Ok(synced(&api_settings::from_json(&v)))
@@ -113,9 +113,12 @@ impl DiscordBackend {
                 SettingsPatch::DeveloperMode(b) => SettingChange::DeveloperMode(*b),
                 SettingsPatch::Locale(l) => SettingChange::Locale(l.to_string()),
                 SettingsPatch::AllowServerDms(b) => SettingChange::DefaultGuildsRestricted(!*b),
+                SettingsPatch::Proto(id, v) => {
+                    crate::ui::settings::synced_map::change(id, *v).ok_or_else(|| err(format!("unknown setting {id}")))?
+                }
             };
-            let p = s.rest.patch_setting(&change).await.map_err(api_err)?;
-            Ok(synced(&p))
+            let raw = s.rest.patch_setting_raw(&change).await.map_err(api_err)?;
+            synced_raw(&raw)
         })
     }
 }
@@ -134,6 +137,14 @@ fn theme_to_api(t: AppTheme) -> Theme {
     }
 }
 
+/// [`synced`] plus every [`crate::ui::settings::synced_map`] entry.
+fn synced_raw(raw: &[u8]) -> Result<SyncedSettings, crate::backend::BackendError> {
+    let p = PreloadedUserSettings::decode_raw(raw).map_err(api_err)?;
+    let mut s = synced(&p);
+    s.proto = crate::ui::settings::synced_map::read_all(raw);
+    Ok(s)
+}
+
 pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
     let d = SyncedSettings::default();
     crate::ui::settings::account::set_activity_restricted(p.privacy.as_ref().map(|x| x.activity_restricted_guild_ids.clone()).unwrap_or_default());
@@ -148,6 +159,7 @@ pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
         developer_mode: p.developer_mode(),
         locale: p.locale().filter(|l| !l.is_empty()).map(|l| l.to_owned().into()).unwrap_or(d.locale),
         allow_server_dms: !p.default_guilds_restricted(),
+        proto: Default::default(),
     }
 }
 
