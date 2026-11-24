@@ -1528,10 +1528,32 @@ static SYSTEM: &[B] = &[
 fn language_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
     let cur = app.prefs.synced.locale.clone();
     let ix = super::view::LOCALES.iter().position(|(c, _)| *c == cur.as_ref()).unwrap_or(0);
-    let opts = super::view::LOCALES.iter().map(|(_, n)| SharedString::from(*n)).collect();
-    let dd = dropdown(
+    let opts: Vec<SharedString> = super::view::LOCALES.iter().map(|(_, n)| SharedString::from(*n)).collect();
+    // vanilla-settings-11: the field shows the language on the left and its
+    // native name 16/20 --text-default right-aligned before the chevron.
+    let name = opts.get(ix).cloned().unwrap_or_default();
+    let field = div()
+        .id(eid("sel-language"))
+        .h(z(40.))
+        .pl(z(12.))
+        .flex()
+        .items_center()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .hover(|s| s.border_color(c(tok(idx::INPUT_BORDER_HOVER))))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .cursor_pointer()
+        .child(div().flex_1().min_w_0().truncate().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).child(name.clone()))
+        .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT))).whitespace_nowrap().child(name))
+        .child(
+            div().w(z(36.)).h_full().flex().items_center().justify_center().pr(z(4.))
+                .child(gpui::svg().path("icons/chevron.svg").size(z(20.)).text_color(c(tok(idx::TEXT_STRONG)))),
+        );
+    let dd = dropdown_with(
         app,
         "language",
+        field,
         opts,
         ix,
         696.,
