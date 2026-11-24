@@ -640,6 +640,11 @@ impl Backend for DiscordBackend {
         g.member_count.is_some_and(|n| n < 10_000)
     }
 
+    fn forum_settings(&self, forum: Id) -> Option<crate::commands::ForumSettings> {
+        let s = self.inner.session().ok()?;
+        s.cache.channel(sf(forum)).map(|c| crate::commands::ForumSettings::from_channel(&c))
+    }
+
     fn forum_tags(&self, forum: Id) -> Vec<crate::commands::ForumTag> {
         let Ok(s) = self.inner.session() else { return Vec::new() };
         s.cache.channel(sf(forum)).map(|c| convert::forum_tags(&c)).unwrap_or_default()

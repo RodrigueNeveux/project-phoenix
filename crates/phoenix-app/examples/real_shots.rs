@@ -279,6 +279,9 @@ impl Backend for ReadOnly {
     fn thread_info(&self, c: Id) -> Option<phoenix_app::model::ThreadInfo> {
         self.0.thread_info(c)
     }
+    fn forum_settings(&self, c: Id) -> Option<phoenix_app::commands::ForumSettings> {
+        self.0.forum_settings(c)
+    }
     fn channel_last_message(&self, c: Id) -> Option<Id> {
         self.0.channel_last_message(c)
     }

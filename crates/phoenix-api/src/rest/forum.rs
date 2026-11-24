@@ -13,14 +13,15 @@ pub enum ThreadSort {
     Created,
 }
 
-pub(crate) fn threads_search_path(forum: ChannelId, sort: ThreadSort, tags: &[Snowflake], offset: u32, archived: bool) -> String {
+pub(crate) fn threads_search_path(forum: ChannelId, sort: ThreadSort, tags: &[Snowflake], offset: u32, archived: bool, match_all: bool) -> String {
     let by = match sort {
         ThreadSort::LastMessage => "last_message_time",
         ThreadSort::Created => "creation_time",
     };
     let mut s = format!("/channels/{forum}/threads/search?archived={archived}&sort_by={by}&sort_order=desc&limit=25&offset={offset}");
-    for t in tags {
-        s.push_str(&format!("&tag={t}"));
+    if !tags.is_empty() {
+        let list: Vec<String> = tags.iter().map(|t| t.to_string()).collect();
+        s.push_str(&format!("&tag={}&tag_setting={}", list.join("%2C"), if match_all { "match_all" } else { "match_some" }));
     }
     s
 }
@@ -109,7 +110,11 @@ impl Poll {
 
 impl RestClient {
     pub async fn search_threads(&self, forum: ChannelId, sort: ThreadSort, tags: &[Snowflake], offset: u32, archived: bool) -> Result<ThreadSearch> {
-        self.call(Method::GET, &threads_search_path(forum, sort, tags, offset, archived), Body::None).await
+        self.search_threads_matching(forum, sort, tags, offset, archived, false).await
+    }
+
+    pub async fn search_threads_matching(&self, forum: ChannelId, sort: ThreadSort, tags: &[Snowflake], offset: u32, archived: bool, match_all: bool) -> Result<ThreadSearch> {
+        self.call(Method::GET, &threads_search_path(forum, sort, tags, offset, archived, match_all), Body::None).await
     }
 
     pub async fn create_forum_post(&self, forum: ChannelId, title: &str, content: &str, tags: &[Snowflake]) -> Result<Channel> {
@@ -189,8 +194,16 @@ mod tests {
     #[test]
     fn paths_and_bodies() {
         assert_eq!(
-            threads_search_path(Snowflake(1), ThreadSort::Created, &[Snowflake(2), Snowflake(3)], 25, false),
-            "/channels/1/threads/search?archived=false&sort_by=creation_time&sort_order=desc&limit=25&offset=25&tag=2&tag=3"
+            threads_search_path(Snowflake(1), ThreadSort::Created, &[Snowflake(2), Snowflake(3)], 25, false, false),
+            "/channels/1/threads/search?archived=false&sort_by=creation_time&sort_order=desc&limit=25&offset=25&tag=2%2C3&tag_setting=match_some"
+        );
+        assert_eq!(
+            threads_search_path(Snowflake(1), ThreadSort::LastMessage, &[Snowflake(2)], 0, true, true),
+            "/channels/1/threads/search?archived=true&sort_by=last_message_time&sort_order=desc&limit=25&offset=0&tag=2&tag_setting=match_all"
+        );
+        assert_eq!(
+            threads_search_path(Snowflake(1), ThreadSort::LastMessage, &[], 0, false, true),
+            "/channels/1/threads/search?archived=false&sort_by=last_message_time&sort_order=desc&limit=25&offset=0"
         );
         let b = forum_post_body("T", "hi", &[Snowflake(4)]);
         assert_eq!(b["applied_tags"][0], "4");

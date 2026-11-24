@@ -208,6 +208,9 @@ pub struct ForumView {
     pub tags: Vec<Id>,
     pub sort: ForumSort,
     pub sort_menu: bool,
+    pub gallery: bool,
+    pub match_all: bool,
+    pub defaults_applied: bool,
     pub compose: Option<ForumCompose>,
 }
 

@@ -82,6 +82,37 @@ pub enum ModAction {
 
 pub type PollAnswerDraft = (String, Option<(Option<Id>, String)>);
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ForumSettings {
+    pub sort_created: bool,
+    pub gallery: bool,
+    pub require_tag: bool,
+    pub match_all: bool,
+    pub reaction: Option<(Option<Id>, String)>,
+    pub guidelines: Option<String>,
+}
+
+impl ForumSettings {
+    pub fn from_channel(c: &phoenix_api::models::Channel) -> Self {
+        Self {
+            sort_created: c.default_sort_order == Some(1),
+            gallery: c.default_forum_layout == Some(2),
+            require_tag: c.flags & (1 << 4) != 0,
+            match_all: c.default_tag_setting.as_deref() == Some("match_all"),
+            reaction: c
+                .default_reaction_emoji
+                .as_ref()
+                .filter(|r| r.emoji_id.is_some() || r.emoji_name.is_some())
+                .map(|r| (r.emoji_id.map(|e| Id(e.0)), r.emoji_name.clone().unwrap_or_default())),
+            guidelines: c.topic.clone().filter(|t| !t.trim().is_empty()),
+        }
+    }
+
+    pub fn can_post(&self, tags: &[Id]) -> bool {
+        !self.require_tag || !tags.is_empty()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum ParityRequest {
     Commands { guild: Option<Id>, channel: Id },
@@ -106,7 +137,7 @@ pub enum ParityRequest {
     VotePoll { channel: Id, message: Id, answers: Vec<u32> },
     CreatePoll { channel: Id, question: String, answers: Vec<PollAnswerDraft>, hours: u32, multi: bool },
     EndPoll { channel: Id, message: Id },
-    ForumPosts { forum: Id, tags: Vec<Id>, offset: u32, by_creation: bool, archived: bool },
+    ForumPosts { forum: Id, tags: Vec<Id>, offset: u32, by_creation: bool, archived: bool, match_all: bool },
     CreatePost { forum: Id, title: String, content: String, tags: Vec<Id> },
     Moderate { guild: Id, user: Id, action: ModAction },
     BulkDelete { channel: Id, messages: Vec<Id> },

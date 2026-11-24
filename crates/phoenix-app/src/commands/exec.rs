@@ -204,9 +204,9 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             rest.end_poll(sf(channel), sf(m)).await.map_err(e)?;
             ParityReply::Done
         }
-        ParityRequest::ForumPosts { forum, tags, offset, by_creation, archived } => {
+        ParityRequest::ForumPosts { forum, tags, offset, by_creation, archived, match_all } => {
             let sort = if by_creation { ThreadSort::Created } else { ThreadSort::LastMessage };
-            let r = rest.search_threads(sf(forum), sort, &ids(&tags), offset, archived).await.map_err(e)?;
+            let r = rest.search_threads_matching(sf(forum), sort, &ids(&tags), offset, archived, match_all).await.map_err(e)?;
             emit_users(&emit, &r.first_messages.iter().collect::<Vec<_>>());
             let posts = r
                 .threads

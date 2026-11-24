@@ -11,7 +11,7 @@ use crate::{
     },
     model::{AttachmentKind, ChannelKind, Id, ThreadRef},
     theme::{Palette, c, generated::idx, tok},
-    ui::icon,
+    ui::{context_menu::MenuItem, icon},
 };
 
 thread_local! {
@@ -20,6 +20,14 @@ thread_local! {
 
 thread_local! {
     static LIST_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+}
+
+thread_local! {
+    static SORT_ANCHOR: std::cell::Cell<gpui::Point<gpui::Pixels>> = std::cell::Cell::new(gpui::point(gpui::px(330.), gpui::px(170.)));
+}
+
+fn menu_group_label(t: SharedString) -> AnyElement {
+    div().px(z(8.)).pt(z(6.)).pb(z(2.)).text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_MUTED))).child(t).into_any_element()
 }
 
 fn search_input(forum: Id) -> Option<gpui::Entity<InputState>> {
@@ -39,6 +47,12 @@ fn post_matches(p: &ForumPost, tags: &[ForumTag], q: &str) -> bool {
 fn open_forum(app: &PhoenixApp) -> Option<Id> {
     let id = app.selected_channel?;
     (app.channels.get(&id)?.kind == ChannelKind::Forum).then_some(id)
+}
+
+pub fn apply_defaults(v: &mut crate::commands::state::ForumView, d: &crate::commands::ForumSettings) {
+    v.sort = if d.sort_created { ForumSort::Created } else { ForumSort::Recent };
+    v.gallery = d.gallery;
+    v.match_all = d.match_all;
 }
 
 pub fn toggle_tag(applied: &[Id], tag: Id) -> Vec<Id> {
@@ -137,7 +151,14 @@ const FORUM_AUTO_RETRIES: u32 = 3;
 
 impl PhoenixApp {
     fn load_forum(&mut self, forum: Id, fresh: bool, cx: &mut Context<Self>) {
+        let defaults = self.backend.forum_settings(forum);
         let v = self.parity.forums.entry(forum).or_default();
+        if !v.defaults_applied {
+            v.defaults_applied = true;
+            if let Some(d) = defaults {
+                apply_defaults(v, &d);
+            }
+        }
         if v.loading {
             return;
         }
@@ -155,6 +176,7 @@ impl PhoenixApp {
             offset: v.posts.len() as u32,
             by_creation: v.sort == ForumSort::Created,
             archived: false,
+            match_all: v.match_all,
         };
         self.parity_request(req, cx, move |a, res, cx| {
             let v = a.parity.forums.entry(forum).or_default();
@@ -208,6 +230,7 @@ impl PhoenixApp {
             offset: v.archived.len() as u32,
             by_creation: v.sort == ForumSort::Created,
             archived: true,
+            match_all: v.match_all,
         };
         self.parity_request(req, cx, move |a, res, cx| {
             let v = a.parity.forums.entry(forum).or_default();
@@ -240,6 +263,28 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    fn set_forum_layout(&mut self, forum: Id, gallery: bool, cx: &mut Context<Self>) {
+        let v = self.parity.forums.entry(forum).or_default();
+        v.gallery = gallery;
+        v.sort_menu = false;
+        cx.notify();
+    }
+
+    fn set_forum_match(&mut self, forum: Id, all: bool, cx: &mut Context<Self>) {
+        let v = self.parity.forums.entry(forum).or_default();
+        v.sort_menu = false;
+        if v.match_all == all {
+            cx.notify();
+            return;
+        }
+        v.match_all = all;
+        let reload = !v.tags.is_empty();
+        if reload {
+            self.load_forum(forum, true, cx);
+        }
+        cx.notify();
+    }
+
     fn submit_post(&mut self, forum: Id, cx: &mut Context<Self>) {
         let Some(comp) = self.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) else { return };
         let title = comp.title.read(cx).value().trim().to_owned();
@@ -249,8 +294,16 @@ impl PhoenixApp {
             cx.notify();
             return;
         }
-        comp.sending = true;
         let tags = comp.tags.clone();
+        if !self.backend.forum_settings(forum).unwrap_or_default().can_post(&tags) {
+            if let Some(comp) = self.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
+                comp.error = Some(crate::t!("forum.needs_tag"));
+            }
+            cx.notify();
+            return;
+        }
+        let Some(comp) = self.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) else { return };
+        comp.sending = true;
         self.parity_request(ParityRequest::CreatePost { forum, title: title.clone(), content, tags }, cx, move |a, res, cx| {
             match res {
                 Ok(ParityReply::Channel(t)) => {
@@ -873,7 +926,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .line_height(z(18.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(c(Palette::INTERACTIVE))
-            .on_click(cx.listener(move |a, _, _, cx| {
+            .on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| {
+                let p = ev.position();
+                SORT_ANCHOR.with(|a| a.set(gpui::point(p.x - gpui::px(40.), p.y + gpui::px(20.))));
                 let v = a.parity.forums.entry(forum).or_default();
                 v.sort_menu = !v.sort_menu;
                 cx.notify();
@@ -1007,7 +1062,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .text_color(c(Palette::TEXT_MUTED))
             .child(crate::t!("forum.older"))
     };
-    if app.backend.is_media_channel(forum) {
+    if app.backend.is_media_channel(forum) || v.gallery {
         col = col.child(div().flex().flex_wrap().gap(z(16.)).children(active.iter().map(|p| media_tile(app, p, &tags, now, cx))));
         if !older.is_empty() {
             col = col
@@ -1042,35 +1097,38 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     }
 
     let sort_menu = v.sort_menu.then(|| {
-        let item = |id: &'static str, label: SharedString, s: ForumSort, on: bool| {
-            div()
-                .id(id)
-                .px(z(8.))
-                .py(z(6.))
-                .rounded(z(4.))
-                .cursor_pointer()
-                .hover(|st| st.bg(c(Palette::BLURPLE)))
-                .flex()
-                .justify_between()
-                .text_size(z(14.))
-                .text_color(c(Palette::TEXT_NORMAL))
-                .child(label)
-                .when(on, |d| d.child("✓"))
-                .on_click(cx.listener(move |a, _, _, cx| a.set_forum_sort(forum, s, cx)))
+        let e = cx.entity();
+        let radio = |key: &'static str, on: bool, f: fn(&mut PhoenixApp, Id, &mut Context<PhoenixApp>)| {
+            let e = e.clone();
+            MenuItem::radio(crate::t!(key), on, move |_, _, cx: &mut gpui::App| e.update(cx, |a, cx| f(a, forum, cx)))
         };
-        div()
-            .absolute()
-            .top(z(128.))
-            .left(z(16.))
-            .w(z(220.))
-            .p(z(8.))
-            .rounded(z(8.))
-            .bg(c(Palette::BG_FLOATING))
-            .shadow_lg()
-            .occlude()
-            .child(div().px(z(8.)).py(z(4.)).text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("forum.sort_by")))
-            .child(item("sort-recent", crate::t!("forum.recent"), ForumSort::Recent, v.sort == ForumSort::Recent))
-            .child(item("sort-created", crate::t!("forum.created"), ForumSort::Created, v.sort == ForumSort::Created))
+        let mut items = vec![
+            MenuItem::Custom(menu_group_label(crate::t!("forum.sort_by"))),
+            radio("forum.recent", v.sort == ForumSort::Recent, |a, f, cx| a.set_forum_sort(f, ForumSort::Recent, cx)),
+            radio("forum.created", v.sort == ForumSort::Created, |a, f, cx| a.set_forum_sort(f, ForumSort::Created, cx)),
+        ];
+        if !app.backend.is_media_channel(forum) {
+            items.push(MenuItem::Separator);
+            items.push(MenuItem::Custom(menu_group_label(crate::t!("forum.view_as"))));
+            items.push(radio("forum.view_list", !v.gallery, |a, f, cx| a.set_forum_layout(f, false, cx)));
+            items.push(radio("forum.view_gallery", v.gallery, |a, f, cx| a.set_forum_layout(f, true, cx)));
+        }
+        if !tags.is_empty() {
+            items.push(MenuItem::Separator);
+            items.push(MenuItem::Custom(menu_group_label(crate::t!("forum.tag_matching"))));
+            items.push(radio("forum.match_some", !v.match_all, |a, f, cx| a.set_forum_match(f, false, cx)));
+            items.push(radio("forum.match_all", v.match_all, |a, f, cx| a.set_forum_match(f, true, cx)));
+        }
+        let dismiss: crate::ui::context_menu::Dismiss = std::rc::Rc::new(move |w, cx| {
+            e.update(cx, |a, _| {
+                if let Some(v) = a.parity.forums.get_mut(&forum) {
+                    v.sort_menu = false;
+                }
+            });
+            w.refresh();
+        });
+        let at = SORT_ANCHOR.with(|p| p.get());
+        crate::ui::context_menu::render(at, items, dismiss)
     });
 
     Some(
@@ -1213,5 +1271,24 @@ mod tests {
         assert_eq!(toggle_tag(&[Id(1)], Id(3)), vec![Id(1), Id(3)]);
         let full: Vec<Id> = (1..=5).map(Id).collect();
         assert_eq!(toggle_tag(&full, Id(9)), full);
+    }
+
+    #[test]
+    fn forum_defaults_follow_the_channel() {
+        let raw = r#"{"id":"1","type":15,"flags":16,"default_sort_order":1,"default_forum_layout":2,"default_tag_setting":"match_all","default_reaction_emoji":{"emoji_id":null,"emoji_name":"✅"},"topic":"Règles"}"#;
+        let ch: phoenix_api::models::Channel = serde_json::from_str(raw).unwrap();
+        let d = crate::commands::ForumSettings::from_channel(&ch);
+        assert!(d.sort_created && d.gallery && d.require_tag && d.match_all);
+        assert_eq!(d.reaction, Some((None, "✅".to_owned())));
+        assert_eq!(d.guidelines.as_deref(), Some("Règles"));
+        assert!(!d.can_post(&[]));
+        assert!(d.can_post(&[Id(3)]));
+        let mut v = crate::commands::state::ForumView::default();
+        apply_defaults(&mut v, &d);
+        assert_eq!(v.sort, ForumSort::Created);
+        assert!(v.gallery && v.match_all);
+        let plain: phoenix_api::models::Channel = serde_json::from_str(r#"{"id":"2","type":15,"default_reaction_emoji":{"emoji_id":null,"emoji_name":null}}"#).unwrap();
+        let d = crate::commands::ForumSettings::from_channel(&plain);
+        assert_eq!(d, crate::commands::ForumSettings::default());
     }
 }

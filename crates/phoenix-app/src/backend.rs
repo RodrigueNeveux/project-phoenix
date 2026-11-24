@@ -374,6 +374,9 @@ pub trait Backend: Send + Sync + 'static {
     fn thread_info(&self, _thread: Id) -> Option<crate::model::ThreadInfo> {
         None
     }
+    fn forum_settings(&self, _forum: Id) -> Option<crate::commands::ForumSettings> {
+        None
+    }
     fn open_dm(&self, _user: Id) -> BoxFuture<Id> {
         Box::pin(async { Err(BackendError(crate::t!("backend.dm_unavailable").to_string())) })
     }
