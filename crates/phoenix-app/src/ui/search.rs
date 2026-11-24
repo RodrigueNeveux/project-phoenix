@@ -1160,6 +1160,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
     );
     let mut body = div().flex().flex_col();
     let query = input.read(cx).value().trim().to_string();
+    let query_empty = query.is_empty();
     if !query.is_empty() {
         body = body
             .child(
@@ -1179,7 +1180,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
             )
             .child(div().my(z(8.)).mx(z(-8.)).h(z(1.)).bg(tk(idx::BORDER_SUBTLE)));
     }
-    if all_dms && query.is_empty()
+    if all_dms && query_empty
         && let Some(cur) = app.selected_channel
     {
         let tag = dm_tag(app, cur);
