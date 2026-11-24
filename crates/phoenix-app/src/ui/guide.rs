@@ -297,8 +297,14 @@ fn card(g: &Guild, p: &GuildProfile) -> gpui::Div {
         .flex()
         .flex_col()
         .child(
-            div().h(z(120.)).w_full().bg(t(idx::BACKGROUND_MOD_STRONG)).when_some(p.custom_banner_hash.clone(), |d, h| {
-                d.child(gpui::img(cdn(format!("discovery-splashes/{}/{h}.jpg?size=640", gid.0))).size_full().object_fit(gpui::ObjectFit::Cover))
+            div().relative().h(z(120.)).w_full().flex_none().overflow_hidden().bg(t(idx::BACKGROUND_MOD_STRONG)).when_some(p.custom_banner_hash.clone(), |d, h| {
+                d.child(
+                    gpui::img(cdn(format!("discovery-splashes/{}/{h}.jpg?size=640", gid.0)))
+                        .absolute()
+                        .inset_0()
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Cover),
+                )
             }),
         )
         .child(
@@ -392,8 +398,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         }
     }
     let side = page.data.as_ref().and_then(|d| d.profile.as_ref()).map(|p| card(&g, p));
+    // The scroller keeps a 16px scrollbar gutter (scrollbarGutterStable_): content 1103 of 1119.
     let body = div()
         .p(z(32.))
+        .pr(z(48.))
         .flex()
         .flex_col()
         .gap(z(32.))

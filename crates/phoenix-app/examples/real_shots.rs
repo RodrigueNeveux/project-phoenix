@@ -190,7 +190,11 @@ impl Backend for ReadOnly {
     }
     // Server Guide header art (READY cache only).
     fn guild_home_header(&self, g: Id) -> Option<String> {
-        self.0.guild_home_header(g)
+        let h = self.0.guild_home_header(g);
+        if std::env::var_os("PHX_DEBUG_GUIDE").is_some() {
+            eprintln!("real_shots: home_header {}", if h.is_some() { "present" } else { "absent" });
+        }
+        h
     }
     fn channel_user_limit(&self, c: Id) -> Option<u32> {
         self.0.channel_user_limit(c)
@@ -246,7 +250,27 @@ impl Backend for ReadOnly {
             // Channels & Roles page (PHX_OPEN=community): GET onboarding.
             phoenix_app::commands::ParityRequest::Onboarding { .. } => self.0.parity(req),
             // Server Guide (PHX_OPEN=guide): GET new-member-welcome + GET profile.
-            phoenix_app::commands::ParityRequest::ServerGuide { .. } => self.0.parity(req),
+            // PHX_DEBUG_GUIDE=1 prints what came back (titles and lengths only).
+            phoenix_app::commands::ParityRequest::ServerGuide { .. } => {
+                let fut = self.0.parity(req);
+                Box::pin(async move {
+                    let r = fut.await;
+                    if std::env::var_os("PHX_DEBUG_GUIDE").is_some() {
+                        match &r {
+                            Ok(phoenix_app::commands::ParityReply::Guide(g)) => eprintln!(
+                                "real_shots: guide resources {:?}, actions {}, welcome {} chars, profile {}",
+                                g.resources.iter().map(|r| (r.title.clone(), r.description.chars().count(), r.icon.is_some())).collect::<Vec<_>>(),
+                                g.actions.len(),
+                                g.welcome_message.chars().count(),
+                                g.profile.is_some()
+                            ),
+                            Ok(_) => eprintln!("real_shots: guide: unexpected reply"),
+                            Err(e) => eprintln!("real_shots: guide failed: {}", e.0),
+                        }
+                    }
+                    r
+                })
+            }
             // Thread / forum post opened by id (PHX_CHANNEL of a post).
             phoenix_app::commands::ParityRequest::FetchThread { .. } => self.0.parity(req),
             // Inbox popout tabs (PHX_VIEW=inbox): GET mentions / saved / scheduled.
