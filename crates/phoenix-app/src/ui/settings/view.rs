@@ -358,9 +358,9 @@ fn page_icon(p: Page) -> &'static str {
         Page::Notifications => "bell",
         Page::Keybinds | Page::System => "gear",
         Page::Language => "compass",
-        Page::Appearance => "emoji",
+        Page::Appearance => "palette", // vanilla-settings-08 sidebar
         Page::Accessibility => "help",
-        Page::VoiceVideo => "speaker",
+        Page::VoiceVideo => "mic", // vanilla-settings-08 sidebar
         Page::Advanced => "file",
         Page::ActivityPrivacy => "user-profile",
         Page::RegisteredGames => "apps",
