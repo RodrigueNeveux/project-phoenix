@@ -156,6 +156,25 @@ Offscreen check: `phoenix-build <out> build -p phoenix-app --example states_shot
 (`PHX_SETTINGS=1` for settings, `PHX_OPEN=pins|inbox|threads|search[:q]` for popouts)
 renders the mock app with the mouse at each point (pressed with `,down`).
 
+## Focus rings (Tab navigation)
+
+Live client, 2026-11-24, Tab from the chat (focus only, nothing opened). `.focus-rings-ring` is an
+absolute box over the focused element: `box-shadow: 0 0 0 4px` `--focus-primary` (unset in the 2026
+themes: fallback `#00b0f4`), radius = the element's radius (4px when it has none). Shown only after
+keyboard input. Phoenix: `ui/focus_ring.rs` (Tab / Shift+Tab at the root, after the composer,
+pickers and menus had their turn; Enter / Space click through GPUI's keyboard click).
+
+| element | client ring box (live) | Phoenix | status |
+|---|---|---|---|
+| composer text area | the 830x57 input box, radius 8 | gpui-component input (own focus, no ring) | ❌ no ring on the text field yet |
+| composer buttons (gift, GIF, sticker) | 32x24, 4px inside the 32px button vertically, radius 8 (gift 4) | `states::composer_button_ext` `ring_inset(0, 4)` | ✅ |
+| emoji / apps buttons | 40x24 (4px wider than the button) | same helper (32x24) | ⚠ 8px narrower |
+| member rows | 244x36, 4px inside the 252x44 row, radius 8 | `members.rs` `ring_inset(4, 3)` | ✅ |
+| channel rows | not measured (the user was typing in the client) | `sidebar.rs` chrow `ring_inset(4, 4)`, same rule as the member rows | ⚠ |
+| rail tiles | not measured | `server_bar.rs` `row`, around the 40px tile, radius 12 | ⚠ |
+| header / user panel buttons | not measured | `states::header_button` (radius 4), `voice_panel::panel_button` (radius 8), on their bounds | ⚠ |
+| modal focus trap | client keeps Tab inside an open modal (focus lock) | not done: Tab walks the whole window | ❌ |
+
 ## Coverage
 
 81 rows: 79 ✅, 2 ➖, 0 ❌.

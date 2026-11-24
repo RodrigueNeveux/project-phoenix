@@ -44,7 +44,7 @@ pub fn sync(window: &Window, cx: &mut App) -> bool {
         for k in wanted {
             h.entry(k).or_insert_with(|| cx.focus_handle().tab_stop(true));
         }
-        let focused = window.last_input_was_keyboard().then(|| h.iter().find(|(_, f)| f.is_focused(window)).map(|(k, _)| *k)).flatten();
+        let focused = if window.last_input_was_keyboard() { h.iter().find(|(_, f)| f.is_focused(window)).map(|(k, _)| *k) } else { None };
         VISIBLE.with(|v| v.set(focused));
     });
     created
