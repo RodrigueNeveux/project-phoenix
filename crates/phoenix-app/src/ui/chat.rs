@@ -328,9 +328,9 @@ pub(crate) fn width_probe(cell: &'static std::thread::LocalKey<std::cell::Cell<f
 /// header's content box (border box minus the 20px + 8px inline padding). Measured on the
 /// live client (zoom 125 %, CDP viewport emulation): header 583 → 235, 543 → 195,
 /// 483 → 135, 433 → 85, 383 → 64; see docs/parity/responsive.md.
-fn header_search_w() -> f32 {
+fn header_search_w(pad_start: f32) -> f32 {
     let w = HEADER_W.with(std::cell::Cell::get);
-    if w <= 0. { 244. } else { (w - space::md() - 8. - 320.).clamp(64., 244.) }
+    if w <= 0. { 244. } else { (w - pad_start - 8. - 320.).clamp(64., 244.) }
 }
 
 /// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
@@ -364,6 +364,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.clone()).unwrap_or_default()
     };
     let search_ph = SharedString::from(format!("{} {}", crate::t!("search.placeholder"), scope));
+    let pad_start = if is_group_dm { space::md() / 2. } else { space::md() };
     div()
         .relative()
         .child(width_probe(&HEADER_W))
@@ -371,7 +372,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
         .flex_none()
         // padding-inline-start --custom-message-margin-horizontal (--space-md); a group DM's
         // section is half that (vanilla-group-dm #1059: 10px), its hoverable name box adds the rest.
-        .pl(z(if is_group_dm { space::md() / 2. } else { space::md() }))
+        .pl(z(pad_start))
         .pr(z(8.))
         .py(z(8.))
         .flex()
@@ -601,7 +602,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     div()
                         .ml(z(4.))
                         .flex_none()
-                        .w(z(header_search_w()))
+                        .w(z(header_search_w(pad_start)))
                         // `.density-compact .searchBar_i16Ad0` is 28px tall.
                         .h(z(if crate::theme::density() == crate::theme::Density::Compact { 28. } else { 32. }))
                         .rounded(z(8.))
