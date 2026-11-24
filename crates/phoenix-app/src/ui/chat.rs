@@ -410,6 +410,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         .text_color(tk(idx::TEXT_STRONG))
                         .child(crate::ui::emoji_text::label(name, 16.)),
                 )
+                .when(kind == ChannelKind::Announcement && thread_parent.is_none(), |d| d.child(crate::ui::forum::follow_button()))
                 .when(discoverable, |d| {
                     // vanilla-guild-text #1060 dot_GxzgQj: 4px, --background-mod-strong, margin-inline 4 12;
                     // #1061/#1062 label_GxzgQj > body-sm/medium 14px/18px --text-muted "Mode Découverte".

@@ -75,6 +75,30 @@ pub fn is_op(app: &PhoenixApp, channel: Id, author: Id) -> bool {
         .is_some_and(|p| p.owner == Some(author))
 }
 
+/// "Follow" next to an announcement channel's name (vanilla-announcement
+/// followButton_z_gUBg: padding 4 8, margin-inline-end 8 around a
+/// button_F7qvhY sm secondary: h 32, padding 3 11, radius 8, body-sm/medium).
+pub fn follow_button() -> gpui::Stateful<gpui::Div> {
+    div().id("announcement-follow").flex_none().py(z(4.)).px(z(8.)).mr(z(8.)).child(
+        div()
+            .h(z(32.))
+            .px(z(12.))
+            .rounded(z(8.))
+            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+            .border_1()
+            .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+            .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+            .child(crate::t!("forum.follow")),
+    )
+}
+
 /// botTagOP_feVUtO (vanilla-thread-channel "OP"): the bot tag box
 /// (.rem_.botTag_: h .9375rem, padding 0 .275rem, radius 4px; botTagCozy_
 /// margin-inline-start .25rem; .rem_.botTag_.botTagOP_ margin-top .25em)

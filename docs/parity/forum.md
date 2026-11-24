@@ -29,3 +29,5 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 ## State coverage
 - post card: rest ✅, hover (--background-surface-high, --border-strong) ✅; pressed ❌ not measured.
 - tag pill: rest / selected ✅; hover ❌ not measured.
+| inline new post form | vanilla-forum-new-post container_owUmX8 | title 20/600 h32, body min 80, media tile 78 r12, tag row mt16 mb12 gap 8, small pills h24, divider, controls h40 mt12 | | ui/forum.rs compose_card | ✅ (dump) / render pending |
+| announcement "Follow" button | vanilla-announcement followButton_z_gUBg | padding 4 8, mr 8; sm secondary h32 r8 14/500 | | ui/forum.rs follow_button, ui/chat.rs header | ✅ (dump); follow modal ❌ |
