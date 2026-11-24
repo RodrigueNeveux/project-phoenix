@@ -63,3 +63,30 @@ See the table at the bottom; each row is one commit, measured the same way.
 | commit | change | process start → guilds drawn | channel opened → frame |
 |---|---|---|---|
 | fbb7a46 | baseline | ~3.7–4.4 s | 553–756 ms |
+| 510d303 + c0dbb86 | READY snapshot on disk, message page cache (memory LRU 64 + disk), hover prefetch, warm 6 recent channels after READY; token check during the handshake | ~2.1–2.3 s (snapshot drawn ~270 ms after the app starts connecting) | 91–97 ms from the disk page, 8–9 ms from memory |
+
+### After the cache (a10c2a5, three runs)
+
+| step | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| `connect_start` → `snapshot_loaded` (read + parse READY off-thread) | 181 ms | 202 ms | 186 ms |
+| `connect_start` → `snapshot_applied` (guilds, channels, DMs on screen) | 305 ms | 303 ms | 293 ms |
+| cached channel → messages in state | 91 ms | 97 ms | 95 ms |
+| connect → live READY (network; unchanged) | 3103 ms | 1198 ms | 1234 ms |
+| live READY applied, selection kept, page from memory → frame | 9 ms | 8.5 ms | 9 ms |
+| `rest_get_me` (now overlaps the handshake) | 207 ms | 198 ms | 199 ms |
+
+The ~1.8 s before `connect_start` in real_shots is the example's CDP probes
+(the user's Discord had no CDP port during these runs), not the app.
+
+## What's next
+
+- `snapshot_loaded` (~190 ms) is mostly serde on the multi-MB READY: store a
+  compact pre-converted snapshot instead of the raw payload.
+- Messages in state take ~95 ms the first time (markdown/rich text of 50
+  messages on the UI thread) and ~9 ms when warm: build `RenderedMessage`s
+  off-thread.
+- Gateway RESUME across restarts (persist session_id + seq at exit) would
+  skip READY entirely when the app is restarted within a few minutes.
+- Prefetch the channels with unread mentions after READY (now only the 6
+  most recently viewed channels and hovered rows).
