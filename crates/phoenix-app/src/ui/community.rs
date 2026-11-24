@@ -22,8 +22,9 @@ use crate::{
 struct Slot(Option<Page>);
 impl gpui::Global for Slot {}
 
-/// Browse Channels search field: (guild, input). Local filter only.
-struct Search(Id, Entity<InputState>, gpui::Subscription);
+/// Browse Channels search field: (guild, input). Local filter only. The
+/// subscription (re-render on each keystroke) lives as long as the field.
+struct Search(Id, Entity<InputState>, #[allow(dead_code)] gpui::Subscription);
 impl gpui::Global for Search {}
 
 struct Page {
