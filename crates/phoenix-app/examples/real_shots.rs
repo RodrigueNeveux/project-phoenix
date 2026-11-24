@@ -69,6 +69,12 @@ impl Backend for ReadOnly {
     fn restore_session(&self) -> Option<BoxFuture<ReadyData>> {
         self.0.restore_session()
     }
+    fn restore_cached(&self) -> Option<BoxFuture<ReadyData>> {
+        self.0.restore_cached()
+    }
+    fn prefetch_messages(&self, channel: Id) {
+        self.0.prefetch_messages(channel) // GET only, never acks
+    }
     fn select_guild(&self, guild: Option<Id>) -> BoxFuture<()> {
         self.0.select_guild(guild)
     }
