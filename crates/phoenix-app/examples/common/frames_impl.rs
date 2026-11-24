@@ -108,6 +108,11 @@ pub fn run() -> anyhow::Result<()> {
     cx.update(|cx| {
         let _ = cx.text_system().add_fonts(fonts);
         phoenix_app::init(cx);
+        // Real media path (CDN + disk cache), like the app: images that fail
+        // to load would otherwise retry and skew every frame.
+        let b = phoenix_app::discord_backend::DiscordBackend::new();
+        cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(b.http_client())));
+        std::mem::forget(b);
     });
     let view: Rc<RefCell<Option<Entity<PhoenixApp>>>> = Rc::default();
     let v2 = view.clone();
@@ -181,7 +186,8 @@ pub fn run() -> anyhow::Result<()> {
         p.frame();
     }
     // Picker sits above the composer, right side.
-    p.measure("scroll_emoji_picker", 150, |p, _| p.input(wheel(1000., 450., -120.)));
+    p.measure("scroll_emoji_picker_cold", 150, |p, _| p.input(wheel(1000., 450., -120.)));
+    p.measure("scroll_emoji_picker_back", 150, |p, _| p.input(wheel(1000., 450., 120.)));
     p.measure("hover_emoji_picker", 150, |p, i| p.input(mouse(820. + (i % 9) as f32 * 40., 400. + (i / 9 % 5) as f32 * 40.)));
     println!("rss_end_kib={}", rss_kib());
 
