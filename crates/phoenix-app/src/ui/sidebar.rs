@@ -84,15 +84,21 @@ pub fn build_rows(app: &mut PhoenixApp) {
                 }
                 // Live client (channel list, 2026-11-23): voice users are listed by their
                 // shown name (guild nick, else display name), case-insensitively.
+                // Stage: only speakers get rows; `suppress` users go to the audience strip.
+                let stage = ch.kind == ChannelKind::Stage;
                 let mut vu: Vec<(String, Id)> = ch
                     .voice_users
                     .iter()
+                    .filter(|u| !stage || !crate::ui::voice_panel::flags(**u).suppress)
                     .map(|u| (voice_user_name(app, *u).to_lowercase(), *u))
                     .collect();
                 vu.sort();
                 // "Hide Names": one row holding the avatar strip (rendered by the first user).
                 let take = if crate::ui::voice_row::names_hidden(id) { 1 } else { usize::MAX };
                 rows.extend(vu.into_iter().take(take).map(|(_, u)| SidebarRow::VoiceUser { user: u }));
+                if stage && ch.voice_users.iter().any(|u| crate::ui::voice_panel::flags(*u).suppress) {
+                    rows.push(SidebarRow::StageAudience(id));
+                }
             }
             // Drop (expanded) categories left empty by hidden muted channels.
             if hide_muted {
@@ -473,6 +479,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         }
         SidebarRow::Channel(id) => channel_row(app, entity, id),
         SidebarRow::Thread(id) => thread_row(app, entity, id),
+        SidebarRow::StageAudience(id) => crate::ui::voice_row::stage_audience(app, id),
         SidebarRow::VoiceUser { user } => {
             // `list_YUoOxm listDefault_YUoOxm` (live channel list): padding-bottom 10 after
             // a channel's last voice user.
@@ -484,7 +491,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 let users: Vec<Id> = vu.into_iter().map(|(_, u)| u).collect();
                 return crate::ui::voice_row::collapsed_list(app, &users);
             }
-            let last = !matches!(app.sidebar_rows.get(ix), Some(SidebarRow::VoiceUser { .. }));
+            let last = !matches!(app.sidebar_rows.get(ix), Some(SidebarRow::VoiceUser { .. } | SidebarRow::StageAudience(_)));
             let row = crate::ui::voice_panel::voice_user_row(app, entity, user);
             // Stretch the row so its mute/deafen icons sit at the right edge (`icons_YUoOxm`).
             div().w_full().flex().flex_col().when(last, |d| d.pb(z(10.))).child(row).into_any_element()

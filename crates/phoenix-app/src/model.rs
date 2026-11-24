@@ -318,4 +318,6 @@ pub struct VoiceFlags {
     pub server_deaf: bool,
     pub stream: bool,
     pub video: bool,
+    /// Stage audience (VOICE_STATE `suppress`): listed in the audience row, not as a speaker.
+    pub suppress: bool,
 }

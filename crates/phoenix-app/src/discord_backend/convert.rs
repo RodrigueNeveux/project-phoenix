@@ -1343,6 +1343,7 @@ fn voice_flags(v: &phoenix_api::models::VoiceState) -> crate::model::VoiceFlags 
         server_deaf: v.deaf,
         stream: v.self_stream.unwrap_or(false),
         video: v.self_video,
+        suppress: v.suppress,
     }
 }
 

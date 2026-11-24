@@ -121,7 +121,7 @@ pub fn apply(rows: &mut Vec<SidebarRow>) {
     let mut lifting = false;
     for r in rows.drain(..) {
         match r {
-            SidebarRow::Thread(_) | SidebarRow::VoiceUser { .. } => {}
+            SidebarRow::Thread(_) | SidebarRow::VoiceUser { .. } | SidebarRow::StageAudience(_) => {}
             _ => lifting = pinned(&r),
         }
         if lifting { top.push(r) } else { rest.push(r) }

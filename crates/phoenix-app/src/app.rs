@@ -52,6 +52,8 @@ pub enum SidebarRow {
     /// Active thread under its parent channel.
     Thread(Id),
     VoiceUser { user: Id },
+    /// Stage channel audience strip under its speakers.
+    StageAudience(Id),
 }
 
 #[derive(Clone, Debug)]

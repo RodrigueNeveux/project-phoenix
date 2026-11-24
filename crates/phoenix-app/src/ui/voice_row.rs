@@ -268,3 +268,75 @@ mod tests {
         assert_eq!(a.y - px(60.), px(290.));
     }
 }
+
+/// Stage audience strip under the speakers (`audienceContainer_xIeVT2`: row, gap 8,
+/// height 24, margin-top 4, padding-inline-start --space-xs, inside `list_YUoOxm`
+/// padding 0 0 10 38). `audienceIconContainer_` 24px circle --background-base-lowest
+/// with a 16px --interactive-text-default glyph; avatars overlap like `overlap_YUoOxm`
+/// (4px --background-base-lowest ring, margin-inline -8/-4); extra count in
+/// `moreContainer_` (--background-base-lowest, 4px ring, radius 16, padding 3 8).
+pub fn stage_audience(app: &crate::app::PhoenixApp, channel: Id) -> AnyElement {
+    use crate::theme::generated::global::SPACE_XS;
+    let audience: Vec<Id> = app
+        .channels
+        .get(&channel)
+        .map(|c| c.voice_users.iter().copied().filter(|u| crate::ui::voice_panel::flags(*u).suppress).collect())
+        .unwrap_or_default();
+    let shown = audience.len().min(3);
+    let more = audience.len() - shown;
+    let ring = |child: AnyElement| {
+        div()
+            .ml(z(-8.))
+            .rounded_full()
+            .border(z(4.))
+            .border_color(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+            .child(child)
+    };
+    div()
+        .w_full()
+        .pl(z(38.))
+        .pb(z(10.))
+        .child(
+            div()
+                .mt(z(4.))
+                .h(z(24.))
+                .pl(z(SPACE_XS))
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(z(8.))
+                .child(
+                    div()
+                        .size(z(24.))
+                        .flex_none()
+                        .rounded_full()
+                        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(crate::ui::icon(crate::assets::Icon::Headphones, 16. * crate::theme::zoom(), c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .pl(z(8.))
+                        .children(audience.iter().take(shown).map(|u| ring(crate::ui::avatar(app.users.get(u), 24.))))
+                        .children((more > 0).then(|| {
+                            div()
+                                .ml(z(-8.))
+                                .rounded(z(16.))
+                                .border(z(4.))
+                                .border_color(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+                                .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+                                .px(z(8.))
+                                .py(z(3.))
+                                .text_size(z(12.))
+                                .line_height(z(16.))
+                                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                                .child(format!("+{more}"))
+                        })),
+                ),
+        )
+        .into_any_element()
+}
