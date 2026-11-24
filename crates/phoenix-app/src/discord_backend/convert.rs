@@ -935,11 +935,9 @@ impl Adapter {
                 let mut users = Vec::new();
                 message_users(m, &mut users);
                 out.push(AppEvent::Users(users));
-                if m.author.id == self.me {
-                    self.mark_read(m.channel_id.0, m.id.0);
-                } else if {
-                    // Client `isMentioned`: direct mention, @everyone unless the guild
-                    // suppresses it, a role of mine unless the guild suppresses roles.
+                // Client `isMentioned`: direct mention, @everyone unless the guild
+                // suppresses it, a role of mine unless the guild suppresses roles.
+                let mentioned = {
                     let g = m.guild_id.map(|g| g.0);
                     let sup_every = g.is_some_and(|g| self.prefs.mutes.suppress_everyone.contains(&g));
                     let sup_roles = g.is_some_and(|g| self.prefs.mutes.suppress_roles.contains(&g));
@@ -947,7 +945,10 @@ impl Adapter {
                         || (m.mention_everyone && !sup_every)
                         || (!sup_roles
                             && m.guild_id.and_then(|g| cache.member(g, self.me)).is_some_and(|me| m.mention_roles.iter().any(|r| me.roles.contains(r))))
-                } {
+                };
+                if m.author.id == self.me {
+                    self.mark_read(m.channel_id.0, m.id.0);
+                } else if mentioned {
                     self.prefs.reads.entry(m.channel_id.0).or_default().mentions += 1;
                 }
                 out.push(AppEvent::MessageCreate(message(m)));
