@@ -106,3 +106,8 @@ Les noms, messages, URLs et autres contenus réels n’apparaissent jamais dans 
 - prochain lot précis, fichiers concernés, dépendances et effets secondaires à éviter;
 - espace disque, processus/build actif et consigne de ne pas en lancer un second;
 - état du goal et conditions pour le terminer.
+
+## 9. `real_shots` : survol et réglages en mémoire
+
+- `PHX_MOUSE=x,y` envoie un déplacement de souris (px logiques) avant la capture. Le pilote de balayage place la souris du client en `W-2,H-2` (dans la liste des membres à 1280×720) : passer la même position pour comparer les états de survol, par exemple la scrollbar fine `thin fade`.
+- `PHX_PROTO=id=valeur,...` force des réglages synchronisés (ids de `ui/settings/synced_map.rs`) en mémoire seulement, par exemple `PHX_PROTO=alt-text=1` pour le badge ALT. Rien n'est envoyé au compte.
