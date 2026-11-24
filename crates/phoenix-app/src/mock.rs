@@ -117,7 +117,8 @@ fn user(i: usize) -> User {
         tag: ["GLAD", "RUST", "PNX"].get(i % 4).map(|t| ((*t).into(), None)),
         nameplate: None,
         name_style: (i % 5 == 1).then(|| (17, 1, Vec::new())),
-        decoration: None,
+        // PHX_MOCK_DECO=<image URL>: mock avatar decorations for offscreen renders.
+        decoration: std::env::var("PHX_MOCK_DECO").ok().map(Into::into),
     }
 }
 

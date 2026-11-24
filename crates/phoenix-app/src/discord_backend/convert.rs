@@ -59,11 +59,10 @@ pub fn user(u: &api::User) -> model::User {
     }
 }
 
-/// `avatar_decoration_data.asset` → static CDN preset (the client animates it only on hover).
+/// `avatar_decoration_data` → static collectibles-shop image (the client animates it only on hover).
 /// size=96 covers the 48px message and 38px member-list decoration at 2x.
 pub fn decoration_url(u: &api::User) -> Option<SharedString> {
-    let a = u.avatar_decoration_data.as_ref()?.get("asset")?.as_str().filter(|a| !a.is_empty())?;
-    Some(format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false").into())
+    crate::ui::avatar_deco::url(u.avatar_decoration_data.as_ref()?)
 }
 
 /// Per-guild avatar (`member.avatar`): CDN `guilds/{g}/users/{u}/avatars/{hash}`.
@@ -75,8 +74,7 @@ pub fn member_avatar_url(g: api::GuildId, u: api::UserId, m: &api::Member) -> Op
 
 /// Per-guild avatar decoration (`member.avatar_decoration_data.asset`).
 pub fn member_decoration_url(m: &api::Member) -> Option<SharedString> {
-    let a = m.avatar_decoration_data.as_ref()?.get("asset")?.as_str().filter(|a| !a.is_empty())?;
-    Some(format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false").into())
+    crate::ui::avatar_deco::url(m.avatar_decoration_data.as_ref()?)
 }
 
 pub fn presence(status: &str) -> model::Presence {

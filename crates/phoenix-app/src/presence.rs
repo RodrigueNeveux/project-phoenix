@@ -281,9 +281,7 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
     let decoration = u
         .avatar_decoration_data
         .as_ref()
-        .and_then(|d| d.get("asset"))
-        .and_then(Value::as_str)
-        .map(|a| SharedString::from(format!("https://cdn.discordapp.com/avatar-decoration-presets/{a}.png?size=96&passthrough=false")));
+        .and_then(crate::ui::avatar_deco::url);
     let accent = p
         .user_profile
         .as_ref()

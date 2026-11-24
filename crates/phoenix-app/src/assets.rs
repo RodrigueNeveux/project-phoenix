@@ -221,6 +221,10 @@ impl AssetSource for Assets {
         if path == "icon.png" {
             return Ok(Some(Cow::Borrowed(APP_ICON_PNG)));
         }
+        // `local/<abs path>` (no scheme, so GPUI asks the asset source): a file on disk (offscreen mock renders, e.g. PHX_MOCK_DECO).
+        if let Some(p) = path.strip_prefix("local/") {
+            return Ok(std::fs::read(p).ok().map(Cow::Owned));
+        }
         static INIT: std::sync::Once = std::sync::Once::new();
         INIT.call_once(crate::icons::init);
         // Real icons extracted from the local Discord install win over ours.

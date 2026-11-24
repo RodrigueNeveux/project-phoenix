@@ -44,6 +44,8 @@ struct Store {
     anims: HashMap<SharedString, (Option<Arc<RenderImage>>, Instant)>,
     /// Playback clock per effect SKU: (start, last paint).
     clocks: HashMap<u64, (Instant, Instant)>,
+    /// Frame art URL -> natural (width, height) (None while loading / failed).
+    sizes: HashMap<SharedString, Option<(f32, f32)>>,
 }
 
 impl Global for Store {}
@@ -142,6 +144,37 @@ fn anim(src: &SharedString, still: bool, cx: &mut Context<PhoenixApp>) -> Option
     None
 }
 
+/// Natural size of a frame layer, read from its PNG header once. GPUI sizes
+/// an `img` without a height to its box and centres it (object-fit contain),
+/// while the client lays the art at 100% width, natural height, from the top.
+fn art_size(url: &SharedString, cx: &mut Context<PhoenixApp>) -> Option<(f32, f32)> {
+    let s = cx.default_global::<Store>();
+    if let Some(v) = s.sizes.get(url) {
+        return *v;
+    }
+    s.sizes.insert(url.clone(), None);
+    let http = cx.http_client();
+    let (u, fetch) = (url.clone(), url.to_string());
+    cx.spawn(async move |this, cx| {
+        use futures::AsyncReadExt;
+        let mut bytes = Vec::new();
+        let ok = match http.get(&fetch, Default::default(), true).await {
+            Ok(mut r) => r.body_mut().read_to_end(&mut bytes).await.is_ok(),
+            Err(_) => false,
+        };
+        let size = ok
+            .then(|| image::ImageReader::new(std::io::Cursor::new(&bytes)).with_guessed_format().ok()?.into_dimensions().ok())
+            .flatten()
+            .map(|(w, h)| (w as f32, h as f32));
+        let _ = this.update(cx, |_, cx| {
+            cx.default_global::<Store>().sizes.insert(u, size);
+            cx.notify();
+        });
+    })
+    .detach();
+    None
+}
+
 /// Elapsed playback time of an effect. A gap of more than a second without a
 /// paint means the card was hidden: restart, like the client re-mounting.
 fn clock(sku: u64, cx: &mut App) -> Duration {
@@ -156,7 +189,13 @@ fn clock(sku: u64, cx: &mut App) -> Duration {
 }
 
 /// The effect overlay: put last inside a `relative` card of width `w`.
+/// Hides profile effects (offscreen compares mask them on both sides).
+pub static DISABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 pub fn effect(c: &Collectible, w: f32, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if DISABLED.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
     effect_adjusted(c, w, 0., cx)
 }
 
@@ -253,31 +292,43 @@ pub fn effect_adjusted(c: &Collectible, w: f32, banner_adj: f32, cx: &mut Contex
     )
 }
 
-/// The frame art around a card of width `w`: an absolute box overflowing the
-/// card by the frame's `overflow_*` (scaled by `w / inner_width`), each layer
-/// at full width, anchored top / centre / bottom. Put inside a `relative`
-/// wrapper that does NOT clip.
-pub fn frame(f: &FrameSpec, w: f32, front: bool) -> Option<AnyElement> {
+/// The frame art around a card of width `w` (live popout, ref-cache
+/// profile-popout-frame-*.json): `profileFrame_v8co33` spans the card height
+/// (inset 0) and overflows each side by `overflow_horizontal` (scaled by
+/// `w / inner_width`). Rail/border layers fill that box with the art at 100%
+/// width, `background-position: 50% 0` (top) / centre / bottom; `staple`
+/// layers are natural-height images starting `overflow_top` above the card
+/// (or ending `overflow_bottom` below it). Put inside a `relative` wrapper
+/// that does NOT clip.
+pub fn frame(f: &FrameSpec, w: f32, front: bool, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let k = w / f.inner_width;
     let z = crate::theme::z;
-    let layers: Vec<_> = f.layers.iter().filter(|l| l.2 == front).collect();
+    let layers: Vec<_> = f.layers.iter().enumerate().filter(|(_, l)| l.2 == front).collect();
     if layers.is_empty() {
         return None;
     }
-    let mut d = div()
-        .absolute()
-        .top(z(-f.overflow_top * k))
-        .bottom(z(-f.overflow_bottom * k))
-        .left(z(-f.overflow_horizontal * k))
-        .w(z(w + 2. * f.overflow_horizontal * k));
-    for (url, anchor, _) in layers {
-        let col = div().absolute().top_0().left_0().size_full().flex().flex_col();
-        let col = match anchor {
-            Anchor::Top => col.justify_start(),
-            Anchor::Center => col.justify_center(),
-            Anchor::Bottom => col.justify_end(),
-        };
-        d = d.child(col.child(img(url.clone()).w_full().flex_none()));
+    let box_w = w + 2. * f.overflow_horizontal * k;
+    let mut d = div().absolute().top_0().bottom_0().left(z(-f.overflow_horizontal * k)).w(z(box_w));
+    for (i, (url, anchor, _)) in layers {
+        // 100% width, natural aspect; nothing until the size is known.
+        let Some((iw, ih)) = art_size(url, cx) else { continue };
+        let art = img(url.clone()).w_full().h(z(box_w * ih / iw.max(1.))).flex_none();
+        if f.staple.get(i).copied().unwrap_or(false) {
+            let l = div().absolute().left_0().right_0();
+            let l = match anchor {
+                Anchor::Bottom => l.bottom(z(-f.overflow_bottom * k)),
+                _ => l.top(z(-f.overflow_top * k)),
+            };
+            d = d.child(l.child(art));
+        } else {
+            let col = div().absolute().top_0().left_0().size_full().overflow_hidden().flex().flex_col();
+            let col = match anchor {
+                Anchor::Top => col.justify_start(),
+                Anchor::Center => col.justify_center(),
+                Anchor::Bottom => col.justify_end(),
+            };
+            d = d.child(col.child(art));
+        }
     }
     Some(d.into_any_element())
 }

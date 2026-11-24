@@ -84,6 +84,9 @@ pub struct FrameSpec {
     pub overflow_top: f32,
     pub overflow_bottom: f32,
     pub overflow_horizontal: f32,
+    /// Per layer: a `staple` (natural-height art sticking out by `overflow_top`
+    /// / `overflow_bottom`); otherwise a rail/border filling the card height.
+    pub staple: Vec<bool>,
 }
 
 fn effects(kind: Kind, item: &Value) -> Vec<EffectLayer> {
@@ -119,10 +122,19 @@ fn frame(kind: Kind, item: &Value) -> Option<FrameSpec> {
         return None;
     }
     let sku = item.get("sku_id")?.as_str()?;
-    let f = |k: &str| item.get(k).and_then(Value::as_f64).unwrap_or(0.) as f32;
-    let layers = item
-        .get("layers")?
-        .as_array()?
+    // The API spells the geometry in snake_case or camelCase (live store:
+    // innerWidth 1200, overflowTop 304, overflowHorizontal 56).
+    let f = |k: &str| {
+        let camel: String = k.split('_').enumerate().map(|(i, w)| if i == 0 { w.to_owned() } else { w[..1].to_uppercase() + &w[1..] }).collect();
+        item.get(k).or_else(|| item.get(&camel)).and_then(Value::as_f64).unwrap_or(0.) as f32
+    };
+    let raw = item.get("layers")?.as_array()?;
+    let staple = raw
+        .iter()
+        .filter(|l| l.get("id").and_then(Value::as_str).is_some())
+        .map(|l| l.get("type").and_then(Value::as_str) == Some("staple"))
+        .collect();
+    let layers = raw
         .iter()
         .filter_map(|l| {
             let s = |k: &str| l.get(k).and_then(Value::as_str);
@@ -141,6 +153,7 @@ fn frame(kind: Kind, item: &Value) -> Option<FrameSpec> {
         overflow_top: f("overflow_top"),
         overflow_bottom: f("overflow_bottom"),
         overflow_horizontal: f("overflow_horizontal"),
+        staple,
     })
 }
 
@@ -283,7 +296,7 @@ mod tests {
             {"type": 0, "premium_type": 2, "name": "N", "items": [{"type": 0, "sku_id": "1", "asset": "a"}]},
             {"type": 1, "premium_type": 0, "name": "E", "items": [{"type": 1, "sku_id": "2", "thumbnailPreviewSrc": "https://t"}]},
             {"type": 3, "premium_type": 0, "name": "F", "items": [{"type": 3, "sku_id": "3", "layers": [
-                {"id": "9", "type": "border", "order": "front"}, {"id": "8", "type": "staple", "order": "front"}]}]},
+                {"id": "9", "type": "border", "order": "front"}, {"id": "8", "type": "staple", "order": "front"}], "innerWidth": 1200, "overflowTop": 304}]},
             {"type": 1000, "premium_type": 0, "name": "B", "items": [{"type": 0, "sku_id": "4"}]},
             {"type": 1, "premium_type": 0, "name": "dup", "items": [{"type": 1, "sku_id": "2"}]}
         ]}]});
@@ -298,6 +311,8 @@ mod tests {
         let f = s.shop[1].frame.as_ref().unwrap();
         assert_eq!(f.layers.len(), 2);
         assert_eq!(f.layers[1].1, Anchor::Center);
+        assert_eq!(f.staple, vec![false, true]);
+        assert_eq!((f.inner_width, f.overflow_top), (1200., 304.));
     }
 
     #[test]

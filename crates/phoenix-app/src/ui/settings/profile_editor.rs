@@ -988,9 +988,9 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
         .h_full()
         .flex_none()
         .flex()
-        .children(frame.as_ref().and_then(|f| crate::ui::profile_fx::frame(f, 400., false)))
+        .children(frame.as_ref().and_then(|f| crate::ui::profile_fx::frame(f, 400., false, cx)))
         .child(inner)
-        .children(frame.as_ref().and_then(|f| crate::ui::profile_fx::frame(f, 400., true)))
+        .children(frame.as_ref().and_then(|f| crate::ui::profile_fx::frame(f, 400., true, cx)))
 }
 
 /// Applied effect / frame / nameplate: the picker choice ("Apply", preview

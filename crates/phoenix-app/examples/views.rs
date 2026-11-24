@@ -200,8 +200,13 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 4);
     }
-    cx.update_window(win.into(), |_, window, _| window.refresh())?;
-    pump(&mut cx, 2);
+    // Images (avatars, decorations) load over several frames: with
+    // PHX_MOCK_DECO or PHX_WAIT_IMAGES, keep painting ~2 s before capturing.
+    let frames = if std::env::var_os("PHX_MOCK_DECO").is_some() || std::env::var_os("PHX_WAIT_IMAGES").is_some() { 20 } else { 1 };
+    for _ in 0..frames {
+        cx.update_window(win.into(), |_, window, _| window.refresh())?;
+        pump(&mut cx, 2);
+    }
     let _ = cx.capture_screenshot(win.into())?;
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     pump(&mut cx, 2);

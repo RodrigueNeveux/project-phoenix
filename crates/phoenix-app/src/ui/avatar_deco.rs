@@ -63,13 +63,27 @@ pub fn set_hover(key: u64, hovered: bool) -> bool {
     })
 }
 
+/// Static decoration URL from `avatar_decoration_data` (`{asset, sku_id}`):
+/// the 2026 client loads `media/v1/collectibles-shop/{sku_id}/static`
+/// (`getCollectiblesItemAssetUrl`); the asset rides along as a query
+/// parameter (ignored by the CDN) for [`animated`]. Without a SKU, the preset.
+pub fn url(d: &serde_json::Value) -> Option<SharedString> {
+    let asset = d.get("asset")?.as_str().filter(|a| !a.is_empty())?;
+    Some(match d.get("sku_id").and_then(|s| s.as_str()).filter(|s| !s.is_empty()) {
+        Some(sku) => format!("https://cdn.discordapp.com/media/v1/collectibles-shop/{sku}/static?asset={asset}").into(),
+        None => format!("https://cdn.discordapp.com/avatar-decoration-presets/{asset}.png?size=96&passthrough=false").into(),
+    })
+}
+
 /// The animated variant of a static decoration URL. The live client swaps
 /// `…/static` for `…/animated` (an APNG, which GPUI cannot play); the preset
 /// CDN serves the same artwork as an animated WebP, which it decodes.
 pub fn animated(url: &str) -> Option<SharedString> {
-    let (base, _) = url.split_once(".png?")?;
-    base.rsplit('/').next().filter(|a| a.starts_with("a_"))?;
-    Some(format!("{base}.webp?size=96&animated=true").into())
+    let asset = match url.split_once("?asset=") {
+        Some((_, a)) => a,
+        None => url.split_once(".png?")?.0.rsplit('/').next()?,
+    };
+    asset.starts_with("a_").then(|| format!("https://cdn.discordapp.com/avatar-decoration-presets/{asset}.webp?size=96&animated=true").into())
 }
 
 /// Decoration source: animated when `play`, else static.
@@ -89,6 +103,9 @@ mod anim_tests {
         let s = "https://cdn.discordapp.com/avatar-decoration-presets/a_12ab.png?size=96&passthrough=false";
         assert_eq!(super::animated(s).as_deref(), Some("https://cdn.discordapp.com/avatar-decoration-presets/a_12ab.webp?size=96&animated=true"));
         assert!(super::animated("https://cdn.discordapp.com/avatar-decoration-presets/12ab.png?size=96&passthrough=false").is_none());
+        let u = super::url(&serde_json::json!({"asset": "a_12ab", "sku_id": "77"})).unwrap();
+        assert_eq!(u.as_ref(), "https://cdn.discordapp.com/media/v1/collectibles-shop/77/static?asset=a_12ab");
+        assert_eq!(super::animated(&u).as_deref(), Some("https://cdn.discordapp.com/avatar-decoration-presets/a_12ab.webp?size=96&animated=true"));
         assert!(super::set_hover(super::hover_key(1, 5), true));
         assert!(!super::set_hover(super::hover_key(1, 5), true));
         assert!(super::set_hover(super::hover_key(1, 5), false));

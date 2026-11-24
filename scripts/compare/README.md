@@ -50,3 +50,5 @@ The images and `boxes.json` contain private conversations. Keep them on /mnt/win
 
 Adds a `profile popout` / `profile modal` region. `real_shots` opens the same user's
 profile (`PHX_PROFILE`, `PHX_PROFILE_KIND`, `PHX_PROFILE_BOX`) at Discord's position.
+
+    compare.py --open-member 3 --no-effects   # hide animated profile effects on both sides (frame-stable score)

@@ -61,6 +61,11 @@ OPEN_MEMBER_JS = r"""(n=>{const l=[...document.querySelectorAll('div[class^=memb
 if(!l[n])return false;l[n].dataset.phxcmp=1;return true})(%d)"""
 
 
+# Transient style (removed after the capture): hide the animated profile effect layers.
+HIDE_FX_JS = r"""(()=>{const s=document.createElement('style');s.id='phx-nofx';s.textContent='[class*=profileEffects_]{visibility:hidden!important}';document.head.appendChild(s);return true})()"""
+SHOW_FX_JS = r"""(()=>{document.getElementById('phx-nofx')?.remove();return true})()"""
+
+
 def open_overlay(env, member, modal):
     """Drive Discord (read-only): open member `member`'s popout, then its full profile."""
     if json.loads(cdp("eval", OPEN_MEMBER_JS % member)) is not True:
@@ -117,6 +122,7 @@ def main():
     ap.add_argument("--overlay", action="store_true", help="score the profile popout/modal open in Discord")
     ap.add_argument("--open-member", type=int, help="open the n-th visible member's popout first (implies --overlay); Escape after")
     ap.add_argument("--modal", action="store_true", help="with --open-member: open the full profile from the popout")
+    ap.add_argument("--no-effects", action="store_true", help="hide animated profile effects on both sides (frame-stable scores)")
     a = ap.parse_args()
     live = not (a.regions and a.discord and a.phoenix)
     env = take_lock(a.lock_wait) if live else None
@@ -126,8 +132,13 @@ def main():
             open_overlay(env, a.open_member, a.modal)
             opened = 2 if a.modal else 1
             a.overlay = True
+        if env and a.no_effects:
+            cdp("eval", HIDE_FX_JS)
+            time.sleep(0.3)
         return run(a)
     finally:
+        if env and a.no_effects:
+            cdp("eval", SHOW_FX_JS)
         if env:
             close_overlay(env, opened)
             release_lock(env)
@@ -156,6 +167,8 @@ def run(a):
             sys.exit(f"build first: cargo rustc -p phoenix-app --example real_shots -- -L ~/.local/lib/devlinks")
         env = dict(os.environ)
         ov = boxes.get("overlay")
+        if a.no_effects:
+            env["PHX_NO_FX"] = "1"
         if ov:
             env.update(PHX_PROFILE=str(ov["user"]), PHX_PROFILE_KIND=ov["kind"], PHX_PROFILE_BOX=f"{ov['box'][0]},{ov['box'][1]}")
         subprocess.run([str(BIN), str(p_path)], check=True, cwd=out, env=env)

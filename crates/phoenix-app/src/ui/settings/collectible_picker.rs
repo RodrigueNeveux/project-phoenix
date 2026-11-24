@@ -441,9 +441,9 @@ pub fn render(app: &PhoenixApp, e: &super::profile_editor::EditorState, cx: &mut
                         match &it.frame {
                             Some(f) => d.child(
                                 sample
-                                    .children(crate::ui::profile_fx::frame(f, 50., false))
+                                    .children(crate::ui::profile_fx::frame(f, 50., false, cx))
                                     .child(sample_profile(50., 54.))
-                                    .children(crate::ui::profile_fx::frame(f, 50., true)),
+                                    .children(crate::ui::profile_fx::frame(f, 50., true, cx)),
                             ),
                             None => d.child(sample.child(sample_profile(50., 54.))),
                         }

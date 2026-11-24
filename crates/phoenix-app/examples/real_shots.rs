@@ -628,6 +628,10 @@ fn main() -> anyhow::Result<()> {
     // PHX_PROFILE=<user id> opens that user's profile over the location, like the
     // overlay open in Discord: PHX_PROFILE_KIND=popout (default; PHX_PROFILE_BOX=x,y
     // is the popout's top-left in Discord, CSS px) or modal. Read-only GET of the profile.
+    // PHX_NO_FX=1: no profile effects (compare.py --no-effects hides them in Discord too).
+    if std::env::var_os("PHX_NO_FX").is_some() {
+        phoenix_app::ui::profile_fx::DISABLED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     if let Some(uid) = std::env::var("PHX_PROFILE").ok().and_then(|v| parse_id(&v)) {
         let modal = std::env::var("PHX_PROFILE_KIND").is_ok_and(|k| k == "modal");
         let at = std::env::var("PHX_PROFILE_BOX").ok().and_then(|b| {

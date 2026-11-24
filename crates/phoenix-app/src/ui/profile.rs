@@ -125,7 +125,8 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
                 .absolute()
                 .left(x)
                 .top(y)
-                .w(px(POPOUT_W))
+                // themed: width + 2 * --custom-user-profile-theme-padding (live 304px)
+                .w(px(POPOUT_W + if app.people.profiles.get(&p.user).is_some_and(|x| x.theme.is_some()) { 4. } else { 0. }))
                 // outer_P1YEjQ.user-profile-popout max-height: calc(100vh - 20px)
                 .max_h(vp.height - y - px(10.))
                 .flex()
@@ -848,7 +849,13 @@ fn popout_card_inner(
             inner.relative().rounded(z(6.)).overflow_hidden().bg(crate::ui::profile_theme::overlay(t)),
         ),
     }
-    .children(effect);
+    // profileEffects_ZjcCyW: inset by the theme padding (live: 2px, 300 wide).
+    .children(effect.map(|e| {
+        let pad = if theme.is_some() { 2. } else { 0. };
+        div().absolute().top(z(pad)).left(z(pad)).right(z(pad)).bottom(z(pad)).child(e)
+    }));
+    // profileFrameContainer_v8co33 spans the whole outer card (304px when themed).
+    let frame_w = if theme.is_some() { 304. } else { 300. };
     match frame {
         None => card,
         Some(f) => div()
@@ -857,9 +864,9 @@ fn popout_card_inner(
             .max_h_full()
             .flex()
             .flex_col()
-            .children(crate::ui::profile_fx::frame(&f, 300., false))
+            .children(crate::ui::profile_fx::frame(&f, frame_w, false, cx))
             .child(card)
-            .children(crate::ui::profile_fx::frame(&f, 300., true)),
+            .children(crate::ui::profile_fx::frame(&f, frame_w, true, cx)),
     }
 }
 
