@@ -144,6 +144,8 @@ pub enum AttachmentKind {
     Video,
     /// Message sticker rendered as an attachment-like image.
     Sticker(crate::media::StickerFormat),
+    /// `audio/*` attachment: inline audio player card (`wrapperAudio_`).
+    Audio,
 }
 
 #[derive(Clone, Debug, Default)]

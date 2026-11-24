@@ -397,6 +397,11 @@ impl MockBackend {
                 crate::commands::store::record(&m);
             }
         }
+        // Content showcase (every message kind) at the end of the first guild's #showcase.
+        if let Some(ch) = inner.channels.iter().find(|c| c.id == channel && c.name == "showcase" && c.guild == inner.guilds.first().map(|g| g.id)) {
+            let (guild, general) = (ch.guild.unwrap_or_default(), inner.channels.iter().find(|c| c.guild == ch.guild && c.name == "general").map_or(channel, |c| c.id));
+            out.extend(crate::mock_showcase::messages(channel, guild, general, &mut inner.next_id, ts));
+        }
         out
     }
 

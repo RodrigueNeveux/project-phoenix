@@ -28,7 +28,7 @@ use crate::{
     markdown::MentionResolver,
     model::{Id, Message},
     richtext::{self, RBlock},
-    theme::{Palette, c, ca},
+    theme::{Palette, c},
 };
 
 /// Discord button colours (style 1..=6).
@@ -467,8 +467,9 @@ fn checkbox(on: bool) -> AnyElement {
 }
 
 fn radio(on: bool) -> AnyElement {
+    // poll RADIO_BUTTONS selection icon: size 24 (checkboxes 20).
     div()
-        .size(px(20.))
+        .size(px(24.))
         .flex_none()
         .rounded_full()
         .border_2()
@@ -538,7 +539,8 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
     let (ch, id) = (msg.channel, msg.id);
     let winner = poll.answers.iter().map(|a| a.count).max().unwrap_or(0);
 
-    let mut answers = div().flex().flex_col().gap(px(8.));
+    // answersContainer_D4-WfD: grid, gap 8, margin 8px 0 16px.
+    let mut answers = div().mt(px(8.)).mb(px(16.)).flex().flex_col().gap(px(8.));
     for a in &poll.answers {
         let pct = percent(a.count, total);
         let ticked = choice.contains(&a.id);
@@ -548,55 +550,76 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
         let mut row = div()
             .id(("poll-answer", (id.0 << 6) ^ a.id as u64))
             .relative()
-            .min_h(px(48.))
-            .rounded(px(8.))
+            // answerInner_D4-WfD: min-height 50, --radius-sm, --background-mod-muted, 1px outline
+            // var(--custom-poll-style-border): transparent; voted → --control-brand-foreground;
+            // victor → --status-positive; selected while voting → --control-brand-foreground.
+            .min_h(px(50.))
+            .rounded(px(crate::theme::generated::global::RADIUS_SM))
             .overflow_hidden()
-            .bg(c(Palette::BG_MOD_HOVER))
+            .bg(c(crate::theme::tok(crate::theme::generated::idx::BACKGROUND_MOD_MUTED)))
             .border_1()
-            .border_color(if ticked || (show_results && a.me) { c(Palette::BLURPLE) } else { gpui::transparent_black() });
+            .border_color(if ended && a.count == winner && winner > 0 {
+                c(crate::theme::tok(crate::theme::generated::idx::STATUS_POSITIVE))
+            } else if ticked || (show_results && a.me) {
+                c(crate::theme::tok(crate::theme::generated::idx::CONTROL_BRAND_FOREGROUND))
+            } else {
+                gpui::transparent_black()
+            });
         if show_results {
-            let fill = if ended && a.count == winner && winner > 0 { ca(0x23A55A66) } else { ca(0x5865F24D) };
+            // votePercentageBar_: --custom-poll-style-vote-percentage (default
+            // --interactive-background-active, voted --polls-voted-fill, victor --polls-victor-fill).
+            let fill = if ended && a.count == winner && winner > 0 {
+                c(crate::theme::tok(crate::theme::generated::idx::POLLS_VICTOR_FILL))
+            } else if a.me {
+                c(crate::theme::tok(crate::theme::generated::idx::POLLS_VOTED_FILL))
+            } else {
+                c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_ACTIVE))
+            };
             row = row.child(div().absolute().top_0().left_0().h_full().w(gpui::relative(pct as f32 / 100.)).bg(fill));
         } else {
-            row = row.cursor_pointer().hover(|s| s.bg(c(Palette::BG_MOD_SELECTED))).on_click(move |_, _, cx: &mut App| {
+            // .answer_:hover .currentlyVoting_ outline --border-strong.
+            row = row.cursor_pointer().when(!ticked, |r| r.hover(|s| s.border_color(c(crate::theme::tok(crate::theme::generated::idx::BORDER_STRONG))))).on_click(move |_, _, cx: &mut App| {
                 e.update(cx, |a, cx| a.tick_poll_answer(id, aid, multi, cx));
             });
         }
         row = row.child(
             div()
                 .relative()
+                .min_h(px(50.))
                 .px(px(16.))
-                .py(px(12.))
+                .py(px(8.))
                 .flex()
                 .items_center()
-                .gap(px(12.))
+                .gap(px(8.))
                 .when_some(a.emoji.as_ref(), |d, em| d.child(emoji_el(em, 24.)))
                 .child(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .text_size(px(16.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(Palette::TEXT_NORMAL))
+                        // answer label: body-sm/semibold (14 / 1.2857), --text-default
+                        .text_size(px(14.))
+                        .line_height(px(18.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(crate::theme::tok(crate::theme::generated::idx::TEXT_DEFAULT)))
                         .child(SharedString::from(a.text.clone())),
                 )
                 .when(show_results, |d| {
+                    // votesData_: row, gap 8 — "N votes" body-xs/semibold, then "X%" body-md/semibold.
                     d.child(
                         div()
                             .flex()
-                            .flex_col()
-                            .items_end()
-                            .text_size(px(14.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(c(Palette::TEXT_HEADER))
-                            .child(format!("{pct}%"))
+                            .items_center()
+                            .gap(px(8.))
+                            .whitespace_nowrap()
+                            .text_color(c(crate::theme::tok(crate::theme::generated::idx::TEXT_DEFAULT)))
                             .child(
                                 div()
                                     .text_size(px(12.))
-                                    .font_weight(FontWeight::NORMAL)
-                                    .text_color(c(Palette::TEXT_MUTED))
+                                    .line_height(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
                                     .child(if a.count == 1 { crate::t!("poll.vote_one").to_string() } else { crate::t!("poll.votes", n = a.count).to_string() }),
-                            ),
+                            )
+                            .child(div().text_size(px(16.)).line_height(px(20.)).font_weight(FontWeight::SEMIBOLD).child(format!("{pct}%"))),
                     )
                 })
                 .when(!show_results, |d| d.child(if poll.multi { checkbox(ticked) } else { radio(ticked) })),
@@ -639,37 +662,45 @@ pub fn render_poll(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message)
 
     Some(
         div()
-            .mt(px(8.))
+            // pollContainer_ margin 4px 0; container_HOJNvw: --background-surface-high, 1px
+            // --border-subtle, --radius-sm, padding 16, max-width 472, min-width 302, column.
+            .my(px(4.))
             .w_full()
-            .max_w(px(600.))
+            .max_w(px(472.))
+            .min_w(px(302.))
             .p(px(16.))
-            .rounded(px(8.))
-            .bg(c(Palette::BG_SECONDARY))
+            .rounded(px(crate::theme::generated::global::RADIUS_SM))
+            .bg(c(crate::theme::tok(crate::theme::generated::idx::BACKGROUND_SURFACE_HIGH)))
             .border_1()
-            .border_color(c(Palette::BG_TERTIARY))
+            .border_color(c(crate::theme::tok(crate::theme::generated::idx::BORDER_SUBTLE)))
             .flex()
             .flex_col()
-            .gap(px(8.))
             .child(
+                // question_: body-md/medium (16 / 1.25, 500)
                 div()
-                    .text_size(px(17.))
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(c(Palette::TEXT_HEADER))
+                    .text_size(px(16.))
+                    .line_height(px(20.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(crate::theme::tok(crate::theme::generated::idx::TEXT_STRONG)))
                     .child(SharedString::from(poll.question.clone())),
             )
-            .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(if poll.multi {
+            // prompt_: margin-top 4, body-sm/normal --text-muted
+            .child(div().mt(px(4.)).text_size(px(14.)).line_height(px(18.)).text_color(c(crate::theme::tok(crate::theme::generated::idx::TEXT_MUTED))).child(if poll.multi {
                 crate::t!("poll.multi")
             } else {
                 crate::t!("poll.single")
             }))
             .child(answers)
             .child(
+                // bottomBar_: row, gap 16, min-height --custom-button-button-md-height; details
+                // body-sm/normal --text-muted.
                 div()
-                    .mt(px(4.))
+                    .min_h(px(crate::theme::generated::global::CUSTOM_BUTTON_BUTTON_MD_HEIGHT))
                     .flex()
                     .items_center()
                     .justify_between()
-                    .child(div().text_size(px(14.)).text_color(c(Palette::TEXT_MUTED)).child(footer_text))
+                    .gap(px(16.))
+                    .child(div().text_size(px(14.)).line_height(px(18.)).text_color(c(crate::theme::tok(crate::theme::generated::idx::TEXT_MUTED))).child(footer_text))
                     .children(action),
             )
             .into_any_element(),

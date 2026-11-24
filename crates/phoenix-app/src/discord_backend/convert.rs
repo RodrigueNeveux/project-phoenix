@@ -224,13 +224,15 @@ pub fn message(m: &api::Message) -> model::Message {
                     model::AttachmentKind::Image
                 } else if ct.starts_with("video/") && sized {
                     model::AttachmentKind::Video
+                } else if ct.starts_with("audio/") {
+                    model::AttachmentKind::Audio
                 } else {
                     model::AttachmentKind::File
                 };
                 let proxy = if a.proxy_url.starts_with("https://") { &a.proxy_url } else { &a.url };
                 model::Attachment {
                     filename: a.filename.clone().into(),
-                    url: if kind == model::AttachmentKind::File { a.url.clone() } else { proxy.clone() }.into(),
+                    url: if matches!(kind, model::AttachmentKind::File | model::AttachmentKind::Audio) { a.url.clone() } else { proxy.clone() }.into(),
                     width: a.width.unwrap_or(0),
                     height: a.height.unwrap_or(0),
                     is_image: kind == model::AttachmentKind::Image,

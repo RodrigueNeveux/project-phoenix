@@ -14,6 +14,7 @@ pub mod icons;
 pub mod markdown;
 pub mod media;
 pub mod mock;
+pub mod mock_showcase;
 pub mod model;
 pub mod notifications;
 pub mod presence;

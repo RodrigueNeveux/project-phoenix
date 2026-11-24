@@ -16,6 +16,7 @@ use crate::{
 };
 
 // Messaging features live in submodules (composer moved to `composer.rs`).
+pub mod attach;
 pub mod composer;
 pub mod icons;
 pub mod mention;
@@ -1354,14 +1355,6 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bo
     }
 }
 
-fn human_size(n: u64) -> SharedString {
-    if n > 1 << 20 {
-        format!("{:.2} MB", n as f64 / (1 << 20) as f64).into()
-    } else {
-        format!("{:.2} KB", n as f64 / 1024.).into()
-    }
-}
-
 /// Clickable image (opens the viewer). `w x h` is the drawn size; the proxy
 /// is asked for 2x for HiDPI.
 fn media_image(url: &str, original: SharedString, filename: SharedString, (ow, oh): (u32, u32), (w, h): (f32, f32)) -> gpui::Stateful<gpui::Img> {
@@ -1447,41 +1440,14 @@ fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 return div().mt(z(4.)).child(cover).into_any_element();
             }
             if a.kind == AttachmentKind::Video {
-                let poster = media::video_poster(&a.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
-                let original = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
-                return div()
-                    .id(gpui::ElementId::Name(format!("video-{}", a.url).into()))
-                    .mt(z(4.))
-                    .relative()
-                    .w(z(size.0))
-                    .h(z(size.1))
-                    .rounded(z(8.))
-                    .overflow_hidden()
-                    .bg(gpui::black())
-                    .cursor_pointer()
-                    .child(img(poster).size_full().object_fit(gpui::ObjectFit::Cover))
-                    .child(
-                        div().absolute().inset_0().flex().items_center().justify_center().child(
-                            div()
-                                .size(z(48.))
-                                .rounded_full()
-                                .bg(ca(0x000000B3))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .text_color(gpui::white())
-                                .text_size(z(20.))
-                                .child("\u{25B6}"),
-                        ),
-                    )
-                    .on_click(move |_, _, cx| cx.open_url(&original))
-                    .into_any_element();
+                return div().mt(z(4.)).child(attach::video_card(a, size, cx)).into_any_element();
             }
             return div()
                 .mt(z(4.))
                 .child(media_image(&a.url, a.original.clone(), a.filename.clone(), (a.width, a.height), size))
                 .into_any_element();
         }
+        AttachmentKind::Audio => return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element(),
         _ => {}
     }
     if a.is_image {
@@ -1501,30 +1467,7 @@ fn attachment(a: &Attachment, cx: &App) -> AnyElement {
             .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(a.filename.clone()))
             .into_any_element();
     }
-    let url = a.url.clone();
-    div()
-        .id(gpui::ElementId::Name(format!("file-{}", a.url).into()))
-        .mt(z(4.))
-        .w(z(432.))
-        .p(z(16.))
-        .rounded(z(8.))
-        .bg(c(Palette::BG_SECONDARY))
-        .border_1()
-        .border_color(c(Palette::BG_TERTIARY))
-        .flex()
-        .items_center()
-        .gap(z(8.))
-        .child(icon(Icon::File, 40., c(Palette::BLURPLE)))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .child(div().text_size(z(16.)).text_color(c(Palette::TEXT_LINK)).text_ellipsis().child(a.filename.clone()))
-                .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(human_size(a.size))),
-        )
-        .child(icon(Icon::Download, 24., c(Palette::INTERACTIVE)))
-        .when(remote, |d| d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&url)))
-        .into_any_element()
+    div().mt(z(4.)).child(attach::file_card(a)).into_any_element()
 }
 
 fn sticker_name(name: SharedString) -> AnyElement {

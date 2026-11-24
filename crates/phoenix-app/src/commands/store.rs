@@ -298,7 +298,7 @@ pub fn update_poll(msg: Id, f: impl FnOnce(&mut PollView)) -> bool {
     true
 }
 
-#[cfg(test)]
+/// Store parts for a message directly (tests, mock backend).
 pub fn insert(msg: Id, parts: Parts) {
     slot().lock().insert(msg.0, Arc::new(parts));
 }
