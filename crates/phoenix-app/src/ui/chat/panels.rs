@@ -315,12 +315,67 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
     crate::ui::inbox::pins_popout(app, cx)
 }
 
+thread_local! {
+    static THREAD_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+}
+
+/// buttons_HeWz1C (vanilla-thread-channel): the forum post action buttons,
+/// gap 4; each button_F7qvhY sm secondary 32x32, radius 8, 16px icon.
+fn forum_post_bar(app: &PhoenixApp, thread: crate::model::Id, scroll: &gpui::ScrollHandle, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    use crate::theme::{generated::idx, tok};
+    let ch = app.channels.get(&thread).or_else(|| app.nav.find_thread(thread))?;
+    let forum = ch.parent?;
+    if app.channels.get(&forum).is_none_or(|f| f.kind != crate::model::ChannelKind::Forum) {
+        return None;
+    }
+    let link = format!("https://discord.com/channels/{}/{}", ch.guild.map_or(0, |g| g.0), thread.0);
+    let btn = |id: &'static str, path: &'static str, tip: SharedString| {
+        div()
+            .id(id)
+            .size(z(32.))
+            .flex_none()
+            .rounded(z(8.))
+            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+            .border_1()
+            .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+            .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .tooltip(crate::ui::tooltip::tip(tip))
+            .child(gpui::svg().path(crate::icons::path(path)).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+    };
+    let top = scroll.clone();
+    Some(
+        div()
+            .flex_none()
+            .px(z(16.))
+            .pt(z(12.))
+            .flex()
+            .justify_end()
+            .gap(z(4.))
+            .child(btn("forum-post-link", "chat/link", crate::t!("menu.copy_link")).on_click(move |_, _, cx| {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.clone()));
+            }))
+            .child(btn("forum-post-top", "nav/up", crate::t!("forum.go_top")).on_click(cx.listener(move |_, _, _, cx| {
+                top.scroll_to_item(0);
+                cx.notify();
+            })))
+            .into_any_element(),
+    )
+}
+
 /// Thread side panel (replaces the member list while open).
 pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let t = app.chat.thread.as_ref()?;
     let entity: Entity<PhoenixApp> = cx.entity();
     let id = t.thread.id;
-    let mut body = div().id("thread-msgs").flex_1().min_h_0().overflow_y_scroll().flex().flex_col().pb(z(8.));
+    let scroll = THREAD_SCROLL.with(|h| h.clone());
+    let mut body = div().id("thread-msgs").flex_1().min_h_0().overflow_y_scroll().track_scroll(&scroll).flex().flex_col().pb(z(8.));
+    if let Some(bar) = forum_post_bar(app, id, &scroll, cx) {
+        body = body.child(bar);
+    }
     match app.messages.get(&id) {
         Some(entry) if entry.loaded_once => {
             for (m, r) in entry.msgs.iter().zip(entry.rendered.iter()) {

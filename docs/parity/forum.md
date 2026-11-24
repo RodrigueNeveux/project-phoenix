@@ -22,7 +22,8 @@ on a forum, `PHX_OPEN=post[:n]` for the post sidebar.
 | thread sidebar header | container_ybUK7Z | h 49, pad 8 8 8 20, icon 32/20, body-md/medium --text-strong | | ui/chat/panels.rs | ✅ |
 | thread sidebar composer | channelTextArea_ | margin 0 10 10, radius 8, --border-subtle, --chat-background-default | | ui/chat/panels.rs | ✅ |
 | thread sidebar header toolbar (bell, pins, threads, more) | not dumped | | | — | ❌ needs a vanilla dump |
-| forum post action bar (reactions, Following, copy link, jump up) | vanilla-thread-channel | | | — | ❌ not implemented |
+| forum post action bar: copy link + jump to top | vanilla-thread-channel buttons_HeWz1C | sm secondary 32x32, radius 8, gap 4 | | ui/chat/panels.rs forum_post_bar | ✅ (dump) |
+| forum post action bar: reactions + Following | vanilla-thread-channel reactButtons_HeWz1C | | | — | ❌ follow state not in model |
 | opening a forum post by URL (not in active threads) | GET /channels/{id} | | | real_shots falls back to the first channel | ❌ |
 
 ## State coverage
