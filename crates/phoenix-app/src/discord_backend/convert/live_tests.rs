@@ -121,3 +121,16 @@ fn guild_settings_update_from_another_client_mutes_live() {
     feed(&cache, &mut a, &upd(false));
     assert!(!a.prefs.mutes.guilds.contains(&300000000000000001) && !a.prefs.mutes.channels.contains(&CH));
 }
+
+#[test]
+fn presence_with_profile_updates_the_user() {
+    let (cache, mut a) = setup();
+    let raw = r#"{"user":{"id":"200000000000000002","username":"alice2","global_name":"Alice Two","avatar":"abc"},"status":"online","activities":[]}"#;
+    let out = feed(&cache, &mut a, &parse_dispatch("PRESENCE_UPDATE", raw));
+    let u = out.iter().find_map(|x| match x { AppEvent::Users(u) => u.first().cloned(), _ => None }).expect("user refreshed");
+    assert_eq!(u.display_name.as_ref(), "Alice Two");
+    assert!(matches!(u.avatar, model::ImageRef::Url(_)));
+    // Id-only presences don't touch the profile.
+    let out = feed(&cache, &mut a, &parse_dispatch("PRESENCE_UPDATE", r#"{"user":{"id":"200000000000000002"},"status":"idle"}"#));
+    assert!(!out.iter().any(|x| matches!(x, AppEvent::Users(_))));
+}

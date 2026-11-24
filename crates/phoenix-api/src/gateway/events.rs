@@ -175,6 +175,30 @@ pub struct MessageAck {
 #[derive(Debug, Clone, Deserialize)]
 pub struct PresenceUser {
     pub id: UserId,
+    /// Present only when the user's profile changed (otherwise just `id`).
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub global_name: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
+    #[serde(default)]
+    pub discriminator: Option<String>,
+}
+
+impl PresenceUser {
+    /// Merge the changed profile fields into `u`; false when this presence
+    /// carries no profile (the common id-only case).
+    pub fn merge_into(&self, u: &mut crate::models::User) -> bool {
+        let Some(name) = &self.username else { return false };
+        u.username = name.clone();
+        u.global_name = self.global_name.clone();
+        u.avatar = self.avatar.clone();
+        if let Some(d) = &self.discriminator {
+            u.discriminator = d.clone();
+        }
+        true
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

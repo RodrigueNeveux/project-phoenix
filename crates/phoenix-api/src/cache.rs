@@ -255,6 +255,12 @@ impl Cache {
                 }
                 s.users.insert(u.id, u);
             }
+            GatewayEvent::PresenceUpdate(p) if p.user.username.is_some() => {
+                let mut u = s.users.get(&p.user.id).map(|u| (**u).clone()).unwrap_or_else(|| User { id: p.user.id, ..Default::default() });
+                if p.user.merge_into(&mut u) {
+                    s.users.insert(u.id, Arc::new(u));
+                }
+            }
             GatewayEvent::GuildCreate(g) => insert_guild(&mut s, (**g).clone()),
             GatewayEvent::GuildUpdate(g) => {
                 let Some(old) = s.guilds.get(&g.id).cloned() else {

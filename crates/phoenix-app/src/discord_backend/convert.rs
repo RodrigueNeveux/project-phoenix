@@ -1117,6 +1117,12 @@ impl Adapter {
                 out.push(AppEvent::TypingStart { channel: id(t.channel_id), user: id(t.user_id) });
             }
             GatewayEvent::PresenceUpdate(p) => {
+                // Profile changed (avatar / names): the cache merged it.
+                if p.user.username.is_some()
+                    && let Some(u) = cache.user(p.user.id)
+                {
+                    out.push(AppEvent::Users(vec![user(&u)]));
+                }
                 self.statuses.insert(p.user.id.0, presence(&p.status));
                 out.push(AppEvent::PresenceUpdate { user: id(p.user.id), presence: presence(&p.status) });
                 let activities = crate::presence::parse_activities(&p.activities);
