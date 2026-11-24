@@ -714,6 +714,7 @@ pub fn bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                         .flex_1()
                         .min_w_0()
                         .h(z(32.))
+                        .my(z(-4.))
                         .on_mouse_down(MouseButton::Left, move |e, _, cx| {
                             if let Some(b) = cx.try_global::<Store>().and_then(|s| s.bounds.get(&k2).copied()) {
                                 let f = f32::from(e.position.x - b.origin.x) / f32::from(b.size.width).max(1.);
@@ -916,6 +917,7 @@ pub fn player(url: &SharedString, meta: &VoiceMeta, cx: &App) -> AnyElement {
                 .flex_none()
                 .w(z(canvas_width(f64::from(duration))))
                 .h(z(32.))
+                .my(z(-4.))
                 .cursor_pointer()
                 .on_mouse_down(MouseButton::Left, move |e, _, cx| {
                     if let Some(b) = cx.try_global::<Store>().and_then(|s| s.bounds.get(&k2).copied()) {

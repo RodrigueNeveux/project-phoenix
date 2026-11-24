@@ -56,7 +56,7 @@ Not measured on the live client (recorder never opened): the exact x positions i
 | Container | `--background-mod-subtle`, radius 24, padding 12, gap `--space-12`, row | ✅ |
 | Ripple | `rippleContainer_` 1 px `--border-subtle`, radius 24; `ripple_` `--brand-530` grows to 200% on play (.2 s) | ✅ colour, ⚠ no grow animation (instant) |
 | Play button | 32×32 circle, margin −4 (start/top/bottom); dark: `linear-gradient(151.11deg, --brand-460 16.55%, --brand-560 104.36%)`, hover `--brand-400 17.78% → --brand-460 82.22%`; playing: `--white` bg, icon `--brand-500`; Play/Pause icon `sm` (18 px) `--white` | ✅ (no :active scale .875) |
-| Waveform | canvas 32 px high, width `6·floor((w+4)/6)−4` with `w` = 40 (≤0.5 s) … 294 (≥45 s) linear; bars 2 px / pitch 6, height `22v+2`; fewer samples than bars → padded with 0 (non fluid) or interpolated (fluid); more → bucket average | ✅ |
+| Waveform | canvas 32 px high (`canvas_CNmkpo` margin −4px 0, so the player is 48 px tall), width `6·floor((w+4)/6)−4` with `w` = 40 (≤0.5 s) … 294 (≥45 s) linear; bars 2 px / pitch 6, height `22v+2`; fewer samples than bars → padded with 0 (non fluid) or interpolated (fluid); more → bucket average | ✅ |
 | Waveform colours | idle: all `--interactive-text-default`; paused after play: played `--interactive-text-active`, rest `--background-mod-muted`; playing: played `--white`, rest `--brand-430` (`408822`) | ✅ (no easeOutBack bar animation) |
 | Duration | body-sm 14/18 `--interactive-text-default`, `--white` while playing; `ceil(duration)` then `ceil(duration − position)` | ✅ |
 | Speed | `CA = [.75, 1, 1.5, 2]` cycled on click, label `${rate}X` without the leading 0 (".75X"), shared by every voice message (`MEDIA_PLAYBACK_RATE_UPDATE`); `playbackRate_`: width 32, radius 4, body-xs/semibold, `--background-mod-subtle` / `--interactive-text-default`, hover `--interactive-background-hover` / `--interactive-text-active`, playing `--interactive-background-active` / `--brand-200` | ✅; time-stretch keeps the pitch (WSOLA, `vm::time_stretch`) like `preservesPitch` |
@@ -73,3 +73,11 @@ Not measured on the live client (recorder never opened): the exact x positions i
 * Real send: `examples/voice_message_probe.rs` (hard-locked to the sandbox `〢💬・phoenix`,
   names checked by GET first) records a generated tone through `Recorder` (no microphone),
   posts a `[Test Phoenix]` line and the voice message as a reply to it.
+
+## Live check (2026-11-24, sandbox, 4.5 s tone sent by `voice_message_probe`)
+
+Discord accepted the upload (`flags` 8192, `duration_secs` 4.5, 300-char waveform). Official
+client at zoom 1.25: container 246.6×48 at x 496.6; play button x 504.6 (32, margin −4),
+waveform x 548.6 width 62 (= `canvas_width(4.5)`), duration x 622.6 (28.6 wide), speed
+x 663.2 (32×16 inside a 4 px padded box), volume x 707.2 (24). Phoenix matches every x; its
+height was 56 until the −4 px canvas margin was added.
