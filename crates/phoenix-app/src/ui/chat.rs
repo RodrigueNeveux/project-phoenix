@@ -793,6 +793,7 @@ fn dated_divider(label: SharedString, unread: bool) -> gpui::Div {
             div()
                 .bg(tk(idx::BACKGROUND_BASE_LOWER))
                 .rounded(z(8.))
+                .mt(z(-1.)) // content_4TfzT5 margin-top -1px
                 .px(z(4.))
                 .py(z(2.))
                 .text_size(z(12.))
