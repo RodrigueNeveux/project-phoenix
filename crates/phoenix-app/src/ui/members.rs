@@ -723,7 +723,8 @@ pub fn member_row_in(
             |d, l| d.child(l),
         )
         .when(app.people.popout.as_ref().is_some_and(|p| p.user == uid), |d| {
-            d.bg(c(Palette::BG_MOD_SELECTED)).opacity(1.)
+            // .selected_J1Adu_ .childContainer_J1Adu_ --interactive-background-selected
+            d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))).opacity(1.)
         })
         .on_click(move |ev, window, cx| {
             let at = ev.position();
@@ -742,7 +743,7 @@ pub fn member_row_in(
                     let sel = app.people.popout.as_ref().is_some_and(|p| p.user == uid);
                     crate::ui::avatar_with_status_overlay(user, 32., mem.presence, c(Palette::BG_SECONDARY), move |d| {
                         d.group_hover("member-row", |s| s.bg(c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_HOVER))))
-                            .when(sel, |d| d.bg(c(Palette::BG_MOD_SELECTED)))
+                            .when(sel, |d| d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
                     })
                 })
                 .when(streaming, |d| d.child(streaming_dot()))
