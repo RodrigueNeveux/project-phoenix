@@ -237,7 +237,8 @@ pub fn refresh(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoe
     };
     let next = token_at(&text, cursor).and_then(|(kind, query, start)| {
         let mut items = suggestions(app, kind, &query);
-        if kind == Kind::Emoji {
+        // Appearance "Show sticker suggestions in autocomplete" (include_stickers_in_autocomplete).
+        if kind == Kind::Emoji && app.prefs.synced.flag("ac-stickers") {
             items = with_stickers(items, sticker_matches(app, &query, cx));
         }
         (!items.is_empty()).then_some(Active { kind, query, start, end: cursor, items, selected: 0 })

@@ -11,6 +11,7 @@ static HOUR_CYCLE: AtomicU8 = AtomicU8::new(0);
 static GIF_AUTOPLAY: AtomicBool = AtomicBool::new(true);
 static UNDERLINE_LINKS: AtomicBool = AtomicBool::new(false);
 static REDUCED_MOTION: AtomicBool = AtomicBool::new(false);
+static INLINE_ATTACHMENTS: AtomicBool = AtomicBool::new(true);
 
 pub fn sync(p: &Prefs) {
     // Spoilers, clocks and link underlines are baked into cached message renders.
@@ -22,6 +23,7 @@ pub fn sync(p: &Prefs) {
     }
     GIF_AUTOPLAY.store(p.synced.flag("gifs"), Relaxed);
     REDUCED_MOTION.store(p.local.reduced_motion, Relaxed);
+    INLINE_ATTACHMENTS.store(p.synced.flag("media-uploads"), Relaxed);
 }
 
 /// "Show spoiler content: Always".
@@ -47,6 +49,11 @@ pub fn gif_autoplay() -> bool {
 /// "Enable Reduced Motion" (the client's `reduce-motion` class drops them).
 pub fn motion(ms: u64) -> std::time::Duration {
     std::time::Duration::from_millis(if REDUCED_MOTION.load(Relaxed) { 1 } else { ms })
+}
+
+/// Images/videos uploaded to Discord render inline (else as file cards).
+pub fn inline_attachments() -> bool {
+    INLINE_ATTACHMENTS.load(Relaxed)
 }
 
 /// Accessibility "Always underline links".

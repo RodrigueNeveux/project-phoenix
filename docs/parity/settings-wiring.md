@@ -65,7 +65,7 @@ where its value is stored and what it changes in the UI.
 | theme-devices | Sync theme across my devices | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | theme-profiles | Apply theme to other users' profiles | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | media-links | When posted as links to chat | settings-proto `text_and_images.inline_embed_media` (6, 10) | image/gifv/video embeds hidden when off (chat.rs show_embed) | ✅ |
-| media-uploads | When uploaded directly to Discord | settings-proto `text_and_images.inline_attachment_media` (6, 9) | — | 🟡 stored, no effect yet |
+| media-uploads | When uploaded directly to Discord | settings-proto `text_and_images.inline_attachment_media` (6, 9) | uploaded images/videos render as file cards when off (chat.rs attachment) | ✅ |
 | embeds | Show embeds and preview website links | settings-proto `text_and_images.render_embeds` (6, 12) | all embeds hidden when off (chat.rs show_embed) | ✅ |
 | reactions | Show emoji reactions | settings-proto `text_and_images.render_reactions` (6, 13) | reaction bar hidden when off (chat.rs) | ✅ |
 | spoilers | Show spoiler content | settings-proto `text_and_images.render_spoilers` (6, 4) | "Always" reveals text + media spoilers (richtext, media::is_revealed); "If moderator" = on click | ✅ |
@@ -74,7 +74,7 @@ where its value is stored and what it changes in the UI.
 | favs | Show favorite servers | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | md-preview | Preview emojis, mentions and markdown syntax as you type | settings-proto `text_and_images.use_rich_chat_input` (6, 2) | — | 🟡 stored, no effect yet |
 | emoticons | Automatically convert emoticons in your messages to emoji | settings-proto `text_and_images.convert_emoticons` (6, 21) | ":)" → 🙂 on send/edit (settings/emoticons.rs) | ✅ |
-| ac-stickers | Show sticker suggestions in autocomplete | settings-proto `text_and_images.include_stickers_in_autocomplete` (6, 28) | — | 🟡 stored, no effect yet |
+| ac-stickers | Show sticker suggestions in autocomplete | settings-proto `text_and_images.include_stickers_in_autocomplete` (6, 28) | no sticker rows in the :emoji autocomplete when off (autocomplete.rs) | ✅ |
 | ac-games | Show games in autocomplete | settings-proto `text_and_images.include_game_mentions_in_autocomplete` (6, 39) | — | 🟡 stored, no effect yet |
 | send-btn | Show the Send Message button | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | dm-search | By default, search in DMs… | settings-proto `text_and_images.is_cross_dm_search_enabled` (6, 36) | — | 🟡 stored, no effect yet |
@@ -116,7 +116,7 @@ where its value is stored and what it changes in the UI.
 
 ## Known gaps
 * `anim-emoji` is synced in the client (`text_and_images.animate_emoji`, 6/14) but stays a local pref here.
-* Stored but without effect yet: link previews for uploads (`media-uploads`), compact avatars, autocomplete toggles
+* Stored but without effect yet: compact avatars, game autocomplete,
   (stickers/games), send button, streamer mode, high contrast, sticker animations, split thread view,
   the notification toggles (server-side behaviour, nothing to render), system tray/startup/hw-accel.
 * Role colors "Next to names" should draw a colored dot; currently it just stops tinting.

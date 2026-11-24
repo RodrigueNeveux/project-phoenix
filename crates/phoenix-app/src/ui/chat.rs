@@ -952,7 +952,7 @@ fn message(
     }
     // Two or more images/videos share one mosaic; files follow (nonVisualMediaItem_ margin-top 8px).
     let visual: Vec<&Attachment> = msg.attachments.iter().filter(|a| mosaic::is_visual(a)).collect();
-    if visual.len() >= 2 {
+    if visual.len() >= 2 && crate::ui::settings::effects::inline_attachments() {
         content = content.child(mosaic::render(&visual, cx));
         for a in msg.attachments.iter().filter(|a| !mosaic::is_visual(a)) {
             content = content.child(div().mt(z(4.)).child(attachment(a, cx)));
@@ -1633,6 +1633,8 @@ fn spoiler_cover(key: SharedString, url: &str, (w, h): (f32, f32), cx: &App) -> 
 pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
     let remote = attach::loadable(&a.url);
     let spoiler = a.filename.starts_with("SPOILER_");
+    // "Display images, videos and lolcats: when uploaded directly" (inline_attachment_media).
+    let inline = crate::ui::settings::effects::inline_attachments();
     match a.kind {
         AttachmentKind::Sticker(fmt) => {
             let name = a.filename.clone();
@@ -1646,7 +1648,7 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 None => div().mt(z(4.)).child(sticker_name(name)).into_any_element(),
             };
         }
-        AttachmentKind::Image | AttachmentKind::Video if remote => {
+        AttachmentKind::Image | AttachmentKind::Video if remote && inline => {
             let size = media::fit(a.width, a.height, media::MAX_W, media::MAX_H);
             if spoiler && let Some(cover) = spoiler_cover(a.url.clone(), &a.url, size, cx) {
                 return div().mt(z(4.)).child(cover).into_any_element();
@@ -1665,7 +1667,7 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
         AttachmentKind::Audio => return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element(),
         _ => {}
     }
-    if a.is_image {
+    if a.is_image && inline {
         let (w, h) = media::fit(a.width, a.height, media::MAX_W, media::MAX_H);
         return div()
             .mt(z(4.))
