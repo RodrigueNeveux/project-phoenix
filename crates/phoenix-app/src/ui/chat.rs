@@ -665,7 +665,8 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icon(Icon::Hash, 42., gpui::white())),
+                // the channel's own type icon (voice text chat, announcements), not always #
+                .child(icon(channel.map_or(Icon::Hash, |c| crate::ui::sidebar::channel_icon(c.kind)), 42., gpui::white())),
         )
         .child(
             div()
