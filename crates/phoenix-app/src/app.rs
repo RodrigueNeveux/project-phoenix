@@ -1374,6 +1374,10 @@ impl Render for PhoenixApp {
         crate::media::emoji::sync_motion(self.prefs.synced.flag("anim-emoji"), window.is_window_active());
         crate::ui::settings::effects::sync(self);
         self.chat_sync_style();
+        if ui::focus_ring::sync(window, cx) {
+            // Controls asked for focus handles last frame: render once more to track them.
+            cx.notify();
+        }
         let body = match self.screen {
             Screen::Login => ui::login::render(self, window, cx).into_any_element(),
             Screen::Main => div()
@@ -1410,6 +1414,12 @@ impl Render for PhoenixApp {
             .on_action(cx.listener(ui::settings::open_action))
             .capture_key_down(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_down(this, ev, cx)))
             .capture_key_up(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_up(this, ev, cx)))
+            // Bubble phase: Tab only moves focus when the composer, a picker or a menu did not take it.
+            .on_key_down(cx.listener(|_, ev, w, cx| {
+                if ui::focus_ring::on_key_down(ev, w, cx) {
+                    cx.stop_propagation();
+                }
+            }))
             .map(|d| crate::shortcuts::handlers(self, d, cx))
             .on_action(cx.listener(|this, _: &ToggleMembers, _, cx| {
                 this.show_members = !this.show_members;

@@ -17,7 +17,7 @@ pub fn composer_button(id: &'static str, i: Icon) -> gpui::Stateful<Div> {
 /// `glyph` px icon; `hover_bg` false = `noHover_hfM7yP` (gift button: no hover fill).
 pub fn composer_button_ext(id: &'static str, i: Icon, glyph: f32, hover_bg: bool) -> gpui::Stateful<Div> {
     let k = key(("composer-btn", id));
-    track(div().id(id), k)
+    let el = track(div().id(id), k)
         .relative()
         // button_hfM7yP:not(.noHover) transition-duration .2s (ease)
         .when(hover_bg, |d| d.child(fade_layer(k, gpui::transparent_black(), c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED)), 200, 8.)))
@@ -38,7 +38,9 @@ pub fn composer_button_ext(id: &'static str, i: Icon, glyph: f32, hover_bg: bool
                 .group_hover(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))) // :hover color
                 .id("glyph")
                 .group_active(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))), // :active color
-        )
+        );
+    // Tab focus ring (live: 32x24 box 4px inside the 32px button, radius 8; 4 on the gift button).
+    crate::ui::focus_ring::ring_inset(el, k, if hover_bg { 8. } else { 4. }, 0., 4.)
 }
 
 thread_local! {

@@ -724,6 +724,8 @@ pub fn member_row_in(
         .active(|s| s.bg(c(crate::theme::tok(crate::theme::generated::idx::INTERACTIVE_BACKGROUND_ACTIVE))))
         // `nameplated_J1Adu_`: nameplate layer behind the row content.
         .relative()
+        // Tab focus: the client's ring sits 4px inside the 252x44 row (live, 244x36).
+        .map(|d| crate::ui::focus_ring::ring_inset(d, crate::ui::states::key(("member", uid.0)), 8., 4., 3.))
         .when_some(
             user.and_then(|u| {
                 let sel = app.people.popout.as_ref().is_some_and(|p| p.user == uid);

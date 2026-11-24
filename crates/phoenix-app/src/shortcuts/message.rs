@@ -200,7 +200,9 @@ impl PhoenixApp {
         }
         let m = ks.modifiers;
         let in_composer = composer_focused(self, window, cx);
-        let at_root = self.focus.is_focused(window);
+        // A control reached with Tab counts as the root (client: type-to-focus works from any button).
+        let on_ring = crate::ui::focus_ring::owns_focus(window);
+        let at_root = self.focus.is_focused(window) || on_ring;
         if let Some((ch, id)) = focused() {
             if !at_root || self.selected_channel != Some(ch) {
                 set_focused(None);
@@ -225,7 +227,8 @@ impl PhoenixApp {
             return false;
         }
         // Type anywhere: printable keys go to the composer (client: any-character → TEXTAREA_FOCUS).
-        if at_root && !m.control && !m.alt && !m.platform && self.selected_channel.is_some()
+        // Space on a focused control clicks it (GPUI keyboard click), it is not typed.
+        if at_root && !m.control && !m.alt && !m.platform && self.selected_channel.is_some() && !(on_ring && ks.key == "space")
             && let Some(ch) = ks.key_char.as_ref().filter(|c| !c.chars().any(char::is_control))
         {
             set_focused(None);

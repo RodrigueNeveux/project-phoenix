@@ -13,6 +13,7 @@ pub mod code_copy;
 pub mod components;
 pub mod community;
 pub mod events;
+pub mod focus_ring;
 pub mod forum;
 pub mod group_dm;
 pub mod inbox;

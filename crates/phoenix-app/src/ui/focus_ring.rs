@@ -1,0 +1,107 @@
+//! Keyboard focus: Tab / Shift+Tab move between controls and the focused one
+//! gets the client's focus ring.
+//!
+//! Measured on the live client (2026-11-24, Tab from the chat, see
+//! docs/parity/states.md "Focus rings"): `.focus-rings-ring` is an absolutely
+//! placed box over the focused element, `box-shadow: 0 0 0 4px` in
+//! `--focus-primary` (unset in the 2026 themes, so the `#00b0f4` fallback,
+//! rgb(0,176,244)), with the element's own border radius. Most controls put the
+//! ring on their own bounds; list rows (member rows) inset it by 4px so it
+//! stays inside the scroller. It only shows after keyboard input (focus-visible),
+//! never on mouse clicks. Enter / Space on a focused control clicks it.
+//!
+//! The helpers here are called from render code that has no `Window` / `App`,
+//! so focus handles live in a thread-local registry: a control asks for its
+//! key, the root render creates the missing handles (see [`sync`]) and the
+//! next frame tracks them. [`sync`] also records which key holds keyboard focus
+//! so the helpers can draw its ring.
+
+use crate::theme::z;
+use gpui::prelude::FluentBuilder as _;
+use gpui::{App, Div, FocusHandle, InteractiveElement, KeyDownEvent, ParentElement, Stateful, Styled, Window, div, rgb};
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+
+/// `--focus-primary` fallback of `.focus-rings-ring`.
+pub const RING: u32 = 0x00b0f4;
+/// Ring thickness (`0 0 0 4px` spread).
+const WIDTH: f32 = 4.;
+
+thread_local! {
+    static HANDLES: RefCell<HashMap<u64, FocusHandle>> = Default::default();
+    static WANTED: RefCell<Vec<u64>> = Default::default();
+    static VISIBLE: Cell<Option<u64>> = const { Cell::new(None) };
+}
+
+/// Creates the handles asked for during the previous frame and records the
+/// keyboard-focused key. Call at the start of the root render; returns true
+/// when new handles were created (the caller re-renders once to track them).
+pub fn sync(window: &Window, cx: &mut App) -> bool {
+    let wanted: Vec<u64> = WANTED.with(|w| std::mem::take(&mut *w.borrow_mut()));
+    let created = !wanted.is_empty();
+    HANDLES.with(|h| {
+        let mut h = h.borrow_mut();
+        for k in wanted {
+            h.entry(k).or_insert_with(|| cx.focus_handle().tab_stop(true));
+        }
+        let focused = window.last_input_was_keyboard().then(|| h.iter().find(|(_, f)| f.is_focused(window)).map(|(k, _)| *k)).flatten();
+        VISIBLE.with(|v| v.set(focused));
+    });
+    created
+}
+
+/// True when the window focus is on one of the ring controls (the app treats
+/// that like focus at the root for type-to-focus and message shortcuts).
+pub fn owns_focus(window: &Window) -> bool {
+    HANDLES.with(|h| h.borrow().values().any(|f| f.is_focused(window)))
+}
+
+/// The handle for `key`, if it already exists (asks for it otherwise).
+fn handle(key: u64) -> Option<FocusHandle> {
+    let h = HANDLES.with(|h| h.borrow().get(&key).cloned());
+    if h.is_none() {
+        WANTED.with(|w| w.borrow_mut().push(key));
+    }
+    h
+}
+
+/// Makes `el` a Tab stop and draws the ring on its bounds when it has keyboard
+/// focus. `radius` is the element's border radius. `el` must be `relative()`.
+pub fn ring(el: Stateful<Div>, key: u64, radius: f32) -> Stateful<Div> {
+    ring_inset(el, key, radius, 0., 0.)
+}
+
+/// Like [`ring`], with the ring box inset by `dx` / `dy` from the element
+/// (negative grows it), as the client does on list rows.
+pub fn ring_inset(el: Stateful<Div>, key: u64, radius: f32, dx: f32, dy: f32) -> Stateful<Div> {
+    let Some(h) = handle(key) else { return el };
+    let shown = VISIBLE.with(|v| v.get()) == Some(key);
+    el.track_focus(&h).when(shown, |el| {
+        el.child(
+            div()
+                .absolute()
+                .left(z(dx - WIDTH))
+                .right(z(dx - WIDTH))
+                .top(z(dy - WIDTH))
+                .bottom(z(dy - WIDTH))
+                .border(z(WIDTH))
+                .border_color(rgb(RING))
+                .rounded(z(radius + WIDTH)),
+        )
+    })
+}
+
+/// Root key handler: plain Tab / Shift+Tab move focus when nothing below
+/// (composer autocomplete, pickers, menus) consumed the key.
+pub fn on_key_down(ev: &KeyDownEvent, window: &mut Window, cx: &mut App) -> bool {
+    let k = &ev.keystroke;
+    if k.key != "tab" || k.modifiers.control || k.modifiers.alt || k.modifiers.platform {
+        return false;
+    }
+    if k.modifiers.shift {
+        window.focus_prev(cx);
+    } else {
+        window.focus_next(cx);
+    }
+    true
+}
