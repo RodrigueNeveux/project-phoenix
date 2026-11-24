@@ -517,7 +517,7 @@ fn open_upload_edit(app: &mut PhoenixApp, ix: usize, cx: &mut Context<PhoenixApp
             subtitle: None,
             fields: vec![
                 Field::new(crate::t!("upload.filename"), "".into(), f.name.to_string()),
-                Field::new(crate::t!("upload.description"), crate::t!("upload.description_ph"), f.description.clone()).rows(3),
+                Field::new(crate::t!("upload.description"), crate::t!("upload.description_ph"), f.description.clone()).rows(3).max_len(1024),
             ],
             choices: Vec::new(),
             choice: None,

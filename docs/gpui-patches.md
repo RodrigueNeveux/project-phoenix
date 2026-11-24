@@ -116,3 +116,45 @@ the last clamped line stops at its last word break when one fits. Search
 
 The commit is kept on the `gpui-ellipsis` branch of origin so the pinned `rev` stays
 reachable.
+
+## 5. Glyph offsets (`vendor/gpui-pre-wgpu/src/cosmic_text_system.rs`, `layout_line_no_separators`)
+
+**Problem.** Combining marks painted one letter to the right of their base: the bot name
+"ღ🌸~͓̽ǤŁa̠̠ĐØS~🌸ღ" in Aperture Sciences showed the U+0320 macrons under "Đ" instead of "a".
+`cosmic_text::LayoutGlyph::x`/`y` are the pen position only; the shaper's GPOS offsets are in
+`x_offset`/`y_offset` (em units) and cosmic-text adds them in `LayoutGlyph::physical`. GPUI
+copied `x`/`y` and dropped the offsets, so a zero-advance mark sat at the pen position after
+its base.
+
+**Patch.** `ShapedGlyph::position` is `(x + x_offset·size, y − y_offset·size)`, like
+`physical`. Advances, and so widths and `x_for_index`, are unchanged. Search
+`PHOENIX PATCH (glyph offsets)`.
+
+## 6. Cluster fallback (`vendor/gpui-pre-wgpu/src/cosmic_text_system.rs`, `compute_run_spans`)
+
+**Problem.** The same name was 1.8px wider than in the client and got an ellipsis. GPUI picks
+the font of a grapheme from its first character, so "~" + U+033D U+0353 and "a" + U+0320 U+0320
+stayed in gg sans (which has "~" and "a" but no marks). cosmic-text then reshaped the whole
+cluster in its own fallback, the system "Noto Sans" Regular (9.15 and 8.98px). Chromium gives
+the cluster to the first font of the stack that covers every character (CDP
+`CSS.getPlatformFontsForNode`: Noto Sans Medium, the web font, 8.15 and 8.18px).
+
+**Reference.** Live client, 2026-11-24, `Range.getBoundingClientRect` on a probe span with
+`font-family: var(--font-primary)` 16px/500: total 140.01px; prefix widths per grapheme in
+`docs/parity/text.md`.
+
+**Patch.** `pick_grapheme_slot` checks every non-default-ignorable character of a multi-char
+grapheme: primary font if it covers all of them, else the first font of the fallback chain
+that does, else the old first-character choice (cosmic-text's fallback takes over). Single
+characters keep upstream's `pick_covering_slot`. Search `PHOENIX PATCH (cluster fallback)`.
+Unit tests: `cluster_goes_to_the_first_font_covering_every_mark`,
+`ignorables_do_not_need_a_glyph`, `uncovered_cluster_keeps_the_first_character_choice`.
+
+## Wiring of `gpui-pre-wgpu`
+
+`vendor/gpui-pre-wgpu` is the crates.io 0.3.12 source (bench table and `benches/` removed),
+patched like `gpui-pre` through a git rev of this repository in `[patch.crates-io]`. Both
+crates point at the same rev, kept on the `gpui-marks` branch of origin (it is
+`gpui-ellipsis` + `vendor/gpui-pre-wgpu`). Only the two `[[package]]` entries of
+`Cargo.lock` change when the rev moves: edit them by hand, because `cargo update -p` also
+re-resolves unrelated crates (itertools, windows-sys).

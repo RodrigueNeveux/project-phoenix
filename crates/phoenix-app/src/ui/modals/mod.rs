@@ -32,15 +32,22 @@ pub struct Field {
     pub input: Option<Entity<InputState>>,
     pub rows: usize,
     pub area: Option<Entity<TextareaState>>,
+    pub max_len: Option<usize>,
+    limit: Option<gpui::Subscription>,
 }
 
 impl Field {
     pub fn new(label: SharedString, placeholder: SharedString, initial: impl Into<String>) -> Self {
-        Self { label, placeholder, initial: initial.into(), input: None, rows: 1, area: None }
+        Self { label, placeholder, initial: initial.into(), input: None, rows: 1, area: None, max_len: None, limit: None }
     }
 
     pub fn rows(mut self, rows: usize) -> Self {
         self.rows = rows.max(1);
+        self
+    }
+
+    pub fn max_len(mut self, utf16_units: usize) -> Self {
+        self.max_len = Some(utf16_units);
         self
     }
 
@@ -87,8 +94,33 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     with_modal(|m| {
         if let Some(Modal::Form(f)) = m {
             for fl in f.fields.iter_mut().filter(|fl| fl.rows > 1 && fl.area.is_none()) {
-                let (ph, val, rows) = (fl.placeholder.clone(), fl.initial.clone(), fl.rows);
-                fl.area = Some(cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, rows).placeholder(ph).default_value(val)));
+                let (ph, rows) = (fl.placeholder.clone(), fl.rows);
+                let val = match fl.max_len {
+                    Some(max) => truncate_utf16(&fl.initial, max).to_owned(),
+                    None => fl.initial.clone(),
+                };
+                let area = cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, rows).placeholder(ph).default_value(val.clone()));
+                if let Some(max) = fl.max_len {
+                    let last = Rc::new(std::cell::RefCell::new(val));
+                    fl.limit = Some(cx.subscribe_in(&area, window, move |_, st, ev: &gpui_component::input::InputEvent, window, cx| {
+                        if !matches!(ev, gpui_component::input::InputEvent::Change) {
+                            return;
+                        }
+                        let now = st.read(cx).value().to_string();
+                        let clamped = clamp_insert(&last.borrow(), &now, max);
+                        match clamped {
+                            Some((text, cursor)) => {
+                                st.update(cx, |s, cx| {
+                                    s.set_value(text.clone(), window, cx);
+                                    s.set_selected_range(cursor..cursor, cx);
+                                });
+                                *last.borrow_mut() = text;
+                            }
+                            None => *last.borrow_mut() = now,
+                        }
+                    }));
+                }
+                fl.area = Some(area);
             }
         }
     });
@@ -208,6 +240,48 @@ pub fn card(width: f32, title: SharedString, subtitle: Option<SharedString>, bod
     crate::ui::modal::frame("amodal-backdrop", close2, el)
 }
 
+fn utf16_len(s: &str) -> usize {
+    s.chars().map(char::len_utf16).sum()
+}
+
+fn truncate_utf16(s: &str, max: usize) -> &str {
+    let mut units = 0;
+    for (i, ch) in s.char_indices() {
+        units += ch.len_utf16();
+        if units > max {
+            return &s[..i];
+        }
+    }
+    s
+}
+
+fn clamp_insert(old: &str, new: &str, max: usize) -> Option<(String, usize)> {
+    if utf16_len(new) <= max {
+        return None;
+    }
+    let prefix = old.char_indices().zip(new.chars()).take_while(|((_, a), b)| a == b).last().map_or(0, |((i, a), _)| i + a.len_utf8());
+    let suffix = old[prefix..]
+        .chars()
+        .rev()
+        .zip(new[prefix..].chars().rev())
+        .take_while(|(a, b)| a == b)
+        .map(|(a, _)| a.len_utf8())
+        .sum::<usize>();
+    let inserted = &new[prefix..new.len() - suffix];
+    let kept = utf16_len(&new[..prefix]) + utf16_len(&new[new.len() - suffix..]);
+    let fit = truncate_utf16(inserted, max.saturating_sub(kept));
+    let mut text = String::with_capacity(prefix + fit.len() + suffix);
+    text.push_str(&new[..prefix]);
+    text.push_str(fit);
+    text.push_str(&new[new.len() - suffix..]);
+    if utf16_len(&text) > max {
+        let t = truncate_utf16(&text, max).to_owned();
+        let cursor = t.len();
+        return Some((t, cursor));
+    }
+    Some((text, prefix + fit.len()))
+}
+
 pub fn input_box(i: &Entity<InputState>) -> gpui::Div {
     div()
         .h(z(40.))
@@ -309,4 +383,19 @@ fn form(f: &Form, cx: &mut Context<PhoenixApp>) -> AnyElement {
             })),
         );
     card(f.width, f.title.clone(), f.subtitle.clone(), body.into_any_element(), Some(footer.into_any_element()), cx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_insert;
+
+    #[test]
+    fn max_length_truncates_the_inserted_text_like_a_textarea() {
+        assert_eq!(clamp_insert("abc", "abcd", 4), None);
+        assert_eq!(clamp_insert("abc", "abcdef", 4), Some(("abcd".into(), 4)));
+        assert_eq!(clamp_insert("abef", "abXYZef", 5), Some(("abXef".into(), 3)));
+        assert_eq!(clamp_insert("ab", "ab😀", 3), Some(("ab".into(), 2)));
+        assert_eq!(clamp_insert("", "é😀x", 3), Some(("é😀".into(), "é😀".len())));
+        assert_eq!(clamp_insert("aaaa", "aaaaa", 4), Some(("aaaa".into(), 4)));
+    }
 }
