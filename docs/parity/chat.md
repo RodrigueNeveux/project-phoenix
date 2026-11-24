@@ -171,3 +171,20 @@ Measured in the user's test channel (Aperture Sciences #général, the only chan
 Phoenix vs client, same size (1536×840 CSS, dpr 1.25, midnight/Onyx), real account, 2026-11-24 (private shots in `/mnt/windata/project-phoenix/compare/pending/`): brightest text pixel of the pending line 106,106,108 (client 106,107,108), settled line 212,213,216 on both. The failed line is red, and the 4xx notice shows the same layout (APP tag with check, link, footer). One difference: Phoenix breaks the long support URL at a `/`, while the browser moves the whole URL to the next line. This is a general line-breaking difference in rich text, not specific to this notice.
 
 Phoenix check: `PHX_SEND=<what> PHX_SEND_HOLD=4000 real_shots out.png` posts `[Test Phoenix] envoyé depuis le client Rust (Phoenix) — <what>` in the test channel only (hard-coded guard in the example's backend). It writes `out-pending.png` while the POST is held, then `out.png` once it settles. `PHX_SEND_FAIL=400` answers with a local 400 and sends nothing.
+
+
+### Sandbox channel `〢💬・phoenix` (live, 2026-11-24, wt/sandbox)
+
+Measured in the user-granted sandbox channel of Aperture Sciences with the official client over CDP
+(1280×800 CSS px, page zoom 125 %, dpr 1.5; captures in `/mnt/windata/project-phoenix/compare/sandbox`,
+private). States were created there (slowmode via the API, messages / threads from the client).
+
+| Feature | Client (live) | Phoenix | Status |
+|---|---|---|---|
+| Thread from a message | "Plus" › "Créer un fil" opens the 480px "Nouveau fil" sidebar: label "Nom du fil (facultatif)" (JPvIiL), name placeholder = default name (module 971389 `V`: embed title 40 / poll question 80 / first line grown word by word to 40 + "..."), no "Fil privé", source message preview (messagePreview_UU236g pb 24), starter textarea; POST /channels/{c}/messages/{m}/threads then the starter in the thread, which opens in the side panel | was a modal form; now the same sidebar (`open_create_thread_from`, `default_thread_name` test) | ✅ |
+| Thread panel intro | container_w6h4R2 (margin 20): 64px --background-mod-strong disc + 32px icon, h3 32/40 bold margin 8 0, "Commencé par **owner**" | added (`thread_intro`, owner from `owner_id`) | ✅ |
+| Thread starter message | type 21 at the top of the thread history renders the referenced parent message | was an empty row; now the referenced message (convert.rs) | ✅ ("Y aller" jump label not drawn) |
+| Thread panel toolbar | bell "Paramètres de notification", "Plus", "Fermer" | bell added (stub: the client opens a notification popout) | ⚠ popout missing |
+| Thread card | container_g2fiji: mt 8, p 8, r 4, --background-surface-high, 1px --border-subtle, ≤480; name 14/18 semibold + "N messages ›" (rfAXDV, --text-link); latest message line (16px avatar, name 500 at .64, text, "Il y a 2 min"); cozy `::after` spine 2px --spine-default left 39 top 48 bottom 29 w 36 r 8 | was a one-line chip; now the card + spine; latest message from THREAD_LIST_SYNC `most_recent_messages` and MESSAGE_CREATE (`thread_recent.rs`) | ✅ (card count does not follow new messages live) |
+| "a commencé un fil" line | cZ9Uf2 "**Yohan** a commencé un fil : **name**. Voir tous les **fils**." (links medium --interactive-text-active, actor in nick + role colour), card below (margin-top 0), spine top 1.75rem | was "… : name" + a "Voir tous les fils" link opening the thread, global name; now the client text, links (thread / threads popout), nick + role colour, card | ✅ |
+| New thread hint | "Seules les personnes … peuvent voir ce fil" (TRPp3g, no final period) | fixed | ✅ |
