@@ -350,7 +350,7 @@ fn active_section(st: &SoundboardState) -> usize {
     }
 }
 
-fn guild_of<'a>(app: &'a PhoenixApp, g: Id) -> Option<&'a crate::model::Guild> {
+fn guild_of(app: &PhoenixApp, g: Id) -> Option<&crate::model::Guild> {
     app.guilds.iter().find(|x| x.id == g)
 }
 
@@ -743,6 +743,34 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     )
 }
 
+pub fn call_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::theme::z;
+    let off = disabled(app);
+    let open = is_open(cx);
+    let hover = tk(idx::BACKGROUND_MOD_MUTED);
+    div()
+        .id("call-soundboard")
+        .relative()
+        .size(z(40.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(z(8.))
+        .when(open && !off, |d| d.bg(hover))
+        .when(!off, |d| d.hover(move |s| s.bg(hover)).cursor_pointer())
+        .when(off, |d| d.opacity(0.5).cursor_not_allowed())
+        .tip(disabled_reason(app).unwrap_or_else(|| crate::t!("voice.soundboard")))
+        .child(gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(tk(idx::WHITE)))
+        .child(anchor_probe())
+        .on_click(cx.listener(move |app, _, window, cx| {
+            if !off {
+                toggle(app, window, cx);
+            }
+        }))
+        .into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -773,32 +801,4 @@ mod tests {
         assert!((top - 239.2).abs() < 0.5, "{top}");
         assert_eq!(h, H);
     }
-}
-
-pub fn call_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    use crate::theme::z;
-    let off = disabled(app);
-    let open = is_open(cx);
-    let hover = tk(idx::BACKGROUND_MOD_MUTED);
-    div()
-        .id("call-soundboard")
-        .relative()
-        .size(z(40.))
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(z(8.))
-        .when(open && !off, |d| d.bg(hover))
-        .when(!off, |d| d.hover(move |s| s.bg(hover)).cursor_pointer())
-        .when(off, |d| d.opacity(0.5).cursor_not_allowed())
-        .tip(disabled_reason(app).unwrap_or_else(|| crate::t!("voice.soundboard")))
-        .child(gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(tk(idx::WHITE)))
-        .child(anchor_probe())
-        .on_click(cx.listener(move |app, _, window, cx| {
-            if !off {
-                toggle(app, window, cx);
-            }
-        }))
-        .into_any_element()
 }
