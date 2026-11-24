@@ -100,7 +100,7 @@ where its value is stored and what it changes in the UI.
 | alt-text | Show image descriptions | settings-proto `text_and_images.view_image_descriptions` (6, 7) | — | 🟡 stored, no effect yet |
 | legacy-input | Use the legacy chat input | settings-proto `text_and_images.use_legacy_chat_input` (6, 24) | — | 🟡 stored, no effect yet |
 | startup | Open Discord when your computer starts | local prefs (settings.json) | — | 🟡 stored, no effect yet |
-| tray | Minimize Discord to the tray | local prefs (settings.json) | — | 🟡 stored, no effect yet |
+| tray | Minimize Discord to the tray | local prefs (minimize_to_tray) | close hides to the tray icon (tray agent) | ✅ |
 | hwaccel | Enable hardware acceleration | local prefs (settings.json) | — | 🟡 stored, no effect yet |
 | time-format | Time format | settings-proto `appearance.timestamp_hour_cycle` (13, 9) | 12h/24h clocks and <t:..:t/T> (i18n::clock, markdown) | ✅ |
 | act-share | Share my activity | settings-proto `status.show_current_game` (11, 3) | enforced by Discord (server-side: DMs, friend requests, pushes, presence) | ✅ |
