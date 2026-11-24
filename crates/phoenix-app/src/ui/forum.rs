@@ -688,7 +688,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             );
         }
         // tagList_BkGrJJ: flex-shrink 1, height 32, overflow hidden
-        filters = filters.child(div().flex_shrink().min_w_0().h(z(32.)).overflow_hidden().child(list)).child(
+        filters = filters.child(div().min_w_0().h(z(32.)).overflow_hidden().child(list)).child(
             // tagsButton_BkGrJJ: h 32, padding 0 4, radius 20, margin-left 8; inner padding-left 8, gap 4
             div()
                 .ml(z(8.))
