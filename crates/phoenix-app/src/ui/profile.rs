@@ -152,7 +152,7 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
                 .w(w)
                 .h(h)
                 .occlude()
-                .child(modal_card(app, u, app.selected_guild, vp.width, cx))
+                .child(modal_card(app, u, app.selected_guild, vp, cx))
                 .into_any_element(),
         );
     }
@@ -825,9 +825,11 @@ fn popout_card_inner(
                 .flex()
                 .items_center()
                 .cursor_text()
-                .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+                // Live themed light card: the input stays on the app theme's
+                // --input-background-default (black / .08 on dark), not the card's.
+                .bg(c(crate::ui::profile_theme::scoped(None, || tok(idx::INPUT_BACKGROUND_DEFAULT))))
                 .border_1()
-                .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+                .border_color(c(crate::ui::profile_theme::scoped(None, || tok(idx::INPUT_BORDER_DEFAULT))))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.message_user(uid, cx)))
                 .child(
                     div()
@@ -958,12 +960,13 @@ fn mutual_row(id: impl Into<gpui::ElementId>, icon: AnyElement, name: SharedStri
 
 /// Full profile, modal v2 (`root_ZhNJfE`, `profileContentInner_s3DB6Y`):
 /// profile card column on the left, tab panel on the right.
-fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut Context<PhoenixApp>) -> Div {
+fn modal_card(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size<Pixels>, cx: &mut Context<PhoenixApp>) -> Div {
     let theme = app.people.profiles.get(&uid).and_then(|p| p.theme);
-    crate::ui::profile_theme::scoped(theme, || modal_card_inner(app, uid, guild, vw, cx))
+    crate::ui::profile_theme::scoped(theme, || modal_card_inner(app, uid, guild, vp, cx))
 }
 
-fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx: &mut Context<PhoenixApp>) -> Div {
+fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size<Pixels>, cx: &mut Context<PhoenixApp>) -> Div {
+    let vw = vp.width;
     let i = info(app, uid, guild);
     let e = cx.entity();
     let theme = i.prof.and_then(|p| p.theme);
@@ -973,39 +976,54 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
     let pw = (f32::from(vw) * 0.455 - 48. * 0.91).clamp(300., 400.);
     // --custom-modal-v2-padding (--space-48 from 1025px, else --space-32)
     let pad = if f32::from(vw) >= 1025. { 48. } else { 32. };
-    const SYSTEM_BAR: f32 = 32.; // --custom-modal-v2-system-bar-padding
+    // --custom-modal-v2-system-bar-padding: the app top bar height (32px), but 0px
+    // from a 785px-high viewport (`@media (min-height:785px)` on .platform-* .root_ZhNJfE).
+    let system_bar: f32 = if f32::from(vp.height) >= 785. { 0. } else { 32. };
     const GUTTER: f32 = 32.; // --custom-modal-v2-gutter
     const CARD_PAD: f32 = 32.; // --custom-modal-v2-profile-card-padding
     const BANNER: f32 = 140.; // .user-profile-modal-v2 --custom-user-profile-banner-height
     const AV: f32 = 120.; // .user-profile-modal-v2 --custom-user-profile-avatar-size
     const RING: f32 = 7.;
 
-    // profileButtons_s3DB6Y: gap 8px; sm buttons (32px): Message + More.
+    // profileButtons_s3DB6Y: gap 8px; sm buttons (32px): primary ChatIcon + "Send Message"
+    // (buttonChildren gap 4px, 16px icon), then icon-only secondaries: Friend
+    // (UserCheckIcon, friends only) and More.
     let e2 = e.clone();
+    let icon_btn = |id: (&'static str, u64), icon: &str| {
+        div()
+            .id(id)
+            .size(z(32.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+            .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+            .cursor_pointer()
+            .child(gpui::svg().path(crate::icons::path(icon)).size(z(16.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+    };
+    let is_friend = app.nav.relationship(uid).is_some_and(|r| r.kind == crate::ui::home::data::RelationshipKind::Friend);
     let buttons = (uid != app.me.id).then(|| {
+        let msg = mana_button(("profile-modal-message", uid.0), "", true, false)
+            .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx)))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z(4.))
+                    .child(gpui::svg().path(crate::icons::path("chat")).size(z(16.)).text_color(c(tok(idx::CONTROL_PRIMARY_TEXT_DEFAULT))))
+                    .child(crate::t!("pe.send_message")),
+            );
+        let more = icon_btn(("profile-modal-more", uid.0), "chat/more");
         div()
             .flex()
             .items_center()
             .gap(z(8.))
-            .child(
-                mana_button(("profile-modal-message", uid.0), crate::t!("profile.message"), true, false)
-                    .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx))),
-            )
-            .child(
-                div()
-                    .id(("profile-modal-more", uid.0))
-                    .size(z(32.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded(z(8.))
-                    .border_1()
-                    .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
-                    .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
-                    .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
-                    .cursor_pointer()
-                    .child(gpui::svg().path(crate::icons::path("chat/more")).size(z(16.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))),
-            )
+            .child(msg)
+            .children(is_friend.then(|| icon_btn(("profile-modal-friend", uid.0), "user-check")))
+            .child(more)
     });
 
     // profileBody_s3DB6Y: gap --space-24, padding 4px 24px 32px 32px, margin-top -4px.
@@ -1277,7 +1295,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
     let close = div()
         .id("profile-modal-close")
         .absolute()
-        .top(z(8.))
+        .top(z(8. + system_bar)) // --custom-modal-v2-header-button-top
         .right(z(8.))
         .size(z(32.))
         .rounded(z(8.))
@@ -1285,15 +1303,18 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-        .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+        // live: a secondary sm Mana button (1px border, --control-secondary-*, 16px icon)
+        .border_1()
+        .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+        .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
         .on_click(move |_, _, cx| {
             e3.update(cx, |a, cx| {
                 a.people.close_overlays();
                 cx.notify();
             })
         })
-        .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))));
+        .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))));
 
     // root/outer: --background-base-lower, 1px --border-normal, --radius-lg.
     // profileContentInner_s3DB6Y: padding-top --custom-modal-v2-padding +
@@ -1320,7 +1341,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
                 .child(div().absolute().top(z(300.)).left_0().right_0().bottom_0().bg(modal_inner(t, 0.2)))
         })
         .shadow_lg()
-        .pt(z(pad + SYSTEM_BAR))
+        .pt(z(pad + system_bar))
         .pl(z(pad))
         .pr(z(32.))
         // The applied profile frame wraps the profile card (same layers as the popout,
