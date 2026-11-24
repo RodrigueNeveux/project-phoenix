@@ -7,7 +7,14 @@ use gpui::{AppContext, Entity, HeadlessAppContext, px, size};
 use gpui_component::Root;
 use phoenix_app::{app::PhoenixApp, assets::Assets, mock::MockBackend};
 
+/// `PHX_FRAMES=1`: frame times per interaction (examples/frames.rs), no allocation counts.
+#[path = "common/frames_impl.rs"]
+mod frames_impl;
+
 fn main() -> anyhow::Result<()> {
+    if std::env::var_os("PHX_FRAMES").is_some() {
+        return frames_impl::run();
+    }
     let mut args = std::env::args().skip(1);
     let out = args.next().unwrap_or_else(|| "phoenix.png".into());
     let login_only = args.next().as_deref() == Some("login");

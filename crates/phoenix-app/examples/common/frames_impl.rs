@@ -4,7 +4,7 @@
 use std::{
     cell::RefCell,
     rc::Rc,
-    sync::{Arc, atomic::Ordering},
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -20,6 +20,13 @@ fn rss_kib() -> u64 {
         .ok()
         .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
         .unwrap_or(0)
+}
+
+/// Allocation counters (count, bytes) of the host example's global allocator, if any.
+pub static COUNTER: OnceLock<fn() -> (u64, u64)> = OnceLock::new();
+
+fn counts() -> (u64, u64) {
+    COUNTER.get().map_or((0, 0), |f| f())
 }
 
 struct Probe<'a> {
@@ -44,7 +51,7 @@ impl Probe<'_> {
 
     /// Run `frames` frames, calling `step(i)` before each, and print the stats.
     fn measure(&mut self, name: &str, frames: usize, mut step: impl FnMut(&mut Self, usize)) {
-        let (a0, b0) = (crate::ALLOCS.load(Ordering::Relaxed), crate::BYTES.load(Ordering::Relaxed));
+        let (a0, b0) = counts();
         let mut times = Vec::with_capacity(frames);
         for i in 0..frames {
             let t = Instant::now();
@@ -52,7 +59,7 @@ impl Probe<'_> {
             self.frame();
             times.push(t.elapsed().as_micros() as u64);
         }
-        let (a1, b1) = (crate::ALLOCS.load(Ordering::Relaxed), crate::BYTES.load(Ordering::Relaxed));
+        let (a1, b1) = counts();
         let over = times.iter().filter(|t| **t > 16_000).count();
         times.sort_unstable();
         println!(

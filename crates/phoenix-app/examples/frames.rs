@@ -16,8 +16,8 @@ use std::{
 mod frames_impl;
 
 struct Counting;
-pub static ALLOCS: AtomicU64 = AtomicU64::new(0);
-pub static BYTES: AtomicU64 = AtomicU64::new(0);
+static ALLOCS: AtomicU64 = AtomicU64::new(0);
+static BYTES: AtomicU64 = AtomicU64::new(0);
 
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
@@ -39,5 +39,6 @@ unsafe impl GlobalAlloc for Counting {
 static A: Counting = Counting;
 
 fn main() -> anyhow::Result<()> {
+    let _ = frames_impl::COUNTER.set(|| (ALLOCS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed)));
     frames_impl::run()
 }

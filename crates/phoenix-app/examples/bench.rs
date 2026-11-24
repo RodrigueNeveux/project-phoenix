@@ -95,6 +95,7 @@ fn bench_markdown() {
 
 fn main() -> anyhow::Result<()> {
     if std::env::var_os("PHX_FRAMES").is_some() {
+        let _ = frames_impl::COUNTER.set(|| (ALLOCS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed)));
         return frames_impl::run();
     }
     let target: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(5000);
