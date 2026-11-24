@@ -1363,7 +1363,15 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
     if !t.emoji.is_empty() {
         let el = message_ext::rich_with_emoji(entity, msg, bi, t);
         if edited {
-            return div().flex().flex_wrap().items_end().child(el).child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(msg.0 as i64))).into_any_element();
+            // max-width 100%: as a bare flex item the text row took its unwrapped width and
+            // ran past the column (edited announcements with a #channel mention).
+            return div()
+                .flex()
+                .flex_wrap()
+                .items_end()
+                .child(div().max_w_full().child(el))
+                .child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(msg.0 as i64)))
+                .into_any_element();
         }
         return el;
     }
