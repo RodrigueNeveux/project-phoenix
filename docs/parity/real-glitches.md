@@ -78,12 +78,16 @@ Open items of round 1 (search embeds, Favoris preview, trending tile) are fixed 
 | Quick switcher | Query/placeholder drawn at 16px | 22px on the input itself |
 | Profile voice card | Guild acronym "AS" instead of the guild icon | Icon when the guild has one |
 | Accessibility preview | Card fixed at 175px, sample button cut off | max-height 25vh of the real window |
+| Guild header dropdown | "Paramètres de notificati…" ellipsized by a submenu caret | Plain row that opens the notification settings modal |
+| Server settings | Close button pushed against / past the right edge by the roles list | Close button no longer shrinks, 20px margin |
+| Account popout (user panel) | No profile widget card under the bio (client shows the first Board widget) | Same compact widget card as the profile popout |
+| Invite / join dialogs | No close button | Top-right close button |
 
 Harness: `PHX_OPEN` chanmenu/catmenu/guildmenu/guilddrop/usermenu/switcher/statuspicker/leave/invite,
 `emoji:<row>`, `PHX_PROFILE=member:<n>`, `PHX_GUILD` alone, `PHX_DEBUG_GIF`.
 
-Checked OK: channel and category context menus (labels match `vanilla-menu-channel/category`), leave dialog.
+Checked OK: emoji picker scrolled (unavailable emoji locked like the client), channel and category context menus (labels match `vanilla-menu-channel/category`), leave dialog.
 
-Open: invite dialog has no friend list/search and no close button; Devices page lists only this device (no
+Open: invite dialog has no friend list/search; Devices page lists only this device (no
 `/auth/sessions`); Connections page doesn't list the account's connections; streaming activity card on bots
 ("En direct sur <status text>", empty art); popouts of some members stay on "Chargement du profil…".
