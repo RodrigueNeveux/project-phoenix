@@ -109,6 +109,9 @@ pub struct PhoenixApp {
     pub selected_channel: Option<Id>,
     pub last_channel: HashMap<Option<Id>, Id>,
     pub collapsed: HashSet<Id>,
+    pub favorites_view: bool,
+    pub favorites_last: Option<Id>,
+    pub favorites_seeded: HashSet<Id>,
     pub nav: crate::ui::home::data::NavState,
 
     pub sidebar_rows: Vec<SidebarRow>,
@@ -366,6 +369,9 @@ impl PhoenixApp {
             selected_channel: None,
             last_channel: HashMap::new(),
             collapsed: HashSet::new(),
+            favorites_view: false,
+            favorites_last: None,
+            favorites_seeded: HashSet::new(),
             nav: Default::default(),
             sidebar_rows: Vec::new(),
             sidebar_rows_guild: None,
@@ -542,6 +548,7 @@ impl PhoenixApp {
 
     pub fn select_guild(&mut self, guild: Option<Id>, cx: &mut Context<Self>) {
         self.selected_guild = guild;
+        self.favorites_view = false;
         self.rebuild_sidebar();
         self.rebuild_members();
         self.backend.select_guild(guild).detach_ok();
@@ -584,6 +591,7 @@ impl PhoenixApp {
     }
 
     pub fn open_channel_chat(&mut self, id: Id, cx: &mut Context<Self>) {
+        crate::ui::favorites::on_channel_opened(self, id);
         crate::commands::state::remember_read_mark(self, id);
         let Some(ch) = self.channels.get_mut(&id) else { return };
         ch.unread = false;

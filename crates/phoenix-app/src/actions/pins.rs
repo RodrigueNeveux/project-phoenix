@@ -75,10 +75,6 @@ pub fn is_pinned(id: Id) -> bool {
     with(|p| p.pinned.contains(&id.0))
 }
 
-pub fn is_favorite(id: Id) -> bool {
-    with(|p| p.favorites.contains(&id.0))
-}
-
 pub fn shows_all(guild: Id) -> bool {
     with(|p| p.show_all.contains(&guild.0))
 }
@@ -95,10 +91,6 @@ fn toggle(set: impl FnOnce(&mut Pins) -> &mut BTreeSet<u64>, id: Id) {
 
 pub fn toggle_pin(id: Id) {
     toggle(|p| &mut p.pinned, id)
-}
-
-pub fn toggle_favorite(id: Id) {
-    toggle(|p| &mut p.favorites, id)
 }
 
 pub fn toggle_show_all(guild: Id) {

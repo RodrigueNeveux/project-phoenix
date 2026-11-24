@@ -308,7 +308,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         }
                     }));
                 } else {
-                    items.push(crate::actions::channel::favorite_item(&e, id));
+                    items.push(crate::actions::channel::favorite_item(app, &e, id));
                     items.push(MenuItem::Separator);
                     let invite = if voice { "menu.invite_voice_channel" } else { "menu.invite_channel" };
                     items.push(act(&e, crate::t!(invite), move |a, _, cx| a.open_invite_people(g, cx)));
@@ -373,7 +373,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 let peer = ch.voice_users.first().copied();
                 let is_group = app.nav.extras.get(&id).is_some_and(|x| x.recipients > 1);
                 items.push(crate::actions::channel::pin_item(&e, id, true).with_icon("pin"));
-                items.push(crate::actions::channel::favorite_item(&e, id));
+                items.push(crate::actions::channel::favorite_item(app, &e, id));
                 items.push(MenuItem::Separator);
                 if is_group {
                     items.push(stub(&e, "menu.invites"));
@@ -529,7 +529,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(MenuItem::disabled(crate::t!("menu.mark_read"), None));
             }
             items.push(MenuItem::Separator);
-            items.push(crate::actions::channel::favorite_item(&e, id));
+            items.push(crate::actions::channel::favorite_item(app, &e, id));
             if let Some(g) = guild {
                 items.push(MenuItem::Separator);
                 items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, id.0)));

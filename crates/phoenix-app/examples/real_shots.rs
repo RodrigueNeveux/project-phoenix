@@ -143,7 +143,14 @@ impl Backend for ReadOnly {
         self.0.is_media_channel(c)
     }
     fn load_settings(&self) -> BoxFuture<phoenix_app::ui::settings::SyncedSettings> {
-        self.0.load_settings()
+        let fut = self.0.load_settings();
+        Box::pin(async move {
+            let mut s = fut.await?;
+            if let Some(f) = env_favorites() {
+                s.favorites = f;
+            }
+            Ok(s)
+        })
     }
     fn guild_emojis(&self, g: Id) -> Vec<phoenix_app::ui::pickers::types::GuildEmoji> {
         self.0.guild_emojis(g)
@@ -294,6 +301,23 @@ impl Backend for ReadOnly {
     fn search_messages(&self, r: phoenix_app::ui::search::SearchRequest) -> BoxFuture<phoenix_app::ui::search::SearchPage> {
         self.0.search_messages(r)
     }
+}
+
+fn env_favorites() -> Option<phoenix_api::rest::favorites::Favorites> {
+    let spec = std::env::var("PHX_FAVORITES").ok().filter(|v| !v.trim().is_empty())?;
+    let mut f = phoenix_api::rest::favorites::Favorites::default();
+    for (n, group) in spec.split('|').enumerate() {
+        let (name, ids) = match group.split_once(':') {
+            Some((name, ids)) => (Some(name.trim()), ids),
+            None => (None, group),
+        };
+        let ids: Vec<(u64, Option<u32>)> = ids.split(',').filter_map(|x| x.trim().parse().ok()).map(|x| (x, None)).collect();
+        let _ = match name {
+            Some(name) => f.add_to_category(&ids, name, 1000 + n as u64, true),
+            None => f.add(&ids, None, true),
+        };
+    }
+    Some(f)
 }
 
 fn cdp(expr: &str) -> Option<String> {
@@ -630,6 +654,13 @@ fn main() -> anyhow::Result<()> {
                 } else {
                     app.open_channel_chat(c, cx);
                 }
+            }
+            if view == "favorites"
+                && let Some(f) = env_favorites()
+            {
+                app.prefs.synced.favorites = f;
+                app.favorites_last = channel;
+                phoenix_app::ui::favorites::open(app, cx);
             }
             if view == "inbox" {
                 use phoenix_app::commands::state::InboxTab as T;

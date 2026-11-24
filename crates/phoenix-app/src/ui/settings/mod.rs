@@ -67,6 +67,7 @@ pub struct SyncedSettings {
     pub proto: std::collections::HashMap<&'static str, u64>,
     pub density: crate::theme::Density,
     pub rest: std::collections::HashMap<&'static str, bool>,
+    pub favorites: phoenix_api::rest::favorites::Favorites,
 }
 
 impl Default for SyncedSettings {
@@ -80,6 +81,7 @@ impl Default for SyncedSettings {
             proto: Default::default(),
             density: crate::theme::Density::default(),
             rest: Default::default(),
+            favorites: Default::default(),
         }
     }
 }
@@ -94,6 +96,7 @@ pub enum SettingsPatch {
     Proto(&'static str, u64),
     Density(crate::theme::Density),
     Rest(&'static str, bool),
+    Favorites(Box<phoenix_api::rest::favorites::Favorites>),
 }
 
 impl SyncedSettings {
@@ -117,6 +120,7 @@ impl SyncedSettings {
                 }
             }
             SettingsPatch::Density(d) => self.density = *d,
+            SettingsPatch::Favorites(f) => self.favorites = (**f).clone(),
         }
     }
     pub fn flag(&self, id: &str) -> bool {

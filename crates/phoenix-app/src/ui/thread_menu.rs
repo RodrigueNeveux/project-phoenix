@@ -77,7 +77,7 @@ fn render_post(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
         items.push(MenuItem::disabled(crate::t!("menu.mark_read"), None));
     }
     items.push(MenuItem::Separator);
-    items.push(crate::actions::channel::favorite_item(&e, t));
+    items.push(crate::actions::channel::favorite_item(app, &e, t));
     items.push(MenuItem::Separator);
     items.push(stub("menu.post.follow"));
     if (manage || owner) && !p.archived {

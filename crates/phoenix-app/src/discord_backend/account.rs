@@ -121,13 +121,17 @@ impl DiscordBackend {
                 out.rest.insert(*id, *v);
                 return Ok(out);
             }
+            if let SettingsPatch::Favorites(f) = &patch {
+                let raw = s.rest.patch_favorites(f).await.map_err(api_err)?;
+                return synced_raw(&raw);
+            }
             let change = match &patch {
                 SettingsPatch::Theme(t) => SettingChange::Theme(theme_to_api(*t)),
                 SettingsPatch::Compact(b) => SettingChange::Compact(*b),
                 SettingsPatch::DeveloperMode(b) => SettingChange::DeveloperMode(*b),
                 SettingsPatch::Locale(l) => SettingChange::Locale(l.to_string()),
                 SettingsPatch::AllowServerDms(b) => SettingChange::DefaultGuildsRestricted(!*b),
-                SettingsPatch::Rest(..) => unreachable!("handled above"),
+                SettingsPatch::Rest(..) | SettingsPatch::Favorites(..) => unreachable!("handled above"),
                 SettingsPatch::Proto(id, v) => {
                     crate::ui::settings::synced_map::change(id, *v).ok_or_else(|| err(format!("unknown setting {id}")))?
                 }
@@ -161,6 +165,7 @@ fn synced_raw(raw: &[u8]) -> Result<SyncedSettings, crate::backend::BackendError
     let p = PreloadedUserSettings::decode_raw(raw).map_err(api_err)?;
     let mut s = synced(&p);
     s.proto = crate::ui::settings::synced_map::read_all(raw);
+    s.favorites = phoenix_api::rest::favorites::Favorites::from_settings(raw);
     Ok(s)
 }
 

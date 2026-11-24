@@ -796,6 +796,9 @@ impl Backend for DiscordBackend {
         let limit = max_file_size(premium, guild.as_ref().map(|g| (g.properties.premium_tier, g.properties.features.iter().map(String::as_str))));
         message_upload_limit(limit)
     }
+    fn premium_tier2(&self) -> bool {
+        self.inner.session().ok().and_then(|s| s.cache.current_user()).is_some_and(|u| u.premium_type == Some(2))
+    }
     fn has_premium(&self) -> bool {
         self.inner.session().ok().and_then(|s| s.cache.current_user()).is_none_or(|u| u.premium_type.unwrap_or(0) > 0)
     }

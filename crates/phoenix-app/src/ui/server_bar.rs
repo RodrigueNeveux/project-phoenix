@@ -75,8 +75,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .flex_col()
         .gap(z(gap()))
         .child(home(app, &entity));
+    let fav = favorites(app, &entity);
+    let fav_n = usize::from(fav.is_some());
+    col = col.children(fav);
     let dms = unread_dm_items(app, &entity);
-    let base = 2 + dms.len();
+    let base = 2 + fav_n + dms.len();
     col = col.children(dms).child(separator());
     let mut spans: Vec<Span> = Vec::new();
     let is_unread = |g: &Guild| g.unread || g.mentions > 0;
@@ -419,7 +422,7 @@ const ADD_KEY: u64 = 2;
 const DISCOVER_KEY: u64 = 3;
 
 fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
-    let selected = app.selected_guild.is_none();
+    let selected = app.selected_guild.is_none() && !app.favorites_view;
     let hover = hovered(HOME_KEY);
     let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
     let e = entity.clone();
@@ -452,6 +455,49 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
         )
         .when(hover, |d| d.child(right_tooltip(crate::t!("dm.title"), ICON)))
         .into_any_element()
+}
+
+const FAVORITES_KEY: u64 = 4;
+
+fn favorites(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Option<AnyElement> {
+    if !crate::ui::favorites::enabled(app) {
+        return None;
+    }
+    let selected = app.favorites_view;
+    let hover = hovered(FAVORITES_KEY);
+    let (unread, mentions) = crate::ui::favorites::badge(app);
+    let e = entity.clone();
+    Some(
+        row("favorites", FAVORITES_KEY, entity)
+            .on_click(move |_, _, cx| e.update(cx, |a, cx| crate::ui::favorites::open(a, cx)))
+            .child(pill(FAVORITES_KEY, selected, hover, unread))
+            .child(
+                div()
+                    .relative()
+                    .size(z(ICON))
+                    .child(
+                        div()
+                            .size_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(z(ICON_RADIUS))
+                            .relative()
+                            .child(crate::ui::states::fade_to(
+                                crate::ui::states::key(("rail-tile", FAVORITES_KEY)),
+                                selected || hover,
+                                c(Palette::GUILD_ICON_BG),
+                                c(Palette::BLURPLE),
+                                150,
+                                ICON_RADIUS,
+                            ))
+                            .child(svg().path(crate::icons::path("star")).size(z(20.)).flex_none().text_color(if selected || hover { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
+                    )
+                    .when(mentions > 0, |d| d.child(mention_badge(mentions))),
+            )
+            .when(hover, |d| d.child(right_tooltip(crate::t!("fav.title"), ICON)))
+            .into_any_element(),
+    )
 }
 
 fn guild_inner(g: &Guild, size: f32) -> AnyElement {
@@ -546,7 +592,7 @@ impl PhoenixApp {
 
 fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, _nested: bool) -> AnyElement {
     let id = g.id;
-    let selected = app.selected_guild == Some(id);
+    let selected = app.selected_guild == Some(id) && !app.favorites_view;
     let hover = hovered(id.0);
     let has_icon = matches!(g.icon, ImageRef::Url(_));
     let active = selected || hover;
@@ -598,7 +644,7 @@ fn folder(
     let hover = hovered(key);
     let unread = guilds.iter().any(|g| g.unread);
     let mentions: u32 = guilds.iter().map(|g| g.mentions).sum();
-    let has_selected = guilds.iter().any(|g| Some(g.id) == app.selected_guild);
+    let has_selected = !app.favorites_view && guilds.iter().any(|g| Some(g.id) == app.selected_guild);
     let e = entity.clone();
     let head_inner: AnyElement = if open {
         div()

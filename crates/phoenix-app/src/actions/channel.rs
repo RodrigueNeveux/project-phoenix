@@ -190,19 +190,29 @@ pub fn pin_item(e: &Ent, channel: Id, dm: bool) -> MenuItem {
     item(e, crate::t!(key), move |a, cx| a.toggle_channel_pin(channel, cx))
 }
 
-pub fn favorite_item(e: &Ent, channel: Id) -> MenuItem {
-    let on = pins::is_favorite(channel);
-    let e = e.clone();
-    MenuItem::submenu_with_icon(
-        crate::t!("menu.favorite"),
-        "star",
-        vec![MenuItem::check(crate::t!("menu.favorites"), on, move |_, _, cx: &mut App| {
-            pins::toggle_favorite(channel);
-            e.update(cx, |a, cx| {
-                a.parity_toast(if on { crate::t!("fav.removed") } else { crate::t!("fav.added") }, cx)
+pub fn favorite_item(app: &PhoenixApp, e: &Ent, channel: Id) -> MenuItem {
+    let fav = crate::ui::favorites::data(app);
+    let current = fav.get(channel.0).map(|f| f.parent_id).map(|p| (p != 0 && fav.get(p).is_some_and(|c| c.is_category())).then_some(p));
+    let cats: Vec<(u64, gpui::SharedString)> = fav.categories().into_iter().map(|(id, n)| (id, gpui::SharedString::from(n.to_owned()))).collect();
+    let row = |label: gpui::SharedString, parent: Option<u64>| {
+        let e = e.clone();
+        let on = current == Some(parent);
+        MenuItem::check(label, on, move |_, _, cx: &mut App| {
+            e.update(cx, |a, cx| match (on, current) {
+                (true, _) => {
+                    crate::ui::favorites::remove(a, channel, cx);
+                    a.parity_toast(crate::t!("fav.removed"), cx)
+                }
+                (false, Some(_)) => crate::ui::favorites::move_to(a, channel, parent, cx),
+                (false, None) => crate::ui::favorites::add(a, channel, parent, cx),
             })
-        })],
-    )
+        })
+    };
+    let mut items = vec![row(crate::t!("menu.favorites"), None)];
+    for (id, name) in cats {
+        items.push(row(name, Some(id)));
+    }
+    MenuItem::submenu_with_icon(crate::t!("menu.favorite"), "star", items)
 }
 
 pub fn server_settings_item(e: &Ent, guild: Id) -> MenuItem {

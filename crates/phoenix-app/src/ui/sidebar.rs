@@ -33,9 +33,12 @@ pub fn build_rows(app: &mut PhoenixApp) {
     let anchor = app.sidebar_list.logical_scroll_top();
     let anchor_row = anchor.item_ix.checked_sub(1).and_then(|i| app.sidebar_rows.get(i).copied());
     let old_guild = app.sidebar_rows_guild;
-    app.sidebar_rows_guild = app.selected_guild;
+    app.sidebar_rows_guild = if app.favorites_view { Some(crate::ui::favorites::GUILD) } else { app.selected_guild };
     app.sidebar_rows.clear();
     match app.selected_guild {
+        _ if app.favorites_view => {
+            app.sidebar_rows = crate::ui::favorites::rows(app);
+        }
         None => {
             let reqs = &app.nav.message_requests;
             let rows: Vec<SidebarRow> =
@@ -104,7 +107,7 @@ pub fn build_rows(app: &mut PhoenixApp) {
         }
     }
     app.sidebar_list.reset(app.sidebar_rows.len() + 1);
-    if old_guild == app.selected_guild {
+    if old_guild == app.sidebar_rows_guild {
         let new_ix = match anchor_row {
             Some(r) => app.sidebar_rows.iter().position(|x| *x == r).map(|i| i + 1),
             None => Some(0),
@@ -165,7 +168,36 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .child(crate::ui::sidebar_resize::handle(cx))
 }
 
+fn favorites_header() -> AnyElement {
+    div()
+        .h(px(m::HEADER_H + 1.))
+        .flex_none()
+        .p(z(10.))
+        .flex()
+        .items_center()
+        .border_b_1()
+        .border_color(t(idx::BORDER_SUBTLE))
+        .child(
+            div()
+                .h(z(32.))
+                .min_w_0()
+                .px(z(10.))
+                .flex()
+                .items_center()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(t(idx::TEXT_STRONG))
+                .text_ellipsis()
+                .child(crate::t!("fav.title")),
+        )
+        .into_any_element()
+}
+
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    if app.favorites_view {
+        return favorites_header();
+    }
     match app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
         None => div()
             .h(px(m::HEADER_H + 1.))
@@ -355,7 +387,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
 fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let app = entity.read(cx);
     if ix == 0 {
-        return if app.selected_guild.is_none() {
+        return if app.favorites_view {
+            div().w_full().pt(z(12.)).into_any_element()
+        } else if app.selected_guild.is_none() {
             dm_top(entity, cx).into_any_element()
         } else {
             guild_top(app, entity.clone(), cx).into_any_element()
@@ -368,6 +402,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         SidebarRow::Category(id) => {
             let ch = &app.channels[&id];
             let collapsed = app.collapsed.contains(&id);
+            let fav_cat = ch.guild == Some(crate::ui::favorites::GUILD);
             let e = entity.clone();
             div()
                 .id(("cat", id.0))
@@ -384,8 +419,10 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                 .text_color(t(idx::CHANNELS_DEFAULT))
                 .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_category_saved(id, cx)))
-                .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
-                    crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(id), ev.position, w)
+                .when(!fav_cat, |d| {
+                    d.on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
+                        crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(id), ev.position, w)
+                    })
                 })
                 .child(
                     div()
@@ -412,7 +449,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                                 }))),
                         ),
                 )
-                .child(
+                .when(!fav_cat, |d| d.child(
                     div()
                         .size(z(24.))
                         .flex_none()
@@ -425,7 +462,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
                             icon(Icon::Plus, 16. * crate::theme::zoom(), t(idx::CHANNELS_DEFAULT))
                                 .group_hover("cat-add", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
                         ),
-                )
+                ))
                 .into_any_element()
         }
         SidebarRow::Channel(id) => channel_row(app, entity, id),
@@ -739,7 +776,11 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             (!selected && app.voice_channel != Some(id)).then(|| SharedString::from(format!("chrow{}", id.0))),
         )
     };
-    let name: SharedString = extra.and_then(|e| e.group_name.clone()).filter(|_| is_dm).unwrap_or_else(|| ch.name.clone());
+    let name: SharedString = extra
+        .and_then(|e| e.group_name.clone())
+        .filter(|_| is_dm)
+        .or_else(|| crate::ui::favorites::nickname(app, id))
+        .unwrap_or_else(|| ch.name.clone());
     let members: Option<SharedString> =
         (is_dm && is_group).then(|| crate::t!("invite.members", n = extra.map(|e| e.recipients + 1).unwrap_or(1)));
     let dm_tag = (is_dm && !is_group)
