@@ -76,14 +76,20 @@ fn read_state_and_proto_order() {
 }
 
 #[test]
-fn guild_resource_channels_are_hidden_and_not_unread() {
+fn guild_resource_channels_are_listed_but_not_unread() {
     let (cache, r) = ready_cache();
     let g = r.guilds.iter().find(|g| !g.unavailable).unwrap().id;
     let raw = format!(
         r#"{{"id":"700000000000000077","type":0,"guild_id":"{g}","name":"guide-page","position":0,"flags":128,"last_message_id":"700000000000000099"}}"#
     );
     cache.apply(&parse_dispatch("CHANNEL_CREATE", &raw));
-    let prefs = Prefs::from_ready(&r);
+    let mut prefs = Prefs::from_ready(&r);
+    // Listed (client shows resource channels outside opt-in mode), never unread.
+    let chs = guild_channels(&cache, g, &prefs.ctx());
+    let c = chs.iter().find(|c| c.id == Id(700000000000000077)).expect("resource channel listed");
+    assert!(!c.unread && c.mentions == 0);
+    // Opt-in "browse channels" mode hides them.
+    prefs.mutes.opt_in.insert(g.0);
     let chs = guild_channels(&cache, g, &prefs.ctx());
     assert!(!chs.iter().any(|c| c.id == Id(700000000000000077)));
 }
