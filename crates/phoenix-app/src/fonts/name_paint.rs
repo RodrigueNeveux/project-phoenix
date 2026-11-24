@@ -90,7 +90,7 @@ impl Element for NameText {
         let full = self.shape(&self.text, window, color);
         let text = self.text.clone();
         let starts: Vec<(usize, &str)> = unicode_segmentation::UnicodeSegmentation::grapheme_indices(text.as_ref(), true).collect();
-        let chars: Vec<(String, Pixels)> = starts
+        let per: Vec<(String, Pixels)> = starts
             .iter()
             .enumerate()
             .map(|(i, (b, g))| {
@@ -99,6 +99,7 @@ impl Element for NameText {
                 ((*g).to_owned(), (x1 - x0).max(px(0.)))
             })
             .collect();
+        let chars = merge_ligatures(per);
         let ellipsis = self.shape("\u{2026}", window, color).width;
         let natural = chars.iter().fold(px(0.), |w, (_, a)| w + *a + self.spacing);
         let mut style = Style::default();
@@ -159,6 +160,24 @@ impl Element for NameText {
     }
 }
 
+/// A ligature (e.g. "fl" in a styled-name font) is one glyph: the shaper gives
+/// one of its graphemes the whole advance and the other none. Painting them one
+/// by one then overlaps the second letter on the next one ("flav" read "f bv"),
+/// so zero-advance graphemes are painted together with their neighbour.
+fn merge_ligatures(per: Vec<(String, Pixels)>) -> Vec<(String, Pixels)> {
+    let mut out: Vec<(String, Pixels)> = Vec::with_capacity(per.len());
+    for (g, adv) in per {
+        match out.last_mut() {
+            Some(last) if adv <= px(0.) || last.1 <= px(0.) => {
+                last.0.push_str(&g);
+                last.1 += adv;
+            }
+            _ => out.push((g, adv)),
+        }
+    }
+    out
+}
+
 impl IntoElement for NameText {
     type Element = Self;
 
@@ -170,6 +189,14 @@ impl IntoElement for NameText {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ligatures_paint_as_one_cluster() {
+        let v = |s: &str, a: f32| (s.to_owned(), px(a));
+        assert_eq!(merge_ligatures(vec![v("f", 9.), v("l", 0.), v("a", 7.)]), vec![v("fl", 9.), v("a", 7.)]);
+        assert_eq!(merge_ligatures(vec![v("f", 0.), v("l", 9.), v("a", 7.)]), vec![v("fl", 9.), v("a", 7.)]);
+        assert_eq!(merge_ligatures(vec![v("a", 7.), v("b", 7.)]), vec![v("a", 7.), v("b", 7.)]);
+    }
 
     #[test]
     fn gradient_stops() {
