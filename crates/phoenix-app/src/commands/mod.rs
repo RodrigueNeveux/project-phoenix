@@ -101,10 +101,10 @@ pub enum ModAction {
     Unban,
 }
 
-#[derive(Clone, Debug)]
 /// Poll answer typed in the creation modal: text and optional (custom emoji id, emoji name).
 pub type PollAnswerDraft = (String, Option<(Option<Id>, String)>);
 
+#[derive(Clone, Debug)]
 pub enum ParityRequest {
     /// Guild (or DM channel) + user-installed commands.
     Commands { guild: Option<Id>, channel: Id },
