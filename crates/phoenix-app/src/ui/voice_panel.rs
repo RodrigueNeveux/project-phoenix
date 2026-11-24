@@ -593,7 +593,6 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
     // selected_YUoOxm while this user's profile popout is open.
     let selected = app.people.popout.as_ref().is_some_and(|p| p.user == user);
     let guild = app.selected_guild;
-    let names_hidden = crate::ui::voice_row::user_name_hidden(app, user);
     let name_color = if speaking || selected { t(idx::INTERACTIVE_TEXT_ACTIVE) } else { state };
     div()
         .id(("voice-user-row", user.0))
@@ -630,8 +629,6 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .min_w_0()
                 .flex()
                 .items_center()
-                // "Hide Names" (voice channel menu): avatars and state icons only.
-                .when(names_hidden, |d| d.invisible())
                 .child(
                     div()
                         .min_w_0()

@@ -21,30 +21,75 @@ thread_local! {
 
 /// Remember where the row for `user` was painted.
 thread_local! {
-    /// Voice channels with "Hide Names" checked (channel context menu, per session).
-    static HIDDEN_NAMES: std::cell::RefCell<std::collections::HashSet<u64>> = Default::default();
+    /// Voice channels with "Hide Names" checked (voice channel context menu), saved in
+    /// `$XDG_CONFIG_HOME/discord-phoenix/voice-hidden-names.txt` like the client keeps it
+    /// across restarts.
+    static HIDDEN_NAMES: std::cell::RefCell<Option<std::collections::BTreeSet<u64>>> = const { std::cell::RefCell::new(None) };
+}
+
+fn hidden_path() -> Option<std::path::PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")))?;
+    Some(base.join(crate::APP_ID).join("voice-hidden-names.txt"))
+}
+
+fn with_hidden<R>(f: impl FnOnce(&mut std::collections::BTreeSet<u64>) -> R) -> R {
+    HIDDEN_NAMES.with(|h| {
+        let mut h = h.borrow_mut();
+        let set = h.get_or_insert_with(|| {
+            hidden_path()
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .map(|s| s.split_whitespace().filter_map(|x| x.parse().ok()).collect())
+                .unwrap_or_default()
+        });
+        f(set)
+    })
 }
 
 pub fn names_hidden(channel: Id) -> bool {
-    HIDDEN_NAMES.with(|h| h.borrow().contains(&channel.0))
+    with_hidden(|h| h.contains(&channel.0))
 }
 
 pub fn set_names_hidden(channel: Id, hidden: bool) {
-    HIDDEN_NAMES.with(|h| {
-        let mut h = h.borrow_mut();
+    let text = with_hidden(|h| {
         if hidden {
             h.insert(channel.0);
         } else {
             h.remove(&channel.0);
         }
+        h.iter().map(u64::to_string).collect::<Vec<_>>().join(" ")
     });
+    if let Some(p) = hidden_path() {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(p, text);
+    }
 }
 
-/// Whether `user`'s row sits in a voice channel with hidden names.
-pub fn user_name_hidden(app: &crate::app::PhoenixApp, user: Id) -> bool {
-    HIDDEN_NAMES.with(|h| {
-        h.borrow().iter().any(|c| app.channels.get(&Id(*c)).is_some_and(|ch| ch.voice_users.contains(&user)))
-    })
+/// "Hide Names" layout (`listCollapse_YUoOxm`: row, wrap; `.content_` margin-inline-start
+/// 8, padding 0): only the avatars, side by side, inside `list_YUoOxm` (padding 0 0 10 38;
+/// `draggable_xIeVT2` height 32).
+pub fn collapsed_list(app: &crate::app::PhoenixApp, users: &[Id]) -> AnyElement {
+    div()
+        .w_full()
+        .pl(z(38.))
+        .pb(z(10.))
+        .flex()
+        .flex_row()
+        .flex_wrap()
+        .items_start()
+        .children(users.iter().map(|u| {
+            let speaking = app.voice.is_speaking(*u);
+            div()
+                .h(z(32.))
+                .ml(z(8.))
+                .flex()
+                .items_center()
+                .child(crate::ui::voice_panel::speaking_ring(crate::ui::avatar(app.users.get(u), 24.), 24., speaking))
+        }))
+        .into_any_element()
 }
 
 pub fn record(user: Id, b: Bounds<Pixels>) {

@@ -89,7 +89,9 @@ pub fn build_rows(app: &mut PhoenixApp) {
                     .map(|u| (voice_user_name(app, *u).to_lowercase(), *u))
                     .collect();
                 vu.sort();
-                rows.extend(vu.into_iter().map(|(_, u)| SidebarRow::VoiceUser { user: u }));
+                // "Hide Names": one row holding the avatar strip (rendered by the first user).
+                let take = if crate::ui::voice_row::names_hidden(id) { 1 } else { usize::MAX };
+                rows.extend(vu.into_iter().take(take).map(|(_, u)| SidebarRow::VoiceUser { user: u }));
             }
             // Drop (expanded) categories left empty by hidden muted channels.
             if hide_muted {
@@ -463,6 +465,14 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         SidebarRow::VoiceUser { user } => {
             // `list_YUoOxm listDefault_YUoOxm` (live channel list): padding-bottom 10 after
             // a channel's last voice user.
+            let hidden = app.channels.values().find(|c| c.voice_users.contains(&user) && crate::ui::voice_row::names_hidden(c.id));
+            if let Some(ch) = hidden {
+                let mut vu: Vec<(String, Id)> =
+                    ch.voice_users.iter().map(|u| (voice_user_name(app, *u).to_lowercase(), *u)).collect();
+                vu.sort();
+                let users: Vec<Id> = vu.into_iter().map(|(_, u)| u).collect();
+                return crate::ui::voice_row::collapsed_list(app, &users);
+            }
             let last = !matches!(app.sidebar_rows.get(ix), Some(SidebarRow::VoiceUser { .. }));
             let row = crate::ui::voice_panel::voice_user_row(app, entity, user);
             // Stretch the row so its mute/deafen icons sit at the right edge (`icons_YUoOxm`).

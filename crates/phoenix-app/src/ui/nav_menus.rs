@@ -330,7 +330,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         let e2 = e.clone();
                         items.push(MenuItem::check(crate::t!("menu.hide_voice_names"), hidden, move |_, _, cx: &mut App| {
                             crate::ui::voice_row::set_names_hidden(id, !hidden);
-                            e2.update(cx, |_, cx| cx.notify());
+                            e2.update(cx, |a, cx| {
+                                a.rebuild_sidebar();
+                                cx.notify();
+                            });
                         }));
                     }
                 }
