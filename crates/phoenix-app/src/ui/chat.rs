@@ -2064,7 +2064,19 @@ fn flash_overlay(id: Id) -> AnyElement {
             gpui::Animation::new(std::time::Duration::from_millis(TOTAL as u64)),
             move |d, t| {
                 let ms = t * TOTAL;
-                let o = if ms < IN { ease(ms / IN) } else if ms < OUT_AT { 1. } else { 1. - ease((ms - OUT_AT) / (TOTAL - OUT_AT)) };
+                // flashPulse .6s ease-in-out overrides the fade-in (full motion):
+                // opacity 1 at 0/40/80/100 %, 0 at 20/60 %.
+                let o = if ms < IN {
+                    let p = ms / IN;
+                    let k = ((p % 0.4) / 0.2).min(2.);
+                    let x = if k <= 1. { 1. - k } else { k - 1. };
+                    let eio = crate::ui::states::cubic_bezier(0.42, 0., 0.58, 1.);
+                    if p >= 0.8 { 1. } else { eio(x) }
+                } else if ms < OUT_AT {
+                    1.
+                } else {
+                    1. - ease((ms - OUT_AT) / (TOTAL - OUT_AT))
+                };
                 d.opacity(o)
             },
         )
