@@ -223,13 +223,6 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
                 || app.users.get(&r.user).is_some_and(|u| u.display_name.to_lowercase().contains(&q) || u.name.to_lowercase().contains(&q))
         })
         .collect();
-    let label = match tab {
-        FriendsTab::Online => crate::t!("friends.h_online"),
-        FriendsTab::All => crate::t!("friends.h_all"),
-        // The live client titles the Pending list "All friends - N" too (dump friends-pending #41).
-        FriendsTab::Pending => crate::t!("friends.h_all"),
-        _ => crate::t!("friends.h_blocked"),
-    };
     let search = div()
         .flex_none()
         .mt(z(12.))
@@ -263,23 +256,43 @@ fn list(app: &PhoenixApp, tab: FriendsTab, cx: &mut Context<PhoenixApp>) -> impl
             div().flex_1().pt(z(160.)).flex().justify_center().text_size(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(msg),
         );
     } else {
-        col = col.child(
-            div()
-                .h(z(50.))
-                .flex_none()
-                .flex()
-                .items_center()
-                .ml(z(24.))
-                .mr(z(20.))
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(Palette::TEXT_NORMAL))
-                .child(crate::t!("friends.section", label = label, n = rows.len())),
-        );
-        for r in rows {
-            col = col.child(div().flex_none().h(z(1.)).ml(z(30.)).mr(z(20.)).bg(c(Palette::DIVIDER)));
-            col = col.child(friend_row(app, &r, cx));
+        // `sectionTitle_wVFOQW` per section; the client strings (fr bundle): "En ligne — N",
+        // "Tous les amis - N", "Reçue(s) — N" / "Envoyée(s) — N" (Pending splits incoming
+        // and outgoing, vanilla-friends-pending #1149), "Bloqués - N".
+        let mut sections: Vec<(SharedString, Vec<Relationship>)> = Vec::new();
+        match tab {
+            FriendsTab::Pending => {
+                let (inc, out): (Vec<_>, Vec<_>) = rows.into_iter().partition(|r| r.kind == RelationshipKind::Incoming);
+                if !inc.is_empty() {
+                    sections.push((crate::t!("friends.sec_received", n = inc.len()), inc));
+                }
+                if !out.is_empty() {
+                    sections.push((crate::t!("friends.sec_sent", n = out.len()), out));
+                }
+            }
+            FriendsTab::Online => sections.push((crate::t!("friends.sec_online", n = rows.len()), rows)),
+            FriendsTab::All => sections.push((crate::t!("friends.sec_all", n = rows.len()), rows)),
+            _ => sections.push((crate::t!("friends.sec_blocked", n = rows.len()), rows)),
+        }
+        for (title, rows) in sections {
+            col = col.child(
+                div()
+                    .h(z(50.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .ml(z(24.))
+                    .mr(z(20.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(Palette::TEXT_NORMAL))
+                    .child(title),
+            );
+            for r in rows {
+                col = col.child(div().flex_none().h(z(1.)).ml(z(30.)).mr(z(20.)).bg(c(Palette::DIVIDER)));
+                col = col.child(friend_row(app, &r, cx));
+            }
         }
     }
     div().size_full().flex().flex_col().child(search).child(col).into_any_element()
