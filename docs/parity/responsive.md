@@ -35,8 +35,8 @@ Offscreen check after the merge (7b62021, `theme_shots` demo data, 1280×800 at 
 the composer shows gift, emoji, apps; at 200 % (640 CSS px) the search is 64 px and the title is
 clipped by `children_` exactly like the client at that width.
 
-Not measured: a channel with a topic (the user's channel had none; Phoenix keeps the topic as
-the flexible, ellipsized part after the title), DM and forum headers, compact density.
+Headers with a topic, DM, group DM and forum headers are now covered in `chat.md` (section
+"DM, group DM and forum headers"); density and font size are below.
 
 ## Member list (read-only checks, 2026-11-24)
 
