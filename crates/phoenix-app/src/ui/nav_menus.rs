@@ -171,6 +171,76 @@ fn perms(app: &PhoenixApp, g: Id, bit: u64) -> bool {
     crate::ui::inbox::has_perm(app.backend.guild_permissions(g), bit)
 }
 
+/// Dropdown under the guild header (live `guild-header-popout`, 2026-11-24):
+/// Server Boost | Invite to Server, Server Settings, Server Analytics, Create
+/// Channel, Create Category, Create Event, Active Threads, App Directory | Show All
+/// Channels, Notification Settings, Privacy Settings | Edit Per-server Profile,
+/// Hide Muted Channels | Security Actions, Report Raid | Leave Server | Copy ID.
+pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> Vec<MenuItem> {
+    let e = cx.entity();
+    let mut items = Vec::new();
+    let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
+    let (manage_guild, manage_channels, events) = (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
+    items.push(stub(&e, "settings.page.server_boost"));
+    items.push(MenuItem::Separator);
+    items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)));
+    if manage_guild {
+        items.push(act(&e, crate::t!("menu.server_settings"), move |a, _, cx| a.open_server_settings(g, 0, cx)));
+        items.push(stub(&e, "menu.gs.analytics"));
+    }
+    if manage_channels {
+        items.push(act(&e, crate::t!("menu.create_channel"), move |a, _, cx| a.open_create_channel(g, None, crate::model::ChannelKind::Text, cx)));
+        items.push(act(&e, crate::t!("menu.create_category"), move |a, _, cx| a.open_create_channel(g, None, crate::model::ChannelKind::Category, cx)));
+    }
+    if events {
+        items.push(act(&e, crate::t!("menu.create_event"), move |a, _, cx| a.open_create_event(g, cx)));
+    }
+    items.push(stub(&e, "menu.active_threads"));
+    items.push(stub(&e, "menu.gs.app_directory"));
+    items.push(MenuItem::Separator);
+    items.extend(crate::actions::channel::show_all_item(app, &e, g));
+    items.push(notify_item(app, &e, Some(g), None));
+    items.push(act(&e, crate::t!("menu.privacy_settings"), move |a, _, cx| a.open_privacy_settings(g, cx)));
+    items.push(MenuItem::Separator);
+    items.push(act(&e, crate::t!("menu.edit_server_profile"), move |a, _, cx| a.open_server_profile(g, cx)));
+    items.push(MenuItem::check(crate::t!("menu.hide_muted"), app.nav.hide_muted.contains(&g), {
+        let e = e.clone();
+        move |_, _, cx: &mut App| {
+            e.update(cx, |a, cx| {
+                if !a.nav.hide_muted.remove(&g) {
+                    a.nav.hide_muted.insert(g);
+                }
+                a.rebuild_sidebar();
+                a.save_nav_prefs();
+                cx.notify();
+            })
+        }
+    }));
+    if manage_guild {
+        items.push(MenuItem::Separator);
+        items.push(MenuItem::danger(crate::t!("menu.security_actions"), None, {
+            let e = e.clone();
+            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
+        }));
+        items.push(MenuItem::danger(crate::t!("menu.report_raid"), None, {
+            let e = e.clone();
+            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!("menu.report_raid"), cx))
+        }));
+    }
+    if !owner {
+        items.push(MenuItem::Separator);
+        items.push(MenuItem::danger(crate::t!("menu.leave_server"), None, {
+            let e = e.clone();
+            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.show_overlay(Overlay::LeaveGuild(g), cx))
+        }));
+    }
+    if app.prefs.synced.developer_mode {
+        items.push(MenuItem::Separator);
+        items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
+    }
+    items
+}
+
 /// Stub row: the client action exists but Phoenix doesn't back it yet.
 fn stub(e: &Ent, key: &'static str) -> MenuItem {
     act(e, crate::t!(key), move |a, _, cx| a.stub(&crate::t!(key), cx))

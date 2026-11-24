@@ -195,7 +195,8 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
             out.move_to = Some(MenuItem::submenu(crate::t!("voice.move_to"), targets));
         }
         let e2 = e.clone();
-        out.mods.push(MenuItem::danger(crate::t!("voice.disconnect"), None, move |_, _, cx: &mut App| {
+        // Member menus say "Déconnecter" (the self action is "Se déconnecter").
+        out.mods.push(MenuItem::danger(crate::t!("menu.disconnect_member"), None, move |_, _, cx: &mut App| {
             e2.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Move(None), cx))
         }));
     }
