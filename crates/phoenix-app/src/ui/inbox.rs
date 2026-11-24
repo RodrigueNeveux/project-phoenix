@@ -526,6 +526,7 @@ fn tab_bar(sel: InboxTab, cx: &mut Context<PhoenixApp>) -> AnyElement {
         bar = bar.child(
             div()
                 .id(id)
+                .debug_selector(move || id.to_owned())
                 .flex_1()
                 .min_w_0()
                 .when(i > 0, |d| d.ml(z(space::xs())))
@@ -1534,11 +1535,19 @@ thread_local! {
     static INBOX_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Presses the click trap handled (tests).
+    pub(crate) static TRAP_PRESSES: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
 /// The client's `clickTrapContainer_ trapClicks_` under a header popout: a
 /// full-window layer that closes it on any press outside and swallows that
 /// press (the trigger button included, so a second click closes).
 fn click_trap(cx: &mut Context<PhoenixApp>) -> AnyElement {
     let close = |a: &mut PhoenixApp, _: &gpui::MouseDownEvent, _: &mut Window, cx: &mut Context<PhoenixApp>| {
+        #[cfg(test)]
+        TRAP_PRESSES.with(|n| n.set(n.get() + 1));
         a.close_header_popouts(cx);
     };
     div()

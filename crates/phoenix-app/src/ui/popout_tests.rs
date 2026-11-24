@@ -157,15 +157,17 @@ impl Harness {
         let vp = self.vcx.update(|w, _| w.viewport_size());
         self.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
         self.vcx.run_until_parked();
+        let traps = crate::ui::inbox::TRAP_PRESSES.with(|n| n.get());
         self.vcx.simulate_mouse_down(at, gpui::MouseButton::Left, Modifiers::none());
         self.vcx.run_until_parked();
         let after_down = self.read(is_open);
         self.vcx.simulate_mouse_up(at, gpui::MouseButton::Left, Modifiers::none());
         self.vcx.run_until_parked();
         let after_up = self.read(is_open);
+        let trapped = crate::ui::inbox::TRAP_PRESSES.with(|n| n.get()) - traps;
         assert!(
             after_down && after_up,
-            "press inside {selector} closed it: popout {pop:?}, press {at:?}, trap {trap:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}"
+            "press inside {selector} closed it: popout {pop:?}, press {at:?}, trap {trap:?}, viewport {vp:?}, open after down {after_down}, after up {after_up}, trap presses {trapped}"
         );
     }
 
@@ -197,6 +199,16 @@ fn inbox_closes_like_the_client(cx: &mut TestAppContext) {
 
     // A press inside keeps it, a press outside closes it.
     open(&mut h);
+    // An inner control still gets its press: the Saved tab switches the tab.
+    let saved = h.bounds("inbox-tab-saved");
+    h.click(saved.center());
+    let tab = h.read(|a| a.parity.inbox.tab);
+    let open_after_tab = h.read(|a| a.parity.inbox.open);
+    assert!(
+        open_after_tab && tab == crate::commands::state::InboxTab::Saved,
+        "the Saved tab did not get its press (open {open_after_tab}, tab {tab:?}, trap presses {})",
+        crate::ui::inbox::TRAP_PRESSES.with(|n| n.get())
+    );
     h.press_inside("inbox-popout", |a| a.parity.inbox.open);
     h.click_outside();
     assert!(!h.read(|a| a.parity.inbox.open), "press outside did not close the inbox");
