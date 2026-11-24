@@ -226,8 +226,9 @@ fn feed_cards(app: &PhoenixApp, g: Id) -> (Vec<crate::commands::InventoryEntry>,
     let mut out = Vec::new();
     let mut pending = 0;
     for e in entries {
-        // u_ content types; we render PLAYED_GAME cards (game name + art).
-        if e.content_type != 1 || e.game.is_none() {
+        // Rendered content types (client member list row switch): PLAYED_GAME (1)
+        // and LAUNCHED_ACTIVITY (8, `extra.activity_name`), both name + 48px art.
+        if !matches!(e.content_type, 1 | 8) || e.game.is_none() {
             continue;
         }
         if !is_member(e.author) {
@@ -457,7 +458,8 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 .overflow_hidden()
                                 // badgeContainer_: game-controller + "Il y a 2j" (entry id time), then
                                 // the traits: FIRST_TIME "New player", RESURRECTED, TRENDING, streak >= 3.
-                                .child(badge("game-controller", crate::ui::settings::profile_activity::ago(crate::presence::snowflake_time(e.id.0), now)))
+                                // Time badge icon (client): AppsIcon for a launched activity, else GameControllerIcon.
+                                .child(badge(if e.content_type == 8 { "apps" } else { "game-controller" }, crate::ui::settings::profile_activity::ago(crate::presence::snowflake_time(e.id.0), now)))
                                 .when(e.first_time, |d| d.child(badge("medal", crate::t!("members.new_player"))))
                                 .when(e.resurrected, |d| d.child(badge("refresh", crate::t!("members.resurrection"))))
                                 .when(e.trending, |d| d.child(badge("fire", crate::t!("members.trending"))))
