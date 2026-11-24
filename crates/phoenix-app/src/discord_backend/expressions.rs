@@ -77,7 +77,9 @@ pub(super) async fn sticker_packs(s: Arc<Session>) -> Result<Vec<StickerPackData
 }
 
 fn gif(g: &Gif) -> GifItem {
-    let preview = if g.src.is_empty() { g.gif_src.clone() } else { g.src.clone() };
+    // `src` can be an mp4 (trending): the UI only decodes images, so fall back to `gif_src`.
+    let video = g.src.is_empty() || g.src.split('?').next().is_some_and(|u| u.ends_with(".mp4") || u.ends_with(".webm"));
+    let preview = if video && !g.gif_src.is_empty() { g.gif_src.clone() } else { g.src.clone() };
     GifItem { url: g.url.clone().into(), preview: preview.into(), width: g.width, height: g.height }
 }
 
@@ -89,7 +91,7 @@ pub(super) async fn gif_trending(s: Arc<Session>) -> Result<GifHome, BackendErro
     let locale = s.rest.properties().system_locale.clone();
     let t = s.rest.gif_trending(&locale, PREVIEW).await.map_err(api_err)?;
     Ok(GifHome {
-        trending_preview: t.gifs.first().map(|g| g.src.clone().into()),
+        trending_preview: t.gifs.first().map(|g| gif(g).preview),
         categories: t
             .categories
             .iter()
