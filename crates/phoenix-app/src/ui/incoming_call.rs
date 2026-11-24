@@ -141,5 +141,5 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 ),
         );
     // wrapper_dcNks8: draggable popup; initial position centred near the top.
-    Some(div().absolute().top_0().left_0().size_full().flex().justify_center().pt(z(96.)).child(card).into_any_element())
+    Some(div().absolute().top_0().left_0().size_full().flex().items_start().justify_center().pt(z(96.)).child(card).into_any_element())
 }
