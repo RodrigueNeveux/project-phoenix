@@ -16,7 +16,7 @@ use crate::{
     model::{ChannelKind, Id},
     theme::{c, generated::idx, tok, z},
     ui::{
-        avatar, icon,
+        icon,
         pickers::{
             Pickers,
             emoji::{self, name_score},
@@ -283,7 +283,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Item::User(id) => {
                 let u = app.users.get(id);
                 (
-                    avatar(u, 24.), // not in the CSS (avatar component size): 24px, unverified
+                    // Autocomplete.User (JS): Avatar size SIZE_24, getAvatarURL(guild, 24), with the
+                    // member's status. The cut is painted with the row's background (selected = hover).
+                    crate::ui::avatar_with_status_overlay(u, 24., app.presence_of(*id), tk(idx::BACKGROUND_SURFACE_HIGH), move |d| {
+                        d.when(selected, |d| d.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+                    })
+                    .into_any_element(),
                     u.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("common.unknown")),
                     u.map(|u| u.name.clone()),
                 )
@@ -354,12 +359,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .occlude()
                     .overflow_hidden()
                     .child(
-                        // contentTitle_: 14px medium --interactive-text-default, padding 4px 0
-                        // (inside a row: 0 8 + base_ 8).
+                        // Autocomplete.Title (JS): div.base_ (padding 8, not wrapped in an
+                        // autocompleteRow_) > contentTitle_ (14px medium, padding 4px 0).
                         div()
-                            .px(z(16.))
-                            .pt(z(12.))
-                            .pb(z(4.))
+                            .px(z(8.))
+                            .py(z(12.))
                             .text_size(z(14.))
                             .font_weight(FontWeight::MEDIUM)
                             .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))

@@ -19,8 +19,8 @@ Renders: `cargo run -p phoenix-app --example shortcuts_shot -- out.png <mention|
 | row selected / hover | 790340 `[aria-selected=true]>.base_`, `:hover` | bg | --interactive-background-hover | autocomplete.rs | ✅ CSS only |
 | row icon | 790340 `autocompleteRowIcon_`, `icon_` | size / gap | 16px icon (channels), margin-inline-end 8; emoji 20px (`emojiImage_`) | autocomplete.rs | ✅ CSS only |
 | row secondary text | 790340 `autocompleteRowContentSecondary_` | layout | flex-grow 1, margin-inline-start 16, text-align end, ellipsis | autocomplete.rs | ✅ CSS only |
-| section title | 790340 `contentTitle_` | text | 14px medium --interactive-text-default, padding 4px 0, no uppercase | autocomplete.rs | ✅ CSS only (was 12px uppercase). Its offset inside the popup isn't in the CSS (12px top padding assumed) ❌ |
-| user row avatar | (avatar component, not in CSS) | size | unknown: 24px kept | autocomplete.rs | ❌ unverified |
+| section title | 790340 `contentTitle_` | text | 14px medium --interactive-text-default, padding 4px 0, no uppercase | autocomplete.rs | ✅ (was 12px uppercase). JS Autocomplete.Title = div.base_ (padding 8, no row wrapper) > contentTitle_: 8px inline, 12px above and below |
+| user row avatar | JS Autocomplete.User: Avatar `SIZE_24`, `getAvatarURL(guild,24)`, `status` | size | 24px with status | autocomplete.rs | ✅ 24px + status cut-out |
 | / slash commands popup | 116815/790340 container + rows; 358931 `optionPill_`, `optionPillKey_`, `optionPillValue_` | look | shared autocomplete container and rows; option pills: radius 4, 1px --background-base-lowest, --background-mod-normal, key padding 1 8 on --background-surface-high | ui/chat/slash.rs | ✅ CSS only. The app-icon rail (`rail_3dKq9h`, `categorySection_`) is ❌ missing |
 | sticker suggestions | 116815 `stickerAutoComplete_` | grid | 116px cells, gap 8, padding 8 16 | — | ❌ missing |
 | upload tray | 331249 `channelAttachmentArea_iH8bsl` | layout | flex, gap 24, padding 20 10 10, overflow-x auto | ui/chat/composer.rs upload_tray | ✅ (was padding 16, divider) |
