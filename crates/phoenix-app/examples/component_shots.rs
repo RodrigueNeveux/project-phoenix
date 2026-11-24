@@ -40,6 +40,10 @@ fn main() -> anyhow::Result<()> {
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
     })?;
+    // PHX_SCALE: device scale (default: the platform's). 1.25 matches the user's client.
+    if let Some(scale) = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|s| *s > 0.) {
+        cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
+    }
     let pump = |cx: &mut HeadlessAppContext, n: usize| {
         for _ in 0..n {
             std::thread::sleep(Duration::from_millis(50));
@@ -75,11 +79,18 @@ fn main() -> anyhow::Result<()> {
         entry(3, 17, "Roblox", false, true),
         entry(4, 19, "Minecraft", false, false),
     ]);
+    // Mock nameplate art generated here (a diagonal gradient), never a Discord asset.
+    let plate = format!("{}/phoenix-mock-nameplate.png", std::env::temp_dir().display());
+    image::RgbaImage::from_fn(426, 80, |x, y| {
+        let t = (x as f32 / 426. + y as f32 / 160.).min(1.);
+        image::Rgba([(40. + 160. * t) as u8, (60. + 40. * t) as u8, (180. - 80. * t) as u8, 255])
+    })
+    .save(&plate)?;
     cx.update_window(win.into(), |_, _, cx| {
         v.update(cx, |app, _| {
             // A nameplate (palette only: no network in offscreen renders) and a long name.
             if let Some(u) = app.users.get_mut(&Id(5)) {
-                u.nameplate = Some(("".into(), Some(0x5865f2)));
+                u.nameplate = Some((plate.clone().into(), Some(0x5865f2)));
             }
             if let Some(u) = app.users.get_mut(&Id(13)) {
                 u.display_name = "Quartz (a very long display name)".into();
@@ -97,11 +108,12 @@ fn main() -> anyhow::Result<()> {
         cx.capture_screenshot(win.into())
     };
     let img = shot(&mut cx)?;
-    let s = img.width() as f32 / 1280.;
+    // At PHX_SCALE the content fills only the top-left 1280*scale px of the capture.
+    let s = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(img.width() as f32 / 1280.);
     let crop = |img: &image::RgbaImage, x: f32, y: f32, w: f32, h: f32| {
         image::imageops::crop_imm(img, (x * s) as u32, (y * s) as u32, (w * s) as u32, (h * s) as u32).to_image()
     };
-    crop(&img, 1280. - 268., 40., 268., 420.).save(format!("{out}/members.png"))?;
+    crop(&img, 1280. - 268., 40., 268., 760.).save(format!("{out}/members.png"))?;
     crop(&img, 0., 40., 72., 500.).save(format!("{out}/rail.png"))?;
     crop(&img, 72., 40., 280., 700.).save(format!("{out}/channels.png"))?;
     // Profile popout from the voice row of Aiko (mock user 7, in "Lounge").

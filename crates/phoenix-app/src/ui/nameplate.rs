@@ -77,7 +77,8 @@ pub fn layer(user: &User, h: f32, place: Place, hovered: bool, selected: bool) -
     }
     Some(
         d.child(
-            img(url)
+            // Absolute paths load from disk (offscreen mock renders); URLs as usual.
+            img(if url.starts_with('/') { gpui::ImageSource::from(std::path::PathBuf::from(url.as_ref())) } else { gpui::ImageSource::from(url) })
                 .absolute()
                 .top_0()
                 .right_0()

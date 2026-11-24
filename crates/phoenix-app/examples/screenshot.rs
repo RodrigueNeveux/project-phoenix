@@ -39,6 +39,10 @@ fn main() -> anyhow::Result<()> {
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
     })?;
+    // PHX_SCALE: device scale (default: the platform's). 1.25 matches the user's client.
+    if let Some(scale) = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|s| *s > 0.) {
+        cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
+    }
     let pump = |cx: &mut HeadlessAppContext, n: usize| {
         for _ in 0..n {
             std::thread::sleep(Duration::from_millis(50));
