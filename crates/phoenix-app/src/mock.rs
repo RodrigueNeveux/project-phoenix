@@ -413,6 +413,17 @@ impl MockBackend {
 }
 
 impl Backend for MockBackend {
+    /// Mock Board: a favourite game and a played-games grid (no covers).
+    fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
+        use crate::ui::profile_games::{Game, GameWidget, Kind};
+        let g = |id: u64, n: &str| Game { id, name: n.to_owned().into(), cover: None };
+        Box::pin(async move {
+            Ok(vec![
+                GameWidget { kind: Kind::Favorite, games: vec![g(1, "Ferris Quest")] },
+                GameWidget { kind: Kind::Played, games: vec![g(2, "Crab Kart"), g(3, "Borrow Checker"), g(4, "Rustlings")] },
+            ])
+        })
+    }
     /// `PHX_NO_PREMIUM=1` previews the non-Nitro UI (locks) in examples.
     fn has_premium(&self) -> bool {
         std::env::var_os("PHX_NO_PREMIUM").is_none()

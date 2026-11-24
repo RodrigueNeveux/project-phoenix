@@ -143,6 +143,16 @@ impl Backend for ReadOnly {
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
+    /// Profile Board: widgets, games and recent activity (read-only GETs).
+    fn profile_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_widgets::AppWidget>> {
+        self.0.profile_widgets(u)
+    }
+    fn game_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::profile_games::GameWidget>> {
+        self.0.game_widgets(u)
+    }
+    fn recent_activity(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_activity::RecentGame>> {
+        self.0.recent_activity(u)
+    }
     fn subscribe_member_ranges(&self, g: Id, c: Id, r: Vec<[u32; 2]>) -> BoxFuture<()> {
         self.0.subscribe_member_ranges(g, c, r)
     }

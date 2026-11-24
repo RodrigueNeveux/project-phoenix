@@ -14,6 +14,7 @@ mod nav;
 mod people;
 mod profile_edit;
 mod profile_widgets;
+mod profile_games;
 mod collectibles_shop;
 mod thread_members;
 #[cfg(test)]
@@ -783,6 +784,9 @@ impl Backend for DiscordBackend {
     }
     fn set_note(&self, user: Id, note: String) -> BoxFuture<()> {
         self.people_note(user, note)
+    }
+    fn game_widgets(&self, user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
+        self.game_widgets_impl(user)
     }
     fn recent_activity(&self, user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_activity::RecentGame>> {
         self.recent_activity_impl(user)

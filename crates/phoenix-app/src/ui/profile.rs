@@ -72,7 +72,7 @@ impl PhoenixApp {
     /// Popout -> full profile modal.
     pub fn open_profile_modal(&mut self, user: Id, cx: &mut Context<Self>) {
         self.people.popout = None;
-        set_modal_tab(0);
+        set_modal_tab(TAB_BOARD); // falls back to Activity when the Board is empty
         self.people.modal = Some(user);
         cx.notify();
     }
@@ -870,8 +870,12 @@ fn popout_card_inner(
     }
 }
 
+/// Full-profile tabs (live order: Board, Activity, Wishlist, mutual friends, mutual servers).
+pub const TAB_BOARD: u8 = 3;
+pub const TAB_WISHLIST: u8 = 4;
+
 thread_local! {
-    /// Selected full-profile tab: 0 Activity, 1 Mutual Friends, 2 Mutual Servers.
+    /// Selected full-profile tab: 0 Activity, 1 Mutual Friends, 2 Mutual Servers, 3 Board, 4 Wishlist.
     static MODAL_TAB: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
 
@@ -1063,13 +1067,17 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
     // --text-strong with a 2px underline.
     let mutual_f = i.prof.map(|p| p.mutual_friends_count).unwrap_or(0);
     let mutual_s = i.prof.map(|p| p.mutual_guilds).unwrap_or(0);
+    let board = crate::ui::profile_board::get(app, uid, cx);
+    let has_board = !board.is_empty();
     let sel = MODAL_TAB.with(|c| c.get());
+    let sel = if sel == TAB_BOARD && !has_board { 0 } else { sel };
+    let first = if has_board { TAB_BOARD } else { 0 };
     let tab = |n: u8, t: SharedString| {
         let on = sel == n;
         div()
             .id(("profile-modal-tab", n as u64))
             .relative()
-            .when(n > 0, |d| d.ml(z(16.)))
+            .when(n != first, |d| d.ml(z(16.)))
             .pb(z(16.))
             .mb(z(-1.))
             .cursor_pointer()
@@ -1091,6 +1099,27 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
     let mut panel = div().flex().flex_col().pt(z(20.)).pr(z(8.)).pb(z(16.));
     let empty = |t: SharedString| div().ml(z(12.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(t);
     match sel {
+        TAB_BOARD => {
+            // tabPanel: cards gap 12 (container_FNEkcu margin)
+            panel = panel.gap(z(12.));
+            let wcol = crate::ui::settings::profile_widgets::WidgetColors {
+                strong: c(tok(idx::TEXT_STRONG)),
+                muted: c(tok(idx::TEXT_MUTED)),
+                card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
+                fade: c(tok(idx::BACKGROUND_BASE_LOWER)),
+            };
+            let gcol = crate::ui::profile_board::Colors {
+                strong: c(tok(idx::TEXT_STRONG)),
+                card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
+                cover: c(tok(idx::BACKGROUND_MOD_SUBTLE)),
+            };
+            panel = panel
+                .children(board.widgets.iter().map(|w| crate::ui::settings::profile_widgets::render(w, &wcol)))
+                .children(board.games.iter().filter_map(|w| crate::ui::profile_board::card(w, &gcol)));
+        }
+        TAB_WISHLIST => {
+            panel = panel.child(empty(crate::t!("profile.empty_wishlist")));
+        }
         1 => {
             panel = panel.gap(z(12.));
             let friends = i.prof.map(|p| p.mutual_friends.as_slice()).unwrap_or_default();
@@ -1157,7 +1186,9 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vw: Pixels, cx
                 .mt(z(4.))
                 .border_b_1()
                 .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .children(has_board.then(|| tab(TAB_BOARD, crate::t!("pe.tab.board"))))
                 .child(tab(0, crate::t!("profile.activity")))
+                .child(tab(TAB_WISHLIST, crate::t!("pe.tab.wishlist")))
                 .child(tab(1, crate::t!("profile.mutual_friends", n = mutual_f)))
                 .child(tab(2, crate::t!("profile.mutual_servers", n = mutual_s))),
         )
