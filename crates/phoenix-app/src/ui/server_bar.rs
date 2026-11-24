@@ -469,7 +469,7 @@ fn favorites(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Option<AnyElement
     let e = entity.clone();
     Some(
         row("favorites", FAVORITES_KEY, entity)
-            .on_click(move |_, _, cx| e.update(cx, |a, cx| crate::ui::favorites::open(a, cx)))
+            .on_click(move |_, _, cx| e.update(cx, crate::ui::favorites::open))
             .child(pill(FAVORITES_KEY, selected, hover, unread))
             .child(
                 div()

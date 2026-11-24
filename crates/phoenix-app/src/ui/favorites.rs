@@ -28,10 +28,7 @@ pub fn nickname(app: &PhoenixApp, channel: Id) -> Option<SharedString> {
     if !app.favorites_view {
         return None;
     }
-    let ch = app.channels.get(&channel)?;
-    if ch.guild.is_none() {
-        return None;
-    }
+    app.channels.get(&channel)?.guild?;
     data(app).nickname(channel.0).map(|n| SharedString::from(n.to_owned()))
 }
 
