@@ -291,21 +291,40 @@ fn hdr(id: &'static str, path: SharedString, color: gpui::Hsla) -> gpui::Statefu
     crate::ui::states::header_button(id, path, selected, label)
 }
 
-/// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
-/// section title_ padding 8px 8px 8px 20px, height 49px, border-bottom --border-subtle;
 thread_local! {
-    /// Last painted width of the channel header (`container_ybUK7Z`, the
+    /// Last painted border-box width of the channel header (`container_ybUK7Z`, the
     /// `container-type: inline-size` box the search width is resolved against).
     static HEADER_W: std::cell::Cell<f32> = const { std::cell::Cell::new(0.) };
 }
 
-/// `search_bWCaDq` width: `clamp(var(--space-64), 100cqi - 320px, 244px)` with
-/// `flex: 0 1 244px` (so it also yields to the toolbar when even 64px don't fit).
-fn header_search_w() -> f32 {
-    let w = HEADER_W.with(std::cell::Cell::get);
-    if w <= 0. { 244. } else { (w - 320.).clamp(64., 244.) }
+/// An invisible full-size child that records its parent's painted width (CSS px, page
+/// zoom already divided out) into `cell`, and repaints once when it changed: the
+/// client's container queries, resolved one frame late.
+pub(crate) fn width_probe(cell: &'static std::thread::LocalKey<std::cell::Cell<f32>>) -> impl IntoElement {
+    gpui::canvas(
+        move |b, w, _| {
+            let nw = f32::from(b.size.width);
+            if (cell.with(|c| c.replace(nw)) - nw).abs() > 0.5 {
+                w.on_next_frame(|w, _| w.refresh());
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
 }
 
+/// `search_bWCaDq` width: `clamp(64px, 100cqi - 320px, 244px)`, where 100cqi is the
+/// header's content box (border box minus the 20px + 8px inline padding). Measured on the
+/// live client (zoom 125 %, CDP viewport emulation): header 583 → 235, 543 → 195,
+/// 483 → 135, 433 → 85, 383 → 64; see docs/parity/responsive.md.
+fn header_search_w() -> f32 {
+    let w = HEADER_W.with(std::cell::Cell::get);
+    if w <= 0. { 244. } else { (w - 28. - 320.).clamp(64., 244.) }
+}
+
+/// Channel / DM header. Dump -channels-N-N+ #1040 (guild) and -channels-me-N+ #1088 (DM):
+/// section title_ padding 8px 8px 8px 20px, height 49px, border-bottom --border-subtle;
 /// upperContainer_ → children_ (icon/avatar, title, dot, topic) + toolbar_ (gap 10px, padding-left 10px).
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
@@ -337,19 +356,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let search_ph = SharedString::from(format!("{} {}", crate::t!("search.placeholder"), scope));
     div()
         .relative()
-        .child(
-            gpui::canvas(
-                |b, w, _| {
-                    let nw = f32::from(b.size.width);
-                    if (HEADER_W.with(|c| c.replace(nw)) - nw).abs() > 0.5 {
-                        w.on_next_frame(|w, _| w.refresh());
-                    }
-                },
-                |_, _, _, _| {},
-            )
-            .absolute()
-            .inset_0(),
-        )
+        .child(width_probe(&HEADER_W))
         .h(z(m::HEADER_H + 1.))
         .flex_none()
         .pl(z(20.))
@@ -428,7 +435,10 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                         peer.filter(|_| is_dm),
                         false,
                     )
-                        .flex_shrink(1.)
+                        // Channel/DM titleWrapper_ is flex-shrink 0 (live, every width down to a
+                        // 9px children_): it is clipped by children_, never ellipsized. Only a
+                        // thread title shrinks.
+                        .flex_shrink(if thread_parent.is_some() { 1. } else { 0. })
                         .min_w_0()
                         .overflow_hidden()
                         .whitespace_nowrap()
@@ -547,8 +557,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                     // editor_ padding 0 6px, 14px/22px medium; icon_ 24px box, padding 4px, 16px glyph.
                     div()
                         .ml(z(4.))
-                        .flex_shrink()
-                        .min_w_0()
+                        .flex_none()
                         .w(z(header_search_w()))
                         .h(z(32.))
                         .rounded(z(8.))

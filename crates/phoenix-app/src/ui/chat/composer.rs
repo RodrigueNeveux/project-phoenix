@@ -362,6 +362,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                     .border_color(super::tk(idx::BORDER_MUTED))
                     .bg(super::tk(idx::CHAT_BACKGROUND_DEFAULT))
                     .relative() // autocompleteAttached_ is positioned against channelTextArea_
+                    .child(super::width_probe(&TEXT_AREA_W))
                     .children(crate::ui::autocomplete::render(app, cx))
                     .children(reply)
                     .children(tray)
@@ -468,8 +469,12 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     .gap(z(8.))
                                     .items_center()
                                     .child(crate::ui::states::composer_button_ext("gift", Icon::Gift, 20., false))
-                                    .child(crate::ui::states::composer_button("gif", Icon::Gif).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
-                                    .child(crate::ui::states::composer_button("sticker", Icon::Sticker).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    // GIF and sticker buttons only while channelTextArea_ is at least
+                                    // 450px wide (live: 449.8 → gift/emoji/apps, 450.6 → all five).
+                                    .when(full_buttons(), |d| {
+                                        d.child(crate::ui::states::composer_button("gif", Icon::Gif).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Gif, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                            .child(crate::ui::states::composer_button("sticker", Icon::Sticker).on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Sticker, crate::ui::pickers::EmojiTarget::Composer, w, cx))))
+                                    })
                                     .child(crate::ui::states::composer_button_ext("emoji", Icon::Emoji, 18., true).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
                                     )))
@@ -562,6 +567,18 @@ pub fn char_count(premium: bool, len: i64) -> (i64, bool) {
 
 fn should_show_send_button(enabled: bool, draft_empty: bool, blocked: bool) -> bool {
     enabled && !draft_empty && !blocked
+}
+
+thread_local! {
+    /// Last painted width of the composer box (`channelTextArea_`).
+    static TEXT_AREA_W: std::cell::Cell<f32> = const { std::cell::Cell::new(0.) };
+}
+
+/// Narrow composers drop the GIF and sticker buttons: the live client shows them only
+/// while `channelTextArea_` is at least 450 CSS px wide (docs/parity/responsive.md).
+fn full_buttons() -> bool {
+    let w = TEXT_AREA_W.with(std::cell::Cell::get);
+    w <= 0. || w >= 450.
 }
 
 thread_local! {
