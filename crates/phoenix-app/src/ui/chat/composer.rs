@@ -312,7 +312,7 @@ fn blocked_dm_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<g
     )
 }
 
-fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let placeholder: SharedString = match ch {
         // Group DMs read "Message <name>" (no @), like threads.
@@ -351,7 +351,7 @@ fn render_text_area(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Pho
             // #1432 form padding-inline --space-xs; #1435 margin-bottom --custom-chat-input-margin-bottom (= --space-xs).
             // The typing row (inTextChannel_U9Tvvz) hangs above the form: top -24px, over the message list.
             div().relative().px(z(crate::theme::space::xs())).mb(z(crate::theme::space::xs()))
-            .child(div().absolute().top(z(-24.)).left_0().right_0().child(typing(app)))
+            .child(div().absolute().top(z(-24.)).left_0().right_0().child(typing(app, window)))
             .child(
                 div()
                     .flex()
@@ -643,7 +643,19 @@ pub(crate) fn dot_frame(i: usize, t: f32) -> (f32, f32) {
 /// TypingUsers (inTextChannel): dots, then "**Name** est en train d'écrire..." with the
 /// name from `getName(guild, channel, user)` (nick → global name → username); 4+ typers
 /// give "**Plusieurs personnes** sont en train d'écrire...". Slowmode countdown on the right.
-fn typing(app: &PhoenixApp) -> impl IntoElement {
+thread_local! {
+    /// Last laid-out width of the typingDots_ box (the client's `getBoundingClientRect`).
+    static DOTS_BOX_W: std::cell::Cell<f32> = const { std::cell::Cell::new(f32::MAX) };
+}
+
+fn text_w(window: &Window, text: &str, weight: FontWeight) -> f32 {
+    let mut font = gpui::font(crate::theme::FONT_UI());
+    font.weight = weight;
+    let run = gpui::TextRun { len: text.len(), font, color: gpui::black(), background_color: None, underline: None, strikethrough: None };
+    f32::from(window.text_system().layout_line(text, z(12.), &[run], None).width)
+}
+
+fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement {
     let names: Vec<SharedString> = app
         .selected_channel
         .and_then(|c| app.typing.get(&c).map(|v| (c, v)))
@@ -653,8 +665,21 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
     let bold = |s: SharedString| div().flex_none().font_weight(FontWeight::SEMIBOLD).text_color(super::tk(idx::TEXT_DEFAULT)).child(s);
     // text_: margin-inline-start calc(--space-md + --space-8), nowrap, ellipsis.
     let mut line = div().flex().items_center().min_w_0().overflow_hidden().whitespace_nowrap().ml(z(crate::theme::space::md() + 8.));
+    // Client: 1–3 typers whose sentence (scrollWidth) + 56px overflows the typingDots_ box
+    // switch to qD/0qZ "**Plusieurs personnes** sont en train d'écrire…".
+    let full_w = || -> f32 {
+        let (strong, rest): (Vec<&str>, String) = match names.as_slice() {
+            [a] => (vec![&a[..]], crate::t!("chat.typing_suffix_one").to_string()),
+            [a, b] => (vec![&a[..], &b[..]], format!("{}{}", crate::t!("chat.typing_and"), crate::t!("chat.typing_suffix_many"))),
+            [a, b, c3] => (vec![&a[..], &b[..], &c3[..]], format!(", {}{}", crate::t!("chat.typing_comma_and"), crate::t!("chat.typing_suffix_many"))),
+            _ => (vec![], String::new()),
+        };
+        strong.iter().map(|t| text_w(window, t, FontWeight::SEMIBOLD)).sum::<f32>() + text_w(window, &rest, FontWeight::MEDIUM)
+    };
+    let overflow = (1..=3).contains(&names.len()) && full_w() + f32::from(z(56.)) > DOTS_BOX_W.with(|w| w.get());
     match names.as_slice() {
         [] => {}
+        _ if overflow => line = line.child(bold(crate::t!("chat.typing_multiple"))).child(crate::t!("chat.typing_suffix_multiple")),
         [a] => line = line.child(bold(a.clone())).child(crate::t!("chat.typing_suffix_one")),
         [a, b] => line = line.child(bold(a.clone())).child(crate::t!("chat.typing_and")).child(bold(b.clone())).child(crate::t!("chat.typing_suffix_many")),
         [a, b, c3] => {
@@ -695,7 +720,9 @@ fn typing(app: &PhoenixApp) -> impl IntoElement {
         .font_weight(FontWeight::MEDIUM)
         .text_color(super::tk(idx::TEXT_SUBTLE))
         .child(
-            div().flex_1().min_w_0().overflow_hidden().flex().items_center().pl(z(8.)).when(active, |d| {
+            div().relative().flex_1().min_w_0().overflow_hidden().flex().items_center().pl(z(8.))
+            .child(gpui::canvas(|b, _, _| DOTS_BOX_W.with(|w| w.set(f32::from(b.size.width))), |_, _, _, _| {}).absolute().size_full())
+            .when(active, |d| {
                 d.child(div().flex_none().flex().items_center().gap(z(2.)).child(dot(0)).child(dot(1)).child(dot(2))).child(line)
             }),
         )

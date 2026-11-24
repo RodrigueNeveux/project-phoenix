@@ -14,5 +14,5 @@ Source: current-client/css (`base_U9Tvvz`, `inTextChannel_U9Tvvz`, `dot_U9Tvvz`,
 | names | .text_ > strong | color / weight | --text-default / semibold | composer.rs `bold` | ✅ |
 | name choice | JS getName(guild, channel, user) | nick → global name → username | app.rs `typing_name` | ✅ |
 | strings | lJ9sZX/rB0CUa/StKThj/Q8lUnE | "… est en train d'écrire...", "A et B sont…", "A, B, et C sont…", "**Plusieurs personnes** sont…" | locales/*.yml chat.typing_* | ✅ |
-| overflow fallback | JS qD/0qZ | "Multiple people" when text+56px overflows | — | ❌ not done |
+| overflow fallback | JS qD/0qZ | 1–3 typers, text width + 56px > typingDots_ box → "**Plusieurs personnes** sont en train d'écrire…" | composer.rs `overflow` | ✅ |
 | slowmode | cooldownWrapper_ | right of the same row, padding 3 8, pe 16 | composer.rs `cooldown` | ✅ |
