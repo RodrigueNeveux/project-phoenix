@@ -10,7 +10,60 @@ Regenerated 2026-11-24: the base tables match the CSS exactly (no diff).
 | high contrast toggle | Accessibility "Enable High Contrast mode" | persisted | off | LocalPrefs ui "contrast" → theme::sync | ✅ |
 | page border | `.theme-midnight .page_pog62O`, `.high-contrast-mode .page_pog62O` | border-inline-start | 1px `--border-subtle` | ui/home/mod.rs main_pane | ✅ |
 | channel header | `.theme-midnight .container_ybUK7Z` | border-bottom | 1px `--border-subtle` (same as base) | chat header | ✅ |
-| call container | `.theme-midnight .callContainer_hbKzX7` | border-top | 1px `--app-frame-border` | — | ❌ |
+| call container | `.theme-midnight:not(.in-popout) .callContainer_hbKzX7`, same for `.high-contrast-mode`; `.sidebarOpen_` adds border-inline-end; `.verticalSplit_` border-bottom | border-top | 1px `--app-frame-border`, none in Dark / Light / Ash | call_view.rs, dm_call.rs (`theme::frame_borders`) | ✅ CDP computed; was drawn in every theme because the only dump was Onyx. verticalSplit not drawn (no split view) |
 | HC reaction borders | `.high-contrast-mode .reaction_MmKct8`, `.reactionBtn_` | border | `--border-subtle`, hover `--border-strong` | ui/chat/message_ext.rs | ✅ |
-| HC other component borders | ~34 `.high-contrast-mode .x` rules (nav buttons, radio items, slider…) | border | `--border-*` | — | ❌ |
-| light component rules | 369 `.theme-light .x` rules (mostly niche, hard-coded colours) | various | — | not audited | ❌ |
+| HC component borders | 38 `.high-contrast-mode .x` border rules | border | measured per theme (table below) | see below | ✅ for every component we draw; rest listed |
+| light component rules | 381 `.theme-light .x` rules; 56 touch modules we implement | various | measured (table below) | see below | ✅ audited |
+
+## Theme classes (CDP, 2026-11-24)
+
+The client's **Dark** is `theme-dark theme-darker`, **Ash** is a bare `theme-dark`, **Onyx** is
+`theme-dark theme-midnight`. The classes sit on `<html>` and on ~6 inner layers (bg_Fd0FEH,
+bar_3zSH5d, sidebar_pog62O, guilds_pog62O, title_z_gUBg...). real_shots read Dark and Ash the
+wrong way round before the theme-class fix (Nov 24).
+
+How these were measured, without touching the account settings:
+- rules: a hidden off-screen `<iframe>` gets a copy of every stylesheet, its `<html>` gets the
+  theme classes, test elements with the client's class names are built inside and
+  `getComputedStyle` is read; the iframe is removed afterwards;
+- screenshots: the theme classes of every themed element are swapped, the capture waits 700 ms
+  for the repaint (an immediate capture keeps stale title bar / rail pixels), then the original
+  classes are put back in a `finally`.
+
+## High contrast borders (computed, all themes)
+
+| rule | token | ours |
+|---|---|---|
+| `.navButton_58b0l2` / `.navButtonActive_58b0l2` (picker tabs) | 1px --border-subtle / --border-normal | ✅ pickers/mod.rs |
+| `.wrapper_-sZhZn:not(.emojiPickerHasTabWrapper_)` (reaction picker) | 1px --border-normal | ✅ pickers/mod.rs |
+| `.result_H8nOze` (GIF tiles and results) | 1px --border-strong | ✅ gif.rs |
+| `.wrapper_6AvvhR` (emoji / sticker rail) | border-inline-end 1px --border-subtle | ✅ grid.rs |
+| `.page_pog62O`, `.container_ybUK7Z` | --border-subtle | ✅ (earlier) |
+| `.callContainer_hbKzX7` (+ sidebarOpen) | --app-frame-border | ✅ call_view.rs / dm_call.rs |
+| `.reaction_MmKct8`, `.reactionBtn_` | --border-subtle, hover --border-strong | ✅ (earlier) |
+| `.slider_p3RiOL .grabber_`, `.slider_OnqacX .grabber_` | --border-strong (base --border-normal) | ✅ controls.rs, voice_panel.rs |
+| `button.button_Y-8oZW` (user panel buttons) | 1px transparent; redGlow --opacity-red-52 | ✅ voice_panel.rs |
+| `.button_9U6LUN.buttonActive_` (voice panel camera/share) | --text-feedback-positive on --background-feedback-mod-positive | — never active (we never stream) |
+| `.soundButton_N99eHz` | --border-muted | — no soundboard |
+| `.card_Bu4Al8` (activity card), `.heroAssetWrapper_ZzrVHV` | --border-strong / --border-subtle | — not drawn |
+| `.container_jqZBm0` / `.item_jqZBm0` (bar radio group) | --border-normal, items --border-subtle, radius 0 | — not used (settings use group_oJuRbG) |
+
+## Light rules (computed, Dark vs Light)
+
+| rule | Light value | ours |
+|---|---|---|
+| `.reaction_.reactionMe_` | --brand-160 on --brand-500, count --brand-560 | ✅ message_ext.rs |
+| `.pill_snX-u4.selected_` | Dark --brand-15a, Light --brand-160, border --brand-500, text --reaction-text-reacted-default | ✅ forum.rs (was solid blurple + white) |
+| `.emojiItemSelected_6OcK5D` | --background-base-low + inset 1px --border-subtle | ✅ grid.rs |
+| `.stickerLocked_5z8c5P` | opacity .4 (Dark brightness .4) | ✅ sticker.rs |
+| `.markup_ku1OHH`, `.textArea_2x8-Qn`, `.content_bLMKT5`, `.timestamp_*`, `.filename_-9z-XO` font-weight | computed 400 / 500 in both themes: the light weight rules do not apply under visual-refresh | ✅ nothing to do |
+| `custom-user-profile-theme.theme-light`, `*Mobile*`, `custom-theme-background` rules | profile themes / mobile / Nitro app themes | — out of scope |
+
+## Screenshot comparison (real_shots at the client's 1536x788 @1.25, same channel)
+
+| theme | overall mismatch | title bar | guild rail | notes |
+|---|---|---|---|---|
+| Onyx | 12.5% | 1.5% | 2.2% | |
+| Ash | 11.4% | 1.5% | 2.0% | |
+| Light | 21.5% | 4.0% | 2.7% | older capture, content drifted between the two shots |
+| Dark | — | | | int-bin f66d7f3 renders the account theme (Onyx) instead: `settings::on_ready` lands after real_shots sets the theme; fixed in real_shots (theme re-applied before capture), rerun once merged |
