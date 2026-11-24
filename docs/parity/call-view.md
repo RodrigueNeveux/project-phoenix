@@ -82,10 +82,50 @@ Live reference: official client joined to the test voice channel `〢🔊・phoe
 | own preview mirrored | `media-engine-video video_rfWwnu videoContain_rfWwnu mirror_rfWwnu`: `transform: matrix(-1,0,0,1,0,0)`, `object-fit: contain` (cam2 #1403) | `camera_image` flips X, `ObjectFit::Contain` | ✅ |
 | panel title | "Vidéo connectée" (`HtVOdd`) instead of "Voix connectée" while the camera is on (cam2) | `voice_panel` | ✅ |
 
-## Screen share (Go Live) and Activities: status and limits
+## Screen share (Go Live) (wt/golive, 2026-11-25)
 
-- Go Live is a second RTC connection, not op 12 on the voice connection. Bundle (`web.b63d846b329d6470.js`, GatewayConnectionStore): `STREAM_START` → main gateway `streamCreate(type, guildId, channelId, region)` (op 18), then dispatches `STREAM_CREATE` (`stream_key`, `rtc_server_id`, `viewer_ids`, `paused`) and `STREAM_SERVER_UPDATE` (`stream_key`, `endpoint`, `token`); viewers send `streamWatch(streamKey)` (op 20), owners `streamSetPaused` (op 22) and `streamDelete` (op 19). The stream connection is a voice gateway session with `server_id = rtc_server_id` and a `screen` video stream. Phoenix has no Go Live connection yet ❌ (next lot: reuse `connection::run` with the stream server and the synthetic `TestPattern` as the source).
-- The official client cannot be measured sharing: on Linux it goes through the xdg-desktop-portal ScreenCast picker, which needs the user to choose a source on their screen (forbidden by the brief). Only the stream tile UI already in Phoenix (LIVE pill, placeholder) is measured (`vanilla-call-view.json`).
+References: bundle `web.b63d846b329d6470.js` (GatewayConnectionStore, ApplicationStreamPreviewUploadManager, ApplicationStreamingSettingsStore, module 753070 quality table), Go Live modal chunk `c38559c9b11aba54.js`, CSS classes below. Live dumps (private): `/mnt/windata/project-phoenix/compare/golive/{modal1,modal2,live*}`. Driver scripts: `~/discord-phoenix-ref/golive/{modal,observe}.mjs`, translations through `~/discord-phoenix-ref/golive/intl.mjs`.
+
+| element | source | value | Phoenix | status |
+|---|---|---|---|---|
+| start | `STREAM_START` → `streamCreate` op 18 `{type:"guild", guild_id, channel_id, preferred_region}`; region = channel `rtcRegion` ?? preferred region | | `GatewayHandle::stream_create(guild, channel, region)`, `call::start_own_stream` | ✅ |
+| stream key | module 652896 `Iy`/`_z`: `guild:{guild}:{channel}:{owner}`, `call:{channel}:{owner}` | | `voice::stream::{key, parse_key}` (+ test) | ✅ |
+| stream connection | `STREAM_CREATE` (`rtc_server_id`) + `STREAM_SERVER_UPDATE` (`endpoint`, `token`) → voice gateway session with `server_id = rtc_server_id`, the voice session id, `streams:[{type:"screen", rid:"100", quality:100}]` | | `call::on_stream_create`, `on_stream_server`, `stream_info`; `connection::run` with `info.stream` | ✅ |
+| stop | `STREAM_STOP` → `streamDelete` op 19; viewers too (`e9`) | | `stop_own_stream`, `stop_watch` | ✅ |
+| watch | `STREAM_WATCH` → op 20 `{stream_key}`; other watched streams are deleted unless `allowMultiple`, the own stream is kept | | `start_watch` (one watch per key) | ✅ |
+| reconnect | `RTC_CONNECTION_STATE` disconnected + willReconnect → `streamPing` op 21 | | `GatewayHandle::stream_ping` exists, not called yet | ⚠ |
+| self_stream | never sent by the client (op 4 has no self_stream); the server sets `self_stream` on the voice state | | read from voice states (`flags().stream`) | ✅ |
+| quality table | module 753070 `ZV`: source 60/30/15 need Nitro (HIGH), 1440/1080 need Nitro or a level 2 server, 720p60 / 480p60 Nitro or level 1, 720/480 at 30/15/5 free, source 5 fps only with the Screen Share preset | | `voice::stream::{TABLE, allowed}` (+ test) | ✅ |
+| presets | 476697: Gaming (PRESET_VIDEO) = first allowed of 1440p60, 1080p60, 720p60, 720p30; Screen Share (PRESET_DOCUMENTS) = source 15, source 5; default store state PRESET_VIDEO / 720 / 30 / sound on (929921) | | `preset_choices`, `resolve`, `Quality::default` | ✅ (kept for the session only; the client persists it in local storage) |
+| bitrate / encoder | done by the native media engine, not visible in JS | | libx264 baseline zerolatency, `stream::bitrate` (≈0.07–0.14 bit/px, 1–8 Mb/s) as `max_bitrate` in op 12 | ⚠ own estimate |
+| capture | Linux: system picker (`getUseSystemScreensharePicker` = supports NATIVE_SCREENSHARE_PICKER && setting ?? isLinux) | xdg-desktop-portal ScreenCast (Monitor / Window / both, cursor embedded, no persistence) → PipeWire node read with `gst-launch-1.0 pipewiresrc fd=0` → RGBA | `phoenix_voice::screencast::pick`, `camera::Input::PipeWire` | ✅ code; never run in tests (the brief forbids opening the KDE picker) |
+| test source | brief | animated colour bars + moving square + frame counter | `StreamSource::TestPattern` (real_shots forces it) | ✅ |
+| stream audio | "Audio du système" (soundshare) | default sink monitor through `parec`, Opus stereo 128 kb/s, speaking flag SOUNDSHARE (2) | `media::soundshare` (tone with the test pattern) | ✅ code; ⚠ the monitor also contains Phoenix's own output, the client excludes itself |
+| preview upload | ApplicationStreamPreviewUploadManager: 500 ms debounce, first non-black frame (≤60 tries), scaled to fit 512x288, `canvas.toDataURL("image/jpeg")`, `POST /streams/{key}/preview {thumbnail}`; again after 5 min, after 60 s on failure | | `call::preview_loop`, `stream::preview_jpeg`, `Backend::upload_stream_preview` | ✅ |
+| preview fetch | `GET /streams/{key}/preview?version=<now>` → `{url}`; cached 2 min | | `Backend::stream_preview` | ✅ API (UI see below) |
+| receive | screen video over the stream connection | decoded by ffmpeg at 1280x720 (camera tiles stay 640x360) | `call::watch_events`, `stream_frame` | see live checks |
+| stream volume | stream audio is its own track | | mixer track `owner | 1<<63`, `VoiceControl::SetStreamVolume` | ✅ code, no UI yet ❌ |
+
+### Go Live modal (live CDP, modal1/modal2, Onyx, 1536x840 CSS px)
+
+The panel and call tray share buttons open it (the client does the same: `Partage ton écran` → modal, then the system picker only after the primary button). Opening it, selecting a card and opening the Options menu sent no request (checked with Network.enable).
+
+| element | CSS (class) | value | Phoenix (`ui/modals/go_live.rs`) | status |
+|---|---|---|---|---|
+| card | `container_dvN-MP size-xl padding-size-sm` | max-width 960, `--background-surface-high`, 1px `--border-subtle`, radius 12, `--shadow-high`, padding 8 0 16 | `render` card | ✅ |
+| body height | `root_oszuaw.nativePicker_oszuaw` | 570 (≤820 px high: min(570, 100vh−90), max 550) | `height()` | ✅ |
+| tabs | `header_oszuaw` 16 24; `pillContainer_I4ubrz` `--background-base-lowest`, radius 12, padding 4, gap 4; `pillItem_I4ubrz` 8 16, radius 8, `--text-subtle`, hover `--background-mod-subtle`; selected `--background-surface-high` + `--interactive-text-active`; text 14/500, icon 16 (BrowserIcon, VideoIcon) | | `tab` | ✅ |
+| title | `heading-lg/semibold` | 20/24 600, margin-bottom 8 | | ✅ |
+| source cards | `nativeSourceTypeButton_AtvFBu nativePickerRadioItem`: 227.6x165.6, padding 32, `--background-base-lower`, `--interactive-text-default`, 1px `--border-subtle`, radius 4; hover `--interactive-background-hover`/`--interactive-text-hover`; selected/active `--interactive-background-active`, border `--brand-500`; inner padding 16, ScreenIcon / BrowserIcon 32, text 14/18 500; row gap 16, 32 below the title | | `source_card` | ✅ |
+| footer | `footer_oszuaw` `--background-surface-high`; `footerContent` 16 24 0, gap 32, space-between | | | ✅ |
+| summary | preset name 16/20 600; detail 12/16 500 `--text-muted`, gap 8, `•` in `--background-mod-subtle`: "• 1080p • 60fps • Audio du système" | | `summary` | ✅ |
+| primary | `button md primary`, "Choisis ce que tu veux" (FiBjwU) even after picking a card | | `golive-go` | ✅ |
+| options | 40x40 secondary, Lottie settings icon (static gear here) | | `golive-options` | ⚠ static icon |
+| Options menu | `menu_M3qk4j` 225 wide, above the cog, right-aligned, 8 px gap; "Mode de streaming" group label 14/20 500 `--text-muted`; radios Gaming "Vidéo plus fluide (1440p, 60 fps)", Partage d'écran "Texte plus clair (Source, 15 fps)", Personnalisés; separator; Résolution de l'écran ›, Images par seconde ›; separator; Couper l'audio du stream (checkbox); Avancés › | | `settings_items` | ✅ except "Avancés" (content not measured, not opened) ❌ |
+| Devices tab | capture devices list | not opened in the client | placeholder text | ❌ |
+
+### Activities
+
 - Activities: opening the launcher in the official client sends `PATCH /users/@me/settings-proto/1` (brief), so it was not opened. An Activity is a web app (`<app_id>.discordsays.com`) running in an iframe with the Embedded App SDK talking to the client over postMessage RPC (auth, voice state, participants). GPUI has no web engine, so running an Activity natively is not feasible; the realistic option is opening the Activity URL in the system browser, which loses the SDK bridge ❌. The call view's "Choisis une Activité" button is drawn (solo tile) but launches nothing.
 
 ## Voice panel and call tray icons (2026-11-25, live CDP icons1)
