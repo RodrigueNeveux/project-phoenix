@@ -1829,8 +1829,11 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
             return div().mt(z(4.)).child(media_image(&m.url, original, "".into(), (m.width, m.height), size)).into_any_element();
         };
         // While the animated rendition downloads/decodes, show the embed's static
-        // thumbnail (proxied, resized) instead of an empty box, then swap.
-        let still = media::resized(&m.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
+        // thumbnail (proxied, resized) instead of an empty box, then swap. The thumbnail
+        // of a gifv is the whole .gif: without `format=webp` the proxy resized every frame
+        // (megabytes, tens of seconds), so the box stayed empty. The client asks for the
+        // single-frame webp (`?format=webp&width=&height=`, ~4 KB).
+        let still = media::video_poster(&m.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
         return div()
             .mt(z(4.))
             .child(media_image(&src, original, "".into(), (m.width, m.height), size).with_loading(move || {
