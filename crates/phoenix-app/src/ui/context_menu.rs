@@ -3,7 +3,7 @@
 //!
 //! The menu is rendered as a full-window overlay (transparent backdrop that
 //! dismisses on any click outside the panel). Keyboard: Up/Down move the
-//! highlight, Enter/Space activate, Right/Left open/close a submenu, Esc closes.
+//! highlight, Home/End jump to the ends, Enter/Space activate, Right/Left open/close a submenu, Esc closes.
 
 use crate::theme::z;
 use std::rc::Rc;
@@ -142,6 +142,17 @@ fn handle_key(key: &str, nav: &[Nav], pos: Point<Pixels>, dismiss: &Dismiss, w: 
             } else {
                 let next = step(&root_ok, root, dir);
                 set_hl(0, next, w);
+                set_open_sub(None, w);
+            }
+        }
+        // Discord's list navigators: Home/End jump to the first/last enabled row.
+        "home" | "end" => {
+            let dir = if key == "home" { 1 } else { -1 };
+            if in_sub {
+                let ok: Vec<bool> = sub_list.unwrap().iter().map(Option::is_some).collect();
+                set_hl(1, step(&ok, None, dir), w);
+            } else {
+                set_hl(0, step(&root_ok, None, dir), w);
                 set_open_sub(None, w);
             }
         }
@@ -285,6 +296,8 @@ const MENU_MAX_W: f32 = 320.; // flexible_M3qk4j max-width
 /// menus are nudged 12px inside the window and capped at window - top - 12.
 /// (--custom-menu-viewport-padding 16 is only the CSS fallback, never used.)
 const VIEWPORT_PAD: f32 = 12.;
+/// Icon prefix that renders an emoji token instead of an SVG.
+pub const EMOJI_ICON: &str = "emoji:";
 const SUB_OVERLAP: f32 = 4.; // live: submenu x = parent right - 4
 const CHEVRON: &str = "chevron-right";
 const CHECK: &str = "check";
@@ -504,6 +517,10 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         }
                     })
                     .when_some(icon, |d, name| {
+                        // `emoji:<token>`: emojiIcon_M3qk4j, a 20px emoji image (Add Reaction submenu).
+                        if let Some(token) = name.strip_prefix(EMOJI_ICON) {
+                            return d.child(div().mr(z(8.)).size(z(20.)).flex_none().child(crate::media::emoji::emoji_element(token, 20.)));
+                        }
                         let path: SharedString =
                             if name.ends_with(".svg") { name } else { crate::icons::path(&name) };
                         d.child(svg().path(path).mr(z(8.)).size(z(20.)).flex_none().text_color(icon_fg))

@@ -81,10 +81,38 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         );
     }
     let mut items = vec![MenuItem::Custom(strip.into_any_element())];
+    // vanilla-menu-message-addreaction: "Add Reaction >" lists the 12 most used
+    // emoji (20px emojiIcon_ + ":name:"), a separator, then "View More" (picker).
+    let mut frequent: Vec<MenuItem> = crate::ui::pickers::grid::build(app, "", cx)
+        .items
+        .into_iter()
+        .take(12)
+        .map(|it| {
+            use crate::ui::pickers::grid::PickItem;
+            let (token, eid): (gpui::SharedString, _) = match &it {
+                PickItem::Unicode(ix) => (crate::ui::pickers::emoji::glyph(*ix).into(), None),
+                PickItem::Custom(em) => (em.token().into(), Some(em.id)),
+            };
+            let label: gpui::SharedString = format!(":{}:", it.name()).into();
+            let icon: gpui::SharedString = format!("{}{token}", context_menu::EMOJI_ICON).into();
+            let ee = e.clone();
+            MenuItem::action(label, Some(icon), move |_, _, cx| {
+                let token = token.clone();
+                ee.update(cx, |a, cx| {
+                    a.chat.menu = None;
+                    a.react_with(ch, id, token, eid, cx)
+                })
+            })
+        })
+        .collect();
+    if !frequent.is_empty() {
+        frequent.push(MenuItem::Separator);
+    }
     let ee = e.clone();
-    items.push(MenuItem::action(crate::t!("msg.add_reaction"), ic(ChatIcon::AddReaction), move |_, _, cx| {
+    frequent.push(MenuItem::action(crate::t!("msg.view_more"), ic(ChatIcon::AddReaction), move |_, _, cx| {
         ee.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
     }));
+    items.push(MenuItem::Submenu { label: crate::t!("msg.add_reaction"), items: frequent, icon: ic(ChatIcon::AddReaction), subtext: None });
     if has_reactions {
         let ee = e.clone();
         items.push(MenuItem::action(crate::t!("msg.view_reactions"), Some(crate::icons::path("menu/view-reactions")), move |_, _, cx| {
