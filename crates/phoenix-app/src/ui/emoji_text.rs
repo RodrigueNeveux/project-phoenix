@@ -25,7 +25,9 @@ pub fn label(text: SharedString, _font_px: f32) -> AnyElement {
     if ranges.is_empty() || std::env::var_os("PHX_NO_EMOJI_FONT").is_some() {
         return text.into_any_element();
     }
-    let mut row = div().flex().items_center().min_w_0().overflow_hidden();
+    // Labels are one line: without nowrap the pieces before an emoji wrapped inside the
+    // row and spilled over the next row (member custom status "/help · site ✨ · docs").
+    let mut row = div().flex().items_center().min_w_0().overflow_hidden().whitespace_nowrap();
     let mut at = 0;
     for r in ranges {
         if r.start > at {
