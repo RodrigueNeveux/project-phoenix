@@ -1160,11 +1160,7 @@ fn message(
             // message_:hover / .selected_ --message-background-hover; .mentioned_ and
             // .replying_ have their own backgrounds, hover shades and a 2px bar
             // (--icon-feedback-warning / --brand-500) drawn over the row.
-            let (bg, hover, bar) = if app.chat.flash == Some(id) {
-                // flash_[data-flash=true]: --message-highlight-background-default, overlay
-                // border-inline-start 2px --text-brand.
-                (idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, Some(idx::TEXT_BRAND))
-            } else if replying {
+            let (bg, hover, bar) = if replying {
                 (idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT, idx::BRAND_10A, Some(idx::BRAND_500))
             } else if mentioned {
                 (idx::MESSAGE_MENTIONED_BACKGROUND_DEFAULT, idx::MESSAGE_MENTIONED_BACKGROUND_HOVER, Some(idx::ICON_FEEDBACK_WARNING))
@@ -1180,6 +1176,7 @@ fn message(
             d.hover(move |s| s.bg(tk(hover))).when_some(bar, |d, b| {
                 d.child(div().absolute().left_0().top_0().bottom_0().w(z(2.)).bg(tk(b)))
             })
+            .when(app.chat.flash == Some(id), |d| d.child(flash_overlay(id)))
         });
 
     let body = if compact {
@@ -2031,4 +2028,31 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed) -> AnyElement {
 pub(crate) fn reply_preview_text(app: &PhoenixApp, content: &SharedString) -> SharedString {
     let m = crate::model::Message { content: content.clone(), ..Default::default() };
     app.render_msg(&m, None).preview
+}
+
+/// Jumped-to message highlight. flash_: `transition: background-color .6s ease`;
+/// flashOverlay_: --message-highlight-background-default, border-inline-start 2px
+/// --text-brand, `transition: opacity .6s ease`. Fades in, holds, fades out when
+/// `data-flash` drops (see `FLASH_HOLD`).
+fn flash_overlay(id: Id) -> AnyElement {
+    use gpui::AnimationExt;
+    const IN: f32 = 600.;
+    const OUT_AT: f32 = 2000.;
+    const TOTAL: f32 = 2600.;
+    let ease = crate::ui::states::cubic_bezier(0.25, 0.1, 0.25, 1.0); // CSS `ease`
+    div()
+        .absolute()
+        .inset_0()
+        .bg(tk(idx::MESSAGE_HIGHLIGHT_BACKGROUND_DEFAULT))
+        .child(div().absolute().left_0().top_0().bottom_0().w(z(2.)).bg(tk(idx::TEXT_BRAND)))
+        .with_animation(
+            ("msg-flash", id.0),
+            gpui::Animation::new(std::time::Duration::from_millis(TOTAL as u64)),
+            move |d, t| {
+                let ms = t * TOTAL;
+                let o = if ms < IN { ease(ms / IN) } else if ms < OUT_AT { 1. } else { 1. - ease((ms - OUT_AT) / (TOTAL - OUT_AT)) };
+                d.opacity(o)
+            },
+        )
+        .into_any_element()
 }

@@ -79,7 +79,7 @@ pub enum EmojiTarget {
 }
 
 /// How long a jumped-to message stays highlighted.
-const FLASH_HOLD: std::time::Duration = std::time::Duration::from_millis(2000);
+const FLASH_HOLD: std::time::Duration = std::time::Duration::from_millis(2600); // flash_overlay timeline
 /// Older pages fetched at most when jumping to a message that isn't loaded.
 const JUMP_MAX_PAGES: u32 = 10;
 
