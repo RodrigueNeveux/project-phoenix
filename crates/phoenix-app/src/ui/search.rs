@@ -196,7 +196,7 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
 pub fn on_key(app: &mut PhoenixApp, key: &str, window: &mut Window, cx: &mut Context<PhoenixApp>) -> bool {
     if key == "escape" && crate::ui::search_filters::is_open(cx) {
         if !crate::ui::search_filters::close_popover(cx) {
-            crate::ui::search_filters::dismiss(cx);
+            crate::ui::search_filters::close(cx);
         }
         return true;
     }
@@ -426,8 +426,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let page = s.page.clone();
     let req = s.request.clone();
     let top = layout::HEADER_H;
-    // The client closes the search popout when "Plus de filtres" opens its modal (the
-    // header bar goes back to idle): only the modal is drawn while it is up.
+    // The client hides the search popout while the "Plus de filtres" modal is up (the
+    // header bar goes back to idle) and shows it again when the modal closes.
     if page.is_none() || req.is_none() {
         if let Some(modal) = crate::ui::search_filters::render(app, window, cx) {
             return Some(modal);

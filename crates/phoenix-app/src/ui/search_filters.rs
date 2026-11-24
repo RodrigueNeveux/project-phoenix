@@ -13,10 +13,11 @@
 
 use chrono::{Datelike, Days, Months, NaiveDate};
 use gpui::{AnyElement, App, Context, Entity, FontWeight, ParentElement, SharedString, Styled, Window, div, prelude::*};
-use gpui_component::input::{Input, InputState};
+use gpui_component::input::{Input, InputEvent, InputState};
 
 use crate::{
     app::PhoenixApp,
+    model::{ChannelKind, Id},
     theme::{c, generated::idx, tok, z},
     ui::controls::{BtnKind, button, button_icon},
 };
@@ -65,7 +66,13 @@ struct DateRow {
 }
 
 pub struct FiltersModal {
+    /// Combobox text per field (filters its option list; "Épinglé" has no text).
     fields: Vec<Entity<InputState>>,
+    /// Picked option values per field (`key` + value tokens on apply).
+    picks: Vec<Vec<String>>,
+    /// Field whose option list is open.
+    list: Option<usize>,
+    _subs: Vec<gpui::Subscription>,
     /// "Ajouter une date" rows; a new one is "Avant le…" today.
     dates: Vec<DateRow>,
     /// Calendar popover: (row, first day of the month shown).
@@ -139,11 +146,31 @@ fn placeholder(app: &PhoenixApp, key: &str) -> SharedString {
 
 pub fn open(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     let mut fields = Vec::with_capacity(FIELDS.len());
-    for (k, _, _) in FIELDS {
+    let mut subs = Vec::with_capacity(FIELDS.len());
+    for (i, (k, _, _)) in FIELDS.into_iter().enumerate() {
         let ph = placeholder(app, k);
-        fields.push(cx.new(|cx| InputState::new(window, cx).placeholder(ph)));
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder(ph));
+        // Typing opens and filters the field's list (comboBoxInput_vWC4bk).
+        // (Clearing a field, e.g. after a pick or "Effacer les filtres", does not open it.)
+        subs.push(cx.subscribe_in(&input, window, move |_, inp, ev: &InputEvent, _, cx| {
+            if let InputEvent::Change = ev
+                && !inp.read(cx).value().is_empty()
+            {
+                with_modal(cx, |m| open_list(m, i));
+                cx.notify();
+            }
+        }));
+        fields.push(input);
     }
-    cx.default_global::<Filters>().0 = Some(FiltersModal { fields, dates: Vec::new(), calendar: None, op_menu: None });
+    cx.default_global::<Filters>().0 = Some(FiltersModal {
+        fields,
+        picks: vec![Vec::new(); FIELDS.len()],
+        list: None,
+        _subs: subs,
+        dates: Vec::new(),
+        calendar: None,
+        op_menu: None,
+    });
     cx.notify();
 }
 
@@ -154,6 +181,16 @@ pub fn add_date(cx: &mut App, open_calendar: bool) {
         m.dates.push(DateRow { op: DateOp::Before, day: today() });
         m.calendar = open_calendar.then(|| (m.dates.len() - 1, month_start(today())));
         m.op_menu = None;
+        m.list = None;
+    });
+}
+
+/// Open the option list of field `i` (real_shots `PHX_OPEN=filters:list<n>`).
+pub fn show_list(cx: &mut App, i: usize) {
+    with_modal(cx, |m| {
+        if i < FIELDS.len() {
+            open_list(m, i);
+        }
     });
 }
 
@@ -161,7 +198,7 @@ pub fn add_date(cx: &mut App, open_calendar: bool) {
 pub fn close_popover(cx: &mut Context<PhoenixApp>) -> bool {
     let mut closed = false;
     with_modal(cx, |m| {
-        closed = m.calendar.take().is_some() | m.op_menu.take().is_some();
+        closed = m.calendar.take().is_some() | m.op_menu.take().is_some() | m.list.take().is_some();
     });
     if closed {
         cx.notify();
@@ -169,57 +206,157 @@ pub fn close_popover(cx: &mut Context<PhoenixApp>) -> bool {
     closed
 }
 
+/// Cancel / close / Escape / backdrop / apply. Like in the client, the search popout the
+/// modal came from shows again (it was hidden, not closed, while the modal was up).
 pub fn close(cx: &mut Context<PhoenixApp>) {
     cx.default_global::<Filters>().0 = None;
     cx.notify();
 }
 
-/// Cancel / close / Escape / backdrop: the modal goes away without a search, and like
-/// in the client the popout it came from does not come back (the search bar is idle).
-pub fn dismiss(cx: &mut Context<PhoenixApp>) {
-    close(cx);
-    if !crate::ui::search::results_shown(cx) && cx.has_global::<crate::ui::search::Search>() {
-        cx.global_mut::<crate::ui::search::Search>().0 = None;
-    }
+
+/// Quote a value with spaces (`from:"Some Name"`).
+fn quoted(v: &str) -> String {
+    let v = v.trim();
+    if v.contains(' ') { format!("\"{v}\"") } else { v.to_string() }
 }
 
-/// Normalise one field value for its key (French or English words accepted).
-fn value_for(key: &str, v: &str) -> Option<String> {
-    let l = v.trim().to_lowercase();
-    if l.is_empty() {
-        return None;
-    }
-    Some(match key {
-        "pinned:" => match l.as_str() {
-            "vrai" | "oui" | "true" | "yes" => "true".into(),
-            "faux" | "non" | "false" | "no" => "false".into(),
-            _ => return None,
-        },
-        "authorType:" => match l.as_str() {
-            "utilisateur" | "user" => "user".into(),
-            "bot" => "bot".into(),
-            "webhook" => "webhook".into(),
-            _ => return None,
-        },
-        _ if l.contains(' ') => format!("\"{}\"", v.trim()),
-        _ => v.trim().to_string(),
-    })
-}
-
-/// The tokens the modal adds to the query.
-fn tokens(m: &FiltersModal, cx: &App) -> String {
+/// The tokens the modal adds to the query: one `key:value` per picked option.
+fn tokens(m: &FiltersModal) -> String {
     let mut out = Vec::new();
-    for ((key, _, _), f) in FIELDS.iter().zip(&m.fields) {
-        for part in f.read(cx).value().split(',') {
-            if let Some(v) = value_for(key, part) {
-                out.push(format!("{key}{v}"));
-            }
+    for ((key, _, _), picks) in FIELDS.iter().zip(&m.picks) {
+        for v in picks {
+            out.push(format!("{key}{}", quoted(v)));
         }
     }
     for d in &m.dates {
         out.push(format!("{}{}", d.op.key(), d.day.format("%Y-%m-%d")));
     }
     out.join(" ")
+}
+
+fn open_list(m: &mut FiltersModal, i: usize) {
+    m.list = Some(i);
+    m.calendar = None;
+    m.op_menu = None;
+}
+
+/// Leading visual of an option row.
+#[derive(Clone)]
+enum Lead {
+    Avatar(Id),
+    Channel(ChannelKind),
+    Glyph(&'static str),
+    None,
+}
+
+/// One row of a field's list: the token value, the label, the trailing username.
+#[derive(Clone)]
+struct Opt {
+    value: String,
+    label: SharedString,
+    sub: Option<SharedString>,
+    lead: Lead,
+}
+
+/// `has:` values in the client's list order (image, vidéo, lien, fichier, intégration
+/// shown; the rest under the scroll), with our own glyphs.
+const HAS: [(&str, &str, &str); 8] = [
+    ("image", "search.has_image", "image"),
+    ("video", "search.has_video", "voice/video-small"),
+    ("link", "search.has_link", "link"),
+    ("file", "search.has_file", "file"),
+    ("embed", "search.has_embed", "angle-brackets"),
+    ("sound", "search.has_sound", "music"),
+    ("sticker", "search.has_sticker", "sticker"),
+    ("poll", "search.has_poll", "chat-check"),
+];
+
+/// 0 = exact, 1 = prefix, 2 = contains, None = no match.
+fn score(name: &str, q: &str) -> Option<u8> {
+    if q.is_empty() {
+        return Some(3);
+    }
+    let n = name.to_lowercase();
+    if n == q {
+        Some(0)
+    } else if n.starts_with(q) {
+        Some(1)
+    } else if n.contains(q) {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+/// The options of field `key` matching `query` (lowercase): users (you first, then the
+/// open channel's recent authors and the server's members), the server's channels
+/// (open one first, then sidebar order), or the fixed `has:` / author type / pinned values.
+fn options(app: &PhoenixApp, key: &str, query: &str) -> Vec<Opt> {
+    let q = query.trim().to_lowercase();
+    match key {
+        "from:" | "mentions:" => {
+            let mut ids: Vec<Id> = vec![app.me.id];
+            if let Some(msgs) = app.selected_channel.and_then(|c| app.messages.get(&c)) {
+                ids.extend(msgs.msgs.iter().rev().take(200).map(|m| m.author));
+            }
+            let nick = |u: Id| {
+                app.selected_guild.and_then(|g| app.members.get(&g)).and_then(|ms| ms.iter().find(|m| m.user == u)).and_then(|m| m.nick.clone())
+            };
+            if let Some(g) = app.selected_guild {
+                ids.extend(app.members.get(&g).into_iter().flatten().map(|m| m.user));
+            }
+            let mut seen = std::collections::HashSet::new();
+            let mut out: Vec<(u8, usize, Opt)> = Vec::new();
+            for (order, id) in ids.into_iter().enumerate() {
+                if !seen.insert(id) {
+                    continue;
+                }
+                let Some(u) = (if id == app.me.id { Some(&app.me) } else { app.users.get(&id) }) else { continue };
+                let shown = nick(id).unwrap_or_else(|| if u.display_name.is_empty() { u.name.clone() } else { u.display_name.clone() });
+                let Some(sc) = [score(&shown, &q), score(&u.name, &q)].into_iter().flatten().min() else { continue };
+                out.push((sc, order, Opt { value: u.name.to_string(), label: shown, sub: Some(u.name.clone()), lead: Lead::Avatar(id) }));
+            }
+            out.sort_by_key(|(sc, order, _)| (*sc, *order));
+            out.into_iter().take(50).map(|(_, _, o)| o).collect()
+        }
+        "in:" => {
+            let Some(g) = app.selected_guild else { return Vec::new() };
+            let mut list: Vec<(u8, usize, Opt)> = Vec::new();
+            for (order, ch) in app.guild_channels.get(&g).into_iter().flatten().filter_map(|id| app.channels.get(id)).enumerate() {
+                if matches!(ch.kind, ChannelKind::Category | ChannelKind::Voice | ChannelKind::Stage) {
+                    continue;
+                }
+                let Some(sc) = score(&ch.name, &q) else { continue };
+                let first = Some(ch.id) == app.selected_channel;
+                list.push((sc, if first { 0 } else { order + 1 }, Opt { value: ch.name.to_string(), label: ch.name.clone(), sub: None, lead: Lead::Channel(ch.kind) }));
+            }
+            list.sort_by_key(|(sc, order, _)| (*sc, *order));
+            list.into_iter().map(|(_, _, o)| o).collect()
+        }
+        "has:" => HAS
+            .iter()
+            .filter_map(|(v, label, glyph)| {
+                let l = crate::i18n::t(label, &[]);
+                score(&l, &q).or_else(|| score(v, &q)).map(|_| Opt { value: (*v).into(), label: l, sub: None, lead: Lead::Glyph(glyph) })
+            })
+            .collect(),
+        "authorType:" => [("user", "search.author_user"), ("bot", "search.author_bot"), ("webhook", "search.author_webhook")]
+            .into_iter()
+            .filter_map(|(v, label)| {
+                let l = crate::i18n::t(label, &[]);
+                score(&l, &q).map(|_| Opt { value: v.into(), label: l, sub: None, lead: Lead::None })
+            })
+            .collect(),
+        _ => [("true", "search.pinned_true"), ("false", "search.pinned_false")]
+            .into_iter()
+            .map(|(v, label)| Opt { value: v.into(), label: crate::i18n::t(label, &[]), sub: None, lead: Lead::None })
+            .collect(),
+    }
+}
+
+/// Label shown in the field for a picked value.
+fn pick_label(app: &PhoenixApp, key: &str, v: &str) -> SharedString {
+    options(app, key, "").into_iter().find(|o| o.value == v).map(|o| o.label).unwrap_or_else(|| SharedString::from(v.to_string()))
 }
 
 /// `container_VhFsFg`: label body-md/medium 16/20 --text-strong, description
@@ -234,18 +371,55 @@ fn label(title: SharedString, desc: SharedString) -> gpui::Div {
 }
 
 /// `selectField_vWC4bk` combobox: 40px, 1px --input-border-default, radius 8,
-/// --input-background-default; input padding 1 8 1 12; 36px chevron button.
-fn field(input: &Entity<InputState>) -> gpui::Div {
-    div()
-        .mt(z(8.))
+/// --input-background-default; input padding 1 8 1 12; 36px chevron button. Open, the
+/// border turns --input-border-active and the chevron points up. Picked options sit
+/// before the text as pills. "Épinglé" is a plain select (`selectButton_`), no text.
+fn field(app: &PhoenixApp, i: usize, input: &Entity<InputState>, picks: &[String], open: bool, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let key = FIELDS[i].0;
+    let select = key == "pinned:";
+    let mut content = div().flex_1().min_w_0().h_full().pl(z(12.)).pr(z(8.)).flex().items_center().gap(z(4.)).overflow_hidden();
+    if select {
+        content = content.child(match picks.first() {
+            Some(v) => div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).child(pick_label(app, key, v)),
+            None => div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_MUTED))).child(placeholder(app, key)),
+        });
+    } else {
+        for v in picks {
+            content = content.child(
+                div()
+                    .flex_none()
+                    .px(z(6.))
+                    .py(z(2.))
+                    .rounded(z(4.))
+                    .bg(c(tok(idx::BACKGROUND_MOD_STRONG)))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(tok(idx::TEXT_STRONG)))
+                    .whitespace_nowrap()
+                    .child(pick_label(app, key, v)),
+            );
+        }
+        content = content.child(div().flex_1().min_w(z(40.)).text_size(z(16.)).child(Input::new(input).appearance(false).bordered(false)));
+    }
+    let wrap = div()
+        .id(gpui::ElementId::Name(format!("search-field-{i}").into()))
+        .relative()
         .h(z(40.))
         .flex()
         .items_center()
         .rounded(z(8.))
         .border_1()
-        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .border_color(c(tok(if open { idx::INPUT_BORDER_ACTIVE } else { idx::INPUT_BORDER_DEFAULT })))
         .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
-        .child(div().flex_1().min_w_0().pl(z(12.)).pr(z(8.)).text_size(z(16.)).child(Input::new(input).appearance(false).bordered(false)))
+        .when(select, |d| d.cursor_pointer())
+        .on_mouse_down(gpui::MouseButton::Left, cx.listener(move |_, _, _, cx| {
+            // A click on the field opens its list (the select toggles it).
+            with_modal(cx, |m| if select && m.list == Some(i) { m.list = None } else { open_list(m, i) });
+            cx.stop_propagation();
+            cx.notify();
+        }))
+        .child(content)
         .child(
             div()
                 .w(z(36.))
@@ -254,8 +428,133 @@ fn field(input: &Entity<InputState>) -> gpui::Div {
                 .items_center()
                 .justify_center()
                 .pr(z(4.))
-                .child(gpui::svg().path("icons/chevron.svg").size(z(20.)).text_color(c(tok(idx::TEXT_STRONG)))),
-        )
+                .child(gpui::svg().path(crate::icons::path(if open { "chevron-up" } else { "chevron" })).size(z(20.)).text_color(c(tok(idx::TEXT_STRONG)))),
+        );
+    div().mt(z(8.)).relative().child(wrap).when(open, |d| d.child(probe(false)))
+}
+
+/// Option list of an open field (`selectDropdown_vWC4bk` > `listBox_b5PEJH`, 4px under
+/// the field, as wide): 1px --border-subtle, radius 8, --background-surface-higher, shadow
+/// 0 2 8 black 16%, padding 4, at most five 40px rows then a scroller. Rows
+/// (`listBoxItem_` radius 4, content padding 3 4 3 8, hover --background-mod-normal):
+/// 24px avatar / 20px glyph, gap 8, label 16/20 --text-strong, username 14/18 --text-muted
+/// on the right, then a 20px checkbox (multi-select); the pinned select shows a check.
+fn option_list(app: &PhoenixApp, i: usize, width: gpui::Pixels, cx: &mut Context<PhoenixApp>) -> Option<gpui::Stateful<gpui::Div>> {
+    let m = cx.try_global::<Filters>()?.0.as_ref()?;
+    let key = FIELDS[i].0;
+    let query = m.fields[i].read(cx).value().to_string();
+    let picked = m.picks[i].clone();
+    let opts = options(app, key, if key == "pinned:" { "" } else { &query });
+    let single = key == "pinned:";
+    let rows: Vec<AnyElement> = opts
+        .into_iter()
+        .enumerate()
+        .map(|(k, o)| {
+            let on = picked.contains(&o.value);
+            let lead: Option<AnyElement> = match o.lead {
+                Lead::Avatar(u) => Some(crate::ui::avatar(if u == app.me.id { Some(&app.me) } else { app.users.get(&u) }, 24.)),
+                Lead::Channel(kind) => Some(
+                    gpui::svg().path(crate::ui::sidebar::channel_icon(kind).path()).flex_none().size(z(20.)).text_color(c(tok(idx::CHANNEL_ICON))).into_any_element(),
+                ),
+                Lead::Glyph(g) => Some(gpui::svg().path(crate::icons::path(g)).flex_none().size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).into_any_element()),
+                Lead::None => None,
+            };
+            let value = o.value.clone();
+            let check = if single {
+                on.then(|| gpui::svg().path(crate::icons::path("check")).flex_none().size(z(16.)).text_color(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW))).into_any_element())
+            } else {
+                Some(
+                    div()
+                        .size(z(20.))
+                        .flex_none()
+                        .rounded(z(4.))
+                        .border_1()
+                        .border_color(c(tok(if on { idx::CHECKBOX_BORDER_SELECTED_DEFAULT } else { idx::CHECKBOX_BORDER_DEFAULT })))
+                        .bg(c(tok(if on { idx::CHECKBOX_BACKGROUND_SELECTED_DEFAULT } else { idx::CHECKBOX_BACKGROUND_DEFAULT })))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .when(on, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(c(tok(idx::CHECKBOX_ICON_ACTIVE)))))
+                        .into_any_element(),
+                )
+            };
+            div()
+                .id(gpui::ElementId::Name(format!("search-opt-{i}-{k}").into()))
+                .flex_none()
+                .h(z(40.))
+                .pt(z(3.))
+                .pb(z(3.))
+                .pl(z(8.))
+                .pr(z(4.))
+                .rounded(z(4.))
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .cursor_pointer()
+                .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+                .on_click(cx.listener(move |_, _, w, cx| {
+                    let mut clear = None;
+                    with_modal(cx, |m| {
+                        let p = &mut m.picks[i];
+                        if single {
+                            *p = vec![value.clone()];
+                            m.list = None;
+                        } else if let Some(at) = p.iter().position(|x| *x == value) {
+                            p.remove(at);
+                        } else {
+                            p.push(value.clone());
+                        }
+                        clear = (!single).then(|| m.fields[i].clone());
+                    });
+                    // The typed filter text goes once an option is picked.
+                    if let Some(inp) = clear {
+                        inp.update(cx, |s, cx| s.set_value("", w, cx));
+                        with_modal(cx, |m| m.list = Some(i));
+                    }
+                    cx.notify();
+                }))
+                .children(lead)
+                .child(div().flex_1().min_w_0().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).truncate().child(o.label))
+                .children(o.sub.map(|u| div().flex_none().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(u)))
+                .children(check)
+                .into_any_element()
+        })
+        .collect();
+    let n = rows.len();
+    let body: AnyElement = if n == 0 {
+        div().h(z(40.)).px(z(8.)).flex().items_center().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("search.m_no_options")).into_any_element()
+    } else {
+        div().id(gpui::ElementId::Name(format!("search-opts-{i}").into())).max_h(z(200.)).overflow_y_scroll().flex().flex_col().children(rows).into_any_element()
+    };
+    Some(
+        div()
+            .id(gpui::ElementId::Name(format!("search-list-{i}").into()))
+            .w(width)
+            .p(z(4.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
+            .shadow(vec![gpui::BoxShadow {
+                color: gpui::hsla(0., 0., 0., 0.16),
+                offset: gpui::point(z(0.), z(2.)),
+                blur_radius: z(8.),
+                spread_radius: z(0.),
+                inset: false,
+            }])
+            .occlude()
+            .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .child(body),
+    )
+}
+
+/// Height of an open list (rows of 40, at most 5, padding 4, 1px border).
+fn list_h(app: &PhoenixApp, i: usize, cx: &App) -> f32 {
+    let Some(m) = cx.try_global::<Filters>().and_then(|f| f.0.as_ref()) else { return 0. };
+    let key = FIELDS[i].0;
+    let q = m.fields[i].read(cx).value().to_string();
+    let n = options(app, key, if key == "pinned:" { "" } else { &q }).len().clamp(1, 5);
+    40. * n as f32 + 10.
 }
 
 /// Date section: label, one `dateFilter_R726Px` row per date, then the md secondary
@@ -302,6 +601,7 @@ fn date_row(i: usize, row: DateRow, menu_open: bool, cal: bool, cx: &mut Context
             with_modal(cx, |m| {
                 m.op_menu = if m.op_menu == Some(i) { None } else { Some(i) };
                 m.calendar = None;
+                m.list = None;
             });
             cx.notify();
         }))
@@ -336,6 +636,7 @@ fn date_row(i: usize, row: DateRow, menu_open: bool, cal: bool, cx: &mut Context
                 let open = m.calendar.is_some_and(|c| c.0 == i);
                 m.calendar = if open { None } else { m.dates.get(i).map(|r| (i, month_start(r.day))) };
                 m.op_menu = None;
+                m.list = None;
             });
             cx.notify();
         }))
@@ -600,12 +901,13 @@ fn calendar_h(month: NaiveDate) -> f32 {
     2. + 40. + 51. + 23. + 40. * weeks as f32
 }
 
-pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+pub fn render(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let m = cx.try_global::<Filters>()?.0.as_ref()?;
     let fields = m.fields.clone();
-    let (dates, calendar, op_menu) = (m.dates.clone(), m.calendar, m.op_menu);
-    // "Effacer les filtres (n)": filled fields + date rows.
-    let set = fields.iter().filter(|f| !f.read(cx).value().trim().is_empty()).count() + dates.len();
+    let picks = m.picks.clone();
+    let (dates, calendar, op_menu, list) = (m.dates.clone(), m.calendar, m.op_menu, m.list);
+    // "Effacer les filtres (n)": fields with a pick + date rows.
+    let set = picks.iter().filter(|p| !p.is_empty()).count() + dates.len();
     // filterSection_R726Px: padding-bottom 20 (first one also 12 on top, last 12 below).
     let mut body = div().flex().flex_col().pt(z(12.)).pb(z(12.));
     for (i, ((key, title, desc), f)) in FIELDS.iter().zip(&fields).enumerate() {
@@ -614,7 +916,9 @@ pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) 
             body = body.child(date_section(&dates, calendar, op_menu, cx));
         }
         let last = i + 1 == FIELDS.len();
-        body = body.child(div().pb(z(if last { 0. } else { 20. })).flex().flex_col().child(label(crate::t!(title), crate::t!(desc))).child(field(f)));
+        body = body.child(
+            div().pb(z(if last { 0. } else { 20. })).flex().flex_col().child(label(crate::t!(title), crate::t!(desc))).child(field(app, i, f, &picks[i], list == Some(i), cx)),
+        );
     }
     // The open popover, placed from the probes (calendar 8px, type list 4px under the control).
     let pop: Option<AnyElement> = match (calendar, op_menu, ANCHOR.with(|c| c.get()), CARD.with(|c| c.get())) {
@@ -633,14 +937,29 @@ pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) 
             let top = if below + h > window.viewport_size().height && b.top() - z(4.) - h >= gpui::px(0.) { b.top() - z(4.) - h } else { below };
             div().absolute().left(b.left() - o.x).top(top - o.y).child(op_list(i, *r, cx)).into_any_element()
         }),
+        (None, None, Some(b), Some(o)) => list.and_then(|i| {
+            let h = z(list_h(app, i, cx));
+            let below = b.bottom() + z(4.);
+            let top = if below + h > window.viewport_size().height && b.top() - z(4.) - h >= gpui::px(0.) { b.top() - z(4.) - h } else { below };
+            option_list(app, i, b.size.width, cx).map(|l| div().absolute().left(b.left() - o.x).top(top - o.y).child(l).into_any_element())
+        }),
         _ => None,
     };
-    if calendar.is_none() && op_menu.is_none() {
+    if calendar.is_none() && op_menu.is_none() && list.is_none() {
         ANCHOR.with(|c| c.set(None));
     }
     let card = div()
+        .id("search-filters-card")
         .relative()
         .child(probe(true))
+        // A click elsewhere in the card closes the open list.
+        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
+            let mut was = false;
+            with_modal(cx, |m| was = m.list.take().is_some());
+            if was {
+                cx.notify();
+            }
+        }))
         .w(z(480.)) // size-md
         .max_h(z(728.))
         .rounded(z(12.))
@@ -703,18 +1022,20 @@ pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) 
                                 i.update(cx, |s, cx| s.set_value("", w, cx));
                             }
                             with_modal(cx, |m| {
+                                m.picks.iter_mut().for_each(Vec::clear);
                                 m.dates.clear();
                                 m.calendar = None;
                                 m.op_menu = None;
+                                m.list = None;
                             });
                             cx.notify();
                         }))
                         .child(if set > 0 { format!("{} ({set})", crate::t!("search.m_clear")).into() } else { crate::t!("search.m_clear") }),
                 )
-                .child(button("search-filters-cancel", crate::t!("common.cancel"), BtnKind::Secondary).on_click(cx.listener(|_, _, _, cx| dismiss(cx))))
+                .child(button("search-filters-cancel", crate::t!("common.cancel"), BtnKind::Secondary).on_click(cx.listener(|_, _, _, cx| close(cx))))
                 .child(button("search-filters-apply", crate::t!("search.m_apply"), BtnKind::Primary).on_click(cx.listener(|a, _, w, cx| {
                     let acx: &App = cx;
-                    let t = acx.global::<Filters>().0.as_ref().map(|m| tokens(m, acx)).unwrap_or_default();
+                    let t = acx.global::<Filters>().0.as_ref().map(tokens).unwrap_or_default();
                     close(cx);
                     crate::ui::search::append_and_submit(a, &t, w, cx);
                 }))),
@@ -733,14 +1054,14 @@ pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) 
                 .justify_center()
                 .cursor_pointer()
                 .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
-                .on_click(cx.listener(|_, _, _, cx| dismiss(cx)))
+                .on_click(cx.listener(|_, _, _, cx| close(cx)))
                 .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         );
     let weak = cx.entity().downgrade();
     Some(crate::ui::modal::frame(
         "search-filters-modal",
         std::rc::Rc::new(move |_, cx| {
-            let _ = weak.update(cx, |_, cx| dismiss(cx));
+            let _ = weak.update(cx, |_, cx| close(cx));
         }),
         div().relative().child(card).children(pop),
     ))
@@ -748,7 +1069,7 @@ pub fn render(_app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) 
 
 #[cfg(test)]
 mod tests {
-    use super::{month_weeks, value_for};
+    use super::{month_weeks, quoted, score};
     use chrono::NaiveDate;
 
     #[test]
@@ -764,11 +1085,13 @@ mod tests {
     }
 
     #[test]
-    fn normalises_values() {
-        assert_eq!(value_for("pinned:", "Vrai").as_deref(), Some("true"));
-        assert_eq!(value_for("pinned:", "nope"), None);
-        assert_eq!(value_for("authorType:", "Utilisateur").as_deref(), Some("user"));
-        assert_eq!(value_for("from:", " Some Name ").as_deref(), Some("\"Some Name\""));
-        assert_eq!(value_for("in:", ""), None);
+    fn quotes_and_scores() {
+        assert_eq!(quoted(" Some Name "), "\"Some Name\"");
+        assert_eq!(quoted("kasiopy"), "kasiopy");
+        assert_eq!(score("Kasiopy", "kasiopy"), Some(0));
+        assert_eq!(score("Kasiopy", "kas"), Some(1));
+        assert_eq!(score("Kasiopy", "opy"), Some(2));
+        assert_eq!(score("Kasiopy", "x"), None);
+        assert_eq!(score("Kasiopy", ""), Some(3));
     }
 }

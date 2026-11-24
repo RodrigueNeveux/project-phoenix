@@ -49,9 +49,28 @@ shows the quick switcher, not this modal.
 | day states | __day--outside-month / --disabled / --today / --selected / :hover | colour | 500 at 30%; disabled on --primary-630; today bold; selected 3px --brand-500 bar; hover --brand-500 + white | calendar | ✅ |
 | Escape | — | behaviour | closes the calendar / type list before the modal | search.rs on_key | ✅ |
 
-Open points (2026-11-24): the calendar is not flipped or clamped at the window edge (the client scrolls
-the date row towards the middle first, so it rarely overflows); the search popout stays open behind
-the modal because the modal is a child of the popout; the De / Dans / Contient / Mentions / Type
-d'auteur / Épinglé comboboxes are still free-text inputs without their option lists.
+## Search filters: option lists (live CDP 2026-11-24, 1536×840 @1.25, Onyx)
+
+Measured on the client by opening De / Dans / Contient (screens + `selectDropdown_vWC4bk`
+of the date type list in dump `search-date-operator`), closed without applying.
+
+| element | source | property | value | our code | status |
+|---|---|---|---|---|---|
+| list box | selectDropdown_vWC4bk > listBox_b5PEJH | box | field width, 4px under it, 1px --border-subtle, radius 8, --background-surface-higher, 0 2 8 black 16%, padding 4 | search_filters.rs option_list | ✅ |
+| list height | screen | rows | 40px rows, five visible then a scroller | option_list / list_h | ✅ |
+| De / Mentions rows | screen | content | 24px avatar, gap 8, display name 16/20, username on the right (muted), 20px checkbox; you first | options() users | ✅ (order after you: recent authors then members, the client's exact ranking is not known) |
+| Dans rows | screen | content | channel glyph, name, checkbox; open channel first | options() "in:" | ✅ (the rest in sidebar order; the client's order looks frecency-based) |
+| Contient rows | screen | content | glyph + image, vidéo, lien, fichier, intégration (more under the scroll) | HAS | ✅ first five; son / autocollant / sondage and the glyphs are ours |
+| Type d'auteur / Épinglé | dump search-more-filters | kind | Type d'auteur is a combobox (input), Épinglé a plain select (`selectButton_`) | field() | ⚠ lists not opened (see below): Utilisateur / Bot / Webhook and Vrai / Faux |
+| open field | screen | style | --input-border-active border, chevron up | field() | ✅ |
+| autocomplete | comboBoxInput_vWC4bk | behaviour | typing filters the list (exact, prefix, contains) | options() score | ✅ |
+| picked values | — | style | pills before the text | field() | ⚠ not observed on the client (we did not pick anything there) |
+| popout | CDP | behaviour | "Plus de filtres" hides the search popout (bar back to idle); closing the modal (Escape) brings the popout back with the bar focused | search.rs render | ✅ |
+| calendar / type list / option list | — | position | flipped above the field when they would pass the window bottom | render | ✅ |
+
+⚠ During this pass the client sent one `POST /channels/<id>/messages/<id>/ack` (new message
+in the open, focused channel while the modal was up). Following the brief the modal was closed
+and not reopened, so Type d'auteur / Épinglé were not measured open.
+
 Implementation note: popovers inside a `modal::frame` must not use a nested `deferred` (it paints
 under the card's footer); search_filters.rs places them beside the card from canvas probes.
