@@ -58,6 +58,9 @@ actions!(
         MarkInboxRead,
         CallDm,
         JumpToCall,
+        CreateThread,
+        RecordVoiceMessage,
+        ToggleSoundboard,
     ]
 );
 
@@ -108,9 +111,11 @@ pub const SHORTCUTS: &[Shortcut] = &[
     sc!(Voice, "shortcuts.mute", ["ctrl-shift-m"]),
     sc!(Voice, "shortcuts.deafen", ["ctrl-shift-d"]),
     sc!(Voice, "shortcuts.call", ["ctrl-'"]),
+    sc!(Voice, "shortcuts.soundboard", ["ctrl-shift-b"]),
     sc!(Chat, "shortcuts.mark_server_read", ["shift-escape"]),
     sc!(Chat, "shortcuts.mark_channel_read", ["escape"]),
     sc!(Chat, "shortcuts.group_dm", ["ctrl-shift-t"]),
+    sc!(Chat, "shortcuts.thread", ["ctrl-shift-alt-n"]),
     sc!(Chat, "shortcuts.pins", ["ctrl-p"]),
     sc!(Chat, "shortcuts.inbox", ["ctrl-i"]),
     sc!(Chat, "shortcuts.inbox_read", ["ctrl-shift-e"]),
@@ -120,6 +125,7 @@ pub const SHORTCUTS: &[Shortcut] = &[
     sc!(Chat, "shortcuts.sticker", ["ctrl-s"]),
     sc!(Chat, "shortcuts.scroll", ["pageup", "pagedown"]),
     sc!(Chat, "shortcuts.oldest_unread", ["shift-pageup"]),
+    sc!(Chat, "shortcuts.voice_message", ["alt-r"]),
     sc!(Chat, "shortcuts.upload", ["ctrl-shift-u"]),
     sc!(Chat, "shortcuts.copy_link", ["ctrl-shift-l"]),
     sc!(Misc, "shortcuts.help", ["ctrl-shift-h"]),
@@ -171,6 +177,9 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-'", CallDm, ctx),
         KeyBinding::new("ctrl-shift-'", CallDm, ctx),
         KeyBinding::new("ctrl-shift-alt-v", JumpToCall, ctx),
+        KeyBinding::new("ctrl-shift-alt-n", CreateThread, ctx),
+        KeyBinding::new("alt-r", RecordVoiceMessage, ctx),
+        KeyBinding::new("ctrl-shift-b", ToggleSoundboard, ctx),
     ]);
 }
 
@@ -472,6 +481,10 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, cx: &mut Context<Ph
     .on_action(cx.listener(|a, _: &MarkInboxRead, _, cx| a.mark_inbox_read(cx)))
     .on_action(cx.listener(|a, _: &CallDm, _, cx| a.call_current_dm(cx)))
     .on_action(cx.listener(|a, _: &JumpToCall, _, cx| a.jump_to_call(cx)))
+    .on_action(cx.listener(|a, _: &CreateThread, _, cx| a.create_thread_shortcut(cx)))
+    // UI-only placeholders (the same stub the voice panel's buttons open): nothing is recorded or sent.
+    .on_action(cx.listener(|a, _: &RecordVoiceMessage, _, cx| a.stub(&crate::t!("shortcuts.voice_message"), cx)))
+    .on_action(cx.listener(|a, _: &ToggleSoundboard, _, cx| a.stub(&crate::t!("voice.soundboard"), cx)))
     .on_action(cx.listener(|_, _: &GetHelp, _, cx| cx.open_url("https://support.discord.com")))
 }
 

@@ -26,6 +26,30 @@ fn set_focused(v: Option<(Id, Id)>) {
     FOCUSED.with(|f| f.set(v));
 }
 
+/// Text-to-speech through the system's speech-dispatcher (`spd-say`), or
+/// espeak-ng as a fallback. False when neither is installed or `text` is empty.
+pub fn speak(text: &str) -> bool {
+    if text.trim().is_empty() {
+        return false;
+    }
+    let Some(bin) = tts_binary() else { return false };
+    std::process::Command::new(bin)
+        .arg("--")
+        .arg(text)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .is_ok()
+}
+
+fn tts_binary() -> Option<std::path::PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    ["spd-say", "espeak-ng"]
+        .iter()
+        .find_map(|b| std::env::split_paths(&path).map(|d| d.join(b)).find(|p| p.is_file()))
+}
+
 /// Message `step` rows away from `cur` in `ids`, clamped (no wrap, like the
 /// client's list navigation). `None` cur starts from the newest message.
 pub fn step_in(ids: &[Id], cur: Option<Id>, step: i32) -> Option<Id> {
@@ -146,6 +170,12 @@ impl PhoenixApp {
             "p" if plain => self.toggle_pin(ch, id, cx),
             "+" | "=" if !m.control && !m.alt => self.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx),
             "f" if plain => self.open_forward(ch, id, cx),
+            "s" if plain => {
+                let text = self.messages.get(&ch).and_then(|l| l.msgs.iter().find(|x| x.id == id)).map(|x| x.content.to_string());
+                if !text.as_deref().is_some_and(speak) {
+                    self.parity_toast(crate::t!("shortcuts.tts_unavailable"), cx);
+                }
+            }
             // Shift+Backspace skips the confirmation, like Shift+click on the trash icon.
             "backspace" if own && !m.control && !m.alt => self.request_delete(ch, id, m.shift, cx),
             "c" if m.control && !m.shift && !m.alt => self.copy_message_text(ch, id, cx),
@@ -198,9 +228,9 @@ impl PhoenixApp {
             set_focused(None);
             let ch = ch.clone();
             self.composer.update(cx, |s, cx| {
-                let v = format!("{}{ch}", s.value());
-                s.set_value(v, window, cx);
                 s.focus(window, cx);
+                // At the caret (replacing any selection), emitting Change like real typing.
+                gpui::EntityInputHandler::replace_text_in_range(s, None, &ch, window, cx);
             });
             return true;
         }
@@ -215,6 +245,18 @@ impl PhoenixApp {
         let ids: Vec<Id> = self.channels.values().filter(|c| c.unread && !c.muted && c.guild.is_some()).map(|c| c.id).collect();
         for id in ids {
             self.mark_nav_read(crate::ui::nav_menus::Target::Channel(id), cx);
+        }
+    }
+
+    /// Ctrl+Shift+Alt+N: the thread creation form for the focused message.
+    /// Standalone threads (no starter message) aren't supported by our backend yet.
+    pub fn create_thread_shortcut(&mut self, cx: &mut Context<Self>) {
+        match focused() {
+            Some((ch, id)) if self.channels.get(&ch).is_some_and(|c| c.guild.is_some()) => {
+                set_focused(None);
+                self.open_thread_form(ch, id, cx);
+            }
+            _ => self.stub(&crate::t!("shortcuts.thread"), cx),
         }
     }
 

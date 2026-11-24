@@ -26,7 +26,7 @@ Source: the live 2026 client's shortcuts modal (Ctrl+/), read on 2026-11-24, plu
 | Ctrl+Enter | Answer an incoming call | ❌ |
 | Esc | Decline an incoming call | ❌ |
 | Ctrl+' | Start a call in a DM or group DM | ✅ (1:1 DM: opens our call UI) |
-| Ctrl+Shift+B | Toggle the soundboard | ❌ |
+| Ctrl+Shift+B | Toggle the soundboard | Bound, opens the same placeholder as the voice panel's button. No soundboard reference dump yet (needs a voice call), so the popout UI is ❌ |
 
 ## Chat
 | Shortcut | Action | Status |
@@ -34,7 +34,7 @@ Source: the live 2026 client's shortcuts modal (Ctrl+/), read on 2026-11-24, plu
 | Shift+Esc | Mark server read | ✅ |
 | Esc | Mark channel read (and jump to present) | ✅ |
 | Ctrl+Shift+T | Create a group DM | ✅ |
-| Ctrl+Shift+Alt+N | Create a thread | ❌ |
+| Ctrl+Shift+Alt+N | Create a thread | ✅ for the focused message (opens the thread form). Standalone threads ❌ (the backend needs a starter message) |
 | Ctrl+P | Toggle pins popout | ✅ |
 | Ctrl+I | Toggle inbox popout | ✅ |
 | Ctrl+Shift+E | Mark the inbox's listed channels read (only while the inbox is open) | ✅ |
@@ -42,8 +42,8 @@ Source: the live 2026 client's shortcuts modal (Ctrl+/), read on 2026-11-24, plu
 | Ctrl+E / Ctrl+G / Ctrl+S | Emoji / GIF / sticker picker | ✅ |
 | Page Up / Page Down | Scroll the chat | ✅ |
 | Shift+Page Up | Jump to the oldest unread message | ✅ |
-| Any key | Focus the composer and type the character | ✅ |
-| Alt+R | Record a voice message | ❌ |
+| Any key | Focus the composer and type the character at the caret | ✅ |
+| Alt+R | Record a voice message | Bound, opens a placeholder only. Nothing is recorded or sent. No reference dump of the recorder UI yet: ❌ |
 | Ctrl+Shift+U | Upload a file | ✅ |
 | Ctrl+Shift+L | Copy channel link | ✅ |
 
@@ -58,7 +58,7 @@ We have not checked how the client itself enters message focus (CDP can't send r
 | + | Add reaction | ✅ |
 | R | Reply | ✅ |
 | F | Forward | ✅ |
-| S | Dictate (text to speech) | ❌ (we have no Speak Message feature yet) |
+| S | Speak the message (text to speech) | ✅ via `spd-say` (speech-dispatcher), falling back to `espeak-ng`; shows a toast when neither is installed |
 | Ctrl+C | Copy text | ✅ |
 | Alt+Enter | Mark unread | ✅ |
 | Esc | Focus the composer | ✅ |
