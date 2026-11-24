@@ -407,8 +407,14 @@ impl Ctx<'_> {
                 let url = raw.strip_prefix('<').and_then(|u| u.strip_suffix('>')).unwrap_or(raw);
                 if !rest[1..close].contains('\n') && url.starts_with("http://") || url.starts_with("https://") {
                     self.push(&src[plain_start..i], style, spoiler);
+                    // The label keeps its own inline markdown (`[**Title** by **Artist**](url)`
+                    // in music bot embeds showed the asterisks).
                     let label = &rest[1..close];
-                    self.push_full(label, style | Style::LINK, Some(url.to_string()), None, spoiler);
+                    let first = self.out.spans.len();
+                    self.run(label, style | Style::LINK, spoiler);
+                    for s in &mut self.out.spans[first..] {
+                        s.link = Some(url.to_string());
+                    }
                     i += close + 3 + paren;
                     plain_start = i;
                     continue;
@@ -612,6 +618,14 @@ mod tests {
         let links: Vec<_> = i.spans.iter().filter_map(|s| s.link.as_deref()).collect();
         assert_eq!(links, vec!["https://example.com/a", "https://docs.rs"]);
         assert_eq!(clickable(&i).count(), 2);
+    }
+
+    #[test]
+    fn masked_link_label_keeps_markdown() {
+        let i = inline("[**Burn** by **Usher**](https://x.y)");
+        assert_eq!(i.text, "Burn by Usher");
+        assert!(i.spans.iter().all(|s| s.link.as_deref() == Some("https://x.y")));
+        assert!(i.spans.iter().any(|s| s.style.has(Style::BOLD)));
     }
 
     #[test]
