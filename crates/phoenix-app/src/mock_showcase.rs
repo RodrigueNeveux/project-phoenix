@@ -73,6 +73,24 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
         },
         &mut out,
     );
+    push(
+        6,
+        Message {
+            content: "https://example.com/watch?v=phoenix".into(),
+            embeds: vec![Embed {
+                color: Some(0xFF0000),
+                provider: Some("VideoSite".into()),
+                title: Some("A video embed".into()),
+                url: Some("https://example.com/watch?v=phoenix".into()),
+                kind: Some("video".into()),
+                thumbnail: Some(EmbedMedia { url: "https://example.invalid/video.jpg".into(), width: 1280, height: 720 }),
+                video: Some(EmbedMedia { url: "https://example.invalid/embed".into(), width: 1280, height: 720 }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+        &mut out,
+    );
     push(3, Message { attachments: vec![at(AttachmentKind::Image, "photo.png", 1280, 720, 345_678)], ..Default::default() }, &mut out);
     push(
         3,

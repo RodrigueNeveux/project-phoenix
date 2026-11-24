@@ -1736,7 +1736,14 @@ fn embed(e: &Embed) -> AnyElement {
                             let size = media::fit(m.width, m.height, 400., 300.);
                             let original = m.url.clone();
                             // embedFull_ .embedMedia_ margin-top 16px, radius 4px.
-                            d.child(div().mt(z(8.)).child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(z(4.))))
+                            let video = (e.kind.as_deref() == Some("video")).then(|| e.url.clone().unwrap_or_else(|| m.url.clone()));
+                            d.child(
+                                div()
+                                    .mt(z(8.))
+                                    .relative()
+                                    .child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(z(4.)))
+                                    .children(video.map(attach::video_embed_actions)),
+                            )
                         })
                         .children(footer),
                 )

@@ -28,7 +28,7 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | Embed thumbnail / media | `embedThumbnail_` ml 16 mt 8; `embedMedia_` mt 16 radius 4 | | ui/chat.rs `embed` | ✅ |
 | Link preview (article) | same grid, side thumbnail 80 | | ui/chat.rs `embed` | ✅ |
 | Image / gifv embeds | bare media, gifv max-h 300 | | ui/chat.rs `embed` | ✅ (real compare earlier) |
-| Video embed (YouTube) | `embedVideo_` + play overlay | | – | ❌ (shows big thumbnail, no play button) |
+| Video embed (YouTube) | `embedVideoActions_` centred; `wrapper_lj7V-K` --opacity-black-60, radius 24, h 48, p 12; `iconWrapper_` opacity .6 → 1, 24px play + external | | ui/chat/attach.rs `video_embed_actions` | ✅ |
 | Image attachment | `visualMediaItemContainer_` max 550x350, radius 8 | | ui/chat.rs `media_image` | ✅ |
 | Image mosaic (2–10) | `mosaicItem_` rows | | ui/chat/mosaic.rs | ✅ |
 | Spoiler image | blurred + "SPOILER" pill | | ui/chat.rs `spoiler_cover` | ⚠ |
@@ -46,5 +46,5 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | System: join, boost, pin, thread, call | `systemMessage_` | | ui/chat/system.rs | ⚠ |
 | `(edited)` label | `edited_` --text-muted .625rem | | ui/chat.rs `edited_marker` | ⚠ |
 
-Coverage: 26 ✅ / 11 ⚠ / 1 ❌ of 38 rows. No real-data compare score for these
+Coverage: 27 ✅ / 11 ⚠ / 0 ❌ of 38 rows. No real-data compare score for these
 components yet (none of them is on the live channel the user shows).

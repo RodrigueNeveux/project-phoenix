@@ -280,6 +280,50 @@ pub fn video_card(a: &Attachment, (w, h): (f32, f32), _cx: &App) -> AnyElement {
         .into_any_element()
 }
 
+/// Play / open-externally pill over a video embed's thumbnail (`embedVideoActions_` centred;
+/// `wrapper_lj7V-K`: --opacity-black-60, radius 24, height 48, padding 12; `iconWrapper_` opacity .6,
+/// hover 1, 24px icons; `iconExternalMargins_` margin-inline 2px 4px).
+pub fn video_embed_actions(url: SharedString) -> AnyElement {
+    let open = url.clone();
+    div()
+        .absolute()
+        .inset_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .h(z(48.))
+                .p(z(12.))
+                .rounded(z(24.))
+                .bg(c(tok(idx::OPACITY_BLACK_60)))
+                .flex()
+                .items_center()
+                .child(
+                    div()
+                        .id(gpui::ElementId::Name(format!("vplay-embed-{url}").into()))
+                        .mx(z(1.))
+                        .opacity(0.6)
+                        .hover(|s| s.opacity(1.))
+                        .cursor_pointer()
+                        .child(named_icon("play", 24., gpui::white()))
+                        .on_click(move |_, _, cx| cx.open_url(&url)),
+                )
+                .child(
+                    div()
+                        .id(gpui::ElementId::Name(format!("vext-embed-{open}").into()))
+                        .ml(z(2.))
+                        .mr(z(4.))
+                        .opacity(0.6)
+                        .hover(|s| s.opacity(1.))
+                        .cursor_pointer()
+                        .child(named_icon("call/popout", 24., gpui::white()))
+                        .on_click(move |_, _, cx| cx.open_url(&open)),
+                ),
+        )
+        .into_any_element()
+}
+
 #[cfg(test)]
 mod tests {
     use super::human_size;
