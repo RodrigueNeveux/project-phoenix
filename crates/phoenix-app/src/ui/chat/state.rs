@@ -55,6 +55,8 @@ pub struct PendingFile {
     /// Decoded preview for images.
     pub image: Option<Arc<Image>>,
     pub spoiler: bool,
+    /// Blurred preview shown while `spoiler` is on (`spoiler::blurred_image`).
+    pub blurred: Option<Arc<Image>>,
 }
 
 pub struct Sending {
@@ -178,7 +180,7 @@ fn is_image_name(name: &str) -> Option<gpui::ImageFormat> {
 
 pub fn pending_file(name: String, bytes: Vec<u8>) -> PendingFile {
     let image = is_image_name(&name).map(|f| Arc::new(Image::from_bytes(f, bytes.clone())));
-    PendingFile { name: name.into(), bytes: Arc::new(bytes), image, spoiler: false }
+    PendingFile { name: name.into(), bytes: Arc::new(bytes), image, spoiler: false, blurred: None }
 }
 
 impl PhoenixApp {
@@ -687,6 +689,21 @@ impl PhoenixApp {
     pub fn toggle_upload_spoiler(&mut self, ix: usize, cx: &mut Context<Self>) {
         if let Some(u) = self.chat.uploads.get_mut(ix) {
             u.spoiler = !u.spoiler;
+            if u.spoiler && u.blurred.is_none() && u.image.is_some() {
+                let bytes = u.bytes.clone();
+                let key = u.bytes.clone();
+                let task = cx.background_spawn(async move { super::spoiler::blurred_image(&bytes) });
+                cx.spawn(async move |this, cx| {
+                    let img = task.await;
+                    let _ = this.update(cx, |this, cx| {
+                        if let Some(u) = this.chat.uploads.get_mut(ix).filter(|u| Arc::ptr_eq(&u.bytes, &key)) {
+                            u.blurred = img;
+                        }
+                        cx.notify();
+                    });
+                })
+                .detach();
+            }
         }
         cx.notify();
     }

@@ -21,7 +21,7 @@ gpui-component = "0.10.0"
 futures = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 memchr = "2"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 phoenix-api = { path = "../phoenix-api" }
 phoenix-voice = { path = "../phoenix-voice", features = ["audio"] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }

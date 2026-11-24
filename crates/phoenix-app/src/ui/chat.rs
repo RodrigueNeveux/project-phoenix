@@ -27,6 +27,7 @@ pub mod panels;
 pub mod scrollbar;
 pub mod state;
 pub mod slash;
+pub mod spoiler;
 pub mod system;
 pub use state::ChatState;
 
