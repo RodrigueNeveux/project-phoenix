@@ -468,7 +468,7 @@ fn group_digits(n: u32) -> String {
     let d = n.to_string();
     let mut out = String::new();
     for (i, ch) in d.chars().enumerate() {
-        if i > 0 && (d.len() - i) % 3 == 0 {
+        if i > 0 && (d.len() - i).is_multiple_of(3) {
             out.push(sep);
         }
         out.push(ch);
