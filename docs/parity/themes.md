@@ -66,4 +66,13 @@ How these were measured, without touching the account settings:
 | Onyx | 12.5% | 1.5% | 2.2% | |
 | Ash | 11.4% | 1.5% | 2.0% | |
 | Light | 21.5% | 4.0% | 2.7% | older capture, content drifted between the two shots |
-| Dark | — | | | int-bin f66d7f3 renders the account theme (Onyx) instead: `settings::on_ready` lands after real_shots sets the theme; fixed in real_shots (theme re-applied before capture), rerun once merged |
+| Dark | 19.4% (content drifted: the client capture ran at dpr 1 through a viewport override) | 6.2% | — | redone 2026-11-24 with int-bin e1b089a: the theme is now Dark (no longer Onyx). Chat (26,26,30), rail (18,18,20), user panel and composer match pixel for pixel; the channel list was (26,26,30) instead of the rail colour, see below |
+
+## Channel list background (CDP computed, 2026-11-24)
+
+`sidebar_` and its header are transparent in Dark, Ash, Light and Onyx: the list shows `bg_`,
+the same colour as the guild rail (Dark oklab .183 = #121214, Ash .298, Light .964, Onyx black),
+while the chat is one step lighter. Phoenix painted the list in --background-base-lower (the chat
+colour); sidebar.rs now uses the rail's --background-base-lowest (Palette::BG_TERTIARY), also for
+the bottom fade and the avatar / icon cut-outs that must match it. ✅ (measured with the class
+swap described above, restored right after).
