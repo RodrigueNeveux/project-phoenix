@@ -434,7 +434,9 @@ fn unread_dm_items(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Vec<AnyElem
     app.dms
         .iter()
         .filter_map(|d| app.channels.get(d))
-        .filter(|ch| ch.mentions > 0)
+        // Muted DMs and message requests never surface in the rail (they stay
+        // in Home: Message Requests / the muted DM row).
+        .filter(|ch| ch.mentions > 0 && !ch.muted && !app.nav.message_requests.contains(&ch.id))
         .map(|ch| {
             let id = ch.id;
             let key = id.0;
