@@ -119,22 +119,27 @@ pub fn file_card(a: &Attachment) -> AnyElement {
 }
 
 fn control_icon(id: String, name: &str) -> gpui::Stateful<gpui::Div> {
-    // controlIcon_: 24x24 + padding 4, --interactive-text-active, hover --white, active translateY(1px)
+    // controlIcon_: 24x24 border-box with padding 4 (a 16px glyph), --interactive-text-active,
+    // hover --white, active translateY(1px).
+    let group = SharedString::from(id);
     div()
-        .id(gpui::ElementId::Name(id.into()))
+        .id(gpui::ElementId::Name(group.clone()))
+        .group(group.clone())
         .flex_none()
+        .size(z(24.))
         .p(z(4.))
         .cursor_pointer()
-        .text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))
-        .child(named_icon(name, 24., tk(idx::INTERACTIVE_TEXT_ACTIVE)))
+        .active(|s| s.mt(z(1.)).mb(z(-1.)))
+        .child(named_icon(name, 16., tk(idx::INTERACTIVE_TEXT_ACTIVE)).group_hover(group, |s| s.text_color(gpui::white())))
 }
 
 /// Seek track (`mediaBarWrapper_`: 6px, hsl(--primary-300) / .3; `mediaBarProgress_` --brand-500).
 fn track(progress: f32) -> gpui::Div {
+    // mediaBarInteraction_: flex 1, margin 0 7px; fakeEdges_ 3px rounded caps on both ends.
     div()
         .flex_1()
         .h(z(24.))
-        .mx(z(4.))
+        .mx(z(7.))
         .flex()
         .items_center()
         .child(
@@ -142,6 +147,7 @@ fn track(progress: f32) -> gpui::Div {
                 .relative()
                 .w_full()
                 .h(z(6.))
+                .rounded(z(3.))
                 .bg(c(tok(idx::PRIMARY_300)).opacity(0.3))
                 .child(div().absolute().top_0().left_0().h_full().w(gpui::relative(progress)).bg(tk(idx::BRAND_500))),
         )
@@ -278,7 +284,8 @@ pub fn video_card(a: &Attachment, (w, h): (f32, f32), _cx: &App) -> AnyElement {
                 .child(control_icon(format!("vplay-{}", a.url), "play"))
                 .child(duration_label())
                 .child(track(0.))
-                .child(control_icon(format!("vvol-{}", a.url), "speaker"))
+                // videoButton_: margin-inline-end 8, none on the last one.
+                .child(control_icon(format!("vvol-{}", a.url), "speaker").mr(z(8.)))
                 .child(control_icon(format!("vfs-{}", a.url), "call/fullscreen")),
         )
         .on_click(move |_, _, cx| cx.open_url(&original))
