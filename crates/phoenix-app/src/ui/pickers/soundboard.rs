@@ -476,10 +476,11 @@ fn emoji_of(s: &SoundboardSound) -> Option<AnyElement> {
     s.emoji_name.as_ref().filter(|n| !n.is_empty()).map(|n| crate::media::emoji::emoji_element(n, 20.))
 }
 
+const OVERLAY_FADE_MS: u64 = 200;
+
 pub fn sound_button(app: &PhoenixApp, s: &SoundboardSound, locked: bool, key: (usize, usize)) -> AnyElement {
     let playing = crate::voice::soundboard::is_sound_playing(s.id);
     let label = s.name.clone().unwrap_or_default();
-    let group: SharedString = format!("sb-btn-{}-{}", key.0, key.1).into();
     let emoji = emoji_of(s);
     let has_emoji = emoji.is_some();
     let sound = s.clone();
@@ -551,16 +552,27 @@ pub fn sound_button(app: &PhoenixApp, s: &SoundboardSound, locked: bool, key: (u
         .child(preview_btn)
         .when(!locked, |d| d.child(div().flex_1().flex().justify_center().child(named("play", 20., tk(idx::INTERACTIVE_TEXT_ACTIVE)))))
         .child(fav_btn);
+    let hk = crate::ui::states::key(("sb-sound", s.id.0, key));
     let hover_layer = div()
         .absolute()
         .inset_0()
-        .invisible()
-        .group_hover(group.clone(), |d| d.visible())
         .when(!locked, |d| d.child(overlay_bg()))
         .child(actions);
-    let button = div()
-        .id(SharedString::from(format!("sb-sound-{}-{}", key.0, key.1)))
-        .group(group.clone())
+    let hover_layer = match crate::ui::states::state(hk) {
+        Some((true, at)) if at.elapsed() < std::time::Duration::from_millis(OVERLAY_FADE_MS) => {
+            use gpui::AnimationExt as _;
+            hover_layer
+                .with_animation(
+                    gpui::ElementId::Name(format!("sb-overlay-{hk}-{at:?}").into()),
+                    gpui::Animation::new(std::time::Duration::from_millis(OVERLAY_FADE_MS)).with_easing(crate::ui::states::cubic_bezier(0.25, 0.1, 0.25, 1.)),
+                    |d, t| d.opacity(t),
+                )
+                .into_any_element()
+        }
+        Some((true, _)) => hover_layer.into_any_element(),
+        _ => hover_layer.invisible().into_any_element(),
+    };
+    let button = crate::ui::states::track(div().id(SharedString::from(format!("sb-sound-{}-{}", key.0, key.1))), hk)
         .relative()
         .w(px(BUTTON_W))
         .h(px(BUTTON_H))

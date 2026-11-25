@@ -1717,7 +1717,15 @@ fn main() -> anyhow::Result<()> {
                 })
             })?;
             println!("soundboard play {name:?} found={found}");
-            for (i, ms) in [700u64, 900, 1200].iter().enumerate() {
+            if std::env::var_os("PHX_VOICE_CLOSE").is_some() {
+                cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| phoenix_app::ui::pickers::soundboard::toggle(app, window, cx)))?;
+            }
+            let shots: Vec<u64> = std::env::var("PHX_VOICE_SOUND_SHOTS")
+                .ok()
+                .map(|s| s.split(',').filter_map(|x| x.trim().parse().ok()).collect())
+                .filter(|v: &Vec<u64>| !v.is_empty())
+                .unwrap_or_else(|| vec![700, 900, 1200]);
+            for (i, ms) in shots.iter().enumerate() {
                 pump(&mut cx, *ms);
                 cx.update_window(win.into(), |_, window, _| window.refresh())?;
                 pump(&mut cx, 100);

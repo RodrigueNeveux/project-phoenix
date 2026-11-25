@@ -218,6 +218,10 @@ impl GatewayHandle {
         self.send(GatewayCommand::Raw { op: 20, d: json!({ "stream_key": stream_key }) })
     }
 
+    pub fn voice_server_ping(&self) -> crate::Result<()> {
+        self.send(GatewayCommand::Raw { op: 5, d: serde_json::Value::Null })
+    }
+
     pub fn stream_ping(&self, stream_key: &str) -> crate::Result<()> {
         self.send(GatewayCommand::Raw { op: 21, d: json!({ "stream_key": stream_key }) })
     }

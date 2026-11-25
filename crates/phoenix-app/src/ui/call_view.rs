@@ -546,6 +546,33 @@ fn solo_button(id: &'static str, icon: &str, label: SharedString) -> AnyElement 
         .into_any_element()
 }
 
+pub fn solo_veil_alpha(x: f32, y: f32) -> f32 {
+    let dx = (x - 0.5) / 1.1079;
+    let dy = y - 1.;
+    let r = (dx * dx + dy * dy).sqrt();
+    (1. - (r - 0.6) / 0.4).clamp(0., 1.)
+}
+
+thread_local! {
+    static SOLO_VEILS: std::cell::RefCell<std::collections::HashMap<u32, std::sync::Arc<gpui::RenderImage>>> = Default::default();
+}
+
+fn solo_veil(rgb: u32) -> std::sync::Arc<gpui::RenderImage> {
+    if let Some(v) = SOLO_VEILS.with(|m| m.borrow().get(&rgb).cloned()) {
+        return v;
+    }
+    let (w, h) = (320u32, 180u32);
+    let [r, g, b] = [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8];
+    let mut out = image::RgbaImage::new(w, h);
+    for (x, y, px) in out.enumerate_pixels_mut() {
+        let a = solo_veil_alpha((x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32);
+        *px = image::Rgba([b, g, r, (a * 255.).round() as u8]);
+    }
+    let arc = std::sync::Arc::new(gpui::RenderImage::new(vec![image::Frame::new(out)]));
+    SOLO_VEILS.with(|m| m.borrow_mut().insert(rgb, arc.clone()));
+    arc
+}
+
 fn solo_tile(w: f32, h: f32) -> AnyElement {
     let lower = t(idx::BACKGROUND_BASE_LOWER);
     div()
@@ -561,11 +588,13 @@ fn solo_tile(w: f32, h: f32) -> AnyElement {
             gpui::linear_color_stop(t(idx::BACKGROUND_TILE_GRADIENT_PINK_END), 0.),
             gpui::linear_color_stop(t(idx::BACKGROUND_TILE_GRADIENT_PINK_START), 0.8),
         )))
-        .child(div().absolute().inset_0().bg(gpui::linear_gradient(
-            0.,
-            gpui::linear_color_stop(lower, 0.6),
-            gpui::linear_color_stop(lower.opacity(0.), 1.),
-        )))
+        .child(
+            gpui::img(gpui::ImageSource::Render(solo_veil(crate::theme::resolve(tok(idx::BACKGROUND_BASE_LOWER)) >> 8)))
+                .absolute()
+                .inset_0()
+                .size_full()
+                .object_fit(gpui::ObjectFit::Fill),
+        )
         .child(
             div()
                 .absolute()
@@ -1028,6 +1057,16 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn solo_veil_is_the_client_ellipse() {
+        assert_eq!(super::solo_veil_alpha(0.5, 1.), 1.);
+        assert_eq!(super::solo_veil_alpha(0.5, 0.4), 1.);
+        assert_eq!(super::solo_veil_alpha(0.5, 0.), 0.);
+        assert!((super::solo_veil_alpha(0.5, 0.2) - 0.5).abs() < 1e-4);
+        assert_eq!(super::solo_veil_alpha(0., 0.), 0.);
+        assert!((super::solo_veil_alpha(0., 0.3) - 0.417).abs() < 0.01);
+    }
+
     use super::grid;
 
     #[test]

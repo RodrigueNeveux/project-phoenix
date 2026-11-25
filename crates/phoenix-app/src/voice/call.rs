@@ -431,7 +431,10 @@ impl VoiceManager {
                     VoiceEvent::Ping(p) => VoiceUiEvent::Ping(p),
                     VoiceEvent::Speaking { user_id, speaking } => VoiceUiEvent::Speaking { user: Id(user_id), speaking },
                     VoiceEvent::Encryption { e2ee, .. } => VoiceUiEvent::Encryption(e2ee),
-                    VoiceEvent::Reconnecting => VoiceUiEvent::Status(VoiceStatus::Reconnecting),
+                    VoiceEvent::Reconnecting => {
+                        ping_on_reconnect(None);
+                        VoiceUiEvent::Status(VoiceStatus::Reconnecting)
+                    }
                     VoiceEvent::Video { user_id, frame } => {
                         on_remote_video(user_id, &frame);
                         continue;
@@ -758,6 +761,14 @@ fn stream_info(endpoint: String, server_id: String, me: u64, session_id: String,
     }
 }
 
+fn ping_on_reconnect(stream_key: Option<&str>) {
+    let Some(gw) = manager().state.lock().gw.clone() else { return };
+    drop(match stream_key {
+        Some(k) => gw.stream_ping(k),
+        None => gw.voice_server_ping(),
+    });
+}
+
 async fn own_stream_events(generation: u64, key: String, mut events: mpsc::UnboundedReceiver<VoiceEvent>) {
     while let Some(ev) = events.recv().await {
         let mut st = manager().state.lock();
@@ -782,6 +793,11 @@ async fn own_stream_events(generation: u64, key: String, mut events: mpsc::Unbou
             VoiceEvent::Stats(s) => {
                 if let Some(o) = st.own.as_mut() {
                     o.stats = s;
+                }
+            }
+            VoiceEvent::Reconnecting => {
+                if let Some(gw) = st.gw.as_ref() {
+                    drop(gw.stream_ping(&key));
                 }
             }
             VoiceEvent::Disconnected { reason } => {
@@ -939,6 +955,7 @@ async fn watch_events(generation: u64, key: String, owner: u64, mut events: mpsc
             VoiceEvent::VideoState { active: false, .. } => {
                 streams().lock().remove(&owner);
             }
+            VoiceEvent::Reconnecting => ping_on_reconnect(Some(&key)),
             VoiceEvent::Disconnected { .. } => {
                 let mut st = manager().state.lock();
                 stop_watch(&mut st, &key);

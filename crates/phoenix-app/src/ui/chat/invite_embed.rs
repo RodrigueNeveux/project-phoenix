@@ -300,39 +300,80 @@ pub(super) fn info(
         .children(detail)
 }
 
+pub fn resolving_offset(t: f32) -> f32 {
+    let seg = if t < 0.5 { t * 2. } else { 2. - t * 2. };
+    -380. * (1. - crate::ui::states::cubic_bezier(0.42, 0., 0.58, 1.)(seg))
+}
+
+fn shimmer_band(key: usize, x: f32) -> impl IntoElement {
+    use gpui::AnimationExt as _;
+    let (edge, mid) = if crate::theme::is_light() {
+        (tk(idx::PRIMARY_100), tk(idx::PRIMARY_200))
+    } else {
+        (tk(idx::PRIMARY_600), tk(idx::PRIMARY_500))
+    };
+    let half = |a: gpui::Hsla, b: gpui::Hsla| {
+        div().w(z(380.)).h_full().flex_none().bg(gpui::linear_gradient(
+            90.,
+            gpui::linear_color_stop(a, 0.),
+            gpui::linear_color_stop(b, 1.),
+        ))
+    };
+    div()
+        .absolute()
+        .top_0()
+        .bottom_0()
+        .w(z(760.))
+        .flex()
+        .child(half(edge, mid))
+        .child(half(mid, edge))
+        .with_animation(
+            ("invite-resolving", key),
+            gpui::Animation::new(Duration::from_secs(4)).repeat(),
+            move |d, t| d.left(z(resolving_offset(t) - x)),
+        )
+}
+
+fn shimmer_piece(key: usize, x: f32, y: f32, w: f32, h: f32, r: f32) -> gpui::Div {
+    div()
+        .absolute()
+        .left(z(x))
+        .top(z(y))
+        .w(z(w))
+        .h(z(h))
+        .rounded(z(r))
+        .overflow_hidden()
+        .child(shimmer_band(key, x))
+}
+
 fn resolving() -> AnyElement {
+    let mask = div().relative().h(z(50.)).min_w(z(259.)).flex_basis(z(259.)).flex_grow(1000.).flex_shrink_0();
     wrapper()
         .child(title(crate::t!("invite.card.resolving")))
         .child(
-            body().child(header_line(
-                Some(
+            div()
+                .w_full()
+                .overflow_hidden()
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(z(16.))
+                .child(
+                    mask.child(shimmer_piece(0, 0., 0., 50., 50., 16.))
+                        .child(shimmer_piece(1, 59., 6., 130., 20., 3.))
+                        .child(shimmer_piece(2, 59., 30., 200., 16., 3.)),
+                )
+                .child(
                     div()
-                        .size(z(48.))
-                        .flex_none()
-                        .rounded(z(12.))
-                        .bg(tk(idx::BACKGROUND_MOD_SUBTLE))
-                        .into_any_element(),
+                        .relative()
+                        .flex_grow(1.)
+                        .flex_shrink_0()
+                        .min_w(z(66.))
+                        .h(z(38.))
+                        .rounded(z(3.))
+                        .overflow_hidden()
+                        .child(shimmer_band(3, 0.)),
                 ),
-                div()
-                    .flex_1()
-                    .flex()
-                    .flex_col()
-                    .gap(z(8.))
-                    .child(
-                        div()
-                            .h(z(16.))
-                            .w(z(124.))
-                            .rounded(z(3.))
-                            .bg(tk(idx::BACKGROUND_MOD_SUBTLE)),
-                    )
-                    .child(
-                        div()
-                            .h(z(12.))
-                            .w(z(194.))
-                            .rounded(z(3.))
-                            .bg(tk(idx::BACKGROUND_MOD_SUBTLE)),
-                    ),
-            )),
         )
         .into_any_element()
 }
@@ -1297,6 +1338,15 @@ fn friend_card(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn resolving_shimmer_follows_the_keyframes() {
+        assert_eq!(super::resolving_offset(0.), -380.);
+        assert!(super::resolving_offset(0.5).abs() < 0.01);
+        assert_eq!(super::resolving_offset(1.), -380.);
+        assert!((super::resolving_offset(0.25) + 190.).abs() < 0.5);
+        assert!(super::resolving_offset(0.1) < -380. * 0.85);
+    }
+
     use super::*;
 
     fn codes(s: &str) -> Vec<(String, Option<u64>)> {

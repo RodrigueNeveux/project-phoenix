@@ -379,7 +379,7 @@ pub fn field_label(t: SharedString, required: bool) -> gpui::Div {
 }
 
 pub fn label(t: SharedString) -> gpui::Div {
-    div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).mb(z(8.)).child(t)
+    field_label(t, false)
 }
 
 pub fn values(f: &Form, cx: &gpui::App) -> Vec<String> {
