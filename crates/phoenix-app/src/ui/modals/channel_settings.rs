@@ -712,10 +712,10 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
     let notice = notice.or(hook_notice);
     let mut page = overlay("channel-settings", items, selected, pick, title, content, notice, cx);
     if let Some(am) = &s.add_members {
-        page = div().size_full().child(page).child(super::channel_perms::add_members_modal(app, s, am, cx)).into_any_element();
+        page = div().absolute().top_0().left_0().size_full().child(page).child(super::channel_perms::add_members_modal(app, s, am, cx)).into_any_element();
     }
     if s.confirm_delete {
-        page = div().size_full().child(page).child(super::channel_perms::delete_modal(s, cx)).into_any_element();
+        page = div().absolute().top_0().left_0().size_full().child(page).child(super::channel_perms::delete_modal(s, cx)).into_any_element();
     }
     page
 }
