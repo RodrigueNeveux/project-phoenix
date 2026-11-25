@@ -323,6 +323,9 @@ pub trait Backend: Send + Sync + 'static {
     fn authorized_apps(&self) -> BoxFuture<Option<Vec<crate::ui::settings::authorized_apps::AuthorizedApp>>> {
         Box::pin(async { Ok(None) })
     }
+    fn user_connections(&self) -> BoxFuture<Option<Vec<crate::ui::settings::connections::LinkedAccount>>> {
+        Box::pin(async { Ok(None) })
+    }
     fn billing(&self) -> BoxFuture<Option<crate::ui::settings::billing::Billing>> {
         Box::pin(async { Ok(None) })
     }

@@ -284,6 +284,9 @@ impl Backend for ReadOnly {
     fn authorized_apps(&self) -> BoxFuture<Option<Vec<phoenix_app::ui::settings::authorized_apps::AuthorizedApp>>> {
         self.0.authorized_apps()
     }
+    fn user_connections(&self) -> BoxFuture<Option<Vec<phoenix_app::ui::settings::connections::LinkedAccount>>> {
+        self.0.user_connections()
+    }
     fn billing(&self) -> BoxFuture<Option<phoenix_app::ui::settings::billing::Billing>> {
         self.0.billing()
     }
@@ -1151,11 +1154,17 @@ fn main() -> anyhow::Result<()> {
                         "devices" => Some(N::Devices),
                         "standing" => Some(N::Standing),
                         "mfa" => Some(N::Mfa),
+                        "family" => Some(N::FamilyCenter),
                         _ => None,
                     };
                     if let (Some(s), Some(n)) = (app.settings.as_mut(), nested) {
                         s.page = P::MyAccount;
                         s.nested = Some(n);
+                    }
+                    if arg == "changelog"
+                        && let Some(s) = app.settings.as_mut()
+                    {
+                        s.show_changelog = true;
                     }
                 }
                 "server_settings" => {

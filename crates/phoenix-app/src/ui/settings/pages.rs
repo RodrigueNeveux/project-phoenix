@@ -1781,36 +1781,12 @@ static CONNECTIONS: &[B] = &[
     B::Title("sp.cn.t1"),
     B::Lead("sp.cn.t1_d"),
     B::Custom("sp.cn.add", connection_tiles),
-    B::Custom("sp.cn.empty", no_connections),
+    B::Custom("sp.cn.empty", super::connections::render),
     B::Divider,
     B::Title("sp.cn.t2"),
     B::Lead("sp.cn.t2_d"),
     B::Custom("sp.cn.t2", super::authorized_apps::render),
 ];
-
-
-fn no_connections(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
-    if super::account::connections().unwrap_or(0) > 0 {
-        return div().into_any_element();
-    }
-    div()
-        .h(z(200.))
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(
-            div()
-                .w(z(440.))
-                .flex()
-                .flex_col()
-                .gap(z(8.))
-                .text_center()
-                .text_color(c(tok(idx::TEXT_MUTED)))
-                .child(div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).child(tr("sp.cn.empty")))
-                .child(div().text_size(z(16.)).line_height(z(20.)).child(tr("sp.cn.empty_d"))),
-        )
-        .into_any_element()
-}
 
 static DEVELOPER: &[B] = &[
     B::Switch(

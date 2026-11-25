@@ -14,6 +14,7 @@ pub enum Nested {
     Mfa,
     Devices,
     Standing,
+    FamilyCenter,
 }
 
 impl Nested {
@@ -22,6 +23,7 @@ impl Nested {
             Self::Mfa => crate::t!("settings.account.mfa"),
             Self::Devices => crate::t!("settings.devices.title"),
             Self::Standing => crate::t!("settings.account.status"),
+            Self::FamilyCenter => crate::t!("settings.account.family"),
         }
     }
 
@@ -29,6 +31,7 @@ impl Nested {
         match self {
             Self::Mfa | Self::Devices => 1,
             Self::Standing => 2,
+            Self::FamilyCenter => 3,
         }
     }
 }
@@ -184,6 +187,7 @@ pub fn render(app: &PhoenixApp, n: Nested, cx: &mut Cx) -> Div {
         Nested::Devices => devices(cx),
         Nested::Standing => standing(app),
         Nested::Mfa => mfa(app, cx),
+        Nested::FamilyCenter => family_center(cx),
     }
 }
 
@@ -479,12 +483,275 @@ fn mfa(app: &PhoenixApp, cx: &mut Cx) -> Div {
     out
 }
 
+fn family_feature_card(icon: &'static str, title_key: &str, desc_key: &str) -> Div {
+    div()
+        .flex_1()
+        .min_w_0()
+        .p(z(20.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+        .flex()
+        .flex_col()
+        .gap(z(8.))
+        .child(
+            div()
+                .size(z(36.))
+                .rounded_full()
+                .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(gpui::svg().path(crate::icons::path(icon)).size(z(18.)).text_color(c(tok(idx::TEXT_STRONG)))),
+        )
+        .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!(title_key)))
+        .child(text(14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE, crate::t!(desc_key)))
+}
+
+fn family_group(title_key: &str, desc_key: Option<&str>, items: &[(&'static str, &str, &str)]) -> Div {
+    let mut card = div()
+        .rounded(z(12.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+        .flex()
+        .flex_col();
+    let last = items.len().saturating_sub(1);
+    for (ix, (icon, tk, dk)) in items.iter().enumerate() {
+        let mut row = div()
+            .p(z(16.))
+            .flex()
+            .items_start()
+            .gap(z(14.))
+            .child(
+                div()
+                    .size(z(32.))
+                    .rounded(z(8.))
+                    .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_none()
+                    .child(gpui::svg().path(crate::icons::path(icon)).size(z(16.)).text_color(c(tok(idx::ICON_DEFAULT)))),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .gap(z(2.))
+                    .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG, crate::t!(tk)))
+                    .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!(dk))),
+            );
+        if ix < last {
+            row = row.border_b_1().border_color(c(tok(idx::BORDER_SUBTLE)));
+        }
+        card = card.child(row);
+    }
+    let mut wrap = div().flex().flex_col().gap(z(6.)).child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG, crate::t!(title_key)));
+    if let Some(dk) = desc_key {
+        wrap = wrap.child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!(dk)));
+    }
+    wrap.child(div().pt(z(6.)).child(card))
+}
+
+fn family_center(cx: &mut Cx) -> Div {
+    let tab = FAMILY_TAB.with(std::cell::Cell::get);
+    let tabs = ["settings.family.tab_activity", "settings.family.tab_family", "settings.family.tab_settings"];
+    let tab_bar = div()
+        .mb(z(24.))
+        .border_b_1()
+        .border_color(c(tok(idx::BORDER_MUTED)))
+        .flex()
+        .items_center()
+        .gap(z(24.))
+        .children(tabs.into_iter().enumerate().map(|(ix, key)| {
+            let active = ix == tab;
+            div()
+                .id(("family-tab", ix))
+                .pb(z(12.))
+                .cursor_pointer()
+                .border_b_2()
+                .border_color(if active { c(tok(idx::TEXT_BRAND)) } else { gpui::transparent_black() })
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(if active { idx::TEXT_BRAND } else { idx::TEXT_MUTED })))
+                .when(!active, |d| d.hover(|s| s.text_color(c(tok(idx::TEXT_DEFAULT)))))
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    FAMILY_TAB.with(|t| t.set(ix));
+                    cx.notify();
+                }))
+                .child(crate::t!(key))
+        }));
+    let body = match tab {
+        1 => div()
+            .p(z(32.))
+            .rounded(z(12.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+            .flex()
+            .flex_col()
+            .items_center()
+            .gap(z(10.))
+            .text_center()
+            .child(gpui::svg().path(crate::icons::path("users")).size(z(36.)).text_color(c(tok(idx::ICON_MUTED))))
+            .child(text(18., 24., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("settings.family.empty_title")))
+            .child(text(14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE, crate::t!("settings.family.empty_desc"))),
+        2 => div()
+            .p(z(24.))
+            .rounded(z(12.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+            .flex()
+            .flex_col()
+            .gap(z(16.))
+            .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("settings.family.settings_title")))
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(z(12.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(z(2.))
+                            .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("settings.family.pref_tab")))
+                            .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("settings.family.pref_tab_d"))),
+                    )
+                    .child(controls::switch("family-pref-tab", true).opacity(0.75)),
+            )
+            .child(
+                div()
+                    .pt(z(12.))
+                    .border_t_1()
+                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap(z(12.))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(z(2.))
+                            .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("settings.family.pref_email")))
+                            .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("settings.family.pref_email_d"))),
+                    )
+                    .child(controls::switch("family-pref-email", false).opacity(0.75)),
+            ),
+        _ => {
+            let hero = div()
+                .p(z(32.))
+                .rounded(z(12.))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap(z(24.))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(z(12.))
+                        .child(text(24., 32., FontWeight::MEDIUM, idx::TEXT_STRONG, crate::t!("settings.family.hero_title")))
+                        .child(text(14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE, crate::t!("settings.family.hero_body")))
+                        .child(
+                            div()
+                                .id("family-learn-more")
+                                .cursor_pointer()
+                                .text_size(z(14.))
+                                .line_height(z(18.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(tok(idx::TEXT_LINK)))
+                                .hover(|s| s.underline())
+                                .on_click(|_, _, cx| cx.open_url("https://support.discord.com/hc/articles/14155043715735"))
+                                .child(crate::t!("settings.family.learn_more")),
+                        )
+                        .child(
+                            div().pt(z(4.)).flex().child(
+                                controls::button("family-get-started", crate::t!("settings.family.get_started"), BtnKind::Primary).on_click(
+                                    cx.listener(|_, _, _, cx| {
+                                        FAMILY_TAB.with(|t| t.set(1));
+                                        cx.notify();
+                                    }),
+                                ),
+                            ),
+                        ),
+                )
+                .child(
+                    div()
+                        .size(z(120.))
+                        .rounded(z(16.))
+                        .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(gpui::svg().path(crate::icons::path("users")).size(z(56.)).text_color(c(tok(idx::TEXT_BRAND)))),
+                );
+            let features = div()
+                .mt(z(20.))
+                .flex()
+                .gap(z(16.))
+                .child(family_feature_card("lock", "settings.family.f1_t", "settings.family.f1_d"))
+                .child(family_feature_card("eye", "settings.family.f2_t", "settings.family.f2_d"))
+                .child(family_feature_card("link", "settings.family.f3_t", "settings.family.f3_d"));
+            let can_see = family_group(
+                "settings.family.g1_t",
+                Some("settings.family.g1_d"),
+                &[
+                    ("users", "settings.family.g1_i1_t", "settings.family.g1_i1_d"),
+                    ("compass", "settings.family.g1_i2_t", "settings.family.g1_i2_d"),
+                    ("message", "settings.family.g1_i3_t", "settings.family.g1_i3_d"),
+                    ("mic", "settings.family.g1_i4_t", "settings.family.g1_i4_d"),
+                    ("shop", "settings.family.g1_i5_t", "settings.family.g1_i5_d"),
+                    ("gift", "settings.family.g1_i6_t", "settings.family.g1_i6_d"),
+                    ("flag", "settings.family.g1_i7_t", "settings.family.g1_i7_d"),
+                ],
+            );
+            let can_manage = family_group(
+                "settings.family.g2_t",
+                Some("settings.family.g2_d"),
+                &[
+                    ("clock", "settings.family.g2_i1_t", "settings.family.g2_i1_d"),
+                    ("shop", "settings.family.g2_i2_t", "settings.family.g2_i2_d"),
+                    ("settings", "settings.family.g2_i3_t", "settings.family.g2_i3_d"),
+                ],
+            );
+            let cannot_see = family_group(
+                "settings.family.g3_t",
+                None,
+                &[("lock", "settings.family.g3_i1_t", "settings.family.g3_i1_d")],
+            );
+            div().flex().flex_col().child(hero).child(features).child(div().mt(z(28.)).flex().flex_col().gap(z(24.)).child(can_see).child(can_manage).child(cannot_see))
+        }
+    };
+    div().flex().flex_col().child(tab_bar).child(body)
+}
+
 thread_local! {
     static SHOW_PHONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static FAMILY_TAB: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 pub fn reset() {
     SHOW_PHONE.with(|c| c.set(false));
+    FAMILY_TAB.with(|t| t.set(0));
 }
 
 #[cfg(test)]
@@ -506,6 +773,7 @@ mod tests {
         assert_eq!(Nested::Devices.sub_index(), 1);
         assert_eq!(Nested::Mfa.sub_index(), 1);
         assert_eq!(Nested::Standing.sub_index(), 2);
+        assert_eq!(Nested::FamilyCenter.sub_index(), 3);
     }
 
     #[test]

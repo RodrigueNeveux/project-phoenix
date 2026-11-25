@@ -172,6 +172,7 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
             .id("acct-family")
             .cursor_pointer()
             .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+            .on_click(cx.listener(|a, _, _, cx| super::nested::open(a, super::nested::Nested::FamilyCenter, cx)))
             .into_any_element(),
     )];
     let removal: Vec<(SharedString, AnyElement)> = [t("settings.account.disable"), t("settings.account.close")].into_iter().zip(acct::removal_rows()).collect();
@@ -960,6 +961,142 @@ fn logout_modal(cx: &mut Cx) -> AnyElement {
     })
 }
 
+fn changelog_modal(cx: &mut Cx) -> AnyElement {
+    let close = cx.listener(|a, _, _, cx| {
+        if let Some(s) = st(a) {
+            s.show_changelog = false;
+        }
+        cx.notify();
+    });
+    let section = |title_key: &str, items: &[&str]| {
+        div()
+            .flex()
+            .flex_col()
+            .gap(z(6.))
+            .child(
+                div()
+                    .text_size(z(13.))
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(c(tok(idx::TEXT_BRAND)))
+                    .child(crate::t!(title_key)),
+            )
+            .children(items.iter().map(|k| {
+                div()
+                    .flex()
+                    .items_start()
+                    .gap(z(8.))
+                    .text_size(z(14.))
+                    .line_height(z(20.))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .child(div().text_color(c(tok(idx::TEXT_MUTED))).child("•"))
+                    .child(div().flex_1().min_w_0().child(crate::t!(k)))
+            }))
+    };
+    let card = div()
+        .id("settings-changelog-modal")
+        .w(z(480.))
+        .max_h(z(600.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            div()
+                .px(z(20.))
+                .py(z(16.))
+                .border_b_1()
+                .border_color(c(tok(idx::BORDER_MUTED)))
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(z(2.))
+                        .child(
+                            div()
+                                .text_size(z(20.))
+                                .line_height(z(24.))
+                                .font_weight(FontWeight::SEMIBOLD)
+                                .text_color(c(tok(idx::TEXT_STRONG)))
+                                .child(crate::t!("settings.more.changelog")),
+                        )
+                        .child(
+                            div()
+                                .text_size(z(12.))
+                                .line_height(z(16.))
+                                .text_color(c(tok(idx::TEXT_MUTED)))
+                                .child(crate::diagnostics::version_line()),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("changelog-close")
+                        .size(z(32.))
+                        .rounded(z(8.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+                        .on_click(cx.listener(|a, _, _, cx| {
+                            if let Some(s) = st(a) {
+                                s.show_changelog = false;
+                            }
+                            cx.notify();
+                        }))
+                        .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
+                ),
+        )
+        .child(
+            div()
+                .id("changelog-body")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .px(z(20.))
+                .py(z(16.))
+                .flex()
+                .flex_col()
+                .gap(z(18.))
+                .child(section("settings.changelog.s1", &["settings.changelog.s1_1", "settings.changelog.s1_2"]))
+                .child(section("settings.changelog.s2", &["settings.changelog.s2_1", "settings.changelog.s2_2"]))
+                .child(section("settings.changelog.s3", &["settings.changelog.s3_1", "settings.changelog.s3_2"])),
+        )
+        .child(
+            div()
+                .px(z(20.))
+                .py(z(12.))
+                .border_t_1()
+                .border_color(c(tok(idx::BORDER_MUTED)))
+                .flex()
+                .justify_end()
+                .child(controls::button("changelog-done", crate::t!("common.close"), BtnKind::Primary).on_click(close)),
+        );
+    div()
+        .id("changelog-scrim")
+        .absolute()
+        .inset_0()
+        .bg(c(tok(idx::BACKGROUND_SCRIM)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|a, _, _, cx| {
+            if let Some(s) = st(a) {
+                s.show_changelog = false;
+            }
+            cx.notify();
+        }))
+        .child(card)
+        .into_any_element()
+}
+
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyElement> {
     let s = app.settings.as_ref()?;
     if s.page == Page::Profiles {
@@ -980,6 +1117,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
     }
     let error = s.error.clone();
     let confirm = s.confirm_logout;
+    let changelog = s.show_changelog;
     let hwaccel = s.confirm_hwaccel;
     let page_label = s.page.label();
     let body = div()
@@ -1056,6 +1194,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
                     .child(card.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())),
             )
             .when(confirm, |d| d.child(logout_modal(cx)))
+            .when(changelog, |d| d.child(changelog_modal(cx)))
             .children(super::authorized_apps::confirm_modal(cx))
             .when_some(hwaccel, |d, on| d.child(hwaccel_modal(on, cx)))
             .into_any_element(),

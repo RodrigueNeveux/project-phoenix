@@ -34,6 +34,11 @@ pub fn connections() -> Vec<(&'static str, String, bool)> {
     ]
 }
 
+pub fn connection_icon(kind: &str) -> Option<(String, bool)> {
+    let label = super::connections::platform_label(kind);
+    connections().into_iter().find(|(n, _, _)| *n == label).map(|(_, u, app)| (u, app))
+}
+
 pub fn app_icons() -> Vec<String> {
     [
         "5926a37cee0904ce", "e8396e79419904ca", "2d62663c4b493f8e", "28f89b5f78dd6f80", "96f9a2942150ba17", "22bb7108ad1c466f",

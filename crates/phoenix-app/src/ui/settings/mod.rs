@@ -3,6 +3,7 @@ pub mod nested;
 pub mod sessions;
 mod art;
 pub mod authorized_apps;
+pub mod connections;
 pub mod billing;
 mod boost;
 mod gift;
@@ -154,6 +155,7 @@ pub struct LocalPrefs {
     pub ui: std::collections::BTreeMap<String, u64>,
     pub trusted_domains: std::collections::BTreeSet<String>,
     pub trusted_protocols: std::collections::BTreeSet<String>,
+    pub collapsed_in_inbox: std::collections::BTreeSet<u64>,
 }
 
 impl Default for LocalPrefs {
@@ -171,6 +173,7 @@ impl Default for LocalPrefs {
             ui: Default::default(),
             trusted_domains: Default::default(),
             trusted_protocols: Default::default(),
+            collapsed_in_inbox: Default::default(),
         }
     }
 }
@@ -213,6 +216,11 @@ impl LocalPrefs {
                 .unwrap_or_default(),
             trusted_domains: strings(v, "trusted_domains"),
             trusted_protocols: strings(v, "trusted_protocols"),
+            collapsed_in_inbox: v
+                .get("collapsed_in_inbox")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).collect())
+                .unwrap_or_default(),
         }
     }
     pub fn to_json(&self) -> Value {
@@ -229,6 +237,7 @@ impl LocalPrefs {
             "ui": self.ui,
             "trusted_domains": self.trusted_domains,
             "trusted_protocols": self.trusted_protocols,
+            "collapsed_in_inbox": self.collapsed_in_inbox,
         })
     }
     pub fn load() -> Self {
@@ -362,6 +371,7 @@ pub const NAV: &[(&str, &[Page])] = &[
 pub struct SettingsState {
     pub page: Page,
     pub confirm_logout: bool,
+    pub show_changelog: bool,
     pub confirm_hwaccel: Option<bool>,
     pub error: Option<SharedString>,
     pub reveal_email: bool,
@@ -387,6 +397,7 @@ pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         billing::fetch(app, cx);
         subscriptions::fetch(app, cx);
         authorized_apps::fetch(app, cx);
+        connections::fetch(app, cx);
         cx.notify();
     }
 }
@@ -408,6 +419,8 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     }
     if s.confirm_hwaccel.is_some() {
         s.confirm_hwaccel = None;
+    } else if s.show_changelog {
+        s.show_changelog = false;
     } else if s.confirm_logout {
         s.confirm_logout = false;
     } else if s.open_select.is_some() {

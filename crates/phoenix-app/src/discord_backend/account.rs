@@ -331,4 +331,10 @@ impl DiscordBackend {
             Ok(Some(crate::ui::settings::authorized_apps::parse(&v)))
         })
     }
+    pub(super) fn user_connections_impl(&self) -> BoxFuture<Option<Vec<crate::ui::settings::connections::LinkedAccount>>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.request_json(reqwest::Method::GET, "/users/@me/connections", None).await.map_err(api_err)?;
+            Ok(Some(crate::ui::settings::connections::parse(&v)))
+        })
+    }
 }

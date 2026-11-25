@@ -126,12 +126,16 @@ impl PhoenixApp {
         use crate::ui::inbox_unreads::Kind;
         let order = crate::ui::server_bar::flat_guild_order(self);
         let entries = self.backend.inbox_unreads(&order);
+        let collapsed_set = &self.prefs.local.collapsed_in_inbox;
         let i = &mut self.parity.inbox;
         i.unreads_gen += 1;
         i.unreads_loading = false;
         i.unreads = entries
             .into_iter()
-            .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false, error: None, collapsed: false })
+            .map(|entry| {
+                let collapsed = collapsed_set.contains(&entry.channel.0);
+                crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false, error: None, collapsed }
+            })
             .collect();
         if i.unreads.is_empty() && attempt < UNREADS_RETRIES {
             let generation = i.unreads_gen;
@@ -1094,6 +1098,12 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
             cx.stop_propagation();
             if let Some(c) = a.parity.inbox.unreads.iter_mut().find(|c| c.entry.channel == ch) {
                 c.collapsed = !c.collapsed;
+                if c.collapsed {
+                    a.prefs.local.collapsed_in_inbox.insert(ch.0);
+                } else {
+                    a.prefs.local.collapsed_in_inbox.remove(&ch.0);
+                }
+                a.prefs.local.save();
             }
             cx.notify();
         }));

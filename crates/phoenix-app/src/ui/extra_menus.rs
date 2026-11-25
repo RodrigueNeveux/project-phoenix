@@ -236,7 +236,12 @@ pub const TERMS_URL: &str = "https://discord.com/terms";
 pub fn settings_more_items(e: &Ent) -> Vec<MenuItem> {
     let url = |label: SharedString, url: &'static str| MenuItem::action(label, None, move |_, _, cx: &mut App| cx.open_url(url));
     vec![
-        act(e, crate::t!("settings.more.changelog"), |a, _, cx| a.stub(&crate::t!("settings.more.changelog"), cx)),
+        act(e, crate::t!("settings.more.changelog"), |a, _, cx| {
+            if let Some(s) = a.settings.as_mut() {
+                s.show_changelog = true;
+            }
+            cx.notify();
+        }),
         url(crate::t!("settings.more.acknowledgements"), ACKNOWLEDGEMENTS_URL),
         url(crate::t!("settings.more.support"), SUPPORT_URL),
     ]

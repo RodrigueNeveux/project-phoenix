@@ -1176,6 +1176,9 @@ impl Backend for DiscordBackend {
     fn authorized_apps(&self) -> BoxFuture<Option<Vec<crate::ui::settings::authorized_apps::AuthorizedApp>>> {
         self.authorized_apps_impl()
     }
+    fn user_connections(&self) -> BoxFuture<Option<Vec<crate::ui::settings::connections::LinkedAccount>>> {
+        self.user_connections_impl()
+    }
     fn billing(&self) -> BoxFuture<Option<crate::ui::settings::billing::Billing>> {
         self.billing_impl()
     }
