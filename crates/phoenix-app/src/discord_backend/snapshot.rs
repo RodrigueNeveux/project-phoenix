@@ -1,7 +1,8 @@
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::{
     fs,
     io::{BufRead, BufWriter, Write},
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     path::PathBuf,
     sync::{Arc, Mutex, OnceLock, mpsc},
     time::{Duration, SystemTime},
@@ -46,7 +47,9 @@ fn other_owner() -> Option<u32> {
 
 fn open_private(p: &std::path::Path, append: bool) -> std::io::Result<fs::File> {
     let mut o = fs::OpenOptions::new();
-    o.create(true).mode(0o600);
+    o.create(true);
+    #[cfg(unix)]
+    o.mode(0o600);
     if append {
         o.append(true);
     } else {
@@ -112,7 +115,11 @@ impl Files {
 
 fn writer(rx: mpsc::Receiver<Rec>) {
     let Some(d) = dir() else { return };
-    if fs::DirBuilder::new().recursive(true).mode(0o700).create(&d).is_err() || other_owner().is_some() {
+    let mut db = fs::DirBuilder::new();
+    db.recursive(true);
+    #[cfg(unix)]
+    db.mode(0o700);
+    if db.create(&d).is_err() || other_owner().is_some() {
         return;
     }
     let (Some(jp), Some(op)) = (journal_path(), owner_path()) else { return };

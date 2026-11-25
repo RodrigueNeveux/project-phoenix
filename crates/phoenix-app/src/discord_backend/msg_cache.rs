@@ -1,8 +1,9 @@
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::{
     collections::{HashMap, HashSet},
     fs,
     io::Write,
-    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     path::PathBuf,
     sync::{
         LazyLock,
@@ -96,15 +97,19 @@ pub fn put_with(channel: u64, msgs: &[api::Message], fresh: bool) {
 
 fn write(channel: u64, json: &[u8]) {
     let (Some(d), Some(p)) = (dir(), file(channel)) else { return };
-    if fs::DirBuilder::new().recursive(true).mode(0o700).create(&d).is_err() {
+    let mut db = fs::DirBuilder::new();
+    db.recursive(true);
+    #[cfg(unix)]
+    db.mode(0o700);
+    if db.create(&d).is_err() {
         return;
     }
     let tmp = p.with_extension("part");
-    let ok = fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+    let ok = opts
         .open(&tmp)
         .and_then(|mut f| f.write_all(json))
         .is_ok();
