@@ -327,7 +327,7 @@ pub fn everyone_allowed(perms: Option<&Value>, guild: Id) -> (bool, bool) {
 }
 
 fn allow_deny(id: &'static str, allowed: bool, on_set: impl Fn(&mut PhoenixApp, bool, &mut Context<PhoenixApp>) + 'static + Clone, cx: &mut Context<PhoenixApp>) -> gpui::Div {
-    let mut seg = |n: usize, on: bool, deny: bool, set: bool| {
+    let seg = |n: usize, on: bool, deny: bool, set: bool| {
         let f = on_set.clone();
         div()
             .id((id, n))
