@@ -34,7 +34,7 @@ pub fn parts(url: &str) -> Option<Parts> {
         None => ("", after),
     };
     let rest = match after.to_lowercase().find(&host) {
-        Some(i) if !host.is_empty() => after[i + host.len()..].to_owned(),
+        Some(i) if !host.is_empty() => after.get(i + host.len()..).unwrap_or_default().to_owned(),
         _ => after.to_owned(),
     };
     Some(Parts { protocol, authority, host, rest })
