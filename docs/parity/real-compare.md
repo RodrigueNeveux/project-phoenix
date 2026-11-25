@@ -254,3 +254,82 @@ Inbox "Messages non lus" at 1280×720: popout region 7.0 % mismatch / 2.8 % mean
 - Inbox embed mention of a non-member (`@Utilisateur inconnu` vs the username): ➖ same rule in both. The client's mention rule (`mention.parse`, web bundle) only reads `UserStore` and renders `@Utilisateur inconnu` (`sKdZ6U`) otherwise. The message (#bienvenue 1575048794351870063) is Components V2 with an empty `mentions` array and the user has left the server (GET member → 10007); the client knew them from its live session (member list while they were a member). Phoenix applies the same lookup on its own session cache.
 - "N dans un salon vocal" channel list bar (`ChannelListUnreadsStore` mode `voice-channels`, text `fDlr+F`, VoiceNormalIcon 14 + 4 avatars 16): ➖ only exists when the guild channel list has the 2026 voice channels section (`voiceChannelsSectionNumber`); no such section in the user's client (DOM check 2026-11-25), so Phoenix has nothing to draw.
 - ⚠ Navigating the official client to #phoenix from another route sent `POST /guilds/1369382919948210248/migrate-command-scope` (known, see the brief).
+
+## Sweep 3 (2026-11-25, wt/sweep3): full pass after v0.1.0-beta.1
+
+Driver `~/discord-phoenix-ref/sweep/{sweep4.mjs,run4.py,stable.sh,table3.py}` (sweep3.mjs plus the
+2026-11-25 CDP rules): every CDP call has a 5 s limit (`Runtime.evaluate` `timeout` 4.5 s and a
+race on the reply; exit 12 = client hung, the plan stops), a 28 s watchdog, refusal when the route
+is not the expected one, when the user types, when a modal / menu is open, or when the window is
+not painted (`requestAnimationFrame` stalled 1.2 s); the transparent `scrim_` layer the client puts
+up after arriving on a guild is clicked away first. Navigation is a separate `nav:<path>` pass, so a
+batch enters Aperture once and leaves once (no `migrate-command-scope` POST was seen this time). A
+route change that is not ours stops the whole plan and `stable.sh` waits for 5 minutes of stable
+`/channels/@me` before the next batch. Settings, server settings and channel settings are closed
+with Escape, then the layer's "Fermer" button if Escape did not close it (it did not once on
+"Système"; the page stayed open until the driver was fixed). New views: inbox tabs by index
+(`inbox-0..4` = Messages non lus, Mentions, Messages marqués, Rappels, Programmés, the last pass
+restores tab 0), `set-*` for every 2026 sidebar entry, `srv-*`, `chanset-*`, `home`, `discovery`,
+`quests`. Sizes 1536×840 and 1280×720, dpr 1.5, page zoom 125 %. Scores = `compare.py` mismatch %
+(pixels off by more than 24/255). "Before" = int-bin 97c3b9a0 (views first rendered after lot 1:
+dbacd367), "after" = int-bin after the last merge of this branch.
+
+Writes seen: `POST /science` and `/metrics/v2` (telemetry) on most passes, nothing else, except
+⚠ one `POST /channels/:id/messages/:id/ack` when the `dm` view opened a DM (12:37): the DM had an
+unread message that the driver's row check did not see (no badge, no "non lu" label on the row).
+The `dm` view is disabled in the driver and was not opened again. Opening the quests page,
+Discover and every user settings page wrote nothing.
+
+Not measured: server and channel settings (the first batch used the old `aside` selectors and found
+no item; the 2026 server and channel settings sidebars are `[class*=sidebarRegion_] [role=tab]`,
+fixed in the driver), and the Aperture views at 1280×720: the user was using the client from 13:22
+(Discover › Applications, then other servers), so those passes never started. The DM view is the
+one capture taken before it was disabled. "Mon compte" is compared but its captures are not
+published anywhere.
+
+### Scores
+
+SCORES_PLACEHOLDER
+
+Reading: the two sides are minutes apart (the Phoenix render runs after the CDP pass), so new
+messages, unread DMs at the top of the rail, presence changes and the inbox unread list count as
+mismatch; the 1280 rail column (34 %) is a new unread DM that shifts every icon. The inbox
+"before" rows at 1536 drew Phoenix on the last guild instead of Home (`real_shots` fix in lot 1),
+so only their popout column is meaningful there. The settings "user panel" column is the strip of
+user panel visible beside the settings layer.
+
+### Fixed by wt/sweep3
+
+| Gap (visibility) | Client reference | Fix |
+|---|---|---|
+| **High** — Friends "En ligne — 4" (client 60), Active Now with 3 cards, DM header / list without activities | the 2026 READY has no friend presences; they come in READY_SUPPLEMENTAL `merged_presences.friends`, whose events reached the app before the ReadyData and `apply_ready` wiped them; the session snapshot also dropped the supplemental and journal presence events when resuming | `app.rs` `apply_ready` keeps presences and activities, `PresenceReset` on READY_SUPPLEMENTAL (`nav.rs`, the payload is authoritative), `snapshot.rs` replays the presence events. Live 1280: 70 online vs the client's 64 a few minutes earlier |
+| **High** (regression exposed by the fix above) — Active Now cards squashed to 2 px lines | the column is a scrolling flex column, its cards shrank | `friends.rs` cards `flex_none` |
+| **Medium** — Activity privacy "Partager quand je commence à streamer" off (client on) | `ACTIVITY_PRIVACY_NOTIFY_SERVER_MEMBERS_ON_GO_LIVE_SETTING` = `notifications.notifyServerMembersOnGoLive` (field 26, default true); Phoenix read `notify_friends_on_go_live` (field 2) | `synced_map.rs` `act-stream` → `[7, 26]` |
+| **Medium** — YouTube / video embeds in inbox, pins and chat show the description | `renderAll`: `Mg.has(embed.type) ? null : renderDescription()`, `Mg = {image, video, gifv}` (module 768570) | `chat.rs` `embed` |
+| **Medium** — inbox / pins / search cards of a reply have no reply line | client cards render the referenced message line (spine, 16 px avatar, name at .64, preview) | `inbox.rs` `reply_line` (from `reply_preview`), avatar moved down 22 px |
+| **Medium** — profile popout lists every role on its own rows | role list `Ql` (module 282c099a): first row 268 px, second row 268 − expand button − add button, the rest behind `pillButton expandButton` "+N" (padding 6 / 8, `interactive-text-default`, hover `background-mod-subtle`), expanded: chevron "Réduire les rôles" | `profile.rs` `roles_fit` + toggle, tooltips "Voir tous les rôles" / "Réduire les rôles" |
+| **Medium** — text file preview stretched to 560 px | `.container_BOOBu-{display:grid;max-width:50vw;min-width:302px;width:100%}` in a shrink-to-fit column: a short file is 302 px | `plaintext.rs` card width = widest line (mono 14) + 18, clamped to [302, 50vw] |
+| **Small** — text preview size "1 KB" / "MB" in French | `eg` footer and the bytes-left notice use module 255438 `up` (base 1000, rounded up, `bTzRR6` "{size} Ko", `cS889N` "{size} Mo", `yhEXX7` "{size} Go") | `plaintext.rs` `size_label`, keys `size.kb/mb/gb/decimal` |
+| ✅ checked, no change — upload progress card and file card in "MB" in French | the upload row (`fileWrapper_-9z-XO`, module 905394) and the file card use `underscore.string` `filesize` (`["bytes","KB","MB","GB","TB","PB"]`, base 1024, 2 decimals, "," thousands): English units in every locale | `attach.rs` `human_size` already matched; GB/TB and the thousands separator added |
+| **Small** — quests header: selected tab underlined | live `/quest-home` 13:13: both tabs `border-bottom: 0`, `::after` transparent, colour oklab(0.873) = text-default | `quests_page.rs` |
+| **Small** — collapsed category hides the selected channel's thread | channel list `computeState`: selected channel (or parent of the selected thread) or expanded unmuted category → `activeJoinedRelevantThreads`, otherwise `activeJoinedUnreadThreads`; a channel with listed threads stays visible | `sidebar.rs` |
+| compare tool — inbox over Home rendered over the last guild | — | `real_shots` selects Home when the client was on Home |
+
+### Gaps still open, by visibility
+
+| Gap | Probable cause | Where |
+|---|---|---|
+| **High** — settings sidebar: no sub-entries under the selected page ("Thème, Icône de l'appli, Messages, Boîte de discussion…" under Apparence; "Quelle activité je partage, Où je partage l'activité, Participation aux Activités" under Confidentialité des activités); settings nav 15–20 % on those pages | 2026 settings sidebar lists the sections of the open page as an indented sub-list (selected marker bar) and scrolls the content to them | `ui/settings/view.rs` sidebar |
+| **High** — quests hero: Phoenix shows the reduced-motion still (mountain art), the client plays `heroBannerAssetOrbs` webm `fbd6cf99…webm` (reduced motion off) | e74f6ab2 switched to the reduced-motion image; Phoenix has no webm playback, the first video frame would be closer | `ui/quests_page.rs` hero |
+| **Medium** — quests order: client first tile TopazLabs, Phoenix Firefox | "Suggérées" sort of the client, Phoenix keeps the API order (known, inventory.md) | `ui/quests_page.rs` |
+| **Medium** — DM profile panel and the DM header activity subtitle ("Xcode • atombot.tech") | panel: compare tool (fixed: `PHX_MEMBERS` now also follows `profilePanel_`); subtitle needs the presence fix above, to re-check live (the DM view is not reopened) | `ui/dm_profile_panel.rs`, header |
+| **Medium** — profile popout: no "Collection de jeux" card, no "+" add role button | widgets come from `GET /users/{id}/profile` (`widgets`), empty for the users tried earlier (popouts.md); add role needs the client's role picker popout (`Q`, `e3Wlyw`) | `ui/profile.rs` |
+| **Medium** — Active Now order: client Fox (voice), PiperHub, Azertim_TV, entirebedbug…, Phoenix sorts by user id | client sorts Now Playing by activity (voice first, then start time); not measured | `ui/home/friends.rs` `active_now_column` |
+| **Medium** — Registered games card in Activity privacy: client "Tu peux aussi partager l'activité de 17 jeux…, y compris Tom Clancy's Ghost Recon: Wildlands et Farming Simulator 15" with the game icon, Phoenix the generic text and a grid icon | needs the detected / registered games list (local game detection) | `ui/settings/pages.rs` `Related("apps")` |
+| **Medium** — emoji picker: "+ NOUVEAU" label under the server's top emoji row, client has none there | Phoenix's newly-added emoji block (message-content.md / pickers.md, still open) shows on this server, the client did not | `ui/pickers/` |
+| **Small** — composer emoji button not highlighted while the emoji picker is open | client tints the button (active state) | `ui/chat/composer.rs` |
+| **Small** — pins: own server tag badge differs (client 🔥 GLAD, Phoenix ✦ GLAD on old messages) | Phoenix uses the `primary_guild` embedded in the old message author, the client the current user store | `ui/inbox.rs` `cozy_message` |
+| **Small** — profile popout 10 px higher than the client | anchor of the member-row popout | `ui/profile.rs` open position |
+| **Small** — messages 3 px lower in the channel view, search result cards ~5 px taller | scroll anchor rounding; card spacing under "Le message n'a pas pu être chargé" | `real_shots` scroll, `ui/search.rs` |
+| **Small** — Discover hero title wraps after "SUR" (client after "COMMUNAUTÉ") and the radial gradient | ABC Ginto Nord missing (known) | `ui/discovery.rs` |
+| — Member list group counts, rail unread DMs, inbox contents | timing between the client capture and the render, not product gaps | — |
