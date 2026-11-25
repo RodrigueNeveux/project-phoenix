@@ -592,7 +592,6 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                 }),
                                 false,
                             )
-                            .when(noise, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
                             .tip(if noise {
                                 crate::t!("voice.noise_off")
                             } else {
@@ -627,7 +626,9 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
 
 pub fn server_tag(tag: &(SharedString, Option<SharedString>), size: f32) -> AnyElement {
     div()
-        .flex_none()
+        .flex_shrink()
+        .min_w_0()
+        .overflow_hidden()
         .ml(z(4.))
         .h(z(16.))
         .px(z(4.))
@@ -639,6 +640,7 @@ pub fn server_tag(tag: &(SharedString, Option<SharedString>), size: f32) -> AnyE
         .when_some(tag.1.clone(), |d, url| d.child(gpui::img(url).size(z(size)).flex_none()))
         .child(
             div()
+                .flex_none()
                 .text_size(z(12.))
                 .line_height(z(16.))
                 .font_weight(FontWeight::SEMIBOLD)
