@@ -13,6 +13,7 @@ fn main() -> anyhow::Result<()> {
     let focus_grid = rest.iter().any(|a| a == "grid");
     let no_strip = rest.iter().any(|a| a == "nostrip");
     let dm = rest.iter().any(|a| a == "dm");
+    let toasts = rest.iter().any(|a| a == "toasts");
     let feedback = rest.iter().find_map(|a| a.strip_prefix("feedback=").map(str::to_owned));
     let menu = rest.iter().find_map(|a| match a.as_str() {
         "menu=more" => Some(phoenix_app::ui::call_menus::TrayMenu::More),
@@ -99,6 +100,20 @@ fn main() -> anyhow::Result<()> {
                 phoenix_app::ui::voice_panel::set_flags(Id(7), VoiceFlags { self_deaf: true, ..Default::default() });
                 app.voice.speaking.insert(Id(3));
                 phoenix_app::ui::call_menus::open(menu);
+                if toasts {
+                    let lines = ["anyone up for a match tonight?", "brb, grabbing a coffee", "the stream looks great from here"];
+                    for (i, text) in lines.into_iter().enumerate() {
+                        let m = phoenix_app::model::Message {
+                            id: Id(990_000 + i as u64),
+                            channel: lounge,
+                            author: Id(3 + i as u64),
+                            content: text.into(),
+                            timestamp: chrono::Utc::now().timestamp(),
+                            ..Default::default()
+                        };
+                        app.handle_event(phoenix_app::backend::AppEvent::MessageCreate(m), cx);
+                    }
+                }
                 if let Some(f) = feedback.as_deref() {
                     use phoenix_app::ui::modals::stream_feedback::State;
                     let st = match f {

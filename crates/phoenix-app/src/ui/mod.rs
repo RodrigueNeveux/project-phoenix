@@ -9,6 +9,7 @@ pub mod profile_board;
 pub mod profile_wishlist;
 pub mod call_popout;
 pub mod call_menus;
+pub mod call_toasts;
 pub mod call_view;
 pub mod incoming_call;
 pub mod dm_call;

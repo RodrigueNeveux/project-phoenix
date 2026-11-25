@@ -348,7 +348,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(top_bar(app, ch.name.clone(), cx))
         .child(div().h(z(8.)))
         .child(tiles_el)
-        .child(bottom_controls(app, collapse(w + 16.), cx));
+        .child(bottom_controls(app, collapse(w + 16.), cx))
+        .relative()
+        .children(crate::ui::call_toasts::render(app, ch_id, cx));
 
     let root = div()
         .flex_1()

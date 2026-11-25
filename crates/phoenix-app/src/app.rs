@@ -845,7 +845,10 @@ impl PhoenixApp {
                     crate::ui::pickers::load_frecency(self, cx);
                 }
             }
-            AppEvent::MessageCreate(m) => self.append_message(m, cx),
+            AppEvent::MessageCreate(m) => {
+                ui::call_toasts::on_message(self, &m, cx);
+                self.append_message(m, cx)
+            }
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
             AppEvent::HistoryRefresh { channel, messages } => crate::history_ui::on_refresh(self, channel, messages, cx),
             AppEvent::MessageDelete { channel, id } => {
