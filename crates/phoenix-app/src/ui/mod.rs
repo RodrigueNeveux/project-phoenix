@@ -91,9 +91,9 @@ pub fn avatar(user: Option<&User>, size: f32) -> AnyElement {
     avatar_ref(user.map(|u| u.avatar.clone()).unwrap_or(ImageRef::Default(0)), size)
 }
 
-pub fn avatar_hover(user: Option<&User>, size: f32, key: u64) -> AnyElement {
+pub fn avatar_hover(user: Option<&User>, size: f32, play: bool) -> AnyElement {
     match user.map(|u| &u.avatar) {
-        Some(ImageRef::Url(url)) if crate::media::is_animated(url) && avatar_deco::hovered(key) => {
+        Some(ImageRef::Url(url)) if play && crate::media::is_animated(url) => {
             gpui::img(url.clone()).id(crate::media::anim_id(url)).size(px(size)).rounded_full().flex_none().into_any_element()
         }
         _ => avatar(user, size),
@@ -129,7 +129,7 @@ pub fn avatar_with_status_deco(
     overlay: impl FnOnce(Div) -> Div,
     deco: Option<SharedString>,
 ) -> Div {
-    avatar_with_status_deco_hover(user, size, p, ring, overlay, deco, None)
+    avatar_with_status_deco_hover(user, size, p, ring, overlay, deco, false)
 }
 
 pub fn avatar_with_status_deco_hover(
@@ -139,17 +139,14 @@ pub fn avatar_with_status_deco_hover(
     ring: Hsla,
     overlay: impl FnOnce(Div) -> Div,
     deco: Option<SharedString>,
-    hover: Option<u64>,
+    play: bool,
 ) -> Div {
     let (cx, r, s) = status_svg::geometry(size);
     div()
         .relative()
         .flex_none()
         .size(px(size))
-        .child(match hover {
-            Some(k) => avatar_hover(user, size, k),
-            None => avatar(user, size),
-        })
+        .child(avatar_hover(user, size, play))
         .when_some(deco, |d, src| d.child(avatar_deco::layer(src, size)))
         .child(
             div()

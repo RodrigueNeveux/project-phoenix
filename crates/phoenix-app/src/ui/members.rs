@@ -702,10 +702,11 @@ pub fn member_row_in(
                                     .when(sel, |d| d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
                             };
                             let deco = crate::ui::avatar_deco::source(user, Some(crate::ui::avatar_deco::hover_key(1, uid.0)));
+                            let play = sel || crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(1, uid.0));
                             if mem.presence == crate::model::Presence::Online && crate::ui::mobile_status::is_mobile(uid.0) {
-                                mobile_avatar(user, cut, deco, crate::ui::avatar_deco::hover_key(1, uid.0))
+                                mobile_avatar(user, cut, deco, play)
                             } else {
-                                crate::ui::avatar_with_status_deco_hover(user, 32., mem.presence, c(Palette::BG_SECONDARY), cut, deco, Some(crate::ui::avatar_deco::hover_key(1, uid.0)))
+                                crate::ui::avatar_with_status_deco_hover(user, 32., mem.presence, c(Palette::BG_SECONDARY), cut, deco, play)
                             }
                         })
                         .when(streaming, |d| d.child(streaming_dot())),
@@ -825,12 +826,12 @@ pub fn verified_check() -> gpui::Div {
 }
 
 
-fn mobile_avatar(user: Option<&crate::model::User>, cut: impl FnOnce(gpui::Div) -> gpui::Div, deco: Option<SharedString>, hover: u64) -> gpui::Div {
+fn mobile_avatar(user: Option<&crate::model::User>, cut: impl FnOnce(gpui::Div) -> gpui::Div, deco: Option<SharedString>, play: bool) -> gpui::Div {
     div()
         .relative()
         .flex_none()
         .size(px(32.))
-        .child(crate::ui::avatar_hover(user, 32., hover))
+        .child(crate::ui::avatar_hover(user, 32., play))
         .when_some(deco, |d, src| d.child(crate::ui::avatar_deco::layer(src, 32.)))
         .child(
             div()
