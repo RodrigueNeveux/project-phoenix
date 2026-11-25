@@ -257,7 +257,7 @@ fn select(
     let open = OPEN_SELECT.with(Cell::get) == Some(id);
     let default_label: SharedString = match options.first() {
         Some(d) => format!("{}: {d}", crate::t!("voice.system_default")).into(),
-        None => crate::t!("voice.default").into(),
+        None => crate::t!("voice.default"),
     };
     let label: SharedString = current.clone().map(SharedString::from).unwrap_or_else(|| default_label.clone());
     let f = Rc::new(f);
