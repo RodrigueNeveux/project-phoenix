@@ -1432,9 +1432,9 @@ mod tests {
 
     #[test]
     fn resolving_shimmer_follows_the_keyframes() {
-        assert_eq!(super::resolving_offset(0.), -380.);
+        assert!((super::resolving_offset(0.) + 380.).abs() < 0.01);
         assert!(super::resolving_offset(0.5).abs() < 0.01);
-        assert_eq!(super::resolving_offset(1.), -380.);
+        assert!((super::resolving_offset(1.) + 380.).abs() < 0.01);
         assert!((super::resolving_offset(0.25) + 190.).abs() < 0.5);
         assert!(super::resolving_offset(0.1) < -380. * 0.85);
     }

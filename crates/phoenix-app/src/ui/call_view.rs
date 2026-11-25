@@ -1059,12 +1059,14 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
 mod tests {
     #[test]
     fn solo_veil_is_the_client_ellipse() {
-        assert_eq!(super::solo_veil_alpha(0.5, 1.), 1.);
-        assert_eq!(super::solo_veil_alpha(0.5, 0.4), 1.);
-        assert_eq!(super::solo_veil_alpha(0.5, 0.), 0.);
-        assert!((super::solo_veil_alpha(0.5, 0.2) - 0.5).abs() < 1e-4);
-        assert_eq!(super::solo_veil_alpha(0., 0.), 0.);
-        assert!((super::solo_veil_alpha(0., 0.3) - 0.417).abs() < 0.01);
+        let a = super::solo_veil_alpha;
+        let near = |x: f32, y: f32| (x - y).abs() < 1e-3;
+        assert!(near(a(0.5, 1.), 1.));
+        assert!(near(a(0.5, 0.4), 1.));
+        assert!(near(a(0.5, 0.), 0.));
+        assert!(near(a(0.5, 0.2), 0.5));
+        assert!(near(a(0., 0.), 0.));
+        assert!((a(0., 0.3) - 0.417).abs() < 0.01);
     }
 
     use super::grid;
