@@ -1187,6 +1187,8 @@ impl Adapter {
                 out.push(AppEvent::Activities { user: id(p.user.id), activities });
             }
             GatewayEvent::ReadySupplemental(r) => {
+                let me = self.me.0;
+                self.statuses.retain(|u, _| *u == me);
                 if let Some(Value::Object(mp)) = &r.merged_presences {
                     let friends = mp.get("friends").and_then(Value::as_array).into_iter().flatten();
                     let guilds = mp.get("guilds").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_array).flatten();

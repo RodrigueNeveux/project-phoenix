@@ -87,6 +87,7 @@ pub enum AppEvent {
     VoiceEffect(crate::voice::soundboard::Effect),
     MemberListRows { guild: Id, rows: Vec<crate::presence::ListEntry> },
     Activities { user: Id, activities: Vec<crate::presence::Activity> },
+    PresenceReset,
     RemoteAuth(crate::auth::RemoteAuthUpdate),
     Resync(crate::commands::Resync),
     Parity(crate::commands::ParityEvent),

@@ -191,8 +191,8 @@ fn load() -> Option<(Ui, Core)> {
         let ev = parse_dispatch("READY_SUPPLEMENTAL", &sup);
         if matches!(ev, GatewayEvent::ReadySupplemental(_)) {
             cache.apply(&ev);
-            people.extend(presence_events(adapter.map(&cache, &ev)));
             people.extend(presence_events(nav::on_gateway(&cache, &ev)));
+            people.extend(presence_events(adapter.map(&cache, &ev)));
         }
     }
     let (last_seq, fresh) = replay(&cache, &mut adapter, &mut people);
@@ -212,7 +212,7 @@ fn load() -> Option<(Ui, Core)> {
 
 fn presence_events(events: Vec<AppEvent>) -> impl Iterator<Item = AppEvent> {
     events.into_iter().filter(|e| {
-        matches!(e, AppEvent::PresenceUpdate { .. } | AppEvent::Activities { .. } | AppEvent::Nav(crate::ui::home::data::NavEvent::Activity { .. }))
+        matches!(e, AppEvent::PresenceReset | AppEvent::PresenceUpdate { .. } | AppEvent::Activities { .. } | AppEvent::Nav(crate::ui::home::data::NavEvent::Activity { .. }))
     })
 }
 
@@ -234,8 +234,8 @@ fn replay(cache: &Cache, adapter: &mut Adapter, people: &mut Vec<AppEvent>) -> (
         cache.apply(&ev);
         let mapped = adapter.map(cache, &ev);
         if matches!(ev, GatewayEvent::PresenceUpdate(_)) {
-            people.extend(presence_events(mapped));
             people.extend(presence_events(nav::on_gateway(cache, &ev)));
+            people.extend(presence_events(mapped));
         }
         if let Ok(s) = seq.parse::<u64>()
             && s > 0

@@ -359,6 +359,7 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
             out.push(AppEvent::Nav(NavEvent::Activity { user: id(p.user.id), activity: convert::activity(&p.activities) }));
         }
         GatewayEvent::ReadySupplemental(r) => {
+            out.push(AppEvent::PresenceReset);
             let friends = r.merged_presences.as_ref().and_then(|m| m.get("friends")).and_then(Value::as_array);
             for f in friends.into_iter().flatten() {
                 let Some(u) = f.get("user_id").and_then(snowflake) else { continue };

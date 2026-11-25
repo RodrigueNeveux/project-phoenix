@@ -1008,6 +1008,11 @@ impl PhoenixApp {
                 }
                 ui::members::on_event(self, ev, cx)
             }
+            AppEvent::PresenceReset => {
+                let me = self.me.id;
+                self.presences.retain(|u, _| *u == me);
+                self.people.activities.retain(|u, _| *u == me);
+            }
             AppEvent::RemoteAuth(u) => crate::auth::on_remote_auth(self, u, cx),
             AppEvent::Resync(r) => crate::commands::on_resync(self, r, cx),
             AppEvent::Parity(e) => crate::commands::on_event(self, e, cx),
