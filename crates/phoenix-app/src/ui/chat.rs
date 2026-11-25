@@ -927,6 +927,7 @@ pub(crate) fn message(
         && msg.reply_to.and_then(|rid| entry.index_of(rid)).is_some_and(|p| entry.msgs[p].author == app.me.id);
     let mentioned = r.mentions_me || msg.mention_everyone || reply_pings_me;
     let ts = msg.timestamp;
+    let edited_at = if msg.edited_at > 0 { msg.edited_at } else { ts };
 
     let mut content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL));
     let last_text = r.blocks.iter().rposition(|b| matches!(b, RBlock::Text(_)));
@@ -957,7 +958,7 @@ pub(crate) fn message(
     };
     let gif_only = matches!(msg.embeds.as_slice(), [e] if e.kind.as_deref() == Some("gifv") && e.url.as_deref() == Some(msg.content.trim()) && show_embed(&e));
     for (bi, b) in r.blocks.iter().enumerate().filter(|_| !gif_only) {
-        let edited_here = msg.edited && last_text == Some(bi) && bi + 1 == n_blocks;
+        let edited_here = (msg.edited && last_text == Some(bi) && bi + 1 == n_blocks).then_some(edited_at);
         match b {
             RBlock::Text(t) if compact && bi == 0 => {
                 content = content.child(rich(entity, id, bi, &indent_rich(t, overflow, cx), edited_here));
@@ -967,7 +968,7 @@ pub(crate) fn message(
     }
     let edited_after_embeds = msg.edited && last_text.is_none();
     if msg.edited && !edited_after_embeds && !last_text.is_some_and(|l| l + 1 == n_blocks) {
-        content = content.child(edited_marker(ts));
+        content = content.child(edited_marker(edited_at));
     }
     media::set_current_author(Some(media::ViewerAuthor {
         user: author.cloned(),
@@ -995,7 +996,7 @@ pub(crate) fn message(
     }
     content = content.children(crate::ui::components::render(app, entity, msg, cx)).children(crate::ui::components::render_poll(app, entity, msg));
     if edited_after_embeds {
-        content = content.child(div().mt(z(4.)).h(z(20.)).flex().items_center().child(edited_marker(ts)));
+        content = content.child(div().mt(z(4.)).h(z(20.)).flex().items_center().child(edited_marker(edited_at)));
     }
     if !msg.reactions.is_empty() && app.prefs.synced.flag("reactions") {
         content = content.child(message_ext::reactions(app, entity, msg));
@@ -1408,6 +1409,7 @@ fn indent_rich(t: &RichText, width: f32, cx: &App) -> RichText {
 fn edited_marker(ts: i64) -> impl IntoElement {
     div()
         .id(("edited", ts as u64))
+        .tooltip(time_tooltip(ts))
         .text_size(z(10.))
         .line_height(z(10.))
         .font_weight(FontWeight::NORMAL)
@@ -1432,36 +1434,47 @@ fn with_edited(t: &RichText) -> (SharedString, Vec<gpui::TextRun>) {
     (text.into(), runs)
 }
 
-fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: bool) -> AnyElement {
+fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: Option<i64>) -> AnyElement {
     if !t.emoji.is_empty() || !message_ext::code_ranges(t).is_empty() {
         let el = message_ext::rich_with_emoji(entity, msg, bi, t);
-        if edited {
+        if let Some(at) = edited {
             return div()
                 .flex()
                 .flex_wrap()
                 .items_end()
                 .child(div().max_w_full().child(el))
-                .child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(msg.0 as i64)))
+                .child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(at)))
                 .into_any_element();
         }
         return el;
     }
-    if edited && t.click_ranges.is_empty() && !t.text.contains('\n') && t.text.chars().count() <= 60 {
+    if let Some(at) = edited.filter(|_| t.click_ranges.is_empty() && !t.text.contains('\n') && t.text.chars().count() <= 60) {
         let plain = div().line_height(gpui::relative(1.375)).child(StyledText::new(t.text.clone()).with_runs(t.runs.clone()));
         return div()
             .flex()
             .flex_wrap()
             .items_end()
             .child(plain)
-            .child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(msg.0 as i64)))
+            .child(div().ml(z(4.)).mb(z(5.)).child(edited_marker(at)))
             .into_any_element();
     }
-    let (text, runs) = if edited { with_edited(t) } else { (t.text.clone(), t.runs.clone()) };
+    let (text, runs) = if edited.is_some() { with_edited(t) } else { (t.text.clone(), t.runs.clone()) };
     let runs = mention::hovered_runs(msg, bi, 0, &t.click_ranges, &t.click_targets, &runs).unwrap_or(runs);
     let styled = StyledText::new(text).with_runs(runs);
     let lh = gpui::relative(1.375);
+    let edited_tip = edited.map(|at| {
+        let from = t.text.len();
+        let tip = std::rc::Rc::new(time_tooltip(at));
+        move |ix: usize, w: &mut Window, cx: &mut App| (ix >= from).then(|| tip(w, cx))
+    });
     if t.click_ranges.is_empty() {
-        return div().line_height(lh).child(styled).into_any_element();
+        return match edited_tip {
+            Some(tip) => div()
+                .line_height(lh)
+                .child(InteractiveText::new(("rt", (msg.0 << 8) | bi as u64), styled).tooltip(tip))
+                .into_any_element(),
+            None => div().line_height(lh).child(styled).into_any_element(),
+        };
     }
     let targets = t.click_targets.clone();
     let e = entity.clone();
@@ -1478,6 +1491,7 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
                     let (hr, ht) = (t.click_ranges.clone(), t.click_targets.clone());
                     move |ix, _ev, w, _cx| mention::on_hover(msg, bi, 0, &hr, &ht, ix, w)
                 })
+                .when_some(edited_tip, |el, tip| el.tooltip(tip))
                 .on_click(
                 t.click_ranges.clone(),
                 move |ix, w, cx| match &targets[ix] {
@@ -1493,7 +1507,7 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: b
         .into_any_element()
 }
 
-fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bool) -> AnyElement {
+fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: Option<i64>) -> AnyElement {
     match b {
         RBlock::Text(t) => rich(entity, msg, bi, t, edited),
         RBlock::Quote(t) => div()
@@ -1501,7 +1515,7 @@ fn block(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, b: &RBlock, edited: bo
             .my(z(4.))
             .max_w(gpui::relative(0.9))
             .child(div().w(z(4.)).rounded(z(4.)).bg(tk(idx::SPINE_DEFAULT)).flex_none())
-            .child(div().flex_1().min_w_0().pl(z(12.)).pr(z(8.)).child(rich(entity, msg, bi, t, false)))
+            .child(div().flex_1().min_w_0().pl(z(12.)).pr(z(8.)).child(rich(entity, msg, bi, t, None)))
             .into_any_element(),
         RBlock::Heading(level, t) => {
             let size = match level {

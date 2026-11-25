@@ -261,6 +261,7 @@ pub struct Message {
     pub author: Id,
     pub timestamp: i64,
     pub edited: bool,
+    pub edited_at: i64,
     pub content: SharedString,
     pub reply_to: Option<Id>,
     pub reply_mentions_author: bool,

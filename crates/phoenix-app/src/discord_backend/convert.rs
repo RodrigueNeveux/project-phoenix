@@ -168,6 +168,7 @@ pub fn message(m: &api::Message) -> model::Message {
         author: id(m.author.id),
         timestamp: (m.id.timestamp_ms() / 1000) as i64,
         edited: m.edited_timestamp.is_some(),
+        edited_at: m.edited_timestamp.as_deref().and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()).map_or(0, |d| d.timestamp()),
         content: m.content.clone().into(),
         reply_to,
         reply_mentions_author: m

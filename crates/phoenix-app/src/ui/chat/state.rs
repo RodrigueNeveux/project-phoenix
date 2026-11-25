@@ -335,6 +335,7 @@ impl PhoenixApp {
             if let Some(mut m) = self.find_msg(channel, id).cloned() {
                 m.content = text.clone().into();
                 m.edited = true;
+                m.edited_at = chrono::Utc::now().timestamp();
                 self.replace_message(m, cx);
             }
             let fut = self.backend.edit_message(channel, id, text);
