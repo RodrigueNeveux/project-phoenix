@@ -202,7 +202,7 @@ pub fn parse_claimed(v: &Value) -> Vec<Claimed> {
             })
         })
         .collect();
-    out.sort_by(|a, b| b.claimed_at.cmp(&a.claimed_at));
+    out.sort_by_key(|c| std::cmp::Reverse(c.claimed_at));
     out
 }
 
