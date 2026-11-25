@@ -1575,6 +1575,22 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
+                "remindcustom" | "remindcal" | "remindtime" => {
+                    let last = app.selected_channel.and_then(|c| Some((c, app.messages.get(&c)?.msgs.last()?.id)));
+                    if let Some((c, m)) = last {
+                        app.open_custom_reminder(c, m, cx);
+                        let which = match kind.as_str() {
+                            "remindcal" => Some(0),
+                            "remindtime" => Some(1),
+                            _ => None,
+                        };
+                        phoenix_app::actions::with_modal(|m| {
+                            if let Some(phoenix_app::ui::modals::Modal::Schedule(p)) = m {
+                                p.open = which;
+                            }
+                        });
+                    }
+                }
                 "msgmenu" => {
                     let last = app.selected_channel.and_then(|c| Some((c, app.messages.get(&c)?.msgs.last()?.id)));
                     if let Some((c, m)) = last {

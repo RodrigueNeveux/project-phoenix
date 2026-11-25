@@ -13,15 +13,6 @@ use crate::{
 pub const REMINDERS: [(&str, Option<u64>); 4] =
     [("msg.remind.30m", Some(1800)), ("msg.remind.1h", Some(3600)), ("msg.remind.4h", Some(14_400)), ("msg.remind.tomorrow", None)];
 
-pub const CUSTOM_REMINDERS: [(&str, u64); 6] = [
-    ("menu.mute.15m", 900),
-    ("menu.mute.3h", 10_800),
-    ("menu.mute.8h", 28_800),
-    ("menu.mute.24h", 86_400),
-    ("msg.remind.3d", 259_200),
-    ("msg.remind.1w", 604_800),
-];
-
 pub fn tomorrow_9am(now: chrono::DateTime<chrono::Local>) -> u64 {
     use chrono::{Duration, TimeZone};
     let day = now.date_naive() + Duration::days(1);
@@ -101,30 +92,6 @@ impl PhoenixApp {
     pub fn remind_message(&mut self, channel: Id, msg: Id, due_unix: u64, cx: &mut Context<Self>) {
         self.chat.menu = None;
         self.action_toast(ActionRequest::Remind { channel, msg, due_unix }, Some(crate::t!("msg.remind_set")), cx);
-    }
-
-    pub fn open_custom_reminder(&mut self, channel: Id, msg: Id, cx: &mut Context<Self>) {
-        self.chat.menu = None;
-        open_modal(
-            Modal::Form(Form {
-                title: crate::t!("msg.remind"),
-                subtitle: Some(crate::t!("msg.remind_custom_sub")),
-                fields: Vec::new(),
-                choices: CUSTOM_REMINDERS.iter().map(|(k, _)| crate::t!(k)).collect(),
-                choice: Some(0),
-                check: None,
-                submit: crate::t!("msg.remind_save"),
-                danger: false,
-                preview: None,
-                width: 440.,
-                on_submit: Rc::new(move |a, _, choice, cx| {
-                    let secs = CUSTOM_REMINDERS[choice.unwrap_or(0).min(CUSTOM_REMINDERS.len() - 1)].1;
-                    a.remind_message(channel, msg, now_unix() + secs, cx);
-                }),
-            }),
-            None,
-        );
-        cx.notify();
     }
 
     pub fn remove_reactions(&mut self, channel: Id, msg: Id, emoji: Option<Reaction>, cx: &mut Context<Self>) {

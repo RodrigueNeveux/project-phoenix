@@ -175,6 +175,28 @@ pub struct Picker {
     pub open: Option<u8>,
     pub existing: Option<Id>,
     pub month: Option<NaiveDate>,
+    pub reminder: Option<Id>,
+}
+
+impl Picker {
+    pub fn bounds(&self, now: i64) -> (NaiveDate, Option<NaiveDate>) {
+        match self.reminder {
+            Some(_) => (local(now).date_naive(), None),
+            None => (local(now + MIN_AHEAD).date_naive(), Some(local(now + MAX_AHEAD).date_naive())),
+        }
+    }
+
+    pub fn problem(&self, now: i64) -> Option<&'static str> {
+        if self.reminder.is_some() { None } else { problem(self.at, now) }
+    }
+
+    pub fn time_label(&self) -> SharedString {
+        if self.reminder.is_some() && !slots(local(self.at).date_naive()).contains(&self.at) {
+            SharedString::default()
+        } else {
+            crate::i18n::clock(local(self.at)).into()
+        }
+    }
 }
 
 pub fn month_start(d: NaiveDate) -> NaiveDate {
@@ -357,8 +379,7 @@ fn nav_button(id: &'static str, next: bool, by: i32, month: NaiveDate, cx: &mut 
 fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let selected = local(p.at).date_naive();
     let month = month_start(p.month.unwrap_or(selected));
-    let first = local(now + MIN_AHEAD).date_naive();
-    let last = local(now + MAX_AHEAD).date_naive();
+    let (first, last) = p.bounds(now);
     let today = local(now).date_naive();
     let sunday = week_starts_sunday();
     let weeks = month_grid(month, sunday);
@@ -380,7 +401,7 @@ fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
         let mut row = div().flex();
         for (n, d) in week.into_iter().enumerate() {
             let outside = d.month() != month.month();
-            let disabled = d < first || d > last;
+            let disabled = d < first || last.is_some_and(|l| d > l);
             let sel = d == selected && !outside;
             let at = with_day(p.at, d);
             row = row.child(
@@ -458,7 +479,7 @@ fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
 pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let now = Local::now().timestamp();
     let cur = local(p.at);
-    let err = problem(p.at, now);
+    let err = p.problem(now);
     let time_opts = slots(cur.date_naive()).into_iter().map(|t| (SharedString::from(crate::i18n::clock(local(t))), t, t == p.at)).collect();
     let date = div()
         .flex_1()
@@ -474,16 +495,22 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .flex()
         .flex_col()
         .child(field_label(crate::t!("sched.time"), true))
-        .child(field("sched-time", crate::i18n::clock(cur).into(), p.open == Some(1), 1, cx))
+        .child(field("sched-time", p.time_label(), p.open == Some(1), 1, cx))
         .when_some(err, |d, k| {
             d.child(div().mt(z(8.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL))).child(crate::t!(k)))
         })
         .when(p.open == Some(1), |d| d.child(div().relative().child(list(time_opts, cx))));
     let body = div().flex().gap(z(16.)).pb(z(16.)).child(date).child(time);
-    let (channel, at, editing, existing) = (p.channel, p.at, p.editing && p.existing.is_none(), p.existing);
+    let (channel, at, editing, existing, reminder) = (p.channel, p.at, p.editing && p.existing.is_none(), p.existing, p.reminder);
     let close = close_action(cx);
     let secondary = if editing { crate::t!("sched.clear") } else { crate::t!("common.cancel") };
-    let (title, primary) = if existing.is_some() { (crate::t!("sched.update_title"), crate::t!("sched.update")) } else { (crate::t!("sched.title"), crate::t!("sched.set")) };
+    let (title, primary) = if reminder.is_some() {
+        (crate::t!("msg.remind_custom_title"), crate::t!("common.save"))
+    } else if existing.is_some() {
+        (crate::t!("sched.update_title"), crate::t!("sched.update"))
+    } else {
+        (crate::t!("sched.title"), crate::t!("sched.set"))
+    };
     let footer = div()
         .w_full()
         .flex()
@@ -499,7 +526,10 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .flex_1()
                 .when(err.is_some(), |d| d.opacity(0.5).cursor_default())
                 .on_click(cx.listener(move |a, _, _, cx| {
-                    if problem(at, Local::now().timestamp()).is_none() {
+                    if let Some(msg) = reminder {
+                        crate::actions::close_modal();
+                        a.remind_message(channel, msg, at.max(0) as u64, cx);
+                    } else if problem(at, Local::now().timestamp()).is_none() {
                         crate::actions::close_modal();
                         match existing {
                             Some(id) => a.reschedule(id, at, cx),
@@ -531,12 +561,19 @@ impl PhoenixApp {
     pub fn open_schedule(&mut self, channel: Id, cx: &mut Context<Self>) {
         let editing = draft(channel).is_some();
         let at = draft(channel).unwrap_or_else(|| default_at(Local::now()));
-        open_modal(Modal::Schedule(Picker { channel, at, editing, open: None, existing: None, month: None }), None);
+        open_modal(Modal::Schedule(Picker { channel, at, editing, open: None, existing: None, month: None, reminder: None }), None);
+        cx.notify();
+    }
+
+    pub fn open_custom_reminder(&mut self, channel: Id, msg: Id, cx: &mut Context<Self>) {
+        self.chat.menu = None;
+        let at = Local::now().timestamp();
+        open_modal(Modal::Schedule(Picker { channel, at, editing: false, open: None, existing: None, month: None, reminder: Some(msg) }), None);
         cx.notify();
     }
 
     pub fn edit_scheduled_time(&mut self, id: Id, at: i64, cx: &mut Context<Self>) {
-        open_modal(Modal::Schedule(Picker { channel: Id(0), at, editing: true, open: None, existing: Some(id), month: None }), None);
+        open_modal(Modal::Schedule(Picker { channel: Id(0), at, editing: true, open: None, existing: Some(id), month: None, reminder: None }), None);
         cx.notify();
     }
 
