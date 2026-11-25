@@ -184,6 +184,12 @@ Reste, par ordre de visibilité :
 4. Nettoyage des Groupes privés, Changer de compte, modale de statut personnalisé, confirmation « Ignorer ».
 5. Menus vidéo (vitesse, transcription), aperçu des fichiers texte, menu « … » des paramètres.
 
+Lot inventory2 (wt/inventory2, 25/11) :
+
+- Messages programmés testés en vrai dans #phoenix avec `examples/schedule_probe.rs` : création, lecture de la liste, reprogrammation (+5 min), modification du texte (`PATCH` `content` + `flags`), annulation (`DELETE`) puis, dans une seconde passe, envoi immédiat (`POST …/send`, le message est arrivé dans #phoenix avec le texte modifié). La première passe a révélé que la liste réelle porte à la fois `id` et `scheduled_message_id` : l'alias serde rejetait toute liste non vide (corrigé, test avec les deux champs). La sonde a dû être compilée deux fois (la première version ne pouvait pas lire la liste).
+- Pilote CDP `~/discord-phoenix-ref/inventory2/drv.mjs` : refuse de démarrer si `requestAnimationFrame` ne tourne pas (fenêtre non peinte : les menus et modales du client restent figés et les clics s'accumulent), ferme le calque transparent `scrim_od1dl1` qui apparaît en arrivant sur Aperture Sciences (il absorbe le premier clic), chien de garde qui referme tout. `runpasses.sh` n'agit qu'après 5 minutes de route stable sur `/channels/@me`.
+- Incidents : à 05:57 le rendu du client a cessé de répondre au CDP pendant ~20 minutes, puis le client a redémarré (route `/app`) ; un second passage ouvrant le calendrier a dépassé son délai à 06:27. Aucune écriture n'est partie hors `science` et `migrate-command-scope` (arrivée sur Aperture, déjà signalée dans le brief).
+
 ## Vérifications sur le vrai compte (25/11, `real_shots` 1536×840 @1,5, #phoenix ; client CDP sur #général)
 
 | vue | client (CDP) | Phoenix | écart restant |
