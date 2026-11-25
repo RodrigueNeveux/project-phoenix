@@ -3,7 +3,7 @@ use gpui::{AnyElement, App, FontWeight, IntoElement, ParentElement, SharedString
 use crate::{
     media,
     model::Attachment,
-    theme::{FONT_MONO, c, generated::{global, idx}, tok, z},
+    theme::{FONT_MONO, c, generated::idx, tok, z},
 };
 
 pub fn loadable(url: &str) -> bool {
