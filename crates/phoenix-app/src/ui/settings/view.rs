@@ -458,9 +458,11 @@ fn footer() -> Div {
                 .child(link("settings-terms", note(crate::t!("settings.footer.terms"), idx::TEXT_LINK)).on_click(|_, _, cx| cx.open_url(crate::ui::extra_menus::TERMS_URL)))
                 .child(bullet())
                 .child(
-                    link("settings-more", note(crate::t!("settings.footer.more"), idx::TEXT_MUTED))
+                    note(crate::t!("settings.footer.more"), idx::TEXT_MUTED)
+                        .id("settings-more")
+                        .cursor_pointer()
                         .when(crate::ui::extra_menus::opened() == Some(crate::ui::extra_menus::Target::SettingsMore), |d| d.text_color(c(tok(idx::TEXT_DEFAULT))))
-                        .hover(|s| s.text_color(c(tok(idx::TEXT_DEFAULT))))
+                        .hover(|s| s.underline().text_color(c(tok(idx::TEXT_DEFAULT))))
                         .on_click(|ev, w, _| {
                             let b = ev.position();
                             crate::ui::extra_menus::open(crate::ui::extra_menus::Target::SettingsMore, gpui::point(b.x, b.y - gpui::px(8.)), w)
