@@ -490,6 +490,8 @@ impl PhoenixApp {
 
     pub fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
         let mine = self.people.activities.remove(&r.me.id);
+        let known_presences = std::mem::take(&mut self.presences);
+        let known_activities = std::mem::take(&mut self.people.activities);
         let old_voice: HashMap<Id, Vec<Id>> = self
             .channels
             .values()
@@ -501,7 +503,11 @@ impl PhoenixApp {
             self.people.custom_status = a.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom).and_then(|x| x.state.clone());
             self.people.activities.insert(r.me.id, a);
         }
-        self.presences = r.presences.into_iter().collect();
+        self.presences = known_presences;
+        self.presences.extend(r.presences);
+        for (u, a) in known_activities {
+            self.people.activities.entry(u).or_insert(a);
+        }
         self.me = r.me;
         self.users = r.users.into_iter().map(|u| (u.id, u)).collect();
         self.guilds = r.guilds;

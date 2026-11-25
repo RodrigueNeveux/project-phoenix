@@ -186,20 +186,23 @@ fn load() -> Option<(Ui, Core)> {
     cache.apply(&ev);
     let GatewayEvent::Ready(ready) = ev else { return None };
     let mut adapter = Adapter::new(ready.user.id, convert::Prefs::from_ready(&ready));
+    let mut people = Vec::new();
     if let Some(sup) = file("READY_SUPPLEMENTAL").and_then(|p| fs::read_to_string(p).ok()) {
         let ev = parse_dispatch("READY_SUPPLEMENTAL", &sup);
         if matches!(ev, GatewayEvent::ReadySupplemental(_)) {
             cache.apply(&ev);
-            let _ = adapter.map(&cache, &ev);
+            people.extend(presence_events(adapter.map(&cache, &ev)));
+            people.extend(presence_events(nav::on_gateway(&cache, &ev)));
         }
     }
-    let (last_seq, fresh) = replay(&cache, &mut adapter);
+    let (last_seq, fresh) = replay(&cache, &mut adapter, &mut people);
     crate::perf::span("snapshot_replayed", t0);
     let data = convert::build_ready(&cache, &ready, &adapter.prefs);
     crate::perf::span("snapshot_built", t0);
     let mut events: Vec<AppEvent> = convert::self_activities(&ready).into_iter().collect();
     events.extend(convert::self_status(&ready));
     events.extend(nav::snapshot(&cache, &ready));
+    events.extend(people);
     let resume = (fresh && other_owner().is_none())
         .then_some(last_seq)
         .flatten()
@@ -207,7 +210,13 @@ fn load() -> Option<(Ui, Core)> {
     Some(((data, events), Core { cache, ready, adapter, resume }))
 }
 
-fn replay(cache: &Cache, adapter: &mut Adapter) -> (Option<u64>, bool) {
+fn presence_events(events: Vec<AppEvent>) -> impl Iterator<Item = AppEvent> {
+    events.into_iter().filter(|e| {
+        matches!(e, AppEvent::PresenceUpdate { .. } | AppEvent::Activities { .. } | AppEvent::Nav(crate::ui::home::data::NavEvent::Activity { .. }))
+    })
+}
+
+fn replay(cache: &Cache, adapter: &mut Adapter, people: &mut Vec<AppEvent>) -> (Option<u64>, bool) {
     let Some(jp) = journal_path() else { return (None, false) };
     let Ok(f) = fs::File::open(&jp) else { return (None, false) };
     let fresh = f
@@ -223,7 +232,11 @@ fn replay(cache: &Cache, adapter: &mut Adapter) -> (Option<u64>, bool) {
         let (Some(seq), Some(name), Some(raw)) = (parts.next(), parts.next(), parts.next()) else { break };
         let ev = parse_dispatch(name, raw);
         cache.apply(&ev);
-        let _ = adapter.map(cache, &ev);
+        let mapped = adapter.map(cache, &ev);
+        if matches!(ev, GatewayEvent::PresenceUpdate(_)) {
+            people.extend(presence_events(mapped));
+            people.extend(presence_events(nav::on_gateway(cache, &ev)));
+        }
         if let Ok(s) = seq.parse::<u64>()
             && s > 0
         {
