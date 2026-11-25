@@ -1334,13 +1334,13 @@ const LIMITED_THEME_END_ALL: i64 = 1_797_184_800_000;
 const LIMITED_THEME_END_NITRO: i64 = 1_803_146_400_000;
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum TimeLeft {
+enum TimeLeft {
     Days(i64),
     Hours(i64),
     UnderHour,
 }
 
-pub(crate) fn limited_time_left(now_ms: i64, end_ms: i64) -> Option<TimeLeft> {
+fn limited_time_left(now_ms: i64, end_ms: i64) -> Option<TimeLeft> {
     let secs = (end_ms - now_ms) / 1000;
     if secs <= 0 {
         return None;
