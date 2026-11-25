@@ -106,6 +106,25 @@ References: bundle `web.b63d846b329d6470.js` (GatewayConnectionStore, Applicatio
 | receive | screen video over the stream connection | decoded by ffmpeg at 1280x720 (camera tiles stay 640x360) | `call::watch_events`, `stream_frame` | see live checks |
 | stream volume | stream audio is its own track | | mixer track `owner | 1<<63`, `VoiceControl::SetStreamVolume` | ✅ code, no UI yet ❌ |
 
+### Sidebar LIVE pill and hover popover (live CDP, streams of other members, styles only, no screenshot)
+
+| element | CSS (class) | value | Phoenix | status |
+|---|---|---|---|---|
+| LIVE pill | `badge_4guu7- notification_4guu7-` body-xs/semibold | 74.5x16, padding 0 8, pill, rgb(210,45,57), 12/16 600 uppercase "En direct" | `voice_panel` row, `voice_row::stream_preview` | ✅ |
+| popover | `container_utcclU popover_81IzEA` | 280 wide, padding 16 8 16 16, gap 16, radius 12, `--background-surface-high`, inset 1px border + `--shadow-high`; 27 px right of the row, 12 px above it, slides in by 10 px | `stream_preview` | ✅ |
+| header | `streamHeaderVoiceUserActivities_1v6-1l` space-between, margin-bottom 10 | "Streame" 12/16 500 `--text-muted` + LIVE pill | | ✅ |
+| preview | `previewContainer_1v6-1l previewContainerUserActivity` | 248x142, radius 8, `--background-secondary-alt`, `--shadow-border`+`--shadow-high`; image from `GET /streams/{key}/preview` (hover sends it), else "Le stream vient de commencer. Viens donc !" 14/18 `--text-default` | `fetch_preview` (2 min cache) | ✅ |
+| preview hover | `previewHover_1v6-1l` | `--opacity-black-60`, opacity 0 → 1 (.2s), "Regarder le stream" 14/18 600 white | | ✅ (no fade) |
+| watch button | `button sm active` | 248x32, radius 8, padding 3 11, `--control-connected-*` (green), icon 16 + gap 4, 14/18 500 | `stream-preview-watch` → `watch_from_sidebar` (joins, then op 20 once connected) | ✅ |
+| activities below | `flexColumn_-kuxsn` (listening etc.) | | not drawn | ❌ |
+
+### Live checks (2026-11-25, real_shots, test channel only, test pattern)
+
+- `PHX_VOICE=1 PHX_CHANNEL=<text channel> PHX_VOICE_STREAM=720p30 [PHX_VOICE_STREAM_SOUND=1] PHX_VOICE_STREAM_HOLD=<ms> PHX_VOICE_STREAM_UNTIL=<flag file>`: op 18 → STREAM_CREATE (rtc_server_id) → STREAM_SERVER_UPDATE → stream voice gateway Ready → Connected; the server sets `self_stream: true`; a 512x288 preview is posted (~19 KB); H.264 RTP leaves and the SFU sends RTCP for the screen SSRC (live4: 1674 video packets, 179 RTCP in ~55 s). The stream Ready lists its stream as `"video"`, not `"screen"`, so the SSRC falls back to the first stream ✅.
+- Start the run from a text channel: a second `join` of the channel you are in used to drop the call (no new VOICE_SERVER_UPDATE); `join` is now a no-op in that case ✅.
+- Own stream from another session of the same account: op 20 from a second Phoenix session (`PHX_STREAM_WATCH=<key>`, not in voice) gets `STREAM_DELETE reason="unauthorized"` right away. Discord does not let an account watch its own stream. The official client logged into the same account shows its own row in the voice list as `voiceUser_ disabled_` with no LIVE pill and no hover preview, while Phoenix streams. So the requested cross-client test (Phoenix streams → official client watches, and the reverse) is not possible with one account; receiving needs a second account ❌.
+- Receiving: the code path (op 20, stream connection as a viewer, screen video decoded at 1280x720, stream audio as its own mixer track) is in place but no frame was decoded live: the only other streams in the channel came from other members (possibly a real screen), so they were not watched ⚠.
+
 ### Go Live modal (live CDP, modal1/modal2, Onyx, 1536x840 CSS px)
 
 The panel and call tray share buttons open it (the client does the same: `Partage ton écran` → modal, then the system picker only after the primary button). Opening it, selecting a card and opening the Options menu sent no request (checked with Network.enable).
