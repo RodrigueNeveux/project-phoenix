@@ -50,7 +50,12 @@ impl TrayState {
         let connected = a.voice_channel.is_some();
         let dms = || a.channels.values().filter(|c| c.guild.is_none());
         let mentions = a.guilds.iter().map(|g| g.mentions).sum::<u32>() + dms().map(|c| c.mentions).sum::<u32>();
-        let pending = a.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
+        let pending = a
+            .nav
+            .relationships
+            .iter()
+            .filter(|r| r.kind == crate::ui::home::data::RelationshipKind::Incoming && !r.spam && !r.ignored)
+            .count() as u32;
         let any_unread = a.guilds.iter().any(|g| g.unread) || dms().any(|c| c.unread);
         Self {
             connected,

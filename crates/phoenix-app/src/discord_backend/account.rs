@@ -218,6 +218,24 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
             crate::sounds::on_message(&s.notify.lock(), &s.cache, me, m);
         }
         GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => s.notify.lock().update(data),
+        GatewayEvent::Unknown { name, data } if name == "GUILD_SCHEDULED_EVENT_UPDATE" => {
+            let me = s.adapter.lock().me;
+            crate::notifications::on_scheduled_event_update(&s.notify.lock(), &s.cache, me, data);
+        }
+        GatewayEvent::Unknown { name, data } if name == "STAGE_INSTANCE_UPDATE" => {
+            let me = s.adapter.lock().me;
+            crate::notifications::on_stage_instance_update(&s.notify.lock(), &s.cache, me, data);
+        }
+        GatewayEvent::Unknown { name, data } if name == "STAGE_INSTANCE_DELETE" => {
+            crate::notifications::on_stage_instance_delete(data);
+        }
+        GatewayEvent::Unknown { name, data } if name == "MESSAGE_REMINDER_DUE" => {
+            crate::notifications::on_message_reminder_due(&s.cache, data);
+        }
+        GatewayEvent::ThreadCreate(ch) => {
+            let me = s.adapter.lock().me;
+            crate::notifications::on_thread_create(&s.notify.lock(), &s.cache, me, ch);
+        }
         GatewayEvent::Ready(_) => crate::notifications::on_ready(&s.cache),
         GatewayEvent::RelationshipAdd(r) => crate::notifications::on_relationship_add(r),
         GatewayEvent::RelationshipRemove(r) => crate::notifications::on_relationship_remove(r),

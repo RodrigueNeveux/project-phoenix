@@ -177,6 +177,8 @@ pub struct Channel {
     pub is_message_request: bool,
     #[serde(default, deserialize_with = "null_default")]
     pub is_spam: bool,
+    #[serde(default, deserialize_with = "null_default")]
+    pub newly_created: bool,
 }
 
 pub const CHANNEL_FLAG_GUILD_RESOURCE: u64 = 1 << 7;

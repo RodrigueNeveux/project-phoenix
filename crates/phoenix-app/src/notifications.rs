@@ -233,7 +233,33 @@ impl NotifyPrefs {
     }
 
     pub fn allow_no_messages(&self, guild: Option<u64>, channel: u64, parent: Option<u64>) -> bool {
-        self.is_guild_or_category_or_channel_muted(guild, channel, parent) || self.resolved_level(guild, channel, parent) == Level::Nothing
+        self.is_guild_or_category_or_channel_muted(guild, channel, parent)
+            || self.resolved_level(guild, channel, parent) == Level::Nothing
+            || (self.is_opt_in_enabled(guild) && !self.is_channel_or_parent_opted_in(guild, channel, parent))
+    }
+
+    pub fn is_opt_in_enabled(&self, guild: Option<u64>) -> bool {
+        guild.is_some_and(|g| self.guilds.get(&g).is_some_and(|gp| gp.flags & OPT_IN_CHANNELS_ON != 0))
+    }
+
+    pub fn is_channel_opted_in(&self, guild: Option<u64>, channel: u64) -> bool {
+        self.channel_prefs(guild, channel).is_some_and(|c| c.flags & OPT_IN_ENABLED != 0)
+    }
+
+    pub fn is_channel_or_parent_opted_in(&self, guild: Option<u64>, channel: u64, parent: Option<u64>) -> bool {
+        guild.is_some() && (self.is_channel_opted_in(guild, channel) || parent.is_some_and(|p| self.is_channel_opted_in(guild, p)))
+    }
+
+    pub fn new_forum_threads_created(&self, guild: Option<u64>, channel: u64, parent: Option<u64>) -> bool {
+        if let Some(c) = self.channel_prefs(guild, channel) {
+            if c.flags & NEW_FORUM_THREADS_ON != 0 {
+                return true;
+            }
+            if c.flags & NEW_FORUM_THREADS_OFF != 0 {
+                return false;
+            }
+        }
+        self.resolved_level(guild, channel, parent) == Level::All
     }
 }
 
@@ -262,6 +288,7 @@ pub struct MessageFacts {
     pub self_mentionable: bool,
     pub spammer: bool,
     pub blocked: bool,
+    pub message_request: bool,
     pub thread: Option<ThreadFacts>,
     pub grandparent: Option<u64>,
     pub voice_text: bool,
@@ -269,7 +296,7 @@ pub struct MessageFacts {
 }
 
 pub fn should_notify(p: &NotifyPrefs, f: &MessageFacts) -> bool {
-    if f.from_me {
+    if f.from_me || f.message_request {
         return false;
     }
     if p.allow_no_messages(f.guild, f.channel, f.parent) {
@@ -287,6 +314,14 @@ pub fn should_notify(p: &NotifyPrefs, f: &MessageFacts) -> bool {
 
 pub const SUPPRESS_NOTIFICATIONS: u64 = 1 << 12;
 pub const SPAMMER: u64 = 1 << 20;
+pub const OPT_IN_CHANNELS_ON: u64 = 16384;
+pub const OPT_IN_ENABLED: u64 = 4096;
+pub const NEW_FORUM_THREADS_ON: u64 = 16384;
+pub const NEW_FORUM_THREADS_OFF: u64 = 8192;
+const EVENT_NOTIF_START: u64 = 1;
+const EVENT_ENTITY_STAGE: u64 = 1;
+const EVENT_ENTITY_VOICE: u64 = 2;
+const EVENT_ENTITY_EXTERNAL: u64 = 3;
 const TH_ALL: u64 = 2;
 const TH_MENTIONS: u64 = 4;
 const TH_NONE: u64 = 8;
@@ -314,7 +349,7 @@ pub fn thread_level(p: &NotifyPrefs, f: &MessageFacts, t: ThreadFacts) -> Level 
 }
 
 pub fn show_message(p: &NotifyPrefs, f: &MessageFacts, c: &crate::sounds::MessageCtx) -> bool {
-    if f.suppressed || f.spammer || f.blocked || c.dnd || c.quiet {
+    if f.suppressed || f.spammer || f.blocked || f.message_request || c.dnd || c.quiet {
         return false;
     }
     if f.from_me && !f.self_mentionable {
@@ -345,7 +380,10 @@ pub fn show_message(p: &NotifyPrefs, f: &MessageFacts, c: &crate::sounds::Messag
 }
 
 fn blocked_user(cache: &Cache, user: api::Snowflake) -> bool {
-    cache.relationships().iter().any(|r| matches!(r.kind, api::RelationshipType::Blocked) && r.user.as_ref().map(|u| u.id).or(r.user_id).unwrap_or(r.id) == user)
+    cache.relationships().iter().any(|r| {
+        (matches!(r.kind, api::RelationshipType::Blocked) || r.user_ignored)
+            && r.user.as_ref().map(|u| u.id).or(r.user_id).unwrap_or(r.id) == user
+    })
 }
 
 pub fn facts(cache: &Cache, me: api::Snowflake, m: &api::Message) -> MessageFacts {
@@ -377,6 +415,7 @@ pub fn facts(cache: &Cache, me: api::Snowflake, m: &api::Message) -> MessageFact
         self_mentionable: m.kind == api::MessageType::PollResult,
         spammer: m.author.public_flags.unwrap_or(0) & SPAMMER != 0,
         blocked: blocked_user(cache, m.author.id),
+        message_request: chan.as_ref().is_some_and(|c| c.is_message_request || c.is_spam),
         thread,
         grandparent,
         voice_text,
@@ -387,6 +426,7 @@ pub fn facts(cache: &Cache, me: api::Snowflake, m: &api::Message) -> MessageFact
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Target {
     Channel(u64),
+    Guild(u64),
     Pending(u64),
     Dm(u64),
 }
@@ -436,9 +476,14 @@ pub fn on_message(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, m: &ap
 }
 
 static OUTGOING: Mutex<Option<HashSet<u64>>> = Mutex::new(None);
+static SEEN_STAGES: Mutex<Option<HashSet<u64>>> = Mutex::new(None);
 
 fn outgoing() -> std::sync::MutexGuard<'static, Option<HashSet<u64>>> {
     OUTGOING.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn seen_stages() -> std::sync::MutexGuard<'static, Option<HashSet<u64>>> {
+    SEEN_STAGES.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 fn rel_user(r: &api::Relationship) -> u64 {
@@ -448,6 +493,199 @@ fn rel_user(r: &api::Relationship) -> u64 {
 pub fn on_ready(cache: &Cache) {
     let set = cache.relationships().iter().filter(|r| matches!(r.kind, api::RelationshipType::OutgoingRequest)).map(|r| rel_user(r)).collect();
     *outgoing() = Some(set);
+    *seen_stages() = Some(HashSet::new());
+}
+
+fn guild_icon_url(guild_id: u64, icon: Option<&str>) -> Option<String> {
+    icon.map(|h| format!("https://cdn.discordapp.com/icons/{guild_id}/{h}.png?size=128"))
+}
+
+pub fn thread_create_toast(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, ch: &api::Channel, c: &crate::sounds::MessageCtx) -> Option<Toast> {
+    if !ch.newly_created || c.dnd || c.quiet {
+        return None;
+    }
+    let parent_id = ch.parent_id?;
+    let parent = cache.channel(parent_id)?;
+    if !matches!(parent.kind, api::ChannelType::GuildForum | api::ChannelType::GuildMedia) {
+        return None;
+    }
+    if c.focused && c.selected == Some(parent_id.0) {
+        return None;
+    }
+    let guild_id = ch.guild_id.or(parent.guild_id)?;
+    let parent_cat = parent.parent_id.map(|p| p.0);
+    if prefs.is_guild_or_category_or_channel_muted(Some(guild_id.0), parent_id.0, parent_cat) {
+        return None;
+    }
+    if !prefs.new_forum_threads_created(Some(guild_id.0), parent_id.0, parent_cat) {
+        return None;
+    }
+    let owner_id = ch.owner_id?;
+    if owner_id == me || blocked_user(cache, owner_id) {
+        return None;
+    }
+    let owner = cache.user(owner_id)?;
+    if owner.public_flags.unwrap_or(0) & SPAMMER != 0 {
+        return None;
+    }
+    let guild = cache.guild(guild_id)?;
+    let look = content::CacheLookup { cache };
+    let author = look.member_name(Some(guild_id.0), &owner);
+    let title = crate::t!("notif.thread_title", guild = guild.properties.name, channel = parent.display_name()).to_string();
+    let body = crate::t!("notif.thread_body", channel = ch.display_name(), username = author).to_string();
+    Some(Toast {
+        tag: ch.id.0,
+        title,
+        body,
+        icon: Some(content::avatar_url(None, &owner, None)),
+        target: Target::Channel(ch.id.0),
+    })
+}
+
+pub fn on_thread_create(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, ch: &api::Channel) {
+    if !enabled() {
+        return;
+    }
+    let c = crate::sounds::message_ctx();
+    if let Some(t) = thread_create_toast(prefs, cache, me, ch, &c) {
+        show(t);
+    }
+}
+
+pub fn scheduled_event_toast(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, data: &Value) -> Option<Toast> {
+    if data.get("notification_type").and_then(Value::as_u64) != Some(EVENT_NOTIF_START) {
+        return None;
+    }
+    let event_id = snowflake(data.get("id"))?;
+    let guild_id = snowflake(data.get("guild_id"))?;
+    if prefs.guild(Some(guild_id)).mute_events {
+        return None;
+    }
+    let guild = cache.guild(api::Snowflake(guild_id))?;
+    let topic = data.get("name").and_then(Value::as_str).filter(|s| !s.is_empty())?;
+    let entity_type = data.get("entity_type").and_then(Value::as_u64)?;
+    let icon = guild_icon_url(guild_id, guild.properties.icon.as_deref());
+    let title = crate::t!("notif.event_title", guild = guild.properties.name).to_string();
+    match entity_type {
+        EVENT_ENTITY_STAGE | EVENT_ENTITY_VOICE => {
+            let channel_id = snowflake(data.get("channel_id"))?;
+            if cache.voice_states(Some(api::Snowflake(guild_id))).iter().any(|v| v.user_id == me && v.channel_id == Some(api::Snowflake(channel_id))) {
+                return None;
+            }
+            let host_id = snowflake(data.get("host_id").or_else(|| data.get("creator_id")))?;
+            let host = cache.user(api::Snowflake(host_id))?;
+            let look = content::CacheLookup { cache };
+            let username = look.member_name(Some(guild_id), &host);
+            let body = crate::t!("notif.event_body", topic = topic, username = username).to_string();
+            Some(Toast { tag: event_id, title, body, icon, target: Target::Channel(channel_id) })
+        }
+        EVENT_ENTITY_EXTERNAL => {
+            let body = crate::t!("notif.event_body_external", topic = topic).to_string();
+            Some(Toast { tag: event_id, title, body, icon, target: Target::Guild(guild_id) })
+        }
+        _ => None,
+    }
+}
+
+pub fn on_scheduled_event_update(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, data: &Value) {
+    if gate_open()
+        && let Some(t) = scheduled_event_toast(prefs, cache, me, data)
+    {
+        show(t);
+    }
+}
+
+pub fn stage_instance_toast(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, data: &Value) -> Option<Toast> {
+    if !data.get("send_start_notification").and_then(Value::as_bool).unwrap_or(false) {
+        return None;
+    }
+    let id = snowflake(data.get("id"))?;
+    let guild_id = snowflake(data.get("guild_id"))?;
+    let channel_id = snowflake(data.get("channel_id"))?;
+    if cache.voice_states(Some(api::Snowflake(guild_id))).iter().any(|v| v.user_id == me && v.channel_id == Some(api::Snowflake(channel_id))) {
+        return None;
+    }
+    let ch = cache.channel(api::Snowflake(channel_id))?;
+    if prefs.allow_no_messages(Some(guild_id), channel_id, ch.parent_id.map(|p| p.0)) {
+        return None;
+    }
+    let guild = cache.guild(api::Snowflake(guild_id))?;
+    let host_id = snowflake(data.get("host_id"))?;
+    if api::Snowflake(host_id) == me || blocked_user(cache, api::Snowflake(host_id)) {
+        return None;
+    }
+    let host = cache.user(api::Snowflake(host_id))?;
+    if host.public_flags.unwrap_or(0) & SPAMMER != 0 {
+        return None;
+    }
+    let topic = data.get("topic").and_then(Value::as_str).unwrap_or("");
+    let look = content::CacheLookup { cache };
+    let username = look.member_name(Some(guild_id), &host);
+    let title = crate::t!("notif.stage_title", guild = guild.properties.name).to_string();
+    let body = crate::t!("notif.stage_body", username = username, topic = topic).to_string();
+    Some(Toast {
+        tag: id,
+        title,
+        body,
+        icon: guild_icon_url(guild_id, guild.properties.icon.as_deref()),
+        target: Target::Channel(channel_id),
+    })
+}
+
+pub fn on_stage_instance_update(prefs: &NotifyPrefs, cache: &Cache, me: api::Snowflake, data: &Value) {
+    if !gate_open() {
+        return;
+    }
+    let Some(id) = snowflake(data.get("id")) else { return };
+    if seen_stages().as_ref().is_some_and(|s| s.contains(&id)) {
+        return;
+    }
+    if let Some(t) = stage_instance_toast(prefs, cache, me, data) {
+        seen_stages().get_or_insert_with(HashSet::new).insert(id);
+        show(t);
+    }
+}
+
+pub fn on_stage_instance_delete(data: &Value) {
+    if let Some(id) = snowflake(data.get("id"))
+        && let Some(s) = seen_stages().as_mut()
+    {
+        s.remove(&id);
+    }
+}
+
+pub fn reminder_due_toast(cache: &Cache, data: &Value) -> Option<Toast> {
+    let saved = data.get("saved_message").or_else(|| data.get("savedMessage")).unwrap_or(data);
+    let msg: api::Message = serde_json::from_value(saved.get("message")?.clone()).ok()?;
+    let channel_id = saved
+        .get("save_data")
+        .or_else(|| saved.get("saveData"))
+        .and_then(|d| snowflake(d.get("channel_id").or_else(|| d.get("channelId"))))
+        .unwrap_or(msg.channel_id.0);
+    let ch = cache.channel(api::Snowflake(channel_id))?;
+    let look = content::CacheLookup { cache };
+    let chan = look.chan(&ch);
+    let guild = msg.guild_id.or(ch.guild_id).map(|g| g.0);
+    let member_avatar = msg
+        .member
+        .as_ref()
+        .and_then(|mb| mb.avatar.clone())
+        .or_else(|| guild.and_then(|g| cache.member(api::Snowflake(g), msg.author.id)).and_then(|mb| mb.avatar.clone()));
+    Some(Toast {
+        tag: msg.id.0,
+        title: crate::t!("notif.reminder_title").to_string(),
+        body: content::body(&look, &chan, &msg)?,
+        icon: Some(content::avatar_url(guild, &msg.author, member_avatar.as_deref())),
+        target: Target::Channel(chan.id),
+    })
+}
+
+pub fn on_message_reminder_due(cache: &Cache, data: &Value) {
+    if gate_open()
+        && let Some(t) = reminder_due_toast(cache, data)
+    {
+        show(t);
+    }
 }
 
 pub fn relationship_toast(r: &api::Relationship, was_outgoing: bool) -> Option<Toast> {
@@ -558,6 +796,7 @@ pub fn open_target(a: &mut crate::app::PhoenixApp, t: Target, cx: &mut gpui::Con
                 a.open_channel_chat(Id(ch), cx);
             }
         }
+        Target::Guild(g) => a.select_guild(Some(Id(g)), cx),
         Target::Pending(user) => {
             a.parity.inbox.open = false;
             a.select_guild(None, cx);
@@ -728,5 +967,135 @@ mod tests {
         let mut q = p.clone();
         q.guilds.get_mut(&1).unwrap().channels.get_mut(&300).unwrap().until = Some(0);
         assert!(!q.is_channel_muted(Some(1), 300));
+    }
+
+    #[test]
+    fn opt_in_channels_and_message_requests() {
+        let p = NotifyPrefs::from_ready(Some(&json!([
+            {"guild_id": "1", "message_notifications": 0, "flags": OPT_IN_CHANNELS_ON, "channel_overrides": [
+                {"channel_id": "10", "flags": OPT_IN_ENABLED},
+                {"channel_id": "20", "flags": OPT_IN_ENABLED}
+            ]},
+            {"guild_id": "2", "message_notifications": 0, "flags": 0}
+        ])));
+        let c = ctx();
+        assert!(p.is_opt_in_enabled(Some(1)));
+        assert!(!p.is_opt_in_enabled(Some(2)));
+        assert!(!show_message(&p, &f(Some(1), 11), &c), "not opted in");
+        assert!(!show_message(&p, &MessageFacts { mentions_me: true, ..f(Some(1), 11) }, &c), "mention in non-opted-in");
+        assert!(show_message(&p, &f(Some(1), 10), &c), "channel opted in");
+        assert!(show_message(&p, &MessageFacts { parent: Some(20), ..f(Some(1), 21) }, &c), "parent category opted in");
+        assert!(show_message(&p, &f(Some(2), 99), &c), "opt-in disabled on guild");
+
+        let dm = f(None, 40);
+        assert!(show_message(&p, &dm, &c));
+        assert!(!show_message(&p, &MessageFacts { message_request: true, ..dm }, &c), "message request");
+        assert!(!should_notify(&p, &MessageFacts { message_request: true, ..dm }), "message request sound");
+    }
+
+    #[test]
+    fn new_desktop_event_toasts() {
+        let cache = Cache::default();
+        let ready = phoenix_api::gateway::parse_dispatch(
+            "READY",
+            &json!({
+                "v": 9,
+                "user": {"id": "1", "username": "me"},
+                "session_id": "s",
+                "guilds": [{
+                    "id": "100",
+                    "properties": {"id": "100", "name": "TestGuild", "icon": "abc"},
+                    "channels": [
+                        {"id": "200", "type": 15, "guild_id": "100", "name": "forum"},
+                        {"id": "201", "type": 0, "guild_id": "100", "name": "general"},
+                        {"id": "202", "type": 13, "guild_id": "100", "name": "stage"}
+                    ],
+                    "members": [{"user": {"id": "2", "username": "alice"}}]
+                }],
+                "private_channels": [],
+                "relationships": []
+            })
+            .to_string(),
+        );
+        cache.apply(&ready);
+
+        let p = NotifyPrefs::from_ready(Some(&json!([
+            {"guild_id": "100", "message_notifications": 1, "channel_overrides": [
+                {"channel_id": "200", "flags": NEW_FORUM_THREADS_ON}
+            ]}
+        ])));
+        let c = ctx();
+        let me = api::Snowflake(1);
+
+        let thread = api::Channel {
+            id: api::Snowflake(300),
+            kind: api::ChannelType::PublicThread,
+            guild_id: Some(api::Snowflake(100)),
+            parent_id: Some(api::Snowflake(200)),
+            owner_id: Some(api::Snowflake(2)),
+            name: Some("Hello Forum".into()),
+            newly_created: true,
+            ..Default::default()
+        };
+        let t = thread_create_toast(&p, &cache, me, &thread, &c).unwrap();
+        assert_eq!(t.tag, 300);
+        assert_eq!(t.target, Target::Channel(300));
+        assert!(t.title.contains("TestGuild"));
+        assert!(t.body.contains("Hello Forum"));
+        assert!(thread_create_toast(&p, &cache, me, &api::Channel { newly_created: false, ..thread.clone() }, &c).is_none());
+        assert!(thread_create_toast(&p, &cache, me, &api::Channel { owner_id: Some(me), ..thread }, &c).is_none());
+
+        let ev_voice = json!({
+            "id": "400",
+            "guild_id": "100",
+            "channel_id": "202",
+            "name": "Town Hall",
+            "entity_type": 2,
+            "notification_type": 1,
+            "host_id": "2"
+        });
+        let et = scheduled_event_toast(&p, &cache, me, &ev_voice).unwrap();
+        assert_eq!((et.tag, et.target), (400, Target::Channel(202)));
+        assert!(et.body.contains("Town Hall"));
+
+        let ev_ext = json!({
+            "id": "401",
+            "guild_id": "100",
+            "name": "Meetup",
+            "entity_type": 3,
+            "notification_type": 1
+        });
+        let ext = scheduled_event_toast(&p, &cache, me, &ev_ext).unwrap();
+        assert_eq!((ext.tag, ext.target), (401, Target::Guild(100)));
+        assert!(ext.body.contains("Meetup"));
+
+        let stage = json!({
+            "id": "500",
+            "guild_id": "100",
+            "channel_id": "202",
+            "host_id": "2",
+            "topic": "Live Q&A",
+            "send_start_notification": true
+        });
+        let st = stage_instance_toast(&p, &cache, me, &stage).unwrap();
+        assert_eq!((st.tag, st.target), (500, Target::Channel(202)));
+        assert!(st.body.contains("Live Q&A"));
+
+        let reminder = json!({
+            "saved_message": {
+                "save_data": {"channel_id": "201"},
+                "message": {
+                    "id": "600",
+                    "channel_id": "201",
+                    "guild_id": "100",
+                    "content": "Don't forget this",
+                    "author": {"id": "2", "username": "alice"},
+                    "timestamp": "2026-11-25T12:00:00Z"
+                }
+            }
+        });
+        let rt = reminder_due_toast(&cache, &reminder).unwrap();
+        assert_eq!((rt.tag, rt.target), (600, Target::Channel(201)));
+        assert_eq!(rt.body, "Don't forget this");
     }
 }

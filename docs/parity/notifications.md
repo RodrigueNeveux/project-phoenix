@@ -22,7 +22,7 @@ Code: `crates/phoenix-app/src/notifications.rs` (rules, gateway hooks, click rou
 | Streamer mode | `showNotification`: `StreamerModeStore.disableNotifications` (streamer && "Disable notifications") | `LocalPrefs::notifications_on` (`st-notifs`) | ✅ |
 | @silent | `SUPPRESS_NOTIFICATIONS` (1<<12) | `MessageFacts.suppressed` | ✅ unit test |
 | Own messages | `K`: same user, except `SELF_MENTIONABLE_SYSTEM` (type 46, poll result) | `from_me`, `self_mentionable` | ✅ unit test |
-| Spammer, blocked / ignored | `K`: `SPAMMER` (1<<20), `isBlockedOrIgnored` | `spammer`, `blocked` | ✅ unit test (ignored users: ❌, Phoenix has no ignore list) |
+| Spammer, blocked / ignored | `K`: `SPAMMER` (1<<20), `isBlockedOrIgnored` | `spammer`, `blocked` (`Blocked` or `user_ignored`) | ✅ unit test |
 | Viewed channel | `!includeSelectedChannel && selected` with `includeSelectedChannel = !windowFocused` | `focused && selected == channel` | ✅ unit test; the thread side panel (`getCurrentSidebarChannelId`) is not counted ❌ |
 | Mutes | `allowNoMessages`: guild / category / channel muted (`mute_config.end_time`), level Nothing | `NotifyPrefs::allow_no_messages` (wt/mute) | ✅ unit test |
 | Levels | `allowAllMessages` → all, else `isMentioned` | `resolved_level` channel → category → guild → server default | ✅ unit test |
@@ -30,15 +30,15 @@ Code: `crates/phoenix-app/src/notifications.rs` (rules, gateway hooks, click rou
 | Text in voice | `OU` (voice, stage): "all messages" only while connected to that voice channel | `voice_text`, `in_voice` (cache voice states) | ✅ unit test |
 | Threads | `JoinedThreadsStore.isMuted`; level from the thread member flags (ALL 2 / MENTIONS 4 / NONE 8, not joined = nothing, else parent level, muted parent = nothing) | `thread_level` | ✅ unit test |
 | Thread starter | uses the parent channel | `facts` | ✅ |
-| Opt-in channels (onboarding) | `isOptInEnabled && !isChannelRecordOrParentOptedIn` | — | ❌ not wired in `NotifyPrefs` |
-| Message requests, game overlay focus, activities | `isMessageRequest`, `getFocusedPID`, embedded activity | — | ❌ Phoenix has none of these |
+| Opt-in channels (onboarding) | `isOptInEnabled && !isChannelRecordOrParentOptedIn` | `NotifyPrefs::allow_no_messages` (`OPT_IN_CHANNELS_ON` 16384, `OPT_IN_ENABLED` 4096) | ✅ unit test |
+| Message requests, game overlay focus, activities | `isMessageRequest`, `getFocusedPID`, embedded activity | `MessageFacts::message_request` (`is_message_request \|\| is_spam`) | ✅ unit test for message requests / spam; game overlay & embedded activity ❌ not in Phoenix |
 | Rate limit | one tracked notification per channel on Linux (older one closed), message sound throttled 1 s | `dbus::Live` replaces the channel's notification (`replaces_id`); sounds: `sounds::throttled` | ✅ unit test |
 | Clearing | `WINDOW_FOCUS` (selected channel), `CHANNEL_SELECT`, `MESSAGE_ACK` close the channel's notifications | `sync_focus` (render), `open_channel_chat`, gateway `MESSAGE_ACK` (`on_ack`; ignored for the selected channel while the window is in the background, where the client would not have acked) | ✅ |
 | Friend requests | module 441711: `RELATIONSHIP_ADD` incoming, not ignored → title `username`, body "Demande d'ami envoyée.", tag user id, click opens the profile and Friends › Pending; `FRIEND_REQUEST_ACCEPTED` (friend that was outgoing) → "Demande d'ami acceptée.", click opens the DM | `on_relationship_add`, `relationship_toast` | ✅ unit test |
 | Incoming calls | no `showNotification` for calls in the client (ringtone + in-app call only) | ringtone in `sounds::watch` | ✅ (nothing to show) |
 | "Reply" action | the strings exist (`TBA5Xg`, `MJ+sFa`) but no desktop caller passes `actions` | none | ✅ (not offered, like the client) |
 | "Show content" switch | no desktop setting in the 2026 client (`notifications` proto has none; the Notifications page has no such row) | none | ✅ (nothing to hide) |
-| Activity started, stage, events, reminders, threads created | `ACTIVITY_START`, `STAGE_INSTANCE_UPDATE`, `GUILD_SCHEDULED_EVENT_UPDATE`, `MESSAGE_REMINDER_DUE`, `THREAD_CREATE` | — | ❌ not yet |
+| Activity started, stage, events, reminders, threads created | `ACTIVITY_START`, `STAGE_INSTANCE_UPDATE`, `GUILD_SCHEDULED_EVENT_UPDATE`, `MESSAGE_REMINDER_DUE`, `THREAD_CREATE` | `on_thread_create`, `on_scheduled_event_update`, `on_stage_instance_update` (+ `STAGE_INSTANCE_DELETE`), `on_message_reminder_due` | ✅ unit test (`ACTIVITY_START` ❌ not in Phoenix) |
 
 ## Taskbar badge (wt/setfx, checked)
 
@@ -48,8 +48,7 @@ Client (`web.b63d846b329d6470.js`, app root `Cd`): `count = getTotalMentionCount
 `app.setBadgeCount(max(count, 0))`, so the dot never shows there and the "badge" switch does not
 change the count. Phoenix `tray::TrayState`: `count = mentions + pending` sent as
 `com.canonical.Unity.LauncherEntry` `count` / `count-visible` (what Electron's `setBadgeCount` does
-on Linux), the switch only drives the unread tray icon. ✅ consistent; pending requests count every
-incoming request (Phoenix has no spam / ignored split, and no game friends) ❌ minor.
+on Linux), the switch only drives the unread tray icon. ✅ consistent; pending requests exclude spam and ignored users (game friends ❌ not in Phoenix).
 
 ## Content (`TB`)
 
