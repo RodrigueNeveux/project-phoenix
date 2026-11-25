@@ -160,15 +160,30 @@ pub fn btn_sm(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>, ki
 }
 
 pub fn critical_secondary(id: impl Into<gpui::ElementId>, label: impl Into<SharedString>) -> Stateful<Div> {
-    btn_sm(id, label, crate::ui::controls::BtnKind::Secondary)
+    div()
+        .id(id.into())
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .h(z(32.))
+        .px(z(12.))
+        .rounded(z(8.))
+        .border_1()
         .border_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_BORDER_DEFAULT)))
         .bg(c(tok(idx::CONTROL_CRITICAL_SECONDARY_BACKGROUND_DEFAULT)))
-        .text_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT)))
         .hover(|s| {
             s.bg(c(tok(idx::CONTROL_CRITICAL_SECONDARY_BACKGROUND_HOVER)))
                 .border_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_BORDER_HOVER)))
                 .text_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_TEXT_HOVER)))
         })
+        .cursor_pointer()
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT)))
+        .whitespace_nowrap()
+        .child(label.into())
 }
 
 pub fn icon_btn(id: impl Into<gpui::ElementId>, icon: &'static str, size: f32, glyph: f32, critical: bool) -> Stateful<Div> {

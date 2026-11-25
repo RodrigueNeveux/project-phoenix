@@ -288,12 +288,12 @@ pub fn list(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let help = div()
         .mt(z(8.))
         .flex()
-        .flex_wrap()
+        .flex_col()
         .text_size(z(14.))
         .line_height(z(18.))
         .text_color(c(tok(idx::TEXT_DEFAULT)))
         .child(crate::t!("gs.roles.help"))
-        .child(div().ml(z(4.)).text_color(c(tok(idx::TEXT_LINK))).child(crate::t!("gs.roles.help_link")));
+        .child(div().text_color(c(tok(idx::TEXT_LINK))).child(crate::t!("gs.roles.help_link")));
     let shown: Vec<&Value> = roles.iter().filter(|r| q.is_empty() || kit::s(r, "name").to_lowercase().contains(&q)).collect();
     let header = div()
         .ml(z(-32.))
