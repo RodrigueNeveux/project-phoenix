@@ -124,8 +124,12 @@ jobs:
     name: macOS universal (aarch64 + x86_64)
     needs: [prepare]
     runs-on: macos-latest
+    env:
+      OPUS_NO_PKG_CONFIG: "1"
     steps:
       - uses: actions/checkout@v4.2.2
+      - name: Install build tools for static Opus
+        run: brew install autoconf automake libtool
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
