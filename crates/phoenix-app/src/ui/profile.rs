@@ -842,12 +842,19 @@ pub fn set_modal_tab(t: u8) {
     PANEL_SCROLL.with(|h| h.set_offset(gpui::Point::default()));
 }
 
-fn mutual_row(id: impl Into<gpui::ElementId>, icon: AnyElement, name: SharedString, sub: Option<SharedString>) -> gpui::Stateful<Div> {
+fn mutual_row(
+    id: impl Into<gpui::ElementId>,
+    icon: AnyElement,
+    name: SharedString,
+    tag: Option<AnyElement>,
+    sub: Option<SharedString>,
+) -> gpui::Stateful<Div> {
     div()
         .id(id)
         .flex()
         .items_center()
         .p(z(4.))
+        .pr(z(32.))
         .ml(z(12.))
         .my(z(1.))
         .rounded(z(4.))
@@ -861,12 +868,20 @@ fn mutual_row(id: impl Into<gpui::ElementId>, icon: AnyElement, name: SharedStri
                 .flex_col()
                 .child(
                     div()
-                        .text_size(z(16.))
-                        .line_height(z(20.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(c(tok(idx::TEXT_STRONG)))
-                        .text_ellipsis()
-                        .child(crate::ui::emoji_text::label(name, 16.)),
+                        .flex()
+                        .items_center()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .min_w_0()
+                                .text_size(z(16.))
+                                .line_height(z(20.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(c(tok(idx::TEXT_STRONG)))
+                                .text_ellipsis()
+                                .child(crate::ui::emoji_text::label(name, 16.)),
+                        )
+                        .children(tag),
                 )
                 .when_some(sub, |d, s| {
                     d.child(
@@ -1119,7 +1134,14 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 let e3 = e.clone();
                 let icon = crate::ui::avatar_with_status(Some(u), 40., app.presence_of(u.id), c(tok(idx::BACKGROUND_BASE_LOWER))).into_any_element();
                 panel = panel.child(
-                    mutual_row(("mutual-friend", u.id.0), icon, u.display_name.clone(), None).on_click(move |ev, window, cx| {
+                    mutual_row(
+                        ("mutual-friend", u.id.0),
+                        icon,
+                        u.display_name.clone(),
+                        u.tag.as_ref().map(|t| crate::ui::members::server_tag(t).ml(z(4.)).into_any_element()),
+                        info(app, fid, None).custom,
+                    )
+                    .on_click(move |ev, window, cx| {
                         let at = ev.position();
                         e3.update(cx, |a, cx| {
                             a.people.modal = None;
@@ -1140,7 +1162,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 let gid = g.id;
                 let e3 = e.clone();
                 let icon = crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 40.);
-                panel = panel.child(mutual_row(("mutual-guild", gid.0), icon, g.name.clone(), None).on_click(move |_, _, cx| {
+                panel = panel.child(mutual_row(("mutual-guild", gid.0), icon, g.name.clone(), None, None).on_click(move |_, _, cx| {
                     e3.update(cx, |a, cx| {
                         a.people.close_overlays();
                         a.select_guild(Some(gid), cx);

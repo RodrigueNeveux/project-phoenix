@@ -44,6 +44,7 @@ Source: `~/discord-phoenix-ref/current-client/css` (Nov 2026 client). Density de
 | popout banner image | live `fill_vNEdYY banner_s9bWOi` radius 8 8 0 0 | clip | image clipped to the top radius | ui/profile.rs banner `img.rounded_t` | ✅ (GPUI overflow_hidden does not clip to rounded corners) |
 | popout mutuals | live `section_PXYMZ1` role=button, cursor pointer | click | opens the full profile on Mutual Friends / Mutual Servers | ui/profile.rs `mutuals_row` → `open_profile_modal_at` | ✅ (also the DM profile panel) |
 | popout mutual counts | live "1 serveur en commun", "10 amis en commun" | plural | singular at 1 | locales `profile.mutual_*_one` | ✅ (was "1 serveurs") |
+| modal Mutual Friends row | dump vanilla-profile-modal-tab3 `row__Bgzj0` | padding / margin / radius; name line; second line | 4 32 4 4 / 1 0 1 12 / 4; name 16/20 500 + guild tag chiplet (margin-start 4); custom status 12/16 500 | ui/profile.rs `mutual_row` | ✅ (had no right padding, tag or status line) |
 | popout banner | 253781 `.user-profile-popout` + 58495 `banner_s9bWOi` | height / radius / bottom line | 105px / 8px 8px 0 0 / 1px --border-muted | ui/profile.rs banner | ✅ |
 | popout header | 352421 `header_NOlkhE` | min-height | banner + 35px | ui/profile.rs popout_card | ✅ |
 | popout avatar | 875762 `avatar_WRLIGC` | inset-start / top | 16px / 61px (80px avatar + 6px ring) | ui/profile.rs popout_card | ✅ (was banner-40) |

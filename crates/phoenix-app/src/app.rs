@@ -781,6 +781,26 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    pub(crate) fn rerender_mentions_of(&mut self, users: &[u64]) {
+        if users.is_empty() {
+            return;
+        }
+        let pats: Vec<String> = users.iter().flat_map(|u| [format!("<@{u}>"), format!("<@!{u}>")]).collect();
+        let chans: Vec<Id> = self.messages.keys().copied().collect();
+        for ch in chans {
+            let Some(mut entry) = self.messages.remove(&ch) else { continue };
+            for ix in 0..entry.msgs.len().min(entry.rendered.len()) {
+                if pats.iter().any(|p| entry.msgs[ix].content.contains(p.as_str())) {
+                    entry.rendered[ix] = self.render_msg(&entry.msgs[ix], ix.checked_sub(1).map(|p| &entry.msgs[p]));
+                    if self.selected_channel == Some(ch) {
+                        self.message_list.splice(ix + 1..ix + 2, 1);
+                    }
+                }
+            }
+            self.messages.insert(ch, entry);
+        }
+    }
+
     pub fn reveal_spoiler(&mut self, msg: Id, spoiler: usize, cx: &mut Context<Self>) {
         self.revealed.insert((msg, spoiler));
         let Some(ch) = self.selected_channel else { return };
@@ -888,9 +908,11 @@ impl PhoenixApp {
                 self.voice.apply(e)
             }
             AppEvent::Users(users) => {
+                let fresh: Vec<u64> = users.iter().filter(|u| !self.users.contains_key(&u.id)).map(|u| u.id.0).collect();
                 for u in users {
                     self.users.insert(u.id, u);
                 }
+                self.rerender_mentions_of(&fresh);
             }
             AppEvent::GuildChannels { guild, channels } => {
                 self.set_guild_channels(guild, channels);

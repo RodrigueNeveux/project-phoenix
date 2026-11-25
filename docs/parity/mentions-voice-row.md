@@ -14,6 +14,7 @@ ref-cache/mention-pill-default.json, voice-user-row-default.json, voice-user-row
 | role mention hover | same, transition background-color/color 0.05s | bg / color | coloured: role color 30 %, text unchanged; uncoloured: --brand-500 / white | ui/chat/mention.rs hovered_runs | ✅ live (used to skip role mentions) |
 | channel mention icon | `icon__RYHZ5` | size / margin-inline-end | 1em / --space-4 | ui/chat/message_ext.rs CHANNEL_ICON_TOKEN | ✅ CSS; always hash icon (no voice/thread variant) |
 | user mention click | live click | opens | profile popout | mention.rs click | ✅ |
+| mention of a user first seen in the page | live #général 25/11: `Glados ban <@1574934402113478824>` shows `@catapulteur2daronnes` (user in the message's `mentions`) | label | resolved name | app.rs `rerender_mentions_of` on AppEvent::Users | ✅ (the page was rendered before the Users event and kept "@Utilisateur inconnu") |
 | channel mention click | live behaviour | opens | channel | mention.rs click (text chat, never voice) | ✅ |
 | mentioned message | `mentioned_SY_P2T` | bg / hover / bar | --message-mentioned-background-default / -hover / 2px --icon-feedback-warning | ui/chat.rs | ✅ |
 | role-mention highlight | same | trigger | my role mentioned | richtext.rs build has_role | ✅ (needs my member entry loaded) |
