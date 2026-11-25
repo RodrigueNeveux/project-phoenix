@@ -27,6 +27,10 @@ Most of the remaining channel list difference comes from states that only exist 
 | User panel subtext | `panelSubtextContainer_g6VwXp` > ActivityStatus: 12 px voice or Go Live icon (#45a366), 4 px gap, `•` in `--text-default`, custom status, 12/13 px medium | `members::self_sub_text` when in voice or with an activity, previous text otherwise | ✅ |
 | User panel hover roll | `hoverRoll_Dq3ch1`: on hover `.default` fades out and `.hovered` (username) fades in, `transition: all .22s ease` | static swap on the avatar group hover, no slide yet | ❌ slide animation missing |
 
+| Voice participant name vs server tag | `usernameContainer_kQORUk` flex 1 1, min-width 0; `chipletParent_kQORUk` flex 1 0, min-width 0, overflow hidden: the tag is clipped before the name ellipsis | `voice_panel::server_tag` shrinks and clips | ✅ |
+| Noise suppression button | `button_9OQtot lookBlank_9OQtot`, background transparent in every state | no background when noise suppression is on | ✅ |
+| "New unreads" top bar | module 616740 `renderTopUnread`: hidden when `topMention == null && (isUnreadVisible || bottomUnread != null || bottomMention != null)`; bottom `hide: bottomMention == null && isUnreadVisible`; the scroller ends 12 px under the panels top | `channel_unread_bar::bars` follows the same rule, but on the 25/11 capture Phoenix showed no top bar while the client showed one for #bienvenue (unread in both): Phoenix sees an unread item visible or below that the client does not | ❌ to probe |
+
 ### Guild route (25/11 21:20, Project Phoenix campement call view, client in voice and streaming)
 
 | region | mismatch | mean diff |
