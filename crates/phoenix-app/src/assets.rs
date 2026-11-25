@@ -121,6 +121,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/picker/sparkle.svg" => f!(r#"<path d="M12 2l2.2 6.6L21 11l-6.8 2.4L12 20l-2.2-6.6L3 11l6.8-2.4z"/>"#),
         "icons/event/location.svg" => s!(r#"<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.5"/>"#),
         "icons/chevron.svg" => s!(r#"<path d="m6 9 6 6 6-6"/>"#),
+        "icons/settings/cloud.svg" => f!(r#"<path d="M7 19a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9a5 5 0 0 1-.5 10z"/>"#),
         "icons/invite.svg" => s!(r#"<circle cx="10" cy="8" r="4"/><path d="M3 20a7 7 0 0 1 12-4.9M19 14v6m-3-3h6"/>"#),
         "icons/nav/back.svg" => s!(r#"<path d="M20 12H5m6-7-7 7 7 7"/>"#),
         "icons/arrow-left.svg" => concat!(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#, r#"<polygon points="20 11 20 13 8 13 13.5 18.5 12.08 19.92 4.16 12 12.08 4.08 13.5 5.5 8 11"/>"#, "</svg>"),
