@@ -3,7 +3,7 @@ use std::{path::PathBuf, sync::OnceLock};
 const PREFIX: &str = "Phx ";
 pub const EMOJI_FAMILY: &str = "Noto Color Emoji";
 const STACK: [&str; 4] = ["Noto Sans", "Helvetica Neue", "Helvetica", "Arial"];
-const RENAMED: usize = 12;
+const RENAMED: usize = 24;
 
 static CHAIN: OnceLock<gpui::FontFallbacks> = OnceLock::new();
 
@@ -45,6 +45,122 @@ fn web_dir() -> Option<PathBuf> {
     Some(super::out_dir()?.join("fallback"))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SortedFace {
+    pub family: String,
+    pub style: String,
+    pub file: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Entry {
+    pub family: String,
+    pub style: Option<String>,
+    pub files: Vec<String>,
+}
+
+impl Entry {
+    fn name(&self) -> String {
+        match &self.style {
+            Some(st) => format!("{PREFIX}{} {st}", self.family),
+            None => format!("{PREFIX}{}", self.family),
+        }
+    }
+}
+
+fn sorted_faces() -> Vec<SortedFace> {
+    fc(&["-s", "sans-serif"], "%{family[0]}\t%{style[0]}\t%{file}\n")
+        .into_iter()
+        .filter_map(|l| {
+            let mut it = l.split('\t');
+            Some(SortedFace { family: it.next()?.to_string(), style: it.next()?.to_string(), file: it.next()?.to_string() })
+        })
+        .take(SORTED_FACES)
+        .collect()
+}
+
+const SORTED_FACES: usize = 48;
+
+pub fn plan(
+    stack: &[(String, String)],
+    sorted: &[SortedFace],
+    bold_of: impl Fn(&str, &str) -> Option<String>,
+    bold_covers_regular: impl Fn(&str, &str) -> bool,
+) -> Vec<Entry> {
+    let mut out: Vec<Entry> = Vec::new();
+    let family_entry = |family: &str, file: &str| {
+        let mut files = vec![file.to_string()];
+        if let Some(bold) = bold_of(family, file)
+            && bold != file
+            && bold_covers_regular(file, &bold)
+        {
+            files.push(bold);
+        }
+        Entry { family: family.to_string(), style: None, files }
+    };
+    for (family, file) in stack {
+        if !out.iter().any(|e| &e.family == family) {
+            out.push(family_entry(family, file));
+        }
+    }
+    for f in sorted {
+        if out.iter().any(|e| e.files.contains(&f.file)) {
+            continue;
+        }
+        if out.iter().any(|e| e.family == f.family) {
+            out.push(Entry { family: f.family.clone(), style: Some(f.style.clone()), files: vec![f.file.clone()] });
+        } else {
+            out.push(family_entry(&f.family, &f.file));
+        }
+    }
+    out
+}
+
+pub fn codepoints(font: &[u8]) -> Option<std::collections::HashSet<u32>> {
+    let face = ttf_parser::Face::parse(font, 0).ok()?;
+    let cmap = face.tables().cmap?;
+    let mut set = std::collections::HashSet::new();
+    for sub in cmap.subtables.into_iter().filter(|s| s.is_unicode()) {
+        sub.codepoints(|c| {
+            if sub.glyph_index(c).is_some_and(|g| g.0 != 0) {
+                set.insert(c);
+            }
+        });
+    }
+    Some(set)
+}
+
+fn bold_file(family: &str, _regular: &str) -> Option<String> {
+    let line = fc(&[&format!("{family}:weight=bold:slant=roman")], "%{family[0]}\t%{weight}\t%{file}").into_iter().next()?;
+    let mut it = line.split('\t');
+    let (fam, weight, file) = (it.next()?, it.next()?.parse::<f32>().ok()?, it.next()?);
+    (fam == family && weight >= 180.).then(|| file.to_string())
+}
+
+fn bold_covers(regular: &str, bold: &str) -> bool {
+    if ![regular, bold].iter().all(|f| f.ends_with(".ttf") || f.ends_with(".otf")) {
+        return false;
+    }
+    let (Ok(r), Ok(b)) = (std::fs::read(regular), std::fs::read(bold)) else { return false };
+    match (codepoints(&r), codepoints(&b)) {
+        (Some(r), Some(b)) => r.is_subset(&b),
+        _ => false,
+    }
+}
+
+fn stack_files() -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for name in STACK {
+        let metric_ok = |f: &str| f == name || (name == "Arial" && matches!(f, "Arimo" | "Liberation Sans"));
+        let Some(line) = fc(&[&format!("{name}:weight=regular:slant=roman")], "%{family[0]}\t%{file}").into_iter().next() else { continue };
+        let Some((fam, file)) = line.split_once('\t') else { continue };
+        if metric_ok(fam) {
+            out.push((fam.to_string(), file.to_string()));
+        }
+    }
+    out
+}
+
 pub fn register(cx: &mut gpui::App) {
     if CHAIN.get().is_some() {
         return;
@@ -53,7 +169,6 @@ pub fn register(cx: &mut gpui::App) {
         let _ = CHAIN.set(gpui::FontFallbacks::from_fonts(Vec::new()));
         return;
     }
-    let mut chain = plain_chain();
     let mut blobs: Vec<std::borrow::Cow<'static, [u8]>> = Vec::new();
     let web: Vec<Vec<u8>> = web_dir()
         .and_then(|d| {
@@ -73,30 +188,32 @@ pub fn register(cx: &mut gpui::App) {
     if !have_web {
         download_web_noto();
     }
-    for (i, fam) in chain.clone().into_iter().enumerate() {
-        if i >= RENAMED + STACK.len() {
-            break;
+    let entries = plan(&stack_files(), &sorted_faces(), bold_file, bold_covers);
+    let mut chain: Vec<String> = Vec::new();
+    for (i, e) in entries.iter().enumerate() {
+        if have_web && e.family == "Noto Sans" && e.style.is_none() {
+            chain.push(web_name.clone());
         }
-        let new = format!("{PREFIX}{fam}");
-        let mut ok = false;
-        let mut seen = Vec::new();
-        for style in ["Regular", "Bold"] {
-            let Some(file) = fc(&[&format!("{fam}:style={style}")], "%{file}").into_iter().next() else { continue };
-            if seen.contains(&file) || !(file.ends_with(".ttf") || file.ends_with(".otf")) {
-                continue;
+        let mut renamed = Vec::new();
+        if i < RENAMED {
+            let name = e.name();
+            for file in &e.files {
+                if !(file.ends_with(".ttf") || file.ends_with(".otf")) {
+                    break;
+                }
+                let Ok(bytes) = std::fs::read(file) else { break };
+                if super::ttf_family(&bytes).as_deref() != Some(e.family.as_str()) {
+                    break;
+                }
+                let Some(r) = rename(&bytes, &name) else { break };
+                renamed.push(r);
             }
-            let Ok(bytes) = std::fs::read(&file) else { continue };
-            if super::ttf_family(&bytes).as_deref() != Some(fam.as_str()) {
-                continue;
-            }
-            if let Some(r) = rename(&bytes, &new) {
-                blobs.push(r.into());
-                ok = true;
-            }
-            seen.push(file);
         }
-        if ok {
-            chain[i] = new;
+        if !renamed.is_empty() {
+            blobs.extend(renamed.into_iter().map(Into::into));
+            chain.push(e.name());
+        } else if e.style.is_none() && !chain.contains(&e.family) {
+            chain.push(e.family.clone());
         }
     }
     if let Some(file) = fc(&["emoji"], "%{file}").into_iter().next()
@@ -104,10 +221,7 @@ pub fn register(cx: &mut gpui::App) {
     {
         blobs.push(bytes.into());
     }
-    if have_web && let Some(i) = chain.iter().position(|f| f == "Phx Noto Sans" || f == "Noto Sans") {
-        chain[i] = web_name;
-    }
-    if !blobs.is_empty() && cx.text_system().add_fonts(blobs).is_err() {
+    if chain.is_empty() || (!blobs.is_empty() && cx.text_system().add_fonts(blobs).is_err()) {
         chain = plain_chain();
     }
     let _ = CHAIN.set(gpui::FontFallbacks::from_fonts(chain));
@@ -236,6 +350,62 @@ fn rename_table(t: &[u8], family: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    use super::{Entry, SortedFace, plan};
+
+    fn face(family: &str, style: &str, file: &str) -> SortedFace {
+        SortedFace { family: family.into(), style: style.into(), file: file.into() }
+    }
+
+    #[test]
+    fn plan_keeps_every_sorted_face_and_pairs_only_superset_bold() {
+        let stack = vec![("Noto Sans".to_string(), "noto-r".to_string())];
+        let sorted = vec![
+            face("Noto Sans", "Regular", "noto-r"),
+            face("DejaVu Sans", "Book", "dv-r"),
+            face("DejaVu Sans", "Bold", "dv-b"),
+            face("DejaVu Sans", "Oblique", "dv-i"),
+            face("FreeSans", "Regular", "fs-r"),
+            face("FreeSerif", "Regular", "fsf-r"),
+        ];
+        let bold = |fam: &str, _: &str| match fam {
+            "Noto Sans" => Some("noto-b".to_string()),
+            "DejaVu Sans" => Some("dv-b".to_string()),
+            "FreeSans" => Some("fs-b".to_string()),
+            _ => None,
+        };
+        let superset = |_: &str, b: &str| b == "noto-b";
+        let e = |family: &str, style: Option<&str>, files: &[&str]| Entry {
+            family: family.into(),
+            style: style.map(Into::into),
+            files: files.iter().map(|f| f.to_string()).collect(),
+        };
+        assert_eq!(
+            plan(&stack, &sorted, bold, superset),
+            vec![
+                e("Noto Sans", None, &["noto-r", "noto-b"]),
+                e("DejaVu Sans", None, &["dv-r"]),
+                e("DejaVu Sans", Some("Bold"), &["dv-b"]),
+                e("DejaVu Sans", Some("Oblique"), &["dv-i"]),
+                e("FreeSans", None, &["fs-r"]),
+                e("FreeSerif", None, &["fsf-r"]),
+            ]
+        );
+        assert_eq!(plan(&stack, &sorted, bold, superset)[2].name(), "Phx DejaVu Sans Bold");
+    }
+
+    #[test]
+    fn freesans_bold_lacks_math_bold_letters() {
+        let (Ok(r), Ok(b)) = (
+            std::fs::read("/usr/share/fonts/opentype/freefont/FreeSans.otf"),
+            std::fs::read("/usr/share/fonts/opentype/freefont/FreeSansBold.otf"),
+        ) else {
+            return;
+        };
+        let (r, b) = (super::codepoints(&r).expect("cmap"), super::codepoints(&b).expect("cmap"));
+        assert!(r.contains(&0x1D40D));
+        assert!(!b.contains(&0x1D40D));
+        assert!(!r.is_subset(&b));
+    }
     #[test]
     fn rename_sets_family() {
         let Ok(b) = std::fs::read("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf") else { return };
