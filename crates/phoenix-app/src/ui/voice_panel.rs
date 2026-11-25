@@ -17,7 +17,7 @@ fn t(i: usize) -> Hsla {
 }
 use crate::model::{Id, VoiceFlags};
 use crate::ui::context_menu::{self, MenuItem};
-use crate::ui::{avatar, icon};
+use crate::ui::icon;
 use crate::voice::prefs::{prefs, update};
 use crate::voice::{Quality, VoiceStatus};
 
@@ -643,7 +643,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
             }
         })
         .children(crate::ui::voice_row::stream_preview(app, user, entity.clone()))
-        .child(speaking_ring(avatar(u, 24.), 24., speaking))
+        .child(speaking_ring(crate::ui::avatar_cdn(u, 24., 32), 24., speaking))
         .child(
             div()
                 .flex_1()

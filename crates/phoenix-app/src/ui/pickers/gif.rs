@@ -136,6 +136,35 @@ fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedStr
         )
 }
 
+thread_local! {
+    static FAVORITE_TILE: std::cell::RefCell<(Option<gpui::EntityId>, usize)> = const { std::cell::RefCell::new((None, 0)) };
+    static PINNED_FAVORITE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+pub fn pin_favorite_tile(url_part: Option<String>) {
+    PINNED_FAVORITE.with(|p| *p.borrow_mut() = url_part);
+}
+
+fn favorite_tile_preview(favs: &[GifItem], picker: Option<gpui::EntityId>) -> Option<SharedString> {
+    if favs.is_empty() {
+        return None;
+    }
+    if let Some(part) = PINNED_FAVORITE.with(|p| p.borrow().clone())
+        && let Some(g) = favs.iter().find(|g| g.url.contains(part.as_str()) || g.preview.contains(part.as_str()))
+    {
+        return Some(g.preview.clone());
+    }
+    let ix = FAVORITE_TILE.with(|t| {
+        let mut t = t.borrow_mut();
+        if t.0 != picker {
+            use std::hash::BuildHasher;
+            *t = (picker, std::collections::hash_map::RandomState::new().hash_one(picker) as usize);
+        }
+        t.1
+    });
+    favs.get(ix % favs.len()).map(|g| g.preview.clone())
+}
+
 pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let p = cx.global::<Pickers>();
     let g = &p.gifs;
@@ -147,7 +176,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
             return empty_state(if g.home_loading { crate::t!("picker.loading_gifs") } else { crate::t!("picker.gifs_unavailable") });
         };
         let mut tiles: Vec<AnyElement> = vec![
-            tile(("gif-favorites", 0), crate::t!("picker.favorites"), favs.first().map(|g| g.preview.clone()), col_w, true, None)
+            tile(("gif-favorites", 0), crate::t!("picker.favorites"), favorite_tile_preview(&favs, p.open.as_ref().map(|o| o.input.entity_id())), col_w, true, None)
                 .on_click(|_, w, cx| with_app(cx, w, |_, _, cx| show_favorites(cx)))
                 .into_any_element(),
             tile(("gif-trending", 0), crate::t!("picker.trending"), home.trending_preview.clone(), col_w, false, Some("picker/trending"))

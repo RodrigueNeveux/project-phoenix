@@ -372,6 +372,7 @@ pub struct SettingsState {
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if app.screen == crate::app::Screen::Main {
         app.settings = Some(SettingsState::default());
+        view::reset_nav();
         account::fetch_sessions(app, cx);
         billing::fetch(app, cx);
         subscriptions::fetch(app, cx);

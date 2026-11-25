@@ -2,6 +2,7 @@ pub mod emoji;
 #[rustfmt::skip]
 pub mod emoji_data;
 mod gif;
+pub use gif::pin_favorite_tile;
 pub mod grid;
 mod prefs;
 pub mod soundboard;

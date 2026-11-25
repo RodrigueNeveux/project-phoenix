@@ -505,6 +505,50 @@ fn list_is_empty(q: &str) -> bool {
     !NAV.iter().any(|(_, pages)| pages.iter().any(|p| super::pages::matches(*p, q)))
 }
 
+thread_local! {
+    static NAV_PAGE: std::cell::Cell<Option<Page>> = const { std::cell::Cell::new(None) };
+    static NAV_REVEAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(super) fn reset_nav() {
+    NAV_PAGE.with(|p| p.set(None));
+    crate::ui::chat::scrollbar::handle("settings-nav").set_offset(gpui::Point::default());
+}
+
+fn reveal_probe() -> impl IntoElement {
+    gpui::canvas(
+        |b, w, _| {
+            if !NAV_REVEAL.with(std::cell::Cell::get) {
+                return;
+            }
+            let h = crate::ui::chat::scrollbar::handle("settings-nav");
+            let vp = h.bounds();
+            if vp.size.height <= gpui::px(0.) {
+                w.refresh();
+                return;
+            }
+            NAV_REVEAL.with(|r| r.set(false));
+            let pad = z(12.);
+            let mut off = h.offset();
+            if b.top() < vp.top() + pad {
+                off.y += vp.top() + pad - b.top();
+            } else if b.bottom() > vp.bottom() - pad {
+                off.y -= b.bottom() - (vp.bottom() - pad);
+            } else {
+                return;
+            }
+            off.y = off.y.min(gpui::px(0.)).max(-h.max_offset().height);
+            h.set_offset(off);
+            w.refresh();
+        },
+        |_, _, _, _| (),
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
 fn select_page(p: Page, cx: &mut Cx) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static {
     cx.listener(move |a, _, _, cx| {
         if let Some(s) = st(a) {
@@ -518,6 +562,9 @@ fn select_page(p: Page, cx: &mut Cx) -> impl Fn(&gpui::ClickEvent, &mut Window, 
 
 fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let cur = app.settings.as_ref().map(|s| s.page).unwrap_or_default();
+    if NAV_PAGE.with(|p| p.replace(Some(cur))) != Some(cur) {
+        NAV_REVEAL.with(|r| r.set(true));
+    }
     let profile = div()
         .id("nav-profiles")
         .p(z(10.))
@@ -644,7 +691,8 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
             );
         }
         for p in pages {
-            sec = sec.child(nav_item(format!("nav-{}", p.label()), page_icon(p), p.label(), p == cur, false).on_click(select_page(p, cx)));
+            let item = nav_item(format!("nav-{}", p.label()), page_icon(p), p.label(), p == cur, false).on_click(select_page(p, cx));
+            sec = sec.child(if p == cur { item.child(reveal_probe()) } else { item });
             if p == cur && !searching {
                 let rows = subnav_rows(p);
                 if rows.len() > 1 {

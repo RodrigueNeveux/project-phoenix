@@ -1084,6 +1084,7 @@ fn main() -> anyhow::Result<()> {
                         "sticker" => Tab::Sticker,
                         _ => Tab::Emoji,
                     };
+                    phoenix_app::ui::pickers::pin_favorite_tile(std::env::var("PHX_GIF_FAV").ok().filter(|v| !v.is_empty()));
                     phoenix_app::ui::pickers::open(app, tab, EmojiTarget::Composer, window, cx);
                     if let Ok(row) = arg.parse::<usize>()
                         && let Some(op) = cx.try_global::<phoenix_app::ui::pickers::Pickers>().and_then(|p| p.open.as_ref())

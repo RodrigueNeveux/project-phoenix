@@ -255,7 +255,11 @@ fn select(
     cx: &mut Cx,
 ) -> Div {
     let open = OPEN_SELECT.with(Cell::get) == Some(id);
-    let label: SharedString = current.clone().unwrap_or_else(|| crate::t!("voice.default").into()).into();
+    let default_label: SharedString = match options.first() {
+        Some(d) => format!("{}: {d}", crate::t!("voice.system_default")).into(),
+        None => crate::t!("voice.default").into(),
+    };
+    let label: SharedString = current.clone().map(SharedString::from).unwrap_or_else(|| default_label.clone());
     let f = Rc::new(f);
     let mut list = div()
         .id(eid(format!("{id}-list")))
@@ -278,7 +282,7 @@ fn select(
     entries.extend(options.into_iter().map(Some));
     for (ix, opt) in entries.into_iter().enumerate() {
         let selected = opt == current;
-        let text: SharedString = opt.clone().unwrap_or_else(|| crate::t!("voice.default").into()).into();
+        let text: SharedString = opt.clone().map(SharedString::from).unwrap_or_else(|| default_label.clone());
         let f = f.clone();
         list = list.child(
             div()
@@ -324,9 +328,11 @@ fn select(
                     div()
                         .flex_1()
                         .min_w_0()
-                        .text_ellipsis()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
                         .text_size(z(16.))
                         .line_height(z(20.))
+                        .font_weight(FontWeight::MEDIUM)
                         .text_color(c(tok(idx::TEXT_STRONG)))
                         .child(label),
                 )

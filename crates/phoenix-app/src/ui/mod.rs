@@ -95,6 +95,13 @@ pub fn avatar(user: Option<&User>, size: f32) -> AnyElement {
     avatar_ref(user.map(|u| u.avatar.clone()).unwrap_or(ImageRef::Default(0)), size)
 }
 
+pub fn avatar_cdn(user: Option<&User>, size: f32, cdn: u32) -> AnyElement {
+    match user.map(|u| &u.avatar) {
+        Some(ImageRef::Url(url)) => crate::media::avatar_image(crate::media::with_cdn_size(url, cdn), size),
+        _ => avatar(user, size),
+    }
+}
+
 pub fn avatar_hover(user: Option<&User>, size: f32, play: bool) -> AnyElement {
     match user.map(|u| &u.avatar) {
         Some(ImageRef::Url(url)) if play && crate::media::is_animated(url) => {

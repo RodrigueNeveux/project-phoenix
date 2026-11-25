@@ -395,6 +395,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                         .child(
                                             gpui::canvas(|b, _, _| ATTACH_BTN.with(|c| c.set(Some(b))), |_, _, _, _| ())
                                                 .absolute()
+                                                .top_0()
+                                                .left_0()
                                                 .size_full(),
                                         ),
                                 )),

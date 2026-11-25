@@ -95,6 +95,13 @@ pub fn is_animated(url: &str) -> bool {
     url.contains(".gif")
 }
 
+pub fn with_cdn_size(url: &str, size: u32) -> SharedString {
+    let Some(q) = url.find("?size=").or_else(|| url.find("&size=")) else { return url.to_owned().into() };
+    let start = q + "?size=".len();
+    let end = url[start..].find('&').map_or(url.len(), |e| start + e);
+    format!("{}{size}{}", &url[..start], &url[end..]).into()
+}
+
 pub fn avatar_image(url: SharedString, size: f32) -> AnyElement {
     if !is_animated(&url) {
         return img(url).size(px(size)).rounded_full().flex_none().into_any_element();
@@ -304,6 +311,13 @@ mod tests {
             "https://media.discordapp.net/attachments/1/2/a.png?ex=1&width=100&height=50"
         );
         assert!(video_poster("https://cdn.discordapp.com/attachments/1/2/a.mp4", 10, 10).ends_with("format=webp"));
+    }
+
+    #[test]
+    fn cdn_size_is_replaced() {
+        assert_eq!(super::with_cdn_size("https://cdn.discordapp.com/avatars/1/a.png?size=128", 32).as_ref(), "https://cdn.discordapp.com/avatars/1/a.png?size=32");
+        assert_eq!(super::with_cdn_size("https://cdn.discordapp.com/a.webp?size=128&animated=true", 32).as_ref(), "https://cdn.discordapp.com/a.webp?size=32&animated=true");
+        assert_eq!(super::with_cdn_size("https://cdn.discordapp.com/embed/avatars/2.png", 32).as_ref(), "https://cdn.discordapp.com/embed/avatars/2.png");
     }
 
     #[test]
