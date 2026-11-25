@@ -128,11 +128,12 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
         }
         None => field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element())),
     };
-    let link_row = |id: &'static str, title: SharedString, v: Option<SharedString>| {
+    let link_row = |id: &'static str, title: SharedString, v: Option<SharedString>, to: super::nested::Nested| {
         controls::control_item(title, None, Some(acct::value_chevron(v)))
             .id(id)
             .cursor_pointer()
             .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+            .on_click(cx.listener(move |a, _, _, cx| super::nested::open(a, to, cx)))
             .into_any_element()
     };
     let devices = acct::sessions().map(|n| crate::t!("settings.account.devices_n", n = n));
@@ -159,12 +160,13 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     "acct-mfa",
                     crate::t!("settings.account.mfa"),
                     Some(if info.mfa { crate::t!("settings.account.mfa_on") } else { crate::t!("settings.account.mfa_off") }),
+                    super::nested::Nested::Mfa,
                 ),
-                link_row("acct-devices", crate::t!("settings.account.devices"), devices),
+                link_row("acct-devices", crate::t!("settings.account.devices"), devices, super::nested::Nested::Devices),
             ],
         ))
         .child(divider())
-        .child(category(crate::t!("settings.account.status"), acct::standing_rows(&info)))
+        .child(category(crate::t!("settings.account.status"), acct::standing_rows(&info, cx)))
         .child(divider())
         .child(category(
             crate::t!("settings.account.family"),
@@ -318,6 +320,9 @@ pub(super) fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
 
 
 fn page(app: &PhoenixApp, cx: &mut Cx) -> Div {
+    if let Some(n) = app.settings.as_ref().and_then(|s| s.nested) {
+        return super::nested::render(app, n, cx);
+    }
     match app.settings.as_ref().map(|s| s.page).unwrap_or_default() {
         Page::MyAccount => my_account(app, cx),
         Page::Devices => devices(),
@@ -405,7 +410,7 @@ fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, s
         )
 }
 
-fn subnav(rows: Vec<SharedString>) -> Div {
+fn subnav(rows: Vec<SharedString>, active: usize) -> Div {
     let n = rows.len() as f32;
     div()
         .pt(z(6.))
@@ -420,13 +425,13 @@ fn subnav(rows: Vec<SharedString>) -> Div {
                 .h(z(20. * n + 20. * (n - 1.)))
                 .rounded(z(1.))
                 .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-                .child(div().w_full().h(z(20.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
+                .child(div().mt(z(40. * active as f32)).w_full().h(z(20.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
         )
         .child(div().flex_1().min_w_0().flex().flex_col().gap(z(20.)).children(rows.into_iter().enumerate().map(|(i, t)| {
             div()
                 .text_size(z(16.))
                 .line_height(z(20.))
-                .text_color(c(tok(if i == 0 { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::TEXT_MUTED })))
+                .text_color(c(tok(if i == active { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::TEXT_MUTED })))
                 .child(t)
         })))
 }
@@ -599,6 +604,7 @@ fn select_page(p: Page, cx: &mut Cx) -> impl Fn(&gpui::ClickEvent, &mut Window, 
             s.page = p;
             s.error = None;
             s.open_select = None;
+            s.nested = None;
         }
         cx.notify();
     })
@@ -740,7 +746,8 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
             if p == cur && !searching {
                 let rows = subnav_rows(p);
                 if rows.len() > 1 {
-                    sec = sec.child(subnav(rows));
+                    let active = app.settings.as_ref().and_then(|s| s.nested).map_or(0, super::nested::Nested::sub_index);
+                    sec = sec.child(subnav(rows, active));
                 }
             }
         }
@@ -792,18 +799,65 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
         )
 }
 
-fn content_header(label: SharedString, cx: &mut Cx) -> Div {
+fn content_header(label: SharedString, nested: Option<super::nested::Nested>, cx: &mut Cx) -> Div {
+    let crumb = |t: SharedString, current: bool| {
+        div()
+            .text_size(z(16.))
+            .line_height(z(20.))
+            .font_weight(if current { FontWeight::MEDIUM } else { FontWeight::NORMAL })
+            .text_color(c(tok(if current { idx::TEXT_DEFAULT } else { idx::TEXT_SUBTLE })))
+            .whitespace_nowrap()
+            .child(t)
+    };
+    let left = match nested {
+        None => crumb(label, true),
+        Some(n) => div()
+            .flex()
+            .items_center()
+            .gap(z(8.))
+            .child(
+                div()
+                    .id("settings-back")
+                    .size(z(32.))
+                    .rounded(z(8.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+                    .on_click(cx.listener(|a, _, _, cx| super::nested::close(a, cx)))
+                    .child(gpui::svg().path(crate::icons::path("settings/arrow-left")).size(z(16.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z(8.))
+                    .child(
+                        div()
+                            .id("settings-crumb-parent")
+                            .flex()
+                            .items_center()
+                            .gap(z(10.))
+                            .cursor_pointer()
+                            .on_click(cx.listener(|a, _, _, cx| super::nested::close(a, cx)))
+                            .child(crumb(label, false))
+                            .child(crumb("/".into(), false)),
+                    )
+                    .child(crumb(n.title(), true)),
+            ),
+    };
     div()
         .h(z(48.))
         .flex_none()
-        .pl(z(16.))
+        .pl(z(if nested.is_some() { 8. } else { 16. }))
         .pr(z(8.))
         .flex()
         .items_center()
         .justify_between()
         .border_b_1()
         .border_color(c(tok(idx::BORDER_MUTED)))
-        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(label))
+        .child(left)
         .child(
             div()
                 .id("settings-close")
@@ -953,7 +1007,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
                 .flex()
                 .flex_col()
                 .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
-                .child(content_header(page_label, cx))
+                .child(content_header(page_label, s.nested, cx))
                 .child(crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::Auto).flex_1().min_h_0().child(body).children(crate::ui::chat::scrollbar::auto_scrollbar_div(&s.scroll))),
         );
     Some(

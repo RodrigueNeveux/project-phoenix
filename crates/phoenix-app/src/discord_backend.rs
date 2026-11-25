@@ -1164,8 +1164,14 @@ impl Backend for DiscordBackend {
     fn subscriptions(&self) -> BoxFuture<Option<crate::ui::settings::subscriptions::Subs>> {
         self.subscriptions_impl()
     }
-    fn session_count(&self) -> BoxFuture<Option<usize>> {
-        self.session_count_impl()
+    fn account_standing(&self) -> BoxFuture<Option<u64>> {
+        self.account_standing_impl()
+    }
+    fn auth_sessions(&self) -> BoxFuture<Option<Vec<crate::ui::settings::sessions::Session>>> {
+        self.auth_sessions_impl()
+    }
+    fn logout_sessions(&self, hashes: Vec<String>) -> BoxFuture<()> {
+        self.logout_sessions_impl(hashes)
     }
     fn profile_widgets(&self, user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_widgets::AppWidget>> {
         self.profile_widgets_impl(user)

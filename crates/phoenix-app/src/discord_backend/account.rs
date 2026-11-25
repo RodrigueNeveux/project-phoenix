@@ -226,10 +226,25 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
 }
 
 impl DiscordBackend {
-    pub(super) fn session_count_impl(&self) -> BoxFuture<Option<usize>> {
+    pub(super) fn auth_sessions_impl(&self) -> BoxFuture<Option<Vec<crate::ui::settings::sessions::Session>>> {
         self.with_session(move |_, s| async move {
             let v = s.rest.request_json(reqwest::Method::GET, "/auth/sessions", None).await.map_err(api_err)?;
-            Ok(v.get("user_sessions").and_then(serde_json::Value::as_array).map(Vec::len))
+            Ok(v.get("user_sessions").is_some().then(|| crate::ui::settings::sessions::parse(&v)))
+        })
+    }
+
+    pub(super) fn account_standing_impl(&self) -> BoxFuture<Option<u64>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.request_json(reqwest::Method::GET, "/safety-hub/@me", None).await.map_err(api_err)?;
+            Ok(v.get("account_standing").and_then(|a| a.get("state")).and_then(serde_json::Value::as_u64))
+        })
+    }
+
+    pub(super) fn logout_sessions_impl(&self, hashes: Vec<String>) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            let Some((_, path, body)) = crate::ui::settings::sessions::logout_request(&hashes) else { return Ok(()) };
+            s.rest.request_json(reqwest::Method::POST, path, Some(body)).await.map_err(api_err)?;
+            Ok(())
         })
     }
 }

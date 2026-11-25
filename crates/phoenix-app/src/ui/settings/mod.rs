@@ -1,4 +1,6 @@
 pub mod account;
+pub mod nested;
+pub mod sessions;
 mod art;
 pub mod authorized_apps;
 pub mod billing;
@@ -367,11 +369,13 @@ pub struct SettingsState {
     pub search_sub: Option<gpui::Subscription>,
     pub profile: Option<profile_editor::EditorState>,
     pub scroll: gpui::ScrollHandle,
+    pub nested: Option<nested::Nested>,
 }
 
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if app.screen == crate::app::Screen::Main {
         app.settings = Some(SettingsState::default());
+        nested::reset();
         view::reset_nav();
         account::fetch_sessions(app, cx);
         billing::fetch(app, cx);
@@ -394,6 +398,9 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     }
     if s.confirm_hwaccel.is_some() {
         s.confirm_hwaccel = None;
+    } else if s.nested.is_some() && s.open_select.is_none() && !s.confirm_logout {
+        nested::close(app, cx);
+        return true;
     } else if s.confirm_logout {
         s.confirm_logout = false;
     } else if s.open_select.is_some() {

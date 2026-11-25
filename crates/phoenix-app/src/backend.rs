@@ -326,8 +326,14 @@ pub trait Backend: Send + Sync + 'static {
     fn subscriptions(&self) -> BoxFuture<Option<crate::ui::settings::subscriptions::Subs>> {
         Box::pin(async { Ok(None) })
     }
-    fn session_count(&self) -> BoxFuture<Option<usize>> {
+    fn account_standing(&self) -> BoxFuture<Option<u64>> {
         Box::pin(async { Ok(None) })
+    }
+    fn auth_sessions(&self) -> BoxFuture<Option<Vec<crate::ui::settings::sessions::Session>>> {
+        Box::pin(async { Ok(None) })
+    }
+    fn logout_sessions(&self, _hashes: Vec<String>) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("read-only backend".into())) })
     }
     fn owned_collectibles(&self) -> BoxFuture<Vec<crate::ui::settings::collectibles::Collectible>> {
         Box::pin(async { Ok(Vec::new()) })

@@ -788,6 +788,7 @@ pub fn build_ready(cache: &Cache, ready: &Ready, prefs: &Prefs) -> ReadyData {
     let rc = prefs.ctx();
     let me = cache.current_user().map(|u| user(&u)).unwrap_or_else(|| user(&ready.user));
     crate::ui::settings::account::set_from_user(cache.current_user().as_deref().unwrap_or(&ready.user));
+    crate::ui::settings::sessions::set_current_hash(ready.auth_session_id_hash.clone());
     crate::ui::settings::account::set_connections(ready.connected_accounts.len());
     crate::ui::settings::synced_map::set_ready_flags(crate::ui::settings::synced_map::ReadyFlags::from_ready(
         ready.ad_personalization_toggles_disabled,

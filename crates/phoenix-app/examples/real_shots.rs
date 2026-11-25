@@ -284,8 +284,11 @@ impl Backend for ReadOnly {
     fn billing(&self) -> BoxFuture<Option<phoenix_app::ui::settings::billing::Billing>> {
         self.0.billing()
     }
-    fn session_count(&self) -> BoxFuture<Option<usize>> {
-        self.0.session_count()
+    fn account_standing(&self) -> BoxFuture<Option<u64>> {
+        self.0.account_standing()
+    }
+    fn auth_sessions(&self) -> BoxFuture<Option<Vec<phoenix_app::ui::settings::sessions::Session>>> {
+        self.0.auth_sessions()
     }
     fn profile_widgets(&self, u: Id) -> BoxFuture<Vec<phoenix_app::ui::settings::profile_widgets::AppWidget>> {
         self.0.profile_widgets(u)
@@ -1131,6 +1134,17 @@ fn main() -> anyhow::Result<()> {
                         (app.settings.as_mut(), pages.into_iter().find(|p| format!("{p:?}").eq_ignore_ascii_case(&arg)))
                     {
                         s.page = p;
+                    }
+                    use phoenix_app::ui::settings::nested::Nested as N;
+                    let nested = match arg.as_str() {
+                        "devices" => Some(N::Devices),
+                        "standing" => Some(N::Standing),
+                        "mfa" => Some(N::Mfa),
+                        _ => None,
+                    };
+                    if let (Some(s), Some(n)) = (app.settings.as_mut(), nested) {
+                        s.page = P::MyAccount;
+                        s.nested = Some(n);
                     }
                 }
                 "server_settings" => {

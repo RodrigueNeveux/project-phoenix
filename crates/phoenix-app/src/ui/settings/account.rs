@@ -14,17 +14,24 @@ pub struct AccountInfo {
     pub email: Option<String>,
     pub phone: Option<String>,
     pub mfa: bool,
+    pub sms: bool,
     pub adult: Option<bool>,
 }
 
 static INFO: RwLock<Option<AccountInfo>> = RwLock::new(None);
-static SESSIONS: RwLock<Option<usize>> = RwLock::new(None);
+const MFA_SMS: u64 = 1 << 4;
+static STANDING: RwLock<Option<u64>> = RwLock::new(None);
+
+pub fn standing() -> super::nested::Standing {
+    super::nested::Standing::from_state(STANDING.read().unwrap_or(100))
+}
 
 pub fn set_from_user(u: &phoenix_api::models::User) {
     *INFO.write() = Some(AccountInfo {
         email: u.email.clone().filter(|e| !e.is_empty()),
         phone: u.phone.clone().filter(|p| !p.is_empty()),
         mfa: u.mfa_enabled.unwrap_or(false),
+        sms: u.flags.unwrap_or(0) & MFA_SMS != 0,
         adult: u.nsfw_allowed,
     });
 }
@@ -34,10 +41,11 @@ pub fn info() -> AccountInfo {
 }
 
 pub fn fetch_sessions(app: &PhoenixApp, cx: &mut Cx) {
-    let fut = app.backend.session_count();
+    super::sessions::fetch(app, cx);
+    let fut = app.backend.account_standing();
     cx.spawn(async move |this, cx| {
         if let Ok(Some(n)) = fut.await {
-            *SESSIONS.write() = Some(n);
+            *STANDING.write() = Some(n);
             let _ = this.update(cx, |_, cx| cx.notify());
         }
     })
@@ -138,7 +146,7 @@ fn leading_item(icon: &'static str, bg: gpui::Hsla, title: SharedString, desc: S
         .into_any_element()
 }
 
-pub(super) fn standing_rows(info: &AccountInfo) -> Vec<AnyElement> {
+pub(super) fn standing_rows(info: &AccountInfo, cx: &mut Cx) -> Vec<AnyElement> {
     let mut rows = Vec::new();
     if let Some(adult) = info.adult {
         rows.push(leading_item(
@@ -151,13 +159,15 @@ pub(super) fn standing_rows(info: &AccountInfo) -> Vec<AnyElement> {
     }
     let mut ok = c(tok(idx::STATUS_POSITIVE));
     ok.a = 0.078;
-    rows.push(leading_item(
-        "check",
-        ok,
-        crate::t!("settings.account.status"),
-        crate::t!("settings.account.standing_d"),
-        value_chevron(Some(crate::t!("settings.account.all_good"))),
-    ));
+    let state = standing();
+    rows.push(
+        div()
+            .id("acct-standing")
+            .cursor_pointer()
+            .on_click(cx.listener(|a, _, _, cx| super::nested::open(a, super::nested::Nested::Standing, cx)))
+            .child(leading_item("check", ok, crate::t!("settings.account.status"), state.description(), value_chevron(Some(state.label()))))
+            .into_any_element(),
+    );
     rows
 }
 
@@ -225,7 +235,7 @@ pub fn connections() -> Option<usize> {
 }
 
 pub fn sessions() -> Option<usize> {
-    *SESSIONS.read()
+    super::sessions::list().map(|l| l.len())
 }
 
 #[cfg(test)]
