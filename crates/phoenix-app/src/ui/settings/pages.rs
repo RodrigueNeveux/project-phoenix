@@ -2041,9 +2041,10 @@ fn a11y_preview(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
 fn theme_title(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     div()
         .flex()
-        .items_start()
+        .items_center()
         .justify_between()
-        .child(controls::section_title(tr("sp.ap.t1")))
+        .pb(z(15.))
+        .child(controls::section_title(tr("sp.ap.t1")).pb_0())
         .child(controls::button(eid("theme-preview"), tr("sp.ap.theme_preview"), BtnKind::Secondary))
         .into_any_element()
 }

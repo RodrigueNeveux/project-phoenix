@@ -54,6 +54,7 @@ pub(super) fn page(app: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyElem
         .flex()
         .flex_col()
         .w_full()
+        .pt(z(11.))
         .child(header())
         .child(notice())
         .child(
