@@ -792,11 +792,11 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let connected = !is_dm && app.voice_channel == Some(id);
     let extra = app.nav.extras.get(&id);
     let is_group = extra.is_some_and(|e| e.recipients > 1 || e.group_icon.is_some());
-    let unread = ch.unread && !ch.muted;
+    let unread = ch.unread && !ch.muted && (is_dm || app.backend.unreads_all(id));
     let guild_dim = !is_dm && ch.muted && !selected;
     let fg = if (selected || connected) && !is_dm {
         tok(idx::TEXT_STRONG)
-    } else if selected || connected || (ch.unread && !ch.muted) {
+    } else if selected || connected || unread {
         tok(idx::INTERACTIVE_TEXT_ACTIVE)
     } else if ch.muted {
         tok(idx::TEXT_MUTED)

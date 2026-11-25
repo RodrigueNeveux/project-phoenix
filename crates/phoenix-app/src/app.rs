@@ -642,12 +642,16 @@ impl PhoenixApp {
         let entry = self.messages.entry(id).or_default();
         self.message_list.reset(entry.msgs.len() + 1);
         crate::perf::channel_opened(id.0);
-        if entry.loaded_once {
+        let cached = entry.loaded_once;
+        if cached {
             crate::perf::channel_messages_ready(id.0, "memory");
         }
         if !entry.loaded_once && !entry.loading {
             entry.loading = true;
             crate::history_ui::load_first_page(self, id, cx);
+        }
+        if cached {
+            crate::commands::state::apply_read_mark(self, id);
         }
         cx.notify();
     }

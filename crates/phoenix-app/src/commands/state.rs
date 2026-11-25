@@ -443,6 +443,16 @@ pub fn apply_read_mark(app: &mut App, channel: Id) {
         app.chat.unread_marker = Some((channel, m));
         app.refresh_message(channel, m);
     }
+    if app.chat.new_messages.is_none() {
+        app.chat.new_messages = app.messages.get(&channel).and_then(|e| unread_since(&e.msgs, last));
+    }
+}
+
+pub fn unread_since(msgs: &[Message], last: Id) -> Option<crate::ui::chat::state::NewMessages> {
+    let oldest = msgs.iter().find(|m| m.id > last)?;
+    let count = msgs.iter().filter(|m| m.id > last).count() as u32;
+    let estimated = !msgs.iter().any(|m| m.id <= last);
+    Some(crate::ui::chat::state::NewMessages { count, since: oldest.timestamp, estimated })
 }
 
 pub fn first_unread(msgs: &[Message], last: Id, me: Id) -> Option<Id> {
@@ -508,6 +518,17 @@ mod tests {
             from_gateway(&ev),
             Some(ParityEvent::PollVote { message: Id(2), answer: 4, add: false, .. })
         ));
+    }
+
+    #[test]
+    fn new_messages_bar_counts_like_the_read_state() {
+        let mk = |id, author, ts| Message { id: Id(id), author: Id(author), timestamp: ts, ..Default::default() };
+        let msgs = [mk(10, 5, 100), mk(11, 1, 110), mk(12, 5, 120)];
+        let n = unread_since(&msgs, Id(10)).unwrap();
+        assert_eq!((n.count, n.since, n.estimated), (2, 110, false));
+        let n = unread_since(&msgs, Id(3)).unwrap();
+        assert_eq!((n.count, n.since, n.estimated), (3, 100, true));
+        assert!(unread_since(&msgs, Id(12)).is_none());
     }
 
     #[test]

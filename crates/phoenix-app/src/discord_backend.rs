@@ -697,6 +697,15 @@ impl Backend for DiscordBackend {
         Some(Id(r))
     }
 
+    fn unreads_all(&self, channel: Id) -> bool {
+        let Ok(s) = self.inner.session() else { return true };
+        let Some(c) = s.cache.channel(sf(channel)) else { return true };
+        let Some(g) = c.guild_id else { return true };
+        let notify = s.notify.lock();
+        let adapter = s.adapter.lock();
+        inbox::Ctx { cache: &s.cache, prefs: &adapter.prefs, notify: &notify, new_notifications: s.new_notifications }.unreads_all(g.0, &c)
+    }
+
     fn is_media_channel(&self, channel: Id) -> bool {
         let Ok(s) = self.inner.session() else { return false };
         s.cache.channel(sf(channel)).is_some_and(|c| c.kind == api::ChannelType::GuildMedia)

@@ -366,6 +366,9 @@ impl Backend for ReadOnly {
     fn last_read(&self, c: Id) -> Option<Id> {
         self.0.last_read(c)
     }
+    fn unreads_all(&self, c: Id) -> bool {
+        self.0.unreads_all(c)
+    }
     fn forum_tags(&self, f: Id) -> Vec<phoenix_app::commands::ForumTag> {
         self.0.forum_tags(f)
     }
@@ -639,6 +642,9 @@ fn parse_id(s: &str) -> Option<Id> {
 
 fn main() -> anyhow::Result<()> {
     phoenix_app::perf::start();
+    if let Ok(f) = std::env::var("RUST_LOG") {
+        let _ = tracing_subscriber::fmt().with_env_filter(phoenix_app::logging::filter_from(Some(&f))).with_writer(std::io::stderr).with_ansi(false).try_init();
+    }
     let out = std::env::args().nth(1).unwrap_or_else(|| "real.png".into());
     phoenix_app::discord_backend::NO_ACKS.store(true, std::sync::atomic::Ordering::Relaxed);
     phoenix_app::ui::title_bar::FORCE_CLIENT_DECORATIONS.store(true, std::sync::atomic::Ordering::Relaxed);

@@ -82,6 +82,13 @@ pub enum EmojiTarget {
 const FLASH_HOLD: std::time::Duration = std::time::Duration::from_millis(2600);
 const JUMP_MAX_PAGES: u32 = 10;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NewMessages {
+    pub count: u32,
+    pub since: i64,
+    pub estimated: bool,
+}
+
 pub struct ChatState {
     pub style_gen: u32,
     pub edit: Option<EditState>,
@@ -93,7 +100,7 @@ pub struct ChatState {
     pub uploads: Vec<PendingFile>,
     pub sending: Vec<Sending>,
     pub attach_menu: bool,
-    pub new_messages: Option<(u32, i64)>,
+    pub new_messages: Option<NewMessages>,
     pub at_bottom: bool,
     pub unread_marker: Option<(Id, Id)>,
     pub emoji_target: Option<EmojiTarget>,
@@ -268,9 +275,9 @@ impl PhoenixApp {
         if own {
             self.message_list.scroll_to_end();
             self.chat.new_messages = None;
-        } else if !self.chat.at_bottom {
-            let e = self.chat.new_messages.get_or_insert((0, ts));
-            e.0 += 1;
+        } else if !self.chat.at_bottom || self.chat.new_messages.is_some() {
+            let e = self.chat.new_messages.get_or_insert(NewMessages { count: 0, since: ts, estimated: false });
+            e.count += 1;
         }
     }
 
@@ -285,6 +292,20 @@ impl PhoenixApp {
         self.chat.at_bottom = true;
         self.chat.new_messages = None;
         cx.notify();
+    }
+
+    pub fn jump_to_first_unread(&mut self, cx: &mut Context<Self>) {
+        let Some((channel, id)) = self.chat.unread_marker.filter(|(c, _)| Some(*c) == self.selected_channel) else {
+            self.jump_to_present(cx);
+            return;
+        };
+        match self.messages.get(&channel).and_then(|e| e.msgs.iter().position(|m| m.id == id)) {
+            Some(ix) => {
+                self.message_list.scroll_to_reveal_item(ix + 1);
+                cx.notify();
+            }
+            None => self.jump_to_message(channel, id, cx),
+        }
     }
 
     pub fn mark_channel_read(&mut self, cx: &mut Context<Self>) {

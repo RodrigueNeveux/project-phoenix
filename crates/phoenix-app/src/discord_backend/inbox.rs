@@ -58,7 +58,7 @@ impl Ctx<'_> {
         }
     }
 
-    fn unreads_all(&self, g: u64, c: &api::Channel) -> bool {
+    pub fn unreads_all(&self, g: u64, c: &api::Channel) -> bool {
         if c.kind.is_thread() || !self.new_notifications {
             return true;
         }

@@ -757,10 +757,7 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
 pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     use crate::{theme::generated::idx, ui::chat::tk};
     use gpui::px;
-    let (n, ts) = app.chat.new_messages?;
-    if app.chat.at_bottom {
-        return None;
-    }
+    let crate::ui::chat::state::NewMessages { count: n, since: ts, estimated } = app.chat.new_messages?;
     let today = chrono::TimeZone::timestamp_opt(&chrono::Local, ts, 0)
         .single()
         .is_some_and(|d| d.date_naive() == chrono::Local::now().date_naive());
@@ -769,7 +766,13 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
     } else {
         crate::t!("chat.new_since_date", date = crate::app::format_day(ts), time = format_time_short(ts))
     };
-    let text = if n == 1 { crate::t!("chat.new_since_one", since = since) } else { crate::t!("chat.new_since_many", n = n, since = since) };
+    let text = if estimated {
+        crate::t!("chat.new_since_estimated", n = n, since = since)
+    } else if n == 1 {
+        crate::t!("chat.new_since_one", since = since)
+    } else {
+        crate::t!("chat.new_since_many", n = n, since = since)
+    };
     Some(
         div()
             .id("new-messages-bar")
@@ -806,7 +809,7 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
                     .pl(z(4.))
                     .pr(z(12.))
                     .cursor_pointer()
-                    .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
+                    .on_click(cx.listener(|a, _, _, cx| a.jump_to_first_unread(cx)))
                     .child(div().truncate().child(text)),
             )
             .child(

@@ -408,6 +408,9 @@ pub trait Backend: Send + Sync + 'static {
     fn last_read(&self, _channel: Id) -> Option<Id> {
         None
     }
+    fn unreads_all(&self, _channel: Id) -> bool {
+        true
+    }
     fn forum_tags(&self, _forum: Id) -> Vec<crate::commands::ForumTag> {
         Vec::new()
     }
