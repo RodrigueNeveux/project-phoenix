@@ -46,6 +46,63 @@ pub struct State {
     pub multi: bool,
     pub list_open: bool,
     pub sending: bool,
+    pub scheduled: Option<i64>,
+}
+
+thread_local! {
+    static PENDING: std::cell::RefCell<Option<State>> = const { std::cell::RefCell::new(None) };
+}
+
+pub fn has_pending() -> bool {
+    PENDING.with(|p| p.borrow().is_some())
+}
+
+pub fn restore(at: Option<Option<i64>>) {
+    let Some(mut s) = PENDING.with(|p| p.borrow_mut().take()) else { return };
+    if let Some(at) = at {
+        s.scheduled = at;
+    }
+    crate::actions::open_modal(Modal::CreatePoll(s), None);
+}
+
+pub fn restore_if_dismissed() {
+    if with_modal(|m| m.is_none()) {
+        restore(None);
+    }
+}
+
+pub fn set_scheduled(at: Option<i64>) {
+    update(|s| s.scheduled = at);
+}
+
+pub fn open_schedule(cx: &mut Context<PhoenixApp>) {
+    let Some(s) = with_modal(|m| match m.take() {
+        Some(Modal::CreatePoll(s)) => Some(s),
+        other => {
+            *m = other;
+            None
+        }
+    }) else {
+        return;
+    };
+    let (channel, scheduled) = (s.channel, s.scheduled);
+    PENDING.with(|p| *p.borrow_mut() = Some(s));
+    let at = scheduled.unwrap_or_else(|| crate::ui::chat::scheduled::default_at(chrono::Local::now()));
+    crate::actions::open_modal(
+        Modal::Schedule(crate::ui::chat::scheduled::Picker { channel, at, editing: scheduled.is_some(), open: None, existing: None, month: None, reminder: None, poll: true }),
+        None,
+    );
+    cx.notify();
+}
+
+pub fn schedule_label(at: Option<i64>) -> SharedString {
+    match at {
+        None => crate::t!("poll.schedule"),
+        Some(at) => {
+            let d = crate::ui::chat::scheduled::local(at);
+            crate::t!("poll.scheduling", date = crate::ui::chat::scheduled::day_month(d.date_naive()), time = crate::i18n::clock(d))
+        }
+    }
 }
 
 impl State {
@@ -58,6 +115,7 @@ impl State {
             multi: false,
             list_open: false,
             sending: false,
+            scheduled: None,
         }
     }
 }
@@ -249,6 +307,7 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
     }
     body = body.child(duration);
     let multi = s.multi;
+    let scheduled = s.scheduled;
     let footer = div()
         .w_full()
         .flex()
@@ -263,11 +322,15 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
                 .flex()
                 .gap(z(8.))
                 .child(
-                    button("poll-schedule", SharedString::default(), BtnKind::Secondary)
+                    button("poll-schedule", SharedString::default(), if scheduled.is_some() { BtnKind::Active } else { BtnKind::Secondary })
                         .w(z(40.))
-                        .child(gpui::svg().path(crate::icons::path("inbox/schedule")).size(z(20.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
-                        .tooltip(crate::ui::tooltip::tip(crate::t!("poll.schedule")))
-                        .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("poll.schedule"), cx))),
+                        .child(gpui::svg().path(crate::icons::path("inbox/schedule")).size(z(20.)).text_color(c(tok(if scheduled.is_some() {
+                            idx::CONTROL_CONNECTED_TEXT_DEFAULT
+                        } else {
+                            idx::CONTROL_SECONDARY_TEXT_DEFAULT
+                        }))))
+                        .tooltip(crate::ui::tooltip::tip(schedule_label(scheduled)))
+                        .on_click(cx.listener(|_, _, _, cx| open_schedule(cx))),
                 )
                 .child(button("poll-post", crate::t!("poll.post"), BtnKind::Primary).min_w(z(100.)).on_click(cx.listener(|a, _, _, cx| submit(a, cx)))),
         );
@@ -298,15 +361,35 @@ fn submit(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
             return;
         }
         s.sending = true;
-        req = Some(crate::commands::ParityRequest::CreatePoll {
-            channel: s.channel,
-            question,
-            answers,
-            hours: DURATIONS[s.duration],
-            multi: s.multi,
-        });
+        req = Some((
+            s.scheduled,
+            crate::commands::ParityRequest::CreatePoll {
+                channel: s.channel,
+                question,
+                answers,
+                hours: DURATIONS[s.duration],
+                multi: s.multi,
+            },
+        ));
     });
-    let Some(req) = req else { return };
+    let Some((scheduled, req)) = req else { return };
+    if let (Some(at), crate::commands::ParityRequest::CreatePoll { channel, question, answers, hours, multi }) = (scheduled, &req) {
+        let call = schedule_call(*channel, at, question, answers, *hours, *multi);
+        app.action(crate::actions::ActionRequest::Admin(call), cx, move |a, r, cx| {
+            match r {
+                Ok(_) => {
+                    close_modal();
+                    a.parity_toast(crate::ui::chat::scheduled::done_text(at), cx);
+                }
+                Err(e) => {
+                    update(|s| s.sending = false);
+                    a.parity_toast(crate::t!("sched.failed", e = e.0), cx);
+                }
+            }
+            cx.notify();
+        });
+        return;
+    }
     app.parity_request(req, cx, |a, res, cx| {
         match res {
             Ok(_) => close_modal(),
@@ -319,9 +402,48 @@ fn submit(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     });
 }
 
+pub fn schedule_call(channel: Id, at: i64, question: &str, answers: &[crate::commands::PollAnswerDraft], hours: u32, multi: bool) -> phoenix_api::rest::guild_manage::AdminCall {
+    use phoenix_api::models::Snowflake;
+    let answers: Vec<phoenix_api::rest::forum::PollAnswerInput> = answers.iter().map(|(t, em)| (t.clone(), em.clone().map(|(i, n)| (i.map(|i| Snowflake(i.0)), n)))).collect();
+    let message = phoenix_api::rest::forum::poll_body(question, &answers, hours, multi);
+    phoenix_api::rest::guild_manage::AdminCall::ScheduleMessage { channel: Snowflake(channel.0), at: crate::ui::chat::scheduled::iso(at), message }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scheduled_poll_goes_to_scheduled_messages_and_is_guarded() {
+        let answers = vec![("A".to_string(), None), ("B".to_string(), Some((None, "🔥".to_string())))];
+        let call = schedule_call(Id(5), 1_795_600_800, "Q?", &answers, 24, true);
+        let r = phoenix_api::rest::guild_manage::build(&call);
+        assert_eq!((r.method.as_str(), r.path.as_str()), ("POST", "/users/@me/scheduled-messages"));
+        let b = r.body.unwrap();
+        assert_eq!(b["channel_id"], "5");
+        assert_eq!(b["content"], "");
+        assert_eq!(b["scheduled_timestamp"], "2026-11-25T10:00:00.000Z");
+        assert_eq!(b["poll"]["question"]["text"], "Q?");
+        assert_eq!(b["poll"]["answers"][1]["poll_media"]["emoji"]["name"], "🔥");
+        assert_eq!(b["poll"]["duration"], 24);
+        assert_eq!(b["poll"]["allow_multiselect"], true);
+        assert_eq!(b["poll"]["layout_type"], 1);
+        assert!(b.get("nonce").is_none());
+        assert!(!crate::actions::guard::read_only_action(&crate::actions::ActionRequest::Admin(call)));
+    }
+
+    #[test]
+    fn schedule_state_survives_the_picker() {
+        PENDING.with(|p| *p.borrow_mut() = Some(State::new(Id(3))));
+        assert!(has_pending());
+        restore(Some(Some(42)));
+        assert!(!has_pending());
+        let at = with_modal(|m| match m.take() {
+            Some(Modal::CreatePoll(s)) => s.scheduled,
+            _ => None,
+        });
+        assert_eq!(at, Some(42));
+    }
 
     #[test]
     fn durations_match_the_client_list() {

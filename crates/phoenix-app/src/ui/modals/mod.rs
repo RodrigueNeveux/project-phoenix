@@ -232,6 +232,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    poll_create::restore_if_dismissed();
     if with_modal(|m| matches!(m, Some(Modal::SpamRequests))) && friend_requests::other_requests(&app.nav.relationships).is_empty() {
         close_modal();
     }

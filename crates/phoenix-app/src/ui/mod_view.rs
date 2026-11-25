@@ -163,6 +163,10 @@ pub fn escape() -> bool {
     }
 }
 
+pub fn settle() {
+    with(|m| m.slide = None);
+}
+
 pub fn navigate(p: Panel) {
     with(|m| {
         if m.panel != p {

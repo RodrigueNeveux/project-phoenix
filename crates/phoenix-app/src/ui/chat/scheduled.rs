@@ -176,6 +176,7 @@ pub struct Picker {
     pub existing: Option<Id>,
     pub month: Option<NaiveDate>,
     pub reminder: Option<Id>,
+    pub poll: bool,
 }
 
 impl Picker {
@@ -526,7 +527,7 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
         })
         .when(p.open == Some(1), |d| d.child(div().relative().child(list(time_opts, cx))));
     let body = div().flex().gap(z(16.)).pb(z(16.)).child(date).child(time);
-    let (channel, at, editing, existing, reminder) = (p.channel, p.at, p.editing && p.existing.is_none(), p.existing, p.reminder);
+    let (channel, at, editing, existing, reminder, poll) = (p.channel, p.at, p.editing && p.existing.is_none(), p.existing, p.reminder, p.poll);
     let close = close_action(cx);
     let secondary = if editing { crate::t!("sched.clear") } else { crate::t!("common.cancel") };
     let (title, primary) = if reminder.is_some() {
@@ -541,6 +542,12 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .flex()
         .gap(z(8.))
         .child(button("sched-cancel", secondary, BtnKind::Secondary).flex_1().on_click(move |_, w, cx| {
+            if poll {
+                crate::actions::close_modal();
+                crate::ui::modals::poll_create::restore(editing.then_some(None));
+                w.refresh();
+                return;
+            }
             if editing {
                 set_draft(channel, None);
             }
@@ -554,6 +561,9 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
                     if let Some(msg) = reminder {
                         crate::actions::close_modal();
                         a.remind_message(channel, msg, at.max(0) as u64, cx);
+                    } else if problem(at, Local::now().timestamp()).is_none() && poll {
+                        crate::actions::close_modal();
+                        crate::ui::modals::poll_create::restore(Some(Some(at)));
                     } else if problem(at, Local::now().timestamp()).is_none() {
                         crate::actions::close_modal();
                         match existing {
@@ -586,19 +596,19 @@ impl PhoenixApp {
     pub fn open_schedule(&mut self, channel: Id, cx: &mut Context<Self>) {
         let editing = draft(channel).is_some();
         let at = draft(channel).unwrap_or_else(|| default_at(Local::now()));
-        open_modal(Modal::Schedule(Picker { channel, at, editing, open: None, existing: None, month: None, reminder: None }), None);
+        open_modal(Modal::Schedule(Picker { channel, at, editing, open: None, existing: None, month: None, reminder: None, poll: false }), None);
         cx.notify();
     }
 
     pub fn open_custom_reminder(&mut self, channel: Id, msg: Id, cx: &mut Context<Self>) {
         self.chat.menu = None;
         let at = Local::now().timestamp();
-        open_modal(Modal::Schedule(Picker { channel, at, editing: false, open: None, existing: None, month: None, reminder: Some(msg) }), None);
+        open_modal(Modal::Schedule(Picker { channel, at, editing: false, open: None, existing: None, month: None, reminder: Some(msg), poll: false }), None);
         cx.notify();
     }
 
     pub fn edit_scheduled_time(&mut self, id: Id, at: i64, cx: &mut Context<Self>) {
-        open_modal(Modal::Schedule(Picker { channel: Id(0), at, editing: true, open: None, existing: Some(id), month: None, reminder: None }), None);
+        open_modal(Modal::Schedule(Picker { channel: Id(0), at, editing: true, open: None, existing: Some(id), month: None, reminder: None, poll: false }), None);
         cx.notify();
     }
 

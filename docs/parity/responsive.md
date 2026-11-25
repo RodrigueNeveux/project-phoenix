@@ -111,5 +111,5 @@ window at 150 % is 1133 CSS px.
 Unit tests: `ui::title_bar::tests` cover each threshold on both sides and at the test widths
 (940, 1100, 1280, 1700 and 1920 px at 100, 125, 150 and 200 %).
 
-Not done: "Programmer un sondage" (`rlf0tb`) in the poll modal. Only the strings are in the cache;
-the modal chunk that uses them is lazy and absent, so its UI cannot be copied without guessing.
+"Programmer un sondage" (`rlf0tb`) in the poll modal: done from the lazy modal chunk fetched from the
+assets CDN (see the poll creation row in chat.md).

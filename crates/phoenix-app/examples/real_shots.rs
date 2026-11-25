@@ -1311,6 +1311,13 @@ fn main() -> anyhow::Result<()> {
                             phoenix_app::ui::modals::Modal::CreatePoll(phoenix_app::ui::modals::poll_create::State::new(ch)),
                             Some(window),
                         );
+                        if arg == "scheduled" || arg == "picker" {
+                            use phoenix_app::ui::modals::poll_create as pc;
+                            pc::set_scheduled(Some(phoenix_app::ui::chat::scheduled::default_at(chrono::Local::now())));
+                            if arg == "picker" {
+                                pc::open_schedule(cx);
+                            }
+                        }
                         if arg == "emoji" {
                             use phoenix_app::ui::modals::poll_create as pc;
                             pc::pick_emoji(1, pc::AnswerEmoji { id: None, name: "\u{1f525}".into(), animated: false });
@@ -1673,6 +1680,12 @@ fn main() -> anyhow::Result<()> {
                         };
                         if let Some(p) = panel {
                             phoenix_app::ui::mod_view::navigate(p);
+                            if std::env::var_os("PHX_MODVIEW_SLIDE").is_none() {
+                                phoenix_app::ui::mod_view::settle();
+                            }
+                        }
+                        if let Some(page) = std::env::var("PHX_MODVIEW_PAGE").ok().and_then(|v| v.parse::<u32>().ok()) {
+                            phoenix_app::ui::mod_view::go_history_page(app, page.saturating_sub(1), cx);
                         }
                     } else {
                         eprintln!("real_shots: modview needs a guild and a member");
