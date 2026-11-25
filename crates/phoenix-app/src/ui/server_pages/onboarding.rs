@@ -2667,10 +2667,10 @@ mod tests {
             assigned_minimum(&l, &["10".into()], std::slice::from_ref(&p)),
             2
         );
-        let (a, m) = coverage(&l, &[], &[p.clone()]);
+        let (a, m) = coverage(&l, &[], std::slice::from_ref(&p));
         assert_eq!((a.len(), m.len()), (2, 1));
         assert_eq!(questions_status(&l, &[], &[]).0, Status::None);
-        assert_eq!(questions_status(&l, &[], &[p.clone()]).0, Status::Warning);
+        assert_eq!(questions_status(&l, &[], std::slice::from_ref(&p)).0, Status::Warning);
         assert_eq!(questions_status(&l, &["10".into()], &[p]).0, Status::Good);
     }
 
