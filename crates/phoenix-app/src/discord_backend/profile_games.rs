@@ -13,22 +13,34 @@ impl DiscordBackend {
         self.with_session(move |_, s| async move {
             let prof = s.rest.request_json(Method::GET, &format!("/users/{}/profile", user.0), None).await.map_err(api_err)?;
             let widgets = prof.get("widgets").and_then(Value::as_array).cloned().unwrap_or_default();
-            let mut out = Vec::new();
-            for (kind, ids) in g::widget_ids(&widgets) {
-                let mut games = Vec::new();
-                for id in ids {
-                    let Ok(v) = s.rest.request_json(Method::GET, &format!("/games/{id}"), None).await else { continue };
+            let lists = g::widget_ids(&widgets);
+            let mut all: Vec<u64> = Vec::new();
+            for id in lists.iter().flat_map(|(_, ids)| ids) {
+                if !all.contains(id) {
+                    all.push(*id);
+                }
+            }
+            let mut found = std::collections::HashMap::new();
+            for chunk in all.chunks(20) {
+                let query = chunk.iter().map(|id| format!("game_ids={id}")).collect::<Vec<_>>().join("&");
+                let Ok(v) = s.rest.request_json(Method::GET, &format!("/games?{query}"), None).await else { continue };
+                for game in v.as_array().into_iter().flatten() {
                     if std::env::var_os("PHX_DEBUG_GAMES").is_some() {
-                        let shape: Vec<String> = v
+                        let shape: Vec<String> = game
                             .as_object()
                             .map(|o| o.iter().map(|(k, x)| format!("{k}:{}", shape_of(x))).collect())
                             .unwrap_or_default();
                         eprintln!("game shape {shape:?}");
                     }
-                    games.push(g::parse_game(id, &v));
+                    if let Some(id) = game.get("id").and_then(Value::as_str).and_then(|x| x.parse::<u64>().ok()) {
+                        found.insert(id, g::parse_game(id, game));
+                    }
                 }
-                out.push(GameWidget { kind, games });
             }
+            let out = lists
+                .into_iter()
+                .map(|(kind, ids)| GameWidget { kind, games: ids.iter().filter_map(|id| found.get(id).cloned()).collect() })
+                .collect();
             Ok(out)
         })
     }
