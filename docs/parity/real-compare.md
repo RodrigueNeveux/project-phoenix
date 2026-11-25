@@ -33,3 +33,33 @@ Most of the remaining channel list difference comes from states that only exist 
 |---|---|---|
 | guild rail | 2.2 % | 0.9 % |
 | channel list | 8.2 % | 3.6 % |
+
+## Channel header, chat, composer, member list and their popouts (25/11, wt/live-diff-b)
+
+The client stayed on Friends, then on a voice call view, then on a text channel of the project server; no CDP pass changed its route. Offline passes compare the dumps `vanilla-guild-chat-busy` (1280×700, dpr 1.5), `vanilla-announcement` (1536×840, dpr 1.25), `vanilla-menu-message` and `vanilla-profile-popout` with `real_shots` on the same channel and size (`PHX_GUILD`/`PHX_CHANNEL`, `PHX_SIDEBAR_W=336`, a `node` stub so nothing reads the live client). The live pass (21:53, text channel, 1536×840 at 125 %) read the DOM and computed styles only; `Network.enable` saw no non-GET request.
+
+Scores (`compare.py`, regions rebuilt from the dump DOM):
+
+| view | region | before | after |
+|---|---|---|---|
+| dump `vanilla-guild-chat-busy` (honeypot) | header | 4.4 % | 4.0 % |
+| same | composer | 3.7 % | 3.7 % |
+| live text channel (project server, 21:54, int-bin 81ce1c58) | header / composer | — | 2.9 % / 1.4 % |
+
+Messages and member list scores on the dumps are decided by data (two days apart: new reactions, statuses, the Activity panel the dump has and the offline render does not), so they are not used as a measure.
+
+| item | client reference | Phoenix | status |
+|---|---|---|---|
+| Header topic emoji | `topic_pVbL3l` is markup: `img.emoji` 19×19 at 14 px (1.375 em), no margin | `emoji_text::markup_label` (images, no 1 px margin) | ✅ |
+| Composer placeholder width | `placeholder_SHcSVi` 291 px in a 301 px `textArea_` (10 px short of the buttons) | `right(10)` | ✅ |
+| Message menu quick reactions | `.wrapper_Qi4I4L{display:grid;gap:4px;grid-template-columns:repeat(4,1fr);justify-items:center;padding:8px}`, `.icon_Qi4I4L` 20×20, button 44×44 radius 8 | 4 equal cells, gap 4, padding 8, emoji 20 | ✅ |
+| Member group header | `membersGroupName_86es0b` plain text span with ellipsis, count span `"\xa0— N"` (module 9fb052…) | one ellipsized span + nbsp count | ✅ |
+| Reactions spacing | `.container_YUQhib` grid: `padding-top:.125rem`, `grid-row-gap:.25rem`; `.reactions_MmKct8{padding-top:.125rem}` | reactions `pt 4`, `pt 8` after media / embeds / forwards (video→pill 4 → 9 px, client 9) | ✅ |
+| Message hover bar | live: `buttonsInner_SY_P2T` right 14, top −16, padding 2, border 0.8 px border-muted, radius 8, `box-shadow: rgba(0,0,0,.14) 0 1px 4px`, 28 px buttons, separator 1×24 border-subtle margin 2 4 | shadow was GPUI `shadow_sm` | ✅ |
+| Profile popout « Collection de jeux » | chunk c476f1…: the first game-collection widget renders a breadcrumb (`innerContainer_s6-upr` padding 8 radius 8, title body-xs/medium text-strong, up to 4 icons 24×24 radius 4 gap 4 from `app-icons/{game}/{icon_hash}.png?size=48`, last icon at 50 % opacity with `+N` on `rgba(0,0,0,.6)` when more games) | `profile_games::breadcrumb`, `Game.icon` from `icon_hash` | ⏳ code merged, not visible yet in `real_shots`: the board stays empty although `/games/{id}` answers (trace `PHX_DEBUG_GAMES` added to find where it is lost) |
+| Message menu « Rappelle-moi » | current client `roMu1H` (« Rappelle-moi »); the 23/11 dump said « Créer un rappel » (`mJ3P0N`, now the save-type label) | « Rappelle-moi » | ✅ (no change) |
+
+Open:
+- Ellipsis one glyph early on texts with an emoji (composer placeholder « hone… » vs « honey… », member group « Dé… » vs « Dév… »): same box widths and glyph positions within 1 device px, so the budget of `truncate_line_end_shaped` (vendor GPUI patch) is a few px smaller than Chromium's. Left to the text owners.
+- Mentioned message background: the token is `--message-mentioned-background-default` = yellow 8 % (computed 0.078 in every dump), but the `vanilla-announcement` capture shows half that on screen (10,6,0 vs Phoenix 19,13,0). Not changed until a live capture of a mentioned message.
+- Hover screenshots: `Page.captureScreenshot` of the live client does not show `:hover` states while the window is not repainted (the DOM shows the bar). Hover values above come from the DOM.
