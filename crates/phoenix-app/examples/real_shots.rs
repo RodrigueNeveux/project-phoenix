@@ -1537,6 +1537,18 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 400);
     }
+    if let Ok(q) = std::env::var("PHX_SETTINGS_SEARCH") {
+        pump(&mut cx, 300);
+        cx.update_window(win.into(), |_, window, cx| {
+            v.update(cx, |app, cx| {
+                if let Some(i) = app.settings.as_ref().and_then(|s| s.search.clone()) {
+                    i.update(cx, |i, cx| i.set_value(q.clone(), window, cx));
+                }
+                cx.notify();
+            })
+        })?;
+        pump(&mut cx, 300);
+    }
     if let Ok(draft) = std::env::var("PHX_DRAFT") {
         let draft = draft.replace("\\n", "\n");
         cx.update_window(win.into(), |_, window, cx| {
