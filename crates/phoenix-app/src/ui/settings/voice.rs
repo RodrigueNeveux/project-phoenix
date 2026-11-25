@@ -25,10 +25,8 @@ type Cx<'a> = Context<'a, PhoenixApp>;
 pub(crate) type OnSlide = Rc<dyn Fn(&mut PhoenixApp, f32, bool, &mut Cx)>;
 
 const TRACK: u32 = 0x4E5058;
-const METER_OFF: u32 = 0x4E5058;
 const SENS_LOW: u32 = 0xF0B232;
 const SENS_HIGH: u32 = 0x23A55A;
-const METER_SEGMENTS: usize = 48;
 const DB_MIN: f32 = -100.;
 
 thread_local! {
@@ -352,11 +350,35 @@ fn button(id: &'static str, label: SharedString, bg: u32, _hover: u32) -> gpui::
 }
 
 fn meter(level_db: f32, active: bool) -> Div {
-    let frac = ((level_db - DB_MIN) / -DB_MIN).clamp(0., 1.);
-    let lit = if active { (frac * METER_SEGMENTS as f32).round() as usize } else { 0 };
-    div().flex_1().h(z(16.)).flex().items_center().gap(z(4.)).children(
-        (0..METER_SEGMENTS)
-            .map(|i| div().flex_1().h(z(16.)).rounded(z(2.)).bg(c(if i < lit { SENS_HIGH } else { METER_OFF }))),
+    let frac = if active { ((level_db - DB_MIN) / -DB_MIN).clamp(0., 1.) } else { 0. };
+    div().flex_1().h(z(20.)).child(
+        gpui::canvas(
+            |_, _, _| {},
+            move |b, _, window, _| {
+                let cell = f32::from(z(8.));
+                let (w, h) = (f32::from(b.size.width), f32::from(b.size.height));
+                let n = (w / cell).round() as usize;
+                if n == 0 || h <= 0. {
+                    return;
+                }
+                let width = n as f32 * cell;
+                let lit = n - ((n as f32 * (1. - frac)).round() as usize).min(n);
+                window.paint_quad(gpui::fill(gpui::Bounds::new(b.origin, gpui::size(gpui::px(width), b.size.height)), c(tok(idx::BACKGROUND_BASE_LOW))));
+                let (from, to) = (gpui::Rgba::from(c(tok(idx::YELLOW_260))), gpui::Rgba::from(c(tok(idx::GREEN_360))));
+                let inset = f32::from(z(2.));
+                for i in 0..n {
+                    let color = if i < lit {
+                        let t = (i as f32 + 0.5) * cell / width;
+                        gpui::Hsla::from(gpui::Rgba { r: from.r + (to.r - from.r) * t, g: from.g + (to.g - from.g) * t, b: from.b + (to.b - from.b) * t, a: 1. })
+                    } else {
+                        c(tok(idx::GRADIENT_PROGRESS_PILL_BACKGROUND))
+                    };
+                    let o = gpui::point(b.origin.x + gpui::px(i as f32 * cell + inset), b.origin.y + gpui::px(inset));
+                    window.paint_quad(gpui::fill(gpui::Bounds::new(o, gpui::size(gpui::px(cell - 2. * inset), gpui::px(h - 2. * inset))), color).corner_radii(z(2.)));
+                }
+            },
+        )
+        .size_full(),
     )
 }
 
