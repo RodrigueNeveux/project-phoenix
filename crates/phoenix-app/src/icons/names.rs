@@ -95,6 +95,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("menu/speak", &["ChatSpeakIcon"]),
     ("menu/open-link", &["LinkExternalSmallIcon"]),
     ("chat/upload", &["UploadIcon"]),
+    ("attach/file-up", &["FileUpIcon"]),
+    ("attach/thread-plus", &["ThreadPlusIcon"]),
     ("chat/boost", &["BoostGemIcon"]),
     ("chat/arrow-right", &["ArrowSmallRightIcon"]),
     ("picker/clock", &["ClockIcon"]),

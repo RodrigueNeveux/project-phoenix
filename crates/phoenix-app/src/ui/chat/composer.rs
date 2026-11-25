@@ -204,9 +204,9 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
         .channels
         .get(&ch)
         .is_some_and(|c| c.guild.is_some() && matches!(c.kind, crate::model::ChannelKind::Text | crate::model::ChannelKind::Announcement));
-    let mut items = vec![MenuItem::action(crate::t!("attach.upload"), Some(crate::icons::path("chat/upload")), act(|a, _, _, cx| a.prompt_attach(cx)))];
+    let mut items = vec![MenuItem::action(crate::t!("attach.upload"), Some(crate::icons::path("attach/file-up")), act(|a, _, _, cx| a.prompt_attach(cx)))];
     if thread_ok {
-        items.push(MenuItem::action(crate::t!("attach.thread"), Some(crate::icons::path("chat/thread")), act(|a, ch, w, cx| a.open_create_thread(ch, w, cx))));
+        items.push(MenuItem::action(crate::t!("attach.thread"), Some(crate::icons::path("attach/thread-plus")), act(|a, ch, w, cx| a.open_create_thread(ch, w, cx))));
     }
     let guild = app.channels.get(&ch).and_then(|c| c.guild);
     if guild.is_none() || crate::actions::has(app, guild, 1 << 49) {

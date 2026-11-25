@@ -78,6 +78,11 @@ pub fn inbox_right_inset() -> f32 {
 }
 
 static VIEWPORT_H_CSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+static VIEWPORT_W_CSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn viewport_w_css() -> f32 {
+    f32::from_bits(VIEWPORT_W_CSS.load(std::sync::atomic::Ordering::Relaxed))
+}
 
 pub fn viewport_h_css() -> f32 {
     f32::from_bits(VIEWPORT_H_CSS.load(std::sync::atomic::Ordering::Relaxed))
@@ -86,6 +91,8 @@ pub fn viewport_h_css() -> f32 {
 pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let vh = f32::from(window.viewport_size().height) / zoom();
     VIEWPORT_H_CSS.store(vh.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    let vw = f32::from(window.viewport_size().width) / zoom();
+    VIEWPORT_W_CSS.store(vw.to_bits(), std::sync::atomic::Ordering::Relaxed);
     DREW_WIN_BUTTONS.store(client_decorated(window), std::sync::atomic::Ordering::Relaxed);
     let (glyph, text) = title(app);
     let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));

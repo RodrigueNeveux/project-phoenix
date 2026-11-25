@@ -780,7 +780,14 @@ fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixA
         .pr(z(20.))
         .py(z(pad_y))
         .min_h(z(44.))
-        .child(div().absolute().left(z(20.)).top(z(pad_y + 2.)).child(avatar(u, 40.)))
+        .child(
+            div()
+                .absolute()
+                .left(z(20.))
+                .top(z(pad_y + 2.))
+                .child(avatar(u, 40.))
+                .when_some(crate::ui::avatar_deco::source(u, None), |d, src| d.child(crate::ui::avatar_deco::layer(src, 40. * crate::theme::zoom()))),
+        )
         .child(
             div()
                 .flex()
@@ -1379,7 +1386,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .absolute()
                 .top(z(m::TITLE_BAR_H + m::HEADER_H - 3.))
                 .right(z(HDR_RIGHT_THREADS))
-                .w(z(480.))
+                .w(z((crate::ui::title_bar::viewport_w_css() * 0.35).clamp(480., 600.)))
                 .h(z(400.))
                 .rounded(z(8.))
                 .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
@@ -1909,6 +1916,11 @@ fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Contex
         .and_then(|o| app.member_nick(o))
         .or_else(|| owner.map(|u| if u.display_name.is_empty() { u.name.clone() } else { u.display_name.clone() }))
         .unwrap_or_default();
+    let owner_color = p
+        .owner
+        .and_then(|o| app.author_color_in(app.selected_guild, o))
+        .map(|c2| crate::theme::role_color(Some(c2)))
+        .unwrap_or_else(|| tk(idx::TEXT_DEFAULT));
     div()
         .id(("archived-thread-row", p.thread.0))
         .flex_none()
@@ -1943,10 +1955,10 @@ fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Contex
                         .text_color(tk(idx::TEXT_DEFAULT))
                         .whitespace_nowrap()
                         .overflow_hidden()
-                        .child(div().mr(z(8.)).child(avatar(owner, 16.)))
-                        .child(crate::t!("threads.started_by"))
-                        .child(div().ml(z(4.)).child(owner_name))
-                        .child(div().w(z(20.)).flex().justify_center().child("•"))
+                        .child(div().flex_none().mr(z(8.)).child(avatar(owner, 16.)))
+                        .child(div().flex_none().child(crate::t!("threads.started_by")))
+                        .child(div().flex_none().ml(z(4.)).font_weight(FontWeight::SEMIBOLD).text_color(owner_color).child(owner_name))
+                        .child(div().flex_none().w(z(20.)).flex().justify_center().text_color(gpui::rgba(0x97979f14)).child("•"))
                         .child(crate::t!("threads.last_activity", date = date)),
                 ),
         )

@@ -69,6 +69,8 @@ pub fn svg(path: &str) -> Option<&'static str> {
         "icons/chat/thread.svg" => s!(r#"<path d="M4 5h12v8H9l-3 2.5V13H4zM19 9h1v8h-2v2.5L15 17h-4"/>"#),
         "icons/chat/eye.svg" => s!(r#"<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>"#),
         "icons/chat/upload.svg" => s!(r#"<path d="M12 16V4m-5 5 5-5 5 5M4 20h16"/>"#),
+        "icons/attach/file-up.svg" => s!(r#"<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7M14 3l6 6h-6zM18 21v-7m-3 3 3-3 3 3"/>"#),
+        "icons/attach/thread-plus.svg" => s!(r#"<path d="M4 5h12v8H9l-3 2.5V13H4zM19 16v6m-3-3h6"/>"#),
         "icons/chat/join.svg" => s!(r#"<path d="M4 12h14m-5-5 5 5-5 5"/>"#),
         "icons/chat/boost.svg" => f!(r#"<path d="M12 2 19 8v8l-7 6-7-6V8zm0 4L8 9.5v5L12 18l4-3.5v-5z"/>"#),
         "icons/chat/arrow-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
