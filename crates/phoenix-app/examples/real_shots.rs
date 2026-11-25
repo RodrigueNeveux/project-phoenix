@@ -1259,6 +1259,10 @@ fn main() -> anyhow::Result<()> {
                 }
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
+                "discovery" => {
+                    phoenix_app::ui::discovery::open(if arg == "apps" { phoenix_app::ui::discovery::Tab::Apps } else { phoenix_app::ui::discovery::Tab::Servers });
+                    cx.notify();
+                }
                 "boost" => {
                     if let Some(g) = app.selected_guild {
                         phoenix_app::ui::boost_layer::open(g);
