@@ -119,6 +119,7 @@ pub enum AdminCall {
     UserSettings,
     PatchUserSettings { patch: Value },
     EditGroupDm { channel: Snowflake, name: Option<String>, icon: Option<Option<String>> },
+    BulkLeaveGroupDms { channels: Vec<Snowflake> },
     Server(super::guild_server::ServerCall),
     ScheduleMessage { channel: Snowflake, at: String, message: Value },
     ScheduledMessages,
@@ -276,6 +277,7 @@ pub fn build(call: &AdminCall) -> ApiReq {
             }
             req(Method::PATCH, format!("/channels/{channel}"), Some(b))
         }
+        C::BulkLeaveGroupDms { channels } => req(Method::POST, "/users/@me/channels/bulk-leave".into(), Some(json!({ "channel_ids": channels }))),
         C::PatchChannel { channel, body } => req(Method::PATCH, format!("/channels/{channel}"), Some(body.clone())),
         C::ChannelWebhooks { channel } => req(Method::GET, format!("/channels/{channel}/webhooks"), None),
         C::CreateWebhook { channel, name } => req(Method::POST, format!("/channels/{channel}/webhooks"), Some(json!({ "name": name }))),
@@ -492,6 +494,13 @@ mod tests {
         assert_eq!((r.method, r.path.as_str()), (Method::DELETE, "/users/@me/scheduled-messages/9"));
         let r = build(&AdminCall::SendScheduledNow { id: Snowflake(9) });
         assert_eq!((r.method, r.path.as_str(), r.body), (Method::POST, "/users/@me/scheduled-messages/9/send", None));
+    }
+
+    #[test]
+    fn bulk_leave_matches_the_client() {
+        let r = build(&AdminCall::BulkLeaveGroupDms { channels: vec![Snowflake(2), Snowflake(3)] });
+        assert_eq!((r.method, r.path.as_str()), (Method::POST, "/users/@me/channels/bulk-leave"));
+        assert_eq!(r.body.unwrap(), json!({"channel_ids": ["2", "3"]}));
     }
 
     #[test]

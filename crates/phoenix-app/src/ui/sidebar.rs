@@ -573,10 +573,14 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                         .gap(z(4.))
                         .child(
                             btn("dm-more", gpui::svg().path(crate::icons::path("more-horizontal")))
-                                .opacity(0.)
+                                .when(crate::ui::extra_menus::opened() != Some(crate::ui::extra_menus::Target::DmMore), |d| d.opacity(0.))
                                 .group_hover("dm-header", |s| s.opacity(1.))
                                 .tip(crate::t!("header.more"))
-                                .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("More", cx))),
+                                .on_click(move |ev, w, cx| {
+                                    let p = ev.position();
+                                    crate::ui::extra_menus::open(crate::ui::extra_menus::Target::DmMore, gpui::point(p.x - gpui::px(12.), p.y + gpui::px(20.)), w);
+                                    e2.update(cx, |_, cx| cx.notify());
+                                }),
                         )
                         .child(
                             btn("new-dm", icon(Icon::Plus, 16., t(idx::ICON_MUTED)))

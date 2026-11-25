@@ -6,6 +6,7 @@ pub mod channel_settings;
 pub mod create_channel;
 pub mod forward;
 pub mod gdm;
+pub mod gdm_cleanup;
 pub mod go_live;
 pub mod ignore;
 pub mod guild_notify;
@@ -106,6 +107,7 @@ pub enum Modal {
     Schedule(crate::ui::chat::scheduled::Picker),
     SwitchAccounts,
     Ignore(crate::model::Id),
+    GdmCleanup(gdm_cleanup::Cleanup),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -216,6 +218,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Schedule(p) => crate::ui::chat::scheduled::render(p, cx),
             Modal::SwitchAccounts => accounts::render(app, cx),
             Modal::Ignore(u) => ignore::render(app, *u, cx),
+            Modal::GdmCleanup(s) => gdm_cleanup::render(app, s, cx),
         })
     })
 }

@@ -1218,6 +1218,7 @@ fn main() -> anyhow::Result<()> {
                     phoenix_app::ui::status_picker::debug_open_accounts_submenu(arg == "accounts");
                 }
                 "accounts" => app.open_switch_accounts(cx),
+                "gdmclean" => app.open_gdm_cleanup(cx),
                 "ignore" => {
                     let target = arg.parse::<u64>().ok().map(phoenix_app::model::Id).or_else(|| {
                         let ch = app.selected_channel?;

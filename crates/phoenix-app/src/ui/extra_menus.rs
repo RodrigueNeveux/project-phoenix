@@ -20,6 +20,7 @@ pub enum Target {
     ProfileOverflow { user: Id, guild: Option<Id> },
     Viewer,
     SettingsMore,
+    DmMore,
 }
 
 thread_local! {
@@ -212,11 +213,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             viewer_items(&e, &v, app.prefs.synced.developer_mode)
         }
         Target::SettingsMore => settings_more_items(&e),
+        Target::DmMore => vec![act(&e, crate::t!("gdm.cleanup.menu"), |a, _, cx| a.open_gdm_cleanup(cx))],
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
         close();
         w.refresh();
     });
+    if target == Target::DmMore {
+        return Some(context_menu::render_anchored(pos, gpui::Anchor::TopLeft, items, dismiss));
+    }
     if target == Target::SettingsMore {
         return Some(context_menu::render_anchored(pos, gpui::Anchor::BottomCenter, items, dismiss));
     }
