@@ -101,6 +101,7 @@ pub enum Modal {
     EditGroup(gdm::EditGroup),
     GroupInvites(gdm::Invites),
     FolderSettings(gdm::Folder),
+    Schedule(crate::ui::chat::scheduled::Picker),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -203,6 +204,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::EditGroup(g) => gdm::render_edit_group(g, cx),
             Modal::GroupInvites(s) => gdm::render_invites(s, cx),
             Modal::FolderSettings(f) => gdm::render_folder(f, cx),
+            Modal::Schedule(p) => crate::ui::chat::scheduled::render(p, cx),
         })
     })
 }

@@ -25,6 +25,7 @@ pub mod mosaic;
 pub mod panels;
 pub mod pending;
 pub mod rich_input;
+pub mod scheduled;
 pub mod scrollbar;
 pub mod alt_text;
 pub mod state;

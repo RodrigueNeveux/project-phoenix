@@ -167,6 +167,12 @@ impl PhoenixApp {
         self.mark_nav_read(crate::ui::nav_menus::Target::Channel(channel), cx);
     }
 
+    pub(crate) fn reload_scheduled(&mut self, cx: &mut Context<Self>) {
+        if self.parity.inbox.tab == InboxTab::Scheduled {
+            self.load_inbox_tab(true, cx);
+        }
+    }
+
     fn set_inbox_tab(&mut self, tab: InboxTab, cx: &mut Context<Self>) {
         self.parity.inbox.tab = tab;
         self.parity.inbox.filter_menu = false;
@@ -317,13 +323,20 @@ impl PhoenixApp {
     }
 
     pub fn sync_guild_folders(&mut self, cx: &mut Context<Self>) {
-        let folders = folder_sync(self);
-        self.parity_request(ParityRequest::GuildFolders(folders), cx, |a, r, cx| {
+        let folders = folder_tree(self);
+        self.action(crate::actions::ActionRequest::SaveFolders(folders), cx, |a, r, cx| {
             if let Err(e) = r {
                 a.parity_toast(crate::t!("inbox.order_failed", e = e.0).to_string(), cx);
             }
         });
     }
+}
+
+pub fn folder_tree(app: &PhoenixApp) -> Vec<crate::ui::home::data::GuildFolder> {
+    folder_sync(app)
+        .into_iter()
+        .map(|f| crate::ui::home::data::GuildFolder { id: f.id, name: f.name.map(Into::into), color: f.color, guilds: f.guilds })
+        .collect()
 }
 
 pub fn folder_sync(app: &PhoenixApp) -> Vec<FolderSync> {
@@ -1146,9 +1159,23 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
         InboxTab::Scheduled if !i.scheduled.is_empty() => {
             list = scroller(list);
             for m in &i.scheduled {
+                let (id, at) = (m.id, m.timestamp);
+                let buttons = vec![
+                    sm_icon_button(("sched-send", id.0), "send").on_click(cx.listener(move |a, _, _, cx| a.scheduled_send_now(id, cx))),
+                    sm_icon_button(("sched-edit", id.0), "inbox/clock").on_click(cx.listener(move |a, _, _, cx| a.edit_scheduled_time(id, at, cx))),
+                    sm_icon_button(("sched-cancel", id.0), "close").on_click(cx.listener(move |a, _, _, cx| a.cancel_scheduled(id, cx))),
+                ];
                 list = list.child(
                     inbox_box()
-                        .child(channel_head(app, m.channel, Vec::new()))
+                        .child(channel_head(app, m.channel, buttons))
+                        .child(
+                            div()
+                                .pt(z(8.))
+                                .text_size(z(12.))
+                                .line_height(z(16.))
+                                .text_color(tk(idx::TEXT_MUTED))
+                                .child(crate::ui::chat::scheduled::done_text(at)),
+                        )
                         .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2., cx))),
                 );
             }

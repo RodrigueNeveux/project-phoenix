@@ -105,6 +105,11 @@ pub enum AdminCall {
     PatchUserSettings { patch: Value },
     EditGroupDm { channel: Snowflake, name: Option<String>, icon: Option<Option<String>> },
     Server(super::guild_server::ServerCall),
+    ScheduleMessage { channel: Snowflake, at: String, message: Value },
+    ScheduledMessages,
+    EditScheduled { id: Snowflake, at: Option<String>, content: Option<String>, flags: Option<u64> },
+    DeleteScheduled { id: Snowflake },
+    SendScheduledNow { id: Snowflake },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -198,6 +203,37 @@ pub fn build(call: &AdminCall) -> ApiReq {
         ),
         C::DeleteOverwrite { channel, target } => req(Method::DELETE, format!("/channels/{channel}/permissions/{target}"), None),
         C::ChannelInvites { channel } => req(Method::GET, format!("/channels/{channel}/invites"), None),
+        C::ScheduleMessage { channel, at, message } => {
+            let mut b = json!({
+                "channel_id": channel,
+                "content": message.get("content").cloned().unwrap_or_else(|| json!("")),
+                "scheduled_timestamp": at,
+                "flags": message.get("flags").cloned().unwrap_or_else(|| json!(0)),
+                "attachments": [],
+            });
+            for k in ["message_reference", "allowed_mentions", "sticker_ids", "poll"] {
+                if let Some(v) = message.get(k) {
+                    b[k] = v.clone();
+                }
+            }
+            req(Method::POST, "/users/@me/scheduled-messages".into(), Some(b))
+        }
+        C::ScheduledMessages => req(Method::GET, "/users/@me/scheduled-messages".into(), None),
+        C::EditScheduled { id, at, content, flags } => {
+            let mut b = json!({});
+            if let Some(a) = at {
+                b["scheduled_timestamp"] = json!(a);
+            }
+            if let Some(c) = content {
+                b["content"] = json!(c);
+            }
+            if let Some(f) = flags {
+                b["flags"] = json!(f);
+            }
+            req(Method::PATCH, format!("/users/@me/scheduled-messages/{id}"), Some(b))
+        }
+        C::DeleteScheduled { id } => req(Method::DELETE, format!("/users/@me/scheduled-messages/{id}"), None),
+        C::SendScheduledNow { id } => req(Method::POST, format!("/users/@me/scheduled-messages/{id}/send"), None),
         C::EditGroupDm { channel, name, icon } => {
             let mut b = json!({});
             if let Some(n) = name {
@@ -351,6 +387,22 @@ mod tests {
 
     const G: Snowflake = Snowflake(1);
     const C: Snowflake = Snowflake(2);
+
+    #[test]
+    fn scheduled_message_calls_match_the_client() {
+        let r = build(&AdminCall::ScheduleMessage { channel: C, at: "2026-11-25T10:00:00.000Z".into(), message: json!({"content": "hi"}) });
+        assert_eq!((r.method, r.path.as_str()), (Method::POST, "/users/@me/scheduled-messages"));
+        assert_eq!(r.body.unwrap(), json!({"channel_id": "2", "content": "hi", "scheduled_timestamp": "2026-11-25T10:00:00.000Z", "flags": 0, "attachments": []}));
+        let r = build(&AdminCall::ScheduledMessages);
+        assert_eq!((r.method, r.path.as_str(), r.body), (Method::GET, "/users/@me/scheduled-messages", None));
+        let r = build(&AdminCall::EditScheduled { id: Snowflake(9), at: Some("x".into()), content: None, flags: None });
+        assert_eq!((r.method, r.path.as_str()), (Method::PATCH, "/users/@me/scheduled-messages/9"));
+        assert_eq!(r.body.unwrap(), json!({"scheduled_timestamp": "x"}));
+        let r = build(&AdminCall::DeleteScheduled { id: Snowflake(9) });
+        assert_eq!((r.method, r.path.as_str()), (Method::DELETE, "/users/@me/scheduled-messages/9"));
+        let r = build(&AdminCall::SendScheduledNow { id: Snowflake(9) });
+        assert_eq!((r.method, r.path.as_str(), r.body), (Method::POST, "/users/@me/scheduled-messages/9/send", None));
+    }
 
     #[test]
     fn group_dm_edit_sends_only_what_changed() {

@@ -858,6 +858,17 @@ impl PhoenixApp {
             cx.notify();
             return true;
         }
+        if let Some(at) = super::scheduled::draft(ch).filter(|_| self.chat.uploads.is_empty()) {
+            let text = super::rich_input::take_plain(&text);
+            self.composer.update(cx, |s, cx| s.set_value("", window, cx));
+            let mut msg = phoenix_api::rest::CreateMessage::text(text);
+            if let Some(r) = self.replying_to.take() {
+                msg = msg.reply_to(phoenix_api::models::Snowflake(ch.0), phoenix_api::models::Snowflake(r.0), self.chat.reply_mention);
+            }
+            self.chat.reply_mention = true;
+            self.send_scheduled(ch, at, msg, cx);
+            return true;
+        }
         super::composer::note_sent(ch);
         let text = super::rich_input::take_plain(&text);
         self.composer.update(cx, |s, cx| s.set_value("", window, cx));

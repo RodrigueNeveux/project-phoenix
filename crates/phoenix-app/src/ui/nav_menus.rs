@@ -254,6 +254,40 @@ fn stub(e: &Ent, key: &'static str) -> MenuItem {
     act(e, crate::t!(key), move |a, _, cx| a.stub(&crate::t!(key), cx))
 }
 
+fn rail_move(app: &PhoenixApp, e: &Ent, item: crate::ui::modals::gdm::RailRef) -> Option<MenuItem> {
+    use crate::ui::modals::gdm::{Dest, RailRef, placement};
+    let tree = crate::ui::inbox::folder_tree(app);
+    let (in_folder, first, last) = placement(&tree, item)?;
+    let go = |dest: Dest| move |a: &mut PhoenixApp, _: &mut Window, cx: &mut Context<PhoenixApp>| a.move_in_rail(item, dest, cx);
+    let place = |label: &'static str, disabled: bool, dest: Dest| {
+        if disabled { MenuItem::disabled(crate::t!(label), None) } else { act(e, crate::t!(label), go(dest)) }
+    };
+    let mut items = Vec::new();
+    let folders: Vec<&crate::ui::home::data::GuildFolder> = tree.iter().filter(|f| f.id.is_some()).collect();
+    if let RailRef::Guild(g) = item
+        && !folders.is_empty()
+    {
+        let current = tree.iter().find(|f| f.guilds.contains(&g)).and_then(|f| f.id);
+        let mut dests = vec![place("menu.no_folder", current.is_none(), Dest::NoFolder), MenuItem::Separator];
+        for f in folders {
+            let id = f.id.unwrap_or_default();
+            let name = f.name.clone().unwrap_or_else(|| crate::t!("folder.unnamed"));
+            dests.push(if current == Some(id) { MenuItem::disabled(name, None) } else { act(e, name, go(Dest::Folder(id))) });
+        }
+        items.push(MenuItem::submenu(crate::t!("menu.move_folder"), dests));
+        items.push(MenuItem::Separator);
+    }
+    let (fl, ll) = if in_folder { ("menu.move_first_folder", "menu.move_last_folder") } else { ("menu.move_first", "menu.move_last") };
+    if !(first && last) {
+        items.push(place(fl, first, Dest::First));
+        items.push(place(ll, last, Dest::Last));
+    }
+    if matches!(items.last(), Some(MenuItem::Separator)) {
+        items.pop();
+    }
+    (!items.is_empty()).then(|| MenuItem::submenu(crate::t!("menu.move_to"), items))
+}
+
 fn move_to(e: &Ent, folder: bool) -> MenuItem {
     let (to, first, last) = if folder {
         ("menu.move_folder", "menu.move_first_folder", "menu.move_last_folder")
@@ -479,8 +513,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 }
             }
             items.push(MenuItem::Separator);
-            items.push(move_to(&e, true));
-            items.push(MenuItem::Separator);
+            if let Some(mv) = rail_move(app, &e, crate::ui::modals::gdm::RailRef::Guild(g)) {
+                items.push(mv);
+                items.push(MenuItem::Separator);
+            }
             if manage_guild {
                 items.push(MenuItem::danger(crate::t!("menu.security_actions"), None, {
                     let e = e.clone();
@@ -524,21 +560,30 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         }
         Target::Thread(id) => items.extend(crate::ui::thread_menu::items(app, &e, id, crate::actions::thread::Place::ContextMenu)),
         Target::Folder(f) => {
-            items.push(act(&e, crate::t!("menu.mark_folder_read"), move |a, _, cx| {
-                let gs: Vec<Id> = a.nav.folders.iter().filter(|x| x.id == Some(f)).flat_map(|x| x.guilds.clone()).collect();
-                for g in gs {
-                    a.mark_nav_read(Target::Guild(g), cx);
-                }
-            }));
+            let members: Vec<Id> = app.nav.folders.iter().filter(|x| x.id == Some(f)).flat_map(|x| x.guilds.clone()).collect();
+            let unread = app.guilds.iter().any(|g| members.contains(&g.id) && (g.unread || g.mentions > 0));
+            if unread {
+                items.push(act(&e, crate::t!("menu.mark_folder_read"), move |a, _, cx| {
+                    for g in members.clone() {
+                        a.mark_nav_read(Target::Guild(g), cx);
+                    }
+                }));
+            } else {
+                items.push(MenuItem::disabled(crate::t!("menu.mark_folder_read"), None));
+            }
             items.push(MenuItem::Separator);
-            items.push(move_to(&e, true));
-            items.push(MenuItem::Separator);
+            if let Some(mv) = rail_move(app, &e, crate::ui::modals::gdm::RailRef::Folder(f)) {
+                items.push(mv);
+                items.push(MenuItem::Separator);
+            }
             items.push(act(&e, crate::t!("menu.folder_settings"), move |a, _, cx| a.open_folder_settings(f, cx)));
-            items.push(act(&e, crate::t!("menu.close_all_folders"), |a, _, cx| {
-                a.nav.expanded_folders.clear();
-                a.save_nav_prefs();
-                cx.notify();
-            }));
+            if !app.nav.expanded_folders.is_empty() {
+                items.push(act(&e, crate::t!("menu.close_all_folders"), |a, _, cx| {
+                    a.nav.expanded_folders.clear();
+                    a.save_nav_prefs();
+                    cx.notify();
+                }));
+            }
         }
     }
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {

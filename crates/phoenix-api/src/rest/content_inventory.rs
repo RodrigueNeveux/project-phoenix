@@ -7,13 +7,34 @@ use crate::error::Result;
 use crate::models::{ChannelId, Snowflake, null_default};
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct ScheduledMessage {
-    pub id: Snowflake,
+pub struct ScheduledArgs {
     pub channel_id: ChannelId,
     #[serde(default, deserialize_with = "null_default")]
     pub content: String,
-    #[serde(default, deserialize_with = "null_default")]
+    #[serde(default)]
+    pub flags: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ScheduledMessage {
+    #[serde(alias = "scheduled_message_id")]
+    pub id: Snowflake,
+    #[serde(default, alias = "send_at_timestamp", deserialize_with = "null_default")]
     pub scheduled_timestamp: String,
+    #[serde(default)]
+    pub create_args: ScheduledArgs,
+    #[serde(default)]
+    pub state: Value,
+}
+
+impl ScheduledMessage {
+    pub fn channel_id(&self) -> ChannelId {
+        self.create_args.channel_id
+    }
+
+    pub fn content(&self) -> &str {
+        &self.create_args.content
+    }
 }
 
 pub const TRAIT_FIRST_TIME: u64 = 1;
@@ -129,7 +150,12 @@ mod tests {
 
     #[test]
     fn parses_scheduled() {
-        let s: Vec<ScheduledMessage> = serde_json::from_str(r#"[{"id":"1","channel_id":"2","content":"hi","scheduled_timestamp":"2026-11-24T09:00:00+00:00"}]"#).unwrap();
-        assert_eq!(s[0].content, "hi");
+        let s: Vec<ScheduledMessage> = serde_json::from_str(
+            r#"[{"user_id":"9","scheduled_message_id":"1","send_at_timestamp":"2026-11-24T09:00:00+00:00","state":1,
+                "create_args":{"channel_id":"2","content":"hi","type":0,"flags":0,"message_reference":null},"attachment_uploads":[]}]"#,
+        )
+        .unwrap();
+        assert_eq!((s[0].id, s[0].channel_id(), s[0].content()), (Snowflake(1), Snowflake(2), "hi"));
+        assert_eq!(s[0].scheduled_timestamp, "2026-11-24T09:00:00+00:00");
     }
 }

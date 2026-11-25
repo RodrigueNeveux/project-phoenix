@@ -11,6 +11,7 @@ use crate::{
     theme::{c, generated::idx, tok, z},
     ui::controls::{BtnKind, button},
 };
+use crate::ui::home::data::GuildFolder;
 use phoenix_api::{models::Snowflake, rest::guild_manage::AdminCall};
 
 pub struct EditGroup {
@@ -210,13 +211,17 @@ impl PhoenixApp {
         });
         let Some(f) = taken else { return };
         let name = f.name.as_ref().map(|i| clamp(i, FOLDER_NAME_MAX, cx)).unwrap_or_default();
-        let folders = apply_folder(&self.nav.folders, f.id, &name, f.color);
-        self.nav.folders = folders.clone();
-        self.action(ActionRequest::SaveFolders(folders), cx, |a, r, cx| {
-            if let Err(e) = r {
-                a.parity_toast(e.0, cx);
-            }
-        });
+        self.nav.folders = apply_folder(&self.nav.folders, f.id, &name, f.color);
+        self.sync_guild_folders(cx);
+        cx.notify();
+    }
+
+    pub fn move_in_rail(&mut self, item: RailRef, dest: Dest, cx: &mut Context<Self>) {
+        let tree = crate::ui::inbox::folder_tree(self);
+        if let Some(next) = move_tree(&tree, item, dest) {
+            self.nav.folders = next;
+            self.sync_guild_folders(cx);
+        }
         cx.notify();
     }
 }
@@ -233,6 +238,89 @@ pub fn apply_folder(folders: &[crate::ui::home::data::GuildFolder], id: u64, nam
             f
         })
         .collect()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RailRef {
+    Guild(Id),
+    Folder(u64),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Dest {
+    Folder(u64),
+    NoFolder,
+    First,
+    Last,
+}
+
+pub fn locate(tree: &[GuildFolder], g: Id) -> Option<(usize, Option<usize>)> {
+    tree.iter().enumerate().find_map(|(i, f)| {
+        let at = f.guilds.iter().position(|x| *x == g)?;
+        Some((i, f.id.map(|_| at)))
+    })
+}
+
+pub fn placement(tree: &[GuildFolder], item: RailRef) -> Option<(bool, bool, bool)> {
+    match item {
+        RailRef::Folder(id) => {
+            let i = tree.iter().position(|f| f.id == Some(id))?;
+            Some((false, i == 0, i + 1 == tree.len()))
+        }
+        RailRef::Guild(g) => match locate(tree, g)? {
+            (i, Some(at)) => Some((true, at == 0, at + 1 == tree[i].guilds.len())),
+            (i, None) => Some((false, i == 0, i + 1 == tree.len())),
+        },
+    }
+}
+
+pub fn move_tree(tree: &[GuildFolder], item: RailRef, dest: Dest) -> Option<Vec<GuildFolder>> {
+    let mut t = tree.to_vec();
+    let lone = |g: Id| GuildFolder { id: None, name: None, color: None, guilds: vec![g] };
+    match item {
+        RailRef::Folder(id) => {
+            let i = t.iter().position(|f| f.id == Some(id))?;
+            let f = t.remove(i);
+            match dest {
+                Dest::First => t.insert(0, f),
+                Dest::Last => t.push(f),
+                _ => return None,
+            }
+        }
+        RailRef::Guild(g) => {
+            let (i, inside) = locate(&t, g)?;
+            match (dest, inside) {
+                (Dest::First | Dest::Last, Some(at)) => {
+                    let gs = &mut t[i].guilds;
+                    gs.remove(at);
+                    if dest == Dest::First { gs.insert(0, g) } else { gs.push(g) }
+                }
+                (Dest::First | Dest::Last, None) => {
+                    let f = t.remove(i);
+                    if dest == Dest::First { t.insert(0, f) } else { t.push(f) }
+                }
+                (Dest::NoFolder, Some(at)) => {
+                    t[i].guilds.remove(at);
+                    t.insert(i + 1, lone(g));
+                }
+                (Dest::NoFolder, None) => return None,
+                (Dest::Folder(fid), _) => {
+                    if t[i].id == Some(fid) {
+                        return None;
+                    }
+                    match inside {
+                        Some(at) => {
+                            t[i].guilds.remove(at);
+                        }
+                        None => t[i].guilds.clear(),
+                    }
+                    t.iter_mut().find(|f| f.id == Some(fid))?.guilds.push(g);
+                }
+            }
+        }
+    }
+    t.retain(|f| !f.guilds.is_empty());
+    Some(t)
 }
 
 fn icon_data_uri(bytes: &[u8]) -> Option<(String, Vec<u8>)> {
@@ -513,7 +601,6 @@ pub fn render_folder(f: &Folder, cx: &mut Context<PhoenixApp>) -> AnyElement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::home::data::GuildFolder;
 
     #[test]
     fn group_edit_only_sends_changes() {
@@ -555,6 +642,35 @@ mod tests {
         let exp = l[1].expires.unwrap();
         assert_eq!(countdown(Some(exp), exp - 3661), "01:01:01");
         assert_eq!(countdown(None, 0), "∞");
+    }
+
+    #[test]
+    fn rail_moves_rewrite_the_folder_tree() {
+        let tree = vec![
+            GuildFolder { id: None, name: None, color: None, guilds: vec![Id(1)] },
+            GuildFolder { id: Some(7), name: Some("F".into()), color: None, guilds: vec![Id(2), Id(3)] },
+            GuildFolder { id: None, name: None, color: None, guilds: vec![Id(4)] },
+        ];
+        let order = |t: &[GuildFolder]| t.iter().map(|f| (f.id, f.guilds.iter().map(|g| g.0).collect::<Vec<_>>())).collect::<Vec<_>>();
+        assert_eq!(placement(&tree, RailRef::Guild(Id(1))), Some((false, true, false)));
+        assert_eq!(placement(&tree, RailRef::Guild(Id(3))), Some((true, false, true)));
+        assert_eq!(placement(&tree, RailRef::Folder(7)), Some((false, false, false)));
+        let t = move_tree(&tree, RailRef::Guild(Id(4)), Dest::Folder(7)).unwrap();
+        assert_eq!(order(&t), vec![(None, vec![1]), (Some(7), vec![2, 3, 4])]);
+        let t = move_tree(&tree, RailRef::Guild(Id(2)), Dest::NoFolder).unwrap();
+        assert_eq!(order(&t), vec![(None, vec![1]), (Some(7), vec![3]), (None, vec![2]), (None, vec![4])]);
+        let t = move_tree(&tree, RailRef::Guild(Id(3)), Dest::First).unwrap();
+        assert_eq!(order(&t)[1], (Some(7), vec![3, 2]));
+        let t = move_tree(&tree, RailRef::Guild(Id(1)), Dest::Last).unwrap();
+        assert_eq!(order(&t).last().unwrap(), &(None, vec![1]));
+        let t = move_tree(&tree, RailRef::Folder(7), Dest::First).unwrap();
+        assert_eq!(order(&t)[0].0, Some(7));
+        assert!(move_tree(&tree, RailRef::Guild(Id(1)), Dest::NoFolder).is_none());
+        let t = move_tree(&tree, RailRef::Guild(Id(2)), Dest::Folder(7));
+        assert!(t.is_none());
+        let single = vec![GuildFolder { id: Some(9), name: None, color: None, guilds: vec![Id(5)] }, tree[0].clone()];
+        let t = move_tree(&single, RailRef::Guild(Id(5)), Dest::NoFolder).unwrap();
+        assert_eq!(order(&t), vec![(None, vec![5]), (None, vec![1])]);
     }
 
     #[test]

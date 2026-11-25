@@ -137,9 +137,9 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                 list.iter()
                     .map(|s| crate::model::Message {
                         id: id(s.id),
-                        channel: id(s.channel_id),
+                        channel: id(s.channel_id()),
                         timestamp: chrono::DateTime::parse_from_rfc3339(&s.scheduled_timestamp).map_or(0, |t| t.timestamp()),
-                        content: s.content.clone().into(),
+                        content: s.content().to_owned().into(),
                         ..Default::default()
                     })
                     .collect(),

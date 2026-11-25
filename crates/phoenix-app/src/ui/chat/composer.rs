@@ -225,7 +225,9 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
             s.focus(w, cx);
         });
     })));
-    items.push(MenuItem::disabled(crate::t!("attach.schedule"), Some(crate::icons::path("inbox/schedule"))));
+    if let Some(me) = e.upgrade() {
+        items.push(MenuItem::submenu_with_icon(crate::t!("attach.schedule"), "inbox/schedule", super::scheduled::menu_items(&me, ch)));
+    }
     items.push(MenuItem::action(crate::t!("attach.voice"), Some(crate::icons::path("mic")), act(|a, _, _, cx| super::voice_message::start(a, cx))));
     let dismiss: context_menu::Dismiss = std::rc::Rc::new(move |_, cx| {
         let _ = e.update(cx, |a, cx| {
@@ -308,7 +310,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     let placeholder_empty = app.composer.read(cx).value().is_empty();
     let (remaining, show_count) = char_count(app.backend.has_premium(), app.composer.read(cx).value().chars().count() as i64);
     let reply = reply_bar(app, cx);
-    let has_banner = reply.is_some();
+    let sched = if reply.is_none() { super::scheduled::bar(app, cx) } else { None };
+    let has_banner = reply.is_some() || sched.is_some();
     let tray = upload_tray(app, cx);
     let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
     let show_send_button = should_show_send_button(app.prefs.local.flag("send-btn", false), blocked);
@@ -342,6 +345,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                     .child(super::width_probe(&TEXT_AREA_W))
                     .children(crate::ui::autocomplete::render(app, cx))
                     .children(reply)
+                    .children(sched)
                     .children(tray)
                     .child(
                         div()
