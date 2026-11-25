@@ -78,6 +78,11 @@ pub enum AdminCall {
     SetOverwrite { channel: Snowflake, target: Snowflake, kind: u8, allow: u64, deny: u64 },
     DeleteOverwrite { channel: Snowflake, target: Snowflake },
     ChannelInvites { channel: Snowflake },
+    PatchChannel { channel: Snowflake, body: Value },
+    ChannelWebhooks { channel: Snowflake },
+    CreateWebhook { channel: Snowflake, name: String },
+    EditWebhook { webhook: Snowflake, body: Value },
+    DeleteWebhook { webhook: Snowflake },
     GuildInvites { guild: Snowflake },
     DeleteInvite { code: String },
     Integrations { guild: Snowflake },
@@ -194,6 +199,11 @@ pub fn build(call: &AdminCall) -> ApiReq {
             }
             req(Method::PATCH, format!("/channels/{channel}"), Some(b))
         }
+        C::PatchChannel { channel, body } => req(Method::PATCH, format!("/channels/{channel}"), Some(body.clone())),
+        C::ChannelWebhooks { channel } => req(Method::GET, format!("/channels/{channel}/webhooks"), None),
+        C::CreateWebhook { channel, name } => req(Method::POST, format!("/channels/{channel}/webhooks"), Some(json!({ "name": name }))),
+        C::EditWebhook { webhook, body } => req(Method::PATCH, format!("/webhooks/{webhook}"), Some(body.clone())),
+        C::DeleteWebhook { webhook } => req(Method::DELETE, format!("/webhooks/{webhook}"), None),
         C::GuildInvites { guild } => req(Method::GET, format!("/guilds/{guild}/invites"), None),
         C::DeleteInvite { code } => req(Method::DELETE, format!("/invites/{code}"), None),
         C::Integrations { guild } => req(Method::GET, format!("/guilds/{guild}/integrations"), None),
@@ -415,6 +425,11 @@ mod tests {
         assert_eq!((r.method, r.path.as_str()), (Method::PUT, "/channels/2/permissions/3"));
         assert_eq!(r.body.unwrap(), json!({"type": 0, "allow": "1024", "deny": "2048"}));
         assert_eq!(build(&AdminCall::DeleteOverwrite { channel: C, target: Snowflake(3) }).method, Method::DELETE);
+        let w = build(&AdminCall::CreateWebhook { channel: C, name: "Phoenix test".into() });
+        assert_eq!((w.method, w.path.as_str(), w.body), (Method::POST, "/channels/2/webhooks", Some(json!({ "name": "Phoenix test" }))));
+        assert_eq!(build(&AdminCall::DeleteWebhook { webhook: Snowflake(9) }).path, "/webhooks/9");
+        let p = build(&AdminCall::PatchChannel { channel: C, body: json!({ "rate_limit_per_user": 5 }) });
+        assert_eq!((p.method, p.body), (Method::PATCH, Some(json!({ "rate_limit_per_user": 5 }))));
     }
 
     #[test]

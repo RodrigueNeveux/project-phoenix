@@ -1,3 +1,6 @@
+pub mod channel_overview;
+pub mod channel_perms;
+pub mod channel_perms_data;
 pub mod channel_settings;
 pub mod create_channel;
 pub mod forward;
@@ -11,7 +14,9 @@ pub mod privacy;
 pub mod reactions;
 pub mod report;
 pub mod server_settings;
+pub mod settings_form;
 pub mod settings_layout;
+pub mod webhooks;
 
 use std::rc::Rc;
 
@@ -99,6 +104,11 @@ pub enum Modal {
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    with_modal(|m| {
+        if let Some(Modal::ChannelSettings(s)) = m {
+            channel_settings::prepare_area(s, window, cx);
+        }
+    });
     with_modal(|m| {
         if let Some(Modal::Form(f)) = m {
             for fl in f.fields.iter_mut().filter(|fl| fl.rows > 1 && fl.area.is_none()) {

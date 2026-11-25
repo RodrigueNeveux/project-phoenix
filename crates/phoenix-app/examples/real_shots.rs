@@ -1115,8 +1115,41 @@ fn main() -> anyhow::Result<()> {
                     if let Some(g) = app.selected_guild {
                         match kind.as_str() {
                             "chansettings" => {
-                                if let Some(c) = app.selected_channel {
-                                    app.open_channel_settings(c, cx)
+                                let target = std::env::var("PHX_CS_CHANNEL").ok().and_then(|v| v.parse::<u64>().ok()).map(phoenix_app::model::Id).or(app.selected_channel);
+                                if let Some(c) = target {
+                                    app.open_channel_settings(c, cx);
+                                    use phoenix_app::ui::modals::channel_settings::Section as S;
+                                    let sec = match arg.as_str() {
+                                        "perms" => Some(S::Permissions),
+                                        "invites" => Some(S::Invites),
+                                        "integrations" => Some(S::Integrations),
+                                        "webhooks" => Some(S::Webhooks),
+                                        _ => None,
+                                    };
+                                    if let Some(sec) = sec {
+                                        phoenix_app::ui::modals::channel_settings::pick_section(app, sec, cx);
+                                    }
+                                    if std::env::var("PHX_CS_ADD").is_ok() {
+                                        phoenix_app::actions::with_modal(|m| {
+                                            if let Some(phoenix_app::ui::modals::Modal::ChannelSettings(s)) = m {
+                                                s.add_members = Some(phoenix_app::ui::modals::channel_perms::AddMembers { search: None, picked: Vec::new() });
+                                            }
+                                        });
+                                    }
+                                    if std::env::var("PHX_CS_DELETE").is_ok() {
+                                        phoenix_app::actions::with_modal(|m| {
+                                            if let Some(phoenix_app::ui::modals::Modal::ChannelSettings(s)) = m {
+                                                s.confirm_delete = true;
+                                            }
+                                        });
+                                    }
+                                    if let Ok(w) = std::env::var("PHX_CS_HOOK") {
+                                        phoenix_app::actions::with_modal(|m| {
+                                            if let Some(phoenix_app::ui::modals::Modal::ChannelSettings(s)) = m {
+                                                s.open_webhook = Some(w.clone());
+                                            }
+                                        });
+                                    }
                                 }
                             }
                             "createchannel" => app.open_create_channel(g, None, phoenix_app::model::ChannelKind::Text, cx),

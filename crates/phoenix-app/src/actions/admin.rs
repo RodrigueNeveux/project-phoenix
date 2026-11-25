@@ -63,6 +63,12 @@ pub fn mock_reply(c: &AdminCall) -> Value {
               "inviter": user(2, "ferris"), "channel": { "id": "10", "name": "general" } }
         ]),
         C::Integrations { .. } => json!([{ "id": "5", "name": "Phoenix Bot", "type": "discord", "enabled": true, "account": { "name": "Phoenix Bot" } }]),
+        C::ChannelWebhooks { channel } => json!([
+            { "id": "30", "type": 1, "name": "Captain Hook", "channel_id": channel, "avatar": null, "token": "t", "user": user(2, "ferris") },
+            { "id": "31", "type": 2, "name": "Rust News #releases", "channel_id": channel, "avatar": null,
+              "source_guild": { "id": "40", "name": "Rust", "icon": null }, "source_channel": { "id": "41", "name": "releases" }, "user": user(2, "ferris") }
+        ]),
+        C::CreateWebhook { channel, name } => json!({ "id": "32", "type": 1, "name": name, "channel_id": channel, "avatar": null, "token": "t", "user": user(2, "ferris") }),
         C::Roles { .. } => json!([]),
         C::Emojis { .. } => json!([{ "id": "11", "name": "ferris", "animated": false, "user": user(2, "ferris") }]),
         C::Stickers { .. } => json!([{ "id": "12", "name": "wave", "format_type": 1, "tags": "wave", "user": user(2, "ferris") }]),

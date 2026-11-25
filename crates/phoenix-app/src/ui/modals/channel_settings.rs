@@ -1,20 +1,20 @@
 use std::rc::Rc;
 
-use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
-use gpui_component::input::InputState;
-use phoenix_api::rest::guild_manage::{AdminCall, ChannelEdit};
-use serde_json::Value;
+use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*};
+use gpui_component::input::{InputState, TextareaState};
+use phoenix_api::rest::guild_manage::AdminCall;
+use serde_json::{Value, json};
 
 use super::{
     Modal, input_box,
-    settings_layout::{Act, Pick, SideItem, divider, eyebrow, link_btn, overlay, unsaved_bar},
+    settings_layout::{Act, Pick, SideItem, overlay, unsaved_bar},
 };
 use crate::{
     actions::{admin::sf, with_modal},
     app::PhoenixApp,
     model::{Channel, ChannelKind, Id},
     theme::{c, generated::idx, tok, z},
-    ui::controls::{BtnKind, button, marker_slider, select_field, switch},
+    ui::controls::switch,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,46 +23,47 @@ pub enum Section {
     Permissions,
     Invites,
     Integrations,
+    Webhooks,
+    Followed,
 }
 
-const SECTIONS: [(Section, &str); 4] =
-    [(Section::Overview, "admin.cs_overview"), (Section::Permissions, "admin.cs_permissions"), (Section::Invites, "admin.cs_invites"), (Section::Integrations, "admin.cs_integrations")];
-
 pub const SLOWMODE: [u32; 14] = [0, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 21_600];
+pub const SPOILER_CHANNEL: u64 = 1 << 21;
+pub const REQUIRE_TAG: u64 = 1 << 4;
+pub const AUTO_ARCHIVE: [(u32, &str); 4] = [(60, "thread.aa_1h"), (1440, "thread.aa_24h"), (4320, "thread.aa_3d"), (10_080, "thread.aa_1w")];
+pub const REGIONS: [(&str, &str); 12] = [
+    ("brazil", "Brazil"),
+    ("hongkong", "Hong Kong"),
+    ("india", "India"),
+    ("japan", "Japan"),
+    ("rotterdam", "Rotterdam"),
+    ("singapore", "Singapore"),
+    ("southafrica", "South Africa"),
+    ("sydney", "Sydney"),
+    ("us-central", "US Central"),
+    ("us-east", "US East"),
+    ("us-south", "US South"),
+    ("us-west", "US West"),
+];
 
-pub fn slowmode_label(s: u32) -> String {
+pub fn slowmode_label(s: u32) -> SharedString {
     match s {
-        0 => crate::t!("admin.off").to_string(),
+        0 => crate::t!("cs.off"),
+        s if s < 60 => crate::t!("cs.n_seconds", n = s),
+        60 => crate::t!("cs.one_minute"),
+        s if s < 3600 => crate::t!("cs.n_minutes", n = s / 60),
+        3600 => crate::t!("cs.one_hour"),
+        s => crate::t!("cs.n_hours", n = s / 3600),
+    }
+}
+
+pub fn short_duration(s: u32) -> String {
+    match s {
         s if s < 60 => format!("{s}s"),
         s if s < 3600 => format!("{}m", s / 60),
         s => format!("{}h", s / 3600),
     }
 }
-
-pub const PERMS: [(u64, &str); 22] = [
-    (1 << 10, "perm.view_channel"),
-    (1 << 4, "perm.manage_channel"),
-    (1 << 28, "perm.manage_permissions"),
-    (1 << 29, "perm.manage_webhooks"),
-    (1, "perm.create_invite"),
-    (1 << 11, "perm.send_messages"),
-    (1 << 38, "perm.send_in_threads"),
-    (1 << 35, "perm.create_public_threads"),
-    (1 << 36, "perm.create_private_threads"),
-    (1 << 14, "perm.embed_links"),
-    (1 << 15, "perm.attach_files"),
-    (1 << 6, "perm.add_reactions"),
-    (1 << 18, "perm.external_emoji"),
-    (1 << 17, "perm.mention_everyone"),
-    (1 << 13, "perm.manage_messages"),
-    (1 << 34, "perm.manage_threads"),
-    (1 << 16, "perm.read_history"),
-    (1 << 20, "perm.connect"),
-    (1 << 21, "perm.speak"),
-    (1 << 9, "perm.video"),
-    (1 << 22, "perm.mute_members"),
-    (1 << 24, "perm.move_members"),
-];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Overwrite {
@@ -92,41 +93,124 @@ impl Overwrite {
             _ => {}
         }
     }
+
+    pub fn json(&self) -> Value {
+        json!({ "id": self.id.0.to_string(), "type": self.kind, "allow": self.allow.to_string(), "deny": self.deny.to_string() })
+    }
+}
+
+fn num(x: Option<&Value>) -> u64 {
+    x.and_then(|x| x.as_str().and_then(|s| s.parse().ok()).or_else(|| x.as_u64())).unwrap_or(0)
 }
 
 pub fn parse_overwrites(v: &Value) -> Vec<Overwrite> {
-    let num = |x: Option<&Value>| x.and_then(|x| x.as_str().and_then(|s| s.parse().ok()).or_else(|| x.as_u64())).unwrap_or(0);
     v.get("permission_overwrites")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|o| {
-            Some(Overwrite { id: Id(num(o.get("id")).max(1)), kind: o.get("type")?.as_u64()? as u8, allow: num(o.get("allow")), deny: num(o.get("deny")) })
-        })
+        .filter_map(|o| Some(Overwrite { id: Id(num(o.get("id")).max(1)), kind: o.get("type")?.as_u64()? as u8, allow: num(o.get("allow")), deny: num(o.get("deny")) }))
         .collect()
 }
 
-pub struct State {
-    pub channel: Id,
-    pub guild: Option<Id>,
-    pub kind: ChannelKind,
-    pub section: Section,
-    pub name0: String,
-    pub topic0: String,
-    pub slow0: u32,
-    pub nsfw0: bool,
+pub fn same_overwrites(a: &[Overwrite], b: &[Overwrite]) -> bool {
+    let norm = |l: &[Overwrite]| {
+        let mut v: Vec<(u64, u8, u64, u64)> = l.iter().filter(|o| o.allow != 0 || o.deny != 0).map(|o| (o.id.0, o.kind, o.allow, o.deny)).collect();
+        v.sort();
+        v
+    };
+    norm(a) == norm(b)
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Values {
+    pub kind: u8,
     pub slow: u32,
+    pub thread_slow: u32,
     pub nsfw: bool,
-    pub name: Option<Entity<InputState>>,
-    pub topic: Option<Entity<InputState>>,
-    pub overwrites0: Vec<Overwrite>,
-    pub overwrites: Vec<Overwrite>,
-    pub selected: usize,
-    pub loaded: bool,
-    pub invites: Option<Vec<Value>>,
-    pub integrations: Option<Vec<Value>>,
-    pub thread: Option<ThreadFields>,
-    pub open_select: Option<u8>,
+    pub flags: u64,
+    pub bitrate: u32,
+    pub user_limit: u32,
+    pub region: Option<String>,
+    pub video: u8,
+    pub archive: u32,
+    pub layout: u8,
+    pub sort: Option<u8>,
+    pub tag_setting: Option<String>,
+}
+
+impl Values {
+    pub fn from_json(v: &Value) -> Self {
+        let u = |k: &str| v.get(k).and_then(Value::as_u64);
+        Self {
+            kind: u("type").unwrap_or(0) as u8,
+            slow: u("rate_limit_per_user").unwrap_or(0) as u32,
+            thread_slow: u("default_thread_rate_limit_per_user").unwrap_or(0) as u32,
+            nsfw: v.get("nsfw").and_then(Value::as_bool).unwrap_or(false),
+            flags: u("flags").unwrap_or(0),
+            bitrate: u("bitrate").unwrap_or(64_000) as u32,
+            user_limit: u("user_limit").unwrap_or(0) as u32,
+            region: v.get("rtc_region").and_then(Value::as_str).map(str::to_owned),
+            video: u("video_quality_mode").unwrap_or(1) as u8,
+            archive: u("default_auto_archive_duration").unwrap_or(4320) as u32,
+            layout: u("default_forum_layout").unwrap_or(0) as u8,
+            sort: u("default_sort_order").map(|x| x as u8),
+            tag_setting: v.get("default_tag_setting").and_then(Value::as_str).map(str::to_owned),
+        }
+    }
+
+    pub fn visibility(&self) -> usize {
+        if self.nsfw {
+            2
+        } else if self.flags & SPOILER_CHANNEL != 0 {
+            1
+        } else {
+            0
+        }
+    }
+
+    pub fn set_visibility(&mut self, n: usize) {
+        self.nsfw = n == 2;
+        if n == 1 {
+            self.flags |= SPOILER_CHANNEL;
+        } else {
+            self.flags &= !SPOILER_CHANNEL;
+        }
+    }
+}
+
+pub fn patch_body(name: &str, topic: &str, v0: &Values, v: &Values) -> Value {
+    let mut b = json!({
+        "name": name.trim(),
+        "type": v.kind,
+        "topic": topic,
+        "bitrate": v.bitrate,
+        "user_limit": v.user_limit,
+        "nsfw": v.nsfw,
+        "flags": v.flags,
+        "rate_limit_per_user": v.slow,
+    });
+    if v.thread_slow != v0.thread_slow {
+        b["default_thread_rate_limit_per_user"] = json!(v.thread_slow);
+    }
+    if v.archive != v0.archive {
+        b["default_auto_archive_duration"] = json!(v.archive);
+    }
+    if v.region != v0.region {
+        b["rtc_region"] = json!(v.region);
+    }
+    if v.video != v0.video {
+        b["video_quality_mode"] = json!(v.video);
+    }
+    if v.layout != v0.layout {
+        b["default_forum_layout"] = json!(v.layout);
+    }
+    if v.sort != v0.sort {
+        b["default_sort_order"] = json!(v.sort);
+    }
+    if v.tag_setting != v0.tag_setting {
+        b["default_tag_setting"] = json!(v.tag_setting);
+    }
+    b
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -136,10 +220,6 @@ pub struct ThreadFields {
     pub flags0: u64,
     pub flags: u64,
 }
-
-pub const SPOILER_CHANNEL: u64 = 1 << 21;
-
-pub const AUTO_ARCHIVE: [(u32, &str); 4] = [(60, "thread.aa_1h"), (1440, "thread.aa_24h"), (4320, "thread.aa_3d"), (10_080, "thread.aa_1w")];
 
 pub fn thread_edit(name0: &str, name: &str, slow0: u32, slow: u32, t: &ThreadFields) -> phoenix_api::rest::guild_manage::ThreadEdit {
     let name = name.trim();
@@ -152,30 +232,84 @@ pub fn thread_edit(name0: &str, name: &str, slow0: u32, slow: u32, t: &ThreadFie
     }
 }
 
+pub struct State {
+    pub channel: Id,
+    pub guild: Option<Id>,
+    pub parent: Option<Id>,
+    pub kind: ChannelKind,
+    pub section: Section,
+    pub name0: String,
+    pub topic0: String,
+    pub v0: Values,
+    pub v: Values,
+    pub tags: Vec<Value>,
+    pub default_reaction: Option<Value>,
+    pub name: Option<Entity<InputState>>,
+    pub topic: Option<Entity<TextareaState>>,
+    pub perm_search: Option<Entity<InputState>>,
+    pub overwrites0: Vec<Overwrite>,
+    pub overwrites: Vec<Overwrite>,
+    pub parent_overwrites: Option<Vec<Overwrite>>,
+    pub roles: Option<Vec<Value>>,
+    pub selected: Option<Id>,
+    pub loaded: bool,
+    pub invites: Option<Vec<Value>>,
+    pub webhooks: Option<Vec<Value>>,
+    pub open_webhook: Option<String>,
+    pub webhook_name: Option<Entity<InputState>>,
+    pub thread: Option<ThreadFields>,
+    pub slow0: u32,
+    pub slow: u32,
+    pub open_select: Option<u8>,
+    pub advanced_open: bool,
+    pub add_members: Option<super::channel_perms::AddMembers>,
+    pub confirm_delete: bool,
+}
+
 impl State {
     pub fn new(ch: &Channel) -> Self {
         let topic = ch.topic.as_ref().map(|t| t.to_string()).unwrap_or_default();
+        let kind = match ch.kind {
+            ChannelKind::Text => 0,
+            ChannelKind::Voice => 2,
+            ChannelKind::Category => 4,
+            ChannelKind::Announcement => 5,
+            ChannelKind::Stage => 13,
+            ChannelKind::Forum => 15,
+        };
+        let v = Values { kind, bitrate: 64_000, video: 1, archive: 4320, ..Default::default() };
         Self {
             channel: ch.id,
             guild: ch.guild,
+            parent: ch.parent,
             kind: ch.kind,
             section: Section::Overview,
             name0: ch.name.to_string(),
             topic0: topic,
-            slow0: 0,
-            nsfw0: false,
-            slow: 0,
-            nsfw: false,
+            v0: v.clone(),
+            v,
+            tags: Vec::new(),
+            default_reaction: None,
             name: None,
             topic: None,
+            perm_search: None,
             overwrites0: Vec::new(),
             overwrites: Vec::new(),
-            selected: 0,
+            parent_overwrites: None,
+            roles: None,
+            selected: None,
             loaded: false,
             invites: None,
-            integrations: None,
+            webhooks: None,
+            open_webhook: None,
+            webhook_name: None,
             thread: None,
+            slow0: 0,
+            slow: 0,
             open_select: None,
+            advanced_open: true,
+            add_members: None,
+            confirm_delete: false,
         }
     }
 
@@ -188,6 +322,10 @@ impl State {
         s
     }
 
+    pub fn is_category(&self) -> bool {
+        self.kind == ChannelKind::Category
+    }
+
     fn thread_dirty(&self, cx: &gpui::App) -> Option<phoenix_api::rest::guild_manage::ThreadEdit> {
         let t = self.thread.as_ref()?;
         let name = self.name.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| self.name0.clone());
@@ -198,38 +336,57 @@ impl State {
     pub fn load_channel(&mut self, v: &Value) {
         self.overwrites0 = parse_overwrites(v);
         self.overwrites = self.overwrites0.clone();
-        self.slow0 = v.get("rate_limit_per_user").and_then(Value::as_u64).unwrap_or(0) as u32;
-        self.nsfw0 = v.get("nsfw").and_then(Value::as_bool).unwrap_or(false);
-        self.slow = self.slow0;
-        self.nsfw = self.nsfw0;
-        if let Some(g) = self.guild {
-            if !self.overwrites.iter().any(|o| o.id == g) {
-                self.overwrites.insert(0, Overwrite { id: g, kind: 0, allow: 0, deny: 0 });
-                self.overwrites0 = self.overwrites.clone();
-            }
-            self.overwrites.sort_by_key(|o| o.id != g);
-            self.overwrites0.sort_by_key(|o| o.id != g);
+        self.v0 = Values::from_json(v);
+        self.v = self.v0.clone();
+        if let Some(t) = v.get("topic").and_then(Value::as_str) {
+            self.topic0 = t.to_owned();
         }
+        self.tags = v.get("available_tags").and_then(Value::as_array).cloned().unwrap_or_default();
+        self.default_reaction = v.get("default_reaction_emoji").filter(|x| !x.is_null()).cloned();
         self.loaded = true;
     }
 
-    fn edit(&self, cx: &gpui::App) -> ChannelEdit {
-        let name = self.name.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| self.name0.clone());
-        let topic = self.topic.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| self.topic0.clone());
-        ChannelEdit {
-            name: (name.trim() != self.name0 && !name.trim().is_empty()).then(|| crate::actions::admin::channel_name(self.kind, &name)),
-            topic: (topic != self.topic0).then_some(topic),
-            slowmode: (self.slow != self.slow0).then_some(self.slow),
-            nsfw: (self.nsfw != self.nsfw0).then_some(self.nsfw),
-        }
+    pub fn name_value(&self, cx: &gpui::App) -> String {
+        self.name.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| self.name0.clone())
     }
 
-    fn overwrites_dirty(&self) -> bool {
-        self.overwrites != self.overwrites0
+    pub fn topic_value(&self, cx: &gpui::App) -> String {
+        self.topic.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| self.topic0.clone())
+    }
+
+    pub fn overview_dirty(&self, cx: &gpui::App) -> bool {
+        let name = self.name_value(cx);
+        (name.trim() != self.name0 && !name.trim().is_empty()) || self.topic_value(cx) != self.topic0 || self.v != self.v0
+    }
+
+    pub fn overwrites_dirty(&self) -> bool {
+        !same_overwrites(&self.overwrites, &self.overwrites0)
+    }
+
+    pub fn everyone(&self) -> Option<&Overwrite> {
+        self.guild.and_then(|g| self.overwrites.iter().find(|o| o.id == g))
+    }
+
+    pub fn is_private(&self) -> bool {
+        self.everyone().is_some_and(|o| o.deny & phoenix_api::rest::guild_manage::VIEW_CHANNEL != 0)
+    }
+
+    pub fn overwrite_mut(&mut self, id: Id, kind: u8) -> &mut Overwrite {
+        if let Some(i) = self.overwrites.iter().position(|o| o.id == id) {
+            return &mut self.overwrites[i];
+        }
+        self.overwrites.push(Overwrite { id, kind, allow: 0, deny: 0 });
+        self.overwrites.last_mut().expect("just pushed")
+    }
+
+    pub fn synced(&self) -> Option<bool> {
+        self.parent?;
+        let p = self.parent_overwrites.as_ref()?;
+        Some(same_overwrites(&self.overwrites0, p))
     }
 }
 
-fn with_state(f: impl FnOnce(&mut State)) {
+pub(super) fn with_state(f: impl FnOnce(&mut State)) {
     with_modal(|m| {
         if let Some(Modal::ChannelSettings(s)) = m {
             f(s)
@@ -237,379 +394,146 @@ fn with_state(f: impl FnOnce(&mut State)) {
     });
 }
 
+pub fn prepare_area(s: &mut State, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    if s.topic.is_none() && s.thread.is_none() && matches!(s.kind, ChannelKind::Text | ChannelKind::Announcement | ChannelKind::Forum) {
+        let ph = if s.kind == ChannelKind::Forum { crate::t!("cs.post_guidelines_ph") } else { crate::t!("cs.topic_ph") };
+        let init = s.topic0.clone();
+        s.topic = Some(cx.new(|cx| TextareaState::new(window, cx).auto_grow(8, 8).placeholder(ph).default_value(init)));
+    }
+}
+
 pub fn prepare(s: &mut State, mk: &mut dyn FnMut(SharedString, &str, bool) -> Entity<InputState>) {
     if s.name.is_none() {
         s.name = Some(mk(SharedString::default(), &s.name0.clone(), false));
     }
-    if s.topic.is_none() && s.kind != ChannelKind::Category && s.thread.is_none() {
-        s.topic = Some(mk(crate::t!("admin.topic_ph"), &s.topic0.clone(), false));
+    if s.perm_search.is_none() && s.thread.is_none() {
+        s.perm_search = Some(mk(crate::t!("cs.search_perms"), "", false));
+    }
+    if s.webhook_name.is_none()
+        && let Some(id) = s.open_webhook.as_deref().and_then(|x| x.parse::<u64>().ok())
+        && let Some(name) = s.webhooks.iter().flatten().find(|w| super::webhooks::webhook_id(w) == Some(id)).and_then(|w| w.get("name")?.as_str().map(str::to_owned))
+    {
+        s.webhook_name = Some(mk(SharedString::default(), &name, false));
+    }
+    if let Some(a) = s.add_members.as_mut()
+        && a.search.is_none()
+    {
+        a.search = Some(mk(crate::t!("cs.add_members_ph"), "", true));
     }
 }
 
-fn pick_section(a: &mut PhoenixApp, sec: Section, cx: &mut Context<PhoenixApp>) {
-    let mut need = None;
+pub fn pick_section(a: &mut PhoenixApp, sec: Section, cx: &mut Context<PhoenixApp>) {
+    let mut need = Vec::new();
     with_state(|s| {
         s.section = sec;
-        need = match sec {
-            Section::Invites if s.invites.is_none() => Some(AdminCall::ChannelInvites { channel: sf(s.channel) }),
-            Section::Integrations if s.integrations.is_none() => s.guild.map(|g| AdminCall::Integrations { guild: sf(g) }),
-            _ => None,
-        };
+        s.open_select = None;
+        match sec {
+            Section::Invites if s.invites.is_none() => need.push(AdminCall::ChannelInvites { channel: sf(s.channel) }),
+            Section::Integrations | Section::Webhooks | Section::Followed if s.webhooks.is_none() => need.push(AdminCall::ChannelWebhooks { channel: sf(s.channel) }),
+            Section::Permissions => {
+                if s.roles.is_none()
+                    && let Some(g) = s.guild
+                {
+                    need.push(AdminCall::Roles { guild: sf(g) });
+                }
+                if s.parent_overwrites.is_none()
+                    && let Some(p) = s.parent
+                {
+                    need.push(AdminCall::Channel { channel: sf(p) });
+                }
+            }
+            _ => {}
+        }
     });
-    if let Some(call) = need {
+    for call in need {
+        let kind = match &call {
+            AdminCall::ChannelInvites { .. } => 0,
+            AdminCall::ChannelWebhooks { .. } => 1,
+            AdminCall::Roles { .. } => 2,
+            _ => 3,
+        };
         a.admin(call, cx, move |a, r, cx| {
-            let list = match r {
-                Ok(v) => v.as_array().cloned().unwrap_or_default(),
+            let v = match r {
+                Ok(v) => v,
                 Err(e) => {
                     a.parity_toast(e, cx);
-                    Vec::new()
+                    Value::Null
                 }
             };
-            with_state(|s| match sec {
-                Section::Invites => s.invites = Some(list),
-                _ => s.integrations = Some(list),
+            let list = v.as_array().cloned().unwrap_or_default();
+            with_state(|s| match kind {
+                0 => s.invites = Some(list),
+                1 => s.webhooks = Some(list),
+                2 => s.roles = Some(list),
+                _ => s.parent_overwrites = Some(parse_overwrites(&v)),
             });
             cx.notify();
         });
     }
 }
 
-fn text(t: impl Into<SharedString>, size: f32, color: usize) -> gpui::Div {
-    div().text_size(z(size)).line_height(z(size + 4.)).text_color(c(tok(color))).child(t.into())
-}
-
-fn overview(s: &State, cx: &mut Context<PhoenixApp>) -> gpui::Div {
-    let mut d = div().flex().flex_col();
-    if let Some(i) = &s.name {
-        d = d.child(eyebrow(crate::t!(if s.kind == ChannelKind::Category { "admin.category_name" } else { "admin.channel_name" }))).child(input_box(i));
+pub fn channel_icon(kind: ChannelKind, private: bool) -> &'static str {
+    match (kind, private) {
+        (ChannelKind::Voice, false) => "speaker",
+        (ChannelKind::Voice, true) => "voice-lock",
+        (ChannelKind::Announcement, false) => "megaphone",
+        (ChannelKind::Announcement, true) => "announcement-lock",
+        (ChannelKind::Forum, false) => "forum",
+        (ChannelKind::Forum, true) => "forum-lock",
+        (ChannelKind::Stage, false) => "stage",
+        (ChannelKind::Stage, true) => "stage-lock",
+        (ChannelKind::Category, _) => "folder",
+        (ChannelKind::Text, false) => "hash",
+        (ChannelKind::Text, true) => "text-lock",
     }
-    if let Some(i) = &s.topic {
-        d = d.child(divider()).child(eyebrow(crate::t!("admin.channel_topic"))).child(input_box(i));
-    }
-    if matches!(s.kind, ChannelKind::Text | ChannelKind::Announcement | ChannelKind::Forum | ChannelKind::Voice) {
-        let cur = SLOWMODE.iter().position(|x| *x == s.slow).unwrap_or(0);
-        let e = cx.entity();
-        let on_set: crate::ui::controls::OnSet = Rc::new(move |n, _, cx| {
-            with_state(|s| s.slow = SLOWMODE[n.min(SLOWMODE.len() - 1)]);
-            e.update(cx, |_, cx| cx.notify());
-        });
-        d = d
-            .child(divider())
-            .child(eyebrow(crate::t!("admin.slowmode")))
-            .child(marker_slider("cs-slow", SLOWMODE.iter().map(|x| slowmode_label(*x).into()).collect(), cur, Some(0), on_set))
-            .child(text(crate::t!("admin.slowmode_desc"), 14., idx::TEXT_SUBTLE).pt(z(8.)));
-    }
-    if s.kind != ChannelKind::Category {
-        d = d.child(divider()).child(
-            div()
-                .id("cs-nsfw")
-                .flex()
-                .items_center()
-                .gap(z(16.))
-                .cursor_pointer()
-                .on_click(cx.listener(|_, _, _, cx| {
-                    with_state(|s| s.nsfw = !s.nsfw);
-                    cx.notify();
-                }))
-                .child(
-                    div()
-                        .flex_1()
-                        .flex()
-                        .flex_col()
-                        .gap(z(4.))
-                        .child(text(crate::t!("admin.nsfw"), 16., idx::TEXT_STRONG).font_weight(FontWeight::MEDIUM))
-                        .child(text(crate::t!("admin.nsfw_desc"), 14., idx::TEXT_SUBTLE)),
-                )
-                .group(crate::ui::controls::SWITCH_ROW)
-                .child(switch("nsfw-switch", s.nsfw)),
-        );
-    }
-    d
-}
-
-fn target_name(app: &PhoenixApp, guild: Option<Id>, o: &Overwrite) -> SharedString {
-    if Some(o.id) == guild {
-        return "@everyone".into();
-    }
-    if o.kind == 0 {
-        guild.and_then(|g| app.roles.get(&g)).and_then(|rs| rs.iter().find(|r| r.id == o.id)).map(|r| r.name.clone()).unwrap_or_else(|| o.id.0.to_string().into())
-    } else {
-        app.users.get(&o.id).map(|u| u.name.clone()).unwrap_or_else(|| o.id.0.to_string().into())
-    }
-}
-
-fn tri(id: (&'static str, usize), state: i8, cx: &mut Context<PhoenixApp>, bit: u64) -> gpui::Div {
-    let cell = |n: i8, glyph: &'static str, active_bg: usize| {
-        let on = state == n;
-        div()
-            .id((id.0, id.1 * 3 + (n + 1) as usize))
-            .w(z(32.))
-            .h(z(24.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .cursor_pointer()
-            .text_size(z(14.))
-            .font_weight(FontWeight::BOLD)
-            .text_color(c(tok(if on { idx::WHITE } else { idx::INTERACTIVE_TEXT_DEFAULT })))
-            .when(on, |d| d.bg(c(tok(active_bg))))
-            .hover(|d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
-            .on_click(cx.listener(move |_, _, _, cx| {
-                with_state(|s| {
-                    if let Some(o) = s.overwrites.get_mut(s.selected) {
-                        o.set(bit, n)
-                    }
-                });
-                cx.notify();
-            }))
-            .child(glyph)
-    };
-    div()
-        .flex()
-        .rounded(z(4.))
-        .overflow_hidden()
-        .border_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .child(cell(-1, "✕", idx::STATUS_DANGER))
-        .child(cell(0, "/", idx::BACKGROUND_MOD_STRONG))
-        .child(cell(1, "✓", idx::STATUS_POSITIVE))
-}
-
-fn permissions(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> gpui::Div {
-    if !s.loaded {
-        return div().child(text(crate::t!("common.loading"), 14., idx::TEXT_SUBTLE));
-    }
-    let mut list = div().w(z(200.)).flex_none().flex().flex_col().gap(z(2.)).child(eyebrow(crate::t!("admin.roles_members")));
-    for (n, o) in s.overwrites.iter().enumerate() {
-        let on = n == s.selected;
-        list = list.child(
-            div()
-                .id(("cs-ow", n))
-                .px(z(8.))
-                .py(z(6.))
-                .rounded(z(4.))
-                .cursor_pointer()
-                .text_size(z(14.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(tok(if on { idx::TEXT_STRONG } else { idx::TEXT_SUBTLE })))
-                .when(on, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
-                .hover(|d| d.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    with_state(|s| s.selected = n);
-                    cx.notify();
-                }))
-                .truncate()
-                .child(target_name(app, s.guild, o)),
-        );
-    }
-    let present: Vec<Id> = s.overwrites.iter().map(|o| o.id).collect();
-    let mut roles: Vec<&crate::model::Role> = s.guild.and_then(|g| app.roles.get(&g)).into_iter().flatten().filter(|r| !present.contains(&r.id)).collect();
-    roles.sort_by_key(|r| -r.position);
-    if !roles.is_empty() {
-        list = list.child(div().pt(z(12.)).child(eyebrow(crate::t!("admin.add_role"))));
-        for (n, r) in roles.into_iter().take(15).enumerate() {
-            let rid = r.id;
-            list = list.child(
-                link_btn(("cs-add", n), format!("+ {}", r.name).into(), false).on_click(cx.listener(move |_, _, _, cx| {
-                    with_state(|s| {
-                        s.overwrites.push(Overwrite { id: rid, kind: 0, allow: 0, deny: 0 });
-                        s.selected = s.overwrites.len() - 1;
-                    });
-                    cx.notify();
-                })),
-            );
-        }
-    }
-    let mut perms = div().flex_1().min_w_0().flex().flex_col();
-    if let Some(o) = s.overwrites.get(s.selected) {
-        perms = perms.child(eyebrow(crate::t!("admin.perms_for", name = target_name(app, s.guild, o).to_string())));
-        let voice = matches!(s.kind, ChannelKind::Voice | ChannelKind::Stage);
-        for (n, (bit, key)) in PERMS.iter().enumerate() {
-            let voice_bit = [1 << 20, 1 << 21, 1 << 9, 1 << 22, 1 << 24].contains(bit);
-            if voice_bit && !voice && s.kind != ChannelKind::Category {
-                continue;
-            }
-            perms = perms.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .py(z(10.))
-                    .border_b_1()
-                    .border_color(c(tok(idx::BORDER_SUBTLE)))
-                    .child(div().flex_1().child(text(crate::t!(key), 16., idx::TEXT_STRONG).font_weight(FontWeight::MEDIUM)))
-                    .child(tri(("cs-tri", n), o.state(*bit), cx, *bit)),
-            );
-        }
-        if Some(o.id) != s.guild {
-            let (target, ch, existed) = (o.id, s.channel, s.overwrites0.iter().any(|x| x.id == o.id));
-            perms = perms.child(div().pt(z(16.)).child(button("cs-ow-remove", crate::t!("admin.remove_overwrite"), BtnKind::Critical).on_click(cx.listener(
-                move |a, _, _, cx| {
-                    with_state(|s| {
-                        s.overwrites.retain(|x| x.id != target);
-                        s.overwrites0.retain(|x| x.id != target);
-                        s.selected = 0;
-                    });
-                    if existed {
-                        a.admin_toast(AdminCall::DeleteOverwrite { channel: sf(ch), target: sf(target) }, None, cx);
-                    }
-                    cx.notify();
-                },
-            ))));
-        }
-    }
-    div().flex().gap(z(24.)).child(list).child(perms)
-}
-
-fn invites(s: &State, cx: &mut Context<PhoenixApp>) -> gpui::Div {
-    invite_list(s.invites.as_deref(), "cs-inv", cx, |code| {
-        with_state(|s| {
-            if let Some(l) = &mut s.invites {
-                l.retain(|i| i.get("code").and_then(Value::as_str) != Some(code))
-            }
-        })
-    })
-}
-
-pub fn invite_list(list: Option<&[Value]>, id: &'static str, cx: &mut Context<PhoenixApp>, removed: fn(&str)) -> gpui::Div {
-    let Some(list) = list else { return div().child(text(crate::t!("common.loading"), 14., idx::TEXT_SUBTLE)) };
-    if list.is_empty() {
-        return div().child(text(crate::t!("admin.no_invites"), 14., idx::TEXT_SUBTLE));
-    }
-    let head = div()
-        .flex()
-        .pb(z(8.))
-        .child(div().flex_1().child(eyebrow(crate::t!("admin.inviter"))))
-        .child(div().w(z(120.)).child(eyebrow(crate::t!("admin.invite_code"))))
-        .child(div().w(z(60.)).child(eyebrow(crate::t!("admin.uses"))))
-        .child(div().w(z(90.)).child(eyebrow(crate::t!("admin.expires"))))
-        .child(div().w(z(70.)));
-    let mut d = div().flex().flex_col().child(head);
-    for (n, inv) in list.iter().enumerate() {
-        let code = inv.get("code").and_then(Value::as_str).unwrap_or_default().to_owned();
-        let who = inv.pointer("/inviter/global_name").and_then(Value::as_str).or_else(|| inv.pointer("/inviter/username").and_then(Value::as_str)).unwrap_or("-").to_owned();
-        let uses = inv.get("uses").and_then(Value::as_u64).unwrap_or(0);
-        let max = inv.get("max_uses").and_then(Value::as_u64).unwrap_or(0);
-        let age = inv.get("max_age").and_then(Value::as_u64).unwrap_or(0);
-        let expires = if age == 0 { "∞".to_owned() } else { slowmode_label(age.min(u32::MAX as u64) as u32).replace("168h", "7d") };
-        let c2 = code.clone();
-        d = d.child(
-            div()
-                .flex()
-                .items_center()
-                .py(z(10.))
-                .border_t_1()
-                .border_color(c(tok(idx::BORDER_SUBTLE)))
-                .child(div().flex_1().min_w_0().truncate().child(text(who, 14., idx::TEXT_STRONG)))
-                .child(div().w(z(120.)).child(text(code, 14., idx::TEXT_DEFAULT)))
-                .child(div().w(z(60.)).child(text(if max == 0 { uses.to_string() } else { format!("{uses}/{max}") }, 14., idx::TEXT_DEFAULT)))
-                .child(div().w(z(90.)).child(text(expires, 14., idx::TEXT_DEFAULT)))
-                .child(div().w(z(70.)).child(link_btn((id, n), crate::t!("admin.revoke"), true).on_click(cx.listener(move |a, _, _, cx| {
-                    removed(&c2);
-                    a.admin_toast(AdminCall::DeleteInvite { code: c2.clone() }, None, cx);
-                    cx.notify();
-                })))),
-        );
-    }
-    d
-}
-
-pub fn integrations_list(list: Option<&[Value]>) -> gpui::Div {
-    let Some(list) = list else { return div().child(text(crate::t!("common.loading"), 14., idx::TEXT_SUBTLE)) };
-    if list.is_empty() {
-        return div().child(text(crate::t!("admin.no_integrations"), 14., idx::TEXT_SUBTLE));
-    }
-    let mut d = div().flex().flex_col().gap(z(8.));
-    for i in list {
-        let name = i.get("name").and_then(Value::as_str).unwrap_or("-").to_owned();
-        let kind = i.get("type").and_then(Value::as_str).unwrap_or("").to_owned();
-        d = d.child(
-            div()
-                .p(z(16.))
-                .rounded(z(8.))
-                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
-                .flex()
-                .flex_col()
-                .gap(z(4.))
-                .child(text(name, 16., idx::TEXT_STRONG).font_weight(FontWeight::SEMIBOLD))
-                .child(text(kind, 14., idx::TEXT_SUBTLE)),
-        );
-    }
-    d
 }
 
 fn label(t: SharedString) -> gpui::Div {
     div().pb(z(8.)).text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(t)
 }
 
-fn select(id: &'static str, which: u8, s: &State, opts: Vec<(SharedString, bool)>, on_pick: Rc<dyn Fn(usize)>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
-    let cur = opts.iter().find(|o| o.1).map(|o| o.0.clone()).unwrap_or_default();
-    let mut d = div().flex().flex_col().child(select_field(id, cur).on_click(cx.listener(move |_, _, _, cx| {
-        with_state(|s| s.open_select = if s.open_select == Some(which) { None } else { Some(which) });
-        cx.notify();
-    })));
-    if s.open_select == Some(which) {
-        let mut list = div().mt(z(4.)).p(z(4.)).rounded(z(8.)).border_1().border_color(c(tok(idx::BORDER_SUBTLE))).bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER))).flex().flex_col();
-        for (k, (l, on)) in opts.into_iter().enumerate() {
-            let pick = on_pick.clone();
-            list = list.child(
-                div()
-                    .id((id, k))
-                    .h(z(36.))
-                    .px(z(8.))
-                    .rounded(z(4.))
-                    .flex()
-                    .items_center()
-                    .text_size(z(16.))
-                    .text_color(c(tok(idx::TEXT_STRONG)))
-                    .when(on, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
-                    .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
-                    .cursor_pointer()
-                    .child(l)
-                    .on_click(cx.listener(move |_, _, _, cx| {
-                        pick(k);
-                        with_state(|s| s.open_select = None);
-                        cx.notify();
-                    })),
-            );
-        }
-        d = d.child(list);
-    }
-    d
-}
-
 fn thread_overview(s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    use super::settings_form::{OnPick, description, dropdown};
+    let e = cx.entity();
+    let toggle = |which: u8| -> Rc<dyn Fn(&mut gpui::App)> { Rc::new(move |_| with_state(|s| s.open_select = if s.open_select == Some(which) { None } else { Some(which) })) };
+    let slow_pick: OnPick = {
+        let e = e.clone();
+        Rc::new(move |k, _, cx| {
+            with_state(|s| {
+                s.slow = SLOWMODE[k.min(SLOWMODE.len() - 1)];
+                s.open_select = None;
+            });
+            e.update(cx, |_, cx| cx.notify());
+        })
+    };
+    let auto_pick: OnPick = Rc::new(move |k, _, cx| {
+        with_state(|s| {
+            if let Some(t) = s.thread.as_mut() {
+                t.auto = AUTO_ARCHIVE[k.min(AUTO_ARCHIVE.len() - 1)].0;
+            }
+            s.open_select = None;
+        });
+        e.update(cx, |_, cx| cx.notify());
+    });
     let mut d = div().flex().flex_col();
     if let Some(i) = &s.name {
         d = d.child(label(crate::t!("thread.name"))).child(input_box(i));
     }
-    let slow: Vec<(SharedString, bool)> = SLOWMODE.iter().map(|x| (slowmode_label(*x).into(), *x == s.slow)).collect();
-    let auto: Vec<(SharedString, bool)> = AUTO_ARCHIVE.iter().map(|(m, k)| (crate::t!(k), *m == t.auto)).collect();
+    let slow_sel = SLOWMODE.iter().position(|x| *x == s.slow).unwrap_or(0);
+    let auto_sel = AUTO_ARCHIVE.iter().position(|x| x.0 == t.auto).unwrap_or(2);
     d.child(
         div()
             .mt(z(24.))
             .child(label(crate::t!("admin.slowmode")))
-            .child(select("ts-slow", 1, s, slow, Rc::new(|k| with_state(|s| s.slow = SLOWMODE[k.min(SLOWMODE.len() - 1)])), cx))
-            .child(text(crate::t!("thread.slowmode_desc"), 14., idx::TEXT_SUBTLE).pt(z(8.))),
+            .child(dropdown("ts-slow", SLOWMODE.iter().map(|x| slowmode_label(*x)).collect(), slow_sel, s.open_select == Some(1), toggle(1), slow_pick, cx))
+            .child(description(crate::t!("thread.slowmode_desc")).pt(z(8.))),
     )
     .child(
         div()
             .mt(z(24.))
             .child(label(crate::t!("thread.hide_after")))
-            .child(select(
-                "ts-auto",
-                2,
-                s,
-                auto,
-                Rc::new(|k| {
-                    with_state(|s| {
-                        if let Some(t) = s.thread.as_mut() {
-                            t.auto = AUTO_ARCHIVE[k.min(AUTO_ARCHIVE.len() - 1)].0;
-                        }
-                    })
-                }),
-                cx,
-            ))
-            .child(text(crate::t!("thread.hide_after_desc"), 14., idx::TEXT_SUBTLE).pt(z(8.))),
+            .child(dropdown("ts-auto", AUTO_ARCHIVE.iter().map(|(_, k)| crate::t!(k)).collect(), auto_sel, s.open_select == Some(2), toggle(2), auto_pick, cx))
+            .child(description(crate::t!("thread.hide_after_desc")).pt(z(8.))),
     )
     .child(
         div()
@@ -633,8 +557,8 @@ fn thread_overview(s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) ->
                     .flex()
                     .flex_col()
                     .gap(z(4.))
-                    .child(text(crate::t!("thread.spoiler"), 16., idx::TEXT_STRONG).font_weight(FontWeight::MEDIUM))
-                    .child(text(crate::t!("thread.spoiler_desc"), 14., idx::TEXT_SUBTLE)),
+                    .child(super::settings_form::label(crate::t!("thread.spoiler")))
+                    .child(description(crate::t!("thread.spoiler_desc"))),
             )
             .group(crate::ui::controls::SWITCH_ROW)
             .child(switch("ts-spoiler-switch", t.flags & SPOILER_CHANNEL != 0)),
@@ -644,10 +568,10 @@ fn thread_overview(s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) ->
 fn render_thread(app: &PhoenixApp, s: &State, t: &ThreadFields, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let parent = app.backend.thread_info(s.channel).and_then(|i| i.parent).and_then(|p| app.channels.get(&p)).map(|p| p.name.to_string()).unwrap_or_default();
     let items = vec![
-        SideItem::Header(format!("{}  {parent}", s.name0).into()),
-        SideItem::Item { label: crate::t!("admin.cs_overview"), index: 0, danger: false },
+        SideItem::ChannelHeader { icon: "threads", name: s.name0.clone().into(), category: Some(parent.into()) },
+        SideItem::Item { label: crate::t!("admin.cs_overview"), index: 0, danger: false, icon: Some("info"), external: false },
         SideItem::Separator,
-        SideItem::Item { label: crate::t!("thread.delete"), index: 99, danger: true },
+        SideItem::Item { label: crate::t!("thread.delete"), index: 99, danger: true, icon: Some("chat/trash"), external: false },
     ];
     let channel = s.channel;
     let pick: Pick = Rc::new(move |n, a, cx| {
@@ -701,85 +625,131 @@ fn save_thread(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     a.admin_toast(AdminCall::EditThread { thread: sf(thread), edit }, None, cx);
 }
 
+const SECTIONS: [(Section, &str, &str); 4] = [
+    (Section::Overview, "admin.cs_overview", "info"),
+    (Section::Permissions, "admin.cs_permissions", "text-lock"),
+    (Section::Invites, "admin.cs_invites", "invite"),
+    (Section::Integrations, "admin.cs_integrations", "settings/puzzle"),
+];
+
 pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if let Some(t) = s.thread.clone() {
         return render_thread(app, s, &t, cx);
     }
-    let cat = s.kind == ChannelKind::Category;
-    let prefix = if cat { String::new() } else { "# ".to_owned() };
-    let mut items = vec![SideItem::Header(format!("{prefix}{}", s.name0).to_uppercase().into())];
-    for (n, (sec, key)) in SECTIONS.iter().enumerate() {
-        if *sec == Section::Invites && cat {
+    let cat = s.is_category();
+    let private = s.is_private();
+    let category = s.parent.and_then(|p| app.channels.get(&p)).map(|p| p.name.clone());
+    let mut items = vec![SideItem::ChannelHeader { icon: channel_icon(s.kind, private), name: s.name0.clone().into(), category }];
+    for (n, (sec, key, icon)) in SECTIONS.iter().enumerate() {
+        if cat && matches!(sec, Section::Invites | Section::Integrations) {
             continue;
         }
-        items.push(SideItem::Item { label: crate::t!(key), index: n, danger: false });
+        items.push(SideItem::Item { label: crate::t!(key), index: n, danger: false, icon: Some(icon), external: false });
     }
     items.push(SideItem::Separator);
-    items.push(SideItem::Item { label: crate::t!(if cat { "menu.delete_category" } else { "menu.delete_channel" }), index: 99, danger: true });
-    let channel = s.channel;
+    items.push(SideItem::Item {
+        label: crate::t!(if cat { "menu.delete_category" } else { "menu.delete_channel" }),
+        index: 99,
+        danger: true,
+        icon: Some("chat/trash"),
+        external: false,
+    });
     let pick: Pick = Rc::new(move |n, a, cx| {
         if n == 99 {
-            a.confirm_delete_channel(channel, cx);
+            with_state(|s| s.confirm_delete = true);
         } else {
             pick_section(a, SECTIONS[n].0, cx);
         }
     });
-    let selected = SECTIONS.iter().position(|x| x.0 == s.section).unwrap_or(0);
-    let content = match s.section {
-        Section::Overview => overview(s, cx),
-        Section::Permissions => permissions(app, s, cx),
-        Section::Invites => invites(s, cx),
-        Section::Integrations => integrations_list(s.integrations.as_deref()),
+    let selected = match s.section {
+        Section::Webhooks | Section::Followed => 3,
+        sec => SECTIONS.iter().position(|x| x.0 == sec).unwrap_or(0),
+    };
+    let (title, content) = match s.section {
+        Section::Overview => (crate::t!("admin.cs_overview"), super::channel_overview::render(app, s, cx)),
+        Section::Permissions => (SharedString::default(), super::channel_perms::render(app, s, cx)),
+        Section::Invites => (crate::t!("admin.cs_invites"), super::webhooks::invites(s, cx)),
+        Section::Integrations => (crate::t!("admin.cs_integrations"), super::webhooks::integrations(s, cx)),
+        Section::Webhooks => (SharedString::default(), super::webhooks::webhooks_page(app, s, cx)),
+        Section::Followed => (SharedString::default(), super::webhooks::followed_page(app, s, cx)),
     };
     let dirty = match s.section {
-        Section::Overview => s.edit(cx) != ChannelEdit::default(),
+        Section::Overview => s.overview_dirty(cx),
         Section::Permissions => s.overwrites_dirty(),
         _ => false,
     };
+    let hook_notice = super::webhooks::webhook_dirty(s, cx).map(|_| {
+        let reset: Act = Rc::new(|_, _, cx| {
+            with_state(|s| s.webhook_name = None);
+            cx.notify();
+        });
+        let save: Act = Rc::new(|a, _, cx| {
+            super::webhooks::save_webhook(a, cx);
+            with_state(|s| s.webhook_name = None);
+        });
+        unsaved_bar(reset, save, cx)
+    });
     let notice = dirty.then(|| {
         let reset: Act = Rc::new(|_, w, cx| {
             let mut inputs = Vec::new();
+            let mut area = None;
             with_state(|s| {
-                s.slow = s.slow0;
-                s.nsfw = s.nsfw0;
+                s.v = s.v0.clone();
                 s.overwrites = s.overwrites0.clone();
-                inputs = [(s.name.clone(), s.name0.clone()), (s.topic.clone(), s.topic0.clone())].into_iter().filter_map(|(i, v)| Some((i?, v))).collect();
+                inputs = s.name.clone().map(|i| (i, s.name0.clone())).into_iter().collect();
+                area = s.topic.clone().map(|i| (i, s.topic0.clone()));
             });
             for (i, v) in inputs {
+                i.update(cx, |st, cx| st.set_value(v, w, cx));
+            }
+            if let Some((i, v)) = area {
                 i.update(cx, |st, cx| st.set_value(v, w, cx));
             }
         });
         let save: Act = Rc::new(|a, _, cx| save(a, cx));
         unsaved_bar(reset, save, cx)
     });
-    let title = SECTIONS[selected].1;
-    overlay("channel-settings", items, selected, pick, crate::t!(title), content.into_any_element(), notice, cx)
+    let notice = notice.or(hook_notice);
+    let mut page = overlay("channel-settings", items, selected, pick, title, content, notice, cx);
+    if let Some(am) = &s.add_members {
+        page = div().size_full().child(page).child(super::channel_perms::add_members_modal(app, s, am, cx)).into_any_element();
+    }
+    if s.confirm_delete {
+        page = div().size_full().child(page).child(super::channel_perms::delete_modal(s, cx)).into_any_element();
+    }
+    page
 }
 
-fn save(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+pub fn save(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let mut out = None;
     with_modal(|m| {
         if let Some(Modal::ChannelSettings(s)) = m {
-            let edit = s.edit(cx);
-            let changed: Vec<Overwrite> = s.overwrites.iter().filter(|o| !s.overwrites0.contains(o)).cloned().collect();
-            let (name, topic) = (edit.name.clone().unwrap_or_else(|| s.name0.clone()), edit.topic.clone().unwrap_or_else(|| s.topic0.clone()));
-            if edit != ChannelEdit::default() {
+            let (name, topic) = (s.name_value(cx), s.topic_value(cx));
+            let overview = s.overview_dirty(cx).then(|| {
+                let name = if name.trim().is_empty() { s.name0.clone() } else { crate::actions::admin::channel_name(s.kind, &name) };
+                let body = patch_body(&name, &topic, &s.v0, &s.v);
                 s.name0 = name.clone();
                 s.topic0 = topic.clone();
-                s.slow0 = s.slow;
-                s.nsfw0 = s.nsfw;
-            }
+                s.v0 = s.v.clone();
+                (body, name, topic)
+            });
+            let removed: Vec<Id> = s.overwrites0.iter().filter(|o| !s.overwrites.iter().any(|x| x.id == o.id && (x.allow != 0 || x.deny != 0))).map(|o| o.id).collect();
+            let changed: Vec<Overwrite> = s.overwrites.iter().filter(|o| (o.allow != 0 || o.deny != 0) && !s.overwrites0.contains(o)).cloned().collect();
+            s.overwrites.retain(|o| o.allow != 0 || o.deny != 0 || Some(o.id) == s.guild);
             s.overwrites0 = s.overwrites.clone();
-            out = Some((s.channel, edit, changed, name, topic));
+            out = Some((s.channel, overview, changed, removed));
         }
     });
-    let Some((channel, edit, changed, name, topic)) = out else { return };
-    if edit != ChannelEdit::default() {
+    let Some((channel, overview, changed, removed)) = out else { return };
+    if let Some((body, name, topic)) = overview {
         a.apply_channel_overview(channel, &name, &topic);
-        a.admin_toast(AdminCall::EditChannel { channel: sf(channel), edit }, None, cx);
+        a.admin_toast(AdminCall::PatchChannel { channel: sf(channel), body }, None, cx);
     }
     for o in changed {
         a.admin_toast(AdminCall::SetOverwrite { channel: sf(channel), target: sf(o.id), kind: o.kind, allow: o.allow, deny: o.deny }, None, cx);
+    }
+    for t in removed {
+        a.admin_toast(AdminCall::DeleteOverwrite { channel: sf(channel), target: sf(t) }, None, cx);
     }
 }
 
@@ -802,31 +772,36 @@ mod tests {
     fn parse() {
         let v = serde_json::json!({ "permission_overwrites": [{ "id": "7", "type": 1, "allow": "1024", "deny": "0" }] });
         assert_eq!(parse_overwrites(&v), vec![Overwrite { id: Id(7), kind: 1, allow: 1024, deny: 0 }]);
-        assert_eq!(slowmode_label(5), "5s");
-        assert_eq!(slowmode_label(120), "2m");
-        assert_eq!(slowmode_label(21_600), "6h");
+        assert_eq!(short_duration(5), "5s");
+        assert_eq!(short_duration(120), "2m");
+        assert_eq!(short_duration(21_600), "6h");
     }
 
     #[test]
-    fn everyone_first() {
-        let ch = Channel {
-            id: Id(2),
-            guild: Some(Id(1)),
-            parent: None,
-            name: "general".into(),
-            topic: None,
-            kind: ChannelKind::Text,
-            position: 0,
-            unread: false,
-            muted: false,
-            mentions: 0,
-            voice_users: Vec::new(),
-        };
-        let mut s = State::new(&ch);
-        s.load_channel(&serde_json::json!({ "rate_limit_per_user": 5, "permission_overwrites": [{ "id": "7", "type": 0, "allow": "0", "deny": "0" }] }));
-        assert_eq!(s.overwrites[0].id, Id(1));
-        assert_eq!(s.slow, 5);
-        assert!(!s.overwrites_dirty());
+    fn patch_body_matches_the_client() {
+        let live = json!({ "id": "2", "type": 0, "name": "phoenix", "topic": null, "rate_limit_per_user": 0, "nsfw": false, "flags": 0 });
+        let v0 = Values::from_json(&live);
+        let mut v = v0.clone();
+        v.slow = 5;
+        assert_eq!(
+            patch_body("phoenix", "", &v0, &v),
+            json!({"name": "phoenix", "type": 0, "topic": "", "bitrate": 64000, "user_limit": 0, "nsfw": false, "flags": 0, "rate_limit_per_user": 5})
+        );
+        v.set_visibility(1);
+        v.region = Some("rotterdam".into());
+        let b = patch_body("phoenix", "", &v0, &v);
+        assert_eq!((b["flags"].clone(), b["nsfw"].clone(), b["rtc_region"].clone()), (json!(SPOILER_CHANNEL), json!(false), json!("rotterdam")));
+        v.set_visibility(2);
+        assert_eq!((v.nsfw, v.flags & SPOILER_CHANNEL), (true, 0));
+    }
+
+    #[test]
+    fn overwrite_order_and_empty_entries_do_not_count() {
+        let a = vec![Overwrite { id: Id(1), kind: 0, allow: 0, deny: 1024 }, Overwrite { id: Id(2), kind: 0, allow: 1024, deny: 0 }];
+        let mut b = vec![a[1].clone(), a[0].clone(), Overwrite { id: Id(3), kind: 1, allow: 0, deny: 0 }];
+        assert!(same_overwrites(&a, &b));
+        b[0].allow = 0;
+        assert!(!same_overwrites(&a, &b));
     }
 
     #[test]
