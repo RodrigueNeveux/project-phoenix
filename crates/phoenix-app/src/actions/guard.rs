@@ -79,6 +79,7 @@ mod tests {
             GuardedWrite::wishlist_add_sku("1"),
             GuardedWrite::crosspost(3, 4),
             GuardedWrite::put_onboarding(5, serde_json::json!({})),
+            GuardedWrite::put_home_settings(5, serde_json::json!({})),
             GuardedWrite::change_call_region(5, "rotterdam"),
         ] {
             assert!(!read_only_write(&w));

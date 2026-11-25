@@ -86,6 +86,7 @@ impl PhoenixApp {
         cx: &mut Context<Self>,
     ) -> u64 {
         let nonce = make_nonce();
+        super::announce::take_next(nonce);
         let local = local_copy(self, channel, nonce, &content, reply);
         PAYLOADS.with(|p| p.borrow_mut().insert(nonce, Payload { content, reply, files, upload }));
         self.append_message(local, cx);
@@ -107,6 +108,7 @@ impl PhoenixApp {
                 match res {
                     Ok(mut m) => {
                         m.nonce.get_or_insert(nonce);
+                        super::announce::after_sent(this, channel, nonce, m.id, cx);
                         if !this.take_echo(&m, cx) {
                             this.append_message(m, cx);
                         }

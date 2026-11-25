@@ -79,6 +79,9 @@ pub struct Draft {
     pub orig_defaults: Vec<String>,
     pub orig_prompts: Vec<Prompt>,
     pub edited: bool,
+    pub home: Value,
+    pub orig_home: Value,
+    pub home_loaded: bool,
 }
 
 thread_local!(static DRAFTS: RefCell<HashMap<Id, Draft>> = RefCell::new(HashMap::new()));
@@ -507,6 +510,7 @@ fn draft_for(guild: Id, ob: &Value, list: &[Chan]) -> Draft {
                     orig_prompts: prompts.clone(),
                     prompts,
                     edited: false,
+                    ..Draft::default()
                 }
             })
             .clone()
@@ -527,10 +531,67 @@ pub fn reset(guild: Id) {
         if let Some(x) = d.borrow_mut().get_mut(&guild) {
             x.defaults = x.orig_defaults.clone();
             x.prompts = x.orig_prompts.clone();
+            x.home = x.orig_home.clone();
             x.edited = false;
         }
     });
     super::forget_prefix(guild, "obw-q:");
+}
+
+pub fn home_draft(guild: Id) -> Option<Value> {
+    DRAFTS.with(|d| d.borrow().get(&guild).filter(|x| x.home_loaded).map(|x| x.home.clone()))
+}
+
+pub fn edit_home(guild: Id, f: impl FnOnce(&mut Value)) {
+    DRAFTS.with(|d| {
+        if let Some(x) = d.borrow_mut().get_mut(&guild) {
+            if !x.home.is_object() {
+                x.home = json!({});
+            }
+            f(&mut x.home);
+        }
+    });
+}
+
+pub fn prompts_draft(guild: Id) -> Vec<Prompt> {
+    DRAFTS.with(|d| d.borrow().get(&guild).map(|x| x.prompts.clone()).unwrap_or_default())
+}
+
+pub fn edit_prompt(guild: Id, id: &str, f: impl FnOnce(&mut Prompt)) {
+    edit(guild, |d| {
+        if let Some(p) = d.prompts.iter_mut().find(|p| p.id == id) {
+            f(p);
+        }
+    });
+}
+
+pub fn now_id() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
+        .to_string()
+}
+
+pub fn can_manage(app: &PhoenixApp, guild: &Value) -> bool {
+    use crate::actions::{MANAGE_GUILD, MANAGE_ROLES};
+    let Some(g) = str_of(guild, "id").parse::<u64>().ok().map(Id) else {
+        return false;
+    };
+    let p = app.backend.guild_permissions(g);
+    crate::ui::inbox::has_perm(p, MANAGE_GUILD) && crate::ui::inbox::has_perm(p, MANAGE_ROLES)
+}
+
+fn load_home(guild: Id, home: &Value) {
+    DRAFTS.with(|d| {
+        if let Some(x) = d.borrow_mut().get_mut(&guild)
+            && !x.home_loaded
+        {
+            x.home = home.clone();
+            x.orig_home = home.clone();
+            x.home_loaded = true;
+        }
+    });
 }
 
 pub fn step(guild: Id) -> usize {
@@ -568,6 +629,7 @@ struct Ctx {
     draft: Draft,
     home: Value,
     rules_channel: Option<String>,
+    banner: bool,
 }
 
 fn load(app: &PhoenixApp, guild: Id, ob: &Value, cx: &mut Context<PhoenixApp>) -> Option<Ctx> {
@@ -591,7 +653,11 @@ fn load(app: &PhoenixApp, guild: Id, ob: &Value, cx: &mut Context<PhoenixApp>) -
         .collect();
     let draft = draft_for(guild, ob, &list);
     sync_titles(guild, &draft, cx);
+    if let Some(h) = home.as_ref() {
+        load_home(guild, h);
+    }
     let draft = draft_for(guild, ob, &list);
+    let home = if draft.home_loaded { Some(draft.home.clone()) } else { home };
     Some(Ctx {
         guild,
         advanced: ob.get("mode").and_then(Value::as_u64) == Some(1),
@@ -599,6 +665,7 @@ fn load(app: &PhoenixApp, guild: Id, ob: &Value, cx: &mut Context<PhoenixApp>) -
         roles,
         draft,
         home: home.unwrap_or(Value::Null),
+        banner: super::features(&g).iter().any(|f| f == "BANNER"),
         rules_channel: g
             .get("rules_channel_id")
             .and_then(Value::as_str)
@@ -638,6 +705,7 @@ impl Ctx {
         match step {
             1 => d.defaults != d.orig_defaults || (self.advanced && d.prompts != d.orig_prompts),
             2 => d.prompts != d.orig_prompts,
+            3 => d.home_loaded && d.home != d.orig_home,
             _ => false,
         }
     }
@@ -670,6 +738,10 @@ pub fn wizard(app: &PhoenixApp, guild: Id, ob: &Value, cx: &mut Context<PhoenixA
         return super::page().child(super::loading()).into_any_element();
     };
     let cur = step(guild);
+    if c.draft.home_loaded || cur != 3 {
+        let private = c.list.iter().find(|x| x.kind != 4 && x.private).map(|x| x.id.clone());
+        super::guide_editors::apply_pending(guild, &c.home, &c.draft.prompts, private.as_deref());
+    }
     let tip = tip_open(guild, cur);
     let body = match cur {
         0 => super::safety::render(app, guild, cx),
@@ -769,7 +841,7 @@ fn body_sm(s: SharedString) -> gpui::Div {
     text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, s)
 }
 
-fn channel_icon(kind: u64, public: bool) -> &'static str {
+pub fn channel_icon(kind: u64, public: bool) -> &'static str {
     use crate::model::ChannelKind as K;
     let k = match kind {
         2 => K::Voice,
@@ -813,6 +885,7 @@ fn channel_row(
     let guild = c.guild;
     let on = c.draft.defaults.contains(&ch.id);
     let id = ch.id.clone();
+    let public = ch.public;
     let action: AnyElement = if ch.public {
         checkbox(on).into_any_element()
     } else {
@@ -832,12 +905,14 @@ fn channel_row(
         .justify_between()
         .cursor_pointer()
         .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
-        .when(ch.public, |d| {
-            d.on_click(cx.listener(move |_, _, _, cx| {
+        .on_click(cx.listener(move |_, _, _, cx| {
+            if public {
                 toggle_default(guild, id.clone());
-                cx.notify();
-            }))
-        })
+            } else {
+                super::guide_editors::open_unlock(guild, &id);
+            }
+            cx.notify();
+        }))
         .child(
             div()
                 .flex_1()
@@ -1206,6 +1281,10 @@ fn prompt_list(c: &Ctx, prejoin: bool, cx: &mut Context<PhoenixApp>) -> gpui::Di
     )
 }
 
+pub fn emoji_el(e: &Value) -> AnyElement {
+    emoji(e)
+}
+
 fn emoji(e: &Value) -> AnyElement {
     if let Some(id) = e.get("id").and_then(Value::as_str) {
         let ext = if e.get("animated").and_then(Value::as_bool).unwrap_or(false) {
@@ -1272,6 +1351,13 @@ fn prompt_card(
                 .flex_col()
                 .justify_center()
                 .cursor_pointer()
+                .on_click({
+                    let pp = p.clone();
+                    cx.listener(move |_, _, _, cx| {
+                        super::guide_editors::open_answer(guild, &pp, Some(j));
+                        cx.notify();
+                    })
+                })
                 .child(
                     div().flex().items_center().child(emoji(&o.emoji)).child(
                         div()
@@ -1320,6 +1406,14 @@ fn prompt_card(
     }
     options = options.child(
         div()
+            .id(SharedString::from(format!("obw-add-ans-{}", p.id)))
+            .on_click({
+                let pp = p.clone();
+                cx.listener(move |_, _, _, cx| {
+                    super::guide_editors::open_answer(guild, &pp, None);
+                    cx.notify();
+                })
+            })
             .w_full()
             .px(z(16.))
             .py(z(12.))
@@ -1711,26 +1805,50 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .flex_col()
         .child(h2(crate::t!("gs2.obw.welcome_title")))
         .child(desc_md(crate::t!("gs2.obw.welcome_desc")));
+    let home_w = h.clone();
+    let open_welcome = cx.listener(move |_, _, _, cx| {
+        super::guide_editors::open_welcome(guild, &home_w);
+        cx.notify();
+    });
     left = if welcome.is_empty() {
-        left.child(div().my(z(8.)).flex().child(button_sm(
-            "obw-welcome",
-            crate::t!("gs2.obw.welcome_setup"),
-            BtnKind::Primary,
-        )))
+        left.child(
+            div().my(z(8.)).flex().child(
+                button_sm(
+                    "obw-welcome",
+                    crate::t!("gs2.obw.welcome_setup"),
+                    BtnKind::Primary,
+                )
+                .on_click(open_welcome),
+            ),
+        )
     } else {
         left.child(
             div()
+                .id("obw-welcome-card")
+                .group("obw-welcome-card")
+                .relative()
                 .my(z(8.))
                 .p(z(16.))
                 .rounded(z(12.))
                 .bg(t(idx::BACKGROUND_BASE_LOWER))
+                .cursor_pointer()
+                .on_click(open_welcome)
                 .child(text(
                     14.,
                     18.,
                     FontWeight::NORMAL,
                     idx::TEXT_DEFAULT,
                     welcome,
-                )),
+                ))
+                .child(
+                    div()
+                        .absolute()
+                        .top(z(8.))
+                        .right(z(8.))
+                        .invisible()
+                        .group_hover("obw-welcome-card", |s| s.visible())
+                        .child(icon("pen", 24., idx::INTERACTIVE_TEXT_DEFAULT)),
+                ),
         )
     };
     left = left
@@ -1792,20 +1910,24 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let mut items: Vec<(AnyElement, SharedString)> = Vec::new();
+    let mut items: Vec<(AnyElement, SharedString, Option<(usize, SharedString)>)> = Vec::new();
+    for (i, a) in list.iter().enumerate() {
+        let cid = str_of(a, "channel_id").to_owned();
+        items.push((
+            emoji(a.get("emoji").unwrap_or(&Value::Null)),
+            str_of(a, "title").to_owned().into(),
+            Some((i, crate::t!("gs2.obw.task_in", name = c.name(&cid)))),
+        ));
+    }
     if c.rules_channel.is_some() {
         items.push((
             icon("forum/book-check", 24., idx::INTERACTIVE_TEXT_DEFAULT).into_any_element(),
             crate::t!("gs2.obw.read_rules"),
+            None,
         ));
     }
-    for a in &list {
-        items.push((
-            emoji(a.get("emoji").unwrap_or(&Value::Null)),
-            str_of(a, "title").to_owned().into(),
-        ));
-    }
-    for (e, title) in items {
+    for (e, title, edit) in items {
+        let home_t = h.clone();
         actions = actions.child(
             div().mt(z(12.)).child(
                 div()
@@ -1818,17 +1940,42 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
                     .items_center()
                     .gap(z(16.))
                     .child(emoji_disc(e))
-                    .child(div().flex_1().min_w_0().child(text(
-                        16.,
-                        20.,
-                        FontWeight::SEMIBOLD,
-                        idx::TEXT_STRONG,
-                        title,
-                    ))),
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, title).truncate())
+                            .when_some(edit.clone(), |d, (_, where_)| {
+                                d.child(text(12., 16., FontWeight::MEDIUM, idx::TEXT_DEFAULT, where_).truncate())
+                            }),
+                    )
+                    .when_some(edit, |d, (i, _)| {
+                        d.child(
+                            button_sm(("obw-task-edit", i), SharedString::default(), BtnKind::Primary)
+                                .min_w(z(32.))
+                                .w(z(32.))
+                                .px(z(0.))
+                                .tooltip(crate::ui::tooltip::tip(crate::t!("gs2.obw.edit")))
+                                .child(icon("pen", 16., idx::WHITE))
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    super::guide_editors::open_task(guild, &home_t, Some(i));
+                                    cx.notify();
+                                })),
+                        )
+                    }),
             ),
         );
     }
-    left = left.child(actions.child(dashed_add("obw-add-task", crate::t!("gs2.obw.add_task"))));
+    if list.len() < super::guide_editors::MAX_TASKS {
+        let home_t = h.clone();
+        actions = actions.child(dashed_add("obw-add-task", crate::t!("gs2.obw.add_task")).on_click(cx.listener(move |_, _, _, cx| {
+            super::guide_editors::open_task(guild, &home_t, None);
+            cx.notify();
+        })));
+    }
+    left = left.child(actions);
     left = left
         .child(section_sep())
         .child(h2(crate::t!("gs2.obw.resources_title")))
@@ -1870,14 +2017,13 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 ),
         );
     let mut res = div().my(z(8.)).w_full().pr(z(8.)).flex().flex_col();
-    for (i, r) in h
+    let resources = h
         .get("resource_channels")
         .and_then(Value::as_array)
         .cloned()
-        .unwrap_or_default()
-        .iter()
-        .enumerate()
-    {
+        .unwrap_or_default();
+    for (i, r) in resources.iter().enumerate() {
+        let home_r = h.clone();
         let cid = str_of(r, "channel_id").to_owned();
         let writable = c
             .list
@@ -1920,7 +2066,12 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
                             .min_w(z(32.))
                             .w(z(32.))
                             .px(z(0.))
-                            .child(icon("pen", 16., idx::WHITE)),
+                            .tooltip(crate::ui::tooltip::tip(crate::t!("gs2.obw.edit")))
+                            .child(icon("pen", 16., idx::WHITE))
+                            .on_click(cx.listener(move |_, _, _, cx| {
+                                super::guide_editors::open_resource(guild, &home_r, Some(i));
+                                cx.notify();
+                            })),
                         ),
                 )
                 .when(writable, |d| {
@@ -1934,80 +2085,15 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 }),
         );
     }
-    left = left.child(res.child(dashed_add("obw-add-res", crate::t!("gs2.obw.add_resource"))));
-    left = left
-        .child(section_sep())
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .gap(z(8.))
-                .child(h2(crate::t!("gs2.obw.banner_title")))
-                .child(
-                    div()
-                        .h(z(18.))
-                        .pl(z(8.))
-                        .pr(z(8.))
-                        .rounded(z(12.))
-                        .bg(t(idx::BACKGROUND_MOD_STRONG))
-                        .flex()
-                        .items_center()
-                        .gap(z(4.))
-                        .child(icon("boost", 12., idx::GUILD_BOOSTING_PINK))
-                        .child(text(
-                            14.,
-                            18.,
-                            FontWeight::MEDIUM,
-                            idx::TEXT_SUBTLE,
-                            crate::t!("gs2.obw.unlocked"),
-                        )),
-                ),
-        )
-        .child(
-            div()
-                .my(z(8.))
-                .flex()
-                .flex_col()
-                .child(
-                    div()
-                        .mb(z(16.))
-                        .flex()
-                        .flex_col()
-                        .items_start()
-                        .gap(z(8.))
-                        .child(body_sm(crate::t!("gs2.obw.banner_desc")))
-                        .child(div().mt(z(8.)).flex().child(button(
-                            "obw-banner-up",
-                            crate::t!("gs2.obw.banner_upload"),
-                            BtnKind::Primary,
-                        ))),
-                )
-                .child(
-                    div()
-                        .relative()
-                        .w_full()
-                        .h(z(180.))
-                        .rounded(z(12.))
-                        .bg(gpui::linear_gradient(
-                            45.,
-                            gpui::linear_color_stop(crate::theme::c(0x4E76E0), 0.),
-                            gpui::linear_color_stop(crate::theme::c(0xA56CEB), 1.),
-                        ))
-                        .child(
-                            div()
-                                .absolute()
-                                .top(z(16.))
-                                .right(z(16.))
-                                .size(z(28.))
-                                .rounded_full()
-                                .bg(gpui::white())
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .child(icon("image-plus", 18., idx::BLACK)),
-                        ),
-                ),
-        );
+    if resources.len() < super::guide_editors::MAX_RESOURCES {
+        let home_r = h.clone();
+        res = res.child(dashed_add("obw-add-res", crate::t!("gs2.obw.add_resource")).on_click(cx.listener(move |_, _, _, cx| {
+            super::guide_editors::open_resource(guild, &home_r, None);
+            cx.notify();
+        })));
+    }
+    left = left.child(res);
+    left = left.child(section_sep()).child(banner_section(c.banner));
     let tab = super::flag(guild, "obw-preview-member").unwrap_or(false);
     let right = div()
         .w(z(264.))
@@ -2064,6 +2150,113 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .child(left)
         .child(right)
         .into_any_element()
+}
+
+pub fn banner_fill(enabled: bool) -> gpui::Background {
+    if enabled {
+        gpui::linear_gradient(
+            45.,
+            gpui::linear_color_stop(t(idx::GUILD_BOOSTING_BLUE), 0.),
+            gpui::linear_color_stop(t(idx::GUILD_BOOSTING_PURPLE), 1.),
+        )
+    } else {
+        gpui::Background::from(t(idx::PRIMARY_500))
+    }
+}
+
+fn banner_section(enabled: bool) -> gpui::Div {
+    let indicator = if enabled {
+        div()
+            .id("obw-banner-level")
+            .h(z(18.))
+            .pl(z(8.))
+            .pr(z(8.))
+            .rounded(z(12.))
+            .bg(t(idx::BACKGROUND_MOD_STRONG))
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .child(icon("boost", 12., idx::GUILD_BOOSTING_PINK))
+            .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_SUBTLE, crate::t!("gs2.obw.unlocked")))
+    } else {
+        div()
+            .id("obw-banner-level")
+            .h(z(18.))
+            .pl(z(8.))
+            .pr(z(8.))
+            .rounded(z(12.))
+            .bg(t(idx::BACKGROUND_MOD_STRONG))
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .cursor_pointer()
+            .tooltip(crate::ui::tooltip::tip(crate::t!("gs2.obw.learn_more")))
+            .child(icon("boost", 12., idx::INTERACTIVE_TEXT_DEFAULT))
+            .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_SUBTLE, crate::t!("gs2.obw.level2")))
+    };
+    let action = if enabled {
+        div().mt(z(8.)).flex().child(button(
+            "obw-banner-up",
+            crate::t!("gs2.obw.banner_upload"),
+            BtnKind::Primary,
+        ))
+    } else {
+        div().mt(z(8.)).flex().child(crate::ui::controls::button_icon(
+            "obw-banner-boost",
+            "boost",
+            crate::t!("gs2.obw.unlock_boost"),
+            BtnKind::Expressive,
+        ))
+    };
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(h2(crate::t!("gs2.obw.banner_title")))
+                .child(indicator),
+        )
+        .child(
+            div()
+                .my(z(8.))
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .mb(z(16.))
+                        .flex()
+                        .flex_col()
+                        .items_start()
+                        .gap(z(8.))
+                        .child(body_sm(crate::t!("gs2.obw.banner_desc")))
+                        .child(action),
+                )
+                .child(
+                    div()
+                        .relative()
+                        .w_full()
+                        .h(z(180.))
+                        .rounded(z(12.))
+                        .bg(banner_fill(enabled))
+                        .when(!enabled, |d| d.cursor(gpui::CursorStyle::OperationNotAllowed))
+                        .child(
+                            div()
+                                .absolute()
+                                .top(z(16.))
+                                .right(z(16.))
+                                .size(z(28.))
+                                .rounded_full()
+                                .bg(gpui::white())
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(icon("image-plus", 18., if crate::theme::is_light() { idx::PRIMARY_500 } else { idx::PRIMARY_400 })),
+                        ),
+                ),
+        )
 }
 
 fn pill(
@@ -2311,7 +2504,14 @@ fn review_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
                             "obw-preview",
                             crate::t!("gs2.obw.preview"),
                             BtnKind::Secondary,
-                        ))
+                        )
+                        .on_click({
+                            let data = preview_data(c);
+                            cx.listener(move |_, _, _, cx| {
+                                crate::actions::close_modal();
+                                crate::ui::join_flow::open_onboarding_preview(guild, data.clone(), cx);
+                            })
+                        }))
                         .child(
                             button_sm("obw-enable", crate::t!("gs2.obw.enable"), BtnKind::Primary)
                                 .on_click(cx.listener(move |a, _, _, cx| {
@@ -2371,6 +2571,16 @@ fn review_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
             cx,
         ))
         .into_any_element()
+}
+
+fn preview_data(c: &Ctx) -> crate::ui::join_flow::OnboardingData {
+    let v = json!({
+        "guild_id": c.guild.0.to_string(),
+        "enabled": true,
+        "default_channel_ids": c.draft.defaults,
+        "prompts": c.draft.prompts.iter().filter(|p| p.in_onboarding).map(prompt_json).collect::<Vec<_>>(),
+    });
+    crate::ui::join_flow::parse_onboarding(&v)
 }
 
 fn plural_channels(n: usize) -> SharedString {
@@ -2450,6 +2660,7 @@ pub fn notice(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> Opti
     let cur = step(guild);
     if c.has_changes(cur) {
         let advanced = c.advanced;
+        let list = c.list.clone();
         let reset_fn: crate::ui::modals::settings_layout::Act = Rc::new(move |_, _, cx| {
             reset(guild);
             cx.notify();
@@ -2458,6 +2669,11 @@ pub fn notice(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> Opti
             let d = DRAFTS
                 .with(|d| d.borrow().get(&guild).cloned())
                 .unwrap_or_default();
+            if cur == 3 {
+                let body = super::guide_editors::home_body(&guild.0.to_string(), &d.home, &list);
+                a.blocked_write(GuardedWrite::put_home_settings(guild.0, body), cx);
+                return;
+            }
             let body = if cur == 1 {
                 defaults_body(&d.defaults, &d.prompts, advanced)
             } else {

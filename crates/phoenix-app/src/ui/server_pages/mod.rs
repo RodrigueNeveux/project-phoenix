@@ -3,6 +3,7 @@ pub mod automod;
 pub mod boost;
 pub mod community;
 pub mod delete;
+pub mod guide_editors;
 pub mod integrations;
 pub mod mock;
 pub mod onboarding;
@@ -250,8 +251,13 @@ pub fn open_sub(guild: Id, s: &str) {
             set_flag(guild, "onboarding-wizard", true);
             let mut parts = w.split(':').skip(1);
             onboarding::set_step(guild, parts.next().and_then(|n| n.parse::<usize>().ok()).unwrap_or(1).saturating_sub(1));
-            if parts.next() != Some("tip") {
-                onboarding::dismiss_tips(guild);
+            match parts.next() {
+                Some("tip") => {}
+                Some(spec) => {
+                    onboarding::dismiss_tips(guild);
+                    guide_editors::request(guild, spec);
+                }
+                None => onboarding::dismiss_tips(guild),
             }
         }
         _ => {
@@ -348,6 +354,7 @@ pub fn modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElemen
     match which {
         "delete" => Some(delete::modal(app, guild, cx)),
         "verification" => Some(safety::verification_modal(app, guild, cx)),
+        "obw-editor" => guide_editors::modal(app, guild, cx),
         _ => None,
     }
 }

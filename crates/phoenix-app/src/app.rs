@@ -233,6 +233,9 @@ impl PhoenixApp {
         subs.extend(ui::pickers::install(&composer, window, cx));
         subs.push(cx.subscribe_in(&composer, window, |this, _, ev: &InputEvent, window, cx| {
             match ev {
+                InputEvent::PressEnter { shift: false, .. } if ui::chat::announce::enter_inserts_newline(this) => {
+                    this.composer.update(cx, |s, cx| s.insert("\n", window, cx));
+                }
                 InputEvent::PressEnter { shift: false, .. } => this.submit_composer(window, cx),
                 InputEvent::Change => this.on_composer_change(cx),
                 _ => {}
@@ -1130,8 +1133,19 @@ impl PhoenixApp {
     }
 
     pub fn submit_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.editing.is_none() && self.chat_submit(window, cx) {
-            return;
+        if self.editing.is_none() {
+            let announce = ui::chat::announce::is_active(self);
+            if announce && !ui::chat::announce::prepare_submit(self, window, cx) {
+                return;
+            }
+            let handled = self.chat_submit(window, cx);
+            if announce {
+                let sent = self.composer.read(cx).value().is_empty();
+                ui::chat::announce::finish_submit(self, sent, window, cx);
+            }
+            if handled {
+                return;
+            }
         }
         let Some(ch) = self.selected_channel else { return };
         let text = ui::chat::rich_input::take_plain(self.composer.read(cx).value().trim());

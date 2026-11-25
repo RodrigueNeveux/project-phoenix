@@ -22,6 +22,7 @@ pub mod frecency;
 pub mod favorites;
 pub mod soundboard;
 pub mod voice_regions;
+pub mod experiments;
 pub mod streams;
 pub mod uploads;
 pub mod backoff;

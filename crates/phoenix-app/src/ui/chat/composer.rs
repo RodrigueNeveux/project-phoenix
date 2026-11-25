@@ -78,8 +78,13 @@ fn reply_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl Into
     )
 }
 
+pub(super) fn upload_tray_for(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::AnyElement> {
+    upload_tray(app, cx).map(IntoElement::into_any_element)
+}
+
 fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl IntoElement + use<>> {
-    if app.chat.uploads.is_empty() {
+    let hero_ch = super::announce::channel(app);
+    if app.chat.uploads.iter().all(|f| super::announce::is_hero(hero_ch, f)) {
         return None;
     }
     let mut tray = div()
@@ -90,7 +95,7 @@ fn upload_tray(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<impl In
         .flex()
         .gap(z(24.))
         .overflow_x_scroll();
-    for (ix, f) in app.chat.uploads.iter().enumerate() {
+    for (ix, f) in app.chat.uploads.iter().enumerate().filter(|(_, f)| !super::announce::is_hero(hero_ch, f)) {
         let shown = if f.spoiler { f.blurred.as_ref().or(f.image.as_ref()) } else { f.image.as_ref() };
         let preview = match shown {
             Some(i) => img(i.clone())
@@ -243,7 +248,23 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     if let Some(notice) = blocked_dm_notice(app, cx) {
         return notice;
     }
+    if let Some(ch) = super::announce::active(app, cx) {
+        return super::announce::render(app, ch, window, cx);
+    }
     render_text_area(app, window, cx).into_any_element()
+}
+
+pub(super) fn placeholder(app: &PhoenixApp) -> SharedString {
+    match app.selected_channel.and_then(|c| app.channels.get(&c)) {
+        Some(c) if c.guild.is_none() && crate::ui::dm_profile_panel::is_group_dm(app, c.id) => crate::t!("chat.placeholder_thread", name = c.name),
+        Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = c.name),
+        Some(c) if matches!(c.kind, crate::model::ChannelKind::Voice | crate::model::ChannelKind::Stage) => {
+            crate::t!("chat.placeholder_voice", name = c.name)
+        }
+        Some(c) if app.nav.thread_parent(c.id).is_some() => crate::t!("chat.placeholder_thread_quoted", name = c.name),
+        Some(c) => crate::t!("chat.placeholder_channel", name = c.name),
+        None => "".into(),
+    }
 }
 
 
@@ -295,17 +316,7 @@ fn blocked_dm_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<g
 }
 
 fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
-    let placeholder: SharedString = match ch {
-        Some(c) if c.guild.is_none() && crate::ui::dm_profile_panel::is_group_dm(app, c.id) => crate::t!("chat.placeholder_thread", name = c.name),
-        Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = c.name),
-        Some(c) if matches!(c.kind, crate::model::ChannelKind::Voice | crate::model::ChannelKind::Stage) => {
-            crate::t!("chat.placeholder_voice", name = c.name)
-        }
-        Some(c) if app.nav.thread_parent(c.id).is_some() => crate::t!("chat.placeholder_thread_quoted", name = c.name),
-        Some(c) => crate::t!("chat.placeholder_channel", name = c.name),
-        None => "".into(),
-    };
+    let placeholder = placeholder(app);
     let ic = c(Palette::INTERACTIVE);
     let placeholder_empty = app.composer.read(cx).value().is_empty();
     let (remaining, show_count) = char_count(app.backend.has_premium(), app.composer.read(cx).value().chars().count() as i64);
@@ -316,10 +327,6 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
     let show_send_button = should_show_send_button(app.prefs.local.flag("send-btn", false), blocked);
     let can_send = !placeholder_empty || !app.chat.uploads.is_empty();
-    let announce = app.selected_channel.filter(|id| {
-        app.channels.get(id).is_some_and(|ch| ch.kind == crate::model::ChannelKind::Announcement) && app.nav.thread_parent(*id).is_none()
-    });
-    let announce_thread = announce.is_some_and(|id| crate::commands::builtin::Context::of(app, id).thread);
     let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
     let vbar = super::voice_message::bar(app, window, cx);
     let voice_on = vbar.is_some();
@@ -527,16 +534,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                                             .tooltip(crate::ui::tooltip::tip(crate::t!("menu.send_message")))
                                                             .on_click(cx.listener(|a, _, w, cx| a.submit_composer(w, cx)))
                                                     })
-                                                    .when(!can_send, |b| b.cursor(gpui::CursorStyle::OperationNotAllowed))
-                                                    .when_some(announce, |b, channel| {
-                                                        b.on_hover(move |on, w, _| {
-                                                            use crate::ui::extra_menus::{Target, open, opened};
-                                                            if *on && opened().is_none() {
-                                                                let pos = w.mouse_position();
-                                                                open(Target::AnnouncementSend { channel, can_thread: announce_thread }, pos, w);
-                                                            }
-                                                        })
-                                                    }),
+                                                    .when(!can_send, |b| b.cursor(gpui::CursorStyle::OperationNotAllowed)),
                                             )
                                     }),
                             )),
@@ -740,7 +738,7 @@ fn text_w(window: &Window, text: &str, weight: FontWeight) -> f32 {
     f32::from(window.text_system().layout_line(text, z(12.), &[run], None).width)
 }
 
-fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement {
+pub(super) fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement + use<> {
     let names: Vec<SharedString> = app
         .selected_channel
         .and_then(|c| app.typing.get(&c).map(|v| (c, v)))
@@ -810,7 +808,7 @@ fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement {
         .children(cooldown(app))
 }
 
-fn text_pad_y() -> f32 {
+pub(super) fn text_pad_y() -> f32 {
     ((56. - 22. * crate::theme::font_scale()) / 2.).max(0.)
 }
 

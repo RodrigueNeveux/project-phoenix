@@ -1255,6 +1255,9 @@ impl Backend for DiscordBackend {
             Ok(top.ranked().into_iter().map(|x| Id(x.0)).collect())
         })
     }
+    fn user_experiments(&self) -> BoxFuture<Vec<(u32, i64)>> {
+        self.with_session(move |_, s| async move { s.rest.user_experiments().await.map_err(api_err) })
+    }
     fn voice_regions(&self) -> BoxFuture<Vec<(gpui::SharedString, gpui::SharedString)>> {
         self.with_session(move |_, s| async move {
             let regions = s.rest.voice_regions().await.map_err(api_err)?;

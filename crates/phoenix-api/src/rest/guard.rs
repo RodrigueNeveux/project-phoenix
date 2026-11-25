@@ -114,6 +114,14 @@ impl GuardedWrite {
         write(Method::PUT, format!("/guilds/{guild}/onboarding"), Some(body))
     }
 
+    pub fn put_home_settings(guild: u64, body: Value) -> Self {
+        write(Method::PUT, format!("/guilds/{guild}/new-member-welcome"), Some(body))
+    }
+
+    pub fn put_channel_overwrite(channel: u64, overwrite: u64, body: Value) -> Self {
+        write(Method::PUT, format!("/channels/{channel}/permissions/{overwrite}"), Some(body))
+    }
+
     pub fn refusal(&self) -> Error {
         blocked(&self.method, self.path.clone())
     }
@@ -149,6 +157,8 @@ mod tests {
             GuardedWrite::crosspost(3, 4),
             GuardedWrite::thread_from_message(3, 4, "t"),
             GuardedWrite::put_onboarding(5, json!({ "default_channel_ids": ["6"] })),
+            GuardedWrite::put_home_settings(5, json!({ "guild_id": "5" })),
+            GuardedWrite::put_channel_overwrite(6, 5, json!({ "id": "5", "type": 0 })),
             GuardedWrite::change_call_region(5, "rotterdam"),
         ]
     }
@@ -178,6 +188,8 @@ mod tests {
         assert_eq!(GuardedWrite::crosspost(3, 4).path, "/channels/3/messages/4/crosspost");
         let ob = GuardedWrite::put_onboarding(5, json!({ "prompts": [] }));
         assert_eq!((ob.method, ob.path.as_str(), ob.body), (Method::PUT, "/guilds/5/onboarding", Some(json!({ "prompts": [] }))));
+        let home = GuardedWrite::put_home_settings(5, json!({ "enabled": false }));
+        assert_eq!((home.method, home.path.as_str()), (Method::PUT, "/guilds/5/new-member-welcome"));
         let region = GuardedWrite::change_call_region(5, "rotterdam");
         assert_eq!((region.method, region.path.as_str(), region.body), (Method::PATCH, "/channels/5/call", Some(json!({ "region": "rotterdam" }))));
     }

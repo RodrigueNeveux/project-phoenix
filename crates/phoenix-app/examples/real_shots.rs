@@ -219,6 +219,9 @@ impl Backend for ReadOnly {
     fn voice_regions(&self) -> BoxFuture<Vec<(gpui::SharedString, gpui::SharedString)>> {
         self.0.voice_regions()
     }
+    fn user_experiments(&self) -> BoxFuture<Vec<(u32, i64)>> {
+        self.0.user_experiments()
+    }
     fn nav(&self, req: phoenix_app::ui::home::data::NavRequest) -> BoxFuture<phoenix_app::ui::home::data::NavReply> {
         use phoenix_app::ui::home::data::NavRequest as R;
         match req {
@@ -1092,6 +1095,9 @@ fn main() -> anyhow::Result<()> {
             })
         })?;
         pump(&mut cx, wait * 1000 / 3);
+    }
+    if let Some(on) = std::env::var("PHX_ANNOUNCE_COMPOSER").ok().map(|v| v != "0") {
+        phoenix_app::ui::chat::announce::force(on);
     }
     if let Ok(what) = std::env::var("PHX_OPEN") {
         use phoenix_app::ui::settings::Page as P;

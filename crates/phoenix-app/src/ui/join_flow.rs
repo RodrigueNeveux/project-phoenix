@@ -75,6 +75,7 @@ struct JoinFlowState {
     rules_accepted: bool,
     error: Option<SharedString>,
     busy: bool,
+    preview: bool,
 }
 
 thread_local! {
@@ -231,6 +232,24 @@ pub fn member_verification_submit_body(version: &str, rules: &[String]) -> Value
     })
 }
 
+pub fn open_onboarding_preview(guild: Id, data: OnboardingData, cx: &mut Context<PhoenixApp>) {
+    STATE.with(|s| {
+        let mut st = s.borrow_mut();
+        st.active_screen = Some(ActiveScreen::Onboarding(guild));
+        st.onboarding_step = 0;
+        st.onboarding_selected.clear();
+        st.error = None;
+        st.busy = false;
+        st.preview = true;
+        st.onboarding.insert(guild, data);
+    });
+    cx.notify();
+}
+
+pub fn is_preview() -> bool {
+    STATE.with(|s| s.borrow().preview)
+}
+
 pub fn open_onboarding(app: &mut PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) {
     STATE.with(|s| {
         let mut st = s.borrow_mut();
@@ -238,6 +257,7 @@ pub fn open_onboarding(app: &mut PhoenixApp, guild: Id, cx: &mut Context<Phoenix
         st.onboarding_step = 0;
         st.onboarding_selected.clear();
         st.error = None;
+        st.preview = false;
     });
     app.nav_request(NavRequest::FetchOnboarding(guild), cx, move |_, res, cx| {
         STATE.with(|s| {
@@ -284,6 +304,7 @@ pub fn close_screen(cx: &mut Context<PhoenixApp>) {
         st.active_screen = None;
         st.busy = false;
         st.error = None;
+        st.preview = false;
     });
     cx.notify();
 }
@@ -616,6 +637,8 @@ fn render_onboarding(_app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>)
                                 } else if step < total {
                                     STATE.with(|s| s.borrow_mut().onboarding_step = total);
                                     cx.notify();
+                                } else if is_preview() {
+                                    close_screen(cx);
                                 } else {
                                     let (options, prompts) = STATE.with(|s| {
                                         let mut st = s.borrow_mut();

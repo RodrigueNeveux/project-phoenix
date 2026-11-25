@@ -14,6 +14,7 @@ use crate::{
     ui::{avatar, icon, members, sidebar::channel_icon},
 };
 
+pub mod announce;
 pub mod app_launcher;
 pub mod attach;
 pub mod plaintext;

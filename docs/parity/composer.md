@@ -138,3 +138,21 @@ itself costs no visible frame time; the extra 1.6 ms per keystroke is the Markdo
 the wrapper's per-row diff of the rich views. Real-account render checked with `real_shots` + `PHX_DRAFT` in
 #phoenix (private, `compare/richinput`). Real-account render: `real_shots` with `PHX_DRAFT='…'`
 (`\n` for new lines; nothing is sent, the read-only backend also drops typing).
+
+## Announcement post composer (`2026-02-announcement-composer`)
+
+Source: chunk `ceb73656db6e6af4.js` module 5206 (`ez`, `eW`, `eZ`, `e$`), CSS `446860.4fca0a4ff3e83ac3.css` (`*_omcAqa`), chat-input type `CREATE_ANNOUNCEMENT_POST` in `22fbc347793fb277.js`, strings from `06d126e51cd73410.js` (548742, English only: `Z8fYjO`, `9WnJyo`, `/IBYAq`, `2ePvR8`, `VjC21x`).
+
+| part | client | Phoenix | status |
+|---|---|---|---|
+| gate | user experiment `2026-02-announcement-composer`, bucket 1 → `announcementComposer`, default off; used only when `channel.type === GUILD_ANNOUNCEMENT` | `ui::chat::announce`; bucket read from `GET /experiments` (murmur3 of the name, `rest::experiments`), `PHX_ANNOUNCE_COMPOSER=1` forces it in `real_shots`. The real account has no assignment (GET `/experiments`, 2026-11-25) and the 24/11 dump `vanilla-announcement` shows the normal composer, so the user still sees the normal one | ✅ |
+| box | `channelTextArea_2x8-Qn` + `announcementScrollableContainer`, `inner_omcAqa` p 0 16 | same border/background as the normal composer, inner px 16 | ✅ |
+| header | `headerInput_omcAqa` animated height 0 → 122 and padding-top 0 → 16 (spring 120/15, clamp) once the box is pressed or has text, a header image or a title | `with_animation` 320 ms ease-out-quint, same trigger | ✅ |
+| header image | `heroImageButton_omcAqa` 78×78 (`--custom-channel-attachment-upload-mini-attachment-size`), `--background-mod-normal`, r8, ImagePlus md (`interactive-text-default` / `-active` on hover), tooltip "Upload Header Image"; picked image 78×78 cover, trash overlay at 8/8 "Remove Header Image" | `hero_slot`, image kept out of the upload tray | ✅; ❌ the client sends it as a components v2 MEDIA_GALLERY, Phoenix sends it as the first attachment |
+| title | 20/24 bold `--text-strong`, mt 16, h 28, placeholder "Title (optional)", one line, 140 chars, Enter focuses the body | `title_input` (clamped, Enter → body) | ✅ |
+| body | same editor, placeholder of the normal composer, Enter adds a line (`disableEnterToSubmit`), no slash commands | `enter_inserts_newline` | ✅ |
+| content | `# {title}\n{body}` when there is a title; thread name = title, else body, else "Thread"/"Fil" (`7Xm5QI`), 100 chars | `compose`, `thread_name` (tested) | ✅ |
+| footer | 1px `--border-subtle` divider; `footer_omcAqa` p 0 16, height = text-area height; left: FileUp 20 attach (p6 r8, hover `--interactive-background-selected`), GIF, emoji (no gift, no sticker, no apps: `gifts:{}`, `stickers.allowSending:false`, `commands.enabled:false`) | `render` footer | ✅ |
+| send | primary sm "Envoyer" 14 semibold `text-overlay-light` + SendMessage xs, ThreadIcon xxs sub-icon (10×10, p1, r8, `--control-primary-background-default/-hover`, bottom/right −4) when Create Thread is on; disabled when body and title are empty | `send_button` | ✅ |
+| options | hovering the send container (100 ms) opens `send-announcement-options` (top/right): Create Thread (disabled without thread permission), Publish, both on by default | menu moved from the normal send button (99258342) to this button | ✅ |
+| after send | `announcementSendOptions { createThread, threadName, publish }` | the options are kept per nonce; once the message is confirmed, Create Thread and Publish go through `GuardedWrite::thread_from_message` / `GuardedWrite::crosspost`, which refuse: nothing is ever published | ✅ |
