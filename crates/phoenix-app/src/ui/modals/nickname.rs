@@ -133,7 +133,7 @@ fn warning() -> AnyElement {
         .bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_WARNING)))
         .text_size(z(16.))
         .line_height(z(20.))
-        .text_color(c(tok(idx::TEXT_FEEDBACK_WARNING)))
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
         .child(SharedString::from(crate::t!("nick.warning").replace('\n', " ")))
         .into_any_element()
 }
@@ -175,7 +175,7 @@ pub fn render(s: &Nickname, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .when(saving, |d| d.opacity(0.5).cursor_default())
                 .on_click(cx.listener(|a, _, _, cx| a.save_nickname(cx))),
         );
-    card(480., s.title(), subtitle, body.pb(z(16.)).into_any_element(), Some(footer.into_any_element()), cx)
+    card(480., s.title(), subtitle, body.pb(z(8.)).into_any_element(), Some(footer.into_any_element()), cx)
 }
 
 fn set_state(f: impl FnOnce(&mut Nickname)) {
