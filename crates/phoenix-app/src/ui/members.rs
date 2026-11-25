@@ -509,8 +509,8 @@ fn group_header(app: &PhoenixApp, g: Id, id: &str, count: u32) -> AnyElement {
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(Palette::TEXT_MUTED))
                 .when_some(icon, |d, url| d.child(gpui::img(url).flex_none().size(z(16.)).mr(z(4.))))
-                .child(div().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(name.trim().to_string().into(), 14.)))
-                .child(div().flex_none().child(SharedString::from(format!(" — {count}")))),
+                .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(SharedString::from(name.trim().to_string())))
+                .child(div().flex_none().whitespace_nowrap().child(SharedString::from(format!("\u{a0}— {count}")))),
         )
         .into_any_element()
 }
