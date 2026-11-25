@@ -40,6 +40,8 @@ pub fn has_perm(perms: u64, bit: u64) -> bool {
     perms & ADMINISTRATOR != 0 || perms & bit != 0
 }
 
+const UNREADS_RETRIES: u32 = 10;
+
 impl PhoenixApp {
     pub fn toggle_inbox(&mut self, cx: &mut Context<Self>) {
         let i = &mut self.parity.inbox;
@@ -117,6 +119,10 @@ impl PhoenixApp {
     }
 
     fn load_unreads(&mut self, cx: &mut Context<Self>) {
+        self.build_unreads(0, cx);
+    }
+
+    fn build_unreads(&mut self, attempt: u32, cx: &mut Context<Self>) {
         use crate::ui::inbox_unreads::Kind;
         let order = crate::ui::server_bar::flat_guild_order(self);
         let entries = self.backend.inbox_unreads(&order);
@@ -127,6 +133,19 @@ impl PhoenixApp {
             .into_iter()
             .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false, error: None, collapsed: false })
             .collect();
+        if i.unreads.is_empty() && attempt < UNREADS_RETRIES {
+            let generation = i.unreads_gen;
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_secs(3)).await;
+                let _ = this.update(cx, |a, cx| {
+                    let i = &a.parity.inbox;
+                    if i.open && i.tab == InboxTab::Unreads && i.unreads_gen == generation && i.unreads.is_empty() {
+                        a.build_unreads(attempt + 1, cx);
+                    }
+                });
+            })
+            .detach();
+        }
         self.load_next_unread(cx);
         cx.notify();
     }
