@@ -32,6 +32,14 @@ pub fn member_path(guild: GuildId, user: Option<UserId>) -> String {
     }
 }
 
+pub fn member_roles_body(roles: &[Snowflake]) -> Value {
+    json!({ "roles": roles.iter().map(ToString::to_string).collect::<Vec<_>>() })
+}
+
+pub fn role_connection_unassign_path(guild: GuildId, role: Snowflake) -> String {
+    format!("/guilds/{guild}/roles/{role}/connections/unassign")
+}
+
 pub fn friend_nick_body(nick: &str) -> Value {
     let n = nick.trim();
     json!({ "nickname": if n.is_empty() { Value::Null } else { json!(n) } })
@@ -44,6 +52,14 @@ impl RestClient {
 
     pub async fn remove_member_role(&self, guild: GuildId, user: UserId, role: Snowflake) -> Result<()> {
         self.call_empty(Method::DELETE, &format!("/guilds/{guild}/members/{user}/roles/{role}"), Body::None).await
+    }
+
+    pub async fn set_member_roles(&self, guild: GuildId, user: UserId, roles: &[Snowflake]) -> Result<()> {
+        self.call_empty(Method::PATCH, &member_path(guild, Some(user)), Body::Json(member_roles_body(roles))).await
+    }
+
+    pub async fn unassign_role_connection(&self, guild: GuildId, role: Snowflake) -> Result<()> {
+        self.call_empty(Method::POST, &role_connection_unassign_path(guild, role), Body::None).await
     }
 
     pub async fn set_member_nick(&self, guild: GuildId, user: Option<UserId>, nick: &str) -> Result<()> {
@@ -78,6 +94,9 @@ mod tests {
         assert_eq!(voice_mod_body(VoiceMod::Mute(true)), json!({"mute": true}));
         assert_eq!(voice_mod_body(VoiceMod::Deafen(false)), json!({"deaf": false}));
         assert_eq!(voice_mod_body(VoiceMod::Move(None)), json!({"channel_id": null}));
+        assert_eq!(member_roles_body(&[Snowflake(5), Snowflake(60)]), json!({"roles": ["5", "60"]}));
+        assert_eq!(member_roles_body(&[]), json!({"roles": []}));
+        assert_eq!(role_connection_unassign_path(Snowflake(1), Snowflake(2)), "/guilds/1/roles/2/connections/unassign");
         assert_eq!(voice_mod_body(VoiceMod::Move(Some(Snowflake(4)))), json!({"channel_id": "4"}));
     }
 

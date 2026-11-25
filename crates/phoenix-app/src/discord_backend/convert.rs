@@ -703,6 +703,8 @@ pub fn roles(g: &api::Guild) -> Vec<model::Role> {
                 .as_ref()
                 .map(|h| format!("https://cdn.discordapp.com/role-icons/{}/{h}.webp?size=40&quality=lossless", r.id).into())
                 .or_else(|| r.unicode_emoji.as_deref().and_then(crate::media::emoji::twemoji_url)),
+            managed: r.managed,
+            connection: r.tags.as_ref().is_some_and(|t| t.guild_connections),
         })
         .collect()
 }

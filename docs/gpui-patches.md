@@ -204,7 +204,67 @@ Phoenix's `NameText` (gradient and letter-spaced names, painted one grapheme at 
 draws its single underline with the same function and the metrics of a space in the
 primary font.
 
-Rev: `0ce4a85b` on `gpui-underline` (patches 4 to 8). Previous: `265d2211` on `gpui-marks`.
+## 9. Primary-font baseline (`src/text_system/line.rs` `paint_line`)
+
+**Problem.** On a name with emoji the underline sat 1 dp too high against the glyphs. `paint_line`
+put the baseline at `(line_height − ascent − descent) / 2 + ascent` with the line's maximum ascent
+and descent over every font it used, so a fallback font (Noto Color Emoji, an Egyptian hieroglyph
+face…) moved every glyph of the line, and `NameText`, which shapes one grapheme at a time, gave each
+pictograph its own baseline.
+
+**Reference.** Chromium keeps the baseline of the strut: the primary font's ascent and descent plus
+the half leading of `line-height`; fallback fonts never move it while `line-height` is not `normal`.
+Live client 2026-11-25, probe divs `font-family: var(--font-primary)` 16px/20px with a zero-size
+inline-block at the baseline: "Nyxie" and "🌸Nyxie🌸𓂃" (gg sans + Noto Color Emoji + Noto Sans
+Egyptian Hieroglyphs) both 15.2 px below the top. Headless Chrome 158, scale 1.25: 15.2 for gg sans
+16/20 with or without emoji, 18.4 for Pricedown 20/24/600 with or without "🌸˖𓂃❀𝐍𝐲𝐱𝐢𝐞❀𓂃˖🌸".
+
+**Patch.** The baseline (and the strikethrough) use the metrics of `primary_font`, the font the
+first run asked for, like the underline of patch 8. Bare `LineLayout::paint` keeps the line maximum.
+For a line that only uses its primary font the metrics are the same values (cosmic-text's
+`max_ascent` is the same swash ascent × size), so plain text does not move. Search
+`PHOENIX PATCH (primary baseline)`.
+
+## 10. Emoji presentation selectors (`vendor/gpui-pre-wgpu/src/cosmic_text_system.rs`, `pick_grapheme_slot`)
+
+**Problem.** "❄️" (U+2744 U+FE0F) was drawn in DejaVu Sans: GPUI picked the font from the base
+character and U+FE0F is default-ignorable.
+
+**Reference.** Live client and headless Chrome 158, 2026-11-25, `CSS.getPlatformFontsForNode` on
+probe spans in `var(--font-primary)` 16px: ❄️ ❤️ ☃️ ✔️ ▶️ ☺️ ↔️ ™️ ©️ #️⃣ → Noto Color Emoji (19.97 px),
+even when gg sans has the base (↔, ©, ™); a️ stays in gg sans; 🔊︎ → FreeSerif 10.09, ⭐︎ → FreeSans
+10.73, ❄︎ ❤︎ ⚡︎ → DejaVu Sans, 🌸︎ → Symbola. A bare emoji-presentation character goes to the colour
+font unless a font of the CSS stack has it (font-family FreeSerif: 🔊 → FreeSerif).
+
+**Patch.** For a grapheme whose base can be an emoji (non-ASCII, or `#`, `*`, a digit): with U+FE0F,
+the first font of the chain that is a known emoji font and covers it; with U+FE0E, the first
+non-emoji font (primary, sticky current, then the chain); otherwise the usual choice, except that a
+character whose first covering font in the chain is an emoji font goes there instead of the sticky
+current fallback (so "𝓢🔊" still draws 🔊 in colour now that the text faces keep their emoji code
+points). Phoenix places a second copy of Noto Color Emoji with every non-ASCII code point
+("Phx Noto Color Emoji Selector") at the end of the chain for the text-default bases. Search
+`PHOENIX PATCH (emoji presentation)`. Tests `vs16_goes_to_the_emoji_font_before_text_fonts`,
+`vs15_goes_to_a_text_font_and_bare_emoji_skips_the_sticky_one`.
+
+## 11. Synthetic bold (`vendor/gpui-pre-wgpu/src/cosmic_text_system.rs`, `layout_line_no_separators`, `render_glyph_image`)
+
+**Problem.** In 600+ text, a symbol from a fallback face (★ ❄ ☲ 𝔻 from DejaVu Sans, 𝐍 from
+FreeSans, ⓒ from IPAGothic) was drawn as thin as in regular text.
+
+**Reference.** Headless Chrome 158 and the live client, 2026-11-25, `var(--font-primary)` 20px:
+`getPlatformFontsForNode` names the regular face at every weight (DejaVuSans, FreeSans, IPAGothic,
+Symbola, not DejaVuSans-Bold) and the widths do not change (★❄☲𝔻𝐍 84.06 px at 400, 550, 600 and
+700), but from 600 the glyphs are drawn heavier (ink +27 to +84 % on the headless probes); 550 is unchanged. With
+`font-family: 'DejaVu Sans'` named in CSS, 550+ uses the real DejaVuSans-Bold. That is Skia's
+FreeType path: `FT_Outline_Embolden` with strength ppem / 24 (device pixels), advances unchanged.
+
+**Patch.** When a run asks for 600 or more and a glyph comes from a face lighter than 600 (and not a
+colour emoji font), the glyph gets a twin `FontId` of the same face marked `synthetic_bold`;
+rasterizing it calls swash's `embolden(ppem / 48)` (swash's port of `FT_Outline_EmboldenXY` does not
+halve the strength as FreeType does). Shaping and advances are untouched. Search
+`PHOENIX PATCH (synthetic bold)`. Test `synthetic_bold_follows_chromium`.
+
+Rev: `4c7d4f5a` on `gpui-baseline` (patches 4 to 11). Previous: `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## Running the vendored tests
 

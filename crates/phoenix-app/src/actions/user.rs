@@ -113,6 +113,28 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    pub fn remove_profile_role(&mut self, guild: Id, user: Id, role: &crate::model::Role, cx: &mut Context<Self>) {
+        let current = crate::ui::profile::member_role_ids(self, guild, user);
+        let remaining: Vec<Id> = current.into_iter().filter(|r| *r != role.id).collect();
+        if let Some(m) = self.members.get_mut(&guild).and_then(|m| m.iter_mut().find(|m| m.user == user)) {
+            m.roles.retain(|r| *r != role.id);
+        }
+        if let Some(p) = self.people.profiles.get_mut(&user) {
+            p.roles.retain(|r| *r != role.id);
+        }
+        let req = if role.connection {
+            ActionRequest::UnassignRoleConnection { guild, role: role.id }
+        } else {
+            ActionRequest::SetMemberRoles { guild, user, roles: remaining }
+        };
+        self.action(req, cx, |a, r, cx| {
+            if r.is_err() {
+                a.parity_toast(crate::t!("profile.role_update_failed"), cx);
+            }
+        });
+        cx.notify();
+    }
+
     pub fn open_mod_view(&mut self, guild: Id, user: Id, cx: &mut Context<Self>) {
         open_modal(Modal::ModView { guild, user }, None);
         cx.notify();

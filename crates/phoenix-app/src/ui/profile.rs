@@ -444,23 +444,95 @@ fn guild_tag_pill(t: SharedString, badge: Option<SharedString>) -> impl IntoElem
         .child(t)
 }
 
-fn roles_block(roles: Vec<crate::model::Role>) -> Div {
+fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::model::Role>, cx: &mut Context<PhoenixApp>) -> Div {
+    let entity = cx.entity();
     div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().map(|r| {
+        let remove = guild.filter(|g| role_removable(app, *g, uid, &r)).map(|g| {
+            let e = entity.clone();
+            let role = r.clone();
+            let group = SharedString::from(format!("profile-role-remove-{}", r.id.0));
+            div()
+                .id(("profile-role-remove", r.id.0))
+                .group(group.clone())
+                .flex()
+                .flex_none()
+                .items_center()
+                .justify_center()
+                .size(z(24.))
+                .my(z(-1.))
+                .mr(z(-1.))
+                .rounded(z(4.))
+                .cursor_pointer()
+                .tooltip(crate::ui::tooltip::tip(crate::t!("profile.remove_role")))
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    e.update(cx, |a, cx| a.remove_profile_role(g, uid, &role, cx));
+                })
+                .child(
+                    gpui::svg()
+                        .path(crate::icons::path("close-small"))
+                        .size(z(12.))
+                        .text_color(c(tok(idx::ICON_SUBTLE)))
+                        .group_hover(group, |s| s.text_color(c(tok(idx::ICON_STRONG)))),
+                )
+        });
         div()
             .flex()
             .items_center()
             .min_h(z(24.))
+            .max_w(z(268.))
             .pl(z(2.))
-            .pr(z(8.))
+            .when(remove.is_none(), |d| d.pr(z(8.)))
             .rounded(z(8.))
             .border_1()
             .border_color(c(tok(idx::USER_PROFILE_BORDER)))
             .text_size(z(12.))
             .line_height(z(16.))
-            .text_color(c(tok(idx::TEXT_STRONG)))
+            .text_color(c(tok(idx::TEXT_DEFAULT)))
             .child(div().size(z(12.)).mx(z(4.)).flex_none().rounded_full().bg(role_color(r.color.or(Some(0x99AAB5)))))
-            .child(div().max_w(z(200.)).text_ellipsis().child(r.name.clone()))
+            .child(div().min_w_0().text_ellipsis().whitespace_nowrap().overflow_hidden().child(r.name.clone()))
+            .when_some(r.icon.clone(), |d, u| {
+                d.child(div().flex_none().ml(z(4.)).child(img(u).size(z(12.)).object_fit(gpui::ObjectFit::Contain)))
+            })
+            .children(remove)
     }))
+}
+
+pub(crate) fn member_role_ids(app: &PhoenixApp, guild: Id, user: Id) -> Vec<Id> {
+    app.members
+        .get(&guild)
+        .and_then(|ms| ms.iter().find(|m| m.user == user))
+        .map(|m| m.roles.clone())
+        .or_else(|| app.people.profiles.get(&user).map(|p| p.roles.clone()))
+        .unwrap_or_default()
+}
+
+pub(crate) fn sorts_before(guild: Id, a: &crate::model::Role, b: &crate::model::Role) -> bool {
+    let everyone = |r: &crate::model::Role| r.id == guild;
+    match (everyone(a), everyone(b)) {
+        (true, _) => false,
+        (false, true) => true,
+        _ if a.position != b.position => a.position > b.position,
+        _ => a.id < b.id,
+    }
+}
+
+pub(crate) fn role_removable(app: &PhoenixApp, guild: Id, target: Id, role: &crate::model::Role) -> bool {
+    use crate::actions::{ADMINISTRATOR, MANAGE_ROLES};
+    let me = app.me.id;
+    if role.connection {
+        return target == me;
+    }
+    if role.managed || app.backend.guild_permissions(guild) & (ADMINISTRATOR | MANAGE_ROLES) == 0 {
+        return false;
+    }
+    if app.guilds.iter().any(|g| g.id == guild && g.owner == Some(me)) {
+        return true;
+    }
+    let mine = member_role_ids(app, guild, me);
+    let guild_roles = app.roles.get(&guild).map(Vec::as_slice).unwrap_or_default();
+    let top = guild_roles.iter().filter(|r| mine.contains(&r.id)).reduce(|b, r| if sorts_before(guild, r, b) { r } else { b });
+    top.is_some_and(|t| sorts_before(guild, t, role))
 }
 
 fn bio_block(bio: SharedString, clamp: bool) -> Div {
@@ -763,7 +835,7 @@ fn popout_card_inner(
         };
     }
     if guild.is_some() && !i.roles.is_empty() {
-        body = body.child(roles_block(i.roles.clone()));
+        body = body.child(roles_block(app, guild, uid, i.roles.clone(), cx));
     }
 
     let footer = (uid != app.me.id).then(|| {
@@ -1050,7 +1122,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .flex_col()
                 .gap(z(4.))
                 .child(section_heading(if i.roles.len() == 1 { crate::t!("profile.role") } else { crate::t!("profile.roles") }))
-                .child(roles_block(i.roles.clone())),
+                .child(roles_block(app, guild, uid, i.roles.clone(), cx)),
         );
     }
 
@@ -1345,4 +1417,26 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         })
         .child(right)
         .child(close)
+}
+
+#[cfg(test)]
+mod role_order_tests {
+    use super::sorts_before;
+    use crate::model::{Id, Role};
+
+    fn role(id: u64, position: i32) -> Role {
+        Role { id: Id(id), name: "r".into(), color: None, position, hoist: false, icon: None, managed: false, connection: false }
+    }
+
+    #[test]
+    fn higher_role_matches_the_client_comparator() {
+        let g = Id(1);
+        assert!(sorts_before(g, &role(10, 5), &role(11, 3)));
+        assert!(!sorts_before(g, &role(11, 3), &role(10, 5)));
+        assert!(sorts_before(g, &role(10, 4), &role(11, 4)));
+        assert!(!sorts_before(g, &role(11, 4), &role(10, 4)));
+        assert!(sorts_before(g, &role(10, 0), &role(1, 0)));
+        assert!(!sorts_before(g, &role(1, 0), &role(10, 0)));
+        assert!(!sorts_before(g, &role(10, 4), &role(10, 4)));
+    }
 }

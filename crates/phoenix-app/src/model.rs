@@ -324,6 +324,8 @@ pub struct Role {
     pub position: i32,
     pub hoist: bool,
     pub icon: Option<SharedString>,
+    pub managed: bool,
+    pub connection: bool,
 }
 
 #[derive(Clone, Debug)]

@@ -87,6 +87,15 @@ pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> R
             .map_err(e)?;
             ActionReply::Done
         }
+        R::SetMemberRoles { guild, user: u, roles } => {
+            let roles: Vec<_> = roles.into_iter().map(sf).collect();
+            rest.set_member_roles(sf(guild), sf(u), &roles).await.map_err(e)?;
+            ActionReply::Done
+        }
+        R::UnassignRoleConnection { guild, role } => {
+            rest.unassign_role_connection(sf(guild), sf(role)).await.map_err(e)?;
+            ActionReply::Done
+        }
         R::SetNick { guild, user: u, nick } => {
             rest.set_member_nick(sf(guild), u.map(sf), &nick).await.map_err(e)?;
             ActionReply::Done

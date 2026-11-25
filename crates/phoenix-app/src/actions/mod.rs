@@ -37,6 +37,8 @@ pub enum ActionRequest {
     ReportMenu(ReportTarget),
     SubmitReport { menu: Box<ReportMenu>, target: ReportTarget, steps: Vec<ReportStep> },
     SetRole { guild: Id, user: Id, role: Id, add: bool },
+    SetMemberRoles { guild: Id, user: Id, roles: Vec<Id> },
+    UnassignRoleConnection { guild: Id, role: Id },
     SetNick { guild: Id, user: Option<Id>, nick: String },
     FriendNick { user: Id, nick: String },
     Ignore { user: Id, ignored: bool },

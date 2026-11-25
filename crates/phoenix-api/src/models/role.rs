@@ -10,6 +10,17 @@ pub struct RoleTags {
     pub integration_id: Option<Snowflake>,
     #[serde(default)]
     pub subscription_listing_id: Option<Snowflake>,
+    #[serde(default, deserialize_with = "present", serialize_with = "as_null", skip_serializing_if = "std::ops::Not::not")]
+    pub guild_connections: bool,
+}
+
+fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    serde::de::IgnoredAny::deserialize(d)?;
+    Ok(true)
+}
+
+fn as_null<S: serde::Serializer>(_: &bool, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_none()
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -49,4 +60,22 @@ pub struct RoleColors {
     pub secondary_color: Option<u32>,
     #[serde(default)]
     pub tertiary_color: Option<u32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn guild_connections_flag_is_a_present_null() {
+        let r: Role = serde_json::from_str(r#"{"id":"1","tags":{"guild_connections":null}}"#).unwrap();
+        assert!(r.tags.as_ref().is_some_and(|t| t.guild_connections));
+        let r: Role = serde_json::from_str(r#"{"id":"1","tags":{"bot_id":"2"}}"#).unwrap();
+        assert!(!r.tags.as_ref().is_some_and(|t| t.guild_connections));
+        let back: Role = serde_json::from_str(&serde_json::to_string(&r).unwrap()).unwrap();
+        assert!(!back.tags.unwrap().guild_connections);
+        let c: Role = serde_json::from_str(r#"{"id":"1","tags":{"guild_connections":null}}"#).unwrap();
+        let back: Role = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        assert!(back.tags.unwrap().guild_connections);
+    }
 }
