@@ -1,8 +1,7 @@
 use std::cell::RefCell;
 
 use gpui::{
-    AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*,
-    svg,
+    AnyElement, Context, Entity, FontWeight, ParentElement, SharedString, Styled, Window, div, prelude::*, svg,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
@@ -100,7 +99,7 @@ fn ensure_name_input(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Pho
     if let Some(existing) = STATE.with(|s| s.borrow().name_input.clone()) {
         return existing;
     }
-    let uname = app.me.as_ref().map(|u| u.name.as_ref()).unwrap_or("");
+    let uname = app.me.name.as_ref();
     let is_fr = crate::i18n::locale() == "fr";
     let def = default_server_name(uname, is_fr);
     let input = cx.new(|cx| {
@@ -672,7 +671,8 @@ fn render_join_step(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div
 }
 
 pub fn render_modal(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    crate::ui::invite::modal("add-server-modal", cx, render_step(app, window, cx))
+    let inner = render_step(app, window, cx);
+    crate::ui::invite::modal("add-server-modal", cx, inner)
 }
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ pub fn upload_icons() -> Option<&'static UploadArt> {
 
 pub(super) fn init(dir: &Path) {
     let _ = UPLOAD_ICONS.set(upload(&dir.join("art")));
-    let _ = GUILD_UPLOAD.set(guild_upload(&dir.join("art")));
+    let _ = GUILD_UPLOAD.set(load_guild_upload(&dir.join("art")));
 }
 
 pub struct GuildUpload {
@@ -40,7 +40,7 @@ pub fn guild_upload() -> Option<&'static GuildUpload> {
 
 const GUILD_UPLOAD_MARK: &str = "viewBox:\"0 0 80 80\",fill:\"none\",\"aria-hidden\":\"true\",children:[(0,";
 
-fn guild_upload(out: &Path) -> Option<GuildUpload> {
+fn load_guild_upload(out: &Path) -> Option<GuildUpload> {
     let art = GuildUpload { ring: out.join("guild-upload-ring.svg"), plus: out.join("guild-upload-plus.svg") };
     if art.ring.is_file() && art.plus.is_file() {
         return Some(art);
