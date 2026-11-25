@@ -32,7 +32,7 @@ enum State {
     Resolving,
     Ready(Rc<InvitePreview>),
     Invalid,
-    Failed(Instant),
+    Failed(Instant, u32),
 }
 
 thread_local! {
@@ -143,11 +143,11 @@ pub fn links(content: &str) -> Vec<InviteLink> {
 
 fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: &App) -> State {
     let current = CACHE.with(|c| c.borrow().get(link).cloned());
-    match &current {
-        Some(State::Failed(t)) if t.elapsed() > Duration::from_secs(30) => {}
+    let attempt = match &current {
+        Some(State::Failed(t, n)) if t.elapsed() >= retry_delay(*n) => n + 1,
         Some(s) => return s.clone(),
-        None => {}
-    }
+        None => 0,
+    };
     CACHE.with(|c| c.borrow_mut().insert(link.clone(), State::Resolving));
     let req = match link.event {
         Some(e) => NavRequest::FetchInviteEvent(link.code.clone(), e),
@@ -161,8 +161,9 @@ fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: 
             Ok(NavReply::Invite(p)) => State::Ready(Rc::new(*p)),
             Ok(_) => State::Invalid,
             Err(e) if e.0.starts_with("HTTP 4") && !e.0.starts_with("HTTP 429") => State::Invalid,
-            Err(_) => State::Failed(Instant::now()),
+            Err(_) => State::Failed(Instant::now(), attempt),
         };
+        let retry = matches!(st, State::Failed(..)).then(|| retry_delay(attempt));
         cx.update(|cx| {
             if let State::Ready(p) = &st
                 && let Some(ImageRef::Url(u)) = &p.guild_icon
@@ -181,9 +182,22 @@ fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: 
                 cx.notify();
             });
         });
+        if let Some(d) = retry {
+            cx.background_executor().timer(d).await;
+            cx.update(|cx| {
+                entity.update(cx, |a, cx| {
+                    a.message_list.remeasure();
+                    cx.notify();
+                })
+            });
+        }
     })
     .detach();
     State::Resolving
+}
+
+fn retry_delay(attempt: u32) -> Duration {
+    Duration::from_secs((2u64 << attempt.min(5)).min(60))
 }
 
 pub fn render(
@@ -202,7 +216,7 @@ pub fn render(
         .map(|(i, l)| {
             let own = author == app.me.id;
             let el = match ensure(app, entity, &l, cx) {
-                State::Resolving | State::Failed(_) => resolving(),
+                State::Resolving | State::Failed(..) => resolving(),
                 State::Invalid => invalid(own),
                 State::Ready(p) => card(app, entity, &p, own),
             };
