@@ -430,7 +430,7 @@ fn related(app: &PhoenixApp, icon: &'static str, title: &'static str, desc: &'st
 fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: &mut Cx) {
     match b {
         B::Title(t) => out.push(controls::section_title(tr(t)).pb(z(15.)).into_any_element()),
-        B::Lead(t) => out.push(div().mt(z(-21.)).pb(z(22.)).child(desc_text(tr(t))).into_any_element()),
+        B::Lead(t) => out.push(div().mt(z(-21.)).pb(z(15.)).child(desc_text(tr(t))).into_any_element()),
         B::Legend(t) => out.push(
             div()
                 .pt(z(10.))
@@ -1765,12 +1765,12 @@ fn connection_tiles(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyEleme
             .justify_center()
             .cursor_pointer()
             .hover(|d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
-            .child(gpui::img(SharedString::from(url)).size(z(logo)).rounded(z(if app { 6. } else { 0. })).object_fit(gpui::ObjectFit::Contain))
+            .child(gpui::img(SharedString::from(url)).size(z(logo)).when(app, |i| i.rounded_full()).object_fit(gpui::ObjectFit::Contain))
     };
     div()
         .flex()
         .flex_col()
-        .pt(z(12.))
+        .pt(z(10.))
         .gap(z(16.))
         .child(title_text(tr("sp.cn.add")))
         .child(div().flex().flex_wrap().gap_x(z(8.)).gap_y(z(9.)).children(super::art::connections().into_iter().map(tile)))
