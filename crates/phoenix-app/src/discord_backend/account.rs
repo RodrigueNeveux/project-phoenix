@@ -175,6 +175,7 @@ fn synced_raw(raw: &[u8]) -> Result<SyncedSettings, crate::backend::BackendError
 pub fn synced(p: &PreloadedUserSettings) -> SyncedSettings {
     let d = SyncedSettings::default();
     crate::ui::settings::account::set_activity_restricted(p.privacy.as_ref().map(|x| x.activity_restricted_guild_ids.clone()).unwrap_or_default());
+    crate::ui::settings::account::set_dm_restricted(p.privacy.as_ref().map(|x| x.restricted_guild_ids.clone()).unwrap_or_default());
     SyncedSettings {
         theme: match p.theme() {
             Theme::Dark => AppTheme::Dark,

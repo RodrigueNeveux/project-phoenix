@@ -602,6 +602,17 @@ pub fn from_json(v: &Value) -> PreloadedUserSettings {
     if let Some(l) = v.get("locale").and_then(Value::as_str) {
         s.localization = Some(LocalizationSettings { locale: Some(StringValue { value: l.to_owned() }) });
     }
+    let ids = |k: &str| -> Vec<u64> {
+        v.get(k)
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|x| x.as_str().and_then(|s| s.parse().ok()).or_else(|| x.as_u64())).collect())
+            .unwrap_or_default()
+    };
+    s.privacy = Some(PrivacySettings {
+        restricted_guild_ids: ids("restricted_guilds"),
+        default_guilds_restricted: v.get("default_guilds_restricted").and_then(Value::as_bool).unwrap_or(false),
+        activity_restricted_guild_ids: ids("activity_restricted_guild_ids"),
+    });
     s
 }
 
@@ -754,5 +765,18 @@ mod tests {
         assert_eq!(s.theme(), Theme::Ash);
         assert!(s.compact());
         assert_eq!(s.locale(), Some("fr"));
+    }
+
+    #[test]
+    fn restricted_guilds_from_json_and_proto() {
+        let s = from_json(&json!({"restricted_guilds": ["12", "34"], "default_guilds_restricted": true}));
+        let p = s.privacy.as_ref().unwrap();
+        assert_eq!(p.restricted_guild_ids, vec![12, 34]);
+        assert!(s.default_guilds_restricted());
+        let mut raw = vec![0x42, 0x12, 0x1a, 0x10];
+        raw.extend(1369382919948210248u64.to_le_bytes());
+        raw.extend(7u64.to_le_bytes());
+        let d = PreloadedUserSettings::decode_raw(&raw).unwrap();
+        assert_eq!(d.privacy.unwrap().restricted_guild_ids, vec![1369382919948210248, 7]);
     }
 }

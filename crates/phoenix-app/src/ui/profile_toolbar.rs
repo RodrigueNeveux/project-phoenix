@@ -72,14 +72,17 @@ pub fn react_target() -> Option<Id> {
     ACTIVE.with(|a| a.borrow().as_ref().filter(|a| a.kind == Interaction::React).map(|a| a.user))
 }
 
+pub fn dm_allowed(is_self: bool, lurking: bool, friend: bool, mut guilds: impl Iterator<Item = Id>, restricted: &[u64]) -> bool {
+    !is_self && !lurking && (friend || guilds.any(|g| !restricted.contains(&g.0)))
+}
+
 pub fn can_dm(app: &PhoenixApp, uid: Id, guild: Option<Id>) -> bool {
-    if uid == app.me.id {
-        return false;
-    }
     let friend = app.nav.relationship(uid).is_some_and(|r| r.kind == RelationshipKind::Friend);
-    let shares = app.people.profiles.get(&uid).is_some_and(|p| !p.mutual_guild_ids.is_empty())
-        || guild.and_then(|g| app.members.get(&g)).is_some_and(|ms| ms.iter().any(|m| m.user == uid));
-    friend || shares
+    let lurking = guild.is_some_and(crate::ui::join_flow::is_lurking);
+    let mutual = app.people.profiles.get(&uid).map(|p| p.mutual_guild_ids.clone()).unwrap_or_default();
+    let cached = app.members.iter().filter(|(_, ms)| ms.iter().any(|m| m.user == uid)).map(|(g, _)| *g);
+    let restricted = crate::ui::settings::account::dm_restricted();
+    dm_allowed(uid == app.me.id, lurking, friend, mutual.into_iter().chain(cached), &restricted)
 }
 
 pub fn others_toolbar_shown(app: &PhoenixApp, uid: Id, guild: Option<Id>) -> bool {
@@ -629,6 +632,19 @@ mod tests {
         assert!(r.ends_with("*\n> thinking\nhi"));
         let r = react_content("Nyx", None, ":wave:");
         assert!(r.ends_with("*\n:wave:"));
+    }
+
+    #[test]
+    fn dms_follow_the_client_rule() {
+        let g = |ids: &[u64]| ids.iter().map(|i| Id(*i)).collect::<Vec<_>>().into_iter();
+        assert!(dm_allowed(false, false, true, g(&[]), &[]));
+        assert!(!dm_allowed(true, false, true, g(&[1]), &[]));
+        assert!(!dm_allowed(false, true, true, g(&[1]), &[]));
+        assert!(!dm_allowed(false, false, false, g(&[]), &[]));
+        assert!(dm_allowed(false, false, false, g(&[1]), &[]));
+        assert!(!dm_allowed(false, false, false, g(&[1]), &[1]));
+        assert!(dm_allowed(false, false, false, g(&[1, 2]), &[1]));
+        assert!(dm_allowed(false, false, true, g(&[1]), &[1]));
     }
 
     #[test]

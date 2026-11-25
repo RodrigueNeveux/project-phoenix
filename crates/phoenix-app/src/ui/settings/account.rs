@@ -197,6 +197,16 @@ pub fn activity_restricted() -> Vec<u64> {
     ACTIVITY_RESTRICTED.read().clone()
 }
 
+static DM_RESTRICTED: RwLock<Vec<u64>> = RwLock::new(Vec::new());
+
+pub fn set_dm_restricted(ids: Vec<u64>) {
+    *DM_RESTRICTED.write() = ids;
+}
+
+pub fn dm_restricted() -> Vec<u64> {
+    DM_RESTRICTED.read().clone()
+}
+
 pub(super) fn bold_desc(t: SharedString) -> AnyElement {
     let strong = gpui::HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() };
     let (plain, hl) = bracket_runs(&t, strong);
