@@ -871,6 +871,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         .unwrap_or_else(|| ch.name.clone());
     let members: Option<SharedString> =
         (is_dm && is_group).then(|| crate::t!("invite.members", n = extra.map(|e| e.recipients + 1).unwrap_or(1)));
+    let dm_sub = (is_dm && !is_group).then(|| ch.voice_users.first().and_then(|u| crate::ui::members::dm_sub_text(app, *u))).flatten();
     let dm_tag = (is_dm && !is_group)
         .then(|| ch.voice_users.first().and_then(|u| app.users.get(u)).and_then(|u| u.tag.clone()))
         .flatten();
@@ -1109,6 +1110,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                     ),
                             )
                         })
+                        .when_some(dm_sub, |d, s| d.child(s))
                         .when_some(members, |d, m| {
                             d.child(
                                 div()

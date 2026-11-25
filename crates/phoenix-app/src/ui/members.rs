@@ -858,6 +858,23 @@ fn mobile_avatar(user: Option<&crate::model::User>, cut: impl FnOnce(gpui::Div) 
         )
 }
 
+pub(crate) fn dm_sub_text(app: &PhoenixApp, uid: Id) -> Option<gpui::Div> {
+    if app.presence_of(uid) == Presence::Offline {
+        return None;
+    }
+    let acts = app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or(&[]);
+    let in_voice = app.channels.values().any(|ch| ch.guild.is_some() && ch.voice_users.contains(&uid))
+        && !crate::ui::voice_panel::flags(uid).undiscoverable;
+    let go_live = in_voice && crate::ui::voice_panel::flags(uid).stream;
+    let sub = SubText::of(acts, go_live);
+    let fallback = app.nav.activities.get(&uid).cloned().filter(|_| acts.is_empty());
+    if !in_voice && sub.is_none() && fallback.is_none() {
+        return None;
+    }
+    let bot = app.users.get(&uid).is_some_and(|u| u.bot);
+    Some(sub_text(in_voice, if go_live { "golive/screen" } else { "speaker" }, bot, sub, fallback))
+}
+
 struct SubText {
     custom: Option<(Option<SharedString>, Option<SharedString>)>,
     main: Option<(SharedString, Option<&'static str>)>,
