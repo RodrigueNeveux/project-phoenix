@@ -191,6 +191,8 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/sort.svg" => s!(r#"<path d="M7 20V4M3 8l4-4 4 4M17 4v16M13 16l4 4 4-4"/>"#),
         "icons/chevron-up.svg" => s!(r#"<path d="m6 15 6-6 6 6"/>"#),
         "icons/check.svg" => s!(r#"<path d="m5 12.5 4.5 4.5L19 7.5"/>"#),
+        "icons/check-small.svg" => s!(r#"<path d="m7.5 12.5 3 3L16.5 9"/>"#),
+        "icons/guild/flower-star.svg" => f!(r#"<path d="M12 1.5l2.6 2.2 3.4-.4 1 3.3 3 1.6-1 3.3 1 3.3-3 1.6-1 3.3-3.4-.4-2.6 2.2-2.6-2.2-3.4.4-1-3.3-3-1.6 1-3.3-1-3.3 3-1.6 1-3.3 3.4.4z"/>"#),
         "icons/check-small-bold.svg" => concat!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">"#,
             r#"<path d="m6 12 4 4 8-8"/>"#,
