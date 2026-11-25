@@ -122,13 +122,13 @@ pub fn badge_text(q: &Quest) -> SharedString {
     }
 }
 
-fn tile(q: &Quest, w: f32) -> AnyElement {
+fn tile(q: &Quest) -> AnyElement {
     let white = gpui::white();
     let reward = match q.orbs {
         Some(n) => crate::t!("quests.orbs", n = n),
         None => q.reward.clone(),
     };
-    let mut el = div().id(("quest-tile", q.id)).relative().w(z(w)).h(z(260.)).rounded(z(16.)).overflow_hidden().bg(tk(idx::BACKGROUND_BASE_LOWEST)).border_1().border_color(tk(idx::BORDER_SUBTLE));
+    let mut el = div().id(("quest-tile", q.id)).relative().w_full().min_w_0().h(z(260.)).rounded(z(16.)).overflow_hidden().bg(tk(idx::BACKGROUND_BASE_LOWEST)).border_1().border_color(tk(idx::BORDER_SUBTLE));
     if let Some(h) = q.hero.clone() {
         el = el.child(img(h).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover));
     }
@@ -214,7 +214,6 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let page_w = f32::from(window.viewport_size().width) / crate::theme::zoom() - crate::ui::sidebar_resize::width() - 72.;
     let inner = page_w.min(1300.) - 40.;
     let cols = columns(inner);
-    let tile_w = (inner - GAP * (cols as f32 - 1.)) / cols as f32;
     let mut content = div().w_full().max_w(z(1300.)).mx_auto().px(z(20.)).py(z(24.)).flex().flex_col();
     match quests {
         None => content = content.child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_MUTED), crate::t!("common.loading"))),
@@ -231,9 +230,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         }
         Some(list) => {
             content = content.child(text(20., 24., FontWeight::SEMIBOLD, tk(idx::TEXT_STRONG), crate::t!("quests.available", n = list.len())));
-            let mut grid = div().mt(z(GAP)).flex().flex_wrap().gap(z(GAP));
+            let mut grid = div().mt(z(GAP)).grid().grid_cols(cols as u16).gap(z(GAP));
             for q in &list {
-                grid = grid.child(tile(q, tile_w));
+                grid = grid.child(tile(q));
             }
             content = content.child(grid);
         }
