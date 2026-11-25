@@ -146,7 +146,7 @@ fn remove_hero(app: &mut PhoenixApp, channel: Id) {
     }
 }
 
-fn prompt_hero(app: &mut PhoenixApp, channel: Id, cx: &mut Context<PhoenixApp>) {
+fn prompt_hero(channel: Id, cx: &mut Context<PhoenixApp>) {
     let rx = cx.prompt_for_paths(gpui::PathPromptOptions { files: true, directories: false, multiple: false, prompt: Some(crate::t!("announce.hero_upload")) });
     cx.spawn(async move |this, cx| {
         let Ok(Ok(Some(paths))) = rx.await else { return };
@@ -333,9 +333,9 @@ fn hero_slot(app: &PhoenixApp, channel: Id, cx: &mut Context<PhoenixApp>) -> Any
                 .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
                 .group_hover("announce-hero-add", |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
         )
-        .on_click(cx.listener(move |a, _, _, cx| {
+        .on_click(cx.listener(move |_, _, _, cx| {
             ACTIVE.with(|s| s.borrow_mut().insert(channel));
-            prompt_hero(a, channel, cx);
+            prompt_hero(channel, cx);
         }))
         .into_any_element()
 }
@@ -567,7 +567,7 @@ pub fn render(app: &PhoenixApp, channel: Id, window: &mut Window, cx: &mut Conte
                                 cx.notify();
                             }
                         }))
-                        .children(crate::ui::autocomplete::render(app, cx))
+                        .children(crate::ui::autocomplete::render(app, window, cx))
                         .child(
                             div()
                                 .px(z(16.))

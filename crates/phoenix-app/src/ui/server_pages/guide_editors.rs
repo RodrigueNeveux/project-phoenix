@@ -438,7 +438,7 @@ pub fn modal(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> Optio
         Editor::Task { index, channel, action, emoji } => task(guild, &d, index, channel, action, emoji, cx),
         Editor::Resource { index, channel } => resource(guild, &d, index, channel, cx),
         Editor::Answer { prompt, index, channels, roles, emoji, title_error } => answer(guild, &d, &prompt, index, channels, roles, emoji, title_error, cx),
-        Editor::Unlock { review, selected } => unlock(guild, &d, review, selected, cx),
+        Editor::Unlock { review, selected } => unlock(&d, review, selected, cx),
     })
 }
 
@@ -577,6 +577,7 @@ fn task(guild: Id, d: &Data, index: Option<usize>, channel: Option<String>, acti
         _ => None,
     };
     let title_err = task_title_error(&title);
+    let ok = !title.is_empty() && action.is_some() && channel.is_some() && !title_err && action_err.is_none();
     let thumb = div()
         .flex()
         .justify_between()
@@ -609,7 +610,6 @@ fn task(guild: Id, d: &Data, index: Option<usize>, channel: Option<String>, acti
         .child(thumb)
         .child(sep())
         .child(group().pb(z(16.)).child(heading(crate::t!("obe.task_done"), true)).child(radios).children(action_err.map(err)));
-    let ok = !title.is_empty() && action.is_some() && channel.is_some() && !title_err && action_err.is_none();
     let remove = index.map(|i| {
         critical_link("obe-remove", crate::t!("obe.remove")).on_click(cx.listener(move |_, _, _, cx| {
             ob::edit_home(guild, |h| {
@@ -889,7 +889,7 @@ fn rich(parts: &[(SharedString, bool)], size: f32, lh: f32, base: usize, strong:
         .into_any_element()
 }
 
-fn unlock(guild: Id, d: &Data, review: bool, selected: Vec<String>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn unlock(d: &Data, review: bool, selected: Vec<String>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if !review {
         let item = |emoji: &'static str, a: &'static str, em: &'static str, b: &'static str| {
             div()
