@@ -1519,7 +1519,9 @@ fn main() -> anyhow::Result<()> {
                 }
                 "guidelines" => {
                     if let Some(f) = app.selected_channel {
-                        app.parity.forums.entry(f).or_default().guidelines_open = true;
+                        let v = app.parity.forums.entry(f).or_default();
+                        v.guidelines_open = true;
+                        v.guidelines_modal = arg == "all";
                     }
                 }
                 "favadd" => phoenix_app::ui::favorites::open_add_modal(),

@@ -212,7 +212,7 @@ fn resource(i: usize, r: &GuideEntry, preview: Option<&Preview>, cx: &Context<Ph
     let text = Some(r.description.clone()).filter(|d| !d.is_empty()).or_else(|| preview.and_then(|p| p.text.clone()));
     let thumb: Option<AnyElement> = match (&r.icon, preview.and_then(|p| p.media.clone())) {
         (Some(h), _) => Some(
-            gpui::img(cdn(format!("resource-channels/{}/{h}.jpg?size=128", ch.0)))
+            gpui::img(cdn(format!("resource-channels/{}/{h}.png?size=128", ch.0)))
                 .size(z(72.))
                 .rounded(z(8.))
                 .flex_none()

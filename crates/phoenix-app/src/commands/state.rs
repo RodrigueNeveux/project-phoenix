@@ -243,7 +243,7 @@ pub struct ForumView {
     pub compose: Option<ForumCompose>,
     pub guidelines_open: bool,
     pub guidelines_seen: bool,
-    pub guidelines_full: bool,
+    pub guidelines_modal: bool,
 }
 
 pub struct ModalView {
