@@ -129,7 +129,26 @@ fn header(app: &PhoenixApp, guild: Id, r: &AutomodRule, open: bool, cx: &mut Con
                         write(a, ServerCall::EditAutomodRule { guild: sf(guild), rule: r }, None, cx);
                     })
                 }))
-                .child(div().ml(z(8.)).size(z(24.)).flex().items_center().justify_center().cursor_pointer().child(icon("more-horizontal", 20., idx::ICON_DEFAULT))),
+                .child(
+                    div()
+                        .id(SharedString::from(format!("gs2-am-more-{id}")))
+                        .ml(z(8.))
+                        .size(z(24.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .on_click({
+                            let r = r.clone();
+                            cx.listener(move |_, ev: &gpui::ClickEvent, _, cx| {
+                                cx.stop_propagation();
+                                let pos = ev.position();
+                                super::with(|s| s.menu = Some((guild, super::AutomodMenu { rule: r.clone(), pos })));
+                                cx.notify();
+                            })
+                        })
+                        .child(icon("more-horizontal", 20., idx::ICON_DEFAULT)),
+                ),
         )
 }
 
@@ -297,6 +316,43 @@ fn editor(app: &PhoenixApp, guild: Id, d: &AutomodRule, cx: &mut Context<Phoenix
             .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.am_exempt_hint")))
             .into_any_element(),
     ))
+}
+
+pub fn rule_menu(guild: Id, m: super::AutomodMenu, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::ui::context_menu::{Dismiss, MenuItem};
+    let e = cx.entity();
+    let dismiss: Dismiss = {
+        let e = e.clone();
+        Rc::new(move |_, cx| {
+            super::with(|s| s.menu = None);
+            e.update(cx, |_, cx| cx.notify());
+        })
+    };
+    let (edit_rule, del_rule) = (m.rule.clone(), m.rule.clone());
+    let rid = m.rule.id.map(|i| i.0.to_string()).unwrap_or_default();
+    let (e1, e2) = (e.clone(), e.clone());
+    let items = vec![
+        MenuItem::action(crate::t!("gs2.am_edit_rule"), None, move |_, _, cx| {
+            super::with(|s| {
+                s.menu = None;
+                s.rule_draft = Some((guild, edit_rule.clone()));
+            });
+            e1.update(cx, |_, cx| cx.notify());
+        }),
+        MenuItem::danger(crate::t!("gs2.am_delete_rule"), None, move |_, _, cx| {
+            super::with(|s| s.menu = None);
+            let rule = del_rule.id.unwrap_or_default();
+            e2.update(cx, |a, cx| write(a, ServerCall::DeleteAutomodRule { guild: sf(guild), rule }, None, cx));
+        }),
+        MenuItem::Separator,
+        MenuItem::action(crate::t!("gs2.am_copy_id"), None, move |_, _, cx| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(rid.clone()));
+            super::with(|s| s.menu = None);
+            e.update(cx, |_, cx| cx.notify());
+        })
+        .with_icon("id"),
+    ];
+    crate::ui::context_menu::render_anchored_at(m.pos, gpui::Anchor::TopRight, items, dismiss, 30)
 }
 
 pub fn toggle_action(r: &mut AutomodRule, kind: u8) {

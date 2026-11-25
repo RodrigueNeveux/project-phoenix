@@ -40,6 +40,12 @@ pub enum Sub {
 }
 
 #[derive(Clone, Debug)]
+pub struct AutomodMenu {
+    pub rule: phoenix_api::rest::guild_server::AutomodRule,
+    pub pos: gpui::Point<gpui::Pixels>,
+}
+
+#[derive(Clone, Debug)]
 pub enum Load {
     Pending,
     Ready(Value),
@@ -55,7 +61,7 @@ pub struct Store {
     pub text: HashMap<(Id, String), String>,
     pub modal: Option<(Id, &'static str)>,
     pub rule_draft: Option<(Id, phoenix_api::rest::guild_server::AutomodRule)>,
-    pub menu: Option<(Id, String)>,
+    pub menu: Option<(Id, AutomodMenu)>,
     pub inputs: HashMap<(Id, String), Entity<InputState>>,
     pub want: Vec<(Id, String, String)>,
     pub subs: Vec<gpui::Subscription>,
@@ -244,6 +250,9 @@ pub fn content(app: &PhoenixApp, guild: Id, key: &str, cx: &mut Context<PhoenixA
 }
 
 pub fn modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if let Some((guild, m)) = with(|s| s.menu.clone()) {
+        return Some(automod::rule_menu(guild, m, cx));
+    }
     let (guild, which) = with(|s| s.modal)?;
     match which {
         "delete" => Some(delete::modal(app, guild, cx)),
