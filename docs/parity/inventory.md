@@ -51,16 +51,16 @@ Une ligne compte comme ⚠ dès qu'une partie reste inerte ou non mesurée, mêm
 | `user-profile-overflow-menu` | « … » du popout / profil | Voir le profil complet, Inviter sur le serveur › / Ignorer, Bloquer, Signaler le profil d'utilisateur / Copier les infos utilisateur › (identifiant, lien du profil, lien de l'avatar, lien de la bannière) | `extra_menus::profile_items` | ✅ ce lot ; ⚠ « Partager le profil », « Achète ce look » et « Partage Nitro » dépendent d'expériences et ne sont pas reproduits |
 | `image-menu` | « … » de la visionneuse | Copier l'image, Copier le lien du média / Voir les détails › (Nom de fichier, Taille, Description) / Copier l'ID de la pièce jointe | `extra_menus::viewer_items` | ✅ ce lot (le bouton était inerte) |
 | `channel-attach` | bouton « + » | Uploader un fichier, Uploader ton message en tant que fichier (brouillon non vide), Créer un fil, Créer le sondage, Utiliser des applications, Programmer un message › (Aujourd'hui/Demain à 9 h 00, à 13 h 00, Lundi à 9 h 00 / Personnalisé...), Enregistrer un message vocal | `ui/chat/composer.rs attach_menu`, `ui/chat/scheduled.rs` | ✅ lots 1 et 2 (relevé CDP du 25/11 : même ordre) |
-| `guild-header-popout` | en-tête du serveur | Boost / Inviter, Paramètres, Statistiques, Créer salon, catégorie, événement, Fils actifs, Annuaire d'applications / Tout afficher, Notifications, Confidentialité / Profil par serveur, Masquer les muets / Sécurité, Signaler un raid / Quitter / Copier l'identifiant | `nav_menus::guild_dropdown` | ⚠ Boost, Statistiques, Fils actifs, Annuaire d'applications et Signaler un raid sont des stubs |
+| `guild-header-popout` | en-tête du serveur | Boost / Inviter, Paramètres, Statistiques, Créer salon, catégorie, événement, Fils actifs, Annuaire d'applications / Tout afficher, Notifications, Confidentialité / Profil par serveur, Masquer les muets / Sécurité, Signaler un raid / Quitter / Copier l'identifiant | `nav_menus::guild_dropdown` | ⚠ Fils actifs branché (inventory2) ; Boost, Statistiques, Annuaire d'applications et Signaler un raid restent des stubs |
 | `set-status-submenu` | popout du compte | En ligne, Inactif, Ne pas déranger (durées), Invisible | `ui/status_picker.rs` | ✅ |
-| `switch-accounts-submenu` | popout du compte | comptes connectés, Gérer les comptes | `status_picker.rs` | ❌ stub (Phoenix ne gère qu'un compte) |
+| `switch-accounts-submenu` | popout du compte | comptes connectés, Gérer les comptes | `status_picker::accounts_submenu` | ✅ inventory2 (compte courant : avatar 24, nom, `CircleCheckIcon` brand, séparateur, « Gérer les comptes » ; CSS `lZtGs8`) |
 | `edit-profile-popout` | « Modifier les profils » | Profil principal, Profil par serveur | `settings::profile_editor` | ✅ |
-| `clean-up-inactive-gdms` | « … » de « Messages privés » | Nettoyage des Groupes privés… | `ui/sidebar.rs dm-more` | ❌ stub (la modale de nettoyage n'existe pas) |
+| `clean-up-inactive-gdms` | « … » de « Messages privés » | Nettoyage des Groupes privés… | `extra_menus::Target::DmMore` | ✅ inventory2 (menu sous le bouton, ouvre la modale) |
 | `sort-and-view` | forum | Trier par activité / date, Liste / Grille, Tags (tous / un), Réinitialiser | `ui/forum.rs` | ✅ |
 | `mentions-filter`, `recents-notifications` | boîte de réception | filtres Mentions, notifications de fils | `ui/inbox.rs` | ✅ |
 | `send-announcement-options` | salon d'annonces | Créer un fil, Envoyer et publier | — | ❌ |
-| `video-player-overflow` | vidéo | Transcription, Sous-titres, Télécharger | — | ❌ |
-| `media-player-playback-speed` | vidéo / audio | vitesses 0,25×–2× | — | ❌ |
+| `video-player-overflow` | vidéo | Transcription, Sous-titres, Télécharger (boutons repliés quand la barre est trop étroite, `discord-web-video-player`) | — | ❌ hors périmètre : Phoenix n'a pas de lecteur vidéo intégré (`attach::video_card` ouvre la vidéo à l'extérieur), le menu n'a pas d'hôte |
+| `media-player-playback-speed` | vidéo | 0,5×, 0,75×, 1×, 1,2×, 1,5×, 2×, 3× (expérience `2026-10-video-player-playback-speed`, désactivée par défaut) | — | ❌ hors périmètre : même raison (pas de lecteur vidéo) ; les messages vocaux ont déjà leur bouton de vitesse |
 | `plaintext-preview-overflow-menu` | pièce jointe texte | Télécharger, Retour à la ligne, Rendu Markdown | — | ❌ |
 | `settings-footer-more-menu` | bas de la barre des paramètres | Nouveautés, Remerciements, Assistance | `extra_menus::settings_more_items` | ✅ inventory2 (au-dessus du lien « Plus », centré ; liens Politique de confidentialité et Conditions d'utilisation branchés) ; ⚠ « Nouveautés » ouvre un stub (pas de modale de changelog) |
 | `wishlist-overflow-menu` | liste de souhaits du profil | Parcourir la boutique, Ajouter Nitro, Confidentialité | `ui/profile_wishlist.rs` (bouton Parcourir seulement) | ❌ |
@@ -89,7 +89,7 @@ Menus réservés au personnel, aux propriétaires d'applications ou à des fonct
 | Ajouter une note | menus | ouvre le profil (note éditable) | ✅ |
 | Retirer l'ami | ligne d'ami, menus, intro MP | `confirm_remove_friend` | ✅ ce lot (« Retirer '{name}' », bouton danger) |
 | Bloquer | menus, profil, intro MP | `confirm_block` | ✅ ce lot (« Bloquer {name} ? ») |
-| Ignorer | menus | bascule directe | ⚠ le client ouvre « Ignorer {username} ? » avec l'explication |
+| Ignorer | menus | `modals/ignore.rs` | ✅ inventory2 (module 143547, CSS `RETnwM` / `NhnBvM` / `zgsiD2` : avatar 56 + œil barré, « Ignorer {name} ? » 24 px, trois explications, « Ça ne te suffit pas ? » / Bloquer à la place / Voir les détails → confirmation de blocage, guide des fonctionnalités, Annuler / Ignorer ; ne plus ignorer reste direct) |
 | Profil complet | profil | `open_profile_modal` | ✅ |
 | Vue modérateur, exclusion, expulsion, bannissement | menu membre | `modals/member.rs` | ✅ |
 | Inviter sur le serveur | menus | `ui/invite.rs` | ✅ |
@@ -106,11 +106,11 @@ Menus réservés au personnel, aux propriétaires d'applications ou à des fonct
 | Modifier le groupe | menu groupe, intro du groupe | `modals/gdm.rs render_edit_group` | ✅ ce lot (icône 120 px + crayon, « Supprimer l'icône », nom ≤ 100, Annuler / Enregistrer pleine largeur) |
 | Invitations du groupe | menu groupe (propriétaire) | `gdm.rs render_invites` | ⚠ ce lot : structure et données du client ; le CSS du tableau (`qF1Ceg`) n'est pas dans le cache |
 | Paramètres du dossier | menu dossier | `gdm.rs render_folder` | ✅ ce lot (nom ≤ 32, « Dossier du serveur », 2 grandes pastilles + 20 couleurs de rôle) ; ⚠ la pastille personnalisée n'ouvre pas encore la pipette |
-| Nettoyage des Groupes privés | « … » des MP | — | ❌ |
-| Statut personnalisé | popout du compte | bulle en ligne | ⚠ pas de modale (émoji, durée « Effacer après ») |
-| Changer de compte | popout du compte | — | ❌ |
+| Nettoyage des Groupes privés | « … » des MP | `modals/gdm_cleanup.rs` | ✅ inventory2 (module 877760 : groupes dont le dernier message a plus de 180 jours, du plus ancien au plus récent, 5000 listés / 1000 présélectionnés, Trier (Plus récents / Date, libellés FR du client), Tout (dé)sélectionner, ligne icône 32 + nom + « N membres » + case, « Quitter N Groupes privés silencieusement » → `POST /users/@me/channels/bulk-leave` `{channel_ids}` testé, jamais exécuté ; état vide du client) |
+| Statut personnalisé | popout du compte | `modals/custom_status.rs` | ⚠ inventory2 : modale du client (module 431273, CSS `5sqtjZ` / `9pOngU`) : aperçu du profil 300 px, « Statut » + champ 128 caractères avec bouton émoji et effacement, « Effacer après » (24 h, 4 h, 1 h, 30 min, Ne pas supprimer) à gauche de la barre d'action, Enregistrer ; jamais enregistrée pendant les tests. Reste : le bouton émoji n'ouvre pas encore le sélecteur et la durée n'est pas envoyée (`set_status` sans `expires_at`) |
+| Changer de compte | popout du compte | `modals/accounts.rs` | ✅ inventory2 (UI seulement : « Gérer les comptes » du module 623161 / 970573, CSS `xu8B3s`, carte du compte actif « Compte actif », menu « … » → Déconnexion et « Ajouter un compte » inertes) |
 | Boost du serveur | menu serveur | — | ❌ |
-| Fils actifs | menu serveur | — | ❌ |
+| Fils actifs | menu serveur | `modals/active_threads.rs` | ✅ inventory2 (module 400954 : « Tous les fils actifs », lignes de fil 80 px avec le salon parent, Fermer ; l'entrée du menu n'apparaît que si le serveur a des fils actifs) |
 | Raccourcis clavier | Ctrl+/ | `shortcuts::render_help` | ✅ |
 | Sélecteur rapide | Ctrl+K | `ui/switcher.rs` | ✅ |
 | Go Live | panneau vocal | `modals/go_live.rs` | ✅ |
@@ -129,7 +129,7 @@ Menus réservés au personnel, aux propriétaires d'applications ou à des fonct
 | Demandes de message | MP | `friends.rs message_requests` | ✅ |
 | Nitro | `/store` | `ui/home/nitro.rs` | ✅ |
 | Boutique | `/shop` | `ui/shop_page.rs` | ✅ (achats inertes) |
-| Quêtes | `/quest-home` (rangée « Quêtes ») | — | ❌ stub |
+| Quêtes | `/quest-home` (rangée « Quêtes ») | `ui/quests_page.rs` | ⚠ inventory2 : page en lecture seule depuis `GET /quests/@me` (quêtes non expirées, tuiles 260 px sur une grille `minmax(336px,1fr)` gap 24 dans la colonne de 1300 px, héros, badge d'expiration, logotype, jeu, récompense, progression) ; rien n'est accepté ni réclamé. Reste : bannière héros, sections, recherche, filtres et tri du client, non comparés en direct |
 | Découvrir | `/discovery` (Serveurs, Applications, Quêtes) | — | ❌ stub (bouton boussole du rail) |
 | Annuaire d'applications | menu serveur, « Utiliser des applications » | `ui/chat/app_launcher.rs` (lanceur) | ❌ page complète |
 | Centre familial | Compte › Centre familial | bouton « Configurer » | ❌ |
