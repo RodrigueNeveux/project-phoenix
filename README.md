@@ -35,182 +35,120 @@ as a native application with the goals of:
 
 ## Status
 
-Beta, under active development. The goal is a 1:1 visual and functional replica of the official 2026 desktop client. Every area is compared against the real client on a real account: same window size, zoom and states (hover, focus, pressed, open menus). The per-area tables in [docs/parity/](docs/parity/) currently list about 1,750 verified rows, around 100 partial and about 55 missing.
+Beta, under active development. Every screen is compared side by side with the official 2026 client
+(same size, same zoom, same account) and measured values come from the client's own CSS. The parity
+tables in [`docs/parity/`](docs/parity) track about 1,950 checked items.
 
-### Done
+| Area | State | Notes |
+|---|---|---|
+| Login | Works | Email and password, TOTP, SMS and backup codes, QR code login, token. The token stays in the system keyring. |
+| Gateway and start-up | Works | Compression, resume, reconnect. The last session is cached on disk, so the UI is on screen in 0.1 to 0.4 s after launch. |
+| Servers, channels, folders | Works | Rail with folders and badges, Favorites, categories, Browse Channels, Server Guide, onboarding and join gates. |
+| Messages | Works | Markdown, Twemoji, animated emoji and stickers, embeds, image mosaics, polls, components, forwarded messages, system messages. |
+| Composer | Mostly works | Rich editor with live markdown, slash commands, autocomplete, uploads, voice messages, polls, scheduled messages. |
+| Threads and forums | Works | Thread browser, private threads, forum list and gallery views, tags, guidelines. |
+| DMs, group DMs, calls | Mostly works | Friends, message requests, group DMs, ringing and incoming calls, call view above the DM. |
+| Voice, video, screen share | Partial | Real voice, push-to-talk, noise suppression, soundboard, camera and Go Live sending, stream viewing. DAVE is implemented but not verified yet. |
+| Members and profiles | Works | Role groups, Activity section, nameplates, server tags, profile popout and full profile with themes, effects and widgets. |
+| Inbox, search, pins | Works | Unreads, Mentions, Saved, Reminders and Scheduled; search with filters, sort and pagination. |
+| User settings | Mostly works | The 2026 settings modal with search, synced through Discord's settings protocol. Account changes are blocked on purpose for now. |
+| Server and channel settings | Mostly works | The 2026 layout: roles, members, invites, AutoMod, audit log, bans, onboarding, channel permissions and webhooks. |
+| Moderation | Mostly works | Mod View, timeout, kick and ban, report flows, View Server As Role. |
+| Discover, Quests, Shop, Nitro | Partial | Real data is shown; nothing can be bought. |
+| Notifications | Works | Desktop notifications with the client's rules, taskbar badge, tray icon, sound effects. |
+| Themes, zoom, languages | Works | Light, Ash, Dark, Onyx, high contrast, density, font size, page zoom, English and French plus the client's own translations. |
+| Platforms | Mostly works | Linux (AppImage, `.deb`, tarball), Windows and macOS builds, built-in updater. Linux is the most tested. |
 
-- **Core**: token login with the token kept in the system keyring, gateway with compression, resume and reconnect, REST with rate limiting, local state cache.
-- **Navigation**: server rail with folders (Move To, folder settings), unread and mention badges, Favorites server, channel list with categories, threads, mute rules and the unread pill, DMs and group DMs (with the inactive group cleanup), Friends page, message requests, Nitro home, Shop, Quests, account switcher.
-- **Chat**:
-  - the message list with grouping rules, date and "new messages" dividers, jump to a message with a highlight, and the detached history view;
-  - role colours and gradients on names, mentions drawn as one continuous pill, names in replies and system messages that open the profile;
-  - the send lifecycle: pending message, failed state, retry, slowmode;
-  - scheduled messages: schedule with a calendar, edit, send now or cancel;
-  - editing and deleting messages, replies and reactions; a confirmation before leaving through a masked link.
-- **Message content**: Discord markdown (masked links, code blocks with highlighting, spoilers), mentions, Twemoji 16.0 emoji with the client's emoji table, animated emoji, GIFs and stickers, embeds and provider layouts, invite cards, attachments with an image viewer, ALT text and inline text previews, polls, components v2, voice messages, system messages.
-- **Composer**: the + menu, uploads (picker, drag and drop, paste) with progress, spoiler and description, emoji picker with the server's popular emojis and frecency, GIF and sticker pickers, the app launcher, typing indicator, mention and emoji previews.
-- **Members and profiles**: member list identical to the client (per-channel lists, Activity section, role groups, nameplates), profile popout and modal (live stream card, moderator view, role icons, mutual friends and servers), avatar decorations, custom status modal.
-- **Search and inbox**: server and DM search with filters, sort, pagination and highlighted hits; the inbox with Unreads, Mentions, Saved, Reminders and Scheduled.
-- **Threads and forums**: create, join, leave, rename, archive, lock, mute for a duration, private threads, thread browser, active threads, forum guidelines, sort and tag filters.
-- **Settings**: account, privacy and data, notifications, appearance (themes Light, Ash, Dark, Onyx, high contrast, device theme, density, font size, zoom), voice and video, streamer mode, text-to-speech and `/tts`, synced and local settings wired like the client, subscriptions.
-- **Server settings**: the 2026 layout with server profile, tag, engagement, boost perks, emoji, stickers, soundboard, members, roles, invites, integrations, safety setup, AutoMod, audit log, bans, community, onboarding and analytics, read from the real server. Changes are coded like the client and covered by unit tests.
-- **Channel settings**: overview, permissions, invites, integrations and webhooks, add members and delete modals, create channel.
-- **Voice**: voice channels with mute and deafen states, soundboard, camera (sending), Go Live (sending a stream, screen and window picker, streaming modes), notification and call sounds.
-- **Desktop**: custom title bar, tray icon, autostart, hardware acceleration toggle, keyboard shortcuts, responsive layout down to narrow windows.
-- **Reporting**: the multi-step report flow for messages.
+## Features
 
-### Still to do
+**Servers and navigation**
+- Server rail with folders, unread and mention badges, voice badge and drag reordering.
+- Channel list with categories, mute dimming, private channel locks and threads under their channel.
+- Resizable channel list and the client's narrow-window breakpoints.
+- Quick switcher (Ctrl+K), the client's keyboard shortcuts and the shortcuts modal.
+- Add Server with templates, invite dialogs, Server Guide, onboarding, rules screening and verification gates.
+- Server events and the three-step create event wizard.
 
-- [ ] Receiving other people's camera video and streams, tested with a second account
-- [ ] Activities: they are web apps, and Phoenix has no web engine yet
-- [ ] End-to-end encrypted calls (DAVE), tested in a channel that has it enabled
-- [ ] Stream volume control, the voice panel soundboard button, the capture devices tab of Go Live
-- [ ] Long invite cards ("Show more"), and the stream, event and application invite cards
-- [ ] The Discover page and the App Directory (in progress)
-- [ ] Changing email, phone, password, username and 2FA from the Account page
-- [ ] The remaining ⚠ and ❌ rows in [docs/parity/](docs/parity/), most of them in [inventory](docs/parity/inventory.md) and [call view](docs/parity/call-view.md)
+**Messages and composer**
+- Discord markdown: headings, lists, quotes, subtext, masked links, spoilers, timestamps, highlighted code blocks.
+- Animated GIFs, WebP, Lottie stickers, avatar decorations, image mosaics with the client's geometry.
+- Embeds, components v2, bot buttons and selects, polls with live results, invite cards.
+- Replies, forwards, reactions, reminders, Mark As Unread and full context menus.
+- Rich editor that styles markdown while you type, also used to edit messages.
+- Slash commands, mention, channel, emoji and sticker autocomplete.
+- Uploads by picker, drag and drop or paste, with ALT text and spoiler options.
+- Emoji, GIF and sticker pickers; voice messages; scheduled messages and scheduled polls.
+- Announcement post composer and the Follow modal.
 
-Contributions are very welcome, especially on the items above. Pick an unchecked item or a ❌ row, compare it with the official client, and open a PR; see [Contributing](#contributing).
+**Threads and forums**
+- Threads popout, All Active Threads, private threads, archive, lock and timed mutes.
+- Forums in list or gallery view, with tags, sort, guidelines and the post reactions bar.
 
-## Development progress
+**DMs and calls**
+- Friends page, message requests, group DMs with face piles, friend nicknames as DM names.
+- Ringing, incoming call popup, call view above the DM and call system messages.
 
-**<u>THESE SCREENSHOTS ARE NOT FINAL VERSIONS.</u>**
+**Voice and video**
+- Voice channels with real audio, ping and connection stats, privacy codes.
+- Push-to-talk, noise suppression, input profiles, per-user volume.
+- Call view with tiles, spotlight, side chat, picture-in-picture and a popout window.
+- Camera and Go Live (screen or window) with AV1, H.264 or VP8. H.265 is never sent.
+- Quality changes without restarting the stream; soundboard and emoji effects.
 
-**What's new since 24 November.** Server settings were rebuilt on the 2026 layout and now read the real server: profile, roles, safety setup, AutoMod, audit log, bans and the rest. Channel settings followed, with permissions, webhooks and the add members and delete modals. Phoenix can now go live in a voice channel, play the soundboard and send camera video. Scheduled messages, invite cards, the inbox Unreads and Scheduled tabs, the Quests page, streamer mode and text-to-speech were added. A pass on text rendering (font fallback like Chromium, baselines, underlines and mentions as one pill) brought names and messages closer to the official client.
+**Members and profiles**
+- Member list with role groups, Activity section, nameplates, role icons and server tags.
+- Profile popout and full profile: Nitro themes, effects, frames, widgets, game collection, mutuals, notes.
+- Status bubble toolbar and the client's friend buttons.
+- Profile editor, custom status, server and friend nicknames.
 
-These are real, unedited renders of Phoenix logged into a real account on the project's own community server, *Aperture Sciences* (25 November 2026, build `415f175e`). A few third-party nicknames and sound names are blurred, and so is the DM list on the Quests page. Nothing here is a mock-up: the messages, members, roles, badges, nameplates, server rail and channel list come live from Discord's gateway and API, and Phoenix draws them natively with Rust + GPUI. Click an image to see it full size.
+**Search, inbox and moderation**
+- Server and DM search with filters, sort, pagination and highlighted hits.
+- Inbox with Unreads, Mentions, Saved, Reminders and Scheduled.
+- Mod View, AutoMod rules, audit log, bans, report flows.
 
-### Chat
+**Settings and desktop**
+- The 2026 settings modal with page search, synced with your other clients.
+- Appearance, accessibility, notifications, voice and video, language, Streamer Mode, keybinds.
+- Server and channel settings on the 2026 layout.
+- Discover, Quests, Shop, Nitro and Server Boost pages with real data.
+- Desktop notifications, taskbar badge, tray icon, sound effects, Lottie hover animations.
+- Icons, fonts and sounds are loaded from your local Discord install, never shipped.
 
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/chat-general.png"><img src="docs/screenshots/2026-11-25/chat-general.png" alt="#général on Aperture Sciences: role colours and gradients, replies, badges, YouTube embed and the member list."></a><br><sub>#général on Aperture Sciences: role colours and gradients, replies, badges, YouTube embed and the member list.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/chat-phoenix-sandbox.png"><img src="docs/screenshots/2026-11-25/chat-phoenix-sandbox.png" alt="#phoenix, the test channel: an image with ALT text, a voice message reply, a pin notice and a sticker."></a><br><sub>#phoenix, the test channel: an image with ALT text, a voice message reply, a pin notice and a sticker.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/pending-message.png"><img src="docs/screenshots/2026-11-25/pending-message.png" alt="A message being sent: the pending state in grey, then the final message, next to a Clyde error notice."></a><br><sub>A message being sent: the pending state in grey, then the final message, next to a Clyde error notice.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/poll.png"><img src="docs/screenshots/2026-11-25/poll.png" alt="A finished poll with the winning answer, and the "poll is closed" system message."></a><br><sub>A finished poll with the winning answer, and the "poll is closed" system message.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/attachment-alt-badge.png"><img src="docs/screenshots/2026-11-25/attachment-alt-badge.png" alt="Image attachments with the ALT badge for their description."></a><br><sub>Image attachments with the ALT badge for their description.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/attachment-alt-edit.png"><img src="docs/screenshots/2026-11-25/attachment-alt-edit.png" alt="Editing an attachment before sending: file name, ALT text and spoiler."></a><br><sub>Editing an attachment before sending: file name, ALT text and spoiler.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/voice-message-player.png"><img src="docs/screenshots/2026-11-25/voice-message-player.png" alt="The voice message player, muted, with the waveform and speed button."></a><br><sub>The voice message player, muted, with the waveform and speed button.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/invite-cards.png"><img src="docs/screenshots/2026-11-25/invite-cards.png" alt="Invite links drawn as invite cards, including the invalid invite card."></a><br><sub>Invite links drawn as invite cards, including the invalid invite card.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/emoji-picker-popular.png"><img src="docs/screenshots/2026-11-25/emoji-picker-popular.png" alt="The emoji picker with the server's popular emojis and the frequently used row."></a><br><sub>The emoji picker with the server's popular emojis and the frequently used row.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/scheduled-message-calendar.png"><img src="docs/screenshots/2026-11-25/scheduled-message-calendar.png" alt="Scheduling a message: the date picker and time list."></a><br><sub>Scheduling a message: the date picker and time list.</sub></td>
-</tr>
-</table>
+**Known gaps**
+- Receiving other people's camera and streams has not been checked with a second account yet.
+- DAVE end-to-end encryption is written but not tested in a channel that requires it.
+- No Activities and no built-in video player.
+- Account changes (email, phone, password, username, 2FA) and purchases are blocked on purpose.
 
-### Members & profiles
+## Screenshots
 
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/member-list-nameplates.png"><img src="docs/screenshots/2026-11-25/member-list-nameplates.png" alt="The member list with role groups, role icons, activities and nameplates."></a><br><sub>The member list with role groups, role icons, activities and nameplates.</sub></td>
-</tr>
-</table>
-
-### Search & inbox
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/search-results.png"><img src="docs/screenshots/2026-11-25/search-results.png" alt="Server search: result cards with highlighted hits, pagination, filters and sort."></a><br><sub>Server search: result cards with highlighted hits, pagination, filters and sort.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/search-filters.png"><img src="docs/screenshots/2026-11-25/search-filters.png" alt="The search filters modal with the channel picker open."></a><br><sub>The search filters modal with the channel picker open.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/inbox-unreads.png"><img src="docs/screenshots/2026-11-25/inbox-unreads.png" alt="The inbox, Unreads tab: cards per channel with mark-as-read buttons."></a><br><sub>The inbox, Unreads tab: cards per channel with mark-as-read buttons.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/scheduled-messages-inbox.png"><img src="docs/screenshots/2026-11-25/scheduled-messages-inbox.png" alt="The inbox, Scheduled tab: messages waiting to be sent, with send, edit, reschedule and cancel."></a><br><sub>The inbox, Scheduled tab: messages waiting to be sent, with send, edit, reschedule and cancel.</sub></td>
-</tr>
-</table>
-
-### Threads & forums
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/threads-browser.png"><img src="docs/screenshots/2026-11-25/threads-browser.png" alt="The threads popout: joined threads with their last message, and older threads."></a><br><sub>The threads popout: joined threads with their last message, and older threads.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/forum-guidelines.png"><img src="docs/screenshots/2026-11-25/forum-guidelines.png" alt="A forum channel with its post guidelines, sort menu and a pinned post."></a><br><sub>A forum channel with its post guidelines, sort menu and a pinned post.</sub></td>
-</tr>
-</table>
-
-### Voice
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/voice-call.png"><img src="docs/screenshots/2026-11-25/voice-call.png" alt="In the test voice channel: Phoenix sending a test pattern as camera video."></a><br><sub>In the test voice channel: Phoenix sending a test pattern as camera video.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/soundboard.png"><img src="docs/screenshots/2026-11-25/soundboard.png" alt="The soundboard: top sounds, favourites, recent sounds and the server's sounds."></a><br><sub>The soundboard: top sounds, favourites, recent sounds and the server's sounds.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/go-live-modal.png"><img src="docs/screenshots/2026-11-25/go-live-modal.png" alt="Go Live: the screen picker with the streaming mode menu."></a><br><sub>Go Live: the screen picker with the streaming mode menu.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/go-live-streaming.png"><img src="docs/screenshots/2026-11-25/go-live-streaming.png" alt="Phoenix streaming in the test voice channel (other streams stay behind "Watch stream")."></a><br><sub>Phoenix streaming in the test voice channel (other streams stay behind "Watch stream").</sub></td>
-</tr>
-</table>
-
-### User settings
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/settings-appearance.png"><img src="docs/screenshots/2026-11-25/settings-appearance.png" alt="Settings › Appearance: default themes, the device theme switch and colour themes."></a><br><sub>Settings › Appearance: default themes, the device theme switch and colour themes.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/settings-voice-video.png"><img src="docs/screenshots/2026-11-25/settings-voice-video.png" alt="Settings › Voice & Video: devices, volumes, mic test and input profile."></a><br><sub>Settings › Voice & Video: devices, volumes, mic test and input profile.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/settings-notifications.png"><img src="docs/screenshots/2026-11-25/settings-notifications.png" alt="Settings › Notifications: the overview switches and their sub-pages."></a><br><sub>Settings › Notifications: the overview switches and their sub-pages.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/streamer-mode.png"><img src="docs/screenshots/2026-11-25/streamer-mode.png" alt="Streamer mode on: the banner and hidden usernames, read from the account's settings."></a><br><sub>Streamer mode on: the banner and hidden usernames, read from the account's settings.</sub></td>
-</tr>
-</table>
-
-### Server & channel settings
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/server-settings-profile.png"><img src="docs/screenshots/2026-11-25/server-settings-profile.png" alt="Server settings › Server profile with the live invite preview card."></a><br><sub>Server settings › Server profile with the live invite preview card.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/server-settings-roles.png"><img src="docs/screenshots/2026-11-25/server-settings-roles.png" alt="Server settings › Roles: default permissions, search and the role list."></a><br><sub>Server settings › Roles: default permissions, search and the role list.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/server-settings-safety.png"><img src="docs/screenshots/2026-11-25/server-settings-safety.png" alt="Server settings › Safety setup."></a><br><sub>Server settings › Safety setup.</sub></td>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/server-settings-automod.png"><img src="docs/screenshots/2026-11-25/server-settings-automod.png" alt="Server settings › AutoMod rules."></a><br><sub>Server settings › AutoMod rules.</sub></td>
-</tr>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/channel-settings-permissions.png"><img src="docs/screenshots/2026-11-25/channel-settings-permissions.png" alt="Channel settings › Permissions of #phoenix: private channel and who has access."></a><br><sub>Channel settings › Permissions of #phoenix: private channel and who has access.</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
-
-### Moderation & safety
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/report-flow.png"><img src="docs/screenshots/2026-11-25/report-flow.png" alt="Reporting a message: the multi-step report flow (nothing was sent)."></a><br><sub>Reporting a message: the multi-step report flow (nothing was sent).</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
-
-### Home
-
-<table>
-<tr>
-<td width="50%" valign="top"><a href="docs/screenshots/2026-11-25/quests.png"><img src="docs/screenshots/2026-11-25/quests.png" alt="The Quests page, read from the account's quests (the DM list is blurred)."></a><br><sub>The Quests page, read from the account's quests (the DM list is blurred).</sub></td>
-<td width="50%"></td>
-</tr>
-</table>
-
-How we check parity: every view is compared against the official 2026 client on the same account, at the same window size and zoom. We measure the CSS, the states (hover, focus, pressed, open menus) and the window widths at which the layout changes. The method is in [docs/PARITY_WORKFLOW.md](docs/PARITY_WORKFLOW.md), and each area has a status table in [docs/parity/](docs/parity/), with ✅, ⚠ and ❌ and the source of each value.
+GALLERY_PLACEHOLDER
 
 ## Benchmarks
 
-First measurements (i7-6700K, GTX 1050 Ti, 32 GB, Wayland). Discord Phoenix ran on **mock data**,
-while the official client was measured read-only on a **real account**, so treat this as an
-order of magnitude. Full method and caveats: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+Measured on 2026-11-25 against the official client 1.0.171 on the same machine
+(i7-6700K, GTX 1050 Ti, Wayland). Every process of each app is summed from `/proc`.
+Full method and caveats: [docs/perf.md](docs/perf.md) and [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
-| | Discord Phoenix (mock) | Official Discord 1.0.170 |
-|---|---|---|
-| Idle memory (PSS) | ~140–195 MiB, 1 process | ~805 MiB, 10 processes |
-| Idle CPU | ~0.3 % of one core | ~2.2 % |
-| Start to first frame | ~0.5 s warm, 1.2 s cold | — |
-| 5000-message channel | +14 MiB after loading and scrolling it all | — |
-| Binary | 42 MiB, single stripped file | Electron |
+| | Official Discord 1.0.171 | Phoenix, real account (dev build) | Phoenix, release build (mock data) |
+|---|---|---|---|
+| Memory (PSS) | 880 to 963 MiB | **342 MiB** | **202 MiB** |
+| Memory (RSS) | 1,427 to 1,504 MiB | 423 MiB | 287 MiB |
+| Processes | 9 + crash handler | 1 | 1 |
+| Threads | 138 | 18 | 23 |
+| CPU at rest | 8 to 11 % of one core | 4.1 % | **0.45 %** |
+| Wakeups per second | 243 to 303 | 186 | 127 |
+| On disk | 560 MB install + 708 MB profile | | **55.9 MB** binary |
+
+PSS counts shared pages once, so it is the fair number for memory: Phoenix uses 2.6 to 2.8 times
+less than Discord on a real account, and 4.4 to 4.8 times less in the release build.
+The CPU columns are not like for like (the real-account run is an unoptimized dev build).
+
+| Start-up | |
+|---|---|
+| Session on screen after launch (resume from disk) | about 0.12 s after connecting |
+| Cold start, live READY then first channel | 1.27 s, then 0.37 s |
+| Cached channel switch | 8 to 15 ms from memory, about 0.1 s from disk |
 
 Reproduce with `scripts/bench/run.sh`.
 
