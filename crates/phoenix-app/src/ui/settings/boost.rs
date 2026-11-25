@@ -88,8 +88,12 @@ fn header() -> Div {
                         .text_size(z(14.))
                         .line_height(z(18.))
                         .text_color(c(tok(idx::TEXT_SUBTLE)))
-                        .child(tr("sp.bo.lead"))
-                        .child(div().text_color(c(tok(idx::TEXT_LINK))).child(tr("sp.bo.learn"))),
+                        .child({
+                            let (lead, learn) = (tr("sp.bo.lead"), tr("sp.bo.learn"));
+                            let start = lead.len() + 1;
+                            let link = gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() };
+                            gpui::StyledText::new(format!("{lead} {learn}")).with_highlights(vec![(start..start + learn.len(), link)])
+                        }),
                 ),
         )
         .child(
@@ -167,16 +171,12 @@ fn guild_cards(app: &PhoenixApp) -> Div {
                                                 .items_center()
                                                 .gap(z(2.))
                                                 .child(icon("boost", 14., idx::GUILD_BOOSTING_PINK))
-                                                .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("sp.bo.count", n = g.boosts))),
+                                                .child(text(12., 16., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE, crate::t!("sp.bo.count", n = g.boosts))),
                                         )
-                                        .child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_MUTED))))
-                                        .child(text(
-                                            12.,
-                                            16.,
-                                            FontWeight::NORMAL,
-                                            idx::TEXT_MUTED,
-                                            if g.boost_tier == 0 { tr("sp.bo.no_level") } else { crate::t!("sp.bo.level", n = g.boost_tier) },
-                                        )),
+                                        .when(g.boost_tier > 0, |d| {
+                                            d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_MUTED))))
+                                                .child(text(12., 16., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE, crate::t!("sp.bo.level", n = g.boost_tier)))
+                                        }),
                                 ),
                         ),
                 )
