@@ -192,7 +192,8 @@ fn set_pick(app: &mut PhoenixApp, id: &'static str, p: Pick, v: usize, cx: &mut 
 
 fn switch_row(app: &PhoenixApp, id: &'static str, title: SharedString, desc: Option<AnyElement>, b: Bind, cx: &mut Cx) -> AnyElement {
     let synced = &app.prefs.synced;
-    let disabled = matches!(b, Bind::Proto) && super::synced_map::disabled(&synced.proto, synced.compact, id);
+    let disabled = (matches!(b, Bind::Proto) && super::synced_map::disabled(&synced.proto, synced.compact, id))
+        || (id == "theme-devices" && get_bool(app, "theme-sync", Bind::Pref(false)));
     let on = get_bool(app, id, b) || (id == "avatars" && !synced.compact);
     if disabled {
         let row = item_ex(

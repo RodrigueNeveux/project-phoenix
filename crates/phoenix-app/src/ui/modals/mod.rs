@@ -287,6 +287,29 @@ pub fn close_action(cx: &mut Context<PhoenixApp>) -> crate::ui::modal::Action {
     })
 }
 
+pub fn strong_ranges(s: &str) -> (String, Vec<std::ops::Range<usize>>) {
+    if s.matches("**").count() % 2 == 1 {
+        return (s.to_owned(), Vec::new());
+    }
+    let mut out = String::new();
+    let mut ranges = Vec::new();
+    for (i, part) in s.split("**").enumerate() {
+        let start = out.len();
+        out.push_str(part);
+        if i % 2 == 1 {
+            ranges.push(start..out.len());
+        }
+    }
+    (out, ranges)
+}
+
+fn strong_marked(s: &str) -> gpui::StyledText {
+    let (text, ranges) = strong_ranges(s);
+    gpui::StyledText::new(text).with_highlights(
+        ranges.into_iter().map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })),
+    )
+}
+
 pub fn card(width: f32, title: SharedString, subtitle: Option<SharedString>, body: AnyElement, footer: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     card_with(width, title, subtitle, body, footer, close_action(cx))
 }
@@ -321,7 +344,7 @@ pub fn card_with(width: f32, title: SharedString, subtitle: Option<SharedString>
                 .flex_col()
                 .gap(z(8.))
                 .child(div().pr(z(36.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(title))
-                .children(subtitle.map(|s| div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(s))),
+                .children(subtitle.map(|s| div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(strong_marked(&s)))),
         )
         .child(div().px(z(24.)).pt(z(8.)).flex().flex_col().min_h_0().text_size(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(body))
         .children(footer.map(|f| div().pt(z(16.)).px(z(24.)).pb(z(8.)).flex().gap(z(8.)).justify_end().child(f)))
@@ -502,6 +525,15 @@ fn form(f: &Form, cx: &mut Context<PhoenixApp>) -> AnyElement {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn strong_markers_in_subtitles() {
+        let (t, r) = super::strong_ranges("Ce lien essaie d'ouvrir **une application sur ton appareil**");
+        assert_eq!(t, "Ce lien essaie d'ouvrir une application sur ton appareil");
+        assert_eq!(r, vec![24..t.len()]);
+        assert_eq!(super::strong_ranges("a ** b"), ("a ** b".to_owned(), vec![]));
+        assert_eq!(super::strong_ranges("plain"), ("plain".to_owned(), vec![]));
+    }
+
     use super::clamp_insert;
 
     #[test]
