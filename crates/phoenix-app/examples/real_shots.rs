@@ -1221,6 +1221,11 @@ fn main() -> anyhow::Result<()> {
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
                 "customstatus" => app.open_custom_status(cx),
+                "activethreads" => {
+                    if let Some(g) = app.selected_guild {
+                        app.open_active_threads(g, cx);
+                    }
+                }
                 "ignore" => {
                     let target = arg.parse::<u64>().ok().map(phoenix_app::model::Id).or_else(|| {
                         let ch = app.selected_channel?;

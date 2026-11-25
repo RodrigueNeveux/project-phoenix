@@ -1,4 +1,5 @@
 pub mod accounts;
+pub mod active_threads;
 pub mod channel_overview;
 pub mod channel_perms;
 pub mod channel_perms_data;
@@ -110,6 +111,7 @@ pub enum Modal {
     Ignore(crate::model::Id),
     GdmCleanup(gdm_cleanup::Cleanup),
     CustomStatus(custom_status::CustomStatus),
+    ActiveThreads(crate::model::Id),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -223,6 +225,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Ignore(u) => ignore::render(app, *u, cx),
             Modal::GdmCleanup(s) => gdm_cleanup::render(app, s, cx),
             Modal::CustomStatus(s) => custom_status::render(app, s, cx),
+            Modal::ActiveThreads(g) => active_threads::render(app, *g, cx),
         })
     })
 }

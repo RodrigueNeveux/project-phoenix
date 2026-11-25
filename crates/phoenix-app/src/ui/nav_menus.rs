@@ -217,7 +217,9 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     if events {
         items.push(act(&e, crate::t!("menu.create_event"), move |a, _, cx| a.open_create_event(g, cx)));
     }
-    items.push(stub(&e, "menu.active_threads"));
+    if !crate::ui::modals::active_threads::active_threads(app, g).is_empty() {
+        items.push(act(&e, crate::t!("menu.active_threads"), move |a, _, cx| a.open_active_threads(g, cx)));
+    }
     items.push(stub(&e, "menu.gs.app_directory"));
     items.push(MenuItem::Separator);
     items.extend(crate::actions::channel::show_all_item(app, &e, g));

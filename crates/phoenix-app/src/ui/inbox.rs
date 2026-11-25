@@ -1487,61 +1487,12 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .child(crate::t!("threads.joined", n = list_src.len())),
         );
     }
-    let now = chrono::Local::now().timestamp();
     for t in list_src {
         let tid = t.id;
-        let info = app.backend.thread_info(t.id);
-        let info = info.as_ref();
-        let created = ((t.id.0 >> 22) / 1000 + 1_420_070_400) as i64;
-        let recent = crate::thread_recent::get(t.id);
-        let when = crate::thread_recent::ago(now - recent.as_ref().map_or(created, |r| r.ts));
-        let sub = match &recent {
-            Some(r) => {
-                let u = app.member_user(app.selected_guild, r.author);
-                let color = app.author_color_in(app.selected_guild, r.author).map(|c2| crate::theme::role_color(Some(c2))).unwrap_or_else(|| tk(idx::TEXT_STRONG));
-                div()
-                    .flex()
-                    .items_center()
-                    .min_w_0()
-                    .child(div().flex_none().mr(z(8.)).child(avatar(u.as_deref(), 16.)))
-                    .child(div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(app.member_nick(r.author).unwrap_or_else(|| r.name.clone())))
-                    .child(div().flex_none().child(": "))
-                    .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
-                    .child(div().flex_none().w(z(20.)).flex().justify_center().child("•"))
-                    .child(div().flex_none().child(when))
-            }
-            None => div().flex().items_center().child(crate::t!("threads.no_recent")).child(div().flex_none().w(z(20.)).flex().justify_center().child("•")).child(when),
-        };
-        list = list.child(
-            div()
-                .id(("thread-row", t.id.0))
-                .flex_none()
-                .h(z(72.))
-                .mb(z(8.))
-                .p(z(15.))
-                .rounded(z(8.))
-                .border_1()
-                .border_color(tk(idx::BORDER_SUBTLE))
-                .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
-                .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGHEST)).border_color(tk(idx::BORDER_NORMAL)))
-                .cursor_pointer()
-                .flex()
-                .items_center()
-                .on_click(cx.listener(move |a, _, _, cx| {
-                    a.parity.threads_open = false;
-                    a.open_thread_full(tid, cx);
-                }))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(t.name.clone()))
-                        .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().child(sub)),
-                )
-                .when_some(info.and_then(|i| thread_facepile(app, &i.member_ids_preview, i.member_count)), |d, f| d.child(f)),
-        );
+        list = list.child(thread_browser_row(app, &t, None).on_click(cx.listener(move |a, _, _, cx| {
+            a.parity.threads_open = false;
+            a.open_thread_full(tid, cx);
+        })));
     }
     if !archived.is_empty() {
         list = list.child(section_header(crate::t!("threads.older").to_string()));
@@ -2149,6 +2100,66 @@ fn facepile_more(preview: usize, count: u32) -> Option<String> {
     } else {
         None
     }
+}
+
+pub(crate) fn thread_browser_row(app: &PhoenixApp, t: &crate::model::Channel, parent: Option<SharedString>) -> gpui::Stateful<gpui::Div> {
+    let now = chrono::Local::now().timestamp();
+    let guild = t.guild.or(app.selected_guild);
+    let info = app.backend.thread_info(t.id);
+    let info = info.as_ref();
+    let created = ((t.id.0 >> 22) / 1000 + 1_420_070_400) as i64;
+    let recent = crate::thread_recent::get(t.id);
+    let when = crate::thread_recent::ago(now - recent.as_ref().map_or(created, |r| r.ts));
+    let sub = match &recent {
+        Some(r) => {
+            let u = app.member_user(guild, r.author);
+            let color = app.author_color_in(guild, r.author).map(|c2| crate::theme::role_color(Some(c2))).unwrap_or_else(|| tk(idx::TEXT_STRONG));
+            div()
+                .flex()
+                .items_center()
+                .min_w_0()
+                .child(div().flex_none().mr(z(8.)).child(avatar(u.as_deref(), 16.)))
+                .child(div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(app.member_nick(r.author).unwrap_or_else(|| r.name.clone())))
+                .child(div().flex_none().child(": "))
+                .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
+                .child(div().flex_none().w(z(20.)).flex().justify_center().child("•"))
+                .child(div().flex_none().child(when))
+        }
+        None => div().flex().items_center().child(crate::t!("threads.no_recent")).child(div().flex_none().w(z(20.)).flex().justify_center().child("•")).child(when),
+    };
+    div()
+        .id(("thread-row", t.id.0))
+        .flex_none()
+        .h(z(72.))
+        .mb(z(8.))
+        .p(z(15.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
+        .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGHEST)).border_color(tk(idx::BORDER_NORMAL)))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex()
+                        .items_baseline()
+                        .min_w_0()
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .child(div().min_w_0().overflow_hidden().text_ellipsis().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_DEFAULT)).child(t.name.clone()))
+                        .children(parent.map(|p| div().flex_none().ml(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::TEXT_MUTED)).child(p))),
+                )
+                .child(div().text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().child(sub)),
+        )
+        .when_some(info.and_then(|i| thread_facepile(app, &i.member_ids_preview, i.member_count)), |d, f| d.child(f))
 }
 
 fn thread_facepile(app: &PhoenixApp, ids: &[Id], count: u32) -> Option<gpui::Div> {
