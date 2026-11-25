@@ -104,6 +104,9 @@ impl Backend for ReadOnly {
     fn set_status(&self, _: Presence, _: Option<String>) -> BoxFuture<()> {
         denied()
     }
+    fn save_custom_status(&self, _: Presence, _: Option<phoenix_app::ui::modals::custom_status::StatusDraft>) -> BoxFuture<()> {
+        denied()
+    }
     fn logout(&self) -> BoxFuture<()> {
         denied()
     }

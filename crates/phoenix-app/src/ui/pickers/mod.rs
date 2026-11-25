@@ -33,6 +33,7 @@ use types::{GifHome, GifItem, StickerPackData};
 pub enum EmojiTarget {
     Composer,
     Reaction { channel: Id, message: Id },
+    Status,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,7 +171,7 @@ pub fn open(app: &mut PhoenixApp, tab: Tab, target: EmojiTarget, window: &mut Wi
         return;
     }
     ui::autocomplete::dismiss(cx);
-    let tab = if matches!(target, EmojiTarget::Reaction { .. }) { Tab::Emoji } else { tab };
+    let tab = if matches!(target, EmojiTarget::Composer) { tab } else { Tab::Emoji };
     let input = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder(tab)));
     let sub = cx.subscribe_in(&input, window, |app, _, ev: &InputEvent, window, cx| match ev {
         InputEvent::Change => on_query(app, cx),
@@ -178,7 +179,7 @@ pub fn open(app: &mut PhoenixApp, tab: Tab, target: EmojiTarget, window: &mut Wi
         _ => {}
     });
     input.update(cx, |s, cx| s.focus(window, cx));
-    let anchor = matches!(target, EmojiTarget::Reaction { .. }).then(|| window.mouse_position());
+    let anchor = (!matches!(target, EmojiTarget::Composer)).then(|| window.mouse_position());
     let grid = grid::build(app, "", matches!(target, EmojiTarget::Reaction { .. }), cx);
     let list = ListState::new(grid.rows.len(), gpui::ListAlignment::Top, px(400.));
     cx.global_mut::<Pickers>().open = Some(OpenPicker {
@@ -223,8 +224,10 @@ fn switch_tab(app: &mut PhoenixApp, tab: Tab, window: &mut Window, cx: &mut Cont
 
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     app.chat.emoji_target = None;
-    if cx.global_mut::<Pickers>().open.take().is_some() {
-        app.composer.update(cx, |s, cx| s.focus(window, cx));
+    if let Some(op) = cx.global_mut::<Pickers>().open.take() {
+        if op.target != EmojiTarget::Status {
+            app.composer.update(cx, |s, cx| s.focus(window, cx));
+        }
         cx.notify();
     }
 }
@@ -369,6 +372,16 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
                 close(app, window, cx);
             }
         }
+        EmojiTarget::Status => {
+            let e = match &item {
+                PickItem::Unicode(ix) => crate::ui::modals::custom_status::StatusEmoji { id: None, name: emoji::toned(*ix, tone).into(), animated: false },
+                PickItem::Custom(e) => crate::ui::modals::custom_status::StatusEmoji { id: Some(e.id), name: e.name.clone(), animated: e.animated },
+            };
+            crate::ui::modals::custom_status::pick_emoji(e);
+            if !keep_open {
+                close(app, window, cx);
+            }
+        }
         EmojiTarget::Reaction { channel, message } => {
             let (emoji, id) = match &item {
                 PickItem::Unicode(ix) => (emoji::toned(*ix, tone), None),
@@ -420,13 +433,22 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
     if let Some(el) = ui::search::render(app, window, cx) {
         out.push(el);
     }
-    if let Some(el) = render_picker(app, window, cx) {
+    if open_tab(cx).is_some_and(|(_, t)| t != EmojiTarget::Status)
+        && let Some(el) = render_picker(app, window, cx)
+    {
         out.push(el);
     }
     if let Some(el) = soundboard::render(app, window, cx) {
         out.push(el);
     }
     out
+}
+
+pub fn render_status_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if open_tab(cx)?.1 != EmojiTarget::Status {
+        return None;
+    }
+    render_picker(app, window, cx)
 }
 
 pub const PICKER_W: f32 = 498.;

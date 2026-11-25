@@ -1144,6 +1144,9 @@ impl Backend for DiscordBackend {
     fn set_status(&self, status: crate::model::Presence, custom: Option<String>) -> BoxFuture<()> {
         self.people_status(status, custom)
     }
+    fn save_custom_status(&self, status: crate::model::Presence, draft: Option<crate::ui::modals::custom_status::StatusDraft>) -> BoxFuture<()> {
+        self.people_custom_status(status, draft)
+    }
     fn open_dm(&self, user: Id) -> BoxFuture<Id> {
         self.people_open_dm(user)
     }

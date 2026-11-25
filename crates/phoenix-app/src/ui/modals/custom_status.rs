@@ -5,6 +5,7 @@ use gpui_component::input::{Input, InputState};
 use crate::{
     actions::{open_modal, with_modal},
     app::PhoenixApp,
+    model::Id,
     theme::{c, generated::idx, tok, z},
     ui::{
         controls::{BtnKind, button},
@@ -29,7 +30,11 @@ pub const CHOICES: [ClearAfter; 5] = [ClearAfter::Today, ClearAfter::Hours4, Cle
 impl ClearAfter {
     pub fn duration(self) -> Option<Duration> {
         match self {
-            Self::Today => Some(Duration::hours(24)),
+            Self::Today => {
+                let now = Local::now();
+                let next = (now.date_naive() + chrono::Days::new(1)).and_time(now.time()).and_local_timezone(Local).earliest();
+                Some(next.map(|t| t - now).unwrap_or_else(|| Duration::hours(24)))
+            }
             Self::Hours4 => Some(Duration::hours(4)),
             Self::Hours1 => Some(Duration::hours(1)),
             Self::Minutes30 => Some(Duration::minutes(30)),
@@ -38,11 +43,57 @@ impl ClearAfter {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusEmoji {
+    pub id: Option<Id>,
+    pub name: SharedString,
+    pub animated: bool,
+}
+
+impl StatusEmoji {
+    pub fn token(&self) -> String {
+        match self.id {
+            Some(id) => format!("<{}:{}:{}>", if self.animated { "a" } else { "" }, self.name, id.0),
+            None => self.name.to_string(),
+        }
+    }
+
+    pub fn from_token(token: &str) -> Option<Self> {
+        if let Some(e) = crate::media::emoji::parse_custom(token) {
+            return Some(Self { id: Some(Id(e.id)), name: e.name, animated: e.animated });
+        }
+        let t = token.trim();
+        (!t.is_empty()).then(|| Self { id: None, name: t.to_owned().into(), animated: false })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatusDraft {
+    pub text: String,
+    pub emoji: Option<StatusEmoji>,
+    pub expires_at_ms: u64,
+    pub created_at_ms: u64,
+}
+
+pub fn draft(text: &str, emoji: Option<StatusEmoji>, clear_after: ClearAfter, now_ms: u64) -> Option<StatusDraft> {
+    let text: String = text.trim().chars().take(MAX_LEN).collect();
+    if text.is_empty() && emoji.is_none() {
+        return None;
+    }
+    let expires_at_ms = clear_after.duration().map(|d| now_ms.saturating_add(d.num_milliseconds().max(0) as u64)).unwrap_or(0);
+    Some(StatusDraft { text, emoji, expires_at_ms, created_at_ms: now_ms })
+}
+
 pub struct CustomStatus {
     pub input: Option<Entity<InputState>>,
     pub initial: String,
     pub clear_after: ClearAfter,
     pub select_open: bool,
+    pub emoji: Option<StatusEmoji>,
+}
+
+pub fn pick_emoji(e: StatusEmoji) {
+    set(|s| s.emoji = Some(e));
 }
 
 fn tk(i: usize) -> gpui::Hsla {
@@ -90,7 +141,7 @@ pub fn prepare(s: &mut CustomStatus, mk: &mut dyn FnMut(SharedString, &str, bool
     }
 }
 
-fn preview(app: &PhoenixApp, text: &str) -> AnyElement {
+fn preview(app: &PhoenixApp, text: &str, emoji: Option<&StatusEmoji>) -> AnyElement {
     let i = info(app, app.me.id, None);
     let bubble = div()
         .absolute()
@@ -109,8 +160,15 @@ fn preview(app: &PhoenixApp, text: &str) -> AnyElement {
         .whitespace_nowrap()
         .text_size(z(14.))
         .line_height(z(18.))
-        .text_color(tk(if text.is_empty() { idx::TEXT_MUTED } else { idx::TEXT_STRONG }))
-        .child(if text.is_empty() { crate::t!("cstatus.placeholder") } else { SharedString::from(text.to_owned()) });
+        .text_color(tk(if text.is_empty() && emoji.is_none() { idx::TEXT_MUTED } else { idx::TEXT_STRONG }))
+        .child(match (emoji, text.is_empty()) {
+            (None, true) => crate::t!("cstatus.placeholder").into_any_element(),
+            (None, false) => SharedString::from(text.to_owned()).into_any_element(),
+            (Some(e), _) => {
+                let line = if text.is_empty() { e.token() } else { format!("{} {text}", e.token()) };
+                crate::ui::emoji_text::status_label(line.into(), 14.)
+            }
+        });
     div()
         .w(z(300.))
         .rounded(z(8.))
@@ -132,7 +190,7 @@ fn preview(app: &PhoenixApp, text: &str) -> AnyElement {
 
 pub fn render(app: &PhoenixApp, s: &CustomStatus, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let text = s.input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default();
-    let has = !text.is_empty();
+    let has = !text.is_empty() || s.emoji.is_some();
     let field = div()
         .mt(z(4.))
         .relative()
@@ -150,6 +208,7 @@ pub fn render(app: &PhoenixApp, s: &CustomStatus, cx: &mut Context<PhoenixApp>) 
         .children(s.input.as_ref().map(|i| div().flex_1().min_w_0().child(Input::new(i).appearance(false).bordered(false))))
         .child(
             div()
+                .id("cstatus-emoji")
                 .absolute()
                 .left_0()
                 .top_0()
@@ -159,7 +218,12 @@ pub fn render(app: &PhoenixApp, s: &CustomStatus, cx: &mut Context<PhoenixApp>) 
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(gpui::svg().path(crate::icons::path("emoji")).size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))),
+                .cursor_pointer()
+                .on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::open_emoji_picker(a, crate::ui::pickers::EmojiTarget::Status, w, cx)))
+                .child(match &s.emoji {
+                    Some(e) => crate::media::emoji::emoji_element(&e.token(), 24. * crate::theme::zoom()),
+                    None => gpui::svg().path(crate::icons::path("emoji")).size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)).into_any_element(),
+                }),
         )
         .when(has, |d| {
             d.child(
@@ -178,6 +242,7 @@ pub fn render(app: &PhoenixApp, s: &CustomStatus, cx: &mut Context<PhoenixApp>) 
                     .hover(|st| st.opacity(1.))
                     .on_click(cx.listener(|_, _, w, cx| {
                         set(|s| {
+                            s.emoji = None;
                             if let Some(i) = s.input.clone() {
                                 i.update(cx, |st, cx| st.set_value("", w, cx));
                             }
@@ -190,7 +255,7 @@ pub fn render(app: &PhoenixApp, s: &CustomStatus, cx: &mut Context<PhoenixApp>) 
     let body = div()
         .flex()
         .flex_col()
-        .child(div().mt(z(8.)).mb(z(36.)).w_full().flex().items_center().justify_center().child(preview(app, &text)))
+        .child(div().mt(z(8.)).mb(z(36.)).w_full().flex().items_center().justify_center().child(preview(app, &text, s.emoji.as_ref())))
         .child(
             div()
                 .mb(z(20.))
@@ -277,15 +342,61 @@ fn clear_after_menu(current: ClearAfter, cx: &mut Context<PhoenixApp>) -> AnyEle
 impl PhoenixApp {
     pub fn open_custom_status(&mut self, cx: &mut Context<Self>) {
         let initial = self.people.custom_status.as_ref().map(|s| s.to_string()).unwrap_or_default();
+        let emoji = self
+            .people
+            .activities
+            .get(&self.me.id)
+            .and_then(|a| a.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom))
+            .and_then(|a| a.emoji.as_deref())
+            .and_then(StatusEmoji::from_token);
         self.people.close_overlays();
-        open_modal(Modal::CustomStatus(CustomStatus { input: None, initial, clear_after: ClearAfter::Today, select_open: false }), None);
+        open_modal(Modal::CustomStatus(CustomStatus { input: None, initial, clear_after: ClearAfter::Today, select_open: false, emoji }), None);
         cx.notify();
     }
 
-    fn save_custom_status(&mut self, cx: &mut Context<Self>) {
-        let mut text = None;
-        set(|s| text = s.input.as_ref().map(|i| i.read(cx).value().trim().chars().take(MAX_LEN).collect::<String>()));
+    pub(crate) fn save_custom_status(&mut self, cx: &mut Context<Self>) {
+        let mut out = None;
+        set(|s| {
+            let text = s.input.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_default();
+            out = Some(draft(&text, s.emoji.clone(), s.clear_after, chrono::Utc::now().timestamp_millis().max(0) as u64));
+        });
+        let Some(d) = out else { return };
         crate::actions::close_modal();
-        self.set_custom_status(text.filter(|t| !t.is_empty()), cx);
+        self.people.custom_status = d.as_ref().map(|d| d.text.clone()).filter(|t| !t.is_empty()).map(Into::into);
+        cx.background_spawn(self.backend.save_custom_status(self.presence, d)).detach();
+        cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn draft_carries_the_clear_after_deadline() {
+        let now = 1_764_085_600_000;
+        let d = draft("  Lunch  ", None, ClearAfter::Hours4, now).unwrap();
+        assert_eq!(d.text, "Lunch");
+        assert_eq!(d.expires_at_ms, now + 4 * 3_600_000);
+        assert_eq!(d.created_at_ms, now);
+        assert_eq!(draft("x", None, ClearAfter::Minutes30, now).unwrap().expires_at_ms, now + 1_800_000);
+        assert_eq!(draft("x", None, ClearAfter::Hours1, now).unwrap().expires_at_ms, now + 3_600_000);
+        assert_eq!(draft("x", None, ClearAfter::Never, now).unwrap().expires_at_ms, 0);
+        let today = draft("x", None, ClearAfter::Today, now).unwrap().expires_at_ms - now;
+        assert!((23 * 3_600_000..=25 * 3_600_000).contains(&today));
+        assert_eq!(draft("   ", None, ClearAfter::Today, now), None);
+        let e = StatusEmoji { id: None, name: "\u{1f354}".into(), animated: false };
+        let only = draft("", Some(e.clone()), ClearAfter::Never, now).unwrap();
+        assert_eq!((only.text.as_str(), only.emoji), ("", Some(e)));
+        assert_eq!(draft(&"a".repeat(200), None, ClearAfter::Never, now).unwrap().text.len(), MAX_LEN);
+    }
+
+    #[test]
+    fn emoji_tokens_round_trip() {
+        let c = StatusEmoji::from_token("<a:dance:42>").unwrap();
+        assert_eq!(c, StatusEmoji { id: Some(Id(42)), name: "dance".into(), animated: true });
+        assert_eq!(c.token(), "<a:dance:42>");
+        assert_eq!(StatusEmoji::from_token("\u{1f980}").unwrap().token(), "\u{1f980}");
+        assert_eq!(StatusEmoji::from_token(" "), None);
     }
 }

@@ -373,6 +373,61 @@ pub fn with_guild_folders(raw: &[u8], folders: &[FolderProto]) -> Vec<u8> {
     out
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CustomStatusProto {
+    pub text: String,
+    pub emoji_id: u64,
+    pub emoji_name: String,
+    pub expires_at_ms: u64,
+    pub created_at_ms: u64,
+}
+
+fn field_fixed64(tag: u32, v: u64, out: &mut Vec<u8>) {
+    varint(((tag as u64) << 3) | 1, out);
+    out.extend_from_slice(&v.to_le_bytes());
+}
+
+pub fn encode_custom_status(c: &CustomStatusProto) -> Vec<u8> {
+    let mut o = Vec::new();
+    if !c.text.is_empty() {
+        field_bytes(1, c.text.as_bytes(), &mut o);
+    }
+    if c.emoji_id != 0 {
+        field_fixed64(2, c.emoji_id, &mut o);
+    }
+    if !c.emoji_name.is_empty() {
+        field_bytes(3, c.emoji_name.as_bytes(), &mut o);
+    }
+    if c.expires_at_ms != 0 {
+        field_fixed64(4, c.expires_at_ms, &mut o);
+    }
+    if c.created_at_ms != 0 {
+        field_fixed64(5, c.created_at_ms, &mut o);
+    }
+    o
+}
+
+pub fn with_custom_status(raw: &[u8], custom: Option<&CustomStatusProto>) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut status = Vec::new();
+    for (tag, wt, v, d) in fields(raw) {
+        if tag == 11 && wt == 2 {
+            for (t, w, x, dd) in fields(d) {
+                if t != 2 {
+                    reencode(t, w, x, dd, &mut status);
+                }
+            }
+            continue;
+        }
+        reencode(tag, wt, v, d, &mut out);
+    }
+    if let Some(c) = custom {
+        field_bytes(2, &encode_custom_status(c), &mut status);
+    }
+    field_bytes(11, &status, &mut out);
+    out
+}
+
 impl RestClient {
     pub async fn save_guild_folders(&self, folders: &[FolderProto]) -> Result<Vec<u8>> {
         let raw = self.get_settings_proto_raw().await?;
@@ -475,6 +530,15 @@ impl RestClient {
         PreloadedUserSettings::decode_base64(&b.settings)
     }
 
+    pub async fn save_custom_status(&self, custom: Option<&CustomStatusProto>) -> Result<Vec<u8>> {
+        let raw = self.get_settings_proto_raw().await?;
+        let next = with_custom_status(&raw, custom);
+        let b: ProtoBody = self
+            .call(Method::PATCH, "/users/@me/settings-proto/1", Body::Json(json!({ "settings": STANDARD.encode(next) })))
+            .await?;
+        STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))
+    }
+
     pub async fn get_settings_proto_raw(&self) -> Result<Vec<u8>> {
         let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/1", Body::None).await?;
         STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))
@@ -538,6 +602,43 @@ pub fn from_json(v: &Value) -> PreloadedUserSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_status_save_replaces_only_the_custom_status() {
+        let mut raw = Vec::new();
+        let mut status = Vec::new();
+        let mut online = Vec::new();
+        field_bytes(1, b"dnd", &mut online);
+        field_bytes(1, &online, &mut status);
+        let old = CustomStatusProto { text: "old".into(), expires_at_ms: 5, ..Default::default() };
+        field_bytes(2, &encode_custom_status(&old), &mut status);
+        field_fixed64(4, 9, &mut status);
+        field_bytes(11, &status, &mut raw);
+        field_varint(13, 1, &mut raw);
+        let new = CustomStatusProto {
+            text: "Lunch".into(),
+            emoji_id: 0,
+            emoji_name: "\u{1f354}".into(),
+            expires_at_ms: 1_764_100_000_000,
+            created_at_ms: 1_764_085_600_000,
+        };
+        let next = with_custom_status(&raw, Some(&new));
+        assert_eq!(proto_read(&next, &[11, 1], true, true), Some(ProtoValue::Str("dnd".into())));
+        assert_eq!(proto_read(&next, &[11, 2, 1], false, true), Some(ProtoValue::Str("Lunch".into())));
+        assert_eq!(proto_read(&next, &[11, 2, 3], false, true), Some(ProtoValue::Str("\u{1f354}".into())));
+        assert_eq!(proto_read(&next, &[11, 2, 4], false, false), Some(ProtoValue::Int(1_764_100_000_000)));
+        assert_eq!(proto_read(&next, &[11, 2, 5], false, false), Some(ProtoValue::Int(1_764_085_600_000)));
+        assert_eq!(proto_read(&next, &[11, 2, 2], false, false), None);
+        assert_eq!(proto_read(&next, &[11, 4], false, false), Some(ProtoValue::Int(9)));
+        let status_fields = fields(fields(&next).into_iter().find(|f| f.0 == 11).unwrap().3);
+        assert_eq!(status_fields.iter().filter(|f| f.0 == 2).count(), 1);
+        assert!(fields(&next).iter().any(|f| f.0 == 13 && f.2 == 1));
+        let cleared = with_custom_status(&raw, None);
+        assert_eq!(proto_read(&cleared, &[11, 2, 1], false, true), None);
+        assert_eq!(proto_read(&cleared, &[11, 1], true, true), Some(ProtoValue::Str("dnd".into())));
+        let wire = encode_custom_status(&CustomStatusProto { text: "a".into(), expires_at_ms: 1, ..Default::default() });
+        assert_eq!(wire, [0x0a, 1, b'a', 0x21, 1, 0, 0, 0, 0, 0, 0, 0]);
+    }
 
     #[test]
     fn folder_save_replaces_only_the_folder_list() {

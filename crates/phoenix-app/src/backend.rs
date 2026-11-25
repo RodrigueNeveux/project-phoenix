@@ -348,6 +348,9 @@ pub trait Backend: Send + Sync + 'static {
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
     }
+    fn save_custom_status(&self, _status: Presence, _draft: Option<crate::ui::modals::custom_status::StatusDraft>) -> BoxFuture<()> {
+        Box::pin(async { Ok(()) })
+    }
     fn parity(&self, _req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
         Box::pin(async { Err(BackendError(crate::t!("backend.offline").to_string())) })
     }

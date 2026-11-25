@@ -1516,6 +1516,7 @@ impl Render for PhoenixApp {
             .children(ui::components::overlays(self, window, cx))
             .children(ui::voice_panel::overlays(self, window, cx))
             .children(crate::actions::overlays(self, window, cx))
+            .children(ui::pickers::render_status_picker(self, window, cx))
             .children(crate::shortcuts::render_help(self, window, cx))
             .when(self.screen == Screen::Login, |d| d.child(ui::title_bar::login_bar(window, cx)))
             .children(ui::window_chrome::resize_handles(window))
