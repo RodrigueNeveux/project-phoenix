@@ -136,6 +136,15 @@ impl Backend for ReadOnly {
             }
         })
     }
+    fn preupload(&self, ch: Id, key: u64, filename: String, bytes: Arc<Vec<u8>>) {
+        if std::env::var_os("PHX_SEND").is_some() && ch.0 == SEND_TEST_CHANNEL {
+            eprintln!("preupload started: {filename} ({} bytes)", bytes.len());
+            self.0.preupload(ch, key, filename, bytes);
+        }
+    }
+    fn drop_preupload(&self, key: u64) {
+        self.0.drop_preupload(key);
+    }
     fn edit_message(&self, _: Id, _: Id, _: String) -> BoxFuture<Message> {
         denied()
     }
@@ -1701,6 +1710,16 @@ fn main() -> anyhow::Result<()> {
     if let Some(what) = std::env::var("PHX_SEND").ok().filter(|w| !w.trim().is_empty()) {
         anyhow::ensure!(channel.map(|c| c.0) == Some(SEND_TEST_CHANNEL), "PHX_SEND only works in the test channel");
         let text = format!("{SEND_PREFIX}{}", what.trim());
+        if let Ok(path) = std::env::var("PHX_SEND_FILE") {
+            let bytes = std::fs::read(&path)?;
+            let name = std::path::Path::new(&path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| app.push_upload(name.clone(), bytes.clone())))?;
+            println!("added to the tray: {name}");
+            pump(&mut cx, 300);
+            shoot(&mut cx, &format!("{}-tray.png", out.trim_end_matches(".png")))?;
+            let wait: u64 = std::env::var("PHX_SEND_PRE_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+            pump(&mut cx, wait);
+        }
         cx.update_window(win.into(), |_, window, cx| {
             v.update(cx, |app, cx| {
                 app.composer.update(cx, |s, cx| s.set_value(text.clone(), window, cx));
@@ -1711,7 +1730,12 @@ fn main() -> anyhow::Result<()> {
         pump(&mut cx, 600);
         shoot(&mut cx, &format!("{}-pending.png", out.trim_end_matches(".png")))?;
         let hold: u64 = std::env::var("PHX_SEND_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(4000);
-        pump(&mut cx, hold + 3000);
+        let steps: u64 = std::env::var("PHX_SEND_SHOTS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        for i in 0..steps {
+            pump(&mut cx, 250);
+            shoot(&mut cx, &format!("{}-progress{i}.png", out.trim_end_matches(".png")))?;
+        }
+        pump(&mut cx, (hold + 3000).saturating_sub(steps * 250));
     }
     let shot = shoot(&mut cx, &out);
     if voice_test {
