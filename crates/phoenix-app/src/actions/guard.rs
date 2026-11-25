@@ -81,6 +81,8 @@ mod tests {
             GuardedWrite::put_onboarding(5, serde_json::json!({})),
             GuardedWrite::put_home_settings(5, serde_json::json!({})),
             GuardedWrite::change_call_region(5, "rotterdam"),
+            GuardedWrite::automod_alert_action(5, 6, 7, 3),
+            GuardedWrite::automod_clear_mention_raid(5),
         ] {
             assert!(!read_only_write(&w));
             assert!(w.refusal().is_write_blocked());

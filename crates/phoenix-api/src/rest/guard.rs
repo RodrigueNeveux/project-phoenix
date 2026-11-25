@@ -122,6 +122,18 @@ impl GuardedWrite {
         write(Method::PUT, format!("/channels/{channel}/permissions/{overwrite}"), Some(body))
     }
 
+    pub fn automod_alert_action(guild: u64, channel: u64, message: u64, action_type: u8) -> Self {
+        write(
+            Method::POST,
+            format!("/guilds/{guild}/auto-moderation/alert-action"),
+            Some(json!({ "message_id": message.to_string(), "channel_id": channel.to_string(), "alert_action_type": action_type })),
+        )
+    }
+
+    pub fn automod_clear_mention_raid(guild: u64) -> Self {
+        write(Method::POST, format!("/guilds/{guild}/auto-moderation/clear-mention-raid"), None)
+    }
+
     pub fn join_guild(guild: u64) -> Self {
         write(Method::PUT, format!("/guilds/{guild}/members/@me"), None)
     }
@@ -164,6 +176,8 @@ mod tests {
             GuardedWrite::put_home_settings(5, json!({ "guild_id": "5" })),
             GuardedWrite::put_channel_overwrite(6, 5, json!({ "id": "5", "type": 0 })),
             GuardedWrite::change_call_region(5, "rotterdam"),
+            GuardedWrite::automod_alert_action(5, 6, 7, 3),
+            GuardedWrite::automod_clear_mention_raid(5),
         ]
     }
 
@@ -196,6 +210,12 @@ mod tests {
         assert_eq!((home.method, home.path.as_str()), (Method::PUT, "/guilds/5/new-member-welcome"));
         let region = GuardedWrite::change_call_region(5, "rotterdam");
         assert_eq!((region.method, region.path.as_str(), region.body), (Method::PATCH, "/channels/5/call", Some(json!({ "region": "rotterdam" }))));
+        let am = GuardedWrite::automod_alert_action(5, 6, 7, 3);
+        assert_eq!(
+            (am.method, am.path.as_str(), am.body),
+            (Method::POST, "/guilds/5/auto-moderation/alert-action", Some(json!({ "message_id": "7", "channel_id": "6", "alert_action_type": 3 })))
+        );
+        assert_eq!(GuardedWrite::automod_clear_mention_raid(5).path, "/guilds/5/auto-moderation/clear-mention-raid");
     }
 
     #[tokio::test]
