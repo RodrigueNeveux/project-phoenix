@@ -43,6 +43,10 @@ pub fn tab_focused(handle: &FocusHandle, window: &Window) -> bool {
     handle.is_focused(window) && TABBED.with(|t| t.borrow().as_ref() == Some(handle))
 }
 
+pub fn shown(key: u64) -> bool {
+    VISIBLE.with(|v| v.get()) == Some(key)
+}
+
 pub fn owns_focus(window: &Window) -> bool {
     HANDLES.with(|h| h.borrow().values().any(|f| f.is_focused(window)))
 }

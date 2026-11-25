@@ -1080,7 +1080,8 @@ fn popout_card_inner(
         let pad = if theme.is_some() { 2. } else { 0. };
         div().absolute().top(z(pad)).left(z(pad)).right(z(pad)).bottom(z(pad)).child(e)
     }))
-    .children(crate::ui::profile_toolbar::scrim(uid, crate::ui::profile_toolbar::Layout::Popout));
+    .children(crate::ui::profile_toolbar::scrim(uid, crate::ui::profile_toolbar::Layout::Popout))
+    .children(crate::ui::profile_toolbar::toast(uid, 105.));
     let frame_w = if theme.is_some() { 304. } else { 300. };
     match frame {
         None => card,
@@ -1387,6 +1388,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             crate::ui::profile_toolbar::status(app, uid, guild, crate::ui::profile_toolbar::Layout::Modal, theme.is_some(), i.custom.clone(), cx)
                 .map(|s| div().absolute().left(z(CARD_PAD + AV + 20.)).top(z(BANNER - 8.)).child(s)),
         )
+        .children(crate::ui::profile_toolbar::toast(uid, BANNER))
         .child(div().h(z(220. - BANNER)).flex_none())
         .child(pbody);
 

@@ -2,8 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use gpui::{AnimationExt, AnyElement, Bounds, Context, Div, Entity, Focusable, IntoElement, ParentElement, Pixels, SharedString, Styled, Window, div, prelude::*};
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui::{AnimationExt, AnyElement, Bounds, Context, Div, Entity, IntoElement, ParentElement, Pixels, SharedString, Styled, Window, div, prelude::*};
+use gpui_component::input::{InputEvent, Textarea, TextareaState};
 
 use crate::{
     app::PhoenixApp,
@@ -31,18 +31,182 @@ struct Active {
     layout: Layout,
     kind: Interaction,
     since: Instant,
-    input: Option<Entity<InputState>>,
+    input: Option<Entity<TextareaState>>,
     _sub: Option<gpui::Subscription>,
 }
 
 thread_local! {
     static ACTIVE: RefCell<Option<Active>> = const { RefCell::new(None) };
     static SIZES: RefCell<HashMap<(u64, Layout), (f32, f32)>> = RefCell::new(HashMap::new());
+    static HEIGHTS: RefCell<HashMap<(u64, Layout), (f32, f32)>> = RefCell::new(HashMap::new());
+    static PINNED: RefCell<HashMap<(u64, Layout), Instant>> = RefCell::new(HashMap::new());
+    static TOAST: RefCell<Option<Toast>> = const { RefCell::new(None) };
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Toast {
+    pub user: Id,
+    pub sent: Option<Interaction>,
+    pub since: Instant,
 }
 
 pub const FADE_MS: u64 = 150;
 pub const ICON_MS: u64 = 400;
 pub const SCRIM_MS: u64 = 150;
+pub const EXPAND_DELAY_MS: u64 = 300;
+pub const EXPAND_MS: u64 = 150;
+pub const BAR_DELAY_OTHERS_MS: u64 = 450;
+pub const BAR_DELAY_OWN_MS: u64 = 300;
+pub const TOAST_MS: u64 = 2700;
+pub const TOAST_DELAY_MS: u64 = 200;
+pub const OPEN_CLAMP: usize = 8;
+pub const LINE_H: f32 = 18.;
+
+pub fn clamp_heights(emoji: bool) -> (f32, f32) {
+    let e = if emoji { 1.25 } else { 0. };
+    (2. * LINE_H + e, 8. * LINE_H + e)
+}
+
+pub fn expand_target(full: f32, cap: f32, unclamped: bool) -> f32 {
+    if unclamped { full } else { full.min(cap) }
+}
+
+pub fn expandable(clamped: f32, full: f32, cap: f32, unclamped: bool) -> bool {
+    clamped > 0. && expand_target(full, cap, unclamped) > clamped + 0.5
+}
+
+pub fn delay_ms(ms: u64) -> u64 {
+    if crate::ui::settings::effects::motion(ms).as_millis() <= 1 { 0 } else { ms }
+}
+
+pub fn bar_delay(me: bool, expandable: bool) -> u64 {
+    match (expandable, me) {
+        (false, _) => 0,
+        (true, true) => delay_ms(BAR_DELAY_OWN_MS),
+        (true, false) => delay_ms(BAR_DELAY_OTHERS_MS),
+    }
+}
+
+pub fn toast_state() -> Option<Toast> {
+    TOAST.with(|t| *t.borrow())
+}
+
+pub fn set_toast(user: Id, sent: Option<Interaction>) -> Instant {
+    let since = Instant::now();
+    TOAST.with(|t| *t.borrow_mut() = Some(Toast { user, sent, since }));
+    since
+}
+
+pub fn clear_toast_if(since: Instant) {
+    TOAST.with(|t| {
+        let mut t = t.borrow_mut();
+        if t.is_some_and(|x| x.since == since) {
+            *t = None;
+        }
+    });
+}
+
+pub fn toast_text(sent: Option<Interaction>) -> SharedString {
+    match sent {
+        Some(Interaction::Reply) => crate::t!("ptb.toast_reply"),
+        Some(Interaction::React) => crate::t!("ptb.toast_react"),
+        None => crate::t!("ptb.toast_sending"),
+    }
+}
+
+pub fn toast(user: Id, banner_h: f32) -> Option<AnyElement> {
+    let t = toast_state().filter(|t| t.user == user)?;
+    let success = t.sent.is_some();
+    let card = div()
+        .relative()
+        .p(z(12.))
+        .rounded(z(8.))
+        .bg(c(tok(if success { idx::BACKGROUND_BASE_LOW } else { idx::BACKGROUND_SURFACE_HIGHEST })))
+        .shadow(crate::ui::inbox::shadow_high())
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+                .rounded(z(8.))
+                .border_1()
+                .when(success, |d| d.bg(c(tok(idx::TOAST_SUCCESS_BACKGROUND))).border_color(c(tok(idx::TOAST_SUCCESS_BORDER))))
+                .when(!success, |d| d.border_color(c(tok(idx::BORDER_NORMAL)))),
+        )
+        .child(
+            div()
+                .relative()
+                .flex()
+                .items_center()
+                .justify_center()
+                .gap(z(8.))
+                .when(success, |d| {
+                    d.child(gpui::svg().path(crate::icons::path("circle-check")).size(z(18.)).flex_none().text_color(c(tok(idx::ICON_FEEDBACK_POSITIVE))))
+                })
+                .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).child(toast_text(t.sent))),
+        );
+    let delay = delay_ms(TOAST_DELAY_MS);
+    let enter = crate::ui::settings::effects::motion(FADE_MS).as_millis() as u64;
+    let total = delay + enter;
+    let row = div().absolute().left_0().w_full().top(z((banner_h - 56.) / 2.)).flex().justify_center().child(card);
+    let el = if total > 1 && t.since.elapsed() < Duration::from_millis(total) {
+        row.with_animation(
+            gpui::ElementId::Name(format!("ptb-toast-{}-{:?}", user.0, t.since).into()),
+            gpui::Animation::new(Duration::from_millis(total)),
+            move |d, x| {
+                let p = (((x * total as f32) - delay as f32) / enter.max(1) as f32).clamp(0., 1.);
+                d.opacity(p).mt(z(16. * (1. - p)))
+            },
+        )
+        .into_any_element()
+    } else {
+        row.into_any_element()
+    };
+    Some(gpui::deferred(el).with_priority(45).into_any_element())
+}
+
+fn heights(uid: Id, layout: Layout) -> (f32, f32) {
+    HEIGHTS.with(|h| h.borrow().get(&(uid.0, layout)).copied()).unwrap_or_default()
+}
+
+fn measure_height(uid: Id, layout: Layout, full: bool) -> impl IntoElement {
+    gpui::canvas(
+        move |b: Bounds<Pixels>, _, _| {
+            let hgt = f32::from(b.size.height) / crate::theme::zoom();
+            HEIGHTS.with(|m| {
+                let mut m = m.borrow_mut();
+                let e = m.entry((uid.0, layout)).or_default();
+                if full { e.1 = hgt } else { e.0 = hgt }
+            });
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+pub fn toggle_pinned(uid: Id, layout: Layout) -> bool {
+    PINNED.with(|p| {
+        let mut p = p.borrow_mut();
+        if p.remove(&(uid.0, layout)).is_some() {
+            false
+        } else {
+            p.insert((uid.0, layout), Instant::now());
+            true
+        }
+    })
+}
+
+fn pinned(uid: Id, layout: Layout) -> Option<Instant> {
+    PINNED.with(|p| p.borrow().get(&(uid.0, layout)).copied())
+}
+
+fn status_has_emoji(app: &PhoenixApp, uid: Id) -> bool {
+    app.people.activities.get(&uid).and_then(|a| a.iter().find(|a| a.kind == ActivityKind::Custom)).is_some_and(|a| a.emoji.is_some())
+}
 
 pub fn ease(t: f32) -> f32 {
     crate::ui::states::cubic_bezier(0.25, 0.1, 0.25, 1.)(t)
@@ -60,7 +224,7 @@ fn active_since(user: Id, layout: Layout) -> Option<Instant> {
     ACTIVE.with(|a| a.borrow().as_ref().filter(|a| a.user == user && a.layout == layout).map(|a| a.since))
 }
 
-fn reply_input(user: Id, layout: Layout) -> Option<Entity<InputState>> {
+fn reply_input(user: Id, layout: Layout) -> Option<Entity<TextareaState>> {
     ACTIVE.with(|a| a.borrow().as_ref().filter(|a| a.user == user && a.layout == layout).and_then(|a| a.input.clone()))
 }
 
@@ -126,13 +290,20 @@ pub fn reply_content(username: &str, details: Option<&str>, input: &str) -> Stri
 }
 
 impl PhoenixApp {
-    pub fn send_profile_interaction(&mut self, user: Id, content: String, cx: &mut Context<Self>) {
+    pub fn send_profile_interaction(&mut self, user: Id, kind: Interaction, content: String, cx: &mut Context<Self>) {
+        set_toast(user, None);
         let open = self.backend.open_dm(user);
         let backend = self.backend.clone();
-        cx.spawn(async move |_, _| {
-            let Ok(ch) = open.await else { return };
-            let nonce = crate::ui::chat::slash::next_nonce();
-            let _ = backend.send_message_ex(ch, content, None, Vec::new(), nonce, None).await;
+        cx.spawn(async move |this, cx| {
+            if let Ok(ch) = open.await {
+                let nonce = crate::ui::chat::slash::next_nonce();
+                let _ = backend.send_message_ex(ch, content, None, Vec::new(), nonce, None).await;
+            }
+            let since = set_toast(user, Some(kind));
+            let _ = this.update(cx, |_, cx| cx.notify());
+            cx.background_executor().timer(Duration::from_millis(TOAST_MS)).await;
+            clear_toast_if(since);
+            let _ = this.update(cx, |_, cx| cx.notify());
         })
         .detach();
     }
@@ -142,7 +313,7 @@ impl PhoenixApp {
         let username = self.users.get(&user).map(|u| u.display_name.to_string()).unwrap_or_default();
         let details = status_details(self, user);
         reset();
-        self.send_profile_interaction(user, react_content(&username, details.as_deref(), &emoji), cx);
+        self.send_profile_interaction(user, Interaction::React, react_content(&username, details.as_deref(), &emoji), cx);
         cx.notify();
     }
 
@@ -156,24 +327,29 @@ impl PhoenixApp {
             }
             Interaction::Reply => {
                 let name = self.users.get(&user).map(|u| u.display_name.to_string()).unwrap_or_default();
+                let max_rows = ((f32::from(window.viewport_size().height) * 0.5 / 22.).floor() as usize).max(REPLY_ROWS);
                 let input = cx.new(|cx| {
-                    InputState::new(window, cx).placeholder(crate::t!("ptb.reply_placeholder", username = name))
+                    TextareaState::new(window, cx)
+                        .auto_grow(REPLY_ROWS, max_rows)
+                        .submit_on_enter(true)
+                        .placeholder(crate::t!("ptb.reply_placeholder", username = name))
                 });
-                let sub = cx.subscribe_in(&input, window, move |this, input, ev: &InputEvent, _, cx| {
-                    if let InputEvent::PressEnter { shift: false, .. } = ev {
-                        let text = input.read(cx).value().trim().to_string();
-                        if text.is_empty() {
+                let sub = cx.subscribe_in(&input, window, move |this, input, ev: &InputEvent, _, cx| match ev {
+                    InputEvent::PressEnter { shift: false, .. } => {
+                        let text = crate::ui::chat::rich_input::peek_plain(input.read(cx).value().trim());
+                        if text.trim().is_empty() {
                             return;
                         }
                         let username = this.users.get(&user).map(|u| u.display_name.to_string()).unwrap_or_default();
                         let details = status_details(this, user);
                         reset();
-                        this.send_profile_interaction(user, reply_content(&username, details.as_deref(), &text), cx);
+                        this.send_profile_interaction(user, Interaction::Reply, reply_content(&username, details.as_deref(), &text), cx);
                         cx.notify();
                     }
+                    InputEvent::Change => crate::ui::chat::rich_input::sync_area(this, input, cx),
+                    _ => {}
                 });
-                let fh = input.read(cx).focus_handle(cx);
-                fh.focus(window, cx);
+                input.update(cx, |s, cx| s.focus(window, cx));
                 ACTIVE.with(|a| {
                     *a.borrow_mut() = Some(Active { user, layout, kind, since: Instant::now(), input: Some(input), _sub: Some(sub) })
                 });
@@ -269,7 +445,7 @@ fn visible(container: u64, bar: u64) -> Option<Instant> {
     }
 }
 
-fn popover(bar_key: u64, since: Option<Instant>, top_rest: f32, right: f32, buttons: Vec<AnyElement>) -> AnyElement {
+fn popover(bar_key: u64, since: Option<Instant>, delay: u64, top_rest: f32, right: f32, buttons: Vec<AnyElement>) -> AnyElement {
     let bar = div()
         .id(("ptb-bar", bar_key))
         .absolute()
@@ -285,14 +461,19 @@ fn popover(bar_key: u64, since: Option<Instant>, top_rest: f32, right: f32, butt
         .children(buttons);
     let bar = crate::ui::states::track(bar, bar_key);
     let ms = crate::ui::settings::effects::motion(FADE_MS).as_millis() as u64;
+    let total = ms + delay;
     match since {
         None => bar.top(z(top_rest)).opacity(0.).invisible().into_any_element(),
-        Some(at) if ms > 0 && at.elapsed() < Duration::from_millis(ms) => bar
+        Some(at) if ms > 0 && at.elapsed() < Duration::from_millis(total) => bar
             .top(z(top_rest + 2.))
+            .opacity(0.)
             .with_animation(
                 gpui::ElementId::Name(format!("ptb-fade-{bar_key}-{at:?}").into()),
-                gpui::Animation::new(Duration::from_millis(ms)).with_easing(ease),
-                move |d, t| d.top(z(top_rest + 2. - 2. * t)).opacity(t),
+                gpui::Animation::new(Duration::from_millis(total)),
+                move |d, t| {
+                    let p = ease((((t * total as f32) - delay as f32) / ms as f32).clamp(0., 1.));
+                    d.top(z(top_rest + 2. - 2. * p)).opacity(p)
+                },
             )
             .into_any_element(),
         Some(_) => bar.top(z(top_rest)).into_any_element(),
@@ -391,7 +572,9 @@ pub fn reply_offset(layout: Layout, themed: bool) -> f32 {
     }
 }
 
-fn reply_box(input: &Entity<InputState>, layout: Layout, themed: bool, top: f32) -> AnyElement {
+pub const REPLY_ROWS: usize = 4;
+
+fn reply_box(input: &Entity<TextareaState>, layout: Layout, themed: bool, top: f32) -> AnyElement {
     let w = if layout == Layout::Sidebar { 276. } else { 300. };
     let anchored = gpui::deferred(
         gpui::anchored().position_mode(gpui::AnchoredPositionMode::Local).position(gpui::point(z(reply_offset(layout, themed)), z(top + 6.))).child(
@@ -421,7 +604,17 @@ fn reply_box(input: &Entity<InputState>, layout: Layout, themed: bool, top: f32)
                         .text_size(z(14.))
                         .line_height(z(22.))
                         .text_color(c(tok(idx::TEXT_DEFAULT)))
-                        .child(Input::new(input).appearance(false).bordered(false)),
+                        .child(
+                            div().mx(z(-4.)).child(
+                                Textarea::new(input)
+                                    .token(crate::ui::chat::rich_input::render_token)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .xsmall()
+                                    .text_size(z(14.))
+                                    .line_height(z(22.)),
+                            ),
+                        ),
                 ),
         ),
     )
@@ -496,9 +689,47 @@ pub fn status(
             .child(bubble(prompt.into_any_element(), false, themed, true));
         return Some(crate::ui::states::track(el, ck).into_any_element());
     };
-    let content = crate::ui::emoji_text::status_wrapped(text, 14. * crate::theme::zoom());
-    let content = div().line_clamp(2).child(content).into_any_element();
+    let unclamped = layout == Layout::Modal;
+    let (_, cap) = clamp_heights(status_has_emoji(app, uid));
+    let (ch, fh) = heights(uid, layout);
+    let can_expand = expandable(ch, fh, cap, unclamped);
     let interacting = interaction(uid, layout);
+    let hover_since = if interacting.is_some() { None } else { crate::ui::states::state(ck).filter(|s| s.0).map(|s| s.1) };
+    let open_since = pinned(uid, layout).or(hover_since).filter(|_| can_expand);
+    let mk = |t: &SharedString| crate::ui::emoji_text::status_wrapped(t.clone(), 14. * crate::theme::zoom());
+    let open_clamp = if unclamped { 1000 } else { OPEN_CLAMP };
+    let probe_clamped = div().absolute().top_0().left_0().w_full().invisible().line_clamp(2).child(mk(&text)).child(measure_height(uid, layout, false));
+    let probe_full = div().absolute().top_0().left_0().w_full().invisible().line_clamp(open_clamp).child(mk(&text)).child(measure_height(uid, layout, true));
+    let target = expand_target(fh, cap, unclamped);
+    let visible_text = match open_since {
+        None => div().line_clamp(2).child(mk(&text)).into_any_element(),
+        Some(at) => {
+            let delay = delay_ms(EXPAND_DELAY_MS);
+            let dur = crate::ui::settings::effects::motion(EXPAND_MS).as_millis() as u64;
+            let total = delay + dur;
+            let start = ch;
+            let el = div().overflow_hidden().child(mk(&text));
+            if total > 1 && at.elapsed() < Duration::from_millis(total) {
+                el.line_clamp(2)
+                    .with_animation(
+                        gpui::ElementId::Name(format!("ptb-expand-{}-{lk}-{at:?}", uid.0).into()),
+                        gpui::Animation::new(Duration::from_millis(total)),
+                        move |d, t| {
+                            let ms = t * total as f32;
+                            if ms < delay as f32 {
+                                return d.line_clamp(2);
+                            }
+                            let p = ((ms - delay as f32) / dur.max(1) as f32).clamp(0., 1.);
+                            d.line_clamp(open_clamp).max_h(z(start + (target - start) * p))
+                        },
+                    )
+                    .into_any_element()
+            } else {
+                el.line_clamp(open_clamp).max_h(z(target)).into_any_element()
+            }
+        }
+    };
+    let content = div().relative().child(probe_clamped).child(probe_full).child(visible_text).into_any_element();
     let shown = if interacting.is_some() { None } else { visible(ck, bk) };
     let bar = if me {
         let e1 = e.clone();
@@ -509,7 +740,7 @@ pub fn status(
         let clear = toolbar_button(("ptb-clear", uid.0 + lk), crate::ui::states::key(("ptb-clear", uid.0, lk)), "chat/trash", false, true, false, themed)
             .tooltip(crate::ui::tooltip::tip(crate::t!("ptb.clear")))
             .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.clear_custom_status_from_profile(cx)));
-        Some(popover(bk, shown, -20., own_right(w), vec![edit.into_any_element(), clear.into_any_element()]))
+        Some(popover(bk, shown, bar_delay(true, can_expand), -20., own_right(w), vec![edit.into_any_element(), clear.into_any_element()]))
     } else if others_toolbar_shown(app, uid, guild) {
         let e1 = e.clone();
         let e2 = e.clone();
@@ -519,7 +750,7 @@ pub fn status(
         let reply = toolbar_button(("ptb-reply", uid.0 + lk), crate::ui::states::key(("ptb-reply-btn", uid.0, lk)), "reply", false, true, true, themed)
             .tooltip(crate::ui::tooltip::tip(crate::t!("ptb.reply")))
             .on_click(move |_, w, cx| e2.update(cx, |a, cx| a.start_profile_interaction(uid, layout, Interaction::Reply, w, cx)));
-        Some(popover(bk, shown, -16., others_right(w), vec![react.into_any_element(), reply.into_any_element()]))
+        Some(popover(bk, shown, bar_delay(false, can_expand), -16., others_right(w), vec![react.into_any_element(), reply.into_any_element()]))
     } else {
         None
     };
@@ -530,10 +761,52 @@ pub fn status(
         .relative()
         .child(measure(uid, layout))
         .child(bubble(content, me && hover, themed, false))
+        .children(can_expand.then(|| expand_button(uid, layout, open_since.is_some(), me && hover, cx)))
         .children(bar)
         .children(reply.map(|i| reply_box(&i, layout, themed, h)));
     let el = crate::ui::states::track(el, ck);
     Some(if interacting.is_some() { gpui::deferred(el).with_priority(30).into_any_element() } else { el.into_any_element() })
+}
+
+fn expand_button(uid: Id, layout: Layout, open: bool, hover: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let key = crate::ui::states::key(("ptb-expand", uid.0, layout as u64));
+    let shown = crate::ui::focus_ring::shown(key);
+    let e = cx.entity();
+    let e2 = e.clone();
+    let label = if open { crate::t!("ptb.collapse_status") } else { crate::t!("ptb.expand_status") };
+    let btn = div()
+        .id(("ptb-expand", uid.0 + layout as u64))
+        .absolute()
+        .bottom(z(-12.))
+        .right(z(8.))
+        .size(z(24.))
+        .rounded_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(bubble_bg(hover))
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
+        .when(!shown, |d| d.opacity(0.))
+        .when(shown, |d| d.cursor_pointer().tooltip(crate::ui::tooltip::tip(label)))
+        .child(
+            gpui::svg()
+                .path(crate::icons::path("chevron"))
+                .size(z(16.))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .when(open, |s| s.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI)))),
+        )
+        .on_click(move |_, _, cx| {
+            toggle_pinned(uid, layout);
+            e.update(cx, |_, cx| cx.notify());
+        })
+        .on_key_down(move |ev: &gpui::KeyDownEvent, _, cx| {
+            if matches!(ev.keystroke.key.as_str(), "enter" | "space") {
+                toggle_pinned(uid, layout);
+                e2.update(cx, |_, cx| cx.notify());
+                cx.stop_propagation();
+            }
+        });
+    crate::ui::focus_ring::ring(btn, key, 12.).into_any_element()
 }
 
 pub fn relationship_button(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> Option<gpui::Stateful<Div>> {
@@ -632,6 +905,41 @@ mod tests {
         assert!(r.ends_with("*\n> thinking\nhi"));
         let r = react_content("Nyx", None, ":wave:");
         assert!(r.ends_with("*\n:wave:"));
+    }
+
+    #[test]
+    fn clamped_status_expands_like_the_client() {
+        assert_eq!(clamp_heights(false), (36., 144.));
+        assert_eq!(clamp_heights(true), (37.25, 145.25));
+        assert!(!expandable(36., 36., 144., false));
+        assert!(expandable(36., 90., 144., false));
+        assert_eq!(expand_target(400., 144., false), 144.);
+        assert_eq!(expand_target(400., 144., true), 400.);
+        assert!(!expandable(0., 90., 144., false));
+        assert_eq!(bar_delay(false, false), 0);
+        assert_eq!(bar_delay(false, true), BAR_DELAY_OTHERS_MS);
+        assert_eq!(bar_delay(true, true), BAR_DELAY_OWN_MS);
+    }
+
+    #[test]
+    fn toast_goes_from_sending_to_sent_and_clears_after_its_timer() {
+        let u = Id(77);
+        set_toast(u, None);
+        assert_eq!(toast_state().map(|t| t.sent), Some(None));
+        let since = set_toast(u, Some(Interaction::Reply));
+        assert_eq!(toast_text(Some(Interaction::Reply)), crate::t!("ptb.toast_reply"));
+        clear_toast_if(Instant::now() + Duration::from_secs(1));
+        assert!(toast_state().is_some());
+        clear_toast_if(since);
+        assert!(toast_state().is_none());
+    }
+
+    #[test]
+    fn expand_button_toggles_the_pinned_state() {
+        assert!(toggle_pinned(Id(5), Layout::Popout));
+        assert!(pinned(Id(5), Layout::Popout).is_some());
+        assert!(!toggle_pinned(Id(5), Layout::Popout));
+        assert!(pinned(Id(5), Layout::Popout).is_none());
     }
 
     #[test]

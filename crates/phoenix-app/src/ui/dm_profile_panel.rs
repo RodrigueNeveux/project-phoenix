@@ -188,7 +188,8 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                             .child(div().id("dm-panel-scroll").flex_1().min_h_0().overflow_y_scroll().child(header).child(body))
                             .child(footer)
                             .children(effect)
-                            .children(crate::ui::profile_toolbar::scrim(uid, crate::ui::profile_toolbar::Layout::Sidebar)),
+                            .children(crate::ui::profile_toolbar::scrim(uid, crate::ui::profile_toolbar::Layout::Sidebar))
+                            .children(crate::ui::profile_toolbar::toast(uid, 105.)),
                     ),
             )
             .into_any_element()
