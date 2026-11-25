@@ -83,7 +83,7 @@ pub fn code_runs(code: &str, lang: Option<&str>) -> Vec<TextRun> {
 }
 
 pub fn ui_font() -> Font {
-    font(FONT_UI())
+    Font { fallbacks: Some(crate::fonts::ui_fallbacks()), ..font(FONT_UI()) }
 }
 
 fn run_for(len: usize, style: Style, revealed: bool, base: Hsla) -> TextRun {

@@ -617,7 +617,7 @@ pub fn grid_columns(content: &[f32], avail: f32, min: f32, gap: f32) -> Vec<f32>
 }
 
 fn text_width(window: &gpui::Window, text: &str, size: Pixels, weight: FontWeight) -> f32 {
-    let mut font = gpui::font(crate::theme::FONT_UI());
+    let mut font = crate::richtext::ui_font();
     font.weight = weight;
     let run = gpui::TextRun { len: text.len(), font, color: gpui::black(), background_color: None, underline: None, strikethrough: None };
     f32::from(window.text_system().layout_line(text, size, &[run], None).width)

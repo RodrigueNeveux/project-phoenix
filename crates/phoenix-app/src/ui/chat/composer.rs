@@ -698,7 +698,7 @@ thread_local! {
 }
 
 fn text_w(window: &Window, text: &str, weight: FontWeight) -> f32 {
-    let mut font = gpui::font(crate::theme::FONT_UI());
+    let mut font = crate::richtext::ui_font();
     font.weight = weight;
     let run = gpui::TextRun { len: text.len(), font, color: gpui::black(), background_color: None, underline: None, strikethrough: None };
     f32::from(window.text_system().layout_line(text, z(12.), &[run], None).width)
