@@ -166,8 +166,11 @@ fn fetch(url: &str) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-fn raster_cache() -> &'static Mutex<HashMap<(u8, u32, String), (Arc<RenderImage>, Duration)>> {
-    static CACHE: OnceLock<Mutex<HashMap<(u8, u32, String), (Arc<RenderImage>, Duration)>>> = OnceLock::new();
+type EffectKey = (u8, u32, String);
+type CachedEffect = (Arc<RenderImage>, Duration);
+
+fn raster_cache() -> &'static Mutex<HashMap<EffectKey, CachedEffect>> {
+    static CACHE: OnceLock<Mutex<HashMap<EffectKey, CachedEffect>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
