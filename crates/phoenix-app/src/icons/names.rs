@@ -175,4 +175,5 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("close-small", &["XSmallIcon"]),
     ("maximize", &["MaximizeIcon"]),
     ("plus-medium", &["PlusMediumIcon"]),
+    ("moderation", &["ModerationIcon"]),
 ];

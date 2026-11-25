@@ -490,3 +490,210 @@ pub fn watch_from_sidebar(app: &mut crate::app::PhoenixApp, key: String, cx: &mu
     }
     cx.notify();
 }
+
+pub fn stream_activity_card(
+    app: &crate::app::PhoenixApp,
+    user: Id,
+    entity: gpui::Entity<crate::app::PhoenixApp>,
+    cx: &mut gpui::App,
+) -> Option<AnyElement> {
+    use gpui::FontWeight;
+    if !crate::ui::voice_panel::flags(user).stream {
+        return None;
+    }
+    let ch = app.channels.values().find(|c| c.voice_users.contains(&user))?;
+    let (cid, cname) = (ch.id, ch.name.clone());
+    let key = crate::ui::call_view::stream_key_in(app, user)?;
+    fetch_preview(app, key.clone(), cx);
+    let url = preview_url(&key);
+    let g = ch.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    let acronym = g.map(|g| g.acronym.clone()).unwrap_or_default();
+    let icon = g.and_then(|g| match &g.icon {
+        crate::model::ImageRef::Url(u) => Some(u.clone()),
+        _ => None,
+    });
+    let locked = app.nav.extras.get(&cid).is_some_and(|e| e.locked);
+    let voice_icon = if locked { "voice-lock" } else { "speaker" };
+    let people: Vec<Id> = ch.voice_users.iter().copied().take(3).collect();
+    let shown = people.len();
+    let subtle = c(tok(idx::TEXT_SUBTLE));
+    let badge = div()
+        .flex()
+        .items_center()
+        .h(z(16.))
+        .px(z(8.))
+        .rounded_full()
+        .bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(tok(idx::WHITE)))
+        .child(crate::t!("voice.live"));
+    let header = div()
+        .flex()
+        .justify_between()
+        .gap(z(4.))
+        .h(z(16.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .min_w_0()
+                .overflow_hidden()
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .child(div().min_w_0().text_ellipsis().child(crate::t!("profile.live_card")))
+                .child(badge),
+        )
+        .child(
+            div()
+                .flex()
+                .mr(z(4.))
+                .cursor_pointer()
+                .child(svg().path(crate::icons::path("more-horizontal")).size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
+        );
+    let watch_key = key.clone();
+    let watch_entity = entity.clone();
+    let preview = div()
+        .id(("profile-stream-preview", user.0))
+        .group("profile-stream-preview")
+        .relative()
+        .w_full()
+        .h(z(252. * 9. / 16.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+        .map(|d| match url {
+            Some(u) => d.child(gpui::img(u).absolute().inset_0().size_full().rounded(z(8.)).object_fit(gpui::ObjectFit::Contain)),
+            None => d.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_center()
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .child(crate::t!("voice.stream_just_started")),
+            ),
+        })
+        .child(
+            div()
+                .relative()
+                .px(z(16.))
+                .py(z(7.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::OPACITY_BLACK_60)))
+                .opacity(0.)
+                .group_hover("profile-stream-preview", |s| s.opacity(1.))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(idx::WHITE)))
+                .child(crate::t!("voice.watch_stream")),
+        )
+        .on_click(move |_, _, cx| {
+            let k = watch_key.clone();
+            watch_entity.update(cx, |a, cx| {
+                a.people.popout = None;
+                watch_from_sidebar(a, k, cx);
+            });
+        });
+    let guild_icon = div()
+        .relative()
+        .size(z(16.))
+        .flex_none()
+        .rounded(z(4.))
+        .overflow_hidden()
+        .flex()
+        .items_center()
+        .justify_center()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+        .text_size(z(8.))
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
+        .map(|d| match icon {
+            Some(u) => d.child(gpui::img(u).absolute().inset_0().size_full()),
+            None => d.child(acronym),
+        });
+    let open_entity = entity.clone();
+    let channel_row = div()
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .h(z(16.))
+        .child(guild_icon)
+        .child(svg().path(crate::icons::path("chevron-right")).size(z(12.)).flex_none().text_color(subtle))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .items_center()
+                .gap(z(2.))
+                .child(svg().path(crate::icons::path(voice_icon)).size(z(12.)).flex_none().text_color(subtle))
+                .child(
+                    div()
+                        .id(("profile-stream-channel", user.0))
+                        .min_w_0()
+                        .cursor_pointer()
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .text_color(subtle)
+                        .text_ellipsis()
+                        .hover(|s| s.underline())
+                        .child(cname)
+                        .on_click(move |_, _, cx| {
+                            open_entity.update(cx, |a, cx| {
+                                a.people.popout = None;
+                                a.open_channel_chat(cid, cx);
+                            })
+                        }),
+                ),
+        )
+        .child(div().flex().flex_none().items_center().children(people.iter().enumerate().map(|(n, u)| {
+            div().when(n + 1 < shown, |d| d.mr(z(-3.))).child(crate::ui::avatar(app.users.get(u), 16.))
+        })));
+    let join = crate::ui::profile::mana_button(("profile-stream-join", user.0), crate::t!("profile.join_voice"), false, false)
+        .w_full()
+        .line_height(z(18.))
+        .on_click(move |_, _, cx| {
+            entity.update(cx, |a, cx| {
+                a.people.popout = None;
+                a.join_voice(Some(cid), cx);
+            })
+        });
+    Some(
+        div()
+            .pb(z(8.))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(z(8.))
+                    .p(z(8.))
+                    .rounded(z(8.))
+                    .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND_HOVER)))
+                    .child(header)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(z(8.))
+                            .child(preview)
+                            .child(div().h(z(1.)).bg(c(tok(idx::USER_PROFILE_BORDER))))
+                            .child(channel_row),
+                    )
+                    .child(div().mt(z(4.)).flex().items_center().child(join)),
+            )
+            .into_any_element(),
+    )
+}

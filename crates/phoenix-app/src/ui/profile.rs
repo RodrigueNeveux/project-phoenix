@@ -628,7 +628,21 @@ pub(crate) fn banner_buttons(app: &PhoenixApp, uid: Id, guild: Option<Id>, end: 
         crate::ui::user_menu::open(uid, guild, ev.position(), w);
         cx.notify();
     }));
-    div().absolute().right(z(end)).top(z(8.)).flex().gap(z(8.)).children(friend_btn).child(more)
+    let mod_view = (uid != app.me.id && mod_view_allowed(app, guild)).then(|| {
+        banner_button(("profile-mod-view", uid.0), "moderation")
+            .tooltip(crate::ui::tooltip::tip(crate::t!("profile.open_mod_view")))
+            .on_click(cx.listener(|a, _, _, cx| a.parity_toast(crate::t!("profile.mod_view_unavailable"), cx)))
+    });
+    div().absolute().right(z(end)).top(z(8.)).flex().gap(z(8.)).children(mod_view).children(friend_btn).child(more)
+}
+
+pub(crate) fn mod_view_allowed(app: &PhoenixApp, guild: Option<Id>) -> bool {
+    use crate::actions::{ADMINISTRATOR, MANAGE_GUILD, MANAGE_NICKNAMES, MANAGE_ROLES, MODERATE_MEMBERS};
+    const KICK_MEMBERS: u64 = 1 << 1;
+    const BAN_MEMBERS: u64 = 1 << 2;
+    let Some(g) = guild else { return false };
+    let perms = app.backend.guild_permissions(g);
+    perms & (ADMINISTRATOR | MANAGE_GUILD | BAN_MEMBERS | KICK_MEMBERS | MODERATE_MEMBERS | MANAGE_ROLES | MANAGE_NICKNAMES) != 0
 }
 
 fn popout_card(
@@ -681,7 +695,7 @@ fn popout_card_inner(
         .gap(z(12.))
         .pt(z(4.))
         .pl(z(16.))
-        .pr(z(8.))
+        .pr(z(16.))
         .pb(z(8.))
         .min_h_0()
         .overflow_y_scroll()
@@ -736,7 +750,11 @@ fn popout_card_inner(
         }
     }
     if !offline && voice_here {
-        body = body.children(crate::ui::voice_row::voice_activity_card(app, uid, cx.entity()));
+        let live = crate::ui::voice_row::stream_activity_card(app, uid, cx.entity(), cx);
+        body = match live {
+            Some(card) => body.child(card),
+            None => body.children(crate::ui::voice_row::voice_activity_card(app, uid, cx.entity())),
+        };
     }
     if guild.is_some() && !i.roles.is_empty() {
         body = body.child(roles_block(i.roles.clone()));
