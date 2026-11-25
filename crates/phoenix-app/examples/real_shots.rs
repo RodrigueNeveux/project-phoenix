@@ -787,6 +787,11 @@ fn main() -> anyhow::Result<()> {
                 if home { "friends".into() } else { String::new() }
             });
             let tab = std::env::var("PHX_TAB").unwrap_or_default();
+            if view == "inbox" && guild.is_none() && channel.is_none() {
+                app.select_guild(None, cx);
+                app.nav.home = phoenix_app::ui::home::data::HomeView::Friends;
+                app.selected_channel = None;
+            }
             if view == "friends" {
                 use phoenix_app::ui::home::data::FriendsTab as F;
                 app.select_guild(None, cx);
