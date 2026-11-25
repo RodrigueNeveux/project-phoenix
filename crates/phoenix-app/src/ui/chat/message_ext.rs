@@ -148,10 +148,10 @@ pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&Mo
     }
 }
 
-pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
+pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, after_accessory: bool) -> AnyElement {
     let _ = app;
     let (ch, id) = (msg.channel, msg.id);
-    let mut row = div().pt(z(2.)).pb(z(10.)).mb(z(-8.)).flex().flex_wrap().gap(z(4.)).items_center();
+    let mut row = div().pt(z(if after_accessory { 8. } else { 4. })).pb(z(10.)).mb(z(-8.)).flex().flex_wrap().gap(z(4.)).items_center();
     for (ix, r) in msg.reactions.iter().enumerate() {
         let e = entity.clone();
         let rc = r.clone();

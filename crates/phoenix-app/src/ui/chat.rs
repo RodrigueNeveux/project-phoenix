@@ -1046,7 +1046,8 @@ pub(crate) fn message(
         content = content.child(div().mt(z(4.)).h(z(20.)).flex().items_center().child(edited_marker(edited_at)));
     }
     if !msg.reactions.is_empty() && app.prefs.synced.flag("reactions") {
-        content = content.child(message_ext::reactions(app, entity, msg));
+        let after_accessory = !msg.attachments.is_empty() || msg.embeds.iter().any(|e| show_embed(&e)) || msg.forward.is_some();
+        content = content.child(message_ext::reactions(app, entity, msg, after_accessory));
     }
     if let Some(t) = &msg.thread {
         content = content.child(message_ext::thread_chip(app, entity, t, false));
