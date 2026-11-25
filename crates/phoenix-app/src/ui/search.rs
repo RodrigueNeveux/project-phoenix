@@ -808,7 +808,6 @@ fn channel_group_header(app: &PhoenixApp, ch: Id, hl: &Highlighter) -> gpui::Div
         None => crate::t!("common.unknown_lower"),
     };
     let glyph = match channel {
-        Some(_) if private && crate::ui::dm_profile_panel::is_group_dm(app, ch) => crate::icons::path("members"),
         Some(_) if private => crate::icons::path("search/at"),
         Some(c) => crate::ui::sidebar::channel_icon(c.kind).path(),
         None => Icon::Hash.path(),
