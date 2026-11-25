@@ -63,12 +63,16 @@ pub fn anchor_runs(msg: Id, bi: usize, offset: usize, runs: &[TextRun]) -> Optio
     Some(out)
 }
 
-pub fn link_title(label: &str, url: &str) -> gpui::SharedString {
-    if label == url {
-        return label.to_owned().into();
+pub fn link_tip(entity: &gpui::Entity<crate::app::PhoenixApp>, label: &str, url: &str, cx: &gpui::App) -> gpui::SharedString {
+    link_title(label, url, crate::ui::modals::leave_link::dm_with_stranger(entity.read(cx)))
+}
+
+pub fn link_title(label: &str, url: &str, stranger: bool) -> gpui::SharedString {
+    let mut title = crate::markdown::link_title_attr(label, url).unwrap_or_else(|| label.to_owned());
+    if title == url && !stranger {
+        return title.into();
     }
     let mut suffix = format!("\n\n({url})");
-    let mut title = label.to_owned();
     if title.chars().count() + suffix.chars().count() > 1024 {
         suffix = format!("...{suffix}");
         let keep = 1024usize.saturating_sub(suffix.chars().count());
@@ -204,10 +208,18 @@ mod tests {
 
     #[test]
     fn link_title_follows_the_client() {
-        assert_eq!(link_title("https://a.b", "https://a.b").as_ref(), "https://a.b");
-        assert_eq!(link_title("docs", "https://a.b").as_ref(), "docs\n\n(https://a.b)");
+        assert_eq!(link_title("https://a.b", "https://a.b", false).as_ref(), "https://a.b");
+        assert_eq!(link_title("https://a.b", "https://a.b", true).as_ref(), "https://a.b\n\n(https://a.b)");
+        assert_eq!(link_title("docs", "https://a.b", false).as_ref(), "docs\n\n(https://a.b)");
+        let mut n = 0;
+        let parsed = crate::markdown::parse_inline("[voir](https://t.example/p \"Page du projet\")", &crate::markdown::NoResolve, &mut n);
+        assert_eq!(parsed.text, "voir");
+        assert_eq!(link_title("voir", "https://t.example/p", false).as_ref(), "Page du projet\n\n(https://t.example/p)");
+        crate::markdown::parse_inline("[x](https://t.example/q \"https://t.example/q\")", &crate::markdown::NoResolve, &mut n);
+        assert_eq!(link_title("x", "https://t.example/q", false).as_ref(), "https://t.example/q");
+        assert_eq!(link_title("x", "https://t.example/q", true).as_ref(), "https://t.example/q\n\n(https://t.example/q)");
         let long = "x".repeat(2000);
-        let t = link_title(&long, "https://a.b");
+        let t = link_title(&long, "https://a.b", false);
         assert_eq!(t.chars().count(), 1024);
         assert!(t.ends_with("...\n\n(https://a.b)"));
     }

@@ -19,7 +19,7 @@ const ASSET_CALL: &str = "https://discord.com/assets/61ccab047dad737a.svg";
 const ASSET_CALL_MISSED: &str = "https://discord.com/assets/6f076a64de25de4b.svg";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum SysIcon {
+pub enum SysIcon {
     Asset(&'static str),
     Glyph(ChatIcon, u32),
     Named(&'static str, f32, Option<usize>),
@@ -110,6 +110,307 @@ pub fn call_state(call: Option<&crate::model::CallInfo>, active: bool, me: crate
     }
 }
 
+const ASSET_DISCOVERY_OUT: &str = "https://discord.com/assets/49dd33256719a93e.svg";
+const ASSET_DISCOVERY_BACK: &str = "https://discord.com/assets/5c56b22c17556059.svg";
+
+const FALLBACK_TYPES: [u8; 27] = [13, 24, 25, 32, 33, 34, 35, 36, 37, 38, 39, 44, 48, 49, 50, 51, 52, 53, 54, 58, 59, 60, 61, 62, 64, 65, 67];
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Seg {
+    Text(String),
+    Author,
+    Strong(String),
+    Name(String),
+    Link(usize, String),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SysLink {
+    EditGroup,
+    Guild,
+    GuildSettings,
+    Followed,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SysCtx<'a> {
+    pub type_id: u8,
+    pub content: &'a str,
+    pub group_dm: bool,
+    pub forum_post: bool,
+    pub guild_name: Option<&'a str>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Generic {
+    pub icon: SysIcon,
+    pub segs: Vec<Seg>,
+    pub links: &'static [SysLink],
+    pub strong_text: bool,
+}
+
+pub fn parse_template(tpl: &str, vars: &[(&str, String)]) -> Vec<Seg> {
+    let fill = |s: &str| {
+        let mut o = String::new();
+        let mut rest = s;
+        while let Some(i) = rest.find('{') {
+            o.push_str(&rest[..i]);
+            let tail = &rest[i..];
+            match tail.find('}').and_then(|j| vars.iter().find(|(k, _)| **k == tail[1..j]).map(|(_, v)| (j, v))) {
+                Some((j, v)) => {
+                    o.push_str(v);
+                    rest = &tail[j + 1..];
+                }
+                None => {
+                    o.push('{');
+                    rest = &tail[1..];
+                }
+            }
+        }
+        o.push_str(rest);
+        o
+    };
+    let mut out = Vec::new();
+    let mut rest = tpl;
+    let mut links = 0;
+    while !rest.is_empty() {
+        let next = ["{u}", "**", "<", "["].iter().filter_map(|m| rest.find(m).map(|i| (i, *m))).min_by_key(|(i, _)| *i);
+        let Some((i, m)) = next else {
+            out.push(Seg::Text(fill(rest)));
+            break;
+        };
+        if i > 0 {
+            out.push(Seg::Text(fill(&rest[..i])));
+        }
+        rest = &rest[i + m.len()..];
+        let close = match m {
+            "{u}" => {
+                out.push(Seg::Author);
+                continue;
+            }
+            "**" => "**",
+            "<" => ">",
+            _ => "]",
+        };
+        let end = rest.find(close).unwrap_or(rest.len());
+        let inner = fill(&rest[..end]);
+        out.push(match m {
+            "**" => Seg::Strong(inner),
+            "<" => Seg::Name(inner),
+            _ => {
+                links += 1;
+                Seg::Link(links - 1, inner)
+            }
+        });
+        rest = rest.get(end + close.len()..).unwrap_or("");
+    }
+    out.retain(|s| !matches!(s, Seg::Text(t) if t.is_empty()));
+    out
+}
+
+pub fn boost_count(content: &str) -> u32 {
+    match content.trim().parse::<f64>() {
+        Ok(n) if n.is_finite() && n >= 1. => n as u32,
+        _ => 1,
+    }
+}
+
+pub fn effective_type(msg: &Message) -> u8 {
+    match msg.kind {
+        MessageKind::Boost(t) => 8 + t.min(3),
+        MessageKind::ChannelNameChange => 4,
+        MessageKind::StageStart => 27,
+        MessageKind::StageEnd => 28,
+        MessageKind::StageSpeaker => 29,
+        MessageKind::StageTopic => 31,
+        _ => msg.type_id,
+    }
+}
+
+pub fn generic_in(code: &str, ctx: &SysCtx) -> Option<Generic> {
+    use crate::theme::generated::idx;
+    use SysLink::*;
+    let tr = |k: &str| crate::i18n::t_in(code, k, &[]).to_string();
+    let pen = SysIcon::Named("chat/edit", 12., None);
+    let stage = |tint: Option<usize>| SysIcon::Named("stage", 24., tint);
+    let warn = SysIcon::Named("settings/circle-error", 16., Some(idx::TEXT_FEEDBACK_WARNING));
+    let guild = ctx.guild_name.unwrap_or("this server").to_string();
+    let n = boost_count(ctx.content);
+    let mut vars: Vec<(&str, String)> = vec![("c", ctx.content.to_string()), ("g", guild), ("n", n.to_string())];
+    let (icon, key, links, strong_text): (SysIcon, &str, &'static [SysLink], bool) = match ctx.type_id {
+        4 if ctx.group_dm && ctx.content.is_empty() => (pen, "sys.rename_group_clear", &[EditGroup], false),
+        4 if ctx.group_dm => (pen, "sys.rename_group", &[EditGroup], false),
+        4 if ctx.forum_post => (pen, "sys.rename_post", &[], false),
+        4 => (pen, "sys.rename", &[], false),
+        5 => (pen, "sys.group_icon", &[EditGroup], false),
+        8..=11 => {
+            let gem = SysIcon::Named("chat/boost", 16., Some(idx::GUILD_BOOSTING_PINK));
+            let tier = ctx.type_id - 8;
+            if tier == 0 || ctx.guild_name.is_none() {
+                (gem, if n > 1 { "sys.boost_n" } else { "sys.boost" }, &[], false)
+            } else {
+                vars.push(("t", tr(&format!("sys.boost_tier{tier}"))));
+                (gem, if n > 1 { "sys.boost_tier_n" } else { "sys.boost_tier" }, &[], false)
+            }
+        }
+        12 => (SysIcon::Asset(ASSET_JOIN), "sys.follow_add", &[Followed], false),
+        14 => (SysIcon::Asset(ASSET_DISCOVERY_OUT), "sys.discovery_out", &[Guild, GuildSettings], false),
+        15 => (SysIcon::Asset(ASSET_DISCOVERY_BACK), "sys.discovery_back", &[], false),
+        16 => (warn, "sys.discovery_warn1", &[Guild], false),
+        17 => (warn, "sys.discovery_warn3", &[Guild], false),
+        27 => (stage(Some(idx::GREEN_360)), "sys.stage_start", &[], true),
+        28 => (stage(None), "sys.stage_end", &[], true),
+        29 => (SysIcon::Named("sys/mic-arrow-right", 24., None), "sys.stage_speaker", &[], true),
+        30 => (SysIcon::Named("sys/hand-request-speak", 24., None), "sys.stage_hand", &[], true),
+        31 => (stage(None), "sys.stage_topic", &[], true),
+        _ => return None,
+    };
+    Some(Generic { icon, segs: parse_template(&tr(key), &vars), links, strong_text })
+}
+
+fn split_words(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut in_space = false;
+    for ch in text.chars() {
+        let breaking = ch.is_whitespace() && ch != '\u{a0}';
+        if breaking {
+            in_space = true;
+        } else if in_space {
+            out.push(std::mem::take(&mut cur));
+            in_space = false;
+        }
+        cur.push(ch);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn author_name(app: &PhoenixApp, msg: &Message) -> SharedString {
+    msg.author_nick
+        .clone()
+        .or_else(|| app.member_nick(msg.author))
+        .or_else(|| app.users.get(&msg.author).map(|u| u.display_name.clone()))
+        .unwrap_or_else(|| crate::t!("sys.someone"))
+}
+
+fn author_el(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
+    let (name_color, name_gradient) = app.author_role_style(msg.author);
+    let name_color = name_color.map(c).unwrap_or_else(|| c(Palette::TEXT_HEADER));
+    let author = app.users.get(&msg.author);
+    crate::fonts::styled_name(
+        div().font_weight(FontWeight::MEDIUM).text_color(name_color).cursor_pointer().hover(|s| s.underline()),
+        author,
+        false,
+    )
+    .id(("sys-author", msg.id.0))
+    .on_click(super::message_ext::open_user(entity, msg.author, msg.channel))
+    .child(crate::fonts::role_name_text(author_name(app, msg), author, 16., app.selected_guild.is_some(), name_gradient))
+    .into_any_element()
+}
+
+fn icon_el(glyph: SysIcon) -> AnyElement {
+    match glyph {
+        SysIcon::Named(name, size, tint) => div()
+            .absolute()
+            .left(z(44. - size / 2.))
+            .top(z(15. - size / 2.))
+            .child(
+                gpui::svg()
+                    .path(crate::icons::path(name))
+                    .size(z(size))
+                    .text_color(tint.map_or_else(|| c(Palette::TEXT_MUTED), |t| c(crate::theme::tok(t)))),
+            )
+            .into_any_element(),
+        SysIcon::Asset(url) => div().absolute().left(z(36.)).top(z(7.)).child(gpui::img(SharedString::new_static(url)).size(z(16.))).into_any_element(),
+        SysIcon::Glyph(icon, color) => div().absolute().left(z(36.)).top(z(7.)).child(super::icons::icon(icon, 16., c(color))).into_any_element(),
+    }
+}
+
+fn generic_line(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &RenderedMessage, g: Generic) -> AnyElement {
+    use crate::theme::{generated::idx, tok};
+    let text_color = if g.strong_text { c(tok(idx::TEXT_STRONG)) } else { c(Palette::TEXT_MUTED) };
+    let guild = app.channel_guild(msg.channel);
+    let channel = msg.channel;
+    let mut children: Vec<AnyElement> = Vec::new();
+    for seg in g.segs {
+        match seg {
+            Seg::Text(t) => children.extend(split_words(&t).into_iter().map(|w| div().child(w).into_any_element())),
+            Seg::Strong(t) => children.extend(split_words(&t).into_iter().map(|w| div().font_weight(FontWeight::SEMIBOLD).child(w).into_any_element())),
+            Seg::Name(t) => children.extend(
+                split_words(&t).into_iter().map(|w| div().font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(w).into_any_element()),
+            ),
+            Seg::Author => children.push(author_el(app, entity, msg)),
+            Seg::Link(i, label) => {
+                let kind = g.links.get(i).copied();
+                let color = if kind == Some(SysLink::EditGroup) { idx::TEXT_LINK } else { idx::INTERACTIVE_TEXT_ACTIVE };
+                let e = entity.clone();
+                let el = div()
+                    .id(("sys-link", msg.id.0.wrapping_mul(8).wrapping_add(i as u64)))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(tok(color)))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .child(label)
+                    .on_click(move |_, _, cx| match kind {
+                        Some(SysLink::EditGroup) => e.update(cx, |a, cx| a.open_edit_group(channel, cx)),
+                        Some(SysLink::Guild) => {
+                            if let Some(gid) = guild {
+                                e.update(cx, |a, cx| a.select_guild(Some(gid), cx));
+                            }
+                        }
+                        Some(SysLink::GuildSettings) => {
+                            if let Some(gid) = guild {
+                                let section = crate::ui::modals::server_settings::section_index("menu.gs.access");
+                                e.update(cx, |a, cx| a.open_server_settings(gid, section, cx));
+                            }
+                        }
+                        Some(SysLink::Followed) | None => {}
+                    });
+                children.push(el.into_any_element());
+            }
+        }
+    }
+    div()
+        .id(("sysmsg", msg.id.0))
+        .relative()
+        .pl(z(80.))
+        .pr(z(48.))
+        .py(z(2.))
+        .mt(z(if r.group_start { 17. } else { 0. }))
+        .min_h(z(22.))
+        .flex()
+        .flex_wrap()
+        .items_center()
+        .text_size(z(16.))
+        .text_color(text_color)
+        .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
+        .child(icon_el(g.icon))
+        .children(children)
+        .child(div().ml(z(6.)).text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(r.time_full.clone()))
+        .into_any_element()
+}
+
+fn with_divider(r: &RenderedMessage, line: AnyElement) -> AnyElement {
+    match r.day_divider.clone() {
+        Some(label) => div().child(super::day_divider(label)).child(line).into_any_element(),
+        None => line,
+    }
+}
+
+pub fn ctx_of<'a>(app: &'a PhoenixApp, msg: &'a Message) -> SysCtx<'a> {
+    let guild = app.channel_guild(msg.channel);
+    SysCtx {
+        type_id: effective_type(msg),
+        content: msg.content.as_ref(),
+        group_dm: guild.is_none() && crate::ui::dm_profile_panel::is_group_dm(app, msg.channel),
+        forum_post: guild.is_some() && app.thread_state(msg.channel).forum_post,
+        guild_name: guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| g.name.as_ref()),
+    }
+}
+
 pub fn is_system(kind: MessageKind) -> bool {
     !matches!(kind, MessageKind::Default | MessageKind::Reply)
 }
@@ -118,27 +419,20 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
     if !is_system(msg.kind) {
         return None;
     }
-    if msg.kind == MessageKind::OtherSystem && msg.content.is_empty() {
+    if let MessageKind::PollResult(poll) = msg.kind {
+        let line = poll_result(app, entity, msg, r, poll);
+        return Some(with_divider(r, line));
+    }
+    if let Some(g) = generic_in(crate::i18n::locale(), &ctx_of(app, msg)) {
+        let line = generic_line(app, entity, msg, r, g);
+        return Some(with_divider(r, line));
+    }
+    if msg.kind == MessageKind::OtherSystem && (msg.content.is_empty() || !FALLBACK_TYPES.contains(&msg.type_id)) {
         return Some(match r.day_divider.clone() {
             Some(label) => super::day_divider(label).into_any_element(),
             None => div().into_any_element(),
         });
     }
-    if let MessageKind::PollResult(poll) = msg.kind {
-        let line = poll_result(app, entity, msg, r, poll);
-        return Some(match r.day_divider.clone() {
-            Some(label) => div().child(super::day_divider(label)).child(line).into_any_element(),
-            None => line,
-        });
-    }
-    let name: SharedString = msg
-        .author_nick
-        .clone()
-        .or_else(|| app.member_nick(msg.author))
-        .or_else(|| app.users.get(&msg.author).map(|u| u.display_name.clone()))
-        .unwrap_or_else(|| crate::t!("sys.someone"));
-    let (name_color, name_gradient) = app.author_role_style(msg.author);
-    let name_color = name_color.map(c).unwrap_or_else(|| c(Palette::TEXT_HEADER));
     let target = |t: Option<crate::model::Id>| t.filter(|t| *t != msg.author);
     let other: Option<(crate::model::Id, SharedString, SharedString)> = match msg.kind {
         MessageKind::RecipientAdd(t) | MessageKind::RecipientRemove(t) => target(t).map(|t| {
@@ -158,13 +452,6 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             (ChatIcon::Join, Palette::GREEN, b, a)
         }
         MessageKind::Pin => (ChatIcon::Join, Palette::INTERACTIVE, "".into(), crate::t!("sys.pin_lead")),
-        MessageKind::Boost(0) => (ChatIcon::Boost, 0xFF73FA, "".into(), crate::t!("sys.boost")),
-        MessageKind::Boost(t) => (
-            ChatIcon::Boost,
-            0xFF73FA,
-            "".into(),
-            crate::t!("sys.boost_level", t = t),
-        ),
         MessageKind::ThreadCreated => (
             ChatIcon::Thread,
             Palette::INTERACTIVE,
@@ -188,16 +475,6 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
                 (_, None) => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.call")),
             }
         }
-        MessageKind::ChannelNameChange => (
-            ChatIcon::Edit,
-            Palette::INTERACTIVE,
-            "".into(),
-            crate::t!("sys.rename", c = msg.content),
-        ),
-        MessageKind::StageStart => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.stage_start", c = msg.content)),
-        MessageKind::StageEnd => (ChatIcon::Join, Palette::RED, "".into(), crate::t!("sys.stage_end", c = msg.content)),
-        MessageKind::StageSpeaker => (ChatIcon::Join, Palette::GREEN, "".into(), crate::t!("sys.stage_speaker")),
-        MessageKind::StageTopic => (ChatIcon::Edit, Palette::INTERACTIVE, "".into(), crate::t!("sys.stage_topic", c = msg.content)),
         _ => (
             ChatIcon::More,
             Palette::INTERACTIVE,
@@ -211,9 +488,6 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         MessageKind::RecipientRemove(_) => SysIcon::Asset(ASSET_LEAVE),
         MessageKind::Call if call == Some(CallState::Missed) => SysIcon::Asset(ASSET_CALL_MISSED),
         MessageKind::Call => SysIcon::Asset(ASSET_CALL),
-        MessageKind::StageStart => SysIcon::Named("stage", 24., Some(crate::theme::generated::idx::GREEN_360)),
-        MessageKind::StageEnd | MessageKind::StageTopic => SysIcon::Named("stage", 24., None),
-        MessageKind::StageSpeaker => SysIcon::Named("sys/mic-arrow-right", 24., None),
         _ => SysIcon::Glyph(icon, color),
     };
     let joinable = call == Some(CallState::Joinable);
@@ -232,32 +506,9 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .text_size(z(16.))
         .text_color(c(Palette::TEXT_MUTED))
         .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
-        .child(match glyph {
-            SysIcon::Named(name, size, tint) => div()
-                .absolute()
-                .left(z(44. - size / 2.))
-                .top(z(15. - size / 2.))
-                .child(
-                    gpui::svg()
-                        .path(crate::icons::path(name))
-                        .size(z(size))
-                        .text_color(tint.map_or_else(|| c(Palette::TEXT_MUTED), |t| c(crate::theme::tok(t)))),
-                ),
-            SysIcon::Asset(url) => div().absolute().left(z(36.)).top(z(7.)).child(gpui::img(SharedString::new_static(url)).size(z(16.))),
-            SysIcon::Glyph(icon, color) => div().absolute().left(z(36.)).top(z(7.)).child(super::icons::icon(icon, 16., c(color))),
-        })
+        .child(icon_el(glyph))
         .children(flow(before))
-        .child({
-            let author = app.users.get(&msg.author);
-            crate::fonts::styled_name(
-                div().font_weight(FontWeight::MEDIUM).text_color(name_color).cursor_pointer().hover(|s| s.underline()),
-                author,
-                false,
-            )
-            .id(("sys-author", msg.id.0))
-            .on_click(super::message_ext::open_user(entity, msg.author, msg.channel))
-            .child(crate::fonts::role_name_text(name, author, 16., app.selected_guild.is_some(), name_gradient))
-        })
+        .child(author_el(app, entity, msg))
         .children(flow(after))
         .when_some(thread.clone(), |d, t| {
             let (e1, e2) = (entity.clone(), entity.clone());
@@ -594,6 +845,123 @@ fn flow(text: SharedString) -> Vec<SharedString> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn plain(g: &Generic) -> String {
+        g.segs
+            .iter()
+            .map(|s| match s {
+                Seg::Text(t) => t.clone(),
+                Seg::Author => "@U".into(),
+                Seg::Strong(t) => format!("**{t}**"),
+                Seg::Name(t) => format!("<{t}>"),
+                Seg::Link(i, t) => format!("[{i}:{t}]"),
+            })
+            .collect::<String>()
+            .replace('\u{a0}', " ")
+    }
+
+    fn sys_gen(code: &str, type_id: u8, content: &str) -> Generic {
+        generic_in(code, &SysCtx { type_id, content, guild_name: Some("Aperture"), ..Default::default() }).unwrap()
+    }
+
+    #[test]
+    fn template_parser_keeps_user_text_literal() {
+        let v = vec![("c", "**{g}** [x] <y>".to_string()), ("g", "G".to_string())];
+        assert_eq!(
+            parse_template("{u} a: **{c}** [{g}] <{c}>", &v),
+            vec![
+                Seg::Author,
+                Seg::Text(" a: ".into()),
+                Seg::Strong("**{g}** [x] <y>".into()),
+                Seg::Text(" ".into()),
+                Seg::Link(0, "G".into()),
+                Seg::Text(" ".into()),
+                Seg::Name("**{g}** [x] <y>".into()),
+            ]
+        );
+        assert_eq!(split_words("a b\u{a0}: c"), vec!["a ", "b\u{a0}: ", "c"]);
+    }
+
+    #[test]
+    fn channel_and_group_renames_follow_the_client() {
+        let g = sys_gen("fr", 4, "général");
+        assert_eq!(g.icon, SysIcon::Named("chat/edit", 12., None));
+        assert_eq!(plain(&g), "@U a changé le nom du salon : **général**");
+        assert_eq!(plain(&sys_gen("en", 4, "general")), "@U changed the channel name: **general**");
+        let post = generic_in("fr", &SysCtx { type_id: 4, content: "Idée", forum_post: true, ..Default::default() }).unwrap();
+        assert_eq!(plain(&post), "@U a changé le titre du post : **Idée**");
+        let group = generic_in("fr", &SysCtx { type_id: 4, content: "Les amis", group_dm: true, ..Default::default() }).unwrap();
+        assert_eq!(plain(&group), "@U a changé le nom du groupe : <Les amis>. [0:Modifier le groupe]");
+        assert_eq!(group.links, &[SysLink::EditGroup]);
+        let cleared = generic_in("en", &SysCtx { type_id: 4, content: "", group_dm: true, ..Default::default() }).unwrap();
+        assert_eq!(plain(&cleared), "@U removed the custom group name. [0:Edit Group]");
+        let icon = sys_gen("fr", 5, "");
+        assert_eq!(plain(&icon), "@U a changé l'icône du groupe. [0:Modifier le groupe]");
+        assert_eq!(icon.icon, SysIcon::Named("chat/edit", 12., None));
+    }
+
+    #[test]
+    fn boosts_follow_the_client() {
+        use crate::theme::generated::idx;
+        let b = sys_gen("fr", 8, "");
+        assert_eq!(b.icon, SysIcon::Named("chat/boost", 16., Some(idx::GUILD_BOOSTING_PINK)));
+        assert_eq!(plain(&b), "@U vient de booster le serveur !");
+        assert_eq!(plain(&sys_gen("fr", 8, "3")), "@U vient de booster le serveur **3** fois !");
+        assert_eq!(plain(&sys_gen("fr", 9, "")), "@U vient de booster le serveur ! Aperture a atteint **Niveau 1 !**");
+        assert_eq!(plain(&sys_gen("fr", 10, "2")), "@U vient de booster le serveur **2** fois ! Aperture a atteint le niveau **Niveau 2 !**");
+        assert_eq!(plain(&sys_gen("en", 11, "")), "@U just boosted the server! Aperture has achieved **Level 3!**");
+        let no_guild = generic_in("en", &SysCtx { type_id: 11, content: "", ..Default::default() }).unwrap();
+        assert_eq!(plain(&no_guild), "@U just boosted the server!");
+        assert_eq!(boost_count("0"), 1);
+        assert_eq!(boost_count("x"), 1);
+        assert_eq!(boost_count(" 4 "), 4);
+    }
+
+    #[test]
+    fn follow_and_discovery_follow_the_client() {
+        use crate::theme::generated::idx;
+        let f = sys_gen("fr", 12, "Phoenix #annonces");
+        assert_eq!(f.icon, SysIcon::Asset(ASSET_JOIN));
+        assert_eq!(plain(&f), "@U a ajouté [0:Phoenix #annonces] dans ce salon. Les mises à jour les plus importantes s'afficheront ici.");
+        let out = sys_gen("en", 14, "");
+        assert_eq!(out.icon, SysIcon::Asset(ASSET_DISCOVERY_OUT));
+        assert_eq!(out.links, &[SysLink::Guild, SysLink::GuildSettings]);
+        assert!(plain(&out).starts_with("[0:Aperture] has been removed from Server Discovery"));
+        assert!(plain(&out).contains("Check [1:Server Settings] for more details."));
+        let back = sys_gen("fr", 15, "");
+        assert_eq!(back.icon, SysIcon::Asset(ASSET_DISCOVERY_BACK));
+        assert!(!back.segs.contains(&Seg::Author));
+        let w = generic_in("en", &SysCtx { type_id: 16, ..Default::default() }).unwrap();
+        assert_eq!(w.icon, SysIcon::Named("settings/circle-error", 16., Some(idx::TEXT_FEEDBACK_WARNING)));
+        assert!(plain(&w).starts_with("[0:this server] has failed Discovery activity requirements for 1 week."));
+        assert!(plain(&sys_gen("fr", 17, "")).contains("pendant 3 semaines d'affilée"));
+    }
+
+    #[test]
+    fn stage_messages_follow_the_client() {
+        use crate::theme::generated::idx;
+        let s = sys_gen("fr", 27, "Réunion");
+        assert_eq!(s.icon, SysIcon::Named("stage", 24., Some(idx::GREEN_360)));
+        assert!(s.strong_text);
+        assert_eq!(plain(&s), "@U a commencé **Réunion**");
+        assert_eq!(plain(&sys_gen("fr", 28, "Réunion")), "@U a mis fin à **Réunion**");
+        assert_eq!(plain(&sys_gen("en", 29, "")), "@U is now a speaker.");
+        assert_eq!(sys_gen("en", 30, "").icon, SysIcon::Named("sys/hand-request-speak", 24., None));
+        assert_eq!(plain(&sys_gen("fr", 30, "")), "@U a demandé à prendre la parole.");
+        assert_eq!(plain(&sys_gen("fr", 31, "Sujet")), "@U a changé le sujet de la conférence : **Sujet**");
+    }
+
+    #[test]
+    fn hidden_and_user_types() {
+        for t in [0u8, 19, 20, 22, 40, 42, 55, 56, 57, 63] {
+            assert!(generic_in("fr", &SysCtx { type_id: t, ..Default::default() }).is_none(), "{t}");
+            assert!(!FALLBACK_TYPES.contains(&t));
+        }
+        let m = Message { kind: MessageKind::Boost(2), ..Default::default() };
+        assert_eq!(effective_type(&m), 10);
+        let m = Message { kind: MessageKind::OtherSystem, type_id: 30, ..Default::default() };
+        assert_eq!(effective_type(&m), 30);
+    }
 
     #[test]
     fn call_durations_follow_moment_humanize() {

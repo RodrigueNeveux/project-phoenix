@@ -2,7 +2,22 @@
 pub(super) struct Match {
     pub label: std::ops::Range<usize>,
     pub url: std::ops::Range<usize>,
+    pub title: Option<std::ops::Range<usize>>,
     pub len: usize,
+}
+
+static TITLES: std::sync::LazyLock<parking_lot::Mutex<std::collections::HashMap<(String, String), String>>> = std::sync::LazyLock::new(Default::default);
+
+pub(super) fn remember_title(label: &str, url: &str, title: &str) {
+    let mut t = TITLES.lock();
+    if t.len() > 4096 {
+        t.clear();
+    }
+    t.insert((label.to_owned(), url.to_owned()), title.to_owned());
+}
+
+pub fn title_for(label: &str, url: &str) -> Option<String> {
+    TITLES.lock().get(&(label.to_owned(), url.to_owned())).cloned()
 }
 
 fn within_limits(s: &str) -> bool {
@@ -49,7 +64,7 @@ fn skip_ws(s: &str, mut p: usize) -> usize {
     p
 }
 
-fn tail(s: &str, p: usize) -> Option<usize> {
+fn tail(s: &str, p: usize) -> Option<(usize, Option<std::ops::Range<usize>>)> {
     for gt in [true, false] {
         let mut p = p;
         if gt {
@@ -64,20 +79,20 @@ fn tail(s: &str, p: usize) -> Option<usize> {
             while let Some(q) = s[k..].find(['\'', '"']) {
                 let e = skip_ws(s, k + q + 1);
                 if s[e..].starts_with(')') {
-                    return Some(e + 1);
+                    return Some((e + 1, Some(w + 1..k + q)));
                 }
                 k += q + 1;
             }
         }
         let e = skip_ws(s, p);
         if s[e..].starts_with(')') {
-            return Some(e + 1);
+            return Some((e + 1, None));
         }
     }
     None
 }
 
-fn href(s: &str, start: usize) -> Option<(std::ops::Range<usize>, usize)> {
+fn href(s: &str, start: usize) -> Option<(std::ops::Range<usize>, usize, Option<std::ops::Range<usize>>)> {
     let q = skip_ws(s, start);
     for lt in [true, false] {
         if lt && !s[q..].starts_with('<') {
@@ -86,8 +101,8 @@ fn href(s: &str, start: usize) -> Option<(std::ops::Range<usize>, usize)> {
         let us = q + usize::from(lt);
         let mut u = us;
         loop {
-            if let Some(end) = tail(s, u) {
-                return Some((us..u, end));
+            if let Some((end, title)) = tail(s, u) {
+                return Some((us..u, end, title));
             }
             let Some(ch) = s[u..].chars().next() else { break };
             match ch {
@@ -137,8 +152,8 @@ pub(super) fn match_at(s: &str) -> Option<Match> {
         if !s[end..].starts_with("](") {
             return None;
         }
-        let (url, len) = href(s, end + 2)?;
-        Some(Match { label: 1..end, url, len })
+        let (url, len, title) = href(s, end + 2)?;
+        Some(Match { label: 1..end, url, title, len })
     })
 }
 
@@ -288,6 +303,11 @@ mod tests {
         assert_eq!(m("[a](<https://x.y/a>)").map(|r| r.1), Some("https://x.y/a"));
         assert_eq!(m("[a](https://x.y/w_(b))").map(|r| r.1), Some("https://x.y/w_(b)"));
         assert_eq!(m("[a](https://x.y \"t\")").map(|r| r.1), Some("https://x.y"));
+        let s = "[a](https://x.y \"Le \"vrai\" titre\" )";
+        assert_eq!(match_at(s).and_then(|m| m.title).map(|r| &s[r]), Some("Le \"vrai\" titre"));
+        let s = "[a](https://x.y 'un' \"deux\")";
+        assert_eq!(match_at(s).and_then(|m| m.title).map(|r| &s[r]), Some("un' \"deux"));
+        assert_eq!(match_at("[a](https://x.y)").and_then(|m| m.title), None);
         assert_eq!(m("[a]( https://x.y )").map(|r| r.1), Some("https://x.y"));
         assert_eq!(m("[a](https://x.y"), None);
     }

@@ -1548,8 +1548,8 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: O
         })
         .collect();
     let link_tip = {
-        let (hr, ht, text) = (t.click_ranges.clone(), t.click_targets.clone(), t.text.clone());
-        move |ix: usize| mention::anchor_at(&hr, &ht, ix).map(|(r, url)| mention::link_title(text.get(r).unwrap_or_default(), &url))
+        let (hr, ht, text, le) = (t.click_ranges.clone(), t.click_targets.clone(), t.text.clone(), entity.clone());
+        move |ix: usize, cx: &gpui::App| mention::anchor_at(&hr, &ht, ix).map(|(r, url)| mention::link_tip(&le, text.get(r).unwrap_or_default(), &url, cx))
     };
     let e = entity.clone();
     div()
@@ -1568,7 +1568,7 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: O
                         mention::set_anchor(msg, bi, 0..n, ix.and_then(|i| mention::anchor_at(&hr, &ht, i)).map(|a| a.0), w);
                     }
                 })
-                .tooltip(move |ix, w, cx| match link_tip(ix) {
+                .tooltip(move |ix, w, cx| match link_tip(ix, cx) {
                     Some(title) => Some(crate::ui::tooltip::tip(title)(w, cx)),
                     None => edited_tip.as_ref().and_then(|tip| tip(ix, w, cx)),
                 })
@@ -1951,12 +1951,13 @@ fn embed_link_text(entity: &Entity<PhoenixApp>, key: Id, bi: usize, t: &RichText
     let shown: Vec<String> = ranges.iter().map(|r| anchor(r.start).map(|(a, _)| full.get(a).unwrap_or_default().to_owned()).unwrap_or_default()).collect();
     let hover = anchor.clone();
     let tip_full = full.clone();
+    let te = entity.clone();
     let e = entity.clone();
     InteractiveText::new(("embed-rt", key.0.wrapping_mul(31).wrapping_add(((bi as u64) << 32) | off as u64)), StyledText::new(text).with_runs(runs))
         .on_hover(move |ix, _ev, w, _cx| mention::set_anchor(key, bi, range.clone(), ix.and_then(&hover).map(|a| a.0), w))
         .tooltip(move |ix, w, cx| {
             let (r, url) = anchor(ix)?;
-            Some(crate::ui::tooltip::tip(mention::link_title(tip_full.get(r).unwrap_or_default(), &url))(w, cx))
+            Some(crate::ui::tooltip::tip(mention::link_tip(&te, tip_full.get(r).unwrap_or_default(), &url, cx))(w, cx))
         })
         .on_click(ranges, move |ix, w, cx| {
             let url = urls[ix].clone();

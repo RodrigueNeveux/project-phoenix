@@ -722,6 +722,7 @@ pub fn rich_with_emoji_scaled(
         let full = t.text.clone();
         let styled = gpui::StyledText::new(text).with_runs(seg_runs);
         let e = entity.clone();
+        let te = entity.clone();
         let (hr, ht) = (ranges.clone(), targets.clone());
         let hover_anchor = anchor.clone();
         let el = cell(
@@ -732,7 +733,7 @@ pub fn rich_with_emoji_scaled(
                 })
                 .tooltip(move |ix, w, cx| {
                     let (r, url) = anchor(ix)?;
-                    Some(crate::ui::tooltip::tip(super::mention::link_title(full.get(r).unwrap_or_default(), &url))(w, cx))
+                    Some(crate::ui::tooltip::tip(super::mention::link_tip(&te, full.get(r).unwrap_or_default(), &url, cx))(w, cx))
                 })
                 .on_click(
                 ranges,

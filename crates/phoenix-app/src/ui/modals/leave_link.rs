@@ -53,11 +53,12 @@ pub fn trusted(app: &PhoenixApp, text: &str, url: &str) -> bool {
     if !web {
         return local.trusted_protocols.contains(&p.protocol);
     }
-    let shown_as_is = text == url && !dm_with_stranger(app);
+    let shown = crate::markdown::link_title_attr(text, url).unwrap_or_else(|| text.to_owned());
+    let shown_as_is = shown == url && !dm_with_stranger(app);
     shown_as_is || discord_host(&p.host) || local.trusted_domains.contains(&p.host.to_lowercase())
 }
 
-fn dm_with_stranger(app: &PhoenixApp) -> bool {
+pub fn dm_with_stranger(app: &PhoenixApp) -> bool {
     let Some(ch) = app.selected_channel.and_then(|c| app.channels.get(&c)) else { return false };
     if ch.guild.is_some() || crate::ui::dm_profile_panel::is_group_dm(app, ch.id) {
         return false;

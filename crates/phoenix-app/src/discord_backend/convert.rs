@@ -342,6 +342,7 @@ fn message_kind(k: api::MessageType) -> model::MessageKind {
     use model::MessageKind as K;
     match k {
         T::Default | T::ChatInputCommand | T::ContextMenuCommand | T::ThreadStarterMessage => K::Default,
+        T::Unknown(26 | 41 | 45 | 47 | 68) => K::Default,
         T::Reply => K::Reply,
         T::UserJoin => K::Join,
         T::ChannelPinnedMessage => K::Pin,

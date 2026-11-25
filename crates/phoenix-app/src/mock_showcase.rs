@@ -195,6 +195,12 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
     push(6, Message { kind: MessageKind::Call, call: Some(CallInfo { participants: vec![Id(6), Id(1)], duration_ms: Some(23 * 60_000) }), ..Default::default() }, &mut out);
     push(7, Message { kind: MessageKind::Call, call: Some(CallInfo { participants: vec![Id(7)], duration_ms: Some(12_000) }), ..Default::default() }, &mut out);
     push(5, Message { kind: MessageKind::RecipientRemove(None), ..Default::default() }, &mut out);
+    push(4, Message { kind: MessageKind::ChannelNameChange, content: "release-notes".into(), ..Default::default() }, &mut out);
+    push(3, Message { kind: MessageKind::Boost(3), content: "2".into(), ..Default::default() }, &mut out);
+    push(2, Message { kind: MessageKind::OtherSystem, type_id: 12, content: "Phoenix #annonces".into(), ..Default::default() }, &mut out);
+    push(2, Message { kind: MessageKind::OtherSystem, type_id: 16, ..Default::default() }, &mut out);
+    push(6, Message { kind: MessageKind::StageStart, content: "Office hours".into(), ..Default::default() }, &mut out);
+    push(7, Message { kind: MessageKind::OtherSystem, type_id: 30, ..Default::default() }, &mut out);
     push(3, text("<https://example.com/no-embed> · [docs **Phoenix**](https://example.com/docs) · https://en.wikipedia.org/wiki/Rust_(programming_language)"), &mut out);
     out.into_iter()
         .enumerate()

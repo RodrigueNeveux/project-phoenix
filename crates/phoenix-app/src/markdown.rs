@@ -230,6 +230,7 @@ pub fn parse(src: &str, r: &dyn MentionResolver) -> Vec<Block> {
 
 pub mod input;
 mod link;
+pub use link::title_for as link_title_attr;
 
 thread_local! {
     static EMOJI_LINKS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -431,9 +432,13 @@ impl Ctx<'_> {
                 if let Some(url) = target {
                     self.push(&src[plain_start..i], style, spoiler);
                     let first = self.out.spans.len();
+                    let from = self.out.text.len();
                     self.run(label, style | Style::LINK, spoiler);
                     for s in &mut self.out.spans[first..] {
                         s.link = Some(url.clone());
+                    }
+                    if let Some(tr) = m.title.clone().filter(|r| !r.is_empty()) {
+                        link::remember_title(&self.out.text[from..], &url, &rest[tr]);
                     }
                     i += m.len;
                     plain_start = i;
