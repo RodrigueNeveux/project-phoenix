@@ -104,10 +104,11 @@ fn header() -> Div {
                 .h(z(169.))
                 .rounded(z(10.))
                 .border_1()
-                .border_color(c(tok(idx::BORDER_NORMAL)))
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
                 .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
                 .overflow_hidden()
                 .child(gpui::img(SharedString::from(super::art::boost_video_still())).absolute().size_full().object_fit(gpui::ObjectFit::Cover))
+                .child(div().absolute().size_full().bg(gpui::rgba(0x1a1a1e8b)))
                 .child(div().absolute().top(z(12.)).left(z(12.)).child(text(14., 18., FontWeight::SEMIBOLD, idx::WHITE, tr("sp.bo.video"))))
                 .child(
                     div()
