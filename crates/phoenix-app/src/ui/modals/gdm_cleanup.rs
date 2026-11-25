@@ -265,7 +265,7 @@ impl PhoenixApp {
         let groups: Vec<(Id, i64)> = self
             .dms
             .iter()
-            .filter(|ch| self.nav.extras.get(ch).is_some_and(|e| e.recipients > 1))
+            .filter(|ch| self.nav.extras.get(ch).is_some_and(|e| e.owner.is_some() || e.recipients > 1))
             .map(|ch| (*ch, snowflake_ms(self.backend.channel_last_message(*ch).unwrap_or(*ch).0)))
             .collect();
         let items = inactive(&groups, chrono::Utc::now().timestamp_millis());

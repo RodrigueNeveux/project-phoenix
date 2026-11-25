@@ -97,6 +97,8 @@ pub fn render(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> AnyEl
                     .gap(z(16.))
                     .child(
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .flex()
                             .flex_col()
                             .gap(z(2.))
