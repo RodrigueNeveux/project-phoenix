@@ -790,6 +790,8 @@ fn answer(guild: Id, d: &Data, prompt: &str, index: Option<usize>, channels: Vec
     let emoji_box = div()
         .id("obe-answer-emoji")
         .relative()
+        .flex_none()
+        .overflow_hidden()
         .size(z(40.))
         .rounded(z(4.))
         .border_1()
@@ -928,7 +930,7 @@ fn unlock(d: &Data, review: bool, selected: Vec<String>, cx: &mut Context<Phoeni
     let private: Vec<&Chan> = d.list.iter().filter(|c| c.kind != 4 && c.private).collect();
     let all = !private.is_empty() && private.iter().all(|c| selected.contains(&c.id));
     let ids: Vec<String> = private.iter().map(|c| c.id.clone()).collect();
-    let mut table = div().mb(z(8.)).rounded(z(8.)).overflow_hidden().bg(t(idx::BACKGROUND_BASE_LOWER)).flex().flex_col();
+    let mut table = div().id("obe-priv-list").max_h(z(360.)).overflow_y_scroll().mb(z(8.)).rounded(z(8.)).bg(t(idx::BACKGROUND_BASE_LOWER)).flex().flex_col();
     let n = private.len();
     for (i, c) in private.iter().enumerate() {
         let on = selected.contains(&c.id);
