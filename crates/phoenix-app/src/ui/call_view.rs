@@ -108,7 +108,7 @@ pub fn active(app: &PhoenixApp) -> bool {
     let Some(ch) = SHOWN.with(|s| s.get()) else { return false };
     app.selected_channel == Some(ch)
         && app.voice_channel == Some(ch)
-        && app.channels.get(&ch).is_some_and(|c| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage))
+        && app.channels.get(&ch).is_some_and(|c| c.guild.is_none() || matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage))
 }
 
 const POPOUT: &str = "icons/call/popout.svg";

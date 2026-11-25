@@ -14,6 +14,7 @@ pub fn ringing(app: &PhoenixApp) -> Option<Id> {
 pub fn answer(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let Some(ch) = app.parity.incoming_call.take() else { return };
     app.join_voice(Some(ch), cx);
+    crate::ui::call_view::show(ch);
     cx.notify();
 }
 

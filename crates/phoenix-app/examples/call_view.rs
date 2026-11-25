@@ -12,6 +12,8 @@ fn main() -> anyhow::Result<()> {
     let with_chat = rest.iter().any(|a| a == "chat");
     let focus_grid = rest.iter().any(|a| a == "grid");
     let no_strip = rest.iter().any(|a| a == "nostrip");
+    let dm = rest.iter().any(|a| a == "dm");
+    let feedback = rest.iter().find_map(|a| a.strip_prefix("feedback=").map(str::to_owned));
     let menu = rest.iter().find_map(|a| match a.as_str() {
         "menu=more" => Some(phoenix_app::ui::call_menus::TrayMenu::More),
         "menu=streams" => Some(phoenix_app::ui::call_menus::TrayMenu::Streams),
@@ -66,8 +68,18 @@ fn main() -> anyhow::Result<()> {
         cx.update_window(win.into(), |_, _, cx| {
             v.update(cx, |app, cx| {
                 use phoenix_app::model::{Id, VoiceFlags};
-                let Some(lounge) = app.channels.values().find(|c| c.name.as_ref() == "Lounge").map(|c| c.id) else { return };
                 let me = app.me.id;
+                let target = if dm {
+                    let mut dms: Vec<_> = app.channels.values().filter(|c| c.guild.is_none()).map(|c| c.id).collect();
+                    dms.sort_by_key(|c| c.0);
+                    dms.first().copied()
+                } else {
+                    app.channels.values().find(|c| c.name.as_ref() == "Lounge").map(|c| c.id)
+                };
+                let Some(lounge) = target else { return };
+                if dm && let Some(ch) = app.channels.get_mut(&lounge) {
+                    ch.voice_users = vec![me, Id(3)];
+                }
                 if let Some(ch) = app.channels.get_mut(&lounge)
                     && !ch.voice_users.contains(&me)
                 {
@@ -87,6 +99,16 @@ fn main() -> anyhow::Result<()> {
                 phoenix_app::ui::voice_panel::set_flags(Id(7), VoiceFlags { self_deaf: true, ..Default::default() });
                 app.voice.speaking.insert(Id(3));
                 phoenix_app::ui::call_menus::open(menu);
+                if let Some(f) = feedback.as_deref() {
+                    use phoenix_app::ui::modals::stream_feedback::State;
+                    let st = match f {
+                        "list" => State { open: true, ..Default::default() },
+                        "picked" => State { problem: Some(2), ..Default::default() },
+                        "done" => State { submitted: true, ..Default::default() },
+                        _ => State::default(),
+                    };
+                    phoenix_app::actions::open_modal(phoenix_app::ui::modals::Modal::StreamFeedback(st), None);
+                }
                 if let Some(ix) = sub {
                     phoenix_app::ui::context_menu::debug_open_submenu(ix);
                 }

@@ -23,6 +23,61 @@ thread_local! {
     static NO_VIDEO_HIDDEN: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
     static TOASTS_OFF: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
     static SELF_VIDEO_HIDDEN: Cell<bool> = const { Cell::new(false) };
+    static REGIONS: RefCell<Option<Vec<(gpui::SharedString, gpui::SharedString)>>> = const { RefCell::new(None) };
+    static REGIONS_LOADING: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn regions() -> Option<Vec<(gpui::SharedString, gpui::SharedString)>> {
+    REGIONS.with_borrow(Clone::clone)
+}
+
+pub fn set_regions(list: Vec<(gpui::SharedString, gpui::SharedString)>) {
+    REGIONS.with_borrow_mut(|r| *r = Some(list));
+}
+
+fn ensure_regions(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if REGIONS.with_borrow(Option::is_some) || REGIONS_LOADING.with(|l| l.replace(true)) {
+        return;
+    }
+    let fut = app.backend.voice_regions();
+    cx.spawn(async move |this, cx| {
+        let list = fut.await.unwrap_or_default();
+        REGIONS_LOADING.with(|l| l.set(false));
+        set_regions(list);
+        let _ = this.update(cx, |_, cx| cx.notify());
+    })
+    .detach();
+}
+
+pub fn selected_region(call: Option<&crate::commands::state::CallRegion>, regions: &[(gpui::SharedString, gpui::SharedString)]) -> (Option<gpui::SharedString>, gpui::SharedString) {
+    match call.filter(|c| c.updated).and_then(|c| c.id.clone()) {
+        Some(id) => {
+            let name = regions.iter().find(|(r, _)| **r == *id).map_or_else(|| id.clone().into(), |(_, n)| n.clone());
+            (Some(id.into()), name)
+        }
+        None => (None, crate::t!("call.region_auto")),
+    }
+}
+
+fn region_item(app: &PhoenixApp, channel: Id, e: gpui::Entity<PhoenixApp>) -> MenuItem {
+    let list = regions().unwrap_or_default();
+    let (current, name) = selected_region(app.parity.call_regions.get(&channel), &list);
+    let label = crate::t!("call.region");
+    if list.is_empty() {
+        return MenuItem::action(label, None, |_, _, _: &mut App| {}).with_subtext(name);
+    }
+    let items = list
+        .into_iter()
+        .map(|(id, region)| {
+            let e = e.clone();
+            let checked = current.as_ref() == Some(&id);
+            MenuItem::radio(region, checked, move |_, _, cx: &mut App| {
+                let w = phoenix_api::rest::account::GuardedWrite::change_call_region(channel.0, &id);
+                e.update(cx, |a, cx| a.blocked_write(w, cx));
+            })
+        })
+        .collect();
+    MenuItem::submenu(label, items).with_subtext(name)
 }
 
 pub const SPACING: f32 = 16.;
@@ -210,6 +265,9 @@ fn more_items(app: &PhoenixApp, channel: Id, cx: &mut Context<PhoenixApp>) -> Ve
     use MoreEntry as M;
     let e = cx.entity();
     let guild = app.channels.get(&channel).and_then(|c| c.guild);
+    if guild.is_none() {
+        ensure_regions(app, cx);
+    }
     more_layout(context(app, channel))
         .into_iter()
         .map(|entry| {
@@ -256,8 +314,7 @@ fn more_items(app: &PhoenixApp, channel: Id, cx: &mut Context<PhoenixApp>) -> Ve
                         }
                     })
                 }),
-                M::Region => MenuItem::submenu(crate::t!("call.region"), vec![MenuItem::radio(crate::t!("call.region_auto"), true, |_, _, _: &mut App| {})])
-                    .with_subtext(crate::t!("call.region_auto")),
+                M::Region => region_item(app, channel, e),
                 M::ReportStream => report_item(e),
                 M::Separator => MenuItem::Separator,
             }
@@ -267,7 +324,8 @@ fn more_items(app: &PhoenixApp, channel: Id, cx: &mut Context<PhoenixApp>) -> Ve
 
 fn report_item(e: gpui::Entity<PhoenixApp>) -> MenuItem {
     MenuItem::danger(crate::t!("call.report_problem"), Some(crate::icons::path("settings/circle-error")), move |_, _, cx: &mut App| {
-        e.update(cx, |a, cx| a.parity_toast(crate::t!("call.report_unavailable"), cx))
+        crate::ui::modals::stream_feedback::open();
+        refresh(&e, cx);
     })
 }
 
@@ -377,6 +435,19 @@ mod tests {
         assert_eq!(more_layout(stage), vec![M::ShowMyCamera, M::ChatToasts, M::Separator, M::VoiceSettings]);
         let dm = MoreCtx { private: true, ..Default::default() };
         assert_eq!(more_layout(dm), vec![M::GridView, M::ShowMyCamera, M::ShowNoVideo, M::Separator, M::VoiceSettings, M::Region]);
+    }
+
+    #[test]
+    fn region_subtext_follows_the_call_store() {
+        use crate::commands::state::CallRegion;
+        let list: Vec<(gpui::SharedString, gpui::SharedString)> = vec![("rotterdam".into(), "Rotterdam".into())];
+        assert_eq!(selected_region(None, &list), (None, crate::t!("call.region_auto")));
+        let fresh = CallRegion { id: Some("rotterdam".into()), updated: false };
+        assert_eq!(selected_region(Some(&fresh), &list).0, None);
+        let moved = CallRegion { id: Some("rotterdam".into()), updated: true };
+        assert_eq!(selected_region(Some(&moved), &list), (Some("rotterdam".into()), "Rotterdam".into()));
+        let unknown = CallRegion { id: Some("mars".into()), updated: true };
+        assert_eq!(selected_region(Some(&unknown), &list).1, gpui::SharedString::from("mars"));
     }
 
     #[test]

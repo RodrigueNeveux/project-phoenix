@@ -94,6 +94,10 @@ impl GuardedWrite {
         write(Method::POST, format!("/channels/{channel}/messages/{message}/crosspost"), None)
     }
 
+    pub fn change_call_region(channel: u64, region: &str) -> Self {
+        write(Method::PATCH, format!("/channels/{channel}/call"), Some(json!({ "region": region })))
+    }
+
     pub fn thread_from_message(channel: u64, message: u64, name: &str) -> Self {
         write(Method::POST, format!("/channels/{channel}/messages/{message}/threads"), Some(json!({ "name": name })))
     }
@@ -137,6 +141,7 @@ mod tests {
             GuardedWrite::crosspost(3, 4),
             GuardedWrite::thread_from_message(3, 4, "t"),
             GuardedWrite::put_onboarding(5, json!({ "default_channel_ids": ["6"] })),
+            GuardedWrite::change_call_region(5, "rotterdam"),
         ]
     }
 
@@ -156,6 +161,8 @@ mod tests {
         assert_eq!(GuardedWrite::crosspost(3, 4).path, "/channels/3/messages/4/crosspost");
         let ob = GuardedWrite::put_onboarding(5, json!({ "prompts": [] }));
         assert_eq!((ob.method, ob.path.as_str(), ob.body), (Method::PUT, "/guilds/5/onboarding", Some(json!({ "prompts": [] }))));
+        let region = GuardedWrite::change_call_region(5, "rotterdam");
+        assert_eq!((region.method, region.path.as_str(), region.body), (Method::PATCH, "/channels/5/call", Some(json!({ "region": "rotterdam" }))));
     }
 
     #[tokio::test]

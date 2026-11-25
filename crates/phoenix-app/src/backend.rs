@@ -445,6 +445,9 @@ pub trait Backend: Send + Sync + 'static {
     fn top_soundboard_sounds(&self, _guild: Id) -> BoxFuture<Vec<Id>> {
         Box::pin(async { Ok(Vec::new()) })
     }
+    fn voice_regions(&self) -> BoxFuture<Vec<(gpui::SharedString, gpui::SharedString)>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     fn send_soundboard_sound(&self, _channel: Id, _sound: crate::model::SoundboardSound) -> BoxFuture<()> {
         Box::pin(async { Err(BackendError("soundboard unavailable".into())) })
     }

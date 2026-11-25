@@ -28,6 +28,7 @@ pub mod report;
 pub mod server_settings;
 pub mod settings_form;
 pub mod settings_layout;
+pub mod stream_feedback;
 pub mod update;
 pub mod webhooks;
 
@@ -130,6 +131,7 @@ pub enum Modal {
     GiftNitro(gift_nitro::State),
     Update,
     Account(account_edit::State),
+    StreamFeedback(stream_feedback::State),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -250,6 +252,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::CreatePoll(s) => poll_create::render(app, s, cx),
             Modal::GoLive(s) => go_live::render(app, s, cx),
             Modal::LeaveLink(s) => leave_link::render(s, cx),
+            Modal::StreamFeedback(s) => stream_feedback::render(s, cx),
             Modal::Follow(s) => follow::render(app, s, cx),
             Modal::EditGroup(g) => gdm::render_edit_group(g, cx),
             Modal::GroupInvites(s) => gdm::render_invites(s, cx),

@@ -216,6 +216,9 @@ impl Backend for ReadOnly {
     fn top_soundboard_sounds(&self, guild: Id) -> BoxFuture<Vec<Id>> {
         self.0.top_soundboard_sounds(guild)
     }
+    fn voice_regions(&self) -> BoxFuture<Vec<(gpui::SharedString, gpui::SharedString)>> {
+        self.0.voice_regions()
+    }
     fn nav(&self, req: phoenix_app::ui::home::data::NavRequest) -> BoxFuture<phoenix_app::ui::home::data::NavReply> {
         use phoenix_app::ui::home::data::NavRequest as R;
         match req {

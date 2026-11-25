@@ -417,6 +417,10 @@ impl MockBackend {
 }
 
 impl Backend for MockBackend {
+    fn voice_regions(&self) -> BoxFuture<Vec<(gpui::SharedString, gpui::SharedString)>> {
+        let regions = ["Atlanta", "Brazil", "Hong Kong", "India", "Japan", "Rotterdam", "Russia", "Singapore", "South Africa", "Sydney", "US Central", "US East", "US South", "US West"];
+        Box::pin(async move { Ok(regions.iter().map(|n| (gpui::SharedString::from(n.to_lowercase().replace(' ', "-")), gpui::SharedString::from(*n))).collect()) })
+    }
     fn app_directory_collections(&self, _locale: String) -> BoxFuture<serde_json::Value> {
         let app = |id: u64, name: &str, desc: &str, pos: i64| {
             serde_json::json!({"position": pos, "application": {"id": id.to_string(), "name": name, "description": desc}})

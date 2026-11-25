@@ -1255,6 +1255,12 @@ impl Backend for DiscordBackend {
             Ok(top.ranked().into_iter().map(|x| Id(x.0)).collect())
         })
     }
+    fn voice_regions(&self) -> BoxFuture<Vec<(gpui::SharedString, gpui::SharedString)>> {
+        self.with_session(move |_, s| async move {
+            let regions = s.rest.voice_regions().await.map_err(api_err)?;
+            Ok(regions.into_iter().map(|r| (gpui::SharedString::from(r.id), gpui::SharedString::from(r.name))).collect())
+        })
+    }
     fn send_soundboard_sound(&self, channel: Id, sound: crate::model::SoundboardSound) -> BoxFuture<()> {
         self.with_session(move |_, s| async move {
             s.rest

@@ -19,7 +19,7 @@ pub enum ParityEvent {
     InteractionFailed { nonce: Option<u64> },
     Autocomplete { nonce: u64, choices: Vec<(String, Value)> },
     PollVote { channel: Id, message: Id, user: Id, answer: u32, add: bool },
-    Call { channel: Id, ringing: Vec<Id>, voice: Option<Vec<Id>> },
+    Call { channel: Id, ringing: Vec<Id>, voice: Option<Vec<Id>>, region: Option<CallRegion> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -132,6 +132,10 @@ pub fn from_gateway(ev: &GatewayEvent) -> Option<ParityEvent> {
             } else {
                 data.get("voice_states").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| sf(v.get("user_id"))).collect())
             },
+            region: (name != "CALL_DELETE").then(|| CallRegion {
+                id: data.get("region").and_then(Value::as_str).map(str::to_owned),
+                updated: name == "CALL_UPDATE",
+            }),
         }),
         "MESSAGE_POLL_VOTE_ADD" | "MESSAGE_POLL_VOTE_REMOVE" => Some(ParityEvent::PollVote {
             channel: sf(data.get("channel_id"))?,
@@ -269,11 +273,18 @@ pub struct GroupDmPicker {
     pub sending: bool,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CallRegion {
+    pub id: Option<String>,
+    pub updated: bool,
+}
+
 #[derive(Default)]
 pub struct ParityUi {
     pub inbox: InboxState,
     pub incoming_call: Option<Id>,
     pub call_users: HashMap<Id, Vec<Id>>,
+    pub call_regions: HashMap<Id, CallRegion>,
     pub threads_open: bool,
     pub archived_threads: HashMap<Id, Vec<ForumPost>>,
     pub forums: HashMap<Id, ForumView>,
@@ -365,7 +376,17 @@ pub fn on_event(app: &mut App, ev: ParityEvent, cx: &mut Context<App>) {
                 app.refresh_message(channel, message);
             }
         }
-        ParityEvent::Call { channel, ringing, voice } => {
+        ParityEvent::Call { channel, ringing, voice, region } => {
+            match region {
+                None => {
+                    app.parity.call_regions.remove(&channel);
+                }
+                Some(r) => {
+                    let prev = app.parity.call_regions.get(&channel);
+                    let updated = r.updated && prev.is_some_and(|p| p.updated || p.id != r.id);
+                    app.parity.call_regions.insert(channel, CallRegion { id: r.id, updated });
+                }
+            }
             if let Some(users) = voice {
                 set_call_users(app, channel, users);
             }
@@ -426,11 +447,13 @@ mod tests {
     fn calls_carry_their_voice_states() {
         let ev = |name: &str, data: Value| from_gateway(&GatewayEvent::Unknown { name: name.into(), data });
         let create = ev("CALL_CREATE", json!({"channel_id":"4","ringing":["9"],"voice_states":[{"user_id":"1","channel_id":"4"}]}));
-        assert!(matches!(create, Some(ParityEvent::Call { channel: Id(4), ref ringing, voice: Some(ref v) }) if ringing == &[Id(9)] && v == &[Id(1)]));
+        assert!(matches!(create, Some(ParityEvent::Call { channel: Id(4), ref ringing, voice: Some(ref v), .. }) if ringing == &[Id(9)] && v == &[Id(1)]));
         let update = ev("CALL_UPDATE", json!({"channel_id":"4","ringing":[]}));
         assert!(matches!(update, Some(ParityEvent::Call { voice: None, .. })));
         let delete = ev("CALL_DELETE", json!({"channel_id":"4"}));
-        assert!(matches!(delete, Some(ParityEvent::Call { voice: Some(ref v), .. }) if v.is_empty()));
+        assert!(matches!(delete, Some(ParityEvent::Call { voice: Some(ref v), region: None, .. }) if v.is_empty()));
+        let moved = ev("CALL_UPDATE", json!({"channel_id":"4","region":"rotterdam"}));
+        assert!(matches!(moved, Some(ParityEvent::Call { region: Some(CallRegion { ref id, updated: true }), .. }) if id.as_deref() == Some("rotterdam")));
     }
 
     #[test]
