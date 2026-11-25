@@ -1258,6 +1258,49 @@ fn main() -> anyhow::Result<()> {
                         app.open_report(phoenix_api::rest::reporting::ReportTarget::Message { channel: sf(c.0), message: sf(m.0) }, cx);
                     }
                 }
+                "textmenu" => phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::Textarea, gpui::point(px(500.), px(560.)), window),
+                "profilemenu" => {
+                    let u = app.selected_guild.and_then(|g| app.members.get(&g)?.get(arg.parse().unwrap_or(0)).map(|m| m.user));
+                    if let Some(user) = u {
+                        let target = phoenix_app::ui::extra_menus::Target::ProfileOverflow { user, guild: app.selected_guild };
+                        phoenix_app::ui::extra_menus::open(target, gpui::point(px(900.), px(250.)), window);
+                    }
+                }
+                "friendmenu" => {
+                    let friend = app.nav.relationships.iter().find(|r| r.kind == phoenix_app::ui::home::data::RelationshipKind::Friend).map(|r| r.user);
+                    if let Some(u) = friend {
+                        phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::FriendRow(u), gpui::point(px(900.), px(250.)), window);
+                    }
+                }
+                "foldermenu" | "foldermodal" => {
+                    let id = app.nav.folders.iter().filter_map(|f| f.id).nth(arg.parse().unwrap_or(0));
+                    if let Some(f) = id {
+                        if kind == "foldermenu" {
+                            phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Folder(f), gpui::point(px(80.), px(200.)), window);
+                        } else {
+                            app.open_folder_settings(f, cx);
+                        }
+                    }
+                }
+                "editgroup" => {
+                    let gdm = app.nav.extras.iter().find(|(_, x)| x.recipients > 1).map(|(id, _)| *id);
+                    if let Some(ch) = gdm {
+                        app.open_edit_group(ch, cx);
+                    }
+                }
+                "schedmodal" | "schedbar" | "schedmenu" => {
+                    if let Some(ch) = app.selected_channel {
+                        let at = phoenix_app::ui::chat::scheduled::default_at(chrono::Local::now());
+                        match kind {
+                            "schedmodal" => app.open_schedule(ch, cx),
+                            "schedbar" => phoenix_app::ui::chat::scheduled::set_draft(ch, Some(at)),
+                            _ => {
+                                app.chat.attach_menu = true;
+                                phoenix_app::ui::context_menu::debug_open_submenu(arg.parse().unwrap_or(4));
+                            }
+                        }
+                    }
+                }
                 "msgmenu" => {
                     let last = app.selected_channel.and_then(|c| Some((c, app.messages.get(&c)?.msgs.last()?.id)));
                     if let Some((c, m)) = last {
