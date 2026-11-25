@@ -722,7 +722,7 @@ mod tests {
         assert_eq!(f.last(), Some(&Foot::Text("Exclusion temporaire\u{a0}: 10\u{a0}min".into())));
         assert_eq!(f[f.len() - 2], Foot::Dot);
         assert_eq!(timeout_text("en", Some("60")).as_deref(), Some("60 secs"));
-        assert_eq!(timeout_text("fr", Some("3600")).as_deref(), Some("1 heure"));
+        assert_eq!(timeout_text("fr", Some("3600")).as_deref(), Some("1\u{a0}heure"));
         assert_eq!(timeout_text("en", Some("604800")).as_deref(), Some("1 week"));
         assert_eq!(timeout_text("en", Some("1234")), None);
         assert_eq!(timeout_text("en", None), None);
