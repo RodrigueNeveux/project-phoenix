@@ -278,6 +278,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/reply.svg" => s!(r#"<path d="M4 20v-5a6 6 0 0 1 6-6h10M15 4l5 5-5 5"/>"#),
         "icons/file.svg" => f!(r#"<path d="M6 2h8l6 6v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1zm7 1.5V9h5.5z"/>"#),
         "icons/image.svg" => s!(r#"<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/>"#),
+        "icons/images.svg" => s!(r#"<rect x="6" y="2" width="16" height="14" rx="2"/><path d="M2 7v13a2 2 0 0 0 2 2h13"/><circle cx="11" cy="7" r="1.5"/><path d="m22 12-4-4-8 8"/>"#),
         "icons/phone-hangup.svg" => f!(r#"<path d="M12 9c-3.5 0-6.8 1-9.4 2.9a1.5 1.5 0 0 0-.2 2.2l1.8 2a1.5 1.5 0 0 0 1.9.3l2.4-1.4a1.5 1.5 0 0 0 .7-1.3v-1.6a12 12 0 0 1 5.6 0v1.6c0 .5.3 1 .7 1.3l2.4 1.4a1.5 1.5 0 0 0 1.9-.3l1.8-2a1.5 1.5 0 0 0-.2-2.2C18.8 10 15.5 9 12 9z"/>"#),
         "icons/phone-call.svg" => f!(r#"<path d="M7.4 2.5a1 1 0 0 1 .9.6l1.6 3.6a1 1 0 0 1-.2 1.1L8 9.5a12 12 0 0 0 6.5 6.5l1.7-1.7a1 1 0 0 1 1.1-.2l3.6 1.6a1 1 0 0 1 .6.9V20a2 2 0 0 1-2 2A17.5 17.5 0 0 1 2 4.5a2 2 0 0 1 2-2z"/><path d="M14 4.5a5.5 5.5 0 0 1 5.5 5.5M14 8a2 2 0 0 1 2 2" stroke="black" stroke-width="2" stroke-linecap="round" fill="none"/>"#),
         "icons/video-call.svg" => f!(r#"<rect x="2" y="5" width="13" height="14" rx="3"/><path d="M17 10.2 21.4 7a1 1 0 0 1 1.6.8v8.4a1 1 0 0 1-1.6.8L17 13.8z"/>"#),
