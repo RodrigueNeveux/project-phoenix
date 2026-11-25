@@ -305,7 +305,17 @@ pub fn render_compact(w: &AppWidget, col: &WidgetColors) -> Div {
         .flex_col()
         .gap(z(2.))
         .child(div().truncate().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(col.strong).child(if w.mini_stat.is_empty() { w.title.clone() } else { w.mini_stat.clone() }))
-        .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::CONTROL_PRIMARY_BACKGROUND_DEFAULT))).child("View All Stats"));
+        .child(
+            div()
+                .id("widget-view-all-stats")
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::NORMAL)
+                .text_color(col.strong)
+                .cursor_pointer()
+                .hover(|s| s.underline())
+                .child("View All Stats"),
+        );
     let hero = w.mini_hero.clone().or_else(|| w.hero.clone()).map(|u| {
         let s = 79.;
         div()
