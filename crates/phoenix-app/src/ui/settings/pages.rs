@@ -605,7 +605,7 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
             }
         }
         B::KeyGroup(l, d, rows) => out.push(key_group(l, d, rows).into_any_element()),
-        B::Divider => out.push(div().my(z(50.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element()),
+        B::Divider => out.push(div().mt(z(50.)).mb(z(40.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element()),
         B::Custom(_, f) => out.push(f(app, cx)),
     }
 }
@@ -1134,7 +1134,7 @@ static DATA: &[B] = &[
     B::Switch("data-discovery", "sp.data.discovery", "sp.data.discovery_d", Bind::Proto),
     B::Switch("data-clips", "sp.data.clips", "sp.data.clips_d", Bind::Proto),
     B::Action("sp.data.request", "sp.data.request_d", "sp.data.request_b", false),
-    B::Related("apps", "sp.games", "sp.games_d", Page::RegisteredGames),
+    B::Related("game-controller", "sp.games", "sp.games_d", Page::RegisteredGames),
     B::Divider,
     B::Title("sp.data.t2"),
     B::Lead("sp.data.t2_d"),
@@ -1741,7 +1741,7 @@ static ACTIVITY: &[B] = &[
     B::Switch("act-share", "sp.at.share", "sp.at.share_d", Bind::Proto),
     B::Switch("act-online", "sp.at.online", "sp.at.online_d", Bind::Proto),
     B::Switch("act-stream", "sp.at.stream", "sp.at.stream_d", Bind::Proto),
-    B::Related("apps", "sp.games", "sp.games_d", Page::RegisteredGames),
+    B::Related("game-controller", "sp.games", "sp.games_d", Page::RegisteredGames),
     B::Divider,
     B::Title("sp.at.t2"),
     B::Radios("act-where", "sp.at.auto", "sp.at.auto_d", &[("sp.at.a_all", ""), ("sp.at.a_small", ""), ("sp.at.a_none", "")], Pick::Proto),
