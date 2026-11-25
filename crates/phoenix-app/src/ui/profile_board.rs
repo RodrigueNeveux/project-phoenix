@@ -37,7 +37,13 @@ pub fn get(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> Board {
     }
     s.0.insert(user, Board::default());
     fill(cx, user, app.backend.profile_widgets(user), |b, v| b.widgets = v);
-    fill(cx, user, app.backend.game_widgets(user), |b, v| b.games = v);
+    fill(cx, user, app.backend.game_widgets(user), |b, v: Vec<GameWidget>| {
+        if std::env::var_os("PHX_DEBUG_GAMES").is_some() {
+            let icons = crate::ui::profile_games::collection_icons(&v);
+            eprintln!("board games {} widgets, {} icons, {} more", v.len(), icons.0.len(), icons.1);
+        }
+        b.games = v
+    });
     fill(cx, user, app.backend.recent_activity(user), |b, v| b.recent = v);
     fill(cx, user, app.backend.wishlist(user), |b, v| b.wishlist = v);
     Board::default()
