@@ -424,6 +424,12 @@ fn invite_preview(v: &Value) -> InvitePreview {
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|r| s(r.get("global_name")).or_else(|| s(r.get("username")))).map(Into::into).collect())
         .unwrap_or_default();
+    let recipient_users = ch
+        .and_then(|c| c.get("recipients"))
+        .and_then(Value::as_array)
+        .map(|a| a.iter().map(invite_user).collect())
+        .unwrap_or_default();
+    let ev = v.get("guild_scheduled_event").filter(|e| e.is_object());
     InvitePreview {
         code: s(v.get("code")).unwrap_or_default().into(),
         guild: gid.map(Id),
@@ -452,6 +458,24 @@ fn invite_preview(v: &Value) -> InvitePreview {
         channel_icon,
         recipients,
         event_name: s(v.get("guild_scheduled_event").and_then(|e| e.get("name"))).map(Into::into),
+        recipient_users,
+        event: ev.and_then(crate::commands::parse_event),
+        event_creator: ev.and_then(|e| e.get("creator")).filter(|c| c.is_object()).map(invite_user),
+        target_type: v.get("target_type").and_then(Value::as_u64).map(|t| t as u8),
+        target_user: v.get("target_user").filter(|u| u.is_object()).map(invite_user),
+    }
+}
+
+fn invite_user(u: &Value) -> crate::ui::home::data::InviteUser {
+    let s = |k: &str| u.get(k).and_then(Value::as_str).filter(|x| !x.is_empty()).map(str::to_owned);
+    let uid = u.get("id").and_then(snowflake);
+    crate::ui::home::data::InviteUser {
+        id: uid.map(Id),
+        name: s("global_name").or_else(|| s("username")).unwrap_or_default().into(),
+        avatar: match (uid, s("avatar")) {
+            (Some(uid), Some(h)) => Some(ImageRef::Url(format!("{}/avatars/{uid}/{h}.png?size=128", api::CDN_BASE).into())),
+            _ => None,
+        },
     }
 }
 
@@ -666,6 +690,15 @@ mod tests {
         assert_eq!(g.features, vec!["HUB".to_owned()]);
         assert_eq!(g.profile.as_ref().map(|p| p.member_count), Some(12));
         assert_eq!(g.event_name.as_deref(), Some("Soirée"));
+        assert_eq!(g.event.as_ref().map(|e| e.name.as_str()), Some("Soirée"));
+        let st = invite_preview(&json!({"code":"d","type":0,"target_type":1,"guild":{"id":"7","name":"G"},"channel":{"id":"8","type":2,"name":"v"},
+            "target_user":{"id":"4","username":"live","global_name":"Live","avatar":"a"}}));
+        assert_eq!(st.target_type, Some(1));
+        let tu = st.target_user.unwrap();
+        assert_eq!((tu.id, tu.name.as_ref()), (Some(Id(4)), "Live"));
+        assert!(tu.avatar.is_some());
+        assert_eq!(gdm.recipient_users.len(), 2);
+        assert_eq!(gdm.recipient_users[0].id, None);
     }
 
     #[test]

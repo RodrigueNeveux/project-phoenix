@@ -19,6 +19,7 @@ pub mod attach;
 pub mod plaintext;
 pub mod composer;
 pub mod icons;
+pub mod invite_cards;
 pub mod invite_embed;
 pub mod mention;
 pub mod forward;

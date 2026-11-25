@@ -59,7 +59,11 @@ pub fn open(app: &mut PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) {
 }
 
 fn when_label(e: &GuildEvent) -> String {
-    let Some(d) = chrono::DateTime::from_timestamp(e.start, 0) else { return String::new() };
+    when_label_at(e.start)
+}
+
+pub fn when_label_at(ts: i64) -> String {
+    let Some(d) = chrono::DateTime::from_timestamp(ts, 0) else { return String::new() };
     let local = d.with_timezone(&chrono::Local);
     format!("{} {}", crate::i18n::long_date(local.date_naive()), local.format("%H:%M"))
 }

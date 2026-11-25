@@ -35,7 +35,11 @@ enum State {
     Failed(Instant, u32),
 }
 
+const COLLAPSE_AT: f32 = 292.;
+
 thread_local! {
+    static MEASURED: RefCell<HashMap<String, f32>> = RefCell::new(HashMap::new());
+    static EXPANDED: RefCell<std::collections::HashSet<String>> = RefCell::new(std::collections::HashSet::new());
     static CACHE: RefCell<HashMap<InviteLink, State>> = RefCell::new(HashMap::new());
     static BANNERS: RefCell<HashMap<u32, Arc<RenderImage>>> = RefCell::new(HashMap::new());
 }
@@ -47,7 +51,7 @@ const HOSTS: [&str; 3] = [
 ];
 const SUBDOMAINS: [&str; 3] = ["www.", "ptb.", "canary."];
 
-fn tk(i: usize) -> gpui::Hsla {
+pub(super) fn tk(i: usize) -> gpui::Hsla {
     c(tok(i))
 }
 
@@ -225,7 +229,7 @@ pub fn render(
         .collect()
 }
 
-fn text(size: f32, lh: f32, weight: FontWeight, color: usize) -> gpui::Div {
+pub(super) fn text(size: f32, lh: f32, weight: FontWeight, color: usize) -> gpui::Div {
     div()
         .text_size(z(size))
         .line_height(z(lh))
@@ -233,7 +237,7 @@ fn text(size: f32, lh: f32, weight: FontWeight, color: usize) -> gpui::Div {
         .text_color(tk(color))
 }
 
-fn wrapper() -> gpui::Div {
+pub(super) fn wrapper() -> gpui::Div {
     div()
         .mt(z(2.))
         .w_full()
@@ -248,7 +252,7 @@ fn wrapper() -> gpui::Div {
         .flex_col()
 }
 
-fn title(t: SharedString) -> gpui::Div {
+pub(super) fn title(t: SharedString) -> gpui::Div {
     text(14., 18., FontWeight::MEDIUM, idx::TEXT_MUTED)
         .mb(z(12.))
         .overflow_hidden()
@@ -257,11 +261,11 @@ fn title(t: SharedString) -> gpui::Div {
         .child(t)
 }
 
-fn body() -> gpui::Div {
+pub(super) fn body() -> gpui::Div {
     div().flex().flex_wrap().items_center().gap(z(16.))
 }
 
-fn header_line(icon: Option<AnyElement>, info: gpui::Div) -> gpui::Div {
+pub(super) fn header_line(icon: Option<AnyElement>, info: gpui::Div) -> gpui::Div {
     div()
         .flex_1()
         .min_w(z(1.))
@@ -272,7 +276,7 @@ fn header_line(icon: Option<AnyElement>, info: gpui::Div) -> gpui::Div {
         .child(info)
 }
 
-fn info(
+pub(super) fn info(
     name: AnyElement,
     detail: Option<AnyElement>,
     title_color: usize,
@@ -446,7 +450,7 @@ fn round_icon(src: Option<&ImageRef>, size: f32) -> Option<AnyElement> {
     }
 }
 
-fn guild_icon(p: &InvitePreview, size: f32, radius: f32, acronym_px: f32) -> AnyElement {
+pub(super) fn guild_icon(p: &InvitePreview, size: f32, radius: f32, acronym_px: f32) -> AnyElement {
     match &p.guild_icon {
         Some(ImageRef::Url(u)) => img(ImageSource::from(u.clone()))
             .size(z(size))
@@ -495,6 +499,22 @@ fn card(
         InviteKind::GroupDm => group_card(app, entity, p, own),
         InviteKind::Friend => friend_card(app, entity, p, own),
         InviteKind::Guild if p.guild.is_none() => invalid(own),
+        InviteKind::Guild if p.target_type == Some(1) && p.target_user.is_some() => {
+            match super::invite_cards::visible_voice_channel(app, p) {
+                Some(ch) => super::invite_cards::voice_list_card(app, entity, ch),
+                None => super::invite_cards::stream_card(app, entity, p),
+            }
+        }
+        InviteKind::Guild if p.event.as_ref().is_some_and(|e| e.status < 3) => match &p.event {
+            Some(e) => super::invite_cards::event_card(app, entity, p, e),
+            None => invalid(own),
+        },
+        InviteKind::Guild if super::invite_cards::visible_voice_channel(app, p).is_some() => {
+            match super::invite_cards::visible_voice_channel(app, p) {
+                Some(ch) => super::invite_cards::voice_list_card(app, entity, ch),
+                None => invalid(own),
+            }
+        }
         InviteKind::Guild
             if p.features.iter().any(|f| f == "HUB") || is_voice_or_thread(p.channel_type) =>
         {
@@ -504,7 +524,7 @@ fn card(
     }
 }
 
-fn accept_click(
+pub(super) fn accept_click(
     entity: &Entity<PhoenixApp>,
     code: SharedString,
     guild: Option<Id>,
@@ -730,17 +750,37 @@ fn profile_card(
         );
     }
     let name = p.guild_name.clone();
-    div()
-        .mt(z(2.))
-        .w(z(302.))
+    let key = p.code.to_string();
+    let measured = MEASURED.with(|m| m.borrow().get(&key).copied());
+    let collapsible = measured.is_some_and(|h| h > COLLAPSE_AT);
+    let expanded = EXPANDED.with(|e| e.borrow().contains(&key));
+    let probe_key = key.clone();
+    let probe_entity = entity.clone();
+    let probe = gpui::canvas(
+        move |bounds, _, cx| {
+            let h = (f32::from(bounds.size.height) / crate::theme::zoom()).round();
+            let changed = MEASURED.with(|m| m.borrow_mut().insert(probe_key.clone(), h)) != Some(h);
+            if changed {
+                let e = probe_entity.clone();
+                cx.defer(move |cx| {
+                    e.update(cx, |a, cx| {
+                        a.message_list.remeasure();
+                        cx.notify();
+                    })
+                });
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .size_full();
+    let content = div()
+        .relative()
+        .w_full()
         .flex_none()
-        .rounded(z(16.))
-        .border_1()
-        .border_color(tk(idx::BORDER_SUBTLE))
-        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
-        .overflow_hidden()
         .flex()
         .flex_col()
+        .child(probe)
         .child(
             div()
                 .h(z(72.))
@@ -812,16 +852,81 @@ fn profile_card(
             } else {
                 d.child(div().h(z(8.)))
             }
+        });
+    let button_row = div()
+        .w_full()
+        .px(z(16.))
+        .pb(z(16.))
+        .flex()
+        .child(cta.flex_1().min_w(z(60.)));
+    let card = div()
+        .id(("invite-profile", gid.0))
+        .mt(z(2.))
+        .w(z(302.))
+        .flex_none()
+        .relative()
+        .rounded(z(16.))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .overflow_hidden()
+        .flex()
+        .flex_col()
+        .child(content);
+    let Some(h) = measured.filter(|_| collapsible) else {
+        return card.child(button_row).into_any_element();
+    };
+    let footer = div()
+        .absolute()
+        .bottom_0()
+        .left_0()
+        .right_0()
+        .when(!expanded, |d| {
+            d.child(div().h(z(48.)).w_full().bg(gpui::linear_gradient(
+                0.,
+                gpui::linear_color_stop(tk(idx::BACKGROUND_SURFACE_HIGH), 0.),
+                gpui::linear_color_stop(tk(idx::BACKGROUND_SURFACE_HIGH).opacity(0.), 1.),
+            )))
         })
         .child(
             div()
-                .w_full()
-                .px(z(16.))
-                .pb(z(16.))
-                .flex()
-                .child(cta.flex_1().min_w(z(60.))),
-        )
-        .into_any_element()
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .when(!expanded, |d| d.pt(z(8.)))
+                .child(button_row),
+        );
+    let toggle_key = key.clone();
+    let toggle = entity.clone();
+    if expanded {
+        card.h(z(h + 36. + 48.))
+            .child(
+                div().mx(z(16.)).child(
+                    button_sm(("invite-hide", gid.0), crate::t!("invite.card.hide_details"), BtnKind::Secondary)
+                        .text_size(z(12.))
+                        .line_height(z(16.))
+                        .on_click(move |_, _, cx| {
+                            EXPANDED.with(|e| e.borrow_mut().remove(&toggle_key));
+                            toggle.update(cx, |a, cx| {
+                                a.message_list.remeasure();
+                                cx.notify();
+                            });
+                        }),
+                ),
+            )
+            .child(footer)
+            .into_any_element()
+    } else {
+        card.h(z(COLLAPSE_AT))
+            .cursor_pointer()
+            .on_click(move |_, _, cx| {
+                EXPANDED.with(|e| e.borrow_mut().insert(toggle_key.clone()));
+                toggle.update(cx, |a, cx| {
+                    a.message_list.remeasure();
+                    cx.notify();
+                });
+            })
+            .child(footer)
+            .into_any_element()
+    }
 }
 
 fn legacy_guild_card(
@@ -998,9 +1103,48 @@ fn group_card(
         )
         .on_click(accept_click(entity, p.code.clone(), None, p.channel_id))
     };
-    let detail = text(14., 18., FontWeight::MEDIUM, idx::TEXT_MUTED)
-        .child(members_label(p.recipients.len() as u64))
+    let people: Vec<(Option<Id>, ImageRef, SharedString)> = match p
+        .channel_id
+        .filter(|_| known)
+        .and_then(|ch| app.nav.extras.get(&ch))
+    {
+        Some(extra) => extra
+            .members
+            .iter()
+            .chain(std::iter::once(&app.me.id))
+            .map(|u| {
+                let user = app.users.get(u);
+                (
+                    Some(*u),
+                    user.map_or(ImageRef::Default(((u.0 >> 22) % 6) as u8), |x| x.avatar.clone()),
+                    user.map(|x| x.display_name.clone()).unwrap_or_default(),
+                )
+            })
+            .collect(),
+        None => p
+            .recipient_users
+            .iter()
+            .map(|r| {
+                (
+                    r.id,
+                    r.avatar.clone().unwrap_or(ImageRef::Default(r.id.map_or(0, |u| ((u.0 >> 22) % 6) as u8))),
+                    r.name.clone(),
+                )
+            })
+            .collect(),
+    };
+    let count = if people.is_empty() { p.recipients.len() } else { people.len() };
+    let detail = div()
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .child(
+            text(14., 18., FontWeight::MEDIUM, idx::TEXT_MUTED)
+                .when(!people.is_empty(), |d| d.cursor_pointer().hover(|s| s.underline()))
+                .child(members_label(count as u64)),
+        )
         .into_any_element();
+    let avatars = summary_avatars(&people, 3, 32.);
     wrapper()
         .child(title(head))
         .child(
@@ -1016,11 +1160,67 @@ fn group_card(
                             4.,
                         ),
                     )
-                    .w_full(),
+                    .gap(z(12.))
+                    .w_full()
+                    .children(avatars),
                 )
                 .child(div().w_full().flex().child(btn.flex_1())),
         )
         .into_any_element()
+}
+
+pub fn summary_avatars(people: &[(Option<Id>, ImageRef, SharedString)], max: usize, size: f32) -> Option<AnyElement> {
+    if people.is_empty() {
+        return None;
+    }
+    let overflow = people.len() > max;
+    let shown = if overflow { max - 1 } else { people.len().min(max) };
+    let ring = size / 24.;
+    let mut row = div().ml(z(4.)).flex_none().flex().items_center();
+    for (k, (_, img_ref, _)) in people.iter().take(shown).enumerate() {
+        let av = crate::ui::avatar_ref(img_ref.clone(), size * crate::theme::zoom());
+        row = row.child(if k == 0 {
+            div().flex_none().size(z(size)).child(av)
+        } else {
+            div()
+                .flex_none()
+                .ml(z(-size / 4. - ring))
+                .size(z(size + 2. * ring))
+                .rounded_full()
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(av)
+        });
+    }
+    if overflow {
+        let more = people.len() - max + 1;
+        row = row.child(
+            div()
+                .flex_none()
+                .ml(z(-size / 4. - ring))
+                .p(z(ring))
+                .rounded_full()
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .child(
+                    div()
+                        .h(z(size))
+                        .min_w(z(size))
+                        .px(z(10.))
+                        .rounded(z(16.))
+                        .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            text(14., 18., FontWeight::MEDIUM, idx::INTERACTIVE_TEXT_DEFAULT)
+                                .child(if more > 99 { ">99".to_owned() } else { format!("+{more}") }),
+                        ),
+                ),
+        );
+    }
+    Some(row.into_any_element())
 }
 
 fn friend_card(

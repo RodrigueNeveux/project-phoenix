@@ -68,7 +68,19 @@ pub struct InvitePreview {
     pub inviter_avatar: Option<ImageRef>,
     pub channel_icon: Option<ImageRef>,
     pub recipients: Vec<SharedString>,
+    pub recipient_users: Vec<InviteUser>,
     pub event_name: Option<SharedString>,
+    pub event: Option<crate::commands::GuildEvent>,
+    pub event_creator: Option<InviteUser>,
+    pub target_type: Option<u8>,
+    pub target_user: Option<InviteUser>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct InviteUser {
+    pub id: Option<Id>,
+    pub name: SharedString,
+    pub avatar: Option<ImageRef>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
