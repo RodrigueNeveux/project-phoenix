@@ -80,7 +80,7 @@ pub fn parse(v: &Value) -> Vec<Session> {
 pub fn split(list: &[Session], current: Option<&str>) -> (Option<Session>, Vec<Session>) {
     let mut rest = list.to_vec();
     let cur = current.and_then(|h| rest.iter().position(|s| s.id_hash == h)).map(|i| rest.remove(i));
-    rest.sort_by(|a, b| b.last_used.cmp(&a.last_used));
+    rest.sort_by_key(|s| std::cmp::Reverse(s.last_used));
     (cur, rest)
 }
 
