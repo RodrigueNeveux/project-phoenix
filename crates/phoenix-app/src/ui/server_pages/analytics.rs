@@ -22,11 +22,20 @@ pub fn fr_number(x: f64, decimals: usize) -> String {
     format!("{x:.decimals$}").replace('.', ",")
 }
 
-fn window() -> (String, String) {
-    let end = chrono::Utc::now();
+pub fn window_at(end: chrono::DateTime<chrono::Utc>) -> (String, String) {
     let start = end - chrono::Duration::days(46);
     let f = |d: chrono::DateTime<chrono::Utc>| d.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string();
     (f(start), f(end))
+}
+
+fn window(guild: Id) -> (String, String) {
+    let key = (guild, "analytics-window".to_owned());
+    if let Some((a, b)) = super::with(|s| s.text.get(&key).and_then(|v| v.split_once('|').map(|(a, b)| (a.to_owned(), b.to_owned())))) {
+        return (a, b);
+    }
+    let (a, b) = window_at(chrono::Utc::now());
+    super::with(|s| s.text.insert(key, format!("{a}|{b}")));
+    (a, b)
 }
 
 fn trend(delta: Option<f64>) -> gpui::Div {
@@ -65,11 +74,11 @@ fn stat(title_key: &str, value: String, delta: Option<f64>, info: bool, left: bo
 }
 
 pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let (start, end) = window();
+    let (start, end) = window(guild);
     let call = |kind| ServerCall::Analytics { guild: sf(guild), kind, start: start.clone(), end: end.clone() };
     let eng = fetch(app, guild, call(AnalyticsKind::Engagement), cx);
-    let growth = eng.as_ref().and_then(|_| fetch(app, guild, call(AnalyticsKind::Growth), cx));
-    let ret = growth.as_ref().and_then(|_| fetch(app, guild, call(AnalyticsKind::Retention), cx));
+    let growth = fetch(app, guild, call(AnalyticsKind::Growth), cx);
+    let ret = fetch(app, guild, call(AnalyticsKind::Retention), cx);
     let mut p = page()
         .child(title(crate::t!("menu.gs.analytics")))
         .child(div().mt(z(8.)).child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.analytics_lead"))))
@@ -115,5 +124,14 @@ mod tests {
         let (r, d) = weekly(&ret, "pct_retained").unwrap();
         assert_eq!(fr_number(r, 1), "24,1");
         assert_eq!(fr_number(d.unwrap().abs(), 1), "39,7");
+    }
+
+    #[test]
+    fn the_window_is_fixed_once_per_guild() {
+        let a = window(Id(77));
+        std::thread::sleep(std::time::Duration::from_millis(3));
+        assert_eq!(window(Id(77)), a);
+        let end = chrono::DateTime::parse_from_rfc3339("2026-11-25T02:01:56.019Z").unwrap().with_timezone(&chrono::Utc);
+        assert_eq!(window_at(end), ("2026-10-10T02:01:56.019Z".to_owned(), "2026-11-25T02:01:56.019Z".to_owned()));
     }
 }
