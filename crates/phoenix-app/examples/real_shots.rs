@@ -1507,6 +1507,17 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 400);
     }
+    if let Ok(draft) = std::env::var("PHX_DRAFT") {
+        let draft = draft.replace("\\n", "\n");
+        cx.update_window(win.into(), |_, window, cx| {
+            v.update(cx, |app, cx| {
+                app.composer.update(cx, |s, cx| s.set_value(draft.clone(), window, cx));
+                phoenix_app::ui::chat::rich_input::sync(app, cx);
+                cx.notify();
+            })
+        })?;
+        pump(&mut cx, 300);
+    }
     if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
         let (x, y) = v.split_once(',')?;
         Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))

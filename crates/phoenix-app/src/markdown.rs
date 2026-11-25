@@ -228,6 +228,7 @@ pub fn parse(src: &str, r: &dyn MentionResolver) -> Vec<Block> {
     blocks
 }
 
+pub mod input;
 mod link;
 
 thread_local! {

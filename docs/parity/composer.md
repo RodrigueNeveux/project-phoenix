@@ -88,3 +88,35 @@ Measured 2026-11-24 on the live client (1536x788, Onyx, French), plus the older 
 | hover / pressed | launcher chunk CSS `17bca52902699e86.css` (fetched as a static asset, the launcher stays closed): `.container_LekV6N` (cards, rows, recents) `--background-surface-high`, `:hover` / keyboard focus `--interactive-background-hover`, `:active` `--interactive-background-active`; banner `--background-surface-highest` | `card`, `rows`, command rows, `recents_section` (48px tile, radius 12) | ✅ from the CSS |
 | click an app | opens the app's page (launch / authorise flows) | shows the "not available" notice only | ➖ launching, authorising or installing an app writes to the account |
 | window height | only 788px measured | shrinks to keep 8px from the top, 200px minimum | ➖ other heights need the launcher reopened at another window size, which writes `settings-proto/1` |
+
+## Markdown preview while typing (`md-preview`, Slate decorations)
+
+Sources: chunk 358931 (`syntaxBefore_nsjAhz` … `spoiler_nsjAhz`, CSS `358931.2536148ce7e9b909.css`), the
+Slate decorator and leaf renderer in `web.b63d846b329d6470.js` (map `ep`, inline rule table `m` with
+`before`/`after` strings, `T = {inlineCode, spoiler, s, u: start+end; subtext: start}` for the
+`before_<type>` / `after_<type>` marker classes), spoiler classes from 881013
+(`spoilerContent_0_7_Rr` revealed = `--background-mod-subtle`, `spoilerMarkdownContent_` radius-xs).
+Shown only when "Afficher un aperçu du Markdown" is on and the legacy input is off, like the client.
+
+Phoenix: `markdown::input::spans` (source byte ranges, same delimiter rules as the message parser,
+one line at a time like Slate's `line` elements, tokens `<@…>`, `<#…>`, `<:…:…>`, `<t:…>` left opaque)
+→ `rich_input::style` → `TextareaState::set_decorations` (gpui-component 0.10 draws textarea
+decorations outside the code editor mode). Synced with the mention/emoji tokens on every change and
+on theme changes (`needs_sync` compares the styles too).
+
+| element | client | Phoenix | status |
+|---|---|---|---|
+| `**`, `*`, `_` markers | `syntaxBefore/After`: `--font-weight-semibold`, `--textbox-markdown-syntax` | SYNTAX → semibold + token colour | ✅ |
+| `__`, `~~`, `\|\|`, `\` markers | `before_u/s/spoiler`, `syntaxOverride`: weight normal; `before_u` underlined | SYNTAX \| LIGHT (+ underline for `__`, and inside an underline) | ✅; ⚠ the 1px `margin-inline` of `before_s/u/em` is not reproduced |
+| bold / italic / underline / strike | `bold_` 700, `italics_`, `underline_`, `strikethrough_` | HighlightStyle weight / italic / underline / strikethrough | ✅ |
+| inline code | `inlineCode_` + `before/after_inlineCode`: `--background-code`, 1px `--border-muted`, `--font-code` 85 %, line-height 18 | `--background-code` behind markers and content | ⚠ no border, no code font and no 85 % size: a `HighlightStyle` cannot change the font or draw a border |
+| spoiler | `spoilerContent_` revealed: `--background-mod-subtle`, radius-xs, `padding: 0 .2em` | `--background-mod-subtle` | ⚠ no radius / padding |
+| links | `fakeLink_` `--text-link` (`url`, `autolink`, `link`); link markers weight normal | bare http(s) URLs and `[label](url)` labels in `--text-link`, brackets as light syntax | ✅ colour; ⚠ `[`/`](url)` marker split not measured live |
+| subtext `-# ` | `before_subtext` 700, `subtext_` `--text-muted` 13/17.875 | muted colour, bold marker | ⚠ size stays 16px |
+| code block fences | `codeBlockSyntax` syntax colour, `codeBlockLang` `--text-feedback-positive` (lang `/^[a-z0-9_+\-.#]+$/i`), no inline markdown inside | FENCE / LANG colours, content left plain | ✅; ⚠ no hljs colours, no code font |
+| headings, lists, block quotes | `skip` in the Slate rule table (quotes get a block element with a bar) | not styled | ✅ headings/lists; ❌ quote bar |
+
+Tests: `markdown::input::tests` (bold, each style, nesting, tokens opaque, unclosed delimiters, escapes,
+links, subtext, code blocks, per-line) and `settings_fx_tests::composer_markdown_is_styled_while_typing`
+(decorations follow the preview setting). Real-account render: `real_shots` with `PHX_DRAFT='…'`
+(`\n` for new lines; nothing is sent, the read-only backend also drops typing).

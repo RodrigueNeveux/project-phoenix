@@ -1,7 +1,7 @@
 use std::{cell::RefCell, ops::Range};
 
-use gpui::{AnyElement, App, Context, FontWeight, IntoElement, ParentElement, Styled, Window, div};
-use gpui_component::input::{InlineToken, InlineTokenContext, InputContent};
+use gpui::{AnyElement, App, Context, FontStyle, FontWeight, HighlightStyle, IntoElement, ParentElement, StrikethroughStyle, Styled, UnderlineStyle, Window, div, px};
+use gpui_component::input::{InlineToken, InlineTokenContext, InputContent, TextDecoration};
 
 use crate::{
     app::PhoenixApp,
@@ -102,17 +102,79 @@ fn wanted(app: &PhoenixApp, cx: &App) -> InputContent {
     }
 }
 
+pub fn style(a: u16) -> HighlightStyle {
+    use crate::markdown::input as md;
+    use crate::theme::{generated::idx, tok};
+    let has = |f: u16| a & f != 0;
+    let mut s = HighlightStyle::default();
+    if has(md::SYNTAX) {
+        s.color = Some(c(tok(idx::TEXTBOX_MARKDOWN_SYNTAX)));
+        s.font_weight = Some(if has(md::LIGHT) { FontWeight::NORMAL } else { FontWeight::SEMIBOLD });
+    } else {
+        if has(md::BOLD) {
+            s.font_weight = Some(FontWeight::BOLD);
+        }
+        if has(md::ITALIC) {
+            s.font_style = Some(FontStyle::Italic);
+        }
+        if has(md::STRIKE) {
+            s.strikethrough = Some(StrikethroughStyle { thickness: px(1.), color: None });
+        }
+        if has(md::SPOILER) {
+            s.background_color = Some(c(tok(idx::BACKGROUND_MOD_SUBTLE)));
+        }
+    }
+    if has(md::UNDERLINE) {
+        s.underline = Some(UnderlineStyle { thickness: px(1.), color: None, wavy: false });
+    }
+    if has(md::CODE) {
+        s.background_color = Some(c(tok(idx::BACKGROUND_CODE)));
+    }
+    if has(md::LINK) {
+        s.color = Some(c(tok(idx::TEXT_LINK)));
+    }
+    if has(md::SUBTEXT) || has(md::SUBTEXT_MARK) {
+        s.color = Some(c(tok(idx::TEXT_MUTED)));
+    }
+    if has(md::SUBTEXT_MARK) {
+        s.font_weight = Some(FontWeight::BOLD);
+    }
+    if has(md::FENCE) {
+        s.color = Some(c(tok(idx::TEXTBOX_MARKDOWN_SYNTAX)));
+    }
+    if has(md::LANG) {
+        s.color = Some(c(tok(idx::TEXT_FEEDBACK_POSITIVE)));
+    }
+    s
+}
+
+pub fn decorations_for(text: &str) -> Vec<TextDecoration> {
+    crate::markdown::input::spans(text).into_iter().map(|(r, a)| TextDecoration::new(r, style(a))).collect()
+}
+
+fn wanted_decorations(app: &PhoenixApp, cx: &App) -> Vec<TextDecoration> {
+    if !enabled(app) {
+        return Vec::new();
+    }
+    decorations_for(&app.composer.read(cx).value())
+}
+
 pub fn sync(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let want = wanted(app, cx);
+    let decorations = wanted_decorations(app, cx);
     app.composer.update(cx, |s, cx| {
         let _ = s.set_tokens(want, cx);
+        s.set_decorations(decorations, cx);
     });
 }
 
 pub fn needs_sync(app: &PhoenixApp, cx: &App) -> bool {
     let want = wanted(app, cx);
-    let have = app.composer.read(cx).tokens();
-    have.len() != want.tokens().len() || have.iter().zip(want.tokens()).any(|(a, b)| a.range() != b.range() || a.token().label() != b.token().label())
+    let state = app.composer.read(cx);
+    let have = state.tokens();
+    have.len() != want.tokens().len()
+        || have.iter().zip(want.tokens()).any(|(a, b)| a.range() != b.range() || a.token().label() != b.token().label())
+        || state.decorations() != wanted_decorations(app, cx).as_slice()
 }
 
 pub fn render_token(ctx: &InlineTokenContext, _: &mut Window, _: &mut App) -> AnyElement {
