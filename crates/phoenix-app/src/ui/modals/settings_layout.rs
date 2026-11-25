@@ -83,6 +83,8 @@ fn side_header(icon: Option<&'static str>, name: SharedString, category: Option<
         .overflow_hidden()
         .child(
             div()
+                .w_full()
+                .overflow_hidden()
                 .flex()
                 .items_baseline()
                 .min_w_0()
@@ -163,7 +165,7 @@ pub fn overlay_wide(id: &'static str, side_items: Vec<SideItem>, selected: usize
 
 #[allow(clippy::too_many_arguments)]
 fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, wide: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let mut side = div().flex_1().flex().flex_col();
+    let mut side = div().flex_1().min_w_0().overflow_hidden().flex().flex_col();
     for (n, it) in side_items.into_iter().enumerate() {
         side = side.child(match it {
             SideItem::Header(h) => side_header(None, h, None),
@@ -231,6 +233,7 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
                 .flex()
                 .justify_end()
                 .items_start()
+                .pr(z(8.))
                 .overflow_y_scroll()
                 .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 2))
                 .child(div().flex_none().w(z(264.)).py(z(60.)).pl(z(20.)).pr(z(6.)).flex().child(side)),

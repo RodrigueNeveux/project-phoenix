@@ -330,6 +330,7 @@ impl Backend for ReadOnly {
             _ if admin_get => self.0.action(req),
             phoenix_app::actions::ActionRequest::Reminders => self.0.action(req),
             phoenix_app::actions::ActionRequest::ReportMenu(_) => self.0.action(req),
+            phoenix_app::actions::ActionRequest::Admin(ref c) if phoenix_api::rest::guild_manage::build(c).method == reqwest::Method::GET => self.0.action(req),
             _ => denied(),
         }
     }

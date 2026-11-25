@@ -91,9 +91,9 @@ fn topic_block(s: &State, forum: bool, cx: &App) -> Option<AnyElement> {
                     .border_1()
                     .border_color(c(tok(idx::BORDER_SUBTLE)))
                     .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
-                    .pl(z(15.))
+                    .pl(z(6.))
                     .pr(z(12.))
-                    .py(z(17.))
+                    .py(z(4.))
                     .text_size(z(16.))
                     .line_height(z(22.))
                     .child(Textarea::new(&area).appearance(false).bordered(false))
@@ -114,7 +114,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
     let mut d = div().flex().flex_col().gap(z(24.));
     if let Some(i) = &s.name {
         let key = if kind == ChannelKind::Category { "admin.category_name" } else { "admin.channel_name" };
-        d = d.child(field(crate::t!(key), None, input_box(i), None));
+        d = d.child(field(crate::t!(key), None, input_box(i).pl(z(0.)), None));
     }
     if kind == ChannelKind::Category {
         return d.into_any_element();
