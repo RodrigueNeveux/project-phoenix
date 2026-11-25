@@ -1125,6 +1125,41 @@ fn main() -> anyhow::Result<()> {
                     });
                 }
                 "pins" => app.toggle_pins(cx),
+                "acct" => {
+                    use phoenix_app::ui::modals::account_edit::{Confirm, EmailStep, Flow};
+                    let flow = match arg.as_str() {
+                        "username" => Flow::Username,
+                        "email" => Flow::Email(EmailStep::Start),
+                        "email-reasons" => Flow::Email(EmailStep::Reasons),
+                        "email-warning" => Flow::Email(EmailStep::Warning),
+                        "email-form" => Flow::Email(EmailStep::Form),
+                        "phone" => Flow::Phone,
+                        "phone-entry" => Flow::PhoneEntry,
+                        "phone-remove" => Flow::Confirm(Confirm::RemovePhone),
+                        "sms" => Flow::Confirm(Confirm::DisableSms),
+                        "backup" => Flow::Confirm(Confirm::BackupCodes),
+                        "totp" => Flow::RemoveTotp,
+                        _ => Flow::Password,
+                    };
+                    app.open_account_edit(flow, window, cx);
+                }
+                "imagemenu" | "wishmenu" | "announcemenu" => {
+                    use phoenix_app::ui::extra_menus::{Target, open};
+                    let target = match (kind.as_str(), arg.as_str()) {
+                        ("imagemenu", _) => match &app.me.avatar {
+                            phoenix_app::model::ImageRef::Url(u) => Some(Target::Image(u.clone())),
+                            phoenix_app::model::ImageRef::Default(_) => None,
+                        },
+                        ("wishmenu", "more") => Some(Target::WishlistMore(None)),
+                        ("wishmenu", _) => Some(Target::WishlistAdd),
+                        _ => app.selected_channel.map(|channel| Target::AnnouncementSend { channel, can_thread: true }),
+                    };
+                    let x = std::env::var("PHX_MENU_X").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(600.);
+                    let y = std::env::var("PHX_MENU_Y").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(300.);
+                    if let Some(t) = target {
+                        open(t, gpui::point(px(x), px(y)), window);
+                    }
+                }
                 "threads" => app.toggle_threads_popout(cx),
                 "search" => {
                     phoenix_app::ui::search::open(app, window, cx);
