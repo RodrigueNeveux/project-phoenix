@@ -195,4 +195,13 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("settings/clock", &["ClockIcon"]),
     ("settings/globe", &["GlobeEarthIcon"]),
     ("settings/unsynced", &["RefreshIcon"]),
+    ("server/badge", &["BadgeIcon"]),
+    ("server/envelope", &["EnvelopeIcon"]),
+    ("server/clipboard", &["ClipboardListIcon"]),
+    ("server/server", &["ServerIcon"]),
+    ("server/list-numbered", &["ListNumberedIcon"]),
+    ("server/grid-horizontal", &["GridHorizontalIcon"]),
+    ("server/server-grid", &["ServerGridIcon"]),
+    ("server/drag", &["DragIcon"]),
+    ("server/dropper", &["EyeDropperIcon"]),
 ];

@@ -89,7 +89,7 @@ pub enum Modal {
     Report(report::Report),
     ModView { guild: Id, user: Id },
     Call { channel: Id, user: Id },
-    ServerSettings { guild: Id, section: usize },
+    ServerSettings(Box<server_settings::State>),
     CreateChannel(create_channel::State),
     ChannelSettings(Box<channel_settings::State>),
     Privacy(privacy::Privacy),
@@ -144,6 +144,11 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
             }
         }
     });
+    with_modal(|m| {
+        if let Some(Modal::ServerSettings(s)) = m {
+            server_settings::prepare(s.as_mut(), window, cx);
+        }
+    });
     let vp = window.viewport_size();
     let mut mk = |placeholder: SharedString, initial: &str, focus: bool| {
         let i = cx.new(|cx| InputState::new(window, cx).placeholder(placeholder));
@@ -192,7 +197,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Report(r) => report::render(app, r, cx),
             Modal::ModView { guild, user } => member::mod_view(app, *guild, *user, cx),
             Modal::Call { channel, user } => member::call_card(app, *channel, *user, cx),
-            Modal::ServerSettings { guild, section } => server_settings::render(app, *guild, *section, cx),
+            Modal::ServerSettings(s) => server_settings::render(app, s.as_ref(), cx),
             Modal::CreateChannel(s) => create_channel::render(app, s, cx),
             Modal::ChannelSettings(s) => channel_settings::render(app, s, cx),
             Modal::Privacy(p) => privacy::render_privacy(app, p, cx),

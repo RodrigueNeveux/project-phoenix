@@ -136,7 +136,8 @@ impl PhoenixApp {
     }
 
     pub fn open_server_settings(&mut self, guild: Id, section: usize, cx: &mut Context<Self>) {
-        open_modal(Modal::ServerSettings { guild, section }, None);
+        open_modal(Modal::ServerSettings(Box::new(server_settings::State::new(guild, section))), None);
+        server_settings::load(self, cx);
         cx.notify();
     }
 }
@@ -218,7 +219,12 @@ pub fn favorite_item(app: &PhoenixApp, e: &Ent, channel: Id) -> MenuItem {
 pub fn server_settings_item(e: &Ent, guild: Id) -> MenuItem {
     MenuItem::submenu(
         crate::t!("menu.server_settings"),
-        server_settings::SECTIONS.iter().enumerate().map(|(i, k)| item(e, crate::t!(k), move |a, cx| a.open_server_settings(guild, i, cx))).collect(),
+        server_settings::SECTIONS
+            .iter()
+            .enumerate()
+            .filter(|(_, k)| **k != "menu.gs.delete")
+            .map(|(i, k)| item(e, server_settings::section_label(k), move |a, cx| a.open_server_settings(guild, i, cx)))
+            .collect(),
     )
 }
 

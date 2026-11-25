@@ -53,6 +53,9 @@ pub struct GuildEdit {
     pub afk_channel: Option<Option<Snowflake>>,
     pub afk_timeout: Option<u32>,
     pub default_notifications: Option<u8>,
+    pub system_channel_flags: Option<u64>,
+    pub icon: Option<Option<String>>,
+    pub banner: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -62,7 +65,19 @@ pub struct RoleEdit {
     pub hoist: Option<bool>,
     pub mentionable: Option<bool>,
     pub permissions: Option<u64>,
+    pub colors: Option<RoleColors>,
+    pub icon: Option<Option<String>>,
+    pub unicode_emoji: Option<Option<String>>,
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RoleColors {
+    pub primary: u32,
+    pub secondary: Option<u32>,
+    pub tertiary: Option<u32>,
+}
+
+pub const HOLOGRAPHIC: RoleColors = RoleColors { primary: 0xA9_C9FF, secondary: Some(0xFF_BBEC), tertiary: Some(0xFF_C3A0) };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdminCall {
@@ -110,6 +125,23 @@ pub enum AdminCall {
     EditScheduled { id: Snowflake, at: Option<String>, content: Option<String>, flags: Option<u64> },
     DeleteScheduled { id: Snowflake },
     SendScheduledNow { id: Snowflake },
+    Guild { guild: Snowflake },
+    GuildProfile { guild: Snowflake },
+    Applications { ids: Vec<Snowflake> },
+    RoleMemberCounts { guild: Snowflake },
+    RoleMemberIds { guild: Snowflake, role: Snowflake },
+    ReorderRoles { guild: Snowflake, order: Vec<(Snowflake, i32)> },
+    AddRoleMember { guild: Snowflake, role: Snowflake, user: Snowflake },
+    RemoveRoleMember { guild: Snowflake, role: Snowflake, user: Snowflake },
+    Soundboard { guild: Snowflake },
+    Widget { guild: Snowflake },
+    EditWidget { guild: Snowflake, enabled: bool, channel: Option<Snowflake> },
+    CreateEmoji { guild: Snowflake, name: String, image: String },
+    CreateSound { guild: Snowflake, name: String, sound: String, volume: f32, emoji_id: Option<Snowflake>, emoji_name: Option<String> },
+    DeleteSound { guild: Snowflake, sound: Snowflake },
+    Kick { guild: Snowflake, user: Snowflake },
+    Ban { guild: Snowflake, user: Snowflake, delete_message_seconds: u32 },
+    AuditLogFiltered { guild: Snowflake, user: Option<Snowflake>, action: Option<u32>, before: Option<Snowflake>, limit: u32 },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -272,6 +304,15 @@ pub fn build(call: &AdminCall) -> ApiReq {
             if let Some(n) = edit.default_notifications {
                 b["default_message_notifications"] = json!(n);
             }
+            if let Some(f) = edit.system_channel_flags {
+                b["system_channel_flags"] = json!(f);
+            }
+            if let Some(i) = &edit.icon {
+                b["icon"] = json!(i);
+            }
+            if let Some(i) = &edit.banner {
+                b["banner"] = json!(i);
+            }
             req(Method::PATCH, format!("/guilds/{guild}"), Some(b))
         }
         C::Roles { guild } => req(Method::GET, format!("/guilds/{guild}/roles"), None),
@@ -310,6 +351,46 @@ pub fn build(call: &AdminCall) -> ApiReq {
         C::UserSettings => req(Method::GET, "/users/@me/settings".into(), None),
         C::PatchUserSettings { patch } => req(Method::PATCH, "/users/@me/settings".into(), Some(patch.clone())),
         C::Server(s) => super::guild_server::build(s),
+        C::Guild { guild } => req(Method::GET, format!("/guilds/{guild}?with_counts=true"), None),
+        C::GuildProfile { guild } => req(Method::GET, format!("/guilds/{guild}/profile"), None),
+        C::Applications { ids } => {
+            let q: Vec<String> = ids.iter().map(|i| format!("application_ids={i}")).collect();
+            req(Method::GET, format!("/applications/public?{}", q.join("&")), None)
+        }
+        C::RoleMemberCounts { guild } => req(Method::GET, format!("/guilds/{guild}/roles/member-counts"), None),
+        C::RoleMemberIds { guild, role } => req(Method::GET, format!("/guilds/{guild}/roles/{role}/member-ids"), None),
+        C::ReorderRoles { guild, order } => {
+            req(Method::PATCH, format!("/guilds/{guild}/roles"), Some(Value::Array(order.iter().map(|(id, p)| json!({ "id": id, "position": p })).collect())))
+        }
+        C::AddRoleMember { guild, role, user } => req(Method::PUT, format!("/guilds/{guild}/members/{user}/roles/{role}"), None),
+        C::RemoveRoleMember { guild, role, user } => req(Method::DELETE, format!("/guilds/{guild}/members/{user}/roles/{role}"), None),
+        C::Soundboard { guild } => req(Method::GET, format!("/guilds/{guild}/soundboard-sounds"), None),
+        C::Widget { guild } => req(Method::GET, format!("/guilds/{guild}/widget"), None),
+        C::EditWidget { guild, enabled, channel } => req(Method::PATCH, format!("/guilds/{guild}/widget"), Some(json!({ "enabled": enabled, "channel_id": channel }))),
+        C::CreateEmoji { guild, name, image } => req(Method::POST, format!("/guilds/{guild}/emojis"), Some(json!({ "name": name.trim(), "image": image }))),
+        C::CreateSound { guild, name, sound, volume, emoji_id, emoji_name } => req(
+            Method::POST,
+            format!("/guilds/{guild}/soundboard-sounds"),
+            Some(json!({ "name": name.trim(), "sound": sound, "volume": volume.clamp(0., 1.), "emoji_id": emoji_id, "emoji_name": emoji_name })),
+        ),
+        C::DeleteSound { guild, sound } => req(Method::DELETE, format!("/guilds/{guild}/soundboard-sounds/{sound}"), None),
+        C::Kick { guild, user } => req(Method::DELETE, format!("/guilds/{guild}/members/{user}"), None),
+        C::Ban { guild, user, delete_message_seconds } => {
+            req(Method::PUT, format!("/guilds/{guild}/bans/{user}"), Some(json!({ "delete_message_seconds": (*delete_message_seconds).min(604_800) })))
+        }
+        C::AuditLogFiltered { guild, user, action, before, limit } => {
+            let mut p = format!("/guilds/{guild}/audit-logs?limit={}", (*limit).clamp(1, 100));
+            if let Some(b) = before {
+                p.push_str(&format!("&before={b}"));
+            }
+            if let Some(u) = user {
+                p.push_str(&format!("&user_id={u}"));
+            }
+            if let Some(a) = action {
+                p.push_str(&format!("&action_type={a}"));
+            }
+            req(Method::GET, p, None)
+        }
     }
 }
 
@@ -370,6 +451,15 @@ fn role_body(e: &RoleEdit) -> Value {
     }
     if let Some(p) = e.permissions {
         b["permissions"] = json!(p.to_string());
+    }
+    if let Some(c) = e.colors {
+        b["colors"] = json!({ "primary_color": c.primary & 0xFF_FFFF, "secondary_color": c.secondary.map(|x| x & 0xFF_FFFF), "tertiary_color": c.tertiary.map(|x| x & 0xFF_FFFF) });
+    }
+    if let Some(i) = &e.icon {
+        b["icon"] = json!(i);
+    }
+    if let Some(u) = &e.unicode_emoji {
+        b["unicode_emoji"] = json!(u);
     }
     b
 }
@@ -523,5 +613,53 @@ mod tests {
         assert_eq!(toggle_list(&cur, G, false), json!(["8"]));
         assert_eq!(toggle_list(&json!(null), G, true), json!(["1"]));
         assert_eq!(toggle_list(&cur, G, true), json!(["8", "1"]));
+    }
+
+    #[test]
+    fn server_settings_reads_are_gets() {
+        for c in [
+            AdminCall::Guild { guild: G },
+            AdminCall::GuildProfile { guild: G },
+            AdminCall::Applications { ids: vec![Snowflake(3)] },
+            AdminCall::RoleMemberCounts { guild: G },
+            AdminCall::RoleMemberIds { guild: G, role: Snowflake(2) },
+            AdminCall::Soundboard { guild: G },
+            AdminCall::Widget { guild: G },
+            AdminCall::AuditLogFiltered { guild: G, user: None, action: None, before: None, limit: 50 },
+        ] {
+            assert_eq!(build(&c).method, Method::GET);
+        }
+        assert_eq!(build(&AdminCall::Guild { guild: G }).path, "/guilds/1?with_counts=true");
+        assert_eq!(build(&AdminCall::Applications { ids: vec![Snowflake(3), Snowflake(4)] }).path, "/applications/public?application_ids=3&application_ids=4");
+        let r = build(&AdminCall::AuditLogFiltered { guild: G, user: Some(Snowflake(3)), action: Some(22), before: Some(Snowflake(9)), limit: 500 });
+        assert_eq!(r.path, "/guilds/1/audit-logs?limit=100&before=9&user_id=3&action_type=22");
+    }
+
+    #[test]
+    fn server_settings_writes() {
+        let r = build(&AdminCall::ReorderRoles { guild: G, order: vec![(Snowflake(5), 3), (Snowflake(6), 2)] });
+        assert_eq!((r.method, r.path.as_str()), (Method::PATCH, "/guilds/1/roles"));
+        assert_eq!(r.body.unwrap(), json!([{ "id": "5", "position": 3 }, { "id": "6", "position": 2 }]));
+        let r = build(&AdminCall::EditWidget { guild: G, enabled: true, channel: Some(Snowflake(7)) });
+        assert_eq!((r.method, r.body.unwrap()), (Method::PATCH, json!({ "enabled": true, "channel_id": "7" })));
+        let r = build(&AdminCall::CreateEmoji { guild: G, name: " ok ".into(), image: "data:image/png;base64,AA".into() });
+        assert_eq!((r.method, r.path.as_str()), (Method::POST, "/guilds/1/emojis"));
+        assert_eq!(r.body.unwrap()["name"], "ok");
+        let r = build(&AdminCall::CreateSound { guild: G, name: "s".into(), sound: "data:audio/ogg;base64,AA".into(), volume: 2., emoji_id: None, emoji_name: Some("🔥".into()) });
+        assert_eq!(r.body.unwrap()["volume"], 1.0);
+        assert_eq!(build(&AdminCall::DeleteSound { guild: G, sound: Snowflake(4) }).path, "/guilds/1/soundboard-sounds/4");
+        let r = build(&AdminCall::Ban { guild: G, user: Snowflake(2), delete_message_seconds: 9_999_999 });
+        assert_eq!((r.method, r.body.unwrap()), (Method::PUT, json!({ "delete_message_seconds": 604_800 })));
+        assert_eq!(build(&AdminCall::Kick { guild: G, user: Snowflake(2) }).method, Method::DELETE);
+        let r = build(&AdminCall::AddRoleMember { guild: G, role: Snowflake(3), user: Snowflake(2) });
+        assert_eq!((r.method, r.path.as_str()), (Method::PUT, "/guilds/1/members/2/roles/3"));
+        let edit = RoleEdit { colors: Some(HOLOGRAPHIC), unicode_emoji: Some(Some("🔥".into())), icon: Some(None), ..Default::default() };
+        let b = build(&AdminCall::EditRole { guild: G, role: Snowflake(4), edit }).body.unwrap();
+        assert_eq!(b["colors"], json!({ "primary_color": 11_127_295, "secondary_color": 16_759_788, "tertiary_color": 16_761_760 }));
+        assert_eq!(b["icon"], Value::Null);
+        assert_eq!(b["unicode_emoji"], "🔥");
+        let edit = GuildEdit { system_channel_flags: Some(5), banner: Some(None), ..Default::default() };
+        let b = build(&AdminCall::EditGuild { guild: G, edit }).body.unwrap();
+        assert_eq!(b, json!({ "system_channel_flags": 5, "banner": null }));
     }
 }

@@ -69,7 +69,11 @@ pub fn mock_reply(c: &AdminCall) -> Value {
               "source_guild": { "id": "40", "name": "Rust", "icon": null }, "source_channel": { "id": "41", "name": "releases" }, "user": user(2, "ferris") }
         ]),
         C::CreateWebhook { channel, name } => json!({ "id": "32", "type": 1, "name": name, "channel_id": channel, "avatar": null, "token": "t", "user": user(2, "ferris") }),
-        C::Roles { .. } => json!([]),
+        C::Roles { guild } => json!([
+            { "id": guild, "name": "@everyone", "permissions": "104324673", "position": 0, "color": 0, "hoist": false, "mentionable": false },
+            { "id": "40", "name": "Crabs", "permissions": "8", "position": 2, "color": 15_158_332, "colors": { "primary_color": 15_158_332, "secondary_color": 3_447_003, "tertiary_color": null }, "hoist": true, "mentionable": false },
+            { "id": "41", "name": "Ferrises", "permissions": "0", "position": 1, "color": 3_066_993, "hoist": false, "mentionable": true }
+        ]),
         C::Emojis { .. } => json!([{ "id": "11", "name": "ferris", "animated": false, "user": user(2, "ferris") }]),
         C::Stickers { .. } => json!([{ "id": "12", "name": "wave", "format_type": 1, "tags": "wave", "user": user(2, "ferris") }]),
         C::SearchMembers { .. } => json!({ "members": [
@@ -83,6 +87,16 @@ pub fn mock_reply(c: &AdminCall) -> Value {
         ], "users": [user(2, "ferris"), user(4, "spammer")] }),
         C::UserSettings => json!({ "restricted_guilds": [], "message_request_restricted_guild_ids": [] }),
         C::Server(s) => crate::ui::server_pages::mock::reply(s),
+        C::Guild { guild } => json!({ "id": guild, "name": "Phoenix", "icon": null, "description": "A demo server", "system_channel_id": "10", "system_channel_flags": 13,
+            "afk_channel_id": null, "afk_timeout": 300, "default_message_notifications": 1, "premium_tier": 1, "features": ["COMMUNITY"] }),
+        C::GuildProfile { guild } => json!({ "id": guild, "name": "Phoenix", "description": "A demo server", "member_count": 3, "online_count": 2, "tag": "PHX", "visibility": 1,
+            "traits": [{ "emoji_name": "crab", "label": "Rust", "position": 0 }], "game_application_ids": [] }),
+        C::RoleMemberCounts { .. } => json!({}),
+        C::RoleMemberIds { .. } => json!(["2"]),
+        C::Soundboard { .. } => json!({ "items": [{ "name": "ding", "sound_id": "30", "volume": 1.0, "emoji_name": "🔔", "user": user(2, "ferris") }] }),
+        C::Widget { .. } => json!({ "enabled": false, "channel_id": null }),
+        C::Applications { .. } => json!([]),
+        C::AuditLogFiltered { .. } => mock_reply(&C::AuditLog { guild: Snowflake(0), before: None, limit: 50 }),
         _ => Value::Null,
     }
 }

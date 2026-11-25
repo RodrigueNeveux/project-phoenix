@@ -59,20 +59,12 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                         .mt(z(28.))
                         .flex()
                         .gap(z(8.))
-                        .child(button_sm("gs2-com-onboarding", crate::t!("gs2.community_setup_onboarding"), BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| {
-                            crate::actions::with_modal(|m| {
-                                if let Some(crate::ui::modals::Modal::ServerSettings { section, .. }) = m {
-                                    *section = crate::ui::modals::server_settings::section_index("menu.gs.onboarding");
-                                }
-                            });
+                        .child(button_sm("gs2-com-onboarding", crate::t!("gs2.community_setup_onboarding"), BtnKind::Primary).on_click(cx.listener(|a, _, _, cx| {
+                            crate::ui::modals::server_settings::pick(crate::ui::modals::server_settings::section_index("menu.gs.onboarding"), a, cx);
                             cx.notify();
                         })))
-                        .child(button_sm("gs2-com-analytics", crate::t!("gs2.community_see_analytics"), BtnKind::Secondary).on_click(cx.listener(|_, _, _, cx| {
-                            crate::actions::with_modal(|m| {
-                                if let Some(crate::ui::modals::Modal::ServerSettings { section, .. }) = m {
-                                    *section = crate::ui::modals::server_settings::section_index("menu.gs.analytics");
-                                }
-                            });
+                        .child(button_sm("gs2-com-analytics", crate::t!("gs2.community_see_analytics"), BtnKind::Secondary).on_click(cx.listener(|a, _, _, cx| {
+                            crate::ui::modals::server_settings::pick(crate::ui::modals::server_settings::section_index("menu.gs.analytics"), a, cx);
                             cx.notify();
                         }))),
                 )
