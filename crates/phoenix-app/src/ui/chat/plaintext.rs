@@ -534,13 +534,18 @@ fn icon_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<gpu
 }
 
 fn lang_button(id: &'static str, url: SharedString, above: bool) -> gpui::Stateful<gpui::Div> {
-    icon_button(id, "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language"))).on_click(move |ev, w, cx: &mut App| {
-        let pos = ev.position();
-        let search = cx.new(|cx| InputState::new(w, cx).placeholder(crate::t!("plaintext.language_search")));
-        search.update(cx, |s, cx| s.focus(w, cx));
-        LANG.with(|l| *l.borrow_mut() = Some(LangPicker { url: url.clone(), pos, above, search }));
-        w.refresh();
-    })
+    icon_button(id, "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language"))).on_click(move |ev, w, cx: &mut App| open_language_picker(url.clone(), ev.position(), above, w, cx))
+}
+
+pub fn open_language_picker(url: SharedString, pos: gpui::Point<gpui::Pixels>, above: bool, w: &mut gpui::Window, cx: &mut App) {
+    let search = cx.new(|cx| InputState::new(w, cx).placeholder(crate::t!("plaintext.language_search")));
+    search.update(cx, |s, cx| s.focus(w, cx));
+    LANG.with(|l| *l.borrow_mut() = Some(LangPicker { url, pos, above, search }));
+    w.refresh();
+}
+
+pub fn set_language(url: &SharedString, language: &str) {
+    update(url, |e| e.language = Some(language.to_owned()));
 }
 
 fn close_lang(w: &mut gpui::Window) {

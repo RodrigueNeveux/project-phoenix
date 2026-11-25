@@ -1255,7 +1255,27 @@ fn main() -> anyhow::Result<()> {
                 }
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
-                "customstatus" => app.open_custom_status(cx),
+                "customstatus" => {
+                    app.open_custom_status(cx);
+                    if arg == "emoji" {
+                        phoenix_app::ui::pickers::open_emoji_picker(app, phoenix_app::ui::pickers::EmojiTarget::Status, window, cx);
+                    } else if !arg.is_empty() {
+                        phoenix_app::ui::modals::custom_status::pick_emoji(phoenix_app::ui::modals::custom_status::StatusEmoji { id: None, name: arg.clone().into(), animated: false });
+                    }
+                }
+                "plaintextlang" | "plaintextmd" => {
+                    let url = app.selected_channel.and_then(|c| app.messages.get(&c)).and_then(|m| {
+                        m.msgs.iter().rev().flat_map(|m| m.attachments.iter()).find(|a| phoenix_app::ui::chat::plaintext::previewable(&a.filename)).map(|a| a.url.clone())
+                    });
+                    if let Some(u) = url {
+                        if kind == "plaintextmd" {
+                            phoenix_app::ui::chat::plaintext::set_language(&u, "markdown");
+                        } else {
+                            let (x, y) = arg.split_once(',').and_then(|(x, y)| Some((x.parse::<f32>().ok()?, y.parse::<f32>().ok()?))).unwrap_or((900., 500.));
+                            phoenix_app::ui::chat::plaintext::open_language_picker(u, gpui::point(px(x), px(y)), false, window, cx);
+                        }
+                    }
+                }
                 "activethreads" => {
                     if let Some(g) = app.selected_guild {
                         app.open_active_threads(g, cx);
