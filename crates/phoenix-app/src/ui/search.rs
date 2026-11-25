@@ -754,7 +754,9 @@ fn results_panel(
                     ))
                 }),
         );
-    let mut body = div().flex().flex_col().pt(z(16.)).px(z(16.));
+    let results_scroll = crate::ui::chat::scrollbar::handle("search-results");
+    let gutter = if f32::from(results_scroll.max_offset().y) > 0. { 8. } else { 0. };
+    let mut body = div().flex().flex_col().pt(z(16.)).pl(z(16.)).pr(z(16. + gutter));
     if let Some(e) = error.filter(|_| !loading) {
         body = body.child(empty_state(e, true));
     } else if page.messages.is_empty() && !loading {
@@ -793,7 +795,16 @@ fn results_panel(
         .flex()
         .flex_col()
         .child(header)
-        .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().child(body))
+        .child(
+            div()
+                .relative()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .child(div().id("search-scroll").flex_1().min_h_0().overflow_y_scroll().track_scroll(&results_scroll).child(body))
+                .children(crate::ui::chat::scrollbar::thin_scrollbar_div(&results_scroll)),
+        )
         .children(pager);
     if sort_menu {
         panel = panel.child(sort_popover(req.sort, cx));
@@ -944,6 +955,7 @@ fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
 }
 
 fn go_page(app: &mut PhoenixApp, p: u32, cx: &mut Context<PhoenixApp>) {
+    crate::ui::chat::scrollbar::handle("search-results").set_offset(gpui::point(gpui::px(0.), gpui::px(0.)));
     rerun(app, |r| r.offset = p.saturating_sub(1) * PAGE, cx);
 }
 
