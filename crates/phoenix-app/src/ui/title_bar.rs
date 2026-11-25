@@ -9,6 +9,9 @@ use crate::{
 };
 
 fn title(app: &PhoenixApp) -> (Icon, SharedString) {
+    if crate::ui::discovery::current().is_some() {
+        return (Icon::Compass, crate::t!("discovery.title"));
+    }
     if let Some(g) = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
         return (Icon::Hash, g.name.clone());
     }

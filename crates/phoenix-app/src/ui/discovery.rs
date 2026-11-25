@@ -279,7 +279,7 @@ fn header_bar() -> AnyElement {
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .text_size(z(16.))
+                .text_size(z(14.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(if on { tk(idx::TEXT_DEFAULT) } else { tk(idx::INTERACTIVE_TEXT_DEFAULT) })
                 .hover(|s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
