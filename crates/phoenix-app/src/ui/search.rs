@@ -430,7 +430,14 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, hl: &Highlighter, cx: &
         .cursor_pointer()
         .on_click(cx.listener(move |a, _, _, cx| a.jump_to_message(channel, id, cx)))
         .children(reply)
-        .child(div().absolute().left(z(20.)).top(z(if m.reply_to.is_some() { 32. } else { 10. })).child(avatar(author, 40.)))
+        .child(
+            div()
+                .absolute()
+                .left(z(20.))
+                .top(z(if m.reply_to.is_some() { 32. } else { 10. }))
+                .child(avatar(author, 40.))
+                .when_some(crate::ui::avatar_deco::source(author, None), |d, src| d.child(crate::ui::avatar_deco::layer(src, 40. * crate::theme::zoom()))),
+        )
         .child(
             div()
                 .flex()
