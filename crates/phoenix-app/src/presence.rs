@@ -222,6 +222,7 @@ pub struct Profile {
     pub theme: Option<(u32, u32)>,
     pub effect_sku: Option<u64>,
     pub frame_sku: Option<u64>,
+    pub look_skus: Vec<u64>,
 }
 
 pub fn snowflake_time(id: u64) -> i64 {
@@ -298,7 +299,20 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
         theme: p.user_profile.as_ref().and_then(|x| x.theme_colors.as_ref()).and_then(|t| Some((*t.first()?, *t.get(1)?))),
         effect_sku: fx.0,
         frame_sku: fx.1,
+        look_skus: look_skus(p, fx),
     }
+}
+
+fn sku_of(v: Option<&Value>) -> Option<u64> {
+    v?.get("sku_id")?.as_str()?.parse().ok()
+}
+
+pub fn look_skus(p: &phoenix_api::rest::profile::UserProfile, fx: (Option<u64>, Option<u64>)) -> Vec<u64> {
+    let gm = p.guild_member.as_ref();
+    let deco = sku_of(gm.and_then(|m| m.avatar_decoration_data.as_ref())).or_else(|| sku_of(p.user.avatar_decoration_data.as_ref()));
+    let plate = sku_of(gm.and_then(|m| m.collectibles.as_ref()).and_then(|c| c.get("nameplate")))
+        .or_else(|| sku_of(p.user.collectibles.as_deref().and_then(|c| c.get("nameplate"))));
+    [deco, plate, fx.0, fx.1].into_iter().flatten().collect()
 }
 
 pub fn format_date(ts: i64) -> SharedString {
@@ -396,6 +410,24 @@ impl People {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn shop_this_look_reads_decoration_nameplate_effect_and_frame() {
+        let p: phoenix_api::rest::profile::UserProfile = serde_json::from_value(json!({
+            "user": {"id": "5", "username": "a", "avatar_decoration_data": {"asset": "x", "sku_id": "11"},
+                "collectibles": {"nameplate": {"asset": "n/", "sku_id": "22"}}},
+            "user_profile": {"bio": "", "collectibles": [{"sku_id": "33", "type": 1}, {"sku_id": "44", "type": 3}]}
+        }))
+        .unwrap();
+        let prof = profile_from_api(&p, String::new());
+        assert_eq!(prof.look_skus, vec![11, 22, 33, 44]);
+        let p: phoenix_api::rest::profile::UserProfile = serde_json::from_value(json!({
+            "user": {"id": "5", "username": "a", "avatar_decoration_data": {"asset": "x", "sku_id": "11"}},
+            "guild_member": {"roles": [], "avatar_decoration_data": {"asset": "y", "sku_id": "12"}}
+        }))
+        .unwrap();
+        assert_eq!(look_skus(&p, (None, None)), vec![12]);
+    }
 
     #[test]
     fn custom_status_custom_emoji_become_tokens() {

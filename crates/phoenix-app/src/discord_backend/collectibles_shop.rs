@@ -21,6 +21,13 @@ impl DiscordBackend {
         self.with_session(move |_, s| async move { s.rest.get_orbs_balance().await.map_err(api_err) })
     }
 
+    pub(super) fn storefront_skus_impl(&self, skus: Vec<u64>) -> BoxFuture<Vec<phoenix_api::rest::collectibles::LookSku>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.get_storefront_skus(&skus).await.map_err(api_err)?;
+            Ok(phoenix_api::rest::collectibles::look_skus(&v, &skus))
+        })
+    }
+
     pub(super) fn collectible_product_impl(&self, sku: u64) -> BoxFuture<Option<Collectible>> {
         self.with_session(move |_, s| async move {
             let v = s.rest.get_collectibles_product(sku).await.map_err(api_err)?;

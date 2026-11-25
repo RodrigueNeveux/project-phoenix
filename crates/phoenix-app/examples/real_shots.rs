@@ -375,6 +375,9 @@ impl Backend for ReadOnly {
     fn collectible_product(&self, sku: u64) -> BoxFuture<Option<phoenix_app::ui::settings::collectibles::Collectible>> {
         self.0.collectible_product(sku)
     }
+    fn storefront_skus(&self, skus: Vec<u64>) -> BoxFuture<Vec<phoenix_api::rest::collectibles::LookSku>> {
+        self.0.storefront_skus(skus)
+    }
     fn guarded_write(&self, w: phoenix_app::actions::guard::GuardedWrite) -> BoxFuture<()> {
         eprintln!("real_shots: {}", w.refusal());
         denied()

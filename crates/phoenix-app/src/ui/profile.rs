@@ -1225,6 +1225,17 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
     let rel = app.nav.relationship(uid).map(|r| r.kind).unwrap_or(crate::ui::home::data::RelationshipKind::None);
     let bot = app.users.get(&uid).is_some_and(|u| u.bot);
     let me = uid == app.me.id;
+    let shop_look = (!me && rel != crate::ui::home::data::RelationshipKind::Blocked && crate::ui::shop_look::button_experiment(app, cx)).then(|| {
+        crate::ui::shop_look::prefetch(app, uid, cx);
+        crate::ui::shop_look::state(&crate::ui::shop_look::skus(app, uid))
+    });
+    let shop_look = shop_look.filter(crate::ui::shop_look::renderable).map(|_| {
+        let es = e.clone();
+        icon_btn(("profile-modal-shop-look", uid.0), "shop-sparkle").tooltip(crate::ui::tooltip::tip(crate::t!("shop_look.title"))).on_click(move |ev, w, cx| {
+            crate::ui::extra_menus::open(crate::ui::extra_menus::Target::ShopLook(uid), ev.position(), w);
+            es.update(cx, |_, cx| cx.notify());
+        })
+    });
     let buttons = (rel != crate::ui::home::data::RelationshipKind::Blocked).then(|| {
         use crate::ui::home::data::RelationshipKind as R;
         let send = |primary: bool| {
@@ -1254,7 +1265,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             return row.child(send(true)).child(icon_btn(("profile-modal-shop", uid.0), "shop").tooltip(crate::ui::tooltip::tip(crate::t!("ptb.shop")))).child(more);
         }
         if bot || rel == R::Incoming {
-            return row.child(send(true)).child(more);
+            return row.child(send(true)).children(shop_look).child(more);
         }
         if matches!(rel, R::Friend | R::Outgoing) {
             let (id, icon, tip) = if rel == R::Friend { ("profile-modal-friend", "user-check", "ptb.friend") } else { ("profile-modal-pending", "user-clock", "ptb.outgoing") };
@@ -1264,7 +1275,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             } else {
                 friend.opacity(0.5).cursor_default()
             };
-            return row.child(send(true)).child(friend).child(more);
+            return row.child(send(true)).child(friend).children(shop_look).child(more);
         }
         let e_add = e.clone();
         let add = mana_button(("profile-modal-add-friend", uid.0), "", true, false)
@@ -1285,7 +1296,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         let msg_icon = icon_btn(("profile-modal-message-icon", uid.0), "chat")
             .tooltip(crate::ui::tooltip::tip(crate::t!("ptb.message")))
             .on_click(move |_, _, cx| e3.update(cx, |a, cx| a.message_user(uid, cx)));
-        row.child(add).child(msg_icon).child(more)
+        row.child(add).child(msg_icon).children(shop_look).child(more)
     });
 
     let mut pbody = div()

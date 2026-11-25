@@ -156,6 +156,10 @@ fn full(kind: Kind, item: &Value) -> Option<SharedString> {
     (kind == Kind::Effect).then(|| item.get("reducedMotionSrc").and_then(Value::as_str).map(|s| s.to_owned().into())).flatten()
 }
 
+pub fn item_preview(kind: Kind, item: &Value) -> Option<SharedString> {
+    preview(kind, item)
+}
+
 fn preview(kind: Kind, item: &Value) -> Option<SharedString> {
     let s = |k: &str| item.get(k).and_then(Value::as_str);
     let url = match kind {

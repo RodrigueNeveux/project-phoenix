@@ -56,6 +56,7 @@ pub mod avatar_color;
 pub mod profile_bg;
 pub mod profile_note;
 pub mod profile_toolbar;
+pub mod shop_look;
 pub mod profile_bio;
 pub mod search;
 pub mod search_filters;

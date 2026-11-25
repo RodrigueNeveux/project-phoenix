@@ -1199,6 +1199,9 @@ impl Backend for DiscordBackend {
     fn collectible_product(&self, sku: u64) -> BoxFuture<Option<crate::ui::settings::collectibles::Collectible>> {
         self.collectible_product_impl(sku)
     }
+    fn storefront_skus(&self, skus: Vec<u64>) -> BoxFuture<Vec<phoenix_api::rest::collectibles::LookSku>> {
+        self.storefront_skus_impl(skus)
+    }
     fn authorized_apps(&self) -> BoxFuture<Option<Vec<crate::ui::settings::authorized_apps::AuthorizedApp>>> {
         self.authorized_apps_impl()
     }

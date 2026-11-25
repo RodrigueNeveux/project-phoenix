@@ -34,6 +34,10 @@ pub struct ProfileGuildMember {
     pub roles: Vec<Snowflake>,
     #[serde(default)]
     pub joined_at: Option<String>,
+    #[serde(default)]
+    pub avatar_decoration_data: Option<Value>,
+    #[serde(default)]
+    pub collectibles: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

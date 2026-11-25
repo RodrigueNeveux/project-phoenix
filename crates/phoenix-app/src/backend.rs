@@ -390,6 +390,9 @@ pub trait Backend: Send + Sync + 'static {
     fn collectible_product(&self, _sku: u64) -> BoxFuture<Option<crate::ui::settings::collectibles::Collectible>> {
         Box::pin(async { Ok(None) })
     }
+    fn storefront_skus(&self, _skus: Vec<u64>) -> BoxFuture<Vec<phoenix_api::rest::collectibles::LookSku>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
     fn set_status(&self, _status: Presence, _custom: Option<String>) -> BoxFuture<()> {
         Box::pin(async { Ok(()) })
     }

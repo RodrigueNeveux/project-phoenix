@@ -18,6 +18,7 @@ pub enum Target {
     Textarea,
     FriendRow(Id),
     ProfileOverflow { user: Id, guild: Option<Id> },
+    ShopLook(Id),
     FriendActions(Id),
     EditProfile(Id),
     Viewer,
@@ -297,6 +298,7 @@ pub fn profile_items(app: &PhoenixApp, e: &Ent, user: Id, guild: Option<Id>) -> 
             items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
         }
     }
+    items.extend(crate::ui::shop_look::menu_item(app, e, user));
     if !me {
         items.push(MenuItem::Separator);
         let ign = if crate::actions::user::is_ignored(user) { "menu.unignore" } else { "menu.ignore" };
@@ -380,7 +382,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             textarea_items(app, &e, sel)
         }
         Target::FriendRow(u) => friend_row_items(&e, *u),
-        Target::ProfileOverflow { user, guild } => profile_items(app, &e, *user, *guild),
+        Target::ProfileOverflow { user, guild } => {
+            crate::ui::shop_look::prefetch(app, *user, cx);
+            profile_items(app, &e, *user, *guild)
+        }
+        Target::ShopLook(u) => crate::ui::shop_look::button_items(app, &e, *u),
         Target::FriendActions(u) => crate::ui::profile_toolbar::friend_action_items(app, &e, *u),
         Target::EditProfile(g) => crate::ui::profile_toolbar::edit_profile_items(&e, *g),
         Target::Viewer => {
