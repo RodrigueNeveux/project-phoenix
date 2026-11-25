@@ -313,7 +313,7 @@ pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> Div {
         .overflow_hidden()
         .border_b_1()
         .border_color(c(tok(idx::BORDER_MUTED)))
-        .when_some(i.prof.and_then(|p| p.banner.clone()), |d, b| d.child(img(b).w_full().h(z(h))))
+        .when_some(i.prof.and_then(|p| p.banner.clone()), |d, b| d.child(img(b).w_full().h(z(h)).rounded_t(z(radius))))
 }
 
 pub(crate) fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> Div {
@@ -514,10 +514,10 @@ pub(crate) fn mutuals_row(p: &Profile, uid: Id, e: &gpui::Entity<PhoenixApp>) ->
             .gap_x(z(6.))
             .gap_y(z(2.))
             .when(friends > 0, |d| {
-                d.child(section(TAB_FRIENDS).when(!p.mutual_friends.is_empty(), |s| s.child(stack)).child(text(crate::t!("profile.mutual_friends", n = friends))))
+                d.child(section(TAB_FRIENDS).when(!p.mutual_friends.is_empty(), |s| s.child(stack)).child(text(if friends == 1 { crate::t!("profile.mutual_friends_one", n = friends) } else { crate::t!("profile.mutual_friends", n = friends) })))
             })
             .when(both, |d| d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
-            .when(servers > 0, |d| d.child(section(TAB_SERVERS).child(text(crate::t!("profile.mutual_servers", n = servers))))),
+            .when(servers > 0, |d| d.child(section(TAB_SERVERS).child(text(if servers == 1 { crate::t!("profile.mutual_servers_one", n = servers) } else { crate::t!("profile.mutual_servers", n = servers) })))),
     )
 }
 
@@ -781,9 +781,7 @@ fn popout_card_inner(
         .flex()
         .flex_col()
         .rounded(z(8.))
-        .shadow_lg()
-        .border_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow(popout_shadow())
         .overflow_hidden();
     let card = match theme {
         None => card.bg(c(bg)).child(inner),
@@ -808,6 +806,25 @@ fn popout_card_inner(
             .child(card)
             .children(crate::ui::profile_fx::frame(&f, frame_w, true, cx)),
     }
+}
+
+pub(crate) fn popout_shadow() -> Vec<gpui::BoxShadow> {
+    vec![
+        gpui::BoxShadow {
+            color: gpui::hsla(0., 0., 1., 0.08),
+            offset: gpui::point(z(0.), z(0.)),
+            blur_radius: z(0.),
+            spread_radius: z(1.),
+            inset: false,
+        },
+        gpui::BoxShadow {
+            color: gpui::hsla(0., 0., 0., 0.24),
+            offset: gpui::point(z(0.), z(12.)),
+            blur_radius: z(24.),
+            spread_radius: z(0.),
+            inset: false,
+        },
+    ]
 }
 
 pub const TAB_FRIENDS: u8 = 1;
