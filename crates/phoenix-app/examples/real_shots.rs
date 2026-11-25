@@ -1060,7 +1060,7 @@ fn main() -> anyhow::Result<()> {
                 "server_settings" => {
                     if let Some(g) = app.selected_guild {
                         let (section, sub) = arg.split_once('/').unwrap_or((arg.as_str(), ""));
-                        let index = section.parse().unwrap_or_else(|_| phoenix_app::ui::modals::server_settings::section_index(section));
+                        let index = section.parse().unwrap_or_else(|_| phoenix_app::ui::modals::server_settings::section_index(&if section.starts_with("menu.") { section.to_owned() } else { format!("menu.gs.{section}") }));
                         app.open_server_settings(g, index, cx);
                         phoenix_app::ui::server_pages::open_sub(g, sub);
                     }
