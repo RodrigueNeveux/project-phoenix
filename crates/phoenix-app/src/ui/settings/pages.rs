@@ -443,7 +443,10 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
                 .into_any_element(),
         ),
         B::Switch(id, t, d, bind) => {
-            let desc = (!d.is_empty()).then(|| desc_text(tr(d)).into_any_element());
+            let desc = (!d.is_empty()).then(|| {
+                let d = tr(d);
+                if d.contains('[') { super::account::linked_desc(d) } else { desc_text(d).into_any_element() }
+            });
             out.push(switch_row(app, id, tr(t), desc, *bind, cx));
         }
         B::Sound(id, t) => {
@@ -1091,7 +1094,7 @@ static BILLING: &[B] = &[
 static DATA: &[B] = &[
     B::Title("sp.data.t1"),
     B::Custom("sp.data.core", |_, _| {
-        item(tr("sp.data.core"), Some(desc_text(tr("sp.data.core_d")).into_any_element()), None, false).into_any_element()
+        item(tr("sp.data.core"), Some(super::account::linked_desc(tr("sp.data.core_d"))), None, false).into_any_element()
     }),
     B::Switch("data-improve", "sp.data.improve", "sp.data.improve_d", Bind::Proto),
     B::Switch("data-personalize", "sp.data.personalize", "sp.data.personalize_d", Bind::Proto),
