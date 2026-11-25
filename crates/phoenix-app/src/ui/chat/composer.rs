@@ -257,7 +257,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 pub(super) fn placeholder(app: &PhoenixApp) -> SharedString {
     match app.selected_channel.and_then(|c| app.channels.get(&c)) {
         Some(c) if c.guild.is_none() && crate::ui::dm_profile_panel::is_group_dm(app, c.id) => crate::t!("chat.placeholder_thread", name = c.name),
-        Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = c.name),
+        Some(c) if c.guild.is_none() => crate::t!("chat.placeholder_dm", name = crate::ui::dm_profile_panel::channel_name(app, c)),
         Some(c) if matches!(c.kind, crate::model::ChannelKind::Voice | crate::model::ChannelKind::Stage) => {
             crate::t!("chat.placeholder_voice", name = c.name)
         }

@@ -335,7 +335,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .bg(t(idx::BLACK))
         .when(crate::theme::frame_borders(), |d| d.border_t_1().border_color(t(idx::APP_FRAME_BORDER)))
         .on_mouse_move(cx.listener(|_, _, _, cx| woke(cx)))
-        .child(top_bar(app, ch.name.clone(), cx))
+        .child(top_bar(app, crate::ui::dm_profile_panel::channel_name(app, ch), cx))
         .child(div().h(z(8.)))
         .child(tiles_el)
         .child(bottom_controls(app, collapse(w + 16.), cx))

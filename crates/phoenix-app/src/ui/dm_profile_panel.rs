@@ -19,6 +19,18 @@ pub fn is_group_dm(app: &PhoenixApp, channel: Id) -> bool {
     app.nav.extras.get(&channel).is_some_and(|e| e.recipients > 1 || e.group_icon.is_some())
 }
 
+pub fn friend_nickname(app: &PhoenixApp, ch: &crate::model::Channel) -> Option<gpui::SharedString> {
+    if ch.guild.is_some() || is_group_dm(app, ch.id) {
+        return None;
+    }
+    let peer = ch.voice_users.first()?;
+    app.nav.relationship(*peer).and_then(|r| r.nickname.clone()).filter(|n| !n.is_empty())
+}
+
+pub fn channel_name(app: &PhoenixApp, ch: &crate::model::Channel) -> gpui::SharedString {
+    friend_nickname(app, ch).unwrap_or_else(|| ch.name.clone())
+}
+
 pub fn peer(app: &PhoenixApp) -> Option<Id> {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c))?;
     if ch.guild.is_some() || ch.voice_users.len() != 1 || is_group_dm(app, ch.id) {

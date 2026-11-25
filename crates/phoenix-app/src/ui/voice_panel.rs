@@ -475,7 +475,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         .and_then(|g| app.guilds.iter().find(|x| x.id == g))
         .map(|g| g.name.clone())
         .unwrap_or_default();
-    let name = ch.map(|c| c.name.to_string()).unwrap_or_default();
+    let name = ch.map(|c| crate::ui::dm_profile_panel::channel_name(app, c).to_string()).unwrap_or_default();
     let label: SharedString = if guild.is_empty() { name.into() } else { format!("{name} / {guild}").into() };
     let v = &app.voice;
     const OK: (usize, usize) = (idx::TEXT_FEEDBACK_POSITIVE, idx::BACKGROUND_FEEDBACK_MOD_POSITIVE);

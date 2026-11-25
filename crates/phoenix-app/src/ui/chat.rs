@@ -348,7 +348,7 @@ fn header_search_w(pad_start: f32) -> f32 {
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let is_dm = ch.is_some_and(|c| c.guild.is_none());
-    let name = ch.map(|c| c.name.clone()).unwrap_or_default();
+    let name = ch.map(|c| crate::ui::dm_profile_panel::channel_name(app, c)).unwrap_or_default();
     let topic = ch.and_then(|c| c.topic.clone());
     let is_forum = ch.is_some_and(|c| c.kind == ChannelKind::Forum);
     let topic = topic.filter(|_| !is_forum);

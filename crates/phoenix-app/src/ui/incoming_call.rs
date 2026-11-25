@@ -66,7 +66,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let ch = ringing(app)?;
     let channel = app.channels.get(&ch);
     let user = channel.and_then(|c| c.voice_users.first()).and_then(|u| app.users.get(u));
-    let name: SharedString = channel.map(|c| c.name.clone()).or_else(|| user.map(|u| u.display_name.clone())).unwrap_or_default();
+    let name: SharedString = channel.map(|c| crate::ui::dm_profile_panel::channel_name(app, c)).or_else(|| user.map(|u| u.display_name.clone())).unwrap_or_default();
     let card = div()
         .id("incoming-call")
         .occlude()

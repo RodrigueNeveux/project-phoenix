@@ -871,6 +871,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let name: SharedString = extra
         .and_then(|e| e.group_name.clone())
         .filter(|_| is_dm)
+        .or_else(|| crate::ui::dm_profile_panel::friend_nickname(app, ch))
         .or_else(|| crate::ui::favorites::nickname(app, id))
         .unwrap_or_else(|| ch.name.clone());
     let members: Option<SharedString> =

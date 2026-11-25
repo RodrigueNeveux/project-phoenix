@@ -231,7 +231,7 @@ impl gpui::Render for CallPopoutView {
             window.remove_window();
             return div().size_full().bg(t(idx::BLACK)).into_any_element();
         };
-        let ch_name = app.channels.get(&ch_id).map(|c| c.name.clone()).unwrap_or_else(|| crate::t!("call.title"));
+        let ch_name = app.channels.get(&ch_id).map(|c| crate::ui::dm_profile_panel::channel_name(app, c)).unwrap_or_else(|| crate::t!("call.title"));
         let mut tiles = Vec::new();
         if let Some(ch) = app.channels.get(&ch_id) {
             for &u in &ch.voice_users {
