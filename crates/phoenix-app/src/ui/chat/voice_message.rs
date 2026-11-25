@@ -1874,8 +1874,8 @@ pub fn shot_state(app: &PhoenixApp, spec: &str, cx: &mut App) {
             }
             ("play", Some((key, dur))) => {
                 let rate = 48_000;
-                let silent = Pcm { rate, channels: 1, samples: vec![0.; (dur * rate as f32) as usize + rate as usize] };
-                let handle = effects::play(Arc::new(silent), 0., false);
+                let silent = Pcm { rate, channels: 1, samples: vec![0.; rate as usize] };
+                let handle = effects::play(Arc::new(silent), 0., true);
                 let st = store(cx);
                 st.muted.insert(key.clone());
                 st.playing = Some(Playing { key: key.clone(), handle, from: f * dur, at: Instant::now(), rate: 0.0001, duration: *dur });
