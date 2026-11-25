@@ -595,12 +595,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     items.push((b.to_owned(), b.to_owned()));
                 }
             }
-        } else if slash::autocomplete(o) {
-            if let Some(st) = cx.try_global::<SlashUi>() {
-                for (label, v) in &st.auto_choices {
-                    let val = v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string());
-                    items.push((label.clone(), val));
-                }
+        } else if slash::autocomplete(o)
+            && let Some(st) = cx.try_global::<SlashUi>()
+        {
+            for (label, v) in &st.auto_choices {
+                let val = v.as_str().map(str::to_owned).unwrap_or_else(|| v.to_string());
+                items.push((label.clone(), val));
             }
         }
         if !items.is_empty() {
