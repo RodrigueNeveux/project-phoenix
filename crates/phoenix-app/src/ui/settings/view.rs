@@ -537,7 +537,7 @@ fn reveal_probe() -> impl IntoElement {
             } else {
                 return;
             }
-            off.y = off.y.min(gpui::px(0.)).max(-h.max_offset().height);
+            off.y = off.y.min(gpui::px(0.)).max(-h.max_offset().y);
             h.set_offset(off);
             w.refresh();
         },
