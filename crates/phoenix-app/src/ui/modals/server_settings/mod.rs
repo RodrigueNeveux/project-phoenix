@@ -331,7 +331,21 @@ pub fn reload(a: &mut PhoenixApp, key: &'static str, cx: &mut Context<PhoenixApp
     load(a, cx);
 }
 
+pub fn opens_app_directory(i: usize) -> bool {
+    SECTIONS.get(i) == Some(&"menu.gs.app_directory")
+}
+
+pub fn open_app_directory(cx: &mut Context<PhoenixApp>) {
+    crate::actions::close_modal();
+    crate::ui::discovery::open(crate::ui::discovery::Tab::Apps);
+    cx.notify();
+}
+
 pub fn pick(i: usize, a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if opens_app_directory(i) {
+        open_app_directory(cx);
+        return;
+    }
     with_state(|s| {
         s.section = i.min(SECTIONS.len() - 1);
         s.open_select = None;
@@ -527,6 +541,13 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
 mod tests {
     use super::*;
     use crate::actions::{ADMINISTRATOR, MANAGE_GUILD, MANAGE_ROLES};
+
+    #[test]
+    fn app_directory_entry_leaves_the_settings() {
+        assert!(opens_app_directory(section_index("menu.gs.app_directory")));
+        assert!(!opens_app_directory(section_index("menu.gs.integrations")));
+        assert!(!opens_app_directory(SECTIONS.len()));
+    }
 
     #[test]
     fn uploads_follow_the_client_requests() {

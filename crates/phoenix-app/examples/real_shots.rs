@@ -772,7 +772,11 @@ fn main() -> anyhow::Result<()> {
     let mut ready = false;
     for _ in 0..60 {
         pump(&mut cx, 500);
-        ready = cx.update(|cx| !v.read(cx).channels.is_empty());
+        let early = std::env::var_os("PHX_EARLY").is_some();
+        ready = cx.update(|cx| {
+            let a = v.read(cx);
+            !a.channels.is_empty() && (early || !a.logging_in)
+        });
         if ready {
             break;
         }
@@ -1294,8 +1298,12 @@ fn main() -> anyhow::Result<()> {
                     if let Some(g) = app.selected_guild {
                         let (section, sub) = arg.split_once('/').unwrap_or((arg.as_str(), ""));
                         let index = section.parse().unwrap_or_else(|_| phoenix_app::ui::modals::server_settings::section_index(&if section.starts_with("menu.") { section.to_owned() } else { format!("menu.gs.{section}") }));
-                        app.open_server_settings(g, index, cx);
-                        phoenix_app::ui::server_pages::open_sub(g, sub);
+                        if phoenix_app::ui::modals::server_settings::opens_app_directory(index) {
+                            phoenix_app::ui::modals::server_settings::open_app_directory(cx);
+                        } else {
+                            app.open_server_settings(g, index, cx);
+                            phoenix_app::ui::server_pages::open_sub(g, sub);
+                        }
                     }
                 }
                 "emoji" | "gif" | "sticker" => {

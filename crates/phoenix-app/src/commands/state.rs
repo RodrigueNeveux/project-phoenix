@@ -245,6 +245,7 @@ pub struct ForumView {
     pub guidelines_open: bool,
     pub guidelines_seen: bool,
     pub guidelines_modal: bool,
+    pub generation: u64,
 }
 
 pub struct ModalView {

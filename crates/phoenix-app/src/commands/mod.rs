@@ -244,7 +244,9 @@ impl std::fmt::Debug for Resync {
 
 pub fn on_resync(app: &mut App, r: Resync, cx: &mut Context<App>) {
     let (guild, channel) = (app.selected_guild, app.selected_channel);
+    let (home, discovery) = (app.nav.home, crate::ui::discovery::current());
     app.apply_ready(r.0, cx);
+    app.forums_after_resync();
     if guild.is_none() || app.guilds.iter().any(|g| Some(g.id) == guild) {
         app.select_guild(guild, cx);
     }
@@ -252,6 +254,12 @@ pub fn on_resync(app: &mut App, r: Resync, cx: &mut Context<App>) {
         && app.channels.contains_key(&c)
     {
         app.select_channel(c, cx);
+    }
+    if guild.is_none() && channel.is_none() {
+        app.nav.home = home;
+    }
+    if let Some(tab) = discovery {
+        crate::ui::discovery::open(tab);
     }
 }
 
@@ -283,6 +291,54 @@ mod tests {
                 assert!(!app.guilds.is_empty());
                 assert_eq!(app.selected_guild, Some(g));
                 assert_eq!(app.selected_channel, Some(ch));
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn resync_keeps_the_open_home_page(cx: &mut gpui::TestAppContext) {
+        use crate::ui::{discovery, home::data::HomeView};
+        let backend = std::sync::Arc::new(MockBackend::synchronous());
+        let ready = || futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
+        let first = ready();
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|w, cx| App::new(backend.clone(), w, cx));
+        window
+            .update(cx, |app, _, cx| {
+                app.apply_ready(first, cx);
+                app.select_guild(None, cx);
+                app.selected_channel = None;
+                app.nav.home = HomeView::Quests;
+                on_resync(app, Resync(ready()), cx);
+                assert_eq!(app.nav.home, HomeView::Quests);
+                assert_eq!(app.selected_guild, None);
+                discovery::open(discovery::Tab::Apps);
+                on_resync(app, Resync(ready()), cx);
+                assert_eq!(discovery::current(), Some(discovery::Tab::Apps));
+                discovery::close();
+            })
+            .unwrap();
+    }
+
+    #[gpui::test]
+    fn forum_loads_again_after_resync(cx: &mut gpui::TestAppContext) {
+        let backend = std::sync::Arc::new(MockBackend::synchronous());
+        let ready = || futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
+        let first = ready();
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|w, cx| App::new(backend.clone(), w, cx));
+        window
+            .update(cx, |app, _, cx| {
+                app.apply_ready(first, cx);
+                let forum = Id(4_242_424);
+                let v = app.parity.forums.entry(forum).or_default();
+                v.loading = true;
+                v.archived_loading = true;
+                v.error = Some("Not logged in.".into());
+                on_resync(app, Resync(ready()), cx);
+                let v = &app.parity.forums[&forum];
+                assert!(!v.loading && !v.loaded && !v.archived_loading && v.error.is_none());
+                assert_eq!(v.generation, 1);
             })
             .unwrap();
     }

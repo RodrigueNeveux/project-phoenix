@@ -175,6 +175,7 @@ impl PhoenixApp {
             v.archived_more = false;
             v.archived_loaded = false;
         }
+        let generation = v.generation;
         let req = ParityRequest::ForumPosts {
             forum,
             tags: v.tags.clone(),
@@ -184,7 +185,14 @@ impl PhoenixApp {
             match_all: v.match_all,
         };
         self.parity_request(req, cx, move |a, res, cx| {
+            let waiting_for_session = a.logging_in;
             let v = a.parity.forums.entry(forum).or_default();
+            if v.generation != generation {
+                return;
+            }
+            if res.is_err() && waiting_for_session {
+                return;
+            }
             v.loading = false;
             v.loaded = true;
             match res {
@@ -229,6 +237,7 @@ impl PhoenixApp {
             return;
         }
         v.archived_loading = true;
+        let generation = v.generation;
         let req = ParityRequest::ForumPosts {
             forum,
             tags: v.tags.clone(),
@@ -239,6 +248,9 @@ impl PhoenixApp {
         };
         self.parity_request(req, cx, move |a, res, cx| {
             let v = a.parity.forums.entry(forum).or_default();
+            if v.generation != generation {
+                return;
+            }
             v.archived_loading = false;
             v.archived_loaded = true;
             if let Ok(ParityReply::ForumPosts { posts, has_more }) = res {
@@ -247,6 +259,19 @@ impl PhoenixApp {
             }
             cx.notify();
         });
+    }
+
+    pub(crate) fn forums_after_resync(&mut self) {
+        for v in self.parity.forums.values_mut() {
+            v.generation += 1;
+            v.loading = false;
+            v.loaded = false;
+            v.archived_loading = false;
+            v.archived_loaded = false;
+            v.archived_more = false;
+            v.error = None;
+            v.failures = 0;
+        }
     }
 
     fn toggle_forum_tag(&mut self, forum: Id, tag: Id, cx: &mut Context<Self>) {
