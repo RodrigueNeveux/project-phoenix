@@ -1326,8 +1326,9 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                         .child(crate::ui::emoji_text::label(app.me.display_name.clone(), 14.)),
                                 ),
                         )
-                        .child(
-                            div()
+                        .child(div().relative().w_full().h(z(13.)).overflow_hidden().child(div().w_full().group_hover("user-panel-avatar", |s| s.opacity(0.)).child(match crate::ui::members::self_sub_text(app) {
+                            Some(row) => row.into_any_element(),
+                            None => div()
                                 .text_size(z(12.))
                                 .line_height(z(13.))
                                 .font_weight(FontWeight::MEDIUM)
@@ -1346,8 +1347,24 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                         }
                                     },
                                     14. * crate::theme::zoom() / 1.375,
-                                )),
-                        ),
+                                ))
+                                .into_any_element(),
+                        }))
+                        .child(
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .size_full()
+                                .opacity(0.)
+                                .group_hover("user-panel-avatar", |s| s.opacity(1.))
+                                .text_size(z(12.))
+                                .line_height(z(13.))
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
+                                .text_ellipsis()
+                                .child(app.me.name.clone()),
+                        )),
                 ),
         )
         .child(

@@ -875,6 +875,24 @@ pub(crate) fn dm_sub_text(app: &PhoenixApp, uid: Id) -> Option<gpui::Div> {
     Some(sub_text(in_voice, if go_live { "golive/screen" } else { "speaker" }, bot, sub, fallback))
 }
 
+pub(crate) fn self_sub_text(app: &PhoenixApp) -> Option<gpui::Div> {
+    let uid = app.me.id;
+    let acts = app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or(&[]);
+    let in_voice = app.voice_channel.is_some();
+    let go_live = in_voice && crate::ui::voice_panel::flags(uid).stream;
+    let sub = SubText::of(acts, go_live);
+    if !in_voice && sub.as_ref().is_none_or(|s| s.main.is_none()) {
+        return None;
+    }
+    Some(
+        sub_text(in_voice, if go_live { "golive/screen" } else { "speaker" }, false, sub, None)
+            .mt(z(0.))
+            .h(z(13.))
+            .line_height(z(13.))
+            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))),
+    )
+}
+
 struct SubText {
     custom: Option<(Option<SharedString>, Option<SharedString>)>,
     main: Option<(SharedString, Option<&'static str>)>,
