@@ -673,14 +673,14 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                     d.child(
                         div()
                             .h(z(16.))
-                            .px(z(6.))
+                            .px(z(8.))
                             .rounded_full()
                             .bg(t(idx::BACKGROUND_FEEDBACK_NOTIFICATION))
                             .flex()
                             .items_center()
                             .text_size(z(12.))
                             .line_height(z(16.))
-                            .font_weight(FontWeight::BOLD)
+                            .font_weight(FontWeight::SEMIBOLD)
                             .text_color(gpui::white())
                             .child(crate::t!("voice.live")),
                     )
