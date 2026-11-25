@@ -68,6 +68,7 @@ fn reads_messages_in_the_viewed_channel_only(cx: &mut TestAppContext) {
     crate::tts::record();
     let (here, there) = (h.channels[0], h.channels[1]);
     h.act(|a, _, cx| {
+        a.deafened = false;
         a.prefs.local.ui.insert("read-all".into(), 1);
         let author = a.users.keys().copied().find(|u| *u != a.me.id).unwrap();
         a.append_message(Message { id: Id(9_100_001), channel: here, author, content: "bonjour".into(), ..Default::default() }, cx);
