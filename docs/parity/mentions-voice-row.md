@@ -25,7 +25,7 @@ ref-cache/mention-pill-default.json, voice-user-row-default.json, voice-user-row
 | voice row options button | `optionsButton_YUoOxm` | size / radius / hover | 24px / 4px / --interactive-background-active, hidden unless row hovered | voice_row.rs options_button | ✅ CSS; icon (more-horizontal) not verified live |
 | voice row click | live | popout position | left = row right + 8, top = row top | voice_row.rs popout_anchor | ✅ measured (415,291 vs row 118..407,290) |
 | voice row right-click | live | menu | voice menu in call, user menu otherwise | voice_panel.rs | ✅ |
-| popout "In a voice channel" card | `clickableContainer_Bu4Al8` | card metrics | activity-card padding 8 / --radius-sm / header body-xs/medium / heading-xs/semibold | voice_row.rs voice_activity_card | ❌ boxes not measured: on 2026-11-24 no member was in voice in the guild shown by the client, and the Active Now card opens the full profile modal, not this popout |
+| popout "In a voice channel" card | `clickableContainer_Bu4Al8` | card metrics | activity-card padding 8 / --radius-sm / header body-xs/medium / heading-xs/semibold | voice_row.rs voice_activity_card | ❌ boxes not measured: on 2026-11-24 no member was in voice in the guild shown by the client, and the Active Now card opens the full profile modal, not this popout. 25/11 ~17h: the only members in voice were in the user's own live call, so the client was not driven further |
 
 Compare score: not available, the 2026-11-24 01:15 run was discarded (an overlay was open in Discord).
 
