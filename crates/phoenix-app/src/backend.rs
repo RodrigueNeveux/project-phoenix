@@ -271,6 +271,9 @@ pub trait Backend: Send + Sync + 'static {
     fn member_can_view(&self, _channel: Id, _user: Id) -> bool {
         true
     }
+    fn premium_group_member(&self) -> bool {
+        false
+    }
     fn premium_tier2(&self) -> bool {
         false
     }

@@ -275,6 +275,9 @@ impl Backend for ReadOnly {
     fn has_premium(&self) -> bool {
         self.0.has_premium()
     }
+    fn premium_group_member(&self) -> bool {
+        self.0.premium_group_member()
+    }
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
