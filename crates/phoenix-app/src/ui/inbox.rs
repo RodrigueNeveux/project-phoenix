@@ -797,6 +797,10 @@ fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixA
                         u,
                         false,
                     )
+                    .id(("inbox-author", m.id.0))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .on_click(crate::ui::chat::message_ext::open_user(&cx.entity(), m.author, m.channel))
                     .child(crate::fonts::name_text_with(name, u, 16., role_gradient))
                     .children(role_dot.map(|col| div().flex_none().ml(z(4.)).size(z(8.)).rounded_full().bg(c(col)))),
                 )

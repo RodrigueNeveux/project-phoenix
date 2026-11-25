@@ -191,9 +191,10 @@ Discord cache), 12/14/16/20px, line-height 11/8, scale 1, 1.1, 1.2, 1.25, 1.3, 1
 CJK text in a gg sans span puts the line exactly where Latin text does (probe
 `霜氷冷 | 冰雪 ❄` = `catapulteur2daronnes`: row 17 at scale 1, 21-22 at 1.25).
 
-**Patch.** `LineLayout` gets `decoration_ascent`/`decoration_descent`, the metrics of the
-font requested by the first run (set by `LineLayoutCache::layout_line`, zero when unknown),
-and `decoration_metrics()` falls back to the line maximum. `underline_geometry()` is the
+**Patch.** `ShapedLine` and `WrappedLine` keep `primary_font`, the font the first run asked
+for (set by `shape_line` / `shape_text`), and `paint_line` reads its ascent and descent;
+`LineLayout::paint` (bare layouts) falls back to the line maximum. `LineLayout` itself is
+untouched: gpui-base builds it with struct literals. `underline_geometry()` is the
 formula above; `paint_line` uses it for the position of every non-wavy underline and its
 thickness, per wrapped row. Wavy underlines keep their style. Search
 `PHOENIX PATCH (underline geometry)`. Unit test `underline_geometry_matches_chromium`; the
@@ -203,7 +204,7 @@ Phoenix's `NameText` (gradient and letter-spaced names, painted one grapheme at 
 draws its single underline with the same function and the metrics of a space in the
 primary font.
 
-Rev: `533b56fe` on `gpui-underline` (patches 4 to 8). Previous: `265d2211` on `gpui-marks`.
+Rev: `0ce4a85b` on `gpui-underline` (patches 4 to 8). Previous: `265d2211` on `gpui-marks`.
 
 ## Running the vendored tests
 

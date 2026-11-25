@@ -419,6 +419,7 @@ pub fn open_user(
 ) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static {
     let e = entity.clone();
     move |ev, w, cx| {
+        cx.stop_propagation();
         let pos = ev.position();
         e.update(cx, |a, cx| {
             let guild = a.channels.get(&ch).and_then(|c| c.guild);

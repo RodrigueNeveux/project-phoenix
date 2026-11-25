@@ -394,7 +394,7 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, hl: &Highlighter, cx: &
         .or_else(|| author.map(|u| u.display_name.clone()))
         .unwrap_or_else(|| crate::t!("common.unknown"));
     let role_gradient = app.author_role_gradient_in(guild, m.author);
-    let reply = m.reply_to.is_some().then(|| reply_line(app, m));
+    let reply = m.reply_to.is_some().then(|| reply_line(app, m, &cx.entity()));
     let text: Option<AnyElement> = rich.then(|| crate::ui::components::markdown_highlighted(app, &content, &cx.entity(), m.id, hl));
     div()
         .id(("search-hit", ix))
@@ -431,6 +431,10 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, hl: &Highlighter, cx: &
                         author,
                         false,
                     )
+                    .id(("search-author", ix))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .on_click(crate::ui::chat::message_ext::open_user(&cx.entity(), m.author, m.channel))
                     .child(crate::fonts::name_text_with(shown, author, 16., role_gradient)),
                 )
                 .when_some(author.and_then(|u| u.tag.clone()), |d, tg| d.child(crate::ui::chat::server_tag_chip(&tg, false)))
@@ -481,7 +485,7 @@ fn highlight_plain(text: SharedString, hl: &Highlighter) -> gpui::StyledText {
     gpui::StyledText::new(text).with_highlights(ranges.into_iter().map(|r| (r, style)))
 }
 
-fn reply_line(app: &PhoenixApp, m: &Message) -> gpui::Div {
+fn reply_line(app: &PhoenixApp, m: &Message, entity: &gpui::Entity<PhoenixApp>) -> gpui::Div {
     let spine = div()
         .absolute()
         .left(z(-41.))
@@ -507,6 +511,10 @@ fn reply_line(app: &PhoenixApp, m: &Message) -> gpui::Div {
                         ru,
                         false,
                     )
+                    .id(("search-reply-author", m.id.0))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .on_click(crate::ui::chat::message_ext::open_user(entity, *a, m.channel))
                     .child(match app.author_role_gradient_in(guild, *a) {
                         Some(stops) => crate::fonts::name_text_with(name, ru, 14., Some(stops)),
                         None => crate::fonts::name_text(name, ru, 14.),

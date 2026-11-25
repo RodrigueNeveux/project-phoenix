@@ -87,9 +87,11 @@ impl Element for NameText {
         let chars = merge_ligatures(per);
         let ellipsis = self.shape("\u{2026}", window, color).width;
         let underline = window.text_style().underline.map(|u| {
-            let primary = self.shape(" ", window, color);
-            let (ascent, descent) = primary.decoration_metrics();
-            (primary.font_size, ascent, descent, u)
+            let style = window.text_style();
+            let size = style.font_size.to_pixels(window.rem_size());
+            let ts = window.text_system();
+            let font = ts.resolve_font(&style.font());
+            (size, ts.ascent(font, size), ts.descent(font, size), u)
         });
         let natural = chars.iter().fold(px(0.), |w, (_, a)| w + *a + self.spacing);
         let mut style = Style::default();
