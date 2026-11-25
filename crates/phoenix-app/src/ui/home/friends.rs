@@ -684,6 +684,7 @@ fn active_now_column(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::St
         };
         let mut card = div()
             .id(("active", user.0))
+            .flex_none()
             .mt(z(12.))
             .rounded(z(16.))
             .border_1()
