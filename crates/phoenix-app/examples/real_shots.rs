@@ -920,6 +920,15 @@ fn main() -> anyhow::Result<()> {
             eprintln!("location: second try {}", if ok { "ok" } else { "failed" });
         }
     }
+    if std::env::var("PHX_VIEW").as_deref() == Ok("inbox") {
+        cx.update(|cx| {
+            v.update(cx, |a, cx| {
+                a.parity.inbox.open = false;
+                a.toggle_inbox(cx);
+            })
+        });
+        pump(&mut cx, 3000);
+    }
     if std::env::var_os("PHX_DEBUG_UNREADS").is_some() {
         cx.update(|cx| {
             let a = v.read(cx);
