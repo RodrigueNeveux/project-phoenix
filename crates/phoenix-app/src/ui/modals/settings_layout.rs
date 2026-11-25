@@ -155,16 +155,21 @@ pub fn page_title(t: SharedString) -> gpui::Div {
 
 #[allow(clippy::too_many_arguments)]
 pub fn overlay(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    overlay_ex(id, side_items, selected, pick, title, content, notice, false, cx)
+    overlay_ex(id, side_items, selected, pick, title, content, notice, false, None, cx)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn overlay_with(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, extra: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    overlay_ex(id, side_items, selected, pick, title, content, notice, false, extra, cx)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn overlay_wide(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, content: AnyElement, notice: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    overlay_ex(id, side_items, selected, pick, SharedString::default(), content, notice, true, cx)
+    overlay_ex(id, side_items, selected, pick, SharedString::default(), content, notice, true, None, cx)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, wide: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, wide: bool, extra: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let mut side = div().flex_1().min_w_0().overflow_hidden().flex().flex_col();
     for (n, it) in side_items.into_iter().enumerate() {
         side = side.child(match it {
@@ -250,7 +255,8 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
             .flex()
             .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
             .child(sidebar_region)
-            .child(content_region),
+            .child(content_region)
+            .children(extra),
     )
     .with_priority(20)
     .into_any_element()

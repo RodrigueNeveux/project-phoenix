@@ -515,7 +515,20 @@ fn sub_frame(id: &'static str, width: f32, title: SharedString, body: AnyElement
                 .on_click(move |_, w, cx| close(w, cx))
                 .child(icon("close", 20., c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         );
-    crate::ui::modal::frame(id, c2, card)
+    div()
+        .id(SharedString::from(format!("{id}-scrim")))
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
+        .bg(c(tok(idx::BACKGROUND_SCRIM)))
+        .occlude()
+        .flex()
+        .items_center()
+        .justify_center()
+        .on_mouse_down(gpui::MouseButton::Left, move |_, w, cx| c2(w, cx))
+        .child(div().id(SharedString::from(format!("{id}-card"))).occlude().on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(card))
+        .into_any_element()
 }
 
 pub type Toggle = Rc<dyn Fn(Id, u8, &mut App)>;

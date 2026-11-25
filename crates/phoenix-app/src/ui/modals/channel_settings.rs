@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use super::{
     Modal, input_box,
-    settings_layout::{Act, Pick, SideItem, overlay, unsaved_bar},
+    settings_layout::{Act, Pick, SideItem, overlay, overlay_with, unsaved_bar},
 };
 use crate::{
     actions::{admin::sf, with_modal},
@@ -710,14 +710,12 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         unsaved_bar(reset, save, cx)
     });
     let notice = notice.or(hook_notice);
-    let mut page = overlay("channel-settings", items, selected, pick, title, content, notice, cx);
-    if let Some(am) = &s.add_members {
-        page = div().absolute().top_0().left_0().size_full().child(page).child(super::channel_perms::add_members_modal(app, s, am, cx)).into_any_element();
-    }
-    if s.confirm_delete {
-        page = div().absolute().top_0().left_0().size_full().child(page).child(super::channel_perms::delete_modal(s, cx)).into_any_element();
-    }
-    page
+    let extra = match (&s.add_members, s.confirm_delete) {
+        (Some(am), _) => Some(super::channel_perms::add_members_modal(app, s, am, cx)),
+        (None, true) => Some(super::channel_perms::delete_modal(s, cx)),
+        _ => None,
+    };
+    overlay_with("channel-settings", items, selected, pick, title, content, notice, extra, cx)
 }
 
 pub fn save(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
