@@ -4,6 +4,7 @@ pub mod channel_perms;
 pub mod channel_perms_data;
 pub mod channel_settings;
 pub mod create_channel;
+pub mod custom_status;
 pub mod forward;
 pub mod gdm;
 pub mod gdm_cleanup;
@@ -108,6 +109,7 @@ pub enum Modal {
     SwitchAccounts,
     Ignore(crate::model::Id),
     GdmCleanup(gdm_cleanup::Cleanup),
+    CustomStatus(custom_status::CustomStatus),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -190,6 +192,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         Some(Modal::Report(r)) => r.viewport = Some(vp),
         Some(m @ (Modal::EditGroup(_) | Modal::FolderSettings(_))) => gdm::prepare(m, &mut mk),
         Some(Modal::GoLive(g)) => g.viewport = Some(vp),
+        Some(Modal::CustomStatus(s)) => custom_status::prepare(s, &mut mk),
         _ => {}
     });
 }
@@ -219,6 +222,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::SwitchAccounts => accounts::render(app, cx),
             Modal::Ignore(u) => ignore::render(app, *u, cx),
             Modal::GdmCleanup(s) => gdm_cleanup::render(app, s, cx),
+            Modal::CustomStatus(s) => custom_status::render(app, s, cx),
         })
     })
 }

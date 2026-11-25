@@ -3,7 +3,7 @@ use gpui::{
     AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, anchored, deferred, div,
     point, prelude::*, px, svg,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{InputEvent, InputState};
 
 use crate::{
     app::PhoenixApp,
@@ -286,7 +286,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .h(z(151.))
         .child(banner(&i, 105., 6.))
         .child(div().absolute().left(z(8.)).top(z(53.)).child(avatar_block(&i, 80., 6., ring.unwrap_or(surface))));
-    let bubble = app.people.custom_input.as_ref().map(|input| {
+    let bubble = app.people.custom_input.as_ref().map(|_| {
         let has = app.people.custom_status.is_some();
         div()
             .absolute()
@@ -306,7 +306,27 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             .text_size(z(14.))
             .line_height(z(18.))
             .text_color(c(tok(idx::TEXT_STRONG)))
-            .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false)))
+            .child(
+                div()
+                    .id("custom-open")
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .gap(z(4.))
+                    .cursor_pointer()
+                    .on_click(cx.listener(|a, _, _, cx| a.open_custom_status(cx)))
+                    .when(!has, |d| d.child(svg().path(crate::icons::path("plus-circle")).size(z(12.)).flex_none().text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
+                    .child(
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .when(!has, |d| d.text_color(c(tok(idx::TEXT_MUTED))))
+                            .child(app.people.custom_status.clone().unwrap_or_else(|| crate::t!("cstatus.add"))),
+                    ),
+            )
             .when(has, |d| {
                 d.child(
                     div()

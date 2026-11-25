@@ -1220,6 +1220,7 @@ fn main() -> anyhow::Result<()> {
                 }
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
+                "customstatus" => app.open_custom_status(cx),
                 "ignore" => {
                     let target = arg.parse::<u64>().ok().map(phoenix_app::model::Id).or_else(|| {
                         let ch = app.selected_channel?;
