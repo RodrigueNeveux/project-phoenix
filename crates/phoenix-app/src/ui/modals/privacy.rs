@@ -219,6 +219,7 @@ pub fn render_security_with(s: &Security, close: crate::ui::modal::Action, frame
         })));
     let dirty = s.dirty();
     let c2 = close.clone();
+    let c_save = close.clone();
     let footer = div()
         .w_full()
         .flex()
@@ -230,7 +231,7 @@ pub fn render_security_with(s: &Security, close: crate::ui::modal::Action, frame
             }
             let mut call = None;
             with_sec(|s| call = Some(s.call(now_unix())));
-            close(w, cx);
+            c_save(w, cx);
             if let Some(call) = call {
                 a.admin_toast(call, Some(crate::t!("admin.security_saved")), cx);
             }

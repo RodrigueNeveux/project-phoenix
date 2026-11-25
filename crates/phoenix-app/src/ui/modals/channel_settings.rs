@@ -273,7 +273,7 @@ pub fn emoji_value(id: Option<&str>, name: Option<&str>) -> Option<Value> {
 }
 
 pub fn tag_json(prev: Option<&Value>, name: &str, emoji: Option<&Value>, moderated: bool) -> Value {
-    let name: String = name.trim().chars().take(TAG_MAX).collect();
+    let name: String = name.trim().chars().take(TAG_MAX).collect::<String>().trim_end().to_owned();
     let mut t = json!({
         "name": name,
         "emoji_id": emoji.and_then(|e| e.get("emoji_id")).cloned().unwrap_or(Value::Null),
@@ -964,7 +964,7 @@ mod tests {
         tags.push(tag_json(None, "New", None, false));
         let r = emoji_value(Some("1424806138028888325"), Some("ignored"));
         forum_extras(&mut b, &tags0, &tags, &None, &r);
-        assert_eq!(b["available_tags"][0], json!({"id": "5", "name": "Bug fixé et validé, t", "emoji_id": null, "emoji_name": "✅", "moderated": true}));
+        assert_eq!(b["available_tags"][0], json!({"id": "5", "name": "Bug fixé et validé,", "emoji_id": null, "emoji_name": "✅", "moderated": true}));
         assert_eq!(b["available_tags"][1].get("id"), None);
         assert_eq!(b["default_reaction_emoji"], json!({"emoji_id": "1424806138028888325", "emoji_name": null}));
         let mut c = json!({});
