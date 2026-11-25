@@ -2694,7 +2694,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.10.0"
-source = "git+https://github.com/RoxasYTB/project-phoenix?rev=56ab21b54d1afc3508cd463005c43b2723a11cdd#56ab21b54d1afc3508cd463005c43b2723a11cdd"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=fc9bf4e71b9fc81e4f194f71d59d39b4e03b2996#fc9bf4e71b9fc81e4f194f71d59d39b4e03b2996"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2809,7 +2809,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre"
 version = "0.3.12"
-source = "git+https://github.com/RoxasYTB/project-phoenix?rev=56ab21b54d1afc3508cd463005c43b2723a11cdd#56ab21b54d1afc3508cd463005c43b2723a11cdd"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=fc9bf4e71b9fc81e4f194f71d59d39b4e03b2996#fc9bf4e71b9fc81e4f194f71d59d39b4e03b2996"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3250,7 +3250,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-wgpu"
 version = "0.3.12"
-source = "git+https://github.com/RoxasYTB/project-phoenix?rev=56ab21b54d1afc3508cd463005c43b2723a11cdd#56ab21b54d1afc3508cd463005c43b2723a11cdd"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=fc9bf4e71b9fc81e4f194f71d59d39b4e03b2996#fc9bf4e71b9fc81e4f194f71d59d39b4e03b2996"
 dependencies = [
  "anyhow",
  "bytemuck",

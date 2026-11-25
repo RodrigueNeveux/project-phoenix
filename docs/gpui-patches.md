@@ -353,7 +353,7 @@ nothing fits. An emoji sequence is one grapheme. Unit tests
 `shaped_end_cut_keeps_the_last_glyph_that_fits_like_chromium`,
 `shaped_end_truncation_counts_an_emoji_as_one_glyph`; app tests in `ui::emoji_text`.
 
-Rev: `56ab21b5` on `gpui-ellipsis2` (patches 4 to 14). Before: `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+Rev: `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14). Before: `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## Running the vendored tests
 
