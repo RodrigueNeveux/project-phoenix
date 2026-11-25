@@ -245,6 +245,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/forum/book-check.svg" => s!(r#"<path d="M5 4a2 2 0 0 1 2-2h12v16H7a2 2 0 0 0-2 2zM5 20a2 2 0 0 0 2 2h12v-4M9 9l2 2 4-4"/>"#),
         "icons/close-small.svg" => s!(r#"<path d="m7 7 10 10M17 7 7 17"/>"#),
         "icons/plus-medium.svg" => s!(r#"<path d="M12 5v14M5 12h14"/>"#),
+        "icons/moderation.svg" => s!(r#"<path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/><path d="m9 9 6 6m0-6-6 6"/>"#),
         "icons/maximize.svg" => s!(r#"<path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6"/>"#),
         "icons/pen.svg" => f!(r#"<path d="M16.3 3.3a2.4 2.4 0 0 1 3.4 0l1 1a2.4 2.4 0 0 1 0 3.4L9.5 18.9 3 21l2.1-6.5zM15 6.4 17.6 9"/>"#),
         "icons/id.svg" => f!(r#"<path fill-rule="evenodd" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm2 4v8h2V8zm4 0v8h3a4 4 0 0 0 0-8zm2 2h1a2 2 0 0 1 0 4h-1z"/>"#),
