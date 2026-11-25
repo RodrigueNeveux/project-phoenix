@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use gpui::{App, Context};
 
-use super::{ActionReply, ActionRequest, EventPlace, now_unix, open_modal, pins};
+use super::{ActionRequest, open_modal, pins};
 use crate::{
     app::PhoenixApp,
     model::{ChannelKind, Id},
@@ -11,17 +11,6 @@ use crate::{
         modals::{Field, Form, Modal, server_settings},
     },
 };
-
-pub const EVENT_STARTS: [(&str, Option<u64>); 4] =
-    [("event.in_1h", Some(3600)), ("event.in_3h", Some(10_800)), ("msg.remind.tomorrow", None), ("event.in_1w", Some(604_800))];
-
-pub fn event_place(location: &str, first_voice: Option<(Id, bool)>) -> Option<EventPlace> {
-    let l = location.trim();
-    if !l.is_empty() {
-        return Some(EventPlace::External(l.to_owned()));
-    }
-    first_voice.map(|(c, stage)| if stage { EventPlace::Stage(c) } else { EventPlace::Voice(c) })
-}
 
 pub fn move_entries(app: &PhoenixApp, guild: Id, channel: Id, dest: Dest) -> Vec<(Id, i32, Option<Option<Id>>)> {
     let Some(ch) = app.channels.get(&channel) else { return Vec::new() };
@@ -169,53 +158,6 @@ impl PhoenixApp {
         self.action_toast(ActionRequest::MoveChannels { guild, entries }, None, cx);
     }
 
-    pub fn open_create_event(&mut self, guild: Id, cx: &mut Context<Self>) {
-        let voice = self
-            .guild_channels
-            .get(&guild)
-            .into_iter()
-            .flatten()
-            .filter_map(|id| self.channels.get(id))
-            .find(|c| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage))
-            .map(|c| (c.id, c.kind == ChannelKind::Stage));
-        open_modal(
-            Modal::Form(Form {
-                title: crate::t!("menu.create_event"),
-                subtitle: Some(crate::t!("event.subtitle")),
-                fields: vec![
-                    Field::new(crate::t!("event.topic"), crate::t!("event.topic_ph"), ""),
-                    Field::new(crate::t!("event.location"), crate::t!("event.location_ph"), ""),
-                    Field::new(crate::t!("event.description"), gpui::SharedString::default(), ""),
-                ],
-                choices: EVENT_STARTS.iter().map(|(k, _)| crate::t!(k)).collect(),
-                choice: Some(0),
-                check: None,
-                submit: crate::t!("event.create"),
-                danger: false,
-                preview: None,
-                width: 440.,
-                on_submit: Rc::new(move |a, v, choice, cx| {
-                    let (name, loc, desc) = (v[0].clone(), v[1].clone(), v[2].clone());
-                    let Some(place) = event_place(&loc, voice).filter(|_| !name.trim().is_empty()) else {
-                        a.parity_toast(crate::t!("event.missing"), cx);
-                        return;
-                    };
-                    let start = match EVENT_STARTS[choice.unwrap_or(0).min(EVENT_STARTS.len() - 1)].1 {
-                        Some(s) => now_unix() + s,
-                        None => super::message::tomorrow_9am(chrono::Local::now()),
-                    };
-                    let req = ActionRequest::CreateEvent { guild, name, description: desc, start_unix: start, end_unix: None, place };
-                    a.action(req, cx, |a, r, cx| match r {
-                        Ok(ActionReply::Done) | Ok(_) => a.parity_toast(crate::t!("event.created"), cx),
-                        Err(e) => a.parity_toast(e.0, cx),
-                    });
-                }),
-            }),
-            None,
-        );
-        cx.notify();
-    }
-
     pub fn open_server_settings(&mut self, guild: Id, section: usize, cx: &mut Context<Self>) {
         open_modal(Modal::ServerSettings(Box::new(server_settings::State::new(guild, section))), None);
         server_settings::load(self, cx);
@@ -351,11 +293,4 @@ mod tests {
         assert_eq!(category_move(&chans, Id(3), true), vec![(Id(21), 0), (Id(20), 1)]);
     }
 
-    #[test]
-    fn places() {
-        assert_eq!(event_place(" Paris ", None), Some(EventPlace::External("Paris".into())));
-        assert_eq!(event_place("", Some((Id(3), false))), Some(EventPlace::Voice(Id(3))));
-        assert_eq!(event_place("", Some((Id(3), true))), Some(EventPlace::Stage(Id(3))));
-        assert_eq!(event_place("", None), None);
-    }
 }

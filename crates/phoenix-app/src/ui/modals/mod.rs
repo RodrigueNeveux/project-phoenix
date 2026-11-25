@@ -6,6 +6,7 @@ pub mod channel_perms;
 pub mod channel_perms_data;
 pub mod channel_settings;
 pub mod create_channel;
+pub mod create_event;
 pub mod countries;
 pub mod custom_status;
 pub mod follow;
@@ -116,6 +117,7 @@ pub enum Modal {
     FolderSettings(gdm::Folder),
     Schedule(crate::ui::chat::scheduled::Picker),
     Nickname(nickname::Nickname),
+    CreateEvent(Box<create_event::State>),
     SwitchAccounts,
     Ignore(crate::model::Id),
     GdmCleanup(gdm_cleanup::Cleanup),
@@ -139,6 +141,8 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
             poll_create::prepare_question(s, window, cx);
         } else if let Some(Modal::Nickname(s)) = m {
             nickname::prepare(s, window, cx);
+        } else if let Some(Modal::CreateEvent(s)) = m {
+            create_event::prepare(s, window, cx);
         }
     });
     with_modal(|m| {
@@ -252,6 +256,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::FolderSettings(f) => gdm::render_folder(f, cx),
             Modal::Schedule(p) => crate::ui::chat::scheduled::render(p, cx),
             Modal::Nickname(s) => nickname::render(s, cx),
+            Modal::CreateEvent(s) => create_event::render(app, s, cx),
             Modal::SwitchAccounts => accounts::render(app, cx),
             Modal::Ignore(u) => ignore::render(app, *u, cx),
             Modal::GdmCleanup(s) => gdm_cleanup::render(app, s, cx),

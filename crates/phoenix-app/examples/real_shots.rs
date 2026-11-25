@@ -1357,7 +1357,24 @@ fn main() -> anyhow::Result<()> {
                             "privacy" => app.open_privacy_settings(g, cx),
                             "serverprofile" => app.open_server_profile(g, cx),
                             "security" => app.open_security_actions(g, cx),
-                            "createevent" => app.open_create_event(g, cx),
+                            "createevent" => {
+                                app.open_create_event(g, cx);
+                                let kind = match arg.split(':').next().unwrap_or("") {
+                                    "voice" => Some(phoenix_app::ui::modals::create_event::Kind::Voice),
+                                    "external" => Some(phoenix_app::ui::modals::create_event::Kind::External),
+                                    "stage" => Some(phoenix_app::ui::modals::create_event::Kind::Stage),
+                                    _ => None,
+                                };
+                                if let Some(k) = kind {
+                                    app.set_event_kind(k, cx);
+                                }
+                                let step = arg.split(':').nth(1).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0);
+                                phoenix_app::actions::with_modal(|m| {
+                                    if let Some(phoenix_app::ui::modals::Modal::CreateEvent(s)) = m {
+                                        s.step = step.min(2);
+                                    }
+                                });
+                            }
                             _ => {
                                 let me = app.me.id;
                                 let list = app.members.get(&g);

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, TimeZone, Timelike};
 use gpui::{AnyElement, App, Context, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
@@ -84,7 +84,7 @@ pub fn day_month(d: NaiveDate) -> String {
     if crate::i18n::locale() == "en" { format!("{month} {}", d.day()) } else { format!("{} {month}", d.day()) }
 }
 
-fn local(at: i64) -> DateTime<Local> {
+pub fn local(at: i64) -> DateTime<Local> {
     Local.timestamp_opt(at, 0).single().unwrap_or_else(Local::now)
 }
 
@@ -251,9 +251,9 @@ pub fn with_day(at: i64, day: NaiveDate) -> i64 {
     Local.from_local_datetime(&day.and_time(t)).earliest().map(|d| d.timestamp()).unwrap_or(at)
 }
 
-fn date_field(value: SharedString) -> gpui::Stateful<gpui::Div> {
+pub fn date_field(id: &'static str, value: SharedString) -> gpui::Stateful<gpui::Div> {
     div()
-        .id("sched-date")
+        .id(id)
         .h(z(40.))
         .px(z(12.))
         .py(z(8.))
@@ -271,7 +271,7 @@ fn date_field(value: SharedString) -> gpui::Stateful<gpui::Div> {
 }
 
 fn field(id: &'static str, value: SharedString, open: bool, which: u8, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
-    let base = if which == 0 { date_field(value) } else { crate::ui::controls::select_field(id, value) };
+    let base = if which == 0 { date_field(id, value) } else { crate::ui::controls::select_field(id, value) };
     base.when(open, |d| d.border_color(c(tok(idx::INPUT_BORDER_ACTIVE))))
         .on_click(cx.listener(move |_, _, _, cx| {
             let mut at = None;
@@ -292,11 +292,25 @@ fn field(id: &'static str, value: SharedString, open: bool, which: u8, cx: &mut 
 
 fn list(options: Vec<(SharedString, i64, bool)>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let scroll = LIST_SCROLL.with(|h| h.clone());
+    time_list(
+        options,
+        &scroll,
+        Rc::new(|at| {
+            set_picker(|p| {
+                p.at = at;
+                p.open = None;
+            })
+        }),
+        cx,
+    )
+}
+
+pub fn time_list(options: Vec<(SharedString, i64, bool)>, scroll: &gpui::ScrollHandle, pick: Rc<dyn Fn(i64)>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let mut col = div()
         .id("sched-list")
-        .track_scroll(&scroll)
+        .track_scroll(scroll)
         .absolute()
-        .top(z(44.))
+        .top(z(8.))
         .left_0()
         .right_0()
         .max_h(z(220.))
@@ -309,6 +323,7 @@ fn list(options: Vec<(SharedString, i64, bool)>, cx: &mut Context<PhoenixApp>) -
         .flex()
         .flex_col();
     for (n, (text, at, sel)) in options.into_iter().enumerate() {
+        let pick = pick.clone();
         col = col.child(
             div()
                 .id(("sched-opt", n))
@@ -323,12 +338,7 @@ fn list(options: Vec<(SharedString, i64, bool)>, cx: &mut Context<PhoenixApp>) -
                 .when(sel, |d| d.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
                 .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
                 .on_click(cx.listener(move |_, _, _, cx| {
-                    with_modal(|m| {
-                        if let Some(Modal::Schedule(p)) = m {
-                            p.at = at;
-                            p.open = None;
-                        }
-                    });
+                    pick(at);
                     cx.notify();
                 }))
                 .child(text),
@@ -351,7 +361,12 @@ fn alpha(token: usize, a: f32) -> gpui::Hsla {
     h
 }
 
-fn nav_button(id: &'static str, next: bool, by: i32, month: NaiveDate, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub enum CalPick {
+    Day(NaiveDate),
+    Month(NaiveDate),
+}
+
+fn nav_button(id: &'static str, next: bool, by: i32, month: NaiveDate, pick: Rc<dyn Fn(CalPick)>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let glyph = gpui::svg().path(crate::icons::path("chevron-right")).size(z(12.)).text_color(c(tok(idx::TEXT_DEFAULT)));
     let glyph = if next { glyph } else { glyph.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))) };
     div()
@@ -369,7 +384,7 @@ fn nav_button(id: &'static str, next: bool, by: i32, month: NaiveDate, cx: &mut 
         .justify_center()
         .cursor_pointer()
         .on_click(cx.listener(move |_, _, _, cx| {
-            set_picker(|p| p.month = Some(shift_month(month, by)));
+            pick(CalPick::Month(shift_month(month, by)));
             cx.notify();
         }))
         .child(glyph)
@@ -377,9 +392,22 @@ fn nav_button(id: &'static str, next: bool, by: i32, month: NaiveDate, cx: &mut 
 }
 
 fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let selected = local(p.at).date_naive();
-    let month = month_start(p.month.unwrap_or(selected));
     let (first, last) = p.bounds(now);
+    let pick: Rc<dyn Fn(CalPick)> = Rc::new(|pk| {
+        set_picker(|p| match pk {
+            CalPick::Day(d) => {
+                p.at = with_day(p.at, d);
+                p.open = None;
+                p.month = None;
+            }
+            CalPick::Month(m) => p.month = Some(m),
+        })
+    });
+    calendar_view(local(p.at).date_naive(), p.month, first, last, now, pick, cx)
+}
+
+pub fn calendar_view(selected: NaiveDate, month: Option<NaiveDate>, first: NaiveDate, last: Option<NaiveDate>, now: i64, pick: Rc<dyn Fn(CalPick)>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let month = month_start(month.unwrap_or(selected));
     let today = local(now).date_naive();
     let sunday = week_starts_sunday();
     let weeks = month_grid(month, sunday);
@@ -403,7 +431,8 @@ fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
             let outside = d.month() != month.month();
             let disabled = d < first || last.is_some_and(|l| d > l);
             let sel = d == selected && !outside;
-            let at = with_day(p.at, d);
+            let pick = pick.clone();
+            let day = d;
             row = row.child(
                 div()
                     .id(("sched-day", (w * 7 + n) as u64))
@@ -428,11 +457,7 @@ fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
                     .when(disabled, |d| d.bg(c(tok(idx::PRIMARY_630))))
                     .when(!disabled, |d| {
                         d.cursor_pointer().hover(|s| s.bg(c(tok(idx::BRAND_500))).text_color(c(tok(idx::WHITE)))).on_click(cx.listener(move |_, _, _, cx| {
-                            set_picker(|p| {
-                                p.at = at;
-                                p.open = None;
-                                p.month = None;
-                            });
+                            pick(CalPick::Day(day));
                             cx.notify();
                         }))
                     })
@@ -469,8 +494,8 @@ fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .text_color(c(tok(idx::TEXT_STRONG)))
                 .child(title),
         )
-        .child(nav_button("sched-prev", false, -1, month, cx))
-        .child(nav_button("sched-next", true, 1, month, cx))
+        .child(nav_button("sched-prev", false, -1, month, pick.clone(), cx))
+        .child(nav_button("sched-next", true, 1, month, pick, cx))
         .child(names)
         .child(grid);
     gpui::deferred(cal).with_priority(30).into_any_element()

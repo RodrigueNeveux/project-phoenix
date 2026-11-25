@@ -138,8 +138,9 @@ pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> R
             rest.move_channels(sf(guild), v).await.map_err(e)?;
             ActionReply::Done
         }
-        R::CreateEvent { guild, name, description, start_unix, end_unix, place } => {
-            let body = guild_admin::event_body(&name, &description, start_unix, end_unix, &event_place(&place));
+        R::CreateEvent { guild, name, description, start_unix, end_unix, place, recurrence } => {
+            let mut body = guild_admin::event_body(&name, &description, start_unix, end_unix, &event_place(&place));
+            body["recurrence_rule"] = recurrence.unwrap_or(serde_json::Value::Null);
             rest.create_scheduled_event(sf(guild), body).await.map_err(e)?;
             ActionReply::Done
         }

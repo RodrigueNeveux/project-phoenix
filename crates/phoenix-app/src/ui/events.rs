@@ -68,7 +68,7 @@ pub fn when_label_at(ts: i64) -> String {
     format!("{} {}", crate::i18n::long_date(local.date_naive()), local.format("%H:%M"))
 }
 
-fn card(app: &PhoenixApp, guild: Id, e: &GuildEvent) -> gpui::Div {
+pub fn card(app: &PhoenixApp, guild: Id, e: &GuildEvent) -> gpui::Div {
     let live = e.status == 2;
     let ch_kind = e.channel.and_then(|ch| app.channels.get(&ch)).map(|ch| ch.kind);
     let loc_icon = match ch_kind {
