@@ -627,7 +627,7 @@ fn main() -> anyhow::Result<()> {
     } else if let Some(g) = std::env::var("PHX_GUILD").ok().and_then(|v| parse_id(&v)) {
         (Some(g), None)
     } else {
-        let path = cdp("location.pathname").unwrap_or_default();
+        let path = std::env::var("PHX_ROUTE").ok().or_else(|| cdp("location.pathname")).unwrap_or_default();
         let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         match parts.as_slice() {
             ["channels", "@me", c, ..] => (None, parse_id(c)),
@@ -792,7 +792,7 @@ fn main() -> anyhow::Result<()> {
                     .map(|c| c.id);
             }
             let view = std::env::var("PHX_VIEW").unwrap_or_else(|_| {
-                let home = guild.is_none() && channel.is_none() && cdp("location.pathname").as_deref() == Some("/channels/@me");
+                let home = guild.is_none() && channel.is_none() && std::env::var("PHX_ROUTE").ok().or_else(|| cdp("location.pathname")).as_deref() == Some("/channels/@me");
                 if home { "friends".into() } else { String::new() }
             });
             let tab = std::env::var("PHX_TAB").unwrap_or_default();
