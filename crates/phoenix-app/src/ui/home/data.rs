@@ -99,6 +99,7 @@ pub enum NavRequest {
     AckGuild(Id),
     Mute { guild: Option<Id>, channel: Option<Id>, muted: bool, secs: Option<u32> },
     NotifyLevel { guild: Option<Id>, channel: Option<Id>, level: u8 },
+    GuildNotify { guild: Id, fields: serde_json::Value },
 }
 
 #[derive(Clone, Debug)]

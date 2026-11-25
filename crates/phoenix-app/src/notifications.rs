@@ -52,6 +52,9 @@ pub struct GuildPrefs {
     pub channels: HashMap<u64, ChannelPrefs>,
     pub explicit_level: bool,
     pub flags: u64,
+    pub highlights_off: bool,
+    pub mute_events: bool,
+    pub mobile_push: bool,
 }
 
 impl Default for GuildPrefs {
@@ -71,6 +74,9 @@ impl GuildPrefs {
             channels: HashMap::new(),
             explicit_level: false,
             flags: 0,
+            highlights_off: false,
+            mute_events: false,
+            mobile_push: true,
         }
     }
 }
@@ -124,6 +130,9 @@ fn parse_entry(e: &Value, default: Level, now_ms: i64) -> GuildPrefs {
         suppress_roles: e.get("suppress_roles").and_then(Value::as_bool).unwrap_or(false),
         channels: HashMap::new(),
         flags: e.get("flags").and_then(Value::as_u64).unwrap_or(0),
+        highlights_off: e.get("notify_highlights").and_then(Value::as_u64) == Some(1),
+        mute_events: e.get("mute_scheduled_events").and_then(Value::as_bool).unwrap_or(false),
+        mobile_push: e.get("mobile_push").and_then(Value::as_bool).unwrap_or(true),
     };
     let overrides = e.get("channel_overrides");
     let list: Vec<&Value> = match overrides {

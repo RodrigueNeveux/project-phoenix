@@ -38,9 +38,20 @@ impl State {
             Mentions | Inherit => 1,
             Nothing => 2,
         };
-        let flags = [true, true, p.suppress_everyone, p.suppress_roles, false, false, true];
+        let flags = [true, true, p.suppress_everyone, p.suppress_roles, p.highlights_off, p.mute_events, p.mobile_push];
         Self { guild, muted: p.muted, level, flags }
     }
+}
+
+pub fn flag_fields(i: usize, on: bool) -> Option<serde_json::Value> {
+    Some(match i {
+        2 => serde_json::json!({ "suppress_everyone": on }),
+        3 => serde_json::json!({ "suppress_roles": on }),
+        4 => serde_json::json!({ "notify_highlights": if on { 1 } else { 2 } }),
+        5 => serde_json::json!({ "mute_scheduled_events": on }),
+        6 => serde_json::json!({ "mobile_push": on }),
+        _ => return None,
+    })
 }
 
 fn with_state(f: impl FnOnce(&mut State)) {
@@ -104,8 +115,12 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
     }
     let flag = |i: usize, cx: &mut Context<PhoenixApp>| {
         let (t, d) = FLAGS[i];
-        row(("gn-flag", i), crate::t!(t), (!d.is_empty()).then(|| crate::t!(d)), s.flags[i]).on_click(cx.listener(move |_, _, _, cx| {
-            with_state(|s| s.flags[i] = !s.flags[i]);
+        let on = !s.flags[i];
+        row(("gn-flag", i), crate::t!(t), (!d.is_empty()).then(|| crate::t!(d)), s.flags[i]).on_click(cx.listener(move |a, _, _, cx| {
+            with_state(|s| s.flags[i] = on);
+            if let Some(fields) = flag_fields(i, on) {
+                a.nav_request(NavRequest::GuildNotify { guild, fields }, cx, |_, _, _| {});
+            }
             cx.notify();
         }))
     };
@@ -259,4 +274,18 @@ fn override_table(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> 
         );
     }
     table.into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::flag_fields;
+
+    #[test]
+    fn flags_patch_the_client_fields() {
+        assert_eq!(flag_fields(2, true), Some(serde_json::json!({ "suppress_everyone": true })));
+        assert_eq!(flag_fields(4, true), Some(serde_json::json!({ "notify_highlights": 1 })));
+        assert_eq!(flag_fields(4, false), Some(serde_json::json!({ "notify_highlights": 2 })));
+        assert_eq!(flag_fields(6, false), Some(serde_json::json!({ "mobile_push": false })));
+        assert_eq!(flag_fields(0, true), None);
+    }
 }

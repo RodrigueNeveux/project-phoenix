@@ -499,6 +499,10 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
             call(Method::PATCH, settings_path(guild), Some(settings_body(channel, cfg))).await?;
             NavReply::Done
         }
+        NavRequest::GuildNotify { guild, fields } => {
+            call(Method::PATCH, settings_path(Some(guild)), Some(fields)).await?;
+            NavReply::Done
+        }
         NavRequest::NotifyLevel { guild, channel, level } => {
             let body = settings_body(channel, json!({ "message_notifications": level }));
             call(Method::PATCH, settings_path(guild), Some(body)).await?;
