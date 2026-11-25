@@ -74,6 +74,27 @@ fn game_icon(app: &Value, size: u32) -> Option<SharedString> {
     Some(format!("https://cdn.discordapp.com/app-icons/{id}/{h}.png?size={size}").into())
 }
 
+pub fn top_game_ids(top: &Value, selected: &[String]) -> Vec<String> {
+    let Some(map) = top.as_object() else { return Vec::new() };
+    let mut ids: Vec<(&String, f64)> = map.iter().filter(|(k, _)| !selected.contains(k)).map(|(k, v)| (k, v.get("score").and_then(Value::as_f64).unwrap_or(0.))).collect();
+    ids.sort_by(|a, b| b.1.total_cmp(&a.1));
+    ids.into_iter().map(|(k, _)| k.clone()).collect()
+}
+
+fn members_play(app: &PhoenixApp, s: &State, cx: &mut Cx) -> Option<Vec<Value>> {
+    use phoenix_api::rest::guild_server::ServerCall;
+    let top = crate::ui::server_pages::fetch(app, s.guild, ServerCall::TopGames { guild: crate::actions::admin::sf(s.guild) }, cx)?;
+    let selected: Vec<String> = games(s).iter().map(|g| kit::s(g, "id").to_owned()).collect();
+    let ids = top_game_ids(&top, &selected);
+    if ids.is_empty() {
+        return Some(Vec::new());
+    }
+    let snow: Vec<phoenix_api::models::Snowflake> = ids.iter().filter_map(|i| i.parse().ok()).map(phoenix_api::models::Snowflake).collect();
+    let apps = crate::ui::server_pages::fetch(app, s.guild, ServerCall::PublicApps { ids: snow }, cx)?;
+    let list = apps.as_array().cloned().unwrap_or_default();
+    Some(ids.iter().filter_map(|id| list.iter().find(|a| kit::s(a, "id") == id).cloned()).collect())
+}
+
 pub fn games(s: &State) -> Vec<Value> {
     let order: Vec<String> =
         s.get("profile").and_then(|p| p.get("game_application_ids")).and_then(Value::as_array).into_iter().flatten().filter_map(|v| v.as_str().map(str::to_owned)).collect();
@@ -196,7 +217,7 @@ fn trait_inputs(s: &State) -> AnyElement {
         .into_any_element()
 }
 
-fn games_section(s: &State) -> AnyElement {
+fn games_section(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let list = games(s);
     let mut grid = div().flex().flex_col().gap(z(12.));
     for chunk in list.chunks(3) {
@@ -239,16 +260,38 @@ fn games_section(s: &State) -> AnyElement {
         }
         grid = grid.child(row);
     }
-    kit::fieldset(
-        crate::t!("gs.profile.games"),
-        Some(crate::t!("gs.profile.games_desc")),
-        vec![
-            kit::select_box("ss-games", text(crate::t!("gs.profile.games_search"), 16., 20., FontWeight::NORMAL, idx::INPUT_PLACEHOLDER_TEXT_DEFAULT).into_any_element(), false)
-                .into_any_element(),
-            grid.into_any_element(),
-        ],
-    )
-    .into_any_element()
+    let mut parts = vec![
+        kit::select_box("ss-games", text(crate::t!("gs.profile.games_search"), 16., 20., FontWeight::NORMAL, idx::INPUT_PLACEHOLDER_TEXT_DEFAULT).into_any_element(), false).into_any_element(),
+        grid.into_any_element(),
+    ];
+    if let Some(members) = members_play(app, s, cx).filter(|l| !l.is_empty()) {
+        let mut tiles = div().flex().flex_wrap().gap_x(z(8.)).gap_y(z(12.));
+        for g in members {
+            tiles = tiles.child(
+                div()
+                    .id(SharedString::from(format!("ss-top-game-{}", kit::s(&g, "id"))))
+                    .w(z(133.))
+                    .flex()
+                    .flex_col()
+                    .opacity(0.5)
+                    .hover(|d| d.opacity(1.))
+                    .cursor_pointer()
+                    .child(
+                        div()
+                            .h(z(181.5))
+                            .mb(z(8.))
+                            .rounded(z(4.))
+                            .overflow_hidden()
+                            .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+                            .children(game_cover(&g, 256).map(|u| gpui::img(u).size_full().object_fit(gpui::ObjectFit::Cover))),
+                    )
+                    .child(text(kit::s(&g, "name"), 12., 16., FontWeight::MEDIUM, idx::TEXT_STRONG).truncate()),
+            );
+        }
+        parts.push(div().h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element());
+        parts.push(div().flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.profile.members_play"), 12., 16., FontWeight::SEMIBOLD, idx::TEXT_MUTED)).child(tiles).into_any_element());
+    }
+    kit::fieldset(crate::t!("gs.profile.games"), Some(crate::t!("gs.profile.games_desc")), parts).into_any_element()
 }
 
 fn private_section(s: &State, cx: &mut Cx) -> AnyElement {
@@ -394,7 +437,7 @@ pub fn preview(s: &State, guild: u64) -> AnyElement {
         .into_any_element()
 }
 
-pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
+pub fn render(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let guild = s.guild.0;
     let icon_buttons = div()
         .flex()
@@ -423,7 +466,7 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
             s.areas.get("description").map(|a| super::super::area_box(a, 3).into_any_element()).unwrap_or_else(|| div().h(z(88.)).into_any_element()),
         ))
         .child(divider())
-        .child(games_section(s))
+        .child(games_section(app, s, cx))
         .child(divider())
         .child(private_section(s, cx));
     let right = div().w(z(300.)).flex_none().flex().flex_col().gap(z(24.)).child(preview(s, guild));
@@ -434,6 +477,13 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn top_games_skip_selected_and_sort_by_score() {
+        let top = json!({ "1": { "score": 0.2 }, "2": { "score": 0.9 }, "3": { "score": 0.5 } });
+        assert_eq!(top_game_ids(&top, &["3".to_owned()]), vec!["2", "1"]);
+        assert!(top_game_ids(&json!(null), &[]).is_empty());
+    }
 
     #[test]
     fn traits_sorted_and_banner_urls() {

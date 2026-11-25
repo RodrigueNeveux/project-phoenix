@@ -35,6 +35,8 @@ pub enum ServerCall {
     DiscoveryCategories { locale: String },
     DiscoverableContent { guild: Snowflake },
     ServerIndex { guild: Snowflake },
+    TopGames { guild: Snowflake },
+    PublicApps { ids: Vec<Snowflake> },
     EditDiscoveryMetadata { guild: Snowflake, patch: Value },
     Profile { guild: Snowflake },
     SetProfile { guild: Snowflake, patch: ProfilePatch },
@@ -246,6 +248,11 @@ pub fn build(call: &ServerCall) -> ApiReq {
         S::DiscoveryCategories { locale } => req(Method::GET, format!("/discovery/categories?locale={}&primary_only=false", enc(locale)), None),
         S::DiscoverableContent { guild } => req(Method::GET, format!("/guilds/{guild}/discoverable-content"), None),
         S::ServerIndex { guild } => req(Method::GET, format!("/index/servers/{guild}"), None),
+        S::TopGames { guild } => req(Method::GET, format!("/guilds/{guild}/top-games"), None),
+        S::PublicApps { ids } => {
+            let q: Vec<String> = ids.iter().map(|i| format!("application_ids={i}")).collect();
+            req(Method::GET, format!("/applications/public?{}", q.join("&")), None)
+        }
         S::EditDiscoveryMetadata { guild, patch } => req(Method::PATCH, format!("/guilds/{guild}/discovery-metadata"), Some(patch.clone())),
         S::Profile { guild } => req(Method::GET, format!("/guilds/{guild}/profile"), None),
         S::SetProfile { guild, patch } => {
@@ -315,6 +322,15 @@ impl ServerCall {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn top_games_and_public_apps_are_reads() {
+        let r = build(&ServerCall::TopGames { guild: Snowflake(5) });
+        assert_eq!((r.method.clone(), r.path.as_str()), (Method::GET, "/guilds/5/top-games"));
+        let r = build(&ServerCall::PublicApps { ids: vec![Snowflake(1), Snowflake(2)] });
+        assert_eq!(r.path, "/applications/public?application_ids=1&application_ids=2");
+        assert!(ServerCall::TopGames { guild: Snowflake(5) }.is_read());
+    }
 
     const G: Snowflake = Snowflake(1);
 
