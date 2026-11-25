@@ -1255,6 +1255,12 @@ fn main() -> anyhow::Result<()> {
                 }
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
+                "boost" => {
+                    if let Some(g) = app.selected_guild {
+                        phoenix_app::ui::boost_layer::open(g);
+                        cx.notify();
+                    }
+                }
                 "customstatus" => {
                     app.open_custom_status(cx);
                     if arg == "emoji" {

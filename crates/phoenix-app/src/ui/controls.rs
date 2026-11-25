@@ -279,6 +279,7 @@ pub enum BtnKind {
     Primary,
     Critical,
     Active,
+    Expressive,
 }
 
 pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {
@@ -316,6 +317,17 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Bt
             CONTROL_CONNECTED_BACKGROUND_ACTIVE,
             CONTROL_CONNECTED_TEXT_ACTIVE,
             CONTROL_CONNECTED_BORDER_ACTIVE,
+        ],
+        BtnKind::Expressive => [
+            CONTROL_EXPRESSIVE_BACKGROUND_DEFAULT,
+            CONTROL_EXPRESSIVE_TEXT_DEFAULT,
+            CONTROL_EXPRESSIVE_BORDER_DEFAULT,
+            CONTROL_EXPRESSIVE_BACKGROUND_HOVER,
+            CONTROL_EXPRESSIVE_TEXT_HOVER,
+            CONTROL_EXPRESSIVE_BORDER_HOVER,
+            CONTROL_EXPRESSIVE_BACKGROUND_ACTIVE,
+            CONTROL_EXPRESSIVE_TEXT_ACTIVE,
+            CONTROL_EXPRESSIVE_BORDER_ACTIVE,
         ],
         BtnKind::Critical => [
             CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT,

@@ -203,7 +203,10 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     let mut items = Vec::new();
     let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
     let (manage_guild, manage_channels, events) = (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
-    items.push(stub(&e, "settings.page.server_boost"));
+    items.push(act(&e, crate::t!("settings.page.server_boost"), move |_, _, cx| {
+        crate::ui::boost_layer::open(g);
+        cx.notify();
+    }));
     items.push(MenuItem::Separator);
     items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)));
     if manage_guild {

@@ -1404,6 +1404,7 @@ fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
 
 fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     let ev_entity = entity.clone();
+    let boost_entity = entity.clone();
     let perms = app.selected_guild.map(|g| app.backend.guild_permissions(g)).unwrap_or(0);
     let mods = crate::ui::inbox::has_perm(perms, (1 << 1) | (1 << 2) | (1 << 5));
     let features = app.selected_guild.map(|g| app.backend.guild_features(g)).unwrap_or_default();
@@ -1496,7 +1497,19 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl Int
             )
         })
         .when(mods, |d| d.child(item("g-members", "members", crate::t!("guild.top.members"), false)))
-        .child(item("g-boosts", "boost", crate::t!("guild.top.boosts"), false))
+        .child(
+            div()
+                .id("g-boosts-open")
+                .on_click(move |_, _, cx| {
+                    boost_entity.update(cx, |a, cx| {
+                        if let Some(g) = a.selected_guild {
+                            crate::ui::boost_layer::open(g);
+                            cx.notify();
+                        }
+                    })
+                })
+                .child(item("g-boosts", "boost", crate::t!("guild.top.boosts"), false)),
+        )
         .child(div().mt(z(15.)).ml(z(20.)).mr(z(20.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
         .child(div().h(z(12.)))
 }

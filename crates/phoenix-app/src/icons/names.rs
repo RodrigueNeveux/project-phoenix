@@ -175,6 +175,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("discord", &["ClydeIcon"]),
     ("forum/book-check", &["BookCheckIcon"]),
     ("close-small", &["XSmallIcon"]),
+    ("images", &["ImagesIcon"]),
     ("maximize", &["MaximizeIcon"]),
     ("plus-medium", &["PlusMediumIcon"]),
     ("moderation", &["ModerationIcon"]),
