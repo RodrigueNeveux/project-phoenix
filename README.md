@@ -127,7 +127,7 @@ tables in [`docs/parity/`](docs/parity) track about 1,950 checked items.
 ## Screenshots
 
 Rendered by Discord Phoenix itself on a real account, offscreen at 1.5x scale, in the Aperture Sciences server.
-Some third-party names are blurred. Captured on 2026-11-25 and 26 from main at `cf83f562` to `60857fbf`.
+Some third-party names are blurred. Captured on 2026-11-25 and 26 from main at `cf83f562` to `594490f1`.
 
 ### Chat
 
@@ -143,6 +143,15 @@ Some third-party names are blurred. Captured on 2026-11-25 and 26 from main at `
 <tr>
 <td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/threads-popout.png" alt="Threads popout"><br><sub>Threads popout</sub></td>
 <td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/search.png" alt="Search results with highlights, filters and pages"><br><sub>Search results with highlights, filters and pages</sub></td>
+</tr>
+</table>
+
+### Forums
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/forum-list.png" alt="Forum channel with pinned and older posts"><br><sub>Forum channel with pinned and older posts</sub></td>
+<td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/forum-tags.png" alt="Forum tags and post previews"><br><sub>Forum tags and post previews</sub></td>
 </tr>
 </table>
 
@@ -213,6 +222,10 @@ Some third-party names are blurred. Captured on 2026-11-25 and 26 from main at `
 <tr>
 <td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/server-guide.png" alt="Server Guide"><br><sub>Server Guide</sub></td>
 <td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/discover.png" alt="Discover"><br><sub>Discover</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/discover-apps.png" alt="Discover, Apps"><br><sub>Discover, Apps</sub></td>
+<td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/quests.png" alt="Quests"><br><sub>Quests</sub></td>
 </tr>
 </table>
 
