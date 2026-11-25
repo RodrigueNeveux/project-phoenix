@@ -19,6 +19,7 @@ pub enum Target {
     FriendRow(Id),
     ProfileOverflow { user: Id, guild: Option<Id> },
     Viewer,
+    SettingsMore,
 }
 
 thread_local! {
@@ -210,12 +211,30 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             let v = cx.try_global::<crate::media::MediaState>().and_then(|m| m.viewer.clone())?;
             viewer_items(&e, &v, app.prefs.synced.developer_mode)
         }
+        Target::SettingsMore => settings_more_items(&e),
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
         close();
         w.refresh();
     });
+    if target == Target::SettingsMore {
+        return Some(context_menu::render_anchored(pos, gpui::Anchor::BottomCenter, items, dismiss));
+    }
     Some(context_menu::render(pos, items, dismiss))
+}
+
+pub const ACKNOWLEDGEMENTS_URL: &str = "https://discord.com/acknowledgements";
+pub const SUPPORT_URL: &str = "https://support.discord.com";
+pub const PRIVACY_URL: &str = "https://discord.com/privacy";
+pub const TERMS_URL: &str = "https://discord.com/terms";
+
+pub fn settings_more_items(e: &Ent) -> Vec<MenuItem> {
+    let url = |label: SharedString, url: &'static str| MenuItem::action(label, None, move |_, _, cx: &mut App| cx.open_url(url));
+    vec![
+        act(e, crate::t!("settings.more.changelog"), |a, _, cx| a.stub(&crate::t!("settings.more.changelog"), cx)),
+        url(crate::t!("settings.more.acknowledgements"), ACKNOWLEDGEMENTS_URL),
+        url(crate::t!("settings.more.support"), SUPPORT_URL),
+    ]
 }
 
 impl PhoenixApp {
