@@ -16,7 +16,7 @@ pub enum ParityEvent {
     Modal(ModalSpec),
     InteractionFailed,
     PollVote { channel: Id, message: Id, user: Id, answer: u32, add: bool },
-    Call { channel: Id, ringing: Vec<Id> },
+    Call { channel: Id, ringing: Vec<Id>, voice: Option<Vec<Id>> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -109,6 +109,11 @@ pub fn from_gateway(ev: &GatewayEvent) -> Option<ParityEvent> {
                 Vec::new()
             } else {
                 data.get("ringing").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| sf(Some(v))).collect()).unwrap_or_default()
+            },
+            voice: if name == "CALL_DELETE" {
+                Some(Vec::new())
+            } else {
+                data.get("voice_states").and_then(Value::as_array).map(|a| a.iter().filter_map(|v| sf(v.get("user_id"))).collect())
             },
         }),
         "MESSAGE_POLL_VOTE_ADD" | "MESSAGE_POLL_VOTE_REMOVE" => Some(ParityEvent::PollVote {
@@ -251,6 +256,7 @@ pub struct GroupDmPicker {
 pub struct ParityUi {
     pub inbox: InboxState,
     pub incoming_call: Option<Id>,
+    pub call_users: HashMap<Id, Vec<Id>>,
     pub threads_open: bool,
     pub archived_threads: HashMap<Id, Vec<ForumPost>>,
     pub forums: HashMap<Id, ForumView>,
@@ -322,9 +328,32 @@ pub fn on_event(app: &mut App, ev: ParityEvent, cx: &mut Context<App>) {
                 app.refresh_message(channel, message);
             }
         }
-        ParityEvent::Call { channel, ringing } => crate::ui::incoming_call::on_call(app, channel, &ringing),
+        ParityEvent::Call { channel, ringing, voice } => {
+            if let Some(users) = voice {
+                set_call_users(app, channel, users);
+            }
+            crate::ui::incoming_call::on_call(app, channel, &ringing);
+        }
     }
     cx.notify();
+}
+
+pub fn set_call_users(app: &mut App, channel: Id, users: Vec<Id>) {
+    if users.is_empty() {
+        app.parity.call_users.remove(&channel);
+    } else {
+        app.parity.call_users.insert(channel, users);
+    }
+}
+
+pub fn call_voice_state(calls: &mut HashMap<Id, Vec<Id>>, dm: Option<Id>, user: Id) {
+    for users in calls.values_mut() {
+        users.retain(|u| *u != user);
+    }
+    calls.retain(|_, users| !users.is_empty());
+    if let Some(c) = dm {
+        calls.entry(c).or_default().push(user);
+    }
 }
 
 pub fn remember_read_mark(app: &mut App, channel: Id) {
@@ -355,6 +384,30 @@ pub fn first_unread(msgs: &[Message], last: Id, me: Id) -> Option<Id> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn calls_carry_their_voice_states() {
+        let ev = |name: &str, data: Value| from_gateway(&GatewayEvent::Unknown { name: name.into(), data });
+        let create = ev("CALL_CREATE", json!({"channel_id":"4","ringing":["9"],"voice_states":[{"user_id":"1","channel_id":"4"}]}));
+        assert!(matches!(create, Some(ParityEvent::Call { channel: Id(4), ref ringing, voice: Some(ref v) }) if ringing == &[Id(9)] && v == &[Id(1)]));
+        let update = ev("CALL_UPDATE", json!({"channel_id":"4","ringing":[]}));
+        assert!(matches!(update, Some(ParityEvent::Call { voice: None, .. })));
+        let delete = ev("CALL_DELETE", json!({"channel_id":"4"}));
+        assert!(matches!(delete, Some(ParityEvent::Call { voice: Some(ref v), .. }) if v.is_empty()));
+    }
+
+    #[test]
+    fn dm_voice_states_move_between_calls() {
+        let mut calls = HashMap::new();
+        call_voice_state(&mut calls, Some(Id(4)), Id(1));
+        call_voice_state(&mut calls, Some(Id(4)), Id(2));
+        assert_eq!(calls[&Id(4)], [Id(1), Id(2)]);
+        call_voice_state(&mut calls, Some(Id(5)), Id(1));
+        assert_eq!(calls[&Id(4)], [Id(2)]);
+        assert_eq!(calls[&Id(5)], [Id(1)]);
+        call_voice_state(&mut calls, None, Id(2));
+        assert!(!calls.contains_key(&Id(4)));
+    }
 
     #[test]
     fn modal_both_layouts() {

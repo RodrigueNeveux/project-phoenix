@@ -891,6 +891,8 @@ impl PhoenixApp {
             }
             AppEvent::VoiceFlags { user, flags } => crate::ui::voice_panel::set_flags(user, flags),
             AppEvent::VoiceStateUpdate { channel, user } => {
+                let dm = channel.filter(|c| self.channels.get(c).is_some_and(|x| x.guild.is_none()));
+                crate::commands::state::call_voice_state(&mut self.parity.call_users, dm, user);
                 for ch in self.channels.values_mut().filter(|c| c.guild.is_some()) {
                     ch.voice_users.retain(|u| *u != user);
                 }

@@ -89,12 +89,18 @@ pub fn snapshot(app: &PhoenixApp) -> Snap {
     let channel = app.voice_channel;
     let ch = channel.and_then(|c| app.channels.get(&c));
     let guild_voice = ch.is_some_and(|c| c.guild.is_some());
-    let others: Vec<Id> = if guild_voice { ch.map(|c| c.voice_users.iter().copied().filter(|u| *u != app.me.id).collect()).unwrap_or_default() } else { Vec::new() };
+    let in_call: &[Id] = channel.and_then(|c| app.parity.call_users.get(&c)).map(Vec::as_slice).unwrap_or_default();
+    let others: Vec<Id> = if guild_voice {
+        ch.map(|c| c.voice_users.iter().copied().filter(|u| *u != app.me.id).collect()).unwrap_or_default()
+    } else {
+        in_call.iter().copied().filter(|u| *u != app.me.id).collect()
+    };
     let mut all = others.clone();
     all.push(app.me.id);
     let streamers = if channel.is_some() { all.into_iter().filter(|u| crate::ui::voice_panel::flags(*u).stream).collect() } else { Vec::new() };
     let outgoing = channel.is_some_and(|c| {
         ch.is_some_and(|x| x.guild.is_none())
+            && in_call.len() < 2
             && CALLS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).as_ref().and_then(|m| m.get(&c).copied()).unwrap_or(false)
     });
     Snap {
