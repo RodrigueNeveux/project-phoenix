@@ -79,7 +79,7 @@ pub fn apply_games(games: &mut Vec<ProfileGame>, fetched: &Value) {
         };
         true
     });
-    games.sort_by(|a, b| b.score.cmp(&a.score));
+    games.sort_by_key(|g| std::cmp::Reverse(g.score));
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

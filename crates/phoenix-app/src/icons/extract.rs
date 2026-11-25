@@ -103,7 +103,23 @@ fn attr_ok(k: &str) -> bool {
     )
 }
 
+fn by_path(js: &str, prefix: &str) -> Option<String> {
+    let at = js.find(&format!("d:\"{prefix}"))?;
+    let start = at.saturating_sub(600);
+    let start = (start..at).find(|i| js.is_char_boundary(*i))?;
+    let open = start + js[start..at].rfind("=function(")?;
+    let open = open + js[open..].find('{')?;
+    let close = close_brace(js.as_bytes(), open)?;
+    if close < at {
+        return None;
+    }
+    build(&js[open..=close], false)
+}
+
 pub fn icon_svg(js: &str, name: &str) -> Option<String> {
+    if let Some(prefix) = name.strip_prefix("path:") {
+        return by_path(js, prefix);
+    }
     let (name, second) = match name.strip_suffix("#secondary") {
         Some(n) => (n, true),
         None => (name, false),
@@ -187,5 +203,12 @@ mod tests {
         assert!(s.contains(r#"<path fill-rule="evenodd" d="M1 1h2v2z"/>"#), "{s}");
         assert!(s.contains(r#"<circle cx="12" cy="12" r="3"/>"#), "{s}");
         assert!(icon_svg(JS, "MissingIcon").is_none());
+    }
+
+    #[test]
+    fn finds_an_inline_component_by_its_path() {
+        let js = r#"let o=function(e){let{width:t=16,color:r="currentColor"}=e;return(0,i.jsx)("svg",{width:t,viewBox:"0 0 16 16",children:(0,i.jsx)("path",{fill:r,fillRule:"evenodd",d:"M5.5 0.4C6 0 8 1z"})})};"#;
+        let s = icon_svg(js, "path:M5.5 0.4").unwrap();
+        assert!(s.contains(r#"viewBox="0 0 16 16""#) && s.contains(r#"d="M5.5 0.4C6 0 8 1z""#), "{s}");
     }
 }

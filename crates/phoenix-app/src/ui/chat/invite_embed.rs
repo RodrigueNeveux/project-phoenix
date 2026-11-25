@@ -666,6 +666,30 @@ fn baked_banner(base: u32) -> Arc<RenderImage> {
     arc
 }
 
+fn verified_badge() -> AnyElement {
+    div()
+        .flex_none()
+        .min_w(z(20.))
+        .flex()
+        .justify_center()
+        .child(
+            div()
+                .relative()
+                .size(z(18.))
+                .child(gpui::svg().path(crate::icons::path("guild/flower-star")).size_full().text_color(tk(idx::GREEN_360)))
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(gpui::svg().path(crate::icons::path("check-small")).size(z(13.)).text_color(gpui::white())),
+                ),
+        )
+        .into_any_element()
+}
+
 fn game_icon(guild: u64, g: &crate::commands::guide::ProfileGame, tip: bool) -> gpui::Stateful<gpui::Div> {
     use crate::ui::tooltip::Tipped as _;
     let el = div()
@@ -944,6 +968,7 @@ fn profile_card(
                                 .text_ellipsis()
                                 .child(crate::ui::emoji_text::label(name, 16.)),
                         )
+                        .when(features.iter().any(|f| f == "VERIFIED"), |d| d.child(verified_badge()))
                         .children(tag),
                 )
                 .child(
