@@ -36,20 +36,27 @@ pub fn get(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> Board {
         return b.clone();
     }
     s.0.insert(user, Board::default());
-    let (w, g, r, l) = (app.backend.profile_widgets(user), app.backend.game_widgets(user), app.backend.recent_activity(user), app.backend.wishlist(user));
+    fill(cx, user, app.backend.profile_widgets(user), |b, v| b.widgets = v);
+    fill(cx, user, app.backend.game_widgets(user), |b, v| b.games = v);
+    fill(cx, user, app.backend.recent_activity(user), |b, v| b.recent = v);
+    fill(cx, user, app.backend.wishlist(user), |b, v| b.wishlist = v);
+    Board::default()
+}
+
+fn fill<T: Default + 'static>(
+    cx: &mut Context<PhoenixApp>,
+    user: Id,
+    fut: crate::backend::BoxFuture<T>,
+    set: impl FnOnce(&mut Board, T) + 'static,
+) {
     cx.spawn(async move |this, cx| {
-        let (w, g, r, l) = futures::join!(w, g, r, l);
+        let v = fut.await.unwrap_or_default();
         let _ = this.update(cx, |_, cx| {
-            let b = cx.default_global::<Store>().0.entry(user).or_default();
-            b.widgets = w.unwrap_or_default();
-            b.games = g.unwrap_or_default();
-            b.recent = r.unwrap_or_default();
-            b.wishlist = l.unwrap_or_default();
+            set(cx.default_global::<Store>().0.entry(user).or_default(), v);
             cx.notify();
         });
     })
     .detach();
-    Board::default()
 }
 
 pub struct Colors {
