@@ -397,7 +397,7 @@ pub fn input_box(i: &Entity<InputState>) -> gpui::Div {
         .flex()
         .items_center()
         .text_size(z(16.))
-        .child(Input::new(i).appearance(false).bordered(false))
+        .child(Input::new(i).appearance(false).bordered(false).px(z(0.)).text_size(z(16.)).line_height(z(20.)))
 }
 
 fn area_box(a: &Entity<TextareaState>, rows: usize) -> gpui::Div {

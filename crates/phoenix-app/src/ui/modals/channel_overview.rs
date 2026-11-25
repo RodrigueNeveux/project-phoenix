@@ -123,7 +123,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
     let mut d = div().flex().flex_col().gap(z(24.));
     if let Some(i) = &s.name {
         let key = if kind == ChannelKind::Category { "admin.category_name" } else { "admin.channel_name" };
-        d = d.child(field(crate::t!(key), None, input_box(i).pl(z(0.)).pr(z(4.)).gap(z(4.)).child(div().flex_none().w(z(32.)).h(z(30.)).flex().items_center().child(emoji_button("cs-name-emoji", Field::ChannelName, 30., 18., 12., cx))), None));
+        d = d.child(field(crate::t!(key), None, input_box(i).pl(z(10.)).pr(z(4.)).gap(z(4.)).child(div().flex_none().w(z(32.)).h(z(30.)).flex().items_center().child(emoji_button("cs-name-emoji", Field::ChannelName, 30., 18., 12., cx))), None));
     }
     if kind == ChannelKind::Category {
         return d.child(illustration()).into_any_element();
