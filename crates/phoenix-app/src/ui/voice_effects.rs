@@ -171,16 +171,29 @@ pub fn start(app: &PhoenixApp, e: &Effect, cx: &mut Context<PhoenixApp>) {
         let made = cx
             .background_executor()
             .spawn(async move {
+                let log = std::env::var_os("PHOENIX_SOUND_LOG").is_some();
+                let t = Instant::now();
                 let list = animations();
-                let anim = pick(list, kind, id)?;
-                let bytes = fetch(&url)?;
+                let anim = pick(list, kind, id);
+                if log {
+                    eprintln!("phoenix-soundboard: effect animations={} picked={} after {:?}", list.len(), anim.is_some(), t.elapsed());
+                }
+                let anim = anim?;
+                let bytes = fetch(&url);
+                if log {
+                    eprintln!("phoenix-soundboard: effect emoji {:?} bytes after {:?}", bytes.as_ref().map(Vec::len), t.elapsed());
+                }
+                let bytes = bytes?;
                 let mime = if bytes.starts_with(b"\x89PNG") { "image/png" } else { "image/webp" };
                 let uri = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes));
                 let v = with_image(anim, &uri);
                 let speed = if kind == PREMIUM { 0.8 } else { 1. };
                 let dur = crate::media::lottie::duration(&v).div_f64(speed);
-                let img = crate::media::lottie::rasterize_speed(&v, &renderer, RENDER_PX, speed)?;
-                Some((Arc::new(img), dur))
+                let img = crate::media::lottie::rasterize_speed(&v, &renderer, RENDER_PX, speed);
+                if log {
+                    eprintln!("phoenix-soundboard: effect frames {:?} after {:?}, lasts {dur:?}", img.as_ref().map(gpui::RenderImage::frame_count), t.elapsed());
+                }
+                Some((Arc::new(img?), dur))
             })
             .await;
         let Some((img, dur)) = made else { return };
