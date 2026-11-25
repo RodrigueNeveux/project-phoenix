@@ -191,6 +191,10 @@ fn ctx() -> MutexGuard<'static, MessageCtx> {
     CTX.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+pub fn message_ctx() -> MessageCtx {
+    *ctx()
+}
+
 pub fn set_focused(on: bool) {
     ctx().focused = on;
 }

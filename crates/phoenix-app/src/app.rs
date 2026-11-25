@@ -612,6 +612,7 @@ impl PhoenixApp {
             self.rebuild_members();
         }
         self.selected_channel = Some(id);
+        crate::notifications::clear(id.0);
         crate::ui::chat::voice_message::on_channel_change(self, cx);
         self.last_channel.insert(guild, id);
         self.nav_channel_selected(guild);
@@ -1421,6 +1422,7 @@ impl Render for PhoenixApp {
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
         crate::sounds::set_focused(window.is_window_active());
+        crate::notifications::sync_focus(window.is_window_active(), self.selected_channel.map(|c| c.0));
         crate::media::emoji::sync_motion(self.prefs.synced.flag("anim-emoji"), window.is_window_active());
         crate::ui::settings::effects::sync(self, cx.reduce_motion());
         crate::tts::sync(self);

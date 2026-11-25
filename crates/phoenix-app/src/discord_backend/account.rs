@@ -211,11 +211,14 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
     match ev {
         GatewayEvent::MessageCreate(m) => {
             let me = s.adapter.lock().me;
-            let viewing = *s.selected_channel.lock();
-            crate::notifications::on_message(&s.notify.lock(), &s.cache, me, viewing, m);
+            crate::notifications::on_message(&s.notify.lock(), &s.cache, me, m);
             crate::sounds::on_message(&s.notify.lock(), &s.cache, me, m);
         }
         GatewayEvent::Unknown { name, data } if name == "USER_GUILD_SETTINGS_UPDATE" => s.notify.lock().update(data),
+        GatewayEvent::Ready(_) => crate::notifications::on_ready(&s.cache),
+        GatewayEvent::RelationshipAdd(r) => crate::notifications::on_relationship_add(r),
+        GatewayEvent::RelationshipRemove(r) => crate::notifications::on_relationship_remove(r),
+        GatewayEvent::MessageAck(a) => crate::notifications::on_ack(a.channel_id.0),
         GatewayEvent::GuildCreate(g) | GatewayEvent::GuildUpdate(g) => {
             if let Some(d) = g.properties.default_message_notifications {
                 s.notify.lock().set_default(g.id.0, crate::notifications::Level::from_default(Some(d)));

@@ -88,6 +88,7 @@ pub fn init(cx: &mut App) {
 
 pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {
     tray::spawn(cx);
+    notifications::spawn(cx);
     let opts = window_options(cx);
     cx.open_window(opts, move |window, cx| {
         window.set_window_title("Discord Phoenix");

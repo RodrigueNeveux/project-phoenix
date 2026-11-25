@@ -212,7 +212,7 @@ pub fn spawn(cx: &mut App) {
     .detach();
 }
 
-fn activate(cx: &mut App) {
+pub fn activate(cx: &mut App) {
     let mut token = activation::take();
     for w in cx.windows() {
         let _ = w.update(cx, |_, window, _| {
