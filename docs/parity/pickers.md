@@ -12,7 +12,35 @@ Source: dumps `vanilla-picker-emoji`, `vanilla-picker-gif`, `vanilla-picker-stic
 | rail | wrapper_6AvvhR (#2697) | width | 48 | grid.rs rail | ✅ |
 | rail Nitro row | row_3MXiRB (#2701) | border-bottom / pb / mb | 1px --border-subtle / 8 / 8 | grid.rs render_body | ✅ (non-Nitro only) |
 | rail pill | .small__o8_Xq .item.selected | height | 24px, on default categories too | grid.rs rail_pill | ✅ |
-| frequently used | categorySection (#2525), 42 items | source | settings-proto/2 emoji frecency | grid.rs build + rest/frecency.rs | ✅ |
+| frequently used | categorySection (#2525), 42 items | source | settings-proto/2 emoji frecency | grid.rs build + rest/frecency.rs | ✅ order: see below |
+| top server emoji | `TOP_GUILD_EMOJI` section (`categorySection_6c9R7U`), first section | source / count | `GET /guilds/{id}/top-emojis` → `items[{emoji_id, emoji_rank}]` sorted by rank, cached one day (`topEmojisTTL`), fetched for the current server only, never for reactions; row = `top.slice(0, 9 − newly)` + up to 3 emojis of the server created in the last 60 days (`fromTimestamp(now − 60 d)`, newest first) | grid.rs top_section + pickers::load_top_emojis | ✅ live (9 items, first one selected) |
+| top section header / rail | `header_kSdzCr`, `TrophyIcon` | icon | 16px trophy before "Émojis populaires sur <serveur>" (body-sm/semibold), 24px trophy in the rail before the clock | grid.rs section_icon, render_body | ✅ live |
+| POPULAIRES badge | `topGuildEmojiBadge_1bDrGE` | box | padding 4 8, gap 6, radius 4, `linear-gradient(268.26deg, rgb(191,81,81), rgb(219,128,63) 102.45%)`, 14px fire + body-sm/semibold uppercase white "Populaires"; only for the top (not newly added) items | grid.rs popular_badge | ✅ live; the client's flame is an inline 10×13 path, Phoenix uses the extracted `FireIcon` |
+| newly added sub-block | `NEWLY_ADDED_EMOJI` | | unseen newly added emojis get their own block and an "Ajouté(e) récemment" badge in the client | — | ❌ Phoenix keeps them in the row without badge (the "last seen" state is local to the client) |
+
+### Frequent emoji and sticker order (frecency)
+
+Source: `web.b63d846b329d6470.js` module `283047` (the generic `Frecency` class), the emoji store
+(`eA` / `ef`, `numFrequentlyItems: 42`, `computeBonus: () => 100`) and the sticker store
+(`numFrequentlyItems: 20`). Data: `settings-proto/2` (`FrecencyUserSettings`), `emojiFrecency`
+(field 6) and `stickerFrecency` (field 4), read only.
+
+- For each entry, score = Σ over the first 10 `recentUses` of `weight(days)` with
+  `days = moment().diff(t, "days")` (truncated) and weight 100 (≤ 3 d), 70 (≤ 15), 50 (≤ 30),
+  30 (≤ 45), 10 (≤ 80), 1 beyond; `frecency = ceil(totalUses × score / recentUses.length)`.
+  Entries without recent uses are dropped. The stored `frecency` / `score` fields are ignored.
+- Sort: stable by descending frecency, ties in JS object key order: canonical integer keys
+  below 2³²−1 first (for example the emoji "100"), then the protobuf map order on the wire.
+  Phoenix reads that order from the raw bytes (`rest/frecency.rs` `wire_order`) because prost
+  maps lose it.
+- Then unknown keys are skipped and the first 42 emojis / 20 stickers kept.
+- Empty emoji frecency: the client seeds thumbsup, eyes, laughing, watermelon, fork_and_knife,
+  yum, weary, tired_face, poop, 100 (so "100" comes first).
+- Reactions use another history (`emojiReactionFrecency`, frecency
+  `trunc(1000 × (uses / maxUses × .2 + score / 1000 × .8))`): ❌ not read by Phoenix yet.
+- Checked on the real account (2026-11-25): the 42 emojis computed from the live proto match the
+  client's "Fréquemment utilisés" section item for item (✅ ❤ then customs, wilted_rose…).
+
 | inspector | inspector_1bDrGE (#2687) | height / graphic | 48 / 28 | grid.rs inspector | ✅ |
 | GIF tiles | result_H8nOze | size / gaps | 231x110, 11 / 12 | gif.rs | ✅ |
 | GIF favorites tile | img gif_H8nOze under categoryFadeBlurple | image | newest favorite GIF | gif.rs (favorite_gifs) | ✅ |

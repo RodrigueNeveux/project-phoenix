@@ -1379,6 +1379,12 @@ fn main() -> anyhow::Result<()> {
             cx.update_window(win.into(), |_, _, cx| v.update(cx, |_, cx| cx.notify()))?;
             pump(&mut cx, 800);
         }
+        if kind == "pins"
+            && let Ok(y) = arg.parse::<f32>()
+        {
+            cx.update(|_| phoenix_app::ui::chat::scrollbar::handle("pins-list").set_offset(gpui::point(px(0.), px(-y))));
+            pump(&mut cx, 1500);
+        }
         if kind == "emoji"
             && let Ok(row) = arg.parse::<usize>()
         {

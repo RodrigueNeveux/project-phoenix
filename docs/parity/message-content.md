@@ -94,3 +94,38 @@ drawing in `ui/components.rs`.
 | Spoiler container / media | `spoilerContainer_0_7_Rr` + `isHidden_` blur | hidden spoiler background, SPOILER pill (padding 8 12, radius 20, 15px semibold) | ✅ layout; the blur itself is a flat cover (GPUI has no backdrop blur) |
 | Unknown type | `n1` `container_xAKhZr` | 1px --status-warning, radius 12, padding 16, body-sm/medium --text-subtle "Merci de mettre à jour Discord pour afficher ce message" | ✅ (CSS + string) |
 | Search results | `shouldDisableInteractiveComponents` | same drawing, no interaction, no highlight inside components | ✅ (live) |
+
+## Invite cards (wt/invites, 2026-11-25)
+
+Sources: the 2026 invite embed in `current-client/js/2420b0c09d1ff9a5.js` (the switch on the
+resolved invite: `dK` guild profile card v2, `dG` legacy guild card, `dJ` invalid / expired,
+`dL` group DM, `dk` friend link, `dX` stream, `d7`/`cf` voice v2, `dc.Ay` scheduled event) and the
+profile card modules of `816d6850742d01a6.js` (`42780` banner and avatar, `86376` header,
+`136696` games and traits, `123213` + `461888` call to action) and `d40616fab4aa4a98.js`
+(`649640` banner background). CSS: `845486.*.css` (`guildInviteContainer_fknPy8`),
+`179301.*.css` (`*_Xweo-z`), `10886.*.css` (`*_E7xgJz`), `653294.*.css` (`wrapper_jsxF_b`),
+`435860.*.css` (`inviteEmbed_aoI0WQ`). Live DOM and computed styles of the #général pins popout
+(1536×840 @1.5, page zoom 125 %): one invalid invite and two guild invites without banner or icon.
+Data: `GET /invites/{code}?with_counts=true&with_expiration=true` (plus
+`&guild_scheduled_event_id=` for `?event=` links), read only. Code: `ui/chat/invite_embed.rs`,
+parsing in `discord_backend/nav.rs` `invite_preview`.
+
+| feature | source | values | status |
+|---|---|---|---|
+| Which card | resolved invite switch | expired or banned → invalid; group DM (`type` 1 or channel type 3) → group card; friend (`type` 2, or no guild with an inviter) → friend card; stream target → stream card; event → event card; voice / stage / thread channel or HUB → legacy card; any other guild invite (`da.v`) → profile card v2 | ✅ guild / legacy / invalid / group / friend; ❌ stream, event and voice v2 cards (see below) |
+| Link detection | message `codedLinks` | `discord.gg/`, `discord.com/invite/`, `discordapp.com/invite/` (with `www.`, `ptb.`, `canary.`), code `[A-Za-z0-9-]`, optional `?event=`; not inside inline or fenced code; one card per distinct link, in text order; the link stays in the text | ✅ unit tests |
+| Where | message accessories | chat, pins popout, inbox (mentions / saved), search results | ✅ |
+| Resolving | `iW` | Phoenix: legacy wrapper with the "Résolution de l'invitation" title and 48px / bar placeholders | ⚠ the client draws a masked shimmer (`resolving_jsxF_b`); not compared |
+| Profile card frame | `.guildInviteContainer_fknPy8` | 300px wide, 1px --border-subtle, radius 16, --background-surface-high, overflow hidden; 2px top padding of the accessory grid | ✅ live 301.6 × 237.2 |
+| Banner | `.cardHeightMeasure_ .banner_` + `649640` | 72px; DISCOVERABLE with `custom_banner_hash` → discovery splash cover; else `radial-gradient(105.43% 127.05% at 50.1% 127.05%, brighten(c, 1.75) 20.65%, c 85.16%)` with c = brand colour, else the icon's dominant colour, else `--guild-profile-banner-background-default` | ✅ live rgb(74,74,74) → black for a server without icon (baked image: GPUI has no radial gradient); icon colour uses the color-thief port of `avatar_color` on the 128px icon (client: 64px) |
+| Avatar | `.avatarContainer_Xweo-z`, `.avatarWrapper_Xweo-z`, `145497` | margin-top −34, padding 0 16; 70px clan-icon squircle in --background-surface-highest, 64px icon inside; acronym 22px | ✅ live box 70 at x+16; squircle drawn as radius 22 / 19 |
+| Header | `.header_E7xgJz` | margin 8 0, padding 0 16; name heading-sm/semibold 16/20 --text-strong ellipsis, gap 4 with the server tag; members row gap 0 8: 8px dot (--text-status-online / --text-status-offline) + 4 + body-sm 14/18 --text-subtle "1 en ligne", "12 membres" (ICU plural, nbsp); "depuis oct. 2025" from the snowflake, `toLocaleDateString(year numeric, month short)` | ✅ live |
+| Body | `136696` `V` | description body-sm --text-subtle, games row, traits (max 2 lines); nothing → 8px `emptyBody_` | ✅ empty case live; description / traits not seen live; games row ❌ |
+| Button | `123213` + `461888` | full width sm (32, radius 8, 14/18 medium), `active` = --control-connected-*; member → "Aller sur le serveur"; member verification + manual approval → "Postule pour rejoindre"; valid invite → "Rejoindre"; missing roles → "Accepter" | ✅ Rejoindre live (rgb(0,133,69)); "Aller sur le serveur" opens the server and channel; "Accepter" and the application status ❌ (no invite roles / applications data) |
+| Long cards | `dK` | over 292px the card collapses with "Afficher plus" / "Dissimuler les détails" | ❌ not implemented |
+| Legacy card | `wrapper_jsxF_b` | padding 16, 1px --border-subtle, radius 8, --background-surface-high, max 432 / min 160; title body-sm/medium --text-muted mb 12; content wrap gap 16; 48px icon; title 16/20, detail 14/16 --interactive-text-default; splash 64px | ⚠ from CSS, no live sample (needs a voice / hub invite) |
+| Invalid card | `dJ` | title "Tu as été invité(e), mais" (own message: "Tu as envoyé une invitation, mais"), 48px box radius 12 --opacity-red-12 bg + border, 26px EnvelopeIcon --icon-feedback-critical; "Lien d'invitation invalide" heading-sm/medium --text-feedback-critical, "Demander une nouvelle invitation" body-sm 14/16 | ✅ live 302.4 × 111.6 |
+| Group DM card | `dL` | "Tu as été invité(e) à" (own: "Tu as envoyé une invitation pour"), icon only when the group has one, name = group name or recipients ("a, b", "a, b, et c", "a et b autres", "Sans nom"), "N membres", full-width "Rejoindre le groupe privé" or disabled secondary "Rejoint" | ⚠ from JS, no live sample; the 3 recipient avatars ❌ |
+| Friend card | `dk` | "Tu as reçu un lien d'ami" (own: "Tu as envoyé un lien d'ami"), 48px avatar, username twice, "Ajouter" (active) / "Envoyer un message" (secondary, friends) / disabled own | ⚠ from JS, no live sample |
+| Join actions | `acceptInviteAndTransitionToInviteChannel` | `POST /invites/{code}` then open the server | ✅ coded, never run on the real account (`real_shots` denies it) |
+| Stream, voice v2, event, application cards | `dX`, `d7`/`cf`, `dc.Ay`, `d_` | | ❌ a voice invite of a server you can see uses the voice v2 card in the client, Phoenix draws the legacy card; event invites draw the guild card |
