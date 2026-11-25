@@ -104,6 +104,7 @@ pub enum Modal {
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    crate::ui::server_pages::prepare(window, cx);
     with_modal(|m| {
         if let Some(Modal::ChannelSettings(s)) = m {
             channel_settings::prepare_area(s, window, cx);

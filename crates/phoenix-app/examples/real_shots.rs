@@ -1056,7 +1056,10 @@ fn main() -> anyhow::Result<()> {
                 }
                 "server_settings" => {
                     if let Some(g) = app.selected_guild {
-                        app.open_server_settings(g, arg.parse().unwrap_or(0), cx);
+                        let (section, sub) = arg.split_once('/').unwrap_or((arg.as_str(), ""));
+                        let index = section.parse().unwrap_or_else(|_| phoenix_app::ui::modals::server_settings::section_index(section));
+                        app.open_server_settings(g, index, cx);
+                        phoenix_app::ui::server_pages::open_sub(g, sub);
                     }
                 }
                 "emoji" | "gif" | "sticker" => {

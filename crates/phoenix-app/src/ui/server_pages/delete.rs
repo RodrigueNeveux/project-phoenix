@@ -31,13 +31,12 @@ pub fn render(_app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> Any
 
 pub fn modal(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let name = app.guilds.iter().find(|g| g.id == guild).map(|g| g.name.to_string()).unwrap_or_default();
-    let typed = super::with(|s| s.text.get(&(guild, "delete-name".to_owned())).cloned()).unwrap_or_default();
     let error = super::flag(guild, "delete-error").unwrap_or(false);
     let e = cx.entity();
     let close: crate::ui::modal::Action = Rc::new(move |_, cx| {
         super::close_modal();
+        super::forget_input(guild, "delete-name");
         super::with(|s| {
-            s.text.remove(&(guild, "delete-name".to_owned()));
             s.flags.remove(&(guild, "delete-error".to_owned()));
         });
         e.update(cx, |_, cx| cx.notify());
@@ -57,19 +56,7 @@ pub fn modal(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyEl
         )
         .child(div().mt(z(20.)).child(text(12., 16., FontWeight::BOLD, if error { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_SUBTLE }, crate::t!("gs2.delete_enter_name").to_uppercase())))
         .children(error.then(|| text(12., 16., FontWeight::MEDIUM, idx::TEXT_FEEDBACK_CRITICAL, crate::t!("gs2.delete_wrong"))))
-        .child(
-            div()
-                .mt(z(8.))
-                .h(z(40.))
-                .px(z(12.))
-                .rounded(z(8.))
-                .border_1()
-                .border_color(t(if error { idx::BORDER_FEEDBACK_CRITICAL } else { idx::INPUT_BORDER_DEFAULT }))
-                .bg(t(idx::INPUT_BACKGROUND_DEFAULT))
-                .flex()
-                .items_center()
-                .child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, typed.clone())),
-        );
+        .child(super::field(guild, "delete-name", "", cx).mt(z(8.)).when(error, |d| d.border_color(t(idx::BORDER_FEEDBACK_CRITICAL))));
     let close2 = close.clone();
     let n2 = name.clone();
     let footer = div()
@@ -77,8 +64,10 @@ pub fn modal(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyEl
         .gap(z(8.))
         .child(button("gs2-del-cancel", crate::t!("common.cancel"), BtnKind::Secondary).on_click(move |_, w, cx| close2(w, cx)))
         .child(button("gs2-del-ok", crate::t!("gs2.delete_server"), BtnKind::Critical).on_click(cx.listener(move |a, _, _, cx| {
+            let typed = super::value(guild, "delete-name", cx).unwrap_or_default();
             if confirmed(&typed, &n2) {
                 super::close_modal();
+                super::forget_input(guild, "delete-name");
                 write(a, ServerCall::DeleteGuild { guild: sf(guild) }, None, cx);
             } else {
                 super::set_flag(guild, "delete-error", true);

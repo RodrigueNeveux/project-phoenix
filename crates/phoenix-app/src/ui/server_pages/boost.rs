@@ -147,6 +147,22 @@ fn progress_preview(g: &Value) -> gpui::Div {
         )
 }
 
+fn vanity_bar(guild: Id, code: &str, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    let typed = super::value(guild, "vanity", cx)?;
+    if typed == code {
+        return None;
+    }
+    let ok = vanity_ok(&typed);
+    let reset: crate::ui::modals::settings_layout::Act = std::rc::Rc::new(move |_, _, _| super::forget_input(guild, "vanity"));
+    let save: crate::ui::modals::settings_layout::Act = std::rc::Rc::new(move |a, _, cx| {
+        let code = super::value(guild, "vanity", cx).unwrap_or_default();
+        if ok {
+            write(a, ServerCall::SetVanityUrl { guild: sf(guild), code }, None, cx);
+        }
+    });
+    Some(div().mt(z(16.)).child(crate::ui::modals::settings_layout::unsaved_bar(reset, save, cx)).into_any_element())
+}
+
 pub fn next_goal(boosts: u64) -> u64 {
     match boosts {
         0..=1 => 2,
@@ -182,22 +198,17 @@ fn vanity_section(guild: Id, tier: u64, v: Option<&Value>, cx: &mut Context<Phoe
                 .child(
                     div()
                         .mt(z(12.))
-                        .h(z(40.))
-                        .pl(z(5.))
-                        .rounded(z(8.))
-                        .border_1()
-                        .border_color(t(idx::INPUT_BORDER_DEFAULT))
-                        .bg(t(idx::INPUT_BACKGROUND_DEFAULT))
                         .flex()
                         .items_center()
                         .gap(z(4.))
                         .child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, "https://discord.gg/"))
-                        .child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, code.clone()).truncate()),
+                        .child(super::field(guild, "vanity", &code, cx).flex_1()),
                 )
                 .child(div().mt(z(12.)).flex().child(button("gs2-vanity-remove", crate::t!("gs2.vanity_remove"), BtnKind::Critical).on_click(cx.listener(move |a, _, _, cx| {
                     write(a, ServerCall::SetVanityUrl { guild: sf(guild), code: String::new() }, None, cx);
                 })))),
         )
+        .children(vanity_bar(guild, &code, cx))
         .when(!code.is_empty(), |d| {
             d.child(
                 div()

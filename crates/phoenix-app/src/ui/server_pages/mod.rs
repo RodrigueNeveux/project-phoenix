@@ -12,7 +12,8 @@ pub mod template;
 
 use std::{cell::RefCell, collections::HashMap};
 
-use gpui::{AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
+use gpui::{AnyElement, App, Context, Entity, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*};
+use gpui_component::input::InputState;
 use phoenix_api::{
     models::Snowflake,
     rest::{guild_manage::AdminCall, guild_server::ServerCall},
@@ -55,6 +56,9 @@ pub struct Store {
     pub modal: Option<(Id, &'static str)>,
     pub rule_draft: Option<(Id, phoenix_api::rest::guild_server::AutomodRule)>,
     pub menu: Option<(Id, String)>,
+    pub inputs: HashMap<(Id, String), Entity<InputState>>,
+    pub want: Vec<(Id, String, String)>,
+    pub subs: Vec<gpui::Subscription>,
 }
 
 thread_local!(static STORE: RefCell<Store> = RefCell::new(Store::default()));
@@ -75,6 +79,97 @@ pub fn set_sub(guild: Id, section: &'static str, v: Sub) {
     with(|s| {
         s.sub.insert((guild, section), v);
     });
+}
+
+pub fn input(guild: Id, key: &str, initial: &str, cx: &mut Context<PhoenixApp>) -> Option<Entity<InputState>> {
+    let k = (guild, key.to_owned());
+    if let Some(e) = with(|s| s.inputs.get(&k).cloned()) {
+        return Some(e);
+    }
+    with(|s| {
+        if !s.want.iter().any(|(g, kk, _)| *g == guild && kk == key) {
+            s.want.push((guild, key.to_owned(), initial.to_owned()));
+        }
+    });
+    cx.notify();
+    None
+}
+
+pub fn value(guild: Id, key: &str, cx: &App) -> Option<String> {
+    with(|s| s.inputs.get(&(guild, key.to_owned())).cloned()).map(|e| e.read(cx).value().to_string())
+}
+
+pub fn forget_input(guild: Id, key: &str) {
+    with(|s| {
+        s.inputs.remove(&(guild, key.to_owned()));
+    });
+}
+
+pub fn field(guild: Id, key: &str, initial: &str, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    match input(guild, key, initial, cx) {
+        Some(e) => crate::ui::modals::input_box(&e),
+        None => div()
+            .h(z(40.))
+            .px(z(12.))
+            .rounded(z(8.))
+            .bg(t(idx::INPUT_BACKGROUND_DEFAULT))
+            .border_1()
+            .border_color(t(idx::INPUT_BORDER_DEFAULT))
+            .flex()
+            .items_center()
+            .child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, initial.to_owned())),
+    }
+}
+
+pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    let want = with(|s| std::mem::take(&mut s.want));
+    if want.is_empty() {
+        return;
+    }
+    for (g, k, init) in want {
+        let e = cx.new(|cx| InputState::new(window, cx));
+        if !init.is_empty() {
+            e.update(cx, |s, cx| s.set_value(init, window, cx));
+        }
+        let sub = cx.subscribe_in(&e, window, |_, _, ev: &gpui_component::input::InputEvent, _, cx| {
+            if matches!(ev, gpui_component::input::InputEvent::Change) {
+                cx.notify();
+            }
+        });
+        with(|s| {
+            s.inputs.insert((g, k), e);
+            s.subs.push(sub);
+        });
+    }
+    cx.notify();
+}
+
+pub fn parse_sub(s: &str) -> Option<(&'static str, Sub)> {
+    let (k, arg) = s.split_once(':').unwrap_or((s, ""));
+    Some(match k {
+        "raid" => (safety::SECTION, Sub::RaidCaptcha),
+        "dm" => (safety::SECTION, Sub::DmSpam),
+        "automod" => (safety::SECTION, Sub::Automod),
+        "perms" => (safety::SECTION, Sub::Permissions),
+        "webhooks" => (integrations::SECTION, Sub::Webhooks),
+        "app" => (integrations::SECTION, Sub::App(arg.to_owned())),
+        _ => return None,
+    })
+}
+
+pub fn open_sub(guild: Id, s: &str) {
+    match s {
+        "verification" => {
+            set_sub(guild, safety::SECTION, Sub::DmSpam);
+            open_modal(guild, "verification");
+        }
+        "wizard" => set_flag(guild, "onboarding-wizard", true),
+        _ => {
+            if let Some((section, sub)) = parse_sub(s) {
+                set_sub(guild, section, sub);
+            }
+        }
+    }
 }
 
 pub fn flag(guild: Id, key: &str) -> Option<bool> {
@@ -296,6 +391,9 @@ mod tests {
         set_sub(g, "menu.gs.safety", Sub::Automod);
         assert_eq!(sub(g, "menu.gs.safety"), Sub::Automod);
         assert_eq!(sub(g, "menu.gs.integrations"), Sub::Root);
+        open_sub(g, "app:7");
+        assert_eq!(sub(g, "menu.gs.integrations"), Sub::App("7".into()));
+        assert!(parse_sub("nope").is_none());
     }
 
     #[test]

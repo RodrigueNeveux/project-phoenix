@@ -81,17 +81,17 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                 );
         }
         None => {
-            let name = super::with(|s| s.text.get(&(guild, "tpl-name".to_owned())).cloned()).unwrap_or_default();
-            let desc = super::with(|s| s.text.get(&(guild, "tpl-desc".to_owned())).cloned()).unwrap_or_default();
-            let ok = !name.trim().is_empty();
+            let ok = super::value(guild, "tpl-name", cx).is_some_and(|n| !n.trim().is_empty());
             p = p
-                .child(input(name.clone().into(), 40., false))
+                .child(super::field(guild, "tpl-name", "", cx).mt(z(8.)))
                 .child(div().mt(z(20.)).child(label(crate::t!("gs2.tpl_desc"))))
-                .child(input(desc.clone().into(), 88., false))
+                .child(super::field(guild, "tpl-desc", "", cx).mt(z(8.)))
                 .child(div().mt(z(20.)).flex().child(button("gs2-tpl-create", crate::t!("gs2.tpl_generate"), BtnKind::Primary).when(!ok, |b| b.opacity(0.5)).on_click(cx.listener(
                     move |a, _, _, cx| {
-                        if ok {
-                            write(a, ServerCall::CreateTemplate { guild: sf(guild), name: name.clone(), description: desc.clone() }, None, cx);
+                        let name = super::value(guild, "tpl-name", cx).unwrap_or_default();
+                        let description = super::value(guild, "tpl-desc", cx).unwrap_or_default();
+                        if !name.trim().is_empty() {
+                            write(a, ServerCall::CreateTemplate { guild: sf(guild), name, description }, None, cx);
                         }
                     },
                 ))));
