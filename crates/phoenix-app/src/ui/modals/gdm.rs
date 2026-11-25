@@ -123,7 +123,7 @@ impl PhoenixApp {
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = rx.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
-            let Some((uri, png)) = cx.background_spawn(async move { icon_data_uri(&std::fs::read(path).ok()?) }).await else { return };
+            let Some((uri, png)) = cx.background_executor().spawn(async move { icon_data_uri(&std::fs::read(path).ok()?) }).await else { return };
             let _ = this.update(cx, |_, cx| {
                 with_modal(|m| {
                     if let Some(Modal::EditGroup(g)) = m {

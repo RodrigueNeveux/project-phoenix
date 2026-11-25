@@ -270,7 +270,7 @@ impl PhoenixApp {
                 Ok(mut r) => r.status().is_success() && r.body_mut().read_to_end(&mut bytes).await.is_ok(),
                 Err(_) => false,
             };
-            let png = if ok { cx.background_spawn(async move { to_png(&bytes) }).await } else { None };
+            let png = if ok { cx.background_executor().spawn(async move { to_png(&bytes) }).await } else { None };
             let _ = this.update(cx, |a, cx| match png {
                 Some(png) => {
                     cx.write_to_clipboard(ClipboardItem { entries: vec![ClipboardEntry::Image(Image::from_bytes(gpui::ImageFormat::Png, png))] });
@@ -295,7 +295,7 @@ impl PhoenixApp {
                 Ok(mut r) => r.status().is_success() && r.body_mut().read_to_end(&mut bytes).await.is_ok(),
                 Err(_) => false,
             };
-            let written = ok && cx.background_spawn(async move { std::fs::write(path, bytes).is_ok() }).await;
+            let written = ok && cx.background_executor().spawn(async move { std::fs::write(path, bytes).is_ok() }).await;
             if !written {
                 let _ = this.update(cx, |a, cx| a.parity_toast(crate::t!("viewer.save_failed"), cx));
             }
