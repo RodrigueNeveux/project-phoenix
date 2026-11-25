@@ -234,6 +234,11 @@ fn switch_tab(app: &mut PhoenixApp, tab: Tab, window: &mut Window, cx: &mut Cont
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     app.chat.emoji_target = None;
     if let Some(op) = cx.global_mut::<Pickers>().open.take() {
+        let prefs = &mut cx.global_mut::<Pickers>().prefs;
+        prefs.newly_commit();
+        if let (Some(g), Some(n)) = (op.grid.current_guild, op.grid.newly_newest) {
+            prefs.newly_mark_pending(g.0, n.0, chrono::Utc::now().timestamp_millis());
+        }
         if !matches!(op.target, EmojiTarget::Status | EmojiTarget::Field(_)) {
             app.composer.update(cx, |s, cx| s.focus(window, cx));
         }
