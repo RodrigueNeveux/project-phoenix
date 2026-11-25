@@ -765,6 +765,7 @@ fn action(
         .items_center()
         .justify_center()
         .overflow_hidden()
+        .px(z(8.))
         .bg(mix80(idx::BACKGROUND_BASE_LOWER))
         .child(inner)
         .tooltip(crate::ui::tooltip::tip(label))

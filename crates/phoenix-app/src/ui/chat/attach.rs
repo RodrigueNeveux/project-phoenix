@@ -222,7 +222,7 @@ pub fn audio_card(a: &Attachment, cx: &App) -> AnyElement {
         .child(
             div()
                 .flex()
-                .child(named_icon("file", 40., tk(idx::TEXT_LINK)).w(z(24.)).h(z(40.)).opacity(0.6))
+                .child(div().flex_none().w(z(24.)).h(z(40.)).opacity(0.6).child(img(SharedString::new_static(file_icon_url("audio"))).w(z(24.)).h(z(32.))))
                 .child(
                     div()
                         .flex_1()

@@ -2452,7 +2452,7 @@ pub fn attachment_controls(url: &SharedString, cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .rounded(z(crate::theme::generated::global::RADIUS_SM))
-        .bg(c(tok(idx::OPACITY_BLACK_28)))
+        .bg(c(tok(idx::OPACITY_BLACK_40)))
         .child(play)
         .child(time)
         .child(track)
