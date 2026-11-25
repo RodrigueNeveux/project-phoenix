@@ -917,8 +917,8 @@ mod tests {
         assert_eq!(expand_target(400., 144., true), 400.);
         assert!(!expandable(0., 90., 144., false));
         assert_eq!(bar_delay(false, false), 0);
-        assert_eq!(bar_delay(false, true), BAR_DELAY_OTHERS_MS);
-        assert_eq!(bar_delay(true, true), BAR_DELAY_OWN_MS);
+        assert_eq!(bar_delay(false, true), delay_ms(BAR_DELAY_OTHERS_MS));
+        assert_eq!(bar_delay(true, true), delay_ms(BAR_DELAY_OWN_MS));
     }
 
     #[test]
