@@ -127,7 +127,7 @@ tables in [`docs/parity/`](docs/parity) track about 1,950 checked items.
 ## Screenshots
 
 Rendered by Discord Phoenix itself on a real account, offscreen at 1.5x scale, in the Aperture Sciences server.
-Some third-party names are blurred. Captured on 2026-11-25 from main at `cf83f562`.
+Some third-party names are blurred. Captured on 2026-11-25 and 26 from main at `cf83f562` to `60857fbf`.
 
 ### Chat
 
@@ -283,6 +283,10 @@ Some third-party names are blurred. Captured on 2026-11-25 from main at `cf83f56
 <tr>
 <td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/theme-onyx.png" alt="Onyx theme"><br><sub>Onyx theme</sub></td>
 <td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/zoom-125.png" alt="125 % zoom"><br><sub>125 % zoom</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/screenshots/2026-11-25b/narrow-window.png" alt="Narrow window (900 px)"><br><sub>Narrow window (900 px)</sub></td>
+<td></td>
 </tr>
 </table>
 
