@@ -1714,7 +1714,11 @@ pub(crate) fn spoiler_pill(group: SharedString) -> gpui::Div {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(tk(idx::SPOILER_WARNING_TEXT_COLOR))
         .group_hover(group, |s| s.bg(tk(idx::SPOILER_WARNING_BACKGROUND_COLOR_HOVER)).text_color(tk(idx::SPOILER_WARNING_TEXT_COLOR_HOVER)))
-        .child(crate::t!("chat.spoiler"))
+        .child(letter_spaced(&crate::t!("chat.spoiler").to_uppercase(), 0.5))
+}
+
+pub(crate) fn letter_spaced(text: &str, spacing: f32) -> gpui::Div {
+    div().flex().children(text.chars().map(|ch| div().flex_none().mr(z(spacing)).child(SharedString::from(ch.to_string()))))
 }
 
 pub(crate) fn spoiler_blur(url: &str, video: bool, (w, h): (f32, f32)) -> SharedString {

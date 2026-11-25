@@ -481,17 +481,18 @@ fn icon_el(glyph: SysIcon) -> AnyElement {
             .justify_center()
             .child(
                 div()
+                    .flex_none()
                     .h(z(16.))
-                    .px(z(4.))
-                    .rounded(z(8.))
-                    .bg(c(crate::theme::tok(crate::theme::generated::idx::STATUS_DANGER)))
+                    .px(z(8.))
+                    .rounded_full()
+                    .bg(c(crate::theme::tok(crate::theme::generated::idx::BADGE_NOTIFICATION_BACKGROUND)))
                     .flex()
                     .items_center()
                     .text_size(z(12.))
                     .line_height(z(16.))
                     .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(gpui::white())
-                    .child(crate::t!("voice.live")),
+                    .text_color(c(crate::theme::tok(crate::theme::generated::idx::BADGE_NOTIFICATION_TEXT)))
+                    .child(crate::t!("voice.live").to_uppercase()),
             )
             .into_any_element(),
     }
