@@ -291,7 +291,7 @@ pub(super) fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
                 .rounded(z(8.))
                 .bg(c(t.swatch()))
                 .border_1()
-                .border_color(c(tok(idx::BORDER_SUBTLE))),
+                .border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))),
         )
         .when(selected, |d| {
             d.child(
@@ -300,9 +300,9 @@ pub(super) fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
                     .top(z(-2.))
                     .left(z(-2.))
                     .size(z(52.))
-                    .rounded(z(10.))
-                    .border_2()
-                    .border_color(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW))),
+                    .rounded(z(8.))
+                    .border(z(4.))
+                    .border_color(c(tok(idx::BRAND_500))),
             )
             .child(
                 div()
@@ -311,7 +311,7 @@ pub(super) fn theme_card(t: AppTheme, selected: bool) -> Stateful<Div> {
                     .right(z(-6.))
                     .size(z(20.))
                     .rounded_full()
-                    .bg(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW)))
+                    .bg(c(tok(idx::BRAND_500)))
                     .flex()
                     .items_center()
                     .justify_center()

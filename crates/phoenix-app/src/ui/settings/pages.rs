@@ -1273,7 +1273,7 @@ fn theme_row(_: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
                         .rounded(z(8.))
                         .bg(c(theme.swatch()))
                         .border_1()
-                        .border_color(c(tok(idx::BORDER_SUBTLE)))
+                        .border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -1330,7 +1330,56 @@ fn theme_banner(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
         .into_any_element()
 }
 
-fn limited_theme(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+const LIMITED_THEME_END_ALL: i64 = 1_797_184_800_000;
+const LIMITED_THEME_END_NITRO: i64 = 1_803_146_400_000;
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum TimeLeft {
+    Days(i64),
+    Hours(i64),
+    UnderHour,
+}
+
+pub(crate) fn limited_time_left(now_ms: i64, end_ms: i64) -> Option<TimeLeft> {
+    let secs = (end_ms - now_ms) / 1000;
+    if secs <= 0 {
+        return None;
+    }
+    let (mut d, mut h, mut m, sec) = (secs / 86_400, secs % 86_400 / 3600, secs % 3600 / 60, secs % 60);
+    if sec > 0 {
+        m += 1;
+    }
+    if m == 60 {
+        h += 1;
+        m = 0;
+    }
+    if h == 24 {
+        d += 1;
+        h = 0;
+    }
+    Some(if d > 0 {
+        TimeLeft::Days(d + i64::from(h > 0))
+    } else if h > 0 {
+        let h = h + i64::from(m > 45);
+        if h > 11 { TimeLeft::Days(1) } else { TimeLeft::Hours(h) }
+    } else if m > 45 {
+        TimeLeft::Hours(1)
+    } else {
+        TimeLeft::UnderHour
+    })
+}
+
+fn time_left_label(t: TimeLeft) -> SharedString {
+    match t {
+        TimeLeft::Days(n) => crate::t!("sp.ap.limited_left", n = n),
+        TimeLeft::Hours(n) => crate::t!("sp.ap.limited_left_h", n = n),
+        TimeLeft::UnderHour => crate::t!("sp.ap.limited_left_m"),
+    }
+}
+
+fn limited_theme(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let end = if app.backend.premium_tier2() { LIMITED_THEME_END_NITRO } else { LIMITED_THEME_END_ALL };
+    let left = limited_time_left(chrono::Utc::now().timestamp_millis(), end).map(time_left_label);
     div()
         .mt(z(39.))
         .flex()
@@ -1342,7 +1391,7 @@ fn limited_theme(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .items_center()
                 .gap(z(8.))
                 .child(title_text(tr("sp.ap.limited")).font_weight(FontWeight::SEMIBOLD))
-                .child(
+                .children(left.map(|left| {
                     div()
                         .flex()
                         .items_center()
@@ -1356,8 +1405,8 @@ fn limited_theme(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(c(tok(idx::TEXT_DEFAULT)))
                         .child(gpui::svg().path(crate::icons::path("picker/clock")).size(z(12.)).text_color(c(tok(idx::TEXT_DEFAULT))))
-                        .child(tr("sp.ap.limited_left")),
-                ),
+                        .child(left)
+                })),
         )
         .child(
             div()
@@ -2097,7 +2146,15 @@ fn nitro_themes(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .child(title_text(tr("sp.ap.color_themes")).font_weight(FontWeight::SEMIBOLD))
+        .pt(z(30.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .child(title_text(tr("sp.ap.color_themes")).font_weight(FontWeight::SEMIBOLD))
+                .child(gpui::svg().path(crate::icons::path("nitro")).size(z(16.)).text_color(c(tok(idx::TEXT_STRONG)))),
+        )
         .child(desc_text(tr("sp.ap.color_themes_d")))
         .child(
             div()
@@ -2191,3 +2248,23 @@ mod search_tests {
     }
 }
 
+#[cfg(test)]
+mod limited_tests {
+    use super::*;
+
+    #[test]
+    fn time_left_rounds_like_the_client_pill() {
+        let h = 3_600_000;
+        let now = 1_795_617_000_000;
+        assert_eq!(limited_time_left(now, LIMITED_THEME_END_NITRO), Some(TimeLeft::Days(88)));
+        assert_eq!(limited_time_left(now, LIMITED_THEME_END_ALL), Some(TimeLeft::Days(19)));
+        assert_eq!(limited_time_left(0, 2 * 24 * h), Some(TimeLeft::Days(2)));
+        assert_eq!(limited_time_left(0, 2 * 24 * h + 1000), Some(TimeLeft::Days(2)));
+        assert_eq!(limited_time_left(0, 2 * 24 * h + h), Some(TimeLeft::Days(3)));
+        assert_eq!(limited_time_left(0, 5 * h + 50 * 60_000), Some(TimeLeft::Hours(6)));
+        assert_eq!(limited_time_left(0, 11 * h + 50 * 60_000), Some(TimeLeft::Days(1)));
+        assert_eq!(limited_time_left(0, 50 * 60_000), Some(TimeLeft::Hours(1)));
+        assert_eq!(limited_time_left(0, 10 * 60_000), Some(TimeLeft::UnderHour));
+        assert_eq!(limited_time_left(10, 10), None);
+    }
+}

@@ -84,6 +84,14 @@ fn find_arg<'a>(args: &[(&str, &'a str)], name: &str) -> Option<&'a str> {
     args.iter().find(|&&(k, _)| k == name).map(|&(_, v)| v)
 }
 
+fn ungrouped(raw: &str) -> std::borrow::Cow<'_, str> {
+    if raw.contains([' ', '\u{a0}', '\u{202f}']) {
+        raw.chars().filter(|c| !matches!(c, ' ' | '\u{a0}' | '\u{202f}')).collect::<String>().into()
+    } else {
+        raw.into()
+    }
+}
+
 fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], pound: Option<&str>, out: &mut String) {
     match kind {
         1 => {
@@ -97,7 +105,7 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
             if let Some(name) = items.get(1).and_then(Value::as_str)
                 && let Some(val) = find_arg(args, name)
             {
-                if let Ok(n) = val.parse::<i64>() {
+                if let Ok(n) = ungrouped(val).parse::<i64>() {
                     out.push_str(&intl::number(locale, n));
                 } else if let Ok(f) = val.parse::<f64>() {
                     out.push_str(&intl::decimal(locale, f, 2));
@@ -125,7 +133,7 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
             let Some(name) = items.get(1).and_then(Value::as_str) else { return };
             let Some(cases) = items.get(2).and_then(Value::as_object) else { return };
             let offset = items.get(3).and_then(Value::as_f64).unwrap_or(0.0);
-            let raw = find_arg(args, name).unwrap_or("0");
+            let raw = ungrouped(find_arg(args, name).unwrap_or("0"));
             let n = raw.parse::<f64>().unwrap_or(0.0);
             let exact = format!("={}", n as i64);
             let cat = intl::plural(locale, (n - offset).max(0.0));
@@ -171,6 +179,8 @@ mod tests {
         assert_eq!(render("en-US", &ast, &[("n", "1")], &m), "1 item");
         assert_eq!(render("en-US", &ast, &[("n", "1234")], &m), "1,234 items");
         assert_eq!(render("de", &ast, &[("n", "1234")], &m), "1.234 items");
+        assert_eq!(render("fr", &ast, &[("n", "4\u{202f}625\u{202f}124")], &m), "4\u{202f}625\u{202f}124 items");
+        assert_eq!(render("en-US", &ast, &[("n", "1 234")], &m), "1,234 items");
 
         let hook = json!([[8, "$b", ["Hello ", [1, "name"]]]]);
         let m2 = Mapping { hash: "y", upper: true, args: vec![] };

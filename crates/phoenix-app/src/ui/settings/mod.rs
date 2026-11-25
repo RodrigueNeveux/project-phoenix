@@ -50,11 +50,12 @@ impl AppTheme {
         }
     }
     pub fn swatch(self) -> u32 {
+        use crate::theme::{generated::idx, tok};
         match self {
-            Self::Dark => 0x313338,
-            Self::Light => 0xFFFFFF,
-            Self::Ash => 0x2B2B30,
-            Self::Onyx => 0x0C0C0E,
+            Self::Dark => tok(idx::PLUM_20),
+            Self::Light => tok(idx::WHITE),
+            Self::Ash => tok(idx::PRIMARY_600),
+            Self::Onyx => tok(idx::BLACK),
         }
     }
 }
