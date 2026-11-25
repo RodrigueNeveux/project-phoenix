@@ -812,6 +812,11 @@ fn main() -> anyhow::Result<()> {
             app.deafened = self_deaf;
             app.nav.expanded_folders.clear();
             app.nav.expanded_folders.extend(open_folders.iter().copied());
+            if let Some(only) = std::env::var("PHX_ONLY_GUILD").ok().and_then(|v| parse_id(&v)) {
+                app.guilds.retain(|g| g.id == only);
+                app.nav.folders.clear();
+                app.dms.clear();
+            }
             app.show_members = show_members;
             if in_voice {
                 app.voice_channel = app
