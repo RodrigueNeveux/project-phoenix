@@ -70,7 +70,7 @@ fn topic_block(s: &State, forum: bool, cx: &App) -> Option<AnyElement> {
     let max: i64 = if forum { 4096 } else { 1024 };
     let left = max - area.read(cx).value().encode_utf16().count() as i64;
     let a2 = area.clone();
-    let wrap: Rc<dyn Fn(&'static str, &mut gpui::Window, &mut App)> = Rc::new(move |mark, w, cx| {
+    let wrap: super::settings_form::OnWrap = Rc::new(move |mark, w, cx| {
         a2.update(cx, |st, cx| {
             let (t, r) = wrap_selection(&st.value(), st.selected_range(), mark);
             st.set_value(t, w, cx);

@@ -91,7 +91,7 @@ pub enum Modal {
     Call { channel: Id, user: Id },
     ServerSettings { guild: Id, section: usize },
     CreateChannel(create_channel::State),
-    ChannelSettings(channel_settings::State),
+    ChannelSettings(Box<channel_settings::State>),
     Privacy(privacy::Privacy),
     Security(privacy::Security),
     GuildNotify(guild_notify::State),

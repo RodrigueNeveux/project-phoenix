@@ -199,7 +199,7 @@ impl PhoenixApp {
     pub fn open_thread_settings(&mut self, thread: Id, cx: &mut Context<Self>) {
         let Some(ch) = self.channels.get(&thread).or_else(|| self.nav.find_thread(thread)).cloned() else { return };
         let info = self.thread_state(thread);
-        open_modal(Modal::ChannelSettings(crate::ui::modals::channel_settings::State::for_thread(&ch, &info)), None);
+        open_modal(Modal::ChannelSettings(Box::new(crate::ui::modals::channel_settings::State::for_thread(&ch, &info))), None);
         cx.notify();
     }
 

@@ -136,7 +136,7 @@ fn sync_card(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Optio
 }
 
 #[allow(clippy::too_many_arguments)]
-fn access_row(id: impl Into<gpui::ElementId>, lead: AnyElement, name: SharedString, sub: Option<SharedString>, muted: bool, tag: SharedString, remove: Option<Rc<dyn Fn(&mut App)>>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn access_row(id: impl Into<gpui::ElementId>, lead: AnyElement, name: SharedString, sub: Option<SharedString>, muted: bool, tag: SharedString, remove: Option<super::settings_form::Cb>, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let can = remove.is_some();
     div()
         .pb(z(16.))

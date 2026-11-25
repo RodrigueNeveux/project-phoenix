@@ -9,6 +9,9 @@ use crate::{
 };
 
 pub type OnPick = Rc<dyn Fn(usize, &mut Window, &mut App)>;
+pub type OnValue = Rc<dyn Fn(u32, &mut Window, &mut App)>;
+pub type OnWrap = Rc<dyn Fn(&'static str, &mut Window, &mut App)>;
+pub type Cb = Rc<dyn Fn(&mut App)>;
 
 pub fn text(t: impl Into<SharedString>, size: f32, line: f32, color: usize) -> gpui::Div {
     div().text_size(z(size)).line_height(z(line)).text_color(c(tok(color))).child(t.into())
@@ -162,7 +165,7 @@ pub fn radio_group(id: &'static str, options: Vec<(SharedString, Option<SharedSt
     g.into_any_element()
 }
 
-pub fn value_slider(id: &'static str, min: u32, max: u32, value: u32, marks: Vec<(u32, SharedString)>, on_set: Rc<dyn Fn(u32, &mut Window, &mut App)>) -> AnyElement {
+pub fn value_slider(id: &'static str, min: u32, max: u32, value: u32, marks: Vec<(u32, SharedString)>, on_set: OnValue) -> AnyElement {
     let span = (max - min).max(1) as f32;
     let frac = |v: u32| (v.clamp(min, max) - min) as f32 / span;
     let n_marks = marks.len();
@@ -262,7 +265,7 @@ pub fn info_notice(t: impl Into<SharedString>) -> AnyElement {
         .into_any_element()
 }
 
-pub fn format_toolbar(id: &'static str, extra: bool, on_wrap: Rc<dyn Fn(&'static str, &mut Window, &mut App)>) -> AnyElement {
+pub fn format_toolbar(id: &'static str, extra: bool, on_wrap: OnWrap) -> AnyElement {
     let mut tools: Vec<(&'static str, &'static str)> = vec![("settings/bold", "**"), ("settings/italic", "*"), ("settings/underline", "__"), ("settings/strike", "~~")];
     if extra {
         tools.push(("settings/quote", "> "));

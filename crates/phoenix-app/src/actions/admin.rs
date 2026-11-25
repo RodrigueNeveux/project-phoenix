@@ -144,6 +144,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_channel(&mut self, guild: Id, parent: Option<Id>, kind: ChannelKind, name: String, private: bool, members: Vec<(Id, u8)>, cx: &mut Context<Self>) {
         let name = channel_name(kind, &name);
         if name.is_empty() {
@@ -217,7 +218,7 @@ impl PhoenixApp {
 
     pub fn open_channel_settings(&mut self, channel: Id, cx: &mut Context<Self>) {
         let Some(ch) = self.channels.get(&channel) else { return };
-        open_modal(Modal::ChannelSettings(channel_settings::State::new(ch)), None);
+        open_modal(Modal::ChannelSettings(Box::new(channel_settings::State::new(ch))), None);
         self.admin(AdminCall::Channel { channel: sf(channel) }, cx, move |_, r, cx| {
             if let Ok(v) = r {
                 crate::actions::with_modal(|m| {
