@@ -59,7 +59,7 @@ pub static ENTRIES: &[Entry] = &[
     en("dm-search", &[6, 36], true, &[0, 1], 0),
     b("ac-games", &[6, 39], true),
     b("avatars", &[6, 41], true),
-    b("act-stream", &[7, 2], true),
+    b("act-stream", &[7, 26], true),
     en("n-react", &[7, 7], false, &[0, 1, 2], 0),
     b("n-online", &[7, 12], true),
     b("n-anniv", &[7, 14], true),
