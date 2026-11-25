@@ -241,3 +241,26 @@ The full sidebar tree (`i4` sidebar items) also defines Overlay en jeu, Clips, M
 | Nouveautés | settings footer « … » → Discord's changelog modal (480px, `XFAI1O`: uppercase lheading titles in `--text-brand` / `--text-feedback-*` with a 60 % rule, body-md/normal paragraphs margin 8 0, lists margin 4 0 4 20 with 16px item spacing); opening it marks the changelog seen through settings-proto, so it is never opened over CDP | `view.rs changelog_modal`, `updater::spawn_changelog` | ✅ the same entry opens a Phoenix changelog in that layout: every published GitHub release of Phoenix (GET `api.github.com/repos/…/releases`, no Discord call), title + date, notes rendered from Markdown, prereleases in the warning colour, link to all releases; loading and error states |
 
 ⚠ The very first CDP pass of this session (settings opened from the gear, nothing clicked inside) logged one `PATCH /users/@me/settings-proto/1`. Every later pass (11 openings, same steps) and every sweep3 pass sent only GETs and `POST /science`, so it looks like a one-off dismissal by the client; the body was not captured (the driver now records it).
+
+## Live pass on every user settings page (wt/live-diff-c, 2026-11-25)
+
+Client: the user's running Discord, settings opened over the current route with the user panel cog, pages switched from the sidebar, closed with Escape. Every non-GET request was blocked with `Fetch.enable` during the pass (only `POST /science` and `/metrics` were seen, nothing else). Shots 1536x788 CSS at 1.5x, DOM dumps per scroll step (rects, computed styles, SVG, text). Phoenix: `real_shots PHX_OPEN=settings:<page>` at the same size and scale; `PHX_SETTINGS_SCROLL=<px>` scrolls the content. The current sidebar has no Devices, Keybinds, Clips, Streamer, Activity feed or What's New page: General (Account, Data & Privacy, Message Permissions, Notifications), Billing (Nitro, Server Boost, Subscriptions, Gift Inventory, Billing), Experience (Voice & Video, Appearance, Accessibility, System, Language & Time), Games & Apps (Registered Games, Activity Privacy, Connected Apps), Other (Developer, Log Out).
+
+| element | client source | fix | status |
+|---|---|---|---|
+| category title → first row | `stack_TWWX0S` header (h2 32 + pb 24), 1px spacer, rows stack; first `baseSettingWrapper` label at title+67 on every page | title block pb 15 (+ column gap 10 + 1) | ✅ (was +76) |
+| page lead | `body-sm/normal` 4px under the title, header pb 24 + 1px before the rows | lead mt -21, pb 15 | ✅ |
+| switch rows | `.baseSettingWrapper_4Z2WJy{min-height:48px}`, padding 10 0, rows 58px apart | `item_ex` top rows min-h 48 | ✅ (was 54px apart) |
+| sidebar label | `Cz07t8` « Permissions de messagerie » | discord.yml mapping (was `+o1pDZ` « Contenu et social ») | ✅ |
+| Data & Privacy title | `QDAriI` « Comment Discord utilise mes données » | mapping (was `e0rLYY`) | ✅ |
+| Account « Afficher » | `textButton_nJgowo primary_nJgowo` → `--text-brand`, 16/20 500 | `reveal_button` | ✅ |
+| Account row chevron | ChevronLargeRightIcon (`M8.3 3.3…`), fill `--interactive-icon-default` | `value_chevron` | ✅ |
+| Gift card promo | `container_J9WkLo compact_J9WkLo`: padding 24, gradient over `--background-surface-high`, `content_J9WkLo` max-width 400; `listItem_kPtvGA` align center, gap 6, pl 2; icons ServerGrid, cloud (`M14 4a5 5…`), Gift, Screen 12px; links `--text-link` | `gift::promo` | ✅ (the Lottie art on the right stays a static glyph) |
+| Gift redeem field | `input_0PLWhS` placeholder « WUMP-AAAAA-BBBBB-CCCCC », md primary button 100 wide at opacity .5 while empty | `gift::redeem` | ✅ |
+| Connected apps tiles | `applicationIcon_jn4e52` 28px, border-radius 28px (round) | `connection_tiles` | ✅ |
+| Server Boost header | lead text with the « En savoir plus » anchor inline, 364 wide | `boost::header` | ✅ |
+| Server Boost guild cards | stats `body-xs/semibold` `--text-subtle`; 0 boosts → plural `pob/cL` « Pas de boost », no level | `boost::guild_cards` | ✅; ❌ the client's guild selection (it skips some guilds, e.g. the user's own Project Phoenix server) is not known |
+| Server Boost art | `gemIcon_xDn2Ui` 15x24 image, `thumbnail_DV7fsY` video still | — | ❌ images not loaded yet |
+| Content filter tabs | `tab_9mZA96 vertical`: padding 10, border-left 2 (selected, ml -1) / 1, 4px margin-bottom (20 apart) | `content_filters` | ✅ |
+| Notifications « Quelqu'un réagit » select | `container_VhFsFg[data-layout=horizontal]` grid `auto auto`, gap 24: the select gets max-content + half the free space (316px here) | fixed 280px | ❌ |
+| Subscriptions | Nitro Squad card and credits | `real_shots` now forwards `subscriptions()` (GETs only) | ✅ data in the offscreen render |
