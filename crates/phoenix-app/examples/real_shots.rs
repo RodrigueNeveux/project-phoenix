@@ -780,6 +780,18 @@ fn main() -> anyhow::Result<()> {
         });
     })?;
     pump(&mut cx, wait * 1000 / 2);
+    if std::env::var("PHX_VIEW").as_deref() == Ok("favorites")
+        && let Some(f) = env_favorites()
+    {
+        cx.update_window(win.into(), |_, _, cx| {
+            v.update(cx, |app, cx| {
+                app.prefs.synced.favorites = f;
+                app.favorites_last = channel;
+                phoenix_app::ui::favorites::open(app, cx);
+                cx.notify();
+            })
+        })?;
+    }
     cx.update_window(win.into(), |_, window, cx| {
         window.resize(size(px(w), px(h)));
         window.bounds_changed(cx);
