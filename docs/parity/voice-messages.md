@@ -57,7 +57,7 @@ From the CSS and JS (2026-11-25):
 * the send button is focused when the bar mounts and after a stop (`a.current.focus()`), so its icon shows `--brand-430` (`:focus`), `--brand-500` while pressed.
 * preview `playback_E0Lm4d`: gap 16; waveform `margin-inline-start: 4px`; timer group without gap, timer min-width 32 `--text-default`.
 
-Phoenix follows all of these (`live_wave`, `Draft::{collapse, entrance}`, `Store::send_focus`). ⚠ The send icon colour transition (`.25s`) is instant.
+Phoenix follows all of these (`live_wave`, `Draft::{collapse, entrance}`, `Store::send_focus`). The send icon colour (`sendButtonChild_bWT6VE`, 550929: `transition: color .25s ease-in-out`, no `transition: none` on any state) fades over 250 ms ease-in-out between rest `--text-brand`, hover/focus `--brand-430` and pressed `--brand-500`, in both directions (`faded`, `SEND_FADE_MS`; hover and press tracked on the button).
 
 ## Player (`container_seLrDE`)
 
@@ -77,7 +77,7 @@ Phoenix follows all of these (`live_wave`, `Draft::{collapse, entrance}`, `Store
 | End | `onEnded`: stops, keeps the played look at 0:00 for 500 ms (`V.current` timer), then idle; next play restarts at 0. Recorder preview (`e8`) resets at once | ✅ |
 | Seek | 408822 drag hook: mousedown seeks and starts a window-level drag (mousemove / mouseup anywhere), playback is held (`playing && !dragging`) and resumes on release; released at the end → the 500 ms end state | ✅ (CDP: 0:04 → drag to 75 % 0:02 → past the end 0:00 → release 0:00); hit-tested so a pins popout over the chat does not seek the message under it |
 | Focus | play (ring 32×32, radius 50 %), speed (32×24, radius 4), volume (24×24): `rgb(0,176,244)` 4 px ring, tab order play → speed → volume (CDP) | ✅ `focus_ring::ring`; Enter/Space activate |
-| State transitions | duration colour `.2s ease-in-out`, speed pill `.2s ease-in`, volume icon `.2s ease-in-out` on play/pause; hover changes are instant (`transition: none`) | ✅ on play/pause; ⚠ leaving hover is instant in Phoenix (the client fades back over .2 s) |
+| State transitions | duration colour `.2s ease-in-out`, speed pill `.2s ease-in`, volume icon `.2s ease-in-out` on play/pause; hover changes are instant (`transition: none`) | ✅ on play/pause; ✅ hover (967062: `:hover { transition: none }`, so entering is instant and leaving uses the base rule): leaving the speed pill fades bg + text back over 200 ms `ease-in`, leaving the volume icon fades its colour over 200 ms `ease-in-out` (`hover_fade`, `HOVER_OUT_MS`), on top of the play/pause mix |
 | Replies | a reply to a voice message shows the italic placeholder `XC3A52` "Clique pour afficher le message vocal" (CDP, sandbox, `repliedTextPlaceholder_2i8Bfm` 14/18 italic `--text-default`) | ✅ chat replies and search results (`Message::reply_voice`) |
 | Pins | the pins popout renders the full player (CDP: 246.6×48, same offsets as in chat) | ✅ pins and inbox entries now render attachments |
 | Search results | results render message accessories | ✅ (same `chat::attachment` path; not opened live) |

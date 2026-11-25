@@ -140,6 +140,18 @@ struct Store {
     app: Option<WeakEntity<PhoenixApp>>,
     send_focus: Option<FocusHandle>,
     focus_send: bool,
+    hovered: HashSet<SharedString>,
+    left: HashMap<SharedString, Instant>,
+    send_hover: bool,
+    send_press: bool,
+    fades: HashMap<&'static str, Fade>,
+}
+
+#[derive(Clone, Copy)]
+struct Fade {
+    from: Hsla,
+    to: Hsla,
+    at: Instant,
 }
 
 impl Default for Store {
@@ -171,6 +183,11 @@ impl Default for Store {
             app: None,
             send_focus: None,
             focus_send: false,
+            hovered: HashSet::new(),
+            left: HashMap::new(),
+            send_hover: false,
+            send_press: false,
+            fades: HashMap::new(),
         }
     }
 }
@@ -906,6 +923,62 @@ fn update_look(cx: &mut App, key: &SharedString, played: bool, playing: bool, br
     l
 }
 
+pub const HOVER_OUT_MS: f32 = 200.;
+pub const SEND_FADE_MS: f32 = 250.;
+
+fn set_hovered(cx: &mut App, id: &SharedString, over: bool) {
+    let st = store(cx);
+    if over {
+        st.hovered.insert(id.clone());
+        st.left.remove(id);
+    } else if st.hovered.remove(id) {
+        st.left.insert(id.clone(), Instant::now());
+        bump(cx, HOVER_OUT_MS as u64 + 20);
+    }
+}
+
+pub fn hover_out(left_ms: Option<f32>, hovered: bool, hover: Hsla, rest: Hsla, ease: fn(f32) -> f32) -> Hsla {
+    if hovered {
+        return hover;
+    }
+    match left_ms {
+        Some(ms) if ms < HOVER_OUT_MS => mix(hover, rest, ease((ms / HOVER_OUT_MS).max(0.))),
+        _ => rest,
+    }
+}
+
+fn hover_fade(cx: &App, id: &SharedString, hover: Hsla, rest: Hsla, ease: fn(f32) -> f32) -> Hsla {
+    let Some(st) = cx.try_global::<Store>() else { return rest };
+    let left = st.left.get(id).map(|at| ms_between(*at, Instant::now()));
+    hover_out(left, st.hovered.contains(id), hover, rest, ease)
+}
+
+fn fade_shown(f: &Fade, now: Instant, ms: f32, ease: fn(f32) -> f32) -> Hsla {
+    let t = ms_between(f.at, now) / ms;
+    if t >= 1. { f.to } else { mix(f.from, f.to, ease(t.max(0.))) }
+}
+
+fn faded(cx: &mut App, id: &'static str, target: Hsla, ms: f32, ease: fn(f32) -> f32) -> Hsla {
+    let now = Instant::now();
+    let st = store(cx);
+    let (shown, restart) = match st.fades.get(id).copied() {
+        None => (target, Some(Fade { from: target, to: target, at: now })),
+        Some(f) if f.to == target => (fade_shown(&f, now, ms, ease), None),
+        Some(f) => {
+            let from = fade_shown(&f, now, ms, ease);
+            (from, Some(Fade { from, to: target, at: now }))
+        }
+    };
+    if let Some(f) = restart {
+        let moving = f.from != f.to;
+        st.fades.insert(id, f);
+        if moving {
+            bump(cx, ms as u64 + 20);
+        }
+    }
+    shown
+}
+
 fn state_mix(cx: &App, key: &SharedString, playing: bool, rest: Hsla, on: Hsla, ease: fn(f32) -> f32) -> Hsla {
     let now = Instant::now();
     let target = if playing { on } else { rest };
@@ -1316,13 +1389,17 @@ pub fn bar(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) 
     };
     let ch = channel;
     let send_focused = focus.as_ref().is_some_and(|h| h.is_focused(window));
-    let send_color = c(tok(if !can_send {
+    let (send_hover, send_press) = cx.try_global::<Store>().map_or((false, false), |s| (s.send_hover, s.send_press));
+    let send_target = c(tok(if !can_send {
         idx::ICON_MUTED
-    } else if send_focused {
+    } else if send_press {
+        idx::BRAND_500
+    } else if send_focused || send_hover {
         idx::BRAND_430
     } else {
         idx::TEXT_BRAND
     }));
+    let send_color = faded(cx, "vm-send", send_target, SEND_FADE_MS, ease_in_out);
     let mut send_btn = div()
         .id("vm-send")
         .group("vm-send")
@@ -1340,16 +1417,23 @@ pub fn bar(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) 
             }))
         })
         .when(!can_send, |d| d.cursor(gpui::CursorStyle::OperationNotAllowed))
-        .child(
-            svg()
-                .path(crate::icons::path("send-message"))
-                .size(z(20.))
-                .flex_none()
-                .text_color(send_color)
-                .when(can_send, |s| s.group_hover("vm-send", |s| s.text_color(c(tok(idx::BRAND_430)))))
-                .id("vm-send-icon")
-                .when(can_send, |s| s.group_active("vm-send", |s| s.text_color(c(tok(idx::BRAND_500))))),
-        );
+        .on_hover(|over, window, cx| {
+            store(cx).send_hover = *over;
+            window.refresh();
+        })
+        .on_mouse_down(MouseButton::Left, |_, window, cx| {
+            store(cx).send_press = true;
+            window.refresh();
+        })
+        .on_mouse_up(MouseButton::Left, |_, window, cx| {
+            store(cx).send_press = false;
+            window.refresh();
+        })
+        .on_mouse_up_out(MouseButton::Left, |_, window, cx| {
+            store(cx).send_press = false;
+            window.refresh();
+        })
+        .child(svg().path(crate::icons::path("send-message")).size(z(20.)).flex_none().text_color(send_color));
     if let Some(h) = &focus {
         send_btn = send_btn.track_focus(h);
     }
@@ -1566,6 +1650,12 @@ pub fn player(url: &SharedString, meta: &VoiceMeta, cx: &App) -> AnyElement {
     let rate_fg = state_mix(cx, &key, v.playing, c(tok(idx::INTERACTIVE_TEXT_DEFAULT)), c(tok(idx::BRAND_200)), ease_in);
     let rate_hover_fg = if v.playing { white } else { c(tok(idx::INTERACTIVE_TEXT_ACTIVE)) };
     let duration_color = state_mix(cx, &key, v.playing, c(tok(idx::INTERACTIVE_TEXT_DEFAULT)), white, ease_in_out);
+    let rate_hover_bg = c(tok(idx::INTERACTIVE_BACKGROUND_HOVER));
+    let rate_id: SharedString = format!("rate-{key}").into();
+    let vol_id: SharedString = format!("vol-{key}").into();
+    let rate_bg = hover_fade(cx, &rate_id, rate_hover_bg, rate_bg, ease_in);
+    let rate_fg = hover_fade(cx, &rate_id, rate_hover_fg, rate_fg, ease_in);
+    let vol_color = hover_fade(cx, &vol_id, vol_hover_fg, vol_color, ease_in_out);
     let pressed_bg = if v.playing { gpui::Background::from(c(tok(idx::BRAND_360))) } else { play_bg };
     let (icon_rest, icon_pressed) = if v.playing { (c(tok(idx::BRAND_500)), c(tok(idx::BRAND_500))) } else { (white, c(tok(idx::BRAND_360))) };
     let play = div()
@@ -1639,9 +1729,13 @@ pub fn player(url: &SharedString, meta: &VoiceMeta, cx: &App) -> AnyElement {
                 .text_color(rate_fg)
                 .flex()
                 .justify_center()
-                .group_hover(rate_group, move |s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))).text_color(rate_hover_fg))
+                .group_hover(rate_group, move |s| s.bg(rate_hover_bg).text_color(rate_hover_fg))
                 .child(SharedString::from(rate_label(vm::PLAYBACK_RATES[rate_ix]))),
         )
+        .on_hover(move |over, window, cx| {
+            set_hovered(cx, &rate_id, *over);
+            window.refresh();
+        })
         .on_click(|_, _, cx| {
             cycle_rate(cx);
             cx.refresh_windows();
@@ -1669,6 +1763,10 @@ pub fn player(url: &SharedString, meta: &VoiceMeta, cx: &App) -> AnyElement {
                         .id("vm-vol-icon")
                         .group_active(vol_group, move |s| s.text_color(vol_active)),
                 )
+                .on_hover(move |over, window, cx| {
+                    set_hovered(cx, &vol_id, *over);
+                    window.refresh();
+                })
                 .on_click(move |_, window, cx| {
                     toggle_mute(&k_vol, cx);
                     window.refresh();
@@ -2114,5 +2212,27 @@ mod tests {
         assert_eq!(mount_factor(Some(0.), 0, 10), 0.);
         assert!(mount_factor(Some(50.), 0, 10) > mount_factor(Some(50.), 9, 10));
         assert!((mount_factor(Some(160.), 9, 10) - 1.).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hover_is_instant_and_leaving_fades_back_over_200_ms() {
+        let hover = gpui::hsla(0., 0., 1., 1.);
+        let rest = gpui::hsla(0., 0., 0., 1.);
+        assert_eq!(hover_out(None, true, hover, rest, ease_in), hover);
+        assert_eq!(hover_out(Some(0.), false, hover, rest, ease_in), hover);
+        let mid = hover_out(Some(100.), false, hover, rest, ease_in);
+        assert!(mid.l > 0. && mid.l < 1.);
+        assert_eq!(hover_out(Some(HOVER_OUT_MS), false, hover, rest, ease_in), rest);
+        assert_eq!(hover_out(None, false, hover, rest, ease_in), rest);
+    }
+
+    #[test]
+    fn send_colour_fades_over_250_ms() {
+        let now = Instant::now();
+        let f = Fade { from: gpui::hsla(0., 0., 0., 1.), to: gpui::hsla(0., 0., 1., 1.), at: now };
+        assert_eq!(fade_shown(&f, now, SEND_FADE_MS, ease_in_out), f.from);
+        let half = fade_shown(&f, now + Duration::from_millis(125), SEND_FADE_MS, ease_in_out);
+        assert!((half.l - 0.5).abs() < 0.05, "{half:?}");
+        assert_eq!(fade_shown(&f, now + Duration::from_millis(250), SEND_FADE_MS, ease_in_out), f.to);
     }
 }
