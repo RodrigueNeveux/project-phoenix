@@ -1293,7 +1293,8 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
                 .on_click(cx.listener(|a, _, w, cx| a.toggle_status_picker(w, cx)))
                 .on_hover(cx.listener(|_, h: &bool, _, cx| {
-                    if crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(3, 0), *h) {
+                    let deco = crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(3, 0), *h);
+                    if crate::ui::states::set_hover(crate::ui::states::key("user-panel-roll"), *h) || deco {
                         cx.notify();
                     }
                 }))
@@ -1327,7 +1328,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                         .child(crate::ui::emoji_text::label(app.me.display_name.clone(), 14.)),
                                 ),
                         )
-                        .child(div().relative().w_full().h(z(13.)).overflow_hidden().child(div().w_full().group_hover("user-panel-avatar", |s| s.opacity(0.)).child(match crate::ui::members::self_sub_text(app) {
+                        .child(crate::ui::states::hover_roll(crate::ui::states::key("user-panel-roll"), 13. * crate::theme::zoom(), match crate::ui::members::self_sub_text(app) {
                             Some(row) => row.into_any_element(),
                             None => div()
                                 .text_size(z(12.))
@@ -1350,21 +1351,15 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                                     14. * crate::theme::zoom() / 1.375,
                                 ))
                                 .into_any_element(),
-                        }))
-                        .child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .size_full()
-                                .opacity(0.)
-                                .group_hover("user-panel-avatar", |s| s.opacity(1.))
-                                .text_size(z(12.))
-                                .line_height(z(13.))
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
-                                .text_ellipsis()
-                                .child(app.me.name.clone()),
+                        },
+                        div()
+                            .text_size(z(12.))
+                            .line_height(z(13.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(t(idx::INTERACTIVE_TEXT_DEFAULT))
+                            .text_ellipsis()
+                            .child(app.me.name.clone())
+                            .into_any_element(),
                         )),
                 ),
         )

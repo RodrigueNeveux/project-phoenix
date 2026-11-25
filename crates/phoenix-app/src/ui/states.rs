@@ -102,18 +102,55 @@ pub fn hovered(key: u64) -> bool {
     HOVER.with(|h| h.borrow().get(&key).is_some_and(|s| s.0))
 }
 
+pub fn set_hover(key: u64, over: bool) -> bool {
+    HOVER.with(|h| {
+        let mut h = h.borrow_mut();
+        let prev = h.get(&key).is_some_and(|s| s.0);
+        h.insert(key, (over, std::time::Instant::now()));
+        prev != over
+    })
+}
+
 pub fn track(el: gpui::Stateful<Div>, key: u64) -> gpui::Stateful<Div> {
     el.on_hover(move |over, window, _| {
-        let changed = HOVER.with(|h| {
-            let mut h = h.borrow_mut();
-            let prev = h.get(&key).is_some_and(|s| s.0);
-            h.insert(key, (*over, std::time::Instant::now()));
-            prev != *over
-        });
-        if changed {
+        if set_hover(key, *over) {
             window.refresh();
         }
     })
+}
+
+pub fn hover_roll(key: u64, line: f32, default: gpui::AnyElement, hovered: gpui::AnyElement) -> Div {
+    use gpui::{AnimationExt, IntoElement};
+    const MS: u64 = 220;
+    let (over, at, animating) = match state(key) {
+        Some((o, a)) => (o, a, a.elapsed() < std::time::Duration::from_millis(MS)),
+        None => (false, std::time::Instant::now(), false),
+    };
+    let d = 1.07 * line;
+    let place = move |pos: f32| ((-d * pos, 1. - pos), (d * (1. - pos), pos));
+    let wrap = |el: gpui::AnyElement, front: bool| {
+        let base = div().w_full().relative().child(el);
+        if front { base } else { base.absolute().left_0().top_0().size_full() }
+    };
+    let layer = |el: gpui::AnyElement, front: bool| -> gpui::AnyElement {
+        let pick = move |pos: f32| if front { place(pos).0 } else { place(pos).1 };
+        let set = move |d: Div, pos: f32| {
+            let (y, o) = pick(pos);
+            d.top(gpui::px(y)).opacity(o)
+        };
+        if animating {
+            wrap(el, front)
+                .with_animation(
+                    gpui::ElementId::Name(format!("roll-{key}-{front}-{over}-{at:?}").into()),
+                    gpui::Animation::new(std::time::Duration::from_millis(MS)).with_easing(cubic_bezier(0.25, 0.1, 0.25, 1.)),
+                    move |d, t| set(d, if over { t } else { 1. - t }),
+                )
+                .into_any_element()
+        } else {
+            set(wrap(el, front), if over { 1. } else { 0. }).into_any_element()
+        }
+    };
+    div().relative().w_full().h(gpui::px(line)).overflow_hidden().child(layer(default, true)).child(layer(hovered, false))
 }
 
 pub fn mix(a: gpui::Hsla, b: gpui::Hsla, t: f32) -> gpui::Hsla {
