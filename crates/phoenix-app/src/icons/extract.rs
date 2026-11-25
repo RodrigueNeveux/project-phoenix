@@ -107,7 +107,7 @@ fn by_path(js: &str, prefix: &str) -> Option<String> {
     let at = js.find(&format!("d:\"{prefix}"))?;
     let start = at.saturating_sub(600);
     let start = (start..at).find(|i| js.is_char_boundary(*i))?;
-    let open = start + ["=function(", ":function("].iter().filter_map(|n| js[start..at].rfind(n)).max()?;
+    let open = start + ["=function(", ":function(", "function "].iter().filter_map(|n| js[start..at].rfind(n)).max()?;
     let open = open + js[open..].find('{')?;
     let close = close_brace(js.as_bytes(), open)?;
     if close < at {
@@ -217,5 +217,11 @@ mod tests {
         let js = r#"881548(e,t,n){n.d(t,{},{A:function(e){let{width:t=16,height:n=16,color:a="currentColor",foreground:i,...s}=e;return(0,l.jsxs)("svg",{width:t,height:n,viewBox:"0 0 16 16",fill:"none",children:[(0,l.jsx)("path",{d:"M8 6.66659C9 6 8 5z",className:i??void 0,fill:a}),(0,l.jsx)("path",{fillRule:"evenodd",clipRule:"evenodd",d:"M11 11.5z",fill:a})]})}})}"#;
         let s = icon_svg(js, "path:M8 6.66659C").unwrap();
         assert!(s.contains(r#"viewBox="0 0 16 16""#) && s.contains(r#"d="M8 6.66659C9 6 8 5z""#) && s.contains(r#"fill-rule="evenodd" clip-rule="evenodd" d="M11 11.5z""#), "{s}");
+    }
+    #[test]
+    fn finds_a_named_function_component_by_its_path() {
+        let js = r#"var S=n(1);function T(e){let{width:t=16,height:n=16,color:r="currentColor",foreground:a,...s}=e;return(0,i.jsx)("svg",{...(0,g.A)(s),width:t,height:n,viewBox:"0 0 24 24",children:(0,i.jsx)("path",{className:a,fill:r,d:"M12,5 L12,1 L7,6 L12,11 L12,7 Z"})})}var N=n(2);"#;
+        let s = icon_svg(js, "path:M12,5 L12,1 L7,6 L12,11").unwrap();
+        assert!(s.contains(r#"viewBox="0 0 24 24""#) && s.contains(r#"d="M12,5 L12,1 L7,6 L12,11 L12,7 Z""#), "{s}");
     }
 }

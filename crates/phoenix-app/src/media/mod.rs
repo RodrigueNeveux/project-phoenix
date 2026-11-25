@@ -1,3 +1,4 @@
+pub mod audio_file;
 pub mod cache;
 pub mod emoji;
 pub mod emoji_seqs;

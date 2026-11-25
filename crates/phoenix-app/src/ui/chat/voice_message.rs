@@ -145,6 +145,8 @@ struct Store {
     send_hover: bool,
     send_press: bool,
     fades: HashMap<&'static str, Fade>,
+    meta: HashMap<SharedString, Option<f32>>,
+    track_hover: Option<(SharedString, f32)>,
 }
 
 #[derive(Clone, Copy)]
@@ -188,6 +190,8 @@ impl Default for Store {
             send_hover: false,
             send_press: false,
             fades: HashMap::new(),
+            meta: HashMap::new(),
+            track_hover: None,
         }
     }
 }
@@ -430,6 +434,29 @@ fn stop_recording(app: &mut PhoenixApp, channel: Id, interrupted: bool, by_butto
 
 const DRAFT_PREFIX: &str = "voice-draft:";
 
+pub const ATTACHMENT_PREFIX: &str = "audio-attachment:";
+
+pub fn attachment_key(url: &str) -> SharedString {
+    format!("{ATTACHMENT_PREFIX}{url}").into()
+}
+
+fn is_attachment(key: &str) -> bool {
+    key.starts_with(ATTACHMENT_PREFIX)
+}
+
+fn normal_rate_ix() -> usize {
+    vm::PLAYBACK_RATES.iter().position(|r| (r - 1.).abs() < 1e-3).unwrap_or(0)
+}
+
+fn rate_ix_for(st: &Store, key: &str) -> usize {
+    if is_attachment(key) { normal_rate_ix() } else { st.rate_ix }
+}
+
+pub fn file_name(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    path.rsplit('/').next().unwrap_or(path).to_string()
+}
+
 fn draft_key(channel: Id) -> SharedString {
     format!("{DRAFT_PREFIX}{}", channel.0).into()
 }
@@ -568,6 +595,8 @@ fn tick(cx: &mut App) -> bool {
         st.playing = None;
         if key.starts_with(DRAFT_PREFIX) {
             st.positions.remove(&key);
+        } else if is_attachment(&key) {
+            st.positions.insert(key, duration);
         } else {
             st.positions.insert(key.clone(), duration);
             st.ended.insert(key, now);
@@ -621,10 +650,20 @@ fn ensure_loaded(key: &SharedString, url: &SharedString, cx: &mut App) {
             Ok(mut r) => r.body_mut().read_to_end(&mut bytes).await.is_ok(),
             Err(_) => false,
         };
-        let pcm = if ok { cx.background_spawn(async move { vm::decode_ogg(&bytes).ok() }).await } else { None };
+        let ok = ok && bytes.len() <= crate::media::audio_file::MAX_BYTES;
+        let att = is_attachment(&k);
+        let name = file_name(&u);
+        let pcm = if ok {
+            cx.background_spawn(async move { if att { crate::media::audio_file::decode(&bytes, &name) } else { vm::decode_ogg(&bytes).ok() } }).await
+        } else {
+            None
+        };
         cx.update(|cx| {
             let failed = pcm.is_none();
             let st = store(cx);
+            if let Some(p) = pcm.as_ref().filter(|_| att) {
+                st.meta.insert(k.clone(), Some(p.duration().as_secs_f32()));
+            }
             st.audio.insert(k.clone(), pcm.map_or(Audio::Failed, |p| Audio::Ready(Arc::new(p))));
             if st.want.as_ref() == Some(&k) {
                 st.want = None;
@@ -683,7 +722,7 @@ fn start_playback(key: &SharedString, cx: &mut App) {
     pause(cx);
     let Some(Audio::Ready(pcm)) = audio_for(cx, key) else { return };
     let duration = pcm.duration().as_secs_f32();
-    let ix = store(cx).rate_ix;
+    let ix = rate_ix_for(store(cx), key);
     let Some(src) = stretched(key, ix, cx) else { return };
     let st = store(cx);
     st.ended.remove(key);
@@ -692,10 +731,11 @@ fn start_playback(key: &SharedString, cx: &mut App) {
         from = 0.;
     }
     let rate = vm::PLAYBACK_RATES[ix];
-    let off = ((from / rate) * src.rate as f32) as usize;
+    let ch = usize::from(src.channels.max(1));
+    let off = ((from / rate) * src.rate as f32) as usize * ch;
     let samples = src.samples.get(off..).map(<[f32]>::to_vec).unwrap_or_default();
     let volume = effective_volume(st, key);
-    let handle = effects::play(Arc::new(Pcm { rate: src.rate, channels: 1, samples }), volume, false);
+    let handle = effects::play(Arc::new(Pcm { rate: src.rate, channels: src.channels, samples }), volume, false);
     let st = store(cx);
     st.positions.insert(key.clone(), from);
     st.playing = Some(Playing { key: key.clone(), handle, from, at: Instant::now(), rate, duration });
@@ -746,7 +786,9 @@ fn seek_end(cx: &mut App) {
     } else if pos >= s.duration - 0.01 {
         let st = store(cx);
         st.positions.insert(s.key.clone(), s.duration);
-        st.ended.insert(s.key, Instant::now());
+        if !is_attachment(&s.key) {
+            st.ended.insert(s.key, Instant::now());
+        }
         bump(cx, 520);
     } else if s.resume {
         start_playback(&s.key, cx);
@@ -2117,6 +2159,297 @@ pub fn draft_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                 )),
         );
     Some(crate::ui::modal::frame("vm-unsent-backdrop", close, card))
+}
+
+pub fn ensure_metadata(url: &SharedString, cx: &mut App) {
+    let key = attachment_key(url);
+    let st = store(cx);
+    if st.meta.contains_key(&key) {
+        return;
+    }
+    st.meta.insert(key.clone(), None);
+    let http = cx.http_client();
+    let u = url.to_string();
+    cx.spawn(async move |cx| {
+        use futures::AsyncReadExt;
+        use gpui::http_client::{AsyncBody, Request};
+        let req = Request::builder().uri(u.as_str()).header("Range", crate::media::audio_file::METADATA_RANGE).body(AsyncBody::default());
+        let mut bytes = Vec::new();
+        let ok = match req {
+            Ok(req) => match http.send(req).await {
+                Ok(r) if r.status().is_success() => r.into_body().read_to_end(&mut bytes).await.is_ok(),
+                _ => false,
+            },
+            Err(_) => false,
+        };
+        let name = file_name(&u);
+        let secs = if ok { cx.background_spawn(async move { crate::media::audio_file::probe_duration(&bytes, &name) }).await } else { None };
+        cx.update(|cx| {
+            if let Some(d) = secs {
+                let st = store(cx);
+                if st.meta.get(&key).is_some_and(Option::is_none) {
+                    st.meta.insert(key, Some(d as f32));
+                }
+            }
+            cx.refresh_windows();
+        });
+    })
+    .detach();
+}
+
+pub struct AttachmentView {
+    pub current: Option<f32>,
+    pub duration: Option<f32>,
+    pub playing: bool,
+    pub ended: bool,
+}
+
+pub fn attachment_view(cx: &App, url: &str) -> AttachmentView {
+    let key = attachment_key(url);
+    let Some(st) = cx.try_global::<Store>() else { return AttachmentView { current: None, duration: None, playing: false, ended: false } };
+    let duration = match st.audio.get(&key) {
+        Some(Audio::Ready(p)) => Some(p.duration().as_secs_f32()),
+        _ => st.meta.get(&key).copied().flatten(),
+    };
+    let v = view(cx, &key);
+    let current = duration.map(|d| v.current.min(d));
+    let ended = !v.playing && duration.is_some_and(|d| v.played && v.current >= d - 0.01);
+    AttachmentView { current, duration, playing: v.playing, ended }
+}
+
+pub fn attachment_icon(v: &AttachmentView) -> &'static str {
+    if v.playing {
+        "pause"
+    } else if v.ended {
+        "media/replay"
+    } else {
+        "play"
+    }
+}
+
+pub fn attachment_toggle(url: &SharedString, cx: &mut App) {
+    let key = attachment_key(url);
+    toggle(&key, Some(url), cx);
+}
+
+fn control(id: String, icon: &'static str) -> gpui::Stateful<gpui::Div> {
+    let group = SharedString::from(id);
+    div()
+        .id(gpui::ElementId::Name(group.clone()))
+        .group(group.clone())
+        .flex_none()
+        .size(z(24.))
+        .p(z(4.))
+        .cursor_pointer()
+        .active(|s| s.mt(z(1.)).mb(z(-1.)))
+        .child(svg().path(crate::icons::path(icon)).flex_none().size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))).group_hover(group, |s| s.text_color(gpui::white())))
+}
+
+fn attachment_track(key: SharedString, frac: f32, duration: Option<f32>, cx: &App) -> gpui::Canvas<Hitbox> {
+    let hover = cx.try_global::<Store>().and_then(|s| s.track_hover.clone()).filter(|(k, _)| *k == key).map(|(_, f)| f);
+    let dragging = cx.try_global::<Store>().and_then(|s| s.seek.as_ref()).is_some_and(|s| s.key == key);
+    gpui::canvas(
+        |b, window, _| window.insert_hitbox(b, HitboxBehavior::Normal),
+        move |b, hitbox, window, cx| {
+            let h6 = f32::from(z(6.));
+            let edge = f32::from(z(3.));
+            let w = f32::from(b.size.width);
+            let y = f32::from(b.origin.y) + (f32::from(b.size.height) - h6) / 2.;
+            let x0 = f32::from(b.origin.x);
+            let base = c(tok(idx::PRIMARY_300));
+            let bar = Bounds::new(gpui::point(px(x0 - edge), px(y)), gpui::size(px(w + 2. * edge), px(h6)));
+            let lit = hover.is_some() || dragging;
+            if lit {
+                let sh = Bounds::new(gpui::point(bar.origin.x, bar.origin.y + z(1.)), bar.size);
+                window.paint_quad(gpui::fill(sh, c(tok(idx::OPACITY_BLACK_28))).corner_radii(px(edge)));
+            }
+            window.paint_quad(gpui::fill(bar, Hsla { a: base.a * 0.3, ..base }).corner_radii(px(edge)));
+            if let Some(hf) = hover.filter(|_| !dragging) {
+                let pv = Bounds::new(bar.origin, gpui::size(px(w * hf + 2. * edge), px(h6)));
+                window.paint_quad(gpui::fill(pv, Hsla { a: 0.3, ..gpui::white() }).corner_radii(px(edge)));
+            }
+            let prog = Bounds::new(bar.origin, gpui::size(px(w * frac + 2. * edge), px(h6)));
+            window.paint_quad(gpui::fill(prog, c(tok(idx::BRAND_500))).corner_radii(px(edge)));
+            if lit {
+                let d = f32::from(z(10.));
+                let gx = x0 + w * frac;
+                let gb = Bounds::new(gpui::point(px(gx - d / 2.), px(y + h6 / 2. - d / 2.)), gpui::size(px(d), px(d)));
+                window.paint_quad(gpui::fill(gb, c(tok(idx::BRAND_560))).corner_radii(px(d / 2.)));
+            }
+            let (k, hb) = (key.clone(), hitbox.clone());
+            window.on_mouse_event(move |e: &MouseMoveEvent, phase, window, cx| {
+                if phase != DispatchPhase::Bubble {
+                    return;
+                }
+                let over = hb.is_hovered(window);
+                let st = store(cx);
+                let next = over.then(|| (k.clone(), frac_in(b, e.position.x)));
+                let had = st.track_hover.as_ref().is_some_and(|(kk, _)| *kk == k);
+                if next.is_some() || had {
+                    st.track_hover = next;
+                    window.refresh();
+                }
+            });
+            let Some(duration) = duration else { return };
+            let k = key.clone();
+            window.on_mouse_event(move |e: &MouseDownEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble && e.button == MouseButton::Left && hitbox.is_hovered(window) {
+                    cx.stop_propagation();
+                    seek_start(&k, frac_in(b, e.position.x), duration, b, cx);
+                    window.refresh();
+                }
+            });
+            if cx.try_global::<Store>().and_then(|s| s.seek.as_ref()).is_some_and(|s| s.key == key) {
+                let drag_b = cx.try_global::<Store>().and_then(|s| s.seek.as_ref()).map_or(b, |s| s.bounds);
+                window.on_mouse_event(move |e: &MouseMoveEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture {
+                        return;
+                    }
+                    let Some(s) = cx.try_global::<Store>().and_then(|s| s.seek.as_ref()) else { return };
+                    let (k, d) = (s.key.clone(), s.duration);
+                    seek_to(&k, frac_in(drag_b, e.position.x), d, cx);
+                    window.refresh();
+                });
+                window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        seek_end(cx);
+                    }
+                });
+            }
+        },
+    )
+}
+
+fn track_bubble(text: String, frac: f32) -> AnyElement {
+    div()
+        .absolute()
+        .top(z(-28.))
+        .left(gpui::relative(frac))
+        .child(
+            div()
+                .relative()
+                .left(z(-24.))
+                .w(z(48.))
+                .flex()
+                .flex_col()
+                .items_center()
+                .child(
+                    div()
+                        .h(z(18.))
+                        .px(z(8.))
+                        .rounded(z(3.))
+                        .bg(c(tok(idx::BLACK)))
+                        .text_size(z(12.))
+                        .line_height(z(18.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(tok(idx::PRIMARY_100)))
+                        .child(text),
+                )
+                .child(
+                    gpui::canvas(
+                        |_, _, _| {},
+                        |b, _, window, _| {
+                            let (x, y, w, h) = (b.origin.x, b.origin.y, b.size.width, b.size.height);
+                            let mut pb = gpui::PathBuilder::fill();
+                            pb.move_to(gpui::point(x, y));
+                            pb.line_to(gpui::point(x + w, y));
+                            pb.line_to(gpui::point(x + w / 2., y + h));
+                            pb.close();
+                            if let Ok(path) = pb.build() {
+                                window.paint_path(path, c(tok(idx::BLACK)));
+                            }
+                        },
+                    )
+                    .w(z(10.))
+                    .h(z(5.)),
+                ),
+        )
+        .into_any_element()
+}
+
+pub fn attachment_controls(url: &SharedString, cx: &App) -> AnyElement {
+    let key = attachment_key(url);
+    let v = attachment_view(cx, url);
+    let (cur, dur) = crate::media::audio_file::duration_text(v.current.map(f64::from), v.duration.map(f64::from));
+    let frac = match (v.current, v.duration) {
+        (Some(c), Some(d)) if d > 0. => (c / d).clamp(0., 1.),
+        _ => 0.,
+    };
+    let hover = cx.try_global::<Store>().and_then(|s| s.track_hover.clone()).filter(|(k, _)| *k == key).map(|(_, f)| f);
+    let dragging = cx.try_global::<Store>().and_then(|s| s.seek.as_ref()).is_some_and(|s| s.key == key);
+    let bubble = match (if dragging { Some(frac) } else { hover }, v.duration) {
+        (Some(f), Some(d)) => Some((crate::media::audio_file::format_time(f64::from(f * d)), f)),
+        _ => None,
+    };
+    let muted = cx.try_global::<Store>().is_some_and(|s| s.muted.contains(&key));
+    let slider = slider_value(cx, &key);
+    let vol_open = cx.try_global::<Store>().is_some_and(|s| {
+        let open = s.vol_open.as_ref() == Some(&key) && s.vol_hide_at.is_none_or(|t| Instant::now() < t);
+        open || s.vol_drag.as_ref().is_some_and(|(k, _)| *k == key) || s.vol_keys.as_ref() == Some(&key)
+    });
+    let (u1, k_mute, k_enter, k_keys) = (url.clone(), key.clone(), key.clone(), key.clone());
+    let play = control(format!("aplay-{url}"), attachment_icon(&v)).on_click(move |_, window, cx| {
+        attachment_toggle(&u1, cx);
+        window.refresh();
+    });
+    let time = div()
+        .flex_none()
+        .m(z(4.))
+        .h(z(12.))
+        .flex()
+        .font_family(crate::theme::FONT_MONO())
+        .text_size(z(12.))
+        .line_height(z(12.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(gpui::white())
+        .child(cur)
+        .child(div().mx(z(2.)).child("/"))
+        .child(dur);
+    let track = div()
+        .relative()
+        .flex_1()
+        .h(z(24.))
+        .mx(z(7.))
+        .cursor_pointer()
+        .child(attachment_track(key.clone(), frac, v.duration, cx).size_full())
+        .children(bubble.map(|(t, f)| track_bubble(t, f)));
+    let vol = div()
+        .id(gpui::ElementId::Name(format!("avol-{url}").into()))
+        .relative()
+        .flex_none()
+        .size(z(24.))
+        .child(control(format!("avolbtn-{url}"), volume_icon(muted, slider)).on_click(move |_, window, cx| {
+            toggle_mute(&k_mute, cx);
+            window.refresh();
+        }))
+        .on_hover(move |over, window, cx| {
+            vol_hover(&k_enter, Some(*over), None, cx);
+            window.refresh();
+        })
+        .on_key_down(move |e: &KeyDownEvent, window, cx| {
+            let k = e.keystroke.key.as_str();
+            if k == "up" || k == "down" {
+                cx.stop_propagation();
+                let cur = slider_value(cx, &k_keys);
+                let next = if k == "up" { (cur + 0.05).min(1.) } else { (cur - 0.05).max(0.) };
+                set_slider(&k_keys, next, cx);
+                window.refresh();
+            }
+        })
+        .when(vol_open, |d| d.child(volume_slider(key.clone(), cx)));
+    div()
+        .id(gpui::ElementId::Name(format!("acontrols-{url}").into()))
+        .mt(z(4.))
+        .w_full()
+        .flex()
+        .items_center()
+        .rounded(z(crate::theme::generated::global::RADIUS_SM))
+        .bg(c(tok(idx::OPACITY_BLACK_28)))
+        .child(play)
+        .child(time)
+        .child(track)
+        .child(vol)
+        .into_any_element()
 }
 
 #[cfg(test)]

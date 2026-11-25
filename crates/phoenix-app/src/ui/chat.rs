@@ -1820,7 +1820,7 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
             if let Some(meta) = a.voice.as_ref() {
                 return voice_message::player(&a.url, meta, cx);
             }
-            return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element();
+            return div().mt(z(4.)).child(attach::audio_card(a, cx)).into_any_element();
         }
         AttachmentKind::File if a.url.starts_with("https://") && inline && plaintext::previewable(&a.filename) => {
             if let Some(el) = plaintext::render(a, cx) {

@@ -232,6 +232,9 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("mod/hammer", &["HammerIcon"]),
     ("mod/clock-warning", &["ClockWarningIcon"]),
     ("mod/chat-warning", &["ChatWarningIcon"]),
+    ("shield", &["ShieldIcon"]),
+    ("settings-info", &["SettingsInfoIcon"]),
+    ("media/replay", &["path:M12,5 L12,1 L7,6 L12,11"]),
     ("mod/robot", &["RobotIcon"]),
     ("mod/chevron-large-right", &["ChevronLargeRightIcon"]),
 ];

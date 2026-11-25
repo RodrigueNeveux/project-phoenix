@@ -202,11 +202,13 @@ fn duration_label() -> gpui::Div {
         .child("0:00")
 }
 
-pub fn audio_card(a: &Attachment) -> AnyElement {
+pub fn audio_card(a: &Attachment, cx: &App) -> AnyElement {
     let url = a.url.clone();
     let open = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
     let dl = url.clone();
+    let probe = url.clone();
     div()
+        .id(gpui::ElementId::Name(format!("audio-{url}").into()))
         .w(z(432.))
         .max_w_full()
         .p(z(16.))
@@ -251,19 +253,12 @@ pub fn audio_card(a: &Attachment) -> AnyElement {
                         .on_click(move |_, _, cx| cx.open_url(&dl)),
                 ),
         )
-        .child(
-            div()
-                .mt(z(4.))
-                .w_full()
-                .flex()
-                .items_center()
-                .rounded(z(global::RADIUS_SM))
-                .bg(c(tok(idx::OPACITY_BLACK_28)))
-                .child(control_icon(format!("aplay-{url}"), "play"))
-                .child(duration_label())
-                .child(track(0.))
-                .child(control_icon(format!("avol-{url}"), "speaker")),
-        )
+        .child(super::voice_message::attachment_controls(&url, cx))
+        .on_hover(move |over, _, cx| {
+            if *over {
+                super::voice_message::ensure_metadata(&probe, cx);
+            }
+        })
         .into_any_element()
 }
 
