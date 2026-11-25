@@ -349,16 +349,13 @@ pub fn columns(width: f32) -> usize {
 
 fn header_bar(cx: &mut Context<PhoenixApp>) -> AnyElement {
     let balance = BALANCE.with(|b| b.get());
-    let tab = |label: SharedString, on: bool| {
+    let tab = |label: SharedString, _on: bool| {
         div()
             .h_full()
             .flex()
             .items_center()
             .cursor_pointer()
-            .border_b_2()
-            .border_color(if on { tk(idx::ICON_STRONG) } else { gpui::transparent_black() })
-            .hover(|s| s.border_color(tk(idx::BRAND_500)))
-            .child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_STRONG), label))
+            .child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_DEFAULT), label))
     };
     div()
         .flex_none()
