@@ -139,7 +139,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let filters = div()
         .flex()
         .gap(z(16.))
-        .child(div().flex_1().min_w_0().flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.audit.filter_user"), 12., 16., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE)).child(kit::dropdown(
+        .child(div().w(z(249.)).flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.audit.filter_user"), 16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG)).child(kit::dropdown(
             s,
             "audit_user",
             text(uval, 16., 20., FontWeight::NORMAL, idx::TEXT_STRONG).into_any_element(),
@@ -152,7 +152,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
             }),
             cx,
         )))
-        .child(div().flex_1().min_w_0().flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.audit.filter_action"), 12., 16., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE)).child(kit::dropdown(
+        .child(div().w(z(249.)).flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.audit.filter_action"), 16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG)).child(kit::dropdown(
             s,
             "audit_action",
             text(aval, 16., 20., FontWeight::NORMAL, idx::TEXT_STRONG).into_any_element(),
@@ -183,32 +183,36 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                 .id(("ss-audit", i))
                 .rounded(z(8.))
                 .border_1()
+                .p(z(4.))
                 .border_color(c(tok(if open { idx::BORDER_NORMAL } else { idx::BORDER_SUBTLE })))
-                .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+                .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
                 .flex()
                 .flex_col()
                 .child(
                     div()
                         .id(("ss-audit-head", i))
-                        .min_h(z(62.))
-                        .px(z(16.))
-                        .py(z(12.))
+                        .min_h(z(60.))
+                        .pt(z(10.))
+                        .pb(z(10.))
+                        .pl(z(10.))
+                        .pr(z(20.))
+                        .rounded(z(4.))
                         .flex()
                         .items_center()
-                        .gap(z(16.))
                         .when(has_changes, |d| d.cursor_pointer().hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))))
                         .child(gpui::svg().path(crate::icons::path(icon_for(action))).flex_none().size(z(24.)).text_color(c(kind_color(action))))
-                        .child(kit::avatar(kit::user_avatar(&user, 80), 40.))
+                        .child(div().ml(z(10.)).child(kit::avatar(kit::user_avatar(&user, 80), 40.)))
                         .child(
                             div()
+                                .mx(z(10.))
                                 .flex_1()
                                 .min_w_0()
                                 .flex()
                                 .flex_col()
-                                .child(text(sentence(action, &kit::user_name(&user), &target, &channel, count), 16., 20., FontWeight::MEDIUM, idx::TEXT_DEFAULT))
-                                .child(text(when(kit::n(e, "id")), 12., 16., FontWeight::NORMAL, idx::TEXT_MUTED)),
+                                .child(text(sentence(action, &kit::user_name(&user), &target, &channel, count), 16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT).truncate())
+                                .child(text(when(kit::n(e, "id")), 14., 18., FontWeight::NORMAL, idx::TEXT_MUTED)),
                         )
-                        .when(has_changes, |d| d.child(gpui::svg().path(crate::icons::path(if open { "chevron-up" } else { "chevron" })).flex_none().size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
+                        .when(has_changes, |d| d.child(gpui::svg().path(crate::icons::path(if open { "chevron" } else { "chevron-right" })).flex_none().size(z(24.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
                         .on_click(cx.listener(move |_, _, _, cx| {
                             let k = key.clone();
                             with_state(|s| {
@@ -225,9 +229,8 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .gap(z(24.))
-        .child(kit::h2(crate::t!("menu.gs.audit_log")))
-        .child(filters)
+        .child(div().flex().items_center().justify_between().child(kit::h2(crate::t!("menu.gs.audit_log"))).child(filters))
+        .child(div().my(z(20.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))))
         .child(if entries.is_empty() && !s.pending.contains("audit") {
             text(crate::t!("gs.audit.empty"), 14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE).into_any_element()
         } else {
