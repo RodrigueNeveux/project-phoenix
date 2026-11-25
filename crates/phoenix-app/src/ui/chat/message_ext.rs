@@ -2,7 +2,7 @@ use gpui::{
     AnyElement, App, Div, Entity, FontWeight, IntoElement, MouseDownEvent, ParentElement,
     SharedString, Styled, Window, div, prelude::*,
 };
-use gpui_component::input::Input;
+use gpui_component::{Sizable as _, input::Input};
 
 use super::{
     icons::{ChatIcon, icon},
