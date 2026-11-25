@@ -560,6 +560,79 @@ pub fn spawn_check(include_beta: bool, cx: &mut gpui::Context<crate::app::Phoeni
     check_now(include_beta, on_change);
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChangelogEntry {
+    pub tag: String,
+    pub name: String,
+    pub body: String,
+    pub published_at: String,
+    pub prerelease: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Changelog {
+    Loading,
+    Loaded(Vec<ChangelogEntry>),
+    Failed,
+}
+
+static CHANGELOG: RwLock<Option<Changelog>> = RwLock::new(None);
+
+pub fn changelog() -> Changelog {
+    CHANGELOG.read().clone().unwrap_or(Changelog::Loading)
+}
+
+pub fn parse_changelog(json: &str) -> Vec<ChangelogEntry> {
+    let Ok(Value::Array(items)) = serde_json::from_str::<Value>(json) else {
+        return Vec::new();
+    };
+    let s = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+    items
+        .iter()
+        .filter(|i| !i.get("draft").and_then(Value::as_bool).unwrap_or(false))
+        .map(|i| {
+            let tag = s(i, "tag_name");
+            let name = Some(s(i, "name")).filter(|n| !n.is_empty()).unwrap_or_else(|| tag.clone());
+            ChangelogEntry {
+                name,
+                body: s(i, "body").replace("\r\n", "\n"),
+                published_at: s(i, "published_at"),
+                prerelease: i.get("prerelease").and_then(Value::as_bool).unwrap_or(false),
+                tag,
+            }
+        })
+        .collect()
+}
+
+pub fn spawn_changelog(cx: &mut gpui::Context<crate::app::PhoenixApp>) {
+    if matches!(*CHANGELOG.read(), Some(Changelog::Loaded(_))) {
+        return;
+    }
+    *CHANGELOG.write() = Some(Changelog::Loading);
+    let (tx, rx) = futures::channel::oneshot::channel::<Changelog>();
+    std::thread::spawn(move || {
+        let res = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string()).and_then(|rt| {
+            rt.block_on(async {
+                let resp = http_client()?.get(RELEASES_API_URL).header("Accept", "application/vnd.github+json").send().await.map_err(|e| e.to_string())?;
+                if !resp.status().is_success() {
+                    return Err(format!("HTTP {}", resp.status().as_u16()));
+                }
+                resp.text().await.map_err(|e| e.to_string())
+            })
+        });
+        let _ = tx.send(match res {
+            Ok(body) => Changelog::Loaded(parse_changelog(&body)),
+            Err(_) => Changelog::Failed,
+        });
+    });
+    cx.spawn(async move |this, cx| {
+        let state = rx.await.unwrap_or(Changelog::Failed);
+        *CHANGELOG.write() = Some(state);
+        let _ = this.update(cx, |_, cx| cx.notify());
+    })
+    .detach();
+}
+
 pub fn spawn_install(release: ReleaseInfo, cx: &mut gpui::Context<crate::app::PhoenixApp>) {
     use futures::StreamExt;
     let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
@@ -580,6 +653,22 @@ pub fn spawn_install(release: ReleaseInfo, cx: &mut gpui::Context<crate::app::Ph
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changelog_lists_published_releases() {
+        let json = r#"[
+            {"tag_name":"v0.2.0","name":"","draft":false,"prerelease":false,"body":"- a\r\n- b","published_at":"2026-12-01T10:00:00Z"},
+            {"tag_name":"v0.1.9","name":"Draft","draft":true,"body":"x"},
+            {"tag_name":"v0.1.0-beta.1","name":"First beta","draft":false,"prerelease":true,"body":"hello","published_at":"2026-11-25T10:47:16Z"}
+        ]"#;
+        let list = parse_changelog(json);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "v0.2.0");
+        assert_eq!(list[0].body, "- a\n- b");
+        assert!(list[1].prerelease);
+        assert_eq!(list[1].name, "First beta");
+        assert!(parse_changelog("{}").is_empty());
+    }
 
     #[test]
     fn semver_ordering_handles_betas_and_stable() {

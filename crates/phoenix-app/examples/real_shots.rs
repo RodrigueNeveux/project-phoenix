@@ -1154,17 +1154,23 @@ fn main() -> anyhow::Result<()> {
                         "devices" => Some(N::Devices),
                         "standing" => Some(N::Standing),
                         "mfa" => Some(N::Mfa),
-                        "family" => Some(N::FamilyCenter),
+                        "family" | "family_members" | "family_settings" => Some(N::FamilyCenter),
                         _ => None,
                     };
                     if let (Some(s), Some(n)) = (app.settings.as_mut(), nested) {
                         s.page = P::MyAccount;
                         s.nested = Some(n);
                     }
+                    phoenix_app::ui::settings::nested::set_family_tab(match arg.as_str() {
+                        "family_members" => 1,
+                        "family_settings" => 2,
+                        _ => 0,
+                    });
                     if arg == "changelog"
                         && let Some(s) = app.settings.as_mut()
                     {
                         s.show_changelog = true;
+                        phoenix_app::updater::spawn_changelog(cx);
                     }
                 }
                 "server_settings" => {

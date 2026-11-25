@@ -961,140 +961,132 @@ fn logout_modal(cx: &mut Cx) -> AnyElement {
     })
 }
 
-fn changelog_modal(cx: &mut Cx) -> AnyElement {
-    let close = cx.listener(|a, _, _, cx| {
-        if let Some(s) = st(a) {
-            s.show_changelog = false;
-        }
-        cx.notify();
-    });
-    let section = |title_key: &str, items: &[&str]| {
-        div()
-            .flex()
-            .flex_col()
-            .gap(z(6.))
-            .child(
-                div()
-                    .text_size(z(13.))
-                    .line_height(z(16.))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(c(tok(idx::TEXT_BRAND)))
-                    .child(crate::t!(title_key)),
-            )
-            .children(items.iter().map(|k| {
-                div()
-                    .flex()
-                    .items_start()
-                    .gap(z(8.))
-                    .text_size(z(14.))
-                    .line_height(z(20.))
-                    .text_color(c(tok(idx::TEXT_DEFAULT)))
-                    .child(div().text_color(c(tok(idx::TEXT_MUTED))).child("•"))
-                    .child(div().flex_1().min_w_0().child(crate::t!(k)))
-            }))
-    };
-    let card = div()
-        .id("settings-changelog-modal")
-        .w(z(480.))
-        .max_h(z(600.))
-        .rounded(z(12.))
-        .border_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
-        .overflow_hidden()
-        .flex()
-        .flex_col()
-        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .child(
+fn changelog_body(entries: &[crate::updater::ChangelogEntry]) -> Vec<AnyElement> {
+    use crate::markdown::{Block, NoResolve, parse};
+    let body_text = |d: Div| d.text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT)));
+    let mut out = Vec::new();
+    for (ix, e) in entries.iter().enumerate() {
+        let date = chrono::DateTime::parse_from_rfc3339(&e.published_at)
+            .map(|d| crate::i18n::intl::format(crate::i18n::locale(), "LL", &crate::i18n::intl::Parts::of(&d.with_timezone(&chrono::Local)), None))
+            .unwrap_or_default();
+        out.push(
             div()
-                .px(z(20.))
-                .py(z(16.))
-                .border_b_1()
-                .border_color(c(tok(idx::BORDER_MUTED)))
+                .mt(z(if ix == 0 { 0. } else { 32. }))
                 .flex()
                 .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .gap(z(2.))
-                        .child(
-                            div()
-                                .text_size(z(20.))
-                                .line_height(z(24.))
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(c(tok(idx::TEXT_STRONG)))
-                                .child(crate::t!("settings.more.changelog")),
-                        )
-                        .child(
-                            div()
-                                .text_size(z(12.))
-                                .line_height(z(16.))
-                                .text_color(c(tok(idx::TEXT_MUTED)))
-                                .child(crate::diagnostics::version_line()),
-                        ),
-                )
-                .child(
-                    div()
-                        .id("changelog-close")
-                        .size(z(32.))
-                        .rounded(z(8.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
-                        .on_click(cx.listener(|a, _, _, cx| {
-                            if let Some(s) = st(a) {
-                                s.show_changelog = false;
-                            }
-                            cx.notify();
-                        }))
-                        .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
-                ),
-        )
-        .child(
-            div()
-                .id("changelog-body")
-                .flex_1()
-                .min_h_0()
-                .overflow_y_scroll()
-                .px(z(20.))
-                .py(z(16.))
-                .flex()
-                .flex_col()
-                .gap(z(18.))
-                .child(section("settings.changelog.s1", &["settings.changelog.s1_1", "settings.changelog.s1_2"]))
-                .child(section("settings.changelog.s2", &["settings.changelog.s2_1", "settings.changelog.s2_2"]))
-                .child(section("settings.changelog.s3", &["settings.changelog.s3_1", "settings.changelog.s3_2"])),
-        )
-        .child(
-            div()
-                .px(z(20.))
-                .py(z(12.))
-                .border_t_1()
-                .border_color(c(tok(idx::BORDER_MUTED)))
-                .flex()
-                .justify_end()
-                .child(controls::button("changelog-done", crate::t!("common.close"), BtnKind::Primary).on_click(close)),
+                .gap(z(4.))
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(if e.prerelease { idx::TEXT_FEEDBACK_WARNING } else { idx::TEXT_BRAND })))
+                .child(SharedString::from(e.name.to_uppercase()))
+                .child(div().flex_1().h(z(1.)).opacity(0.6).bg(c(tok(if e.prerelease { idx::TEXT_FEEDBACK_WARNING } else { idx::TEXT_BRAND })))))
+                .into_any_element(),
         );
-    div()
-        .id("changelog-scrim")
-        .absolute()
-        .inset_0()
-        .bg(c(tok(idx::BACKGROUND_SCRIM)))
-        .flex()
-        .items_center()
-        .justify_center()
-        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|a, _, _, cx| {
+        if !date.is_empty() {
+            out.push(div().mt(z(4.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_MUTED))).child(SharedString::from(date)).into_any_element());
+        }
+        for block in parse(&e.body, &NoResolve) {
+            let el = match block {
+                Block::Heading(_, inline) => body_text(div().mt(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG)))).child(crate::ui::modals::update::render_inline(&inline)),
+                Block::ListItem { depth, inline, ordered } => body_text(div().mt(z(4.)).mb(z(12.)).ml(z(20. + f32::from(depth) * 20.)).flex().gap(z(8.)))
+                    .child(div().flex_none().text_color(c(tok(idx::TEXT_MUTED))).child(SharedString::from(ordered.map_or("•".to_owned(), |n| format!("{n}.")))))
+                    .child(div().flex_1().min_w_0().child(crate::ui::modals::update::render_inline(&inline))),
+                Block::Code { code, .. } => body_text(div().my(z(8.)).p(z(8.)).rounded(z(4.)).bg(c(tok(idx::BACKGROUND_BASE_LOWER))).text_size(z(14.))).child(SharedString::from(code)),
+                Block::Paragraph(inline) | Block::Quote(inline) | Block::Subtext(inline) => body_text(div().my(z(8.))).child(crate::ui::modals::update::render_inline(&inline)),
+            };
+            out.push(el.into_any_element());
+        }
+    }
+    out
+}
+
+fn changelog_modal(cx: &mut Cx) -> AnyElement {
+    let e = cx.entity();
+    let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
+        e.update(cx, |a, cx| {
             if let Some(s) = st(a) {
                 s.show_changelog = false;
             }
             cx.notify();
-        }))
-        .child(card)
-        .into_any_element()
+        })
+    });
+    let state = crate::updater::changelog();
+    let content: Vec<AnyElement> = match &state {
+        crate::updater::Changelog::Loaded(list) if !list.is_empty() => changelog_body(list),
+        crate::updater::Changelog::Loading => vec![div().py(z(40.)).flex().justify_center().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("common.loading")).into_any_element()],
+        _ => vec![
+            div()
+                .py(z(8.))
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .child(crate::t!("settings.changelog.unavailable"))
+                .into_any_element(),
+        ],
+    };
+    let close_btn = close.clone();
+    let card = div()
+        .relative()
+        .w(z(480.))
+        .max_h(z(720.))
+        .rounded(z(12.))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .flex_none()
+                .pt(z(24.))
+                .px(z(24.))
+                .pb(z(16.))
+                .pr(z(60.))
+                .flex()
+                .flex_col()
+                .gap(z(4.))
+                .child(div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!("settings.more.changelog")))
+                .child(div().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::diagnostics::version_line())),
+        )
+        .child(
+            div()
+                .id("changelog-close")
+                .absolute()
+                .top(z(8.))
+                .right(z(8.))
+                .size(z(40.))
+                .rounded(z(8.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+                .on_click(move |_, w, cx| close_btn(w, cx))
+                .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
+        )
+        .child(div().id("changelog-body").flex_1().min_h_0().overflow_y_scroll().px(z(24.)).pb(z(20.)).children(content))
+        .child(
+            div()
+                .flex_none()
+                .px(z(24.))
+                .py(z(16.))
+                .border_t_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .flex()
+                .child(
+                    div()
+                        .id("changelog-releases")
+                        .cursor_pointer()
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .text_color(c(tok(idx::TEXT_LINK)))
+                        .hover(|s| s.underline())
+                        .on_click(|_, _, cx| cx.open_url(crate::updater::RELEASES_PAGE_URL))
+                        .child(crate::t!("settings.changelog.all_releases")),
+                ),
+        );
+    crate::ui::modal::frame("settings-changelog", close, card)
 }
 
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyElement> {

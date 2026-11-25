@@ -8,7 +8,7 @@ use crate::{
     updater::{self, UpdateStatus},
 };
 
-fn render_inline(inline: &Inline) -> AnyElement {
+pub(crate) fn render_inline(inline: &Inline) -> AnyElement {
     let mut row = div().flex().flex_wrap().items_baseline();
     if inline.spans.is_empty() {
         return div().child(SharedString::from(inline.text.clone())).into_any_element();

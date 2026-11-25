@@ -240,6 +240,7 @@ pub fn settings_more_items(e: &Ent) -> Vec<MenuItem> {
             if let Some(s) = a.settings.as_mut() {
                 s.show_changelog = true;
             }
+            crate::updater::spawn_changelog(cx);
             cx.notify();
         }),
         url(crate::t!("settings.more.acknowledgements"), ACKNOWLEDGEMENTS_URL),

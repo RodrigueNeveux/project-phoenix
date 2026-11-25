@@ -75,6 +75,7 @@ pub static ENTRIES: &[Entry] = &[
     Entry { id: "fr-members", path: &[8, 11], wrapper: true, kind: Kind::Bits(4), default: 1 },
     inv("msg-requests", &[8, 17], true),
     inv("data-sponsored", &[8, 18], true),
+    b("fc-tab", &[8, 21], false),
     b("game-dms", &[8, 26], true),
     en("ingame", &[8, 28], false, &[1, 2, 3], 0),
     en("act-where", &[8, 29], false, &[3, 2, 1], 0),
@@ -103,6 +104,7 @@ pub static REST: &[(&str, Rest, bool)] = &[
     ("e-news", Rest::Email("updates_and_announcements"), false),
     ("e-tips", Rest::Email("tips"), false),
     ("e-recs", Rest::Email("recommendations_and_events"), false),
+    ("e-family", Rest::Email("family_center_digest"), false),
 ];
 
 pub fn rest(id: &str) -> Option<(Rest, bool)> {

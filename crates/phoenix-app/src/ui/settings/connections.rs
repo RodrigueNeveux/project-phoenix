@@ -104,128 +104,131 @@ pub fn platform_label(kind: &str) -> &'static str {
     }
 }
 
-fn readonly_switch_row(id: (&'static str, usize), label: SharedString, on: bool) -> gpui::Div {
-    div()
-        .py(z(8.))
-        .flex()
-        .items_center()
-        .justify_between()
-        .gap(z(12.))
-        .child(
-            div()
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .child(label),
-        )
-        .child(controls::switch(id, on).opacity(0.75))
+pub fn shows_activity(kind: &str) -> bool {
+    matches!(kind, "spotify" | "xbox" | "playstation" | "playstation-stg" | "crunchyroll")
 }
 
-fn card(acc: &LinkedAccount, ix: usize) -> gpui::Div {
-    let icon_el: AnyElement = match super::art::connection_icon(&acc.kind) {
-        Some((url, app_icon)) => gpui::img(SharedString::from(url))
-            .size(z(if app_icon { 28. } else { 24. }))
-            .rounded(z(if app_icon { 6. } else { 0. }))
-            .object_fit(gpui::ObjectFit::Contain)
-            .into_any_element(),
-        None => gpui::svg()
-            .path(crate::icons::path("link"))
-            .size(z(20.))
-            .text_color(c(tok(idx::ICON_DEFAULT)))
-            .into_any_element(),
-    };
-    let mut header_name = div()
-        .flex()
-        .items_center()
-        .gap(z(6.))
-        .child(
-            div()
-                .text_size(z(16.))
-                .line_height(z(20.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(tok(idx::TEXT_STRONG)))
-                .child(acc.name.clone()),
-        );
-    if acc.verified {
-        header_name = header_name.child(
-            gpui::svg()
-                .path(crate::icons::path("circle-check"))
-                .size(z(16.))
-                .flex_none()
-                .text_color(c(tok(idx::STATUS_POSITIVE))),
-        );
-    }
-    let header = div()
-        .pb(z(12.))
-        .border_b_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
+pub fn syncs_friends(kind: &str) -> bool {
+    matches!(kind, "facebook" | "contacts")
+}
+
+pub fn has_metadata(kind: &str) -> bool {
+    matches!(kind, "reddit" | "steam" | "letterboxd" | "bluesky" | "twitter" | "mastodon" | "ebay" | "paypal" | "tiktok")
+}
+
+fn option_row(id: (&'static str, usize), label: SharedString, on: bool, dim: bool) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
         .flex()
         .items_center()
         .gap(z(12.))
+        .cursor(gpui::CursorStyle::OperationNotAllowed)
         .child(
             div()
-                .size(z(36.))
-                .rounded(z(8.))
-                .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
-                .flex()
-                .items_center()
-                .justify_center()
-                .flex_none()
-                .child(icon_el),
+                .flex_1()
+                .min_w_0()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(label),
         )
+        .child(controls::switch((id.0, id.1 + 1000), on))
+        .when(dim, |d| d.opacity(0.5))
+}
+
+fn card(acc: &LinkedAccount, ix: usize) -> gpui::Stateful<gpui::Div> {
+    let label = platform_label(&acc.kind);
+    let icon: AnyElement = match super::art::connection_icon(&acc.kind) {
+        Some((url, app_icon)) => gpui::img(SharedString::from(url))
+            .flex_none()
+            .size(z(32.))
+            .when(app_icon, |i| i.rounded(z(32.)))
+            .object_fit(gpui::ObjectFit::Contain)
+            .into_any_element(),
+        None => gpui::svg().path(crate::icons::path("chat/link")).flex_none().size(z(32.)).text_color(c(tok(idx::ICON_DEFAULT))).into_any_element(),
+    };
+    let header = div()
+        .flex()
+        .items_center()
+        .child(icon)
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .gap(z(2.))
-                .child(header_name)
                 .child(
                     div()
-                        .text_size(z(12.))
-                        .line_height(z(16.))
-                        .text_color(c(tok(idx::TEXT_MUTED)))
-                        .child(platform_label(&acc.kind)),
-                ),
+                        .ml(z(16.))
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .child(acc.name.clone()),
+                )
+                .child(div().ml(z(16.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(label)),
+        )
+        .child(
+            div()
+                .mx(z(8.))
+                .flex_none()
+                .cursor(gpui::CursorStyle::OperationNotAllowed)
+                .child(gpui::svg().path(crate::icons::path("close-small")).size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
         );
-    let mut rows = div()
-        .pt(z(4.))
-        .flex()
-        .flex_col()
-        .child(readonly_switch_row(("conn-vis", ix), crate::t!("sp.cn.show_profile"), acc.visibility != 0))
-        .child(readonly_switch_row(("conn-act", ix), crate::t!("sp.cn.show_status"), acc.show_activity));
-    if acc.friend_sync {
-        rows = rows.child(readonly_switch_row(("conn-sync", ix), crate::t!("sp.cn.friend_sync"), true));
+    let visible = acc.visibility == 1;
+    let mut options = div().flex().flex_col().gap(z(20.)).child(option_row(("conn-vis", ix * 4), crate::t!("sp.cn.show_profile"), visible, false));
+    if has_metadata(&acc.kind) {
+        options = options.child(option_row(("conn-meta", ix * 4), crate::t!("sp.cn.show_details"), acc.metadata_visibility == 1, !visible));
+    }
+    if shows_activity(&acc.kind) {
+        options = options.child(option_row(("conn-act", ix * 4), crate::t!("sp.cn.show_status", platform = label), acc.show_activity, false));
+    }
+    if syncs_friends(&acc.kind) {
+        options = options.child(option_row(("conn-sync", ix * 4), crate::t!("sp.cn.friend_sync"), acc.friend_sync, false));
     }
     div()
         .id(("conn-card", ix))
+        .w_full()
         .p(z(16.))
-        .rounded(z(12.))
+        .rounded(z(8.))
         .border_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
         .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
         .flex()
         .flex_col()
+        .gap(z(20.))
         .child(header)
-        .child(rows)
+        .child(options)
 }
 
 pub fn render(_: &PhoenixApp, _: &mut Context<PhoenixApp>) -> AnyElement {
     let list = get().unwrap_or_default();
+    if list.is_empty() && super::account::connections().unwrap_or(0) > 0 {
+        return div().into_any_element();
+    }
     if !list.is_empty() {
+        let key = if list.len() == 1 { "sp.cn.count_one" } else { "sp.cn.count_other" };
         return div()
             .flex()
             .flex_col()
-            .gap(z(12.))
+            .gap(z(24.))
+            .child(
+                div()
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_color(c(tok(idx::TEXT_STRONG)))
+                    .child(crate::t!(key, count = list.len())),
+            )
             .children(list.iter().enumerate().map(|(ix, acc)| card(acc, ix)))
             .into_any_element();
     }
-    if super::account::connections().unwrap_or(0) > 0 && get().is_none() {
-        return div().into_any_element();
-    }
     div()
-        .h(z(200.))
+        .min_h(z(200.))
         .flex()
         .items_center()
         .justify_center()
@@ -285,5 +288,8 @@ mod tests {
         assert!(list[1].friend_sync);
         assert_eq!(platform_label(&list[0].kind), "GitHub");
         assert_eq!(platform_label(&list[1].kind), "Spotify");
+        assert!(shows_activity("spotify") && !shows_activity("github"));
+        assert!(syncs_friends("facebook") && !syncs_friends("spotify"));
+        assert!(has_metadata("steam") && !has_metadata("spotify"));
     }
 }
