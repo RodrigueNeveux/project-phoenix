@@ -20,29 +20,36 @@ fn text(size: f32, line: f32, weight: FontWeight, color: usize, s: SharedString)
 
 pub(super) fn promo(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyElement {
     let item = |ic: &'static str, k: &'static str| {
+        let link = gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() };
+        let (plain, hl) = super::account::bracket_runs(&tr(k), link);
         div()
             .flex()
-            .items_start()
+            .items_center()
             .gap(z(6.))
             .pl(z(2.))
-            .child(gpui::svg().path(crate::icons::path(ic)).flex_none().size(z(12.)).mt(z(2.)).text_color(c(tok(idx::TEXT_DEFAULT))))
-            .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT, tr(k)))
+            .child(gpui::svg().path(crate::icons::path(ic)).flex_none().size(z(12.)).text_color(c(tok(idx::TEXT_DEFAULT))))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .text_color(c(tok(idx::TEXT_DEFAULT)))
+                    .child(gpui::StyledText::new(plain).with_highlights(hl)),
+            )
     };
     let store = |k: &'static str| {
         controls::button_sm(eid(format!("gift-store-{k}")), tr(k), BtnKind::Secondary)
             .bg(gpui::white())
             .text_color(gpui::black())
     };
-    div()
+    let card = div()
         .flex()
         .items_center()
         .justify_between()
         .gap(z(16.))
         .min_h(z(180.))
-        .pt(z(16.))
-        .pb(z(16.))
-        .pr(z(16.))
-        .pl(z(28.))
+        .p(z(24.))
         .rounded(z(16.))
         .bg(gpui::linear_gradient(
             90.,
@@ -54,7 +61,9 @@ pub(super) fn promo(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyEleme
                 .flex()
                 .flex_col()
                 .gap(z(24.))
-                .w(z(350.))
+                .flex_1()
+                .min_w_0()
+                .max_w(z(400.))
                 .child(
                     div()
                         .flex()
@@ -66,10 +75,10 @@ pub(super) fn promo(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyEleme
                                 .flex()
                                 .flex_col()
                                 .gap(z(8.))
-                                .child(item("shop", "sp.gi.b1"))
-                                .child(item("nitro", "sp.gi.b2"))
-                                .child(item("file", "sp.gi.b3"))
-                                .child(item("info", "sp.gi.b4")),
+                                .child(item("server/server-grid", "sp.gi.b1"))
+                                .child(item("settings/cloud", "sp.gi.b2"))
+                                .child(item("gift", "sp.gi.b3"))
+                                .child(item("golive/screen", "sp.gi.b4")),
                         ),
                 )
                 .child(
@@ -90,8 +99,8 @@ pub(super) fn promo(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyEleme
                 .items_center()
                 .justify_center()
                 .child(gpui::svg().path(crate::icons::path("gift")).size(z(96.)).text_color(gpui::white().opacity(0.8))),
-        )
-        .into_any_element()
+        );
+    div().mt(z(11.)).rounded(z(16.)).bg(c(tok(idx::BACKGROUND_SURFACE_HIGH))).child(card).into_any_element()
 }
 
 pub(super) fn redeem(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyElement {
@@ -120,10 +129,14 @@ pub(super) fn redeem(_: &PhoenixApp, _: &mut Context<'_, PhoenixApp>) -> AnyElem
                         .rounded(z(8.))
                         .border_1()
                         .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
-                        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT))),
+                        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+                        .px(z(12.))
+                        .flex()
+                        .items_center()
+                        .child(text(16., 20., FontWeight::NORMAL, idx::INPUT_PLACEHOLDER_TEXT_DEFAULT, "WUMP-AAAAA-BBBBB-CCCCC".into())),
                 ),
         )
-        .child(controls::button(eid("gift-redeem"), tr("sp.gi.redeem"), BtnKind::Primary))
+        .child(controls::button(eid("gift-redeem"), tr("sp.gi.redeem"), BtnKind::Primary).w(z(100.)).opacity(0.5))
         .into_any_element()
 }
 

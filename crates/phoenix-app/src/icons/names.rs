@@ -47,6 +47,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("sys/mic-arrow-right", &["MicrophoneArrowRightIcon"]),
     ("invite", &["UserPlusIcon"]),
     ("gift", &["GiftIcon"]),
+    ("settings/cloud", &["path:M14 4a5 5 0 0 1 5 5v.2A5.5"]),
     ("gif", &["GifIcon"]),
     ("sticker", &["StickerIcon"]),
     ("emoji", &["EmojiSlightlySmilingFaceIcon"]),

@@ -208,7 +208,7 @@ pub(super) fn bold_desc(t: SharedString) -> AnyElement {
         .into_any_element()
 }
 
-fn bracket_runs(t: &str, style: gpui::HighlightStyle) -> (String, Vec<(std::ops::Range<usize>, gpui::HighlightStyle)>) {
+pub(super) fn bracket_runs(t: &str, style: gpui::HighlightStyle) -> (String, Vec<(std::ops::Range<usize>, gpui::HighlightStyle)>) {
     let mut plain = String::new();
     let mut hl = Vec::new();
     let mut start = None;
