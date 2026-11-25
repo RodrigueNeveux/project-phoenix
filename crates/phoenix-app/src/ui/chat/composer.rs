@@ -339,7 +339,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
         .children(attach_menu(app, cx))
         .children(super::slash::render(app, cx))
         .child(
-            div().relative().px(z(crate::theme::space::xs())).mb(z(crate::theme::space::xs() - 0.8))
+            div().relative().px(z(crate::theme::space::xs())).mb(z(crate::theme::space::xs()))
             .child(div().absolute().top(z(-24.)).left_0().right_0().child(typing(app, window)))
             .child(
                 div()
@@ -417,7 +417,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     .flex_1()
                                     .min_w_0()
                                     .relative()
-                                    .py(z(text_pad_y()))
+                                    .pt(z(text_pad_y() - TEXT_LIFT))
+                                    .pb(z(text_pad_y() + TEXT_LIFT))
                                     .text_size(fz(16.))
                                     .line_height(fz(22.))
                                     .text_color(c(Palette::TEXT_NORMAL))
@@ -446,7 +447,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                         d.child(
                                             div()
                                                 .absolute()
-                                                .top(z(text_pad_y() - 1.5))
+                                                .top(z(text_pad_y() - TEXT_LIFT))
                                                 .h(fz(22.))
                                                 .left_0()
                                                 .right(z(10.))
@@ -817,6 +818,8 @@ pub(super) fn typing(app: &PhoenixApp, window: &Window) -> impl IntoElement + us
         })
         .children(cooldown(app))
 }
+
+const TEXT_LIFT: f32 = 1.;
 
 pub(super) fn text_pad_y() -> f32 {
     ((56. - 22. * crate::theme::font_scale()) / 2.).max(0.)

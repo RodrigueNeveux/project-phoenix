@@ -1295,6 +1295,33 @@ mod tests {
     }
 
     #[test]
+    fn honeypot_placeholder_cuts_after_honey_like_the_client() {
+        // PHOENIX PATCH (ellipsis): the composer placeholder of Aperture #honeypot, dump
+        // `vanilla-guild-chat-busy` (DPR 1.5): `placeholder_SHcSVi` is 290.667px wide, gg sans
+        // 400 16px. Ends are harfbuzz on the cached gg sans (kerned), U+3022 and U+30FB 16px
+        // from the CJK fallback, U+1F36F 2550/2048 em from Noto Color Emoji.
+        let text = "Envoyer un message dans #\u{3022}\u{1f36f}\u{30fb}honeypot";
+        let ends = [
+            8.960, 16.944, 24.224, 32.320, 39.488, 47.600, 53.632, 57.152, 65.600, 74.048, 77.568,
+            90.560, 98.672, 105.712, 112.672, 120.688, 128.256, 136.368, 139.888, 148.736, 156.880,
+            165.328, 172.560, 176.080, 186.224, 202.224, 222.146, 238.146, 246.754, 255.234,
+            263.682, 271.794, 279.314, 288.162, 296.562, 302.690,
+        ];
+        let x = grapheme_ends(text, 0, &ends);
+        let ellipsis = crate::elements::ceil_to_layout_unit(px(11.232), 1.5);
+        assert!((f32::from(ellipsis) * 96. - 1079.).abs() < 1e-2);
+        let budget = px(27904. / 96.) - ellipsis;
+        let cut = shaped_end_cut(text, &x, budget);
+        assert!(text[..cut].ends_with("\u{30fb}honey"), "{}", &text[..cut]);
+        let slack = f32::from(budget) - 279.314;
+        assert!(slack > 0.1 && slack < 0.12, "{slack}");
+        let cut = shaped_end_cut(text, &x, px(279.314));
+        assert!(text[..cut].ends_with("honey"));
+        let cut = shaped_end_cut(text, &x, px(279.313));
+        assert!(text[..cut].ends_with("hone"));
+    }
+
+    #[test]
     fn shaped_end_truncation_counts_an_emoji_as_one_glyph() {
         let mut wrapper = build_wrapper();
         let ell = f32::from(crate::elements::ceil_to_layout_unit(wrapper.width_for_char('\u{2026}'), 1.));
