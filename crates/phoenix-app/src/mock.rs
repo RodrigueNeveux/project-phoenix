@@ -465,8 +465,8 @@ impl Backend for MockBackend {
         let g = |id: u64, n: &str| Game { id, name: n.to_owned().into(), cover: None, icon: None };
         Box::pin(async move {
             Ok(vec![
-                GameWidget { kind: Kind::Favorite, games: vec![g(1, "Ferris Quest")] },
-                GameWidget { kind: Kind::Played, games: vec![g(2, "Crab Kart"), g(3, "Borrow Checker"), g(4, "Rustlings")] },
+                GameWidget { kind: Kind::Favorite, games: vec![g(1, "Ferris Quest")], order: 1 },
+                GameWidget { kind: Kind::Played, games: vec![g(2, "Crab Kart"), g(3, "Borrow Checker"), g(4, "Rustlings")], order: 2 },
             ])
         })
     }

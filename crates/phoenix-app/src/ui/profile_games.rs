@@ -40,12 +40,14 @@ pub struct Game {
 pub struct GameWidget {
     pub kind: Kind,
     pub games: Vec<Game>,
+    pub order: usize,
 }
 
-pub fn widget_ids(widgets: &[Value]) -> Vec<(Kind, Vec<u64>)> {
+pub fn widget_ids(widgets: &[Value]) -> Vec<(usize, Kind, Vec<u64>)> {
     widgets
         .iter()
-        .filter_map(|w| {
+        .enumerate()
+        .filter_map(|(order, w)| {
             let d = w.get("data")?;
             let kind = Kind::parse(d.get("type")?.as_str()?)?;
             let ids = d
@@ -55,7 +57,7 @@ pub fn widget_ids(widgets: &[Value]) -> Vec<(Kind, Vec<u64>)> {
                 .filter_map(|g| g.get("game_id")?.as_str()?.parse().ok())
                 .take(kind.cap())
                 .collect();
-            Some((kind, ids))
+            Some((order, kind, ids))
         })
         .collect()
 }
@@ -160,7 +162,7 @@ mod tests {
             {"data": {"type": "played_games", "games": [{"game_id": "7"}]}}
         ]);
         let v = super::widget_ids(w.as_array().unwrap());
-        assert_eq!(v, vec![(super::Kind::Favorite, vec![5]), (super::Kind::Played, vec![7])]);
+        assert_eq!(v, vec![(1, super::Kind::Favorite, vec![5]), (2, super::Kind::Played, vec![7])]);
         let g = super::parse_game(5, &json!({"name": "P", "media": {"cover_url": "https://x/c.png"}}));
         assert_eq!((g.name.as_ref(), g.cover.as_deref()), ("P", Some("https://x/c.png")));
     }
@@ -171,7 +173,7 @@ mod tests {
             super::parse_game(id, &if icon { json!({"name": "g", "icon_hash": "h"}) } else { json!({"name": "g"}) })
         };
         assert_eq!(game(9, true).icon.as_deref(), Some("https://cdn.discordapp.com/app-icons/9/h.png?size=48"));
-        let w = |kind, ids: &[(u64, bool)]| super::GameWidget { kind, games: ids.iter().map(|&(i, b)| game(i, b)).collect() };
+        let w = |kind, ids: &[(u64, bool)]| super::GameWidget { kind, games: ids.iter().map(|&(i, b)| game(i, b)).collect(), order: 0 };
         let ws = vec![
             w(super::Kind::Favorite, &[(1, true)]),
             w(super::Kind::Played, &[(1, true), (2, false), (3, true), (4, true), (5, true), (6, true), (7, true)]),

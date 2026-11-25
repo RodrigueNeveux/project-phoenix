@@ -24,7 +24,7 @@ impl DiscordBackend {
                 .await
                 .unwrap_or(Value::Null);
             let mut out = Vec::new();
-            for app in apps {
+            for (order, app) in apps {
                 let Ok(cfg) = s.rest.request_json(Method::GET, &format!("/applications/{app}/widget-configs"), None).await else {
                     continue;
                 };
@@ -32,7 +32,7 @@ impl DiscordBackend {
                     eprintln!("widget config shape {}", crate::discord_backend::profile_games::shape_of(&cfg));
                 }
                 if let Some(card) = w::build(app, &cfg, &w::identity_data(&ident, app)) {
-                    out.push(card);
+                    out.push(AppWidget { order, ..card });
                 }
             }
             Ok(out)

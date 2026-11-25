@@ -29,15 +29,17 @@ pub struct AppWidget {
     pub progress: Option<(f32, WidgetItem)>,
     pub mini_stat: SharedString,
     pub mini_hero: Option<SharedString>,
+    pub order: usize,
 }
 
-pub fn app_ids(profile_widgets: &[Value]) -> Vec<u64> {
+pub fn app_ids(profile_widgets: &[Value]) -> Vec<(usize, u64)> {
     profile_widgets
         .iter()
-        .filter_map(|w| {
+        .enumerate()
+        .filter_map(|(order, w)| {
             let d = w.get("data")?;
             (d.get("type")?.as_str()? == "application").then_some(())?;
-            d.get("application_id")?.as_str()?.parse().ok()
+            Some((order, d.get("application_id")?.as_str()?.parse().ok()?))
         })
         .collect()
 }
@@ -138,6 +140,7 @@ pub fn build(app: u64, configs: &Value, data: &[(String, String)]) -> Option<App
         mini_stat: field("mini_profile", "stat", "text", 0).unwrap_or_default(),
         mini_hero: field("mini_profile", "hero_image", "image", 256),
         items: items.into_iter().map(|(_, i)| i).collect(),
+        order: 0,
     })
 }
 
@@ -340,7 +343,7 @@ mod tests {
     #[test]
     fn builds_card_from_config_and_identity() {
         let widgets = vec![json!({"data": {"type": "application", "application_id": "42"}}), json!({"data": {"type": "favorite_games"}})];
-        assert_eq!(app_ids(&widgets), vec![42]);
+        assert_eq!(app_ids(&widgets), vec![(0, 42)]);
         let ident = json!({"identities": [{"application_id": "42", "profile": {"data": {"dynamic": [
             {"type": 1, "name": "title", "value": "Hello"}, {"type": 1, "name": "users", "value": "12"}]}}}]});
         let data = identity_data(&ident, 42);

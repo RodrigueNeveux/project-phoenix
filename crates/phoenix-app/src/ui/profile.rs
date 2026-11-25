@@ -1398,9 +1398,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
                 cover: c(tok(idx::BACKGROUND_MOD_SUBTLE)),
             };
-            panel = panel
-                .children(board.widgets.iter().map(|w| crate::ui::settings::profile_widgets::render(w, &wcol)))
-                .children(board.games.iter().filter_map(|w| crate::ui::profile_board::card(w, &gcol)));
+            panel = panel.children(crate::ui::profile_board::ordered(&board, |w| crate::ui::settings::profile_widgets::render(w, &wcol), |w| crate::ui::profile_board::card(w, &gcol)));
         }
         TAB_WISHLIST => {
             let items = &board.wishlist;

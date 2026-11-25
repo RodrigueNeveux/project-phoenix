@@ -37,16 +37,21 @@ pub fn get(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> Board {
     }
     s.0.insert(user, Board::default());
     fill(cx, user, app.backend.profile_widgets(user), |b, v| b.widgets = v);
-    fill(cx, user, app.backend.game_widgets(user), |b, v: Vec<GameWidget>| {
-        if std::env::var_os("PHX_DEBUG_GAMES").is_some() {
-            let icons = crate::ui::profile_games::collection_icons(&v);
-            eprintln!("board games {} widgets, {} icons, {} more", v.len(), icons.0.len(), icons.1);
-        }
-        b.games = v
-    });
+    fill(cx, user, app.backend.game_widgets(user), |b, v: Vec<GameWidget>| b.games = v);
     fill(cx, user, app.backend.recent_activity(user), |b, v| b.recent = v);
     fill(cx, user, app.backend.wishlist(user), |b, v| b.wishlist = v);
     Board::default()
+}
+
+pub fn ordered<T>(board: &Board, app: impl Fn(&AppWidget) -> T, games: impl Fn(&GameWidget) -> Option<T>) -> Vec<T> {
+    let mut out: Vec<(usize, T)> = board
+        .widgets
+        .iter()
+        .map(|w| (w.order, app(w)))
+        .chain(board.games.iter().filter_map(|w| Some((w.order, games(w)?))))
+        .collect();
+    out.sort_by_key(|(order, _)| *order);
+    out.into_iter().map(|(_, e)| e).collect()
 }
 
 fn fill<T: Default + 'static>(
@@ -146,4 +151,21 @@ pub fn card(w: &GameWidget, col: &Colors) -> Option<Div> {
         div().flex().flex_wrap().gap(z(16.)).children(w.games.iter().map(|g| cover(g, col)))
     };
     Some(div().flex().flex_col().gap(z(8.)).pt(z(12.)).px(z(16.)).pb(z(16.)).rounded(z(16.)).bg(col.card).child(header).child(body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn widgets_follow_the_profile_order() {
+        let app = |order| AppWidget { app_id: 7, order, ..Default::default() };
+        let games = |order| GameWidget { kind: Kind::Favorite, games: Vec::new(), order };
+        let board = Board { widgets: vec![app(2)], games: vec![games(0), games(3)], ..Default::default() };
+        let kinds = ordered(&board, |w| format!("app{}", w.order), |w| Some(format!("games{}", w.order)));
+        assert_eq!(kinds, ["games0", "app2", "games3"]);
+        let board = Board { widgets: vec![app(0)], games: vec![games(1)], ..Default::default() };
+        assert_eq!(ordered(&board, |_| "app", |_| Some("games")), ["app", "games"]);
+        assert_eq!(ordered(&board, |_| "app", |_| None::<&str>), ["app"]);
+    }
 }

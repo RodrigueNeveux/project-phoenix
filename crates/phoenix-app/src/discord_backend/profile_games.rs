@@ -15,7 +15,7 @@ impl DiscordBackend {
             let widgets = prof.get("widgets").and_then(Value::as_array).cloned().unwrap_or_default();
             let lists = g::widget_ids(&widgets);
             let mut all: Vec<u64> = Vec::new();
-            for id in lists.iter().flat_map(|(_, ids)| ids) {
+            for id in lists.iter().flat_map(|(_, _, ids)| ids) {
                 if !all.contains(id) {
                     all.push(*id);
                 }
@@ -25,13 +25,6 @@ impl DiscordBackend {
                 let query = chunk.iter().map(|id| format!("game_ids={id}")).collect::<Vec<_>>().join("&");
                 let Ok(v) = s.rest.request_json(Method::GET, &format!("/games?{query}"), None).await else { continue };
                 for game in v.as_array().into_iter().flatten() {
-                    if std::env::var_os("PHX_DEBUG_GAMES").is_some() {
-                        let shape: Vec<String> = game
-                            .as_object()
-                            .map(|o| o.iter().map(|(k, x)| format!("{k}:{}", shape_of(x))).collect())
-                            .unwrap_or_default();
-                        eprintln!("game shape {shape:?}");
-                    }
                     if let Some(id) = game.get("id").and_then(Value::as_str).and_then(|x| x.parse::<u64>().ok()) {
                         found.insert(id, g::parse_game(id, game));
                     }
@@ -39,7 +32,7 @@ impl DiscordBackend {
             }
             let out = lists
                 .into_iter()
-                .map(|(kind, ids)| GameWidget { kind, games: ids.iter().filter_map(|id| found.get(id).cloned()).collect() })
+                .map(|(order, kind, ids)| GameWidget { kind, games: ids.iter().filter_map(|id| found.get(id).cloned()).collect(), order })
                 .collect();
             Ok(out)
         })
