@@ -257,6 +257,9 @@ pub trait Backend: Send + Sync + 'static {
         true
     }
     fn request_feed_members(&self, _guild: Id, _users: Vec<Id>) {}
+    fn roles_can_view(&self, _channel: Id, _roles: &[Id]) -> bool {
+        true
+    }
     fn member_can_view(&self, _channel: Id, _user: Id) -> bool {
         true
     }

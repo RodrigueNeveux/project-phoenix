@@ -841,6 +841,7 @@ fn display(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
                         .child(crate::ui::controls::button("ss-role-icon-remove", crate::t!("gs.role.icon_remove"), BtnKind::Secondary)),
                 ),
         )
+        .child(theme_preview(s.guild.0, &role, e))
         .child(line())
         .child(hoist)
         .child(line())
@@ -851,9 +852,79 @@ fn display(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
                 .flex()
                 .flex_col()
                 .child(labels(crate::t!("gs.role.view_as"), Some(crate::t!("gs.role.view_as_desc"))))
-                .child(div().mt(z(8.)).flex().child(kit::btn_sm("ss-role-view-as", crate::t!("gs.role.view_as"), BtnKind::Secondary))),
+                .child(div().mt(z(8.)).flex().child(kit::btn_sm("ss-role-view-as", crate::t!("gs.role.view_as"), BtnKind::Secondary).on_click({
+                    let (guild, role) = (s.guild, e.id);
+                    cx.listener(move |a, _, _, cx| crate::ui::view_as::start(a, guild, crate::model::Id(role), cx))
+                }))),
         )
         .into_any_element()
+}
+
+pub static PREVIEW_THEMES: [(&[u32; crate::theme::generated::COLOR_COUNT], bool); 4] =
+    [(&crate::theme::generated::ASH, false), (&crate::theme::generated::DARK, false), (&crate::theme::generated::ONYX, false), (&crate::theme::generated::LIGHT, true)];
+
+fn rgba(v: u32) -> Hsla {
+    gpui::Hsla::from(gpui::rgba(v))
+}
+
+pub fn preview_stops(colors: &RoleColors) -> Option<[u32; 3]> {
+    colors.secondary.map(|s| [colors.primary, s, colors.tertiary.unwrap_or(colors.primary)])
+}
+
+fn theme_preview(guild: u64, role: &Value, e: &Editor) -> AnyElement {
+    let stops = preview_stops(&e.colors);
+    let now = chrono::Local::now().format("%H:%M").to_string();
+    let mut out = div().mt(z(16.)).rounded(z(8.)).border_1().border_color(c(tok(idx::BORDER_SUBTLE))).overflow_hidden().flex().flex_col();
+    for (n, (table, light)) in PREVIEW_THEMES.iter().enumerate() {
+        let col = |i: usize| rgba(table[i]);
+        let name: AnyElement = match stops {
+            Some(st) => div().child(crate::fonts::name_text_with("Wumpus".into(), None, 16., Some(st))).into_any_element(),
+            None => div()
+                .text_size(z(16.))
+                .line_height(z(22.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if e.colors.primary == 0 { col(idx::TEXT_STRONG) } else { c(e.colors.primary) })
+                .child("Wumpus")
+                .into_any_element(),
+        };
+        let row = div()
+            .py(z(16.))
+            .child(
+                div()
+                    .relative()
+                    .pl(z(80.))
+                    .pr(z(30.))
+                    .py(z(2.))
+                    .min_h(z(48.))
+                    .child(div().absolute().left(z(20.)).top(z(4.)).size(z(40.)).rounded_full().overflow_hidden().child(gpui::img(SharedString::from("https://cdn.discordapp.com/embed/avatars/0.png")).size(z(40.))))
+                    .child(
+                        div()
+                            .h(z(22.))
+                            .flex()
+                            .items_center()
+                            .child(name)
+                            .child(div().ml(z(4.)).child(role_icon(guild, role, 20.)))
+                            .child(div().ml(z(4.)).text_size(z(12.)).line_height(z(22.)).font_weight(FontWeight::MEDIUM).text_color(col(idx::TEXT_MUTED)).child(now.clone())),
+                    )
+                    .child(div().text_size(z(16.)).line_height(z(22.)).text_color(col(idx::TEXT_DEFAULT)).child(crate::t!("gs.role.preview_message"))),
+            );
+        let mut wrap = div().id(("ss-role-preview", n)).bg(col(idx::BACKGROUND_BASE_LOW)).flex().flex_col().child(row);
+        if *light {
+            wrap = wrap.child(
+                div()
+                    .px(z(16.))
+                    .py(z(8.))
+                    .bg(col(idx::BACKGROUND_MOD_SUBTLE))
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(col(idx::TEXT_SUBTLE))
+                    .child(crate::t!("gs.role.light_notice")),
+            );
+        }
+        out = out.child(wrap);
+    }
+    out.into_any_element()
 }
 
 fn links() -> AnyElement {
@@ -934,13 +1005,39 @@ pub fn editor(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                 .child(gpui::svg().path(crate::icons::path("more-horizontal")).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
         )
         .child(tabs(e, cx));
-    let right = div().flex_1().min_w_0().ml(z(16.)).flex().flex_col().pb(z(60.)).child(header).child(body);
-    div().w(z(740.)).max_w_full().pr(z(40.)).flex().child(side(app, s, e.id, cx)).child(right).into_any_element()
+    let right = div()
+        .flex_1()
+        .min_w_0()
+        .h_full()
+        .ml(z(16.))
+        .flex()
+        .flex_col()
+        .child(div().flex_none().child(header))
+        .child(div().id("ss-role-scroll").flex_1().min_h_0().overflow_y_scroll().pb(z(60.)).child(body));
+    div()
+        .h_full()
+        .w(z(740.))
+        .max_w_full()
+        .pr(z(40.))
+        .flex()
+        .child(div().id("ss-role-side-scroll").flex_none().h_full().overflow_y_scroll().child(side(app, s, e.id, cx)))
+        .child(right)
+        .into_any_element()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_themes_follow_the_client_order() {
+        assert_eq!(PREVIEW_THEMES.len(), 4);
+        assert!(PREVIEW_THEMES[3].1 && !PREVIEW_THEMES[0].1);
+        assert_eq!(crate::theme::generated::ASH[idx::BACKGROUND_BASE_LOW], 0x3637_3EFF);
+        assert_eq!(crate::theme::generated::DARK[idx::BACKGROUND_BASE_LOW], 0x2020_24FF);
+        assert_eq!(preview_stops(&RoleColors { primary: 1, secondary: Some(2), tertiary: None }), Some([1, 2, 1]));
+        assert_eq!(preview_stops(&RoleColors { primary: 1, secondary: None, tertiary: None }), None);
+    }
     use serde_json::json;
 
     #[test]

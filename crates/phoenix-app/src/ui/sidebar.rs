@@ -29,6 +29,17 @@ pub fn channel_icon(kind: ChannelKind) -> Icon {
     }
 }
 
+pub fn drop_empty_categories(rows: &[SidebarRow], collapsed: &std::collections::HashSet<Id>) -> Vec<SidebarRow> {
+    rows.iter()
+        .enumerate()
+        .filter(|(i, r)| match r {
+            SidebarRow::Category(cat) => !collapsed.contains(cat) && matches!(rows.get(i + 1), Some(SidebarRow::Channel(_))),
+            _ => true,
+        })
+        .map(|(_, r)| *r)
+        .collect()
+}
+
 pub fn build_rows(app: &mut PhoenixApp) {
     let anchor = app.sidebar_list.logical_scroll_top();
     let anchor_row = anchor.item_ix.checked_sub(1).and_then(|i| app.sidebar_rows.get(i).copied());
@@ -61,6 +72,9 @@ pub fn build_rows(app: &mut PhoenixApp) {
                 }
                 let selected = Some(id) == app.selected_channel
                     || app.selected_channel.and_then(|s| app.nav.thread_parent(s)) == Some(id);
+                if !crate::ui::view_as::visible(app, g, id) {
+                    continue;
+                }
                 let collapsed = current_cat.is_some_and(|c| app.collapsed.contains(&c));
                 if collapsed && !selected && !(ch.unread && !ch.muted) && ch.voice_users.is_empty() {
                     continue;
@@ -101,6 +115,9 @@ pub fn build_rows(app: &mut PhoenixApp) {
                     .map(|(_, r)| *r)
                     .collect();
                 rows = keep;
+            }
+            if crate::ui::view_as::roles_for(g).is_some() {
+                rows = drop_empty_categories(&rows, &app.collapsed);
             }
             crate::actions::pins::apply(&mut rows);
             app.sidebar_rows = rows;

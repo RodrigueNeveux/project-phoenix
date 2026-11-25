@@ -1426,7 +1426,7 @@ impl Render for PhoenixApp {
             Screen::Main => {
                 let title = ui::title_bar::render(self, window, cx).into_any_element();
                 let rail = ui::server_bar::render(self, cx).into_any_element();
-                let notice = crate::streamer::notice(self, cx);
+                let notice = crate::streamer::notice(self, cx).or_else(|| ui::view_as::notice(self, cx));
                 let shift = notice.is_some();
                 let below_notice = |el: gpui::AnyElement, grow: bool| {
                     if !shift {

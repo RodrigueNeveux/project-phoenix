@@ -155,21 +155,38 @@ pub fn page_title(t: SharedString) -> gpui::Div {
 
 #[allow(clippy::too_many_arguments)]
 pub fn overlay(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    overlay_ex(id, side_items, selected, pick, title, content, notice, false, None, cx)
+    overlay_ex(id, side_items, selected, pick, title, content, notice, false, None, false, cx)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn overlay_fixed(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, content: AnyElement, notice: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    overlay_ex(id, side_items, selected, pick, SharedString::default(), content, notice, true, None, true, cx)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn overlay_with(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, extra: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    overlay_ex(id, side_items, selected, pick, title, content, notice, false, extra, cx)
+    overlay_ex(id, side_items, selected, pick, title, content, notice, false, extra, false, cx)
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn overlay_wide(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, content: AnyElement, notice: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    overlay_ex(id, side_items, selected, pick, SharedString::default(), content, notice, true, None, cx)
+    overlay_ex(id, side_items, selected, pick, SharedString::default(), content, notice, true, None, false, cx)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick: Pick, title: SharedString, content: AnyElement, notice: Option<AnyElement>, wide: bool, extra: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn overlay_ex(
+    id: &'static str,
+    side_items: Vec<SideItem>,
+    selected: usize,
+    pick: Pick,
+    title: SharedString,
+    content: AnyElement,
+    notice: Option<AnyElement>,
+    wide: bool,
+    extra: Option<AnyElement>,
+    fixed: bool,
+    cx: &mut Context<PhoenixApp>,
+) -> AnyElement {
     let mut side = div().flex_1().min_w_0().overflow_hidden().flex().flex_col();
     for (n, it) in side_items.into_iter().enumerate() {
         side = side.child(match it {
@@ -186,23 +203,25 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
             .when(narrow, |d| d.flex_none().w_full())
             .when_some(body, |d, b| if wide { d.child(b) } else { d.pt(z(60.)).px(z(40.)).pb(z(80.)).child(b) })
     };
-    let body = div()
-        .flex()
-        .flex_col()
-        .gap(z(24.))
-        .when(!title.is_empty(), |d| d.child(page_title(title)))
-        .child(content)
-        .into_any_element();
-    let scroller = div()
-        .id(SharedString::from(format!("{id}-scroll")))
-        .size_full()
-        .flex()
-        .items_start()
-        .overflow_y_scroll()
-        .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 1))
-        .when(narrow, |d| d.pr(z(16.)))
-        .child(column(Some(body)))
-        .when(!narrow, |d| d.child(div().flex_none().w(z(36.)).mr(z(21.))));
+    let body = if fixed {
+        content
+    } else {
+        div().flex().flex_col().gap(z(24.)).when(!title.is_empty(), |d| d.child(page_title(title))).child(content).into_any_element()
+    };
+    let scroller = if fixed {
+        div().id(SharedString::from(format!("{id}-scroll"))).size_full().flex().child(div().h_full().flex_1().min_w_0().child(body))
+    } else {
+        div()
+            .id(SharedString::from(format!("{id}-scroll")))
+            .size_full()
+            .flex()
+            .items_start()
+            .overflow_y_scroll()
+            .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 1))
+            .when(narrow, |d| d.pr(z(16.)))
+            .child(column(Some(body)))
+            .when(!narrow, |d| d.child(div().flex_none().w(z(36.)).mr(z(21.))))
+    };
     let tools = if narrow {
         div().absolute().top_0().right(z(16.)).w(z(36.)).pt(z(60.)).child(close_tools(cx))
     } else {
@@ -227,7 +246,7 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
         .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
         .child(scroller)
         .child(tools)
-        .children(crate::ui::chat::scrollbar::bar_for_n(id, 1, crate::ui::chat::scrollbar::Bar::Auto))
+        .when(!fixed, |d| d.children(crate::ui::chat::scrollbar::bar_for_n(id, 1, crate::ui::chat::scrollbar::Bar::Auto)))
         .children(notice.map(|n| div().absolute().bottom_0().left_0().right(z(71.)).max_w(z(740.)).px(z(20.)).pb(z(20.)).child(n)));
     let sidebar_region = crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
         .flex_grow(1.)

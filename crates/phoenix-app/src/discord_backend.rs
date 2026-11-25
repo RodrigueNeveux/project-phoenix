@@ -689,6 +689,12 @@ impl Backend for DiscordBackend {
         s.cache.channel(sf(channel)).is_some_and(|c| c.kind == api::ChannelType::GuildMedia)
     }
 
+    fn roles_can_view(&self, channel: Id, roles: &[Id]) -> bool {
+        let Ok(s) = self.inner.session() else { return true };
+        let roles: Vec<_> = roles.iter().map(|r| sf(*r)).collect();
+        s.cache.roles_permissions_in(sf(channel), &roles).is_none_or(|p| p.contains(phoenix_api::models::Permissions::VIEW_CHANNEL))
+    }
+
     fn member_can_view(&self, channel: Id, user: Id) -> bool {
         let Ok(s) = self.inner.session() else { return true };
         s.cache

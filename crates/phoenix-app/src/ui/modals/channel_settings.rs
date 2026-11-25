@@ -299,7 +299,7 @@ pub fn insert_at(text: &str, range: std::ops::Range<usize>, ins: &str) -> (Strin
     let (a, b) = (range.start.min(text.len()), range.end.min(text.len()));
     let (a, b) = (a.min(b), a.max(b));
     let a = (0..=a).rev().find(|i| text.is_char_boundary(*i)).unwrap_or(0);
-    let b = if b <= a { a } else { (b..=text.len()).find(|i| text.is_char_boundary(*i)).unwrap_or(text.len()) };
+    let b = if range.start >= range.end { a } else { (b..=text.len()).find(|i| text.is_char_boundary(*i)).unwrap_or(text.len()) };
     let out = format!("{}{ins}{}", &text[..a], &text[b..]);
     let at = a + ins.len();
     (out, at..at)

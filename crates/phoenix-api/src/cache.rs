@@ -151,6 +151,15 @@ impl Cache {
         Some(compute_channel_permissions(gid, guild.owner_id(), user, &roles, &guild.roles, &ow_src.permission_overwrites))
     }
 
+    pub fn roles_permissions_in(&self, channel: ChannelId, roles: &[RoleId]) -> Option<Permissions> {
+        let s = self.inner.state.read();
+        let ch = s.channels.get(&channel)?;
+        let gid = ch.guild_id?;
+        let guild = s.guilds.get(&gid)?;
+        let ow_src = if ch.kind.is_thread() { ch.parent_id.and_then(|p| s.channels.get(&p)).unwrap_or(ch) } else { ch };
+        Some(compute_channel_permissions(gid, None, Snowflake(0), roles, &guild.roles, &ow_src.permission_overwrites))
+    }
+
     pub fn insert_messages(&self, channel: ChannelId, msgs: impl IntoIterator<Item = Message>) {
         let cap = self.inner.message_cap;
         let mut s = self.inner.state.write();

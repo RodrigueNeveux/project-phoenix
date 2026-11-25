@@ -504,7 +504,9 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         None => page(app, s, cx),
     };
     let notice = s.dirty(cx).then(|| settings_layout::unsaved_bar(Rc::new(reset), Rc::new(save), cx));
-    let shell = if wide {
+    let shell = if s.role.is_some() {
+        settings_layout::overlay_fixed("server-settings", side, s.section, pick_fn, content, notice, cx)
+    } else if wide {
         settings_layout::overlay_wide("server-settings", side, s.section, pick_fn, content, notice, cx)
     } else {
         settings_layout::overlay("server-settings", side, s.section, pick_fn, SharedString::default(), content, notice, cx)

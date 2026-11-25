@@ -67,6 +67,7 @@ pub mod window_chrome;
 pub mod tooltip;
 pub mod channel_unread_bar;
 pub mod user_menu;
+pub mod view_as;
 pub mod voice_effects;
 pub mod voice_panel;
 pub mod go_live;
