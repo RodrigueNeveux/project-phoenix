@@ -279,7 +279,7 @@ pub fn favorites_items(e: &Ent) -> Vec<MenuItem> {
     vec![
         stub(e, "fav.thread_settings"),
         MenuItem::Separator,
-        MenuItem::danger(crate::t!("fav.hide"), None, move |_, _, cx: &mut App| hide.update(cx, |a, cx| crate::ui::favorites::hide(a, cx))),
+        MenuItem::danger(crate::t!("fav.hide"), None, move |_, _, cx: &mut App| hide.update(cx, crate::ui::favorites::hide)),
     ]
 }
 
