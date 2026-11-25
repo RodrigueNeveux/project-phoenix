@@ -101,7 +101,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
     VIEWPORT_W_CSS.store(vw.to_bits(), std::sync::atomic::Ordering::Relaxed);
     DREW_WIN_BUTTONS.store(client_decorated(window), std::sync::atomic::Ordering::Relaxed);
     let (glyph, text) = title(app);
-    let guild = app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    let guild = app.selected_guild.filter(|_| crate::ui::discovery::current().is_none()).and_then(|g| app.guilds.iter().find(|x| x.id == g));
     crate::ui::window_chrome::drag_region(div().id("app-title-bar"))
         .h(z(m::TITLE_BAR_H))
         .flex_none()

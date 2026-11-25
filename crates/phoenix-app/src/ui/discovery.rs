@@ -380,6 +380,7 @@ pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>)
             .size_full()
             .overflow_y_scroll()
             .track_scroll(s)
+            .pr(z(8.))
             .child(hero())
             .child(
                 div()
