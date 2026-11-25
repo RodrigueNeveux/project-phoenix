@@ -10,7 +10,7 @@ use crate::{
 
 pub const HEADER_H: f32 = 49.;
 pub const HERO_H: f32 = 348.;
-pub const CARD_MIN_W: f32 = 320.;
+pub const CARD_MIN_W: f32 = 280.;
 pub const CARD_H: f32 = 322.;
 pub const GRID_GAP: f32 = 20.;
 pub const GRID_PAD_X: f32 = 24.;
@@ -255,21 +255,21 @@ fn card(g: &DiscoverableGuild) -> AnyElement {
         .flex()
         .flex_col()
         .rounded(z(8.))
-        .bg(tk(idx::BACKGROUND_BASE_LOWER))
+        .overflow_hidden()
+        .bg(tk(idx::BACKGROUND_BASE_LOW))
         .border_1()
         .border_color(tk(idx::BORDER_SUBTLE))
         .cursor_pointer()
-        .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGH)))
+        .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGH)).border_color(tk(idx::BORDER_STRONG)).shadow_sm())
         .child(banner)
         .child(icon)
         .child(details)
         .into_any_element()
 }
 
-fn header_bar() -> AnyElement {
-    let cats = ["discovery.cat.home", "discovery.cat.gaming", "discovery.cat.music", "discovery.cat.entertainment", "discovery.cat.science", "discovery.cat.education", "discovery.cat.hubs"];
+fn header_bar(icon: &'static str, cats: &[&'static str]) -> AnyElement {
     let mut tabs = div().h_full().flex().items_center().gap(z(30.));
-    for (n, k) in cats.into_iter().enumerate() {
+    for (n, k) in cats.iter().copied().enumerate() {
         let on = n == 0;
         tabs = tabs.child(
             div()
@@ -280,9 +280,9 @@ fn header_bar() -> AnyElement {
                 .items_center()
                 .cursor_pointer()
                 .text_size(z(14.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(if on { tk(idx::TEXT_DEFAULT) } else { tk(idx::INTERACTIVE_TEXT_DEFAULT) })
-                .hover(|s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(if on { tk(idx::TEXT_DEFAULT) } else { tk(idx::TEXT_SUBTLE) })
+                .hover(|s| s.text_color(tk(idx::TEXT_STRONG)))
                 .child(crate::t!(k))
                 .when(on, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(z(2.)).bg(tk(idx::BRAND_500)))),
         );
@@ -313,49 +313,47 @@ fn header_bar() -> AnyElement {
         .gap(z(20.))
         .border_b_1()
         .border_color(tk(idx::BORDER_SUBTLE))
-        .child(gpui::svg().path(crate::icons::path("server/server")).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)))
+        .child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)))
         .child(div().flex_1().min_w_0().h_full().child(tabs))
         .child(search)
         .into_any_element()
 }
 
-fn hero() -> AnyElement {
+fn hero(lines: &[SharedString], desc: SharedString) -> AnyElement {
+    let mut title = div().max_w(z(740.)).flex().flex_col();
+    for l in lines {
+        title = title.child(text(44., 44., FontWeight::BOLD, tk(idx::TEXT_STRONG), l.to_uppercase()));
+    }
     div()
         .relative()
         .w_full()
         .h(z(HERO_H))
         .overflow_hidden()
-        .child(div().absolute().inset_0().bg(gpui::linear_gradient(
-            115.,
-            gpui::linear_color_stop(rgb(0x1a2a6c), 0.),
-            gpui::linear_color_stop(rgb(0x0b1033), 1.),
+        .bg(gpui::black())
+        .child(div().absolute().inset_0().opacity(0.7).bg(gpui::linear_gradient(
+            110.,
+            gpui::linear_color_stop(rgb(0x2f72c1), 0.),
+            gpui::linear_color_stop(gpui::Hsla::from(rgb(0x25229a)).opacity(0.8), 0.36),
         )))
         .child(
             div()
                 .absolute()
-                .top(z(HEADER_H + 11. + 72.))
+                .top(z(60.))
+                .bottom_0()
                 .left_0()
                 .pl(z(32.))
-                .max_w(z(772.))
                 .flex()
                 .flex_col()
-                .gap(z(16.))
-                .child(text(44., 44., FontWeight::BOLD, tk(idx::TEXT_STRONG), crate::t!("discovery.hero_title").to_uppercase()))
-                .child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_MUTED), crate::t!("discovery.hero_desc")).max_w(z(600.))),
+                .justify_center()
+                .child(title)
+                .child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_MUTED), desc).mt(z(16.)).max_w(z(600.))),
         )
         .into_any_element()
 }
 
 pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if current() == Some(Tab::Apps) {
-        return div()
-            .size_full()
-            .bg(tk(idx::BACKGROUND_BASE_LOWEST))
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_MUTED), crate::t!("discovery.apps")))
-            .into_any_element();
+        return apps_page(app, window, cx);
     }
     ensure_loaded(app, cx);
     let guilds = STATE.with(|s| s.borrow().guilds.clone());
@@ -381,7 +379,7 @@ pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>)
             .overflow_y_scroll()
             .track_scroll(s)
             .pr(z(8.))
-            .child(hero())
+            .child(hero(&[crate::t!("discovery.hero_title")], crate::t!("discovery.hero_desc")))
             .child(
                 div()
                     .pt(z(24.))
@@ -391,7 +389,187 @@ pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>)
             )
             .child(grid)
     });
-    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(body).child(header_bar()).into_any_element()
+    let cats = ["discovery.cat.home", "discovery.cat.gaming", "discovery.cat.music", "discovery.cat.entertainment", "discovery.cat.science", "discovery.cat.education", "discovery.cat.hubs"];
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(body).child(header_bar("server/server", &cats)).into_any_element()
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DirectoryApp {
+    pub id: u64,
+    pub name: SharedString,
+    pub description: SharedString,
+    pub icon: Option<SharedString>,
+    pub banner: Option<SharedString>,
+    pub category: Option<SharedString>,
+    pub promoted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Collection {
+    pub title: SharedString,
+    pub apps: Vec<DirectoryApp>,
+}
+
+pub const PROMOTED_FLAG: u64 = 1 << 29;
+
+pub fn parse_collections(v: &Value) -> Vec<Collection> {
+    let mut list: Vec<&Value> = v.as_array().map(|a| a.iter().collect()).unwrap_or_default();
+    list.sort_by_key(|c| c["position"].as_i64().unwrap_or(i64::MAX));
+    list.into_iter()
+        .filter_map(|c| {
+            let mut items: Vec<&Value> = c["application_directory_collection_items"].as_array()?.iter().filter(|i| i["type"].as_u64() == Some(1)).collect();
+            items.sort_by_key(|i| i["position"].as_i64().unwrap_or(i64::MAX));
+            let apps: Vec<DirectoryApp> = items
+                .into_iter()
+                .filter_map(|i| {
+                    let a = &i["application"];
+                    let id: u64 = a["id"].as_str()?.parse().ok()?;
+                    let s = |v: &Value| v.as_str().filter(|x| !x.is_empty()).map(str::to_owned);
+                    let bot = &a["bot"];
+                    let banner = match (s(&bot["id"]), s(&bot["banner"])) {
+                        (Some(b), Some(h)) => Some(cdn(format!("banners/{b}/{h}.png?size=600"))),
+                        _ => s(&a["cover_image"]).map(|h| cdn(format!("app-icons/{id}/{h}.png?size=600"))),
+                    };
+                    Some(DirectoryApp {
+                        id,
+                        name: s(&a["name"]).unwrap_or_default().into(),
+                        description: s(&a["description"]).unwrap_or_default().into(),
+                        icon: s(&a["icon"]).map(|h| cdn(format!("app-icons/{id}/{h}.png?size=64"))),
+                        banner,
+                        category: a["categories"].get(0).and_then(|c| s(&c["name"])).map(Into::into),
+                        promoted: a["flags"].as_u64().unwrap_or(0) & PROMOTED_FLAG != 0,
+                    })
+                })
+                .collect();
+            (!apps.is_empty()).then(|| Collection { title: s_of(&c["title"]), apps })
+        })
+        .collect()
+}
+
+fn s_of(v: &Value) -> SharedString {
+    v.as_str().unwrap_or_default().to_owned().into()
+}
+
+pub fn app_columns(window_w: f32) -> usize {
+    if window_w >= 1200. {
+        4
+    } else if window_w >= 800. {
+        2
+    } else {
+        1
+    }
+}
+
+thread_local! {
+    static APPS: RefCell<(bool, Option<Vec<Collection>>)> = const { RefCell::new((false, None)) };
+}
+
+fn ensure_apps(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if APPS.with(|a| std::mem::replace(&mut a.borrow_mut().0, true)) {
+        return;
+    }
+    let fut = app.backend.app_directory_collections(crate::i18n::locale().to_string());
+    cx.spawn(async move |this, cx| {
+        let v = fut.await.unwrap_or(Value::Null);
+        APPS.with(|a| a.borrow_mut().1 = Some(parse_collections(&v)));
+        let _ = this.update(cx, |_, cx| cx.notify());
+    })
+    .detach();
+}
+
+fn app_card(a: &DirectoryApp) -> AnyElement {
+    let banner = div()
+        .relative()
+        .w_full()
+        .h(z(140.))
+        .overflow_hidden()
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .children(a.banner.clone().map(|b| img(b).size_full().object_fit(gpui::ObjectFit::Cover)));
+    let icon = div()
+        .absolute()
+        .left(z(12.))
+        .top(z(140. - 28.))
+        .size(z(56.))
+        .p(z(4.))
+        .rounded(z(12.))
+        .bg(tk(idx::BACKGROUND_BASE_LOW))
+        .child(match a.icon.clone() {
+            Some(u) => img(u).size_full().rounded(z(8.)).into_any_element(),
+            None => div().size_full().rounded(z(8.)).bg(tk(idx::BACKGROUND_BASE_LOWEST)).into_any_element(),
+        });
+    let mut info = div().mt(z(4.)).flex().gap(z(4.));
+    let has_info = a.category.is_some() || a.promoted;
+    if let Some(c) = a.category.clone() {
+        info = info.child(text(12., 16., FontWeight::MEDIUM, tk(idx::TEXT_DEFAULT), c));
+    }
+    if a.category.is_some() && a.promoted {
+        info = info.child(text(12., 16., FontWeight::MEDIUM, tk(idx::TEXT_SUBTLE), "\u{2022}"));
+    }
+    if a.promoted {
+        info = info.child(text(12., 16., FontWeight::MEDIUM, tk(idx::TEXT_SUBTLE), crate::t!("discovery.promoted")));
+    }
+    div()
+        .id(("discovery-app", a.id))
+        .relative()
+        .min_w_0()
+        .h(z(275.))
+        .flex()
+        .flex_col()
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(tk(idx::BACKGROUND_BASE_LOW))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .cursor_pointer()
+        .hover(|s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGH)).border_color(tk(idx::BORDER_STRONG)).shadow_sm())
+        .child(banner)
+        .child(div().h(z(28.)))
+        .child(icon)
+        .child(
+            div()
+                .flex_1()
+                .min_h_0()
+                .pt(z(4.))
+                .px(z(16.))
+                .pb(z(16.))
+                .flex()
+                .flex_col()
+                .child(text(16., 20., FontWeight::SEMIBOLD, tk(idx::TEXT_STRONG), a.name.clone()).overflow_hidden().text_ellipsis().whitespace_nowrap())
+                .when(has_info, |d| d.child(info))
+                .child(text(14., 18., FontWeight::MEDIUM, tk(idx::TEXT_DEFAULT), a.description.clone()).mt(z(8.)).max_h(z(36.)).overflow_hidden()),
+        )
+        .into_any_element()
+}
+
+fn apps_page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    ensure_apps(app, cx);
+    let cols = app_columns(f32::from(window.viewport_size().width) / crate::theme::zoom());
+    let colls = APPS.with(|a| a.borrow().1.clone());
+    let mut body = div().flex().flex_col().pb(z(16.));
+    for (n, c) in colls.unwrap_or_default().iter().enumerate() {
+        body = body.child(div().pt(z(if n == 0 { 24. } else { 16. })).pl(z(32.)).child(text(20., 24., FontWeight::SEMIBOLD, tk(idx::TEXT_STRONG), c.title.clone())));
+        let mut grid = div().px(z(32.)).py(z(16.)).grid().grid_cols(cols as u16).gap(z(16.));
+        for a in &c.apps {
+            grid = grid.child(app_card(a));
+        }
+        body = body.child(grid);
+    }
+    let scroll = APP_SCROLL.with(|s| {
+        div()
+            .id("discovery-apps-scroll")
+            .size_full()
+            .overflow_y_scroll()
+            .track_scroll(s)
+            .pr(z(8.))
+            .child(hero(&[crate::t!("discovery.apps_title1"), crate::t!("discovery.apps_title2")], crate::t!("discovery.apps_desc")))
+            .child(body)
+    });
+    let cats = ["discovery.apps_cat.featured", "discovery.apps_cat.games", "discovery.apps_cat.entertainment", "discovery.apps_cat.moderation", "discovery.apps_cat.social", "discovery.apps_cat.utilities"];
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(scroll).child(header_bar("apps", &cats)).into_any_element()
+}
+
+thread_local! {
+    static APP_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
 #[cfg(test)]
@@ -415,6 +593,32 @@ mod tests {
         assert_eq!(group_digits(941116), "941\u{202f}116");
         assert_eq!(group_digits(18149845), "18\u{202f}149\u{202f}845");
         assert_eq!(group_digits(12), "12");
+    }
+
+    #[test]
+    fn parses_app_directory_collections() {
+        let v = json!([
+            {"title": "Puzzle Games", "position": 2, "application_directory_collection_items": [
+                {"type": 1, "position": 1, "application": {"id": "7", "name": "Wordle", "icon": "ic", "description": "d", "flags": 11665410, "categories": [{"id": 6, "name": "Jeux"}], "cover_image": "cv", "bot": {"id": "7", "banner": null}}}
+            ]},
+            {"title": "Promoted Games", "position": 1, "application_directory_collection_items": [
+                {"type": 1, "position": 2, "application": {"id": "9", "name": "Werwulf", "flags": 537002498, "categories": [], "bot": {"id": "9", "banner": "bn"}}},
+                {"type": 2, "position": 1, "application": {"id": "8", "name": "skip"}},
+                {"type": 1, "position": 1, "application": {"id": "5", "name": "EXOPLANET", "flags": 537002498, "categories": [{"name": "Jeux"}]}}
+            ]},
+            {"title": "Empty", "position": 3, "application_directory_collection_items": []}
+        ]);
+        let c = parse_collections(&v);
+        assert_eq!(c.iter().map(|x| x.title.as_ref()).collect::<Vec<_>>(), ["Promoted Games", "Puzzle Games"]);
+        assert_eq!(c[0].apps.iter().map(|a| a.name.as_ref()).collect::<Vec<_>>(), ["EXOPLANET", "Werwulf"]);
+        assert!(c[0].apps[1].promoted && c[0].apps[1].category.is_none());
+        assert_eq!(c[0].apps[1].banner.as_deref(), Some("https://cdn.discordapp.com/banners/9/bn.png?size=600"));
+        let w = &c[1].apps[0];
+        assert!(!w.promoted);
+        assert_eq!(w.category.as_deref(), Some("Jeux"));
+        assert_eq!(w.banner.as_deref(), Some("https://cdn.discordapp.com/app-icons/7/cv.png?size=600"));
+        assert_eq!(w.icon.as_deref(), Some("https://cdn.discordapp.com/app-icons/7/ic.png?size=64"));
+        assert_eq!((app_columns(1536.), app_columns(1000.), app_columns(700.)), (4, 2, 1));
     }
 
     #[test]

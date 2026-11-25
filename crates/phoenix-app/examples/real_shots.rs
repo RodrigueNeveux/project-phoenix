@@ -421,6 +421,9 @@ impl Backend for ReadOnly {
     fn discovery_categories(&self, locale: String) -> BoxFuture<serde_json::Value> {
         self.0.discovery_categories(locale)
     }
+    fn app_directory_collections(&self, locale: String) -> BoxFuture<serde_json::Value> {
+        self.0.app_directory_collections(locale)
+    }
     fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
         self.0.shop_storefront()
     }
