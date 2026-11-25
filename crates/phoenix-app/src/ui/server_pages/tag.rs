@@ -181,7 +181,10 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                         .items_center()
                         .gap(z(8.))
                         .children((!hash.is_empty()).then(|| badge_img(guild, &hash, 40.)))
-                        .child(div().text_size(z(24.)).text_color(t(idx::TEXT_DEFAULT)).child(tag_s.clone())),
+                        .child(match super::input(guild, "tag", &tag_s, cx) {
+                            Some(e) => div().w(z(84.)).text_size(z(24.)).text_color(t(idx::TEXT_DEFAULT)).child(gpui_component::input::Input::new(&e).appearance(false).bordered(false)).into_any_element(),
+                            None => div().text_size(z(24.)).text_color(t(idx::TEXT_DEFAULT)).child(tag_s.clone()).into_any_element(),
+                        }),
                 )
                 .child(div().w(z(154.)).child(text(12., 16., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("gs2.tag_rules")))),
         )
@@ -209,7 +212,19 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         .child(div().mt(z(32.)).child(text(12., 16., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("gs2.tag_current"))))
         .child(div().mt(z(13.)).px(z(16.)).child(sample_message(&me, crate::t!("gs2.tag_s6"), Some((tag_s.as_str(), tag_el(&hash))), false)))
         .child(div().mx(z(16.)).child(button("gs2-tag-use", crate::t!("gs2.tag_use"), BtnKind::Primary).w_full().when(enabled, |b| b.opacity(0.5))));
-    page().child(title(crate::t!("menu.gs.tag"))).child(div().flex().child(left).child(right)).into_any_element()
+    let typed = super::value(guild, "tag", cx).filter(|v| *v != tag_s);
+    let bar = typed.map(|v| {
+        let ok = valid_tag(&v);
+        let reset: crate::ui::modals::settings_layout::Act = std::rc::Rc::new(move |_, _, _| super::forget_input(guild, "tag"));
+        let save: crate::ui::modals::settings_layout::Act = std::rc::Rc::new(move |a, _, cx| {
+            let v = super::value(guild, "tag", cx).unwrap_or_default();
+            if ok {
+                write(a, ServerCall::SetProfile { guild: sf(guild), patch: ProfilePatch { tag: Some(Some(v.to_uppercase())), ..Default::default() } }, None, cx);
+            }
+        });
+        div().mt(z(24.)).child(crate::ui::modals::settings_layout::unsaved_bar(reset, save, cx))
+    });
+    page().child(title(crate::t!("menu.gs.tag"))).child(div().flex().child(left).child(right)).children(bar).into_any_element()
 }
 
 #[cfg(test)]
