@@ -211,7 +211,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .items_center()
         .child(div().size(z(32.)).flex().items_center().justify_center().child(gpui::svg().path(crate::icons::path("quests")).size(z(20.)).text_color(tk(idx::ICON_DEFAULT))))
         .child(text(16., 20., FontWeight::SEMIBOLD, tk(idx::TEXT_DEFAULT), crate::t!("dm.quests")).mr(z(8.)));
-    let page_w = window.viewport_size().width.0 / crate::theme::zoom() - crate::ui::sidebar_resize::width() - 72.;
+    let page_w = f32::from(window.viewport_size().width) / crate::theme::zoom() - crate::ui::sidebar_resize::width() - 72.;
     let inner = page_w.min(1300.) - 40.;
     let cols = columns(inner);
     let tile_w = (inner - GAP * (cols as f32 - 1.)) / cols as f32;
