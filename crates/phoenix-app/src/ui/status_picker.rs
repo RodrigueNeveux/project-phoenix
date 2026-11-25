@@ -117,7 +117,7 @@ fn accounts_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Sta
         .child(crate::ui::avatar(me, 24.))
         .child(
             div()
-                .flex_grow()
+                .flex_grow(1.)
                 .max_w(z(132.))
                 .min_w_0()
                 .overflow_hidden()
