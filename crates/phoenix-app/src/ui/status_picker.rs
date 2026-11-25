@@ -73,12 +73,89 @@ const ITEMS: [(Presence, Option<&str>); 4] = [
 
 thread_local! {
     static STATUS_SUB: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static ACCOUNTS_SUB: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn set_sub(v: bool, w: &mut Window) {
-    if STATUS_SUB.with(|c| c.replace(v)) != v {
+    let a = ACCOUNTS_SUB.with(|c| c.replace(false));
+    if STATUS_SUB.with(|c| c.replace(v)) != v || a {
         w.refresh();
     }
+}
+
+fn set_accounts_sub(v: bool, w: &mut Window) {
+    let s = STATUS_SUB.with(|c| c.replace(false));
+    if ACCOUNTS_SUB.with(|c| c.replace(v)) != v || s {
+        w.refresh();
+    }
+}
+
+pub fn debug_open_accounts_submenu(v: bool) {
+    ACCOUNTS_SUB.with(|c| c.set(v));
+}
+
+fn accounts_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let me = app.users.get(&app.me.id);
+    let name = SharedString::from(app.me.name.to_string());
+    let row = |id: &'static str| {
+        div()
+            .id(id)
+            .min_h(z(32.))
+            .p(z(8.))
+            .rounded(z(4.))
+            .flex()
+            .items_center()
+            .cursor_pointer()
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(c(tok(idx::TEXT_STRONG)))
+            .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+    };
+    let account = row("acct-sub-me")
+        .gap(z(8.))
+        .child(crate::ui::avatar(me, 24.))
+        .child(
+            div()
+                .flex_grow()
+                .max_w(z(132.))
+                .min_w_0()
+                .overflow_hidden()
+                .text_ellipsis()
+                .whitespace_nowrap()
+                .font_weight(FontWeight::NORMAL)
+                .child(name),
+        )
+        .child(svg().path(crate::icons::path("circle-check")).size(z(20.)).flex_none().text_color(c(tok(idx::BRAND_500))))
+        .on_click(cx.listener(|a, _, w, cx| {
+            set_accounts_sub(false, w);
+            a.people.close_overlays();
+            cx.notify();
+        }));
+    let manage = row("acct-sub-manage").child(crate::t!("status.manage_accounts")).on_click(cx.listener(|a, _, w, cx| {
+        set_accounts_sub(false, w);
+        a.open_switch_accounts(cx);
+    }));
+    div()
+        .id("accounts-sub")
+        .occlude()
+        .min_w(z(188.))
+        .p(z(8.))
+        .rounded(z(8.))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow_lg()
+        .flex()
+        .flex_col()
+        .on_hover(|h, w, _| {
+            if !*h {
+                set_accounts_sub(false, w)
+            }
+        })
+        .child(account)
+        .child(div().h(z(1.)).my(z(8.)).bg(c(tok(idx::BORDER_SUBTLE))))
+        .child(manage)
 }
 
 pub fn debug_open_status_submenu(v: bool) {
@@ -302,13 +379,23 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     }));
     let badges = hover_off("acct-badges", "ribbon", crate::t!("status.badges"))
         .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("status.badges"), cx)));
+    let accounts_open = ACCOUNTS_SUB.with(|c| c.get());
     let switch = pop_row("acct-switch", icon("user-circle"), text(crate::t!("status.switch_accounts")), None, true)
+        .relative()
         .on_hover(|h, w, _| {
             if *h {
-                set_sub(false, w)
+                set_accounts_sub(true, w)
             }
         })
-        .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("status.switch_accounts"), cx)));
+        .on_click(cx.listener(|a, _, w, cx| {
+            set_accounts_sub(false, w);
+            a.open_switch_accounts(cx);
+        }))
+        .when(accounts_open, |d| {
+            d.child(deferred(
+                anchored().position_mode(gpui::AnchoredPositionMode::Local).position(point(px(252. + 12.), px(-8.))).snap_to_window().child(accounts_submenu(app, cx)),
+            ))
+        });
     let my_id = me.0.to_string();
     let copy = hover_off("acct-copy-id", "id", crate::t!("common.copy_user_id")).on_click(cx.listener(move |a, _, _, cx| {
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(my_id.clone()));

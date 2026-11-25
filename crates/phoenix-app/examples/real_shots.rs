@@ -1215,7 +1215,9 @@ fn main() -> anyhow::Result<()> {
                 "statuspicker" => {
                     app.toggle_status_picker(window, cx);
                     phoenix_app::ui::status_picker::debug_open_status_submenu(arg == "sub");
+                    phoenix_app::ui::status_picker::debug_open_accounts_submenu(arg == "accounts");
                 }
+                "accounts" => app.open_switch_accounts(cx),
                 "leave" => {
                     if let Some(g) = app.selected_guild {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::LeaveGuild(g), cx);

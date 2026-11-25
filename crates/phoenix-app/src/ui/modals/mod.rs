@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod channel_overview;
 pub mod channel_perms;
 pub mod channel_perms_data;
@@ -102,6 +103,7 @@ pub enum Modal {
     GroupInvites(gdm::Invites),
     FolderSettings(gdm::Folder),
     Schedule(crate::ui::chat::scheduled::Picker),
+    SwitchAccounts,
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -210,6 +212,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::GroupInvites(s) => gdm::render_invites(s, cx),
             Modal::FolderSettings(f) => gdm::render_folder(f, cx),
             Modal::Schedule(p) => crate::ui::chat::scheduled::render(p, cx),
+            Modal::SwitchAccounts => accounts::render(app, cx),
         })
     })
 }
