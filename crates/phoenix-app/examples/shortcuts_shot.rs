@@ -113,6 +113,9 @@ fn main() -> anyhow::Result<()> {
         })
     })?;
     pump(&mut cx, 8);
+    if scene == "bench" {
+        return bench(&mut cx, win.into(), &v);
+    }
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     pump(&mut cx, 2);
     cx.advance_clock(Duration::from_secs(2));
@@ -122,5 +125,63 @@ fn main() -> anyhow::Result<()> {
     let img = cx.capture_screenshot(win.into())?;
     img.save(&out)?;
     println!("wrote {out} ({}x{})", img.width(), img.height());
+    Ok(())
+}
+
+fn bench_draft() -> String {
+    let block = "Some **bold** text, *italic*, __underline__, ~~strike~~ and `inline code` here.\n\
+-# a subtext line with a [link](https://example.com)\n\
+> a quoted line with ||a spoiler|| inside\n\
+```rust\nfn main() { let x = 42; println!(\"{x}\"); }\n```\n\
+# A heading and plain words that wrap around the composer width once or twice at least\n";
+    let mut out = String::new();
+    while out.len() < 2000 {
+        out.push_str(block);
+    }
+    out
+}
+
+fn bench(cx: &mut HeadlessAppContext, win: gpui::AnyWindowHandle, v: &Entity<PhoenixApp>) -> anyhow::Result<()> {
+    let draft = bench_draft();
+    for preview in [false, true] {
+        cx.update_window(win, |_, window, cx| {
+            v.update(cx, |app, cx| {
+                app.prefs.synced.proto.insert("md-preview", preview as u64);
+                app.prefs.synced.proto.insert("legacy-input", 0);
+                app.composer.update(cx, |s, cx| {
+                    s.set_value(draft.clone(), window, cx);
+                    s.focus(window, cx);
+                });
+                phoenix_app::ui::chat::rich_input::sync(app, cx);
+            });
+            for _ in 0..3 {
+                window.refresh();
+                window.draw(cx).clear(cx);
+            }
+        })?;
+        let mut sync = Vec::new();
+        let mut draw = Vec::new();
+        for i in 0..60 {
+            cx.update_window(win, |_, window, cx| {
+                let t = std::time::Instant::now();
+                v.update(cx, |app, cx| {
+                    app.composer.update(cx, |s, cx| s.insert(if i % 7 == 6 { " " } else { "x" }, window, cx));
+                    phoenix_app::ui::chat::rich_input::sync(app, cx);
+                });
+                sync.push(t.elapsed().as_secs_f64() * 1e3);
+                let t = std::time::Instant::now();
+                window.refresh();
+                window.draw(cx).clear(cx);
+                draw.push(t.elapsed().as_secs_f64() * 1e3);
+            })?;
+        }
+        let stat = |v: &mut Vec<f64>| {
+            v.sort_by(f64::total_cmp);
+            (v[v.len() / 2], v[v.len() * 9 / 10])
+        };
+        let (sm, sp) = stat(&mut sync);
+        let (dm, dp) = stat(&mut draw);
+        println!("bench chars={} preview={preview} edit+sync median={sm:.3}ms p90={sp:.3}ms frame median={dm:.3}ms p90={dp:.3}ms", draft.len());
+    }
     Ok(())
 }
