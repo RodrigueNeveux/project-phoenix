@@ -521,7 +521,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                                 .overflow_hidden()
                                 .text_ellipsis()
                                 .on_click(topic_click)
-                                .child(crate::ui::emoji_text::label_with_custom(reply_preview_text(app, &t), 14.)),
+                                .child(crate::ui::emoji_text::markup_label(reply_preview_text(app, &t), 14.)),
                         )
                 }),
         )

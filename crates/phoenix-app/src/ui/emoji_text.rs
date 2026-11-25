@@ -12,6 +12,10 @@ pub fn status_label(text: SharedString, font_px: f32) -> AnyElement {
     label_impl(text, font_px, true, true)
 }
 
+pub fn markup_label(text: SharedString, font_px: f32) -> AnyElement {
+    label_inner(text, font_px, true, true, 0.)
+}
+
 pub fn status_wrapped(text: SharedString, _font_px: f32) -> AnyElement {
     let ranges = crate::richtext::emoji_ranges(&text);
     if ranges.is_empty() {
@@ -45,6 +49,10 @@ pub fn status_wrapped(text: SharedString, _font_px: f32) -> AnyElement {
 }
 
 fn label_impl(text: SharedString, font_px: f32, custom: bool, images: bool) -> AnyElement {
+    label_inner(text, font_px, custom, images, 1.)
+}
+
+fn label_inner(text: SharedString, font_px: f32, custom: bool, images: bool, emoji_mx: f32) -> AnyElement {
     let text: SharedString = if text.contains(['\n', '\r']) { text.replace(['\r', '\n'], " ").into() } else { text };
     let ranges: Vec<_> = crate::richtext::emoji_ranges(&text)
         .into_iter()
@@ -62,7 +70,7 @@ fn label_impl(text: SharedString, font_px: f32, custom: bool, images: bool) -> A
             row = row.child(div().flex_none().child(SharedString::from(text[at..r.start].to_string())));
         }
         if images || text[r.clone()].starts_with('<') {
-            row = row.child(div().flex_none().mx(gpui::px(1.)).child(crate::media::emoji::emoji_element(&text[r.clone()], font_px * 1.375)));
+            row = row.child(div().flex_none().mx(gpui::px(emoji_mx)).child(crate::media::emoji::emoji_element(&text[r.clone()], font_px * 1.375)));
             at = r.end;
             continue;
         }

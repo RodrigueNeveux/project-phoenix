@@ -109,13 +109,14 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             ee.update(cx, |a, cx| a.stub(&crate::t!(key), cx))
         })
     };
-    let mut strip = div().flex().gap(z(8.)).px(z(2.)).py(z(2.));
+    let mut strip = div().flex().items_center().gap(z(4.)).p(z(8.));
     let guild = app.channels.get(&ch).and_then(|c| c.guild);
     for (i, q) in app.chat.quick_reactions_for(guild, app.backend.has_premium(), 4).into_iter().enumerate() {
         let e = e.clone();
-        strip = strip.child(
+        strip = strip.child(div().flex_1().min_w_0().flex().justify_center().child(
             div()
                 .id(("menu-quick", i))
+                .flex_none()
                 .size(z(44.))
                 .rounded(z(8.))
                 .bg(crate::ui::chat::tk(crate::theme::generated::idx::BACKGROUND_MOD_SUBTLE))
@@ -124,14 +125,14 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 .justify_center()
                 .cursor_pointer()
                 .hover(|s| s.bg(crate::ui::chat::tk(crate::theme::generated::idx::BACKGROUND_MOD_NORMAL)))
-                .child(crate::media::emoji::emoji_element(&q.emoji, 24.))
+                .child(crate::media::emoji::emoji_element(&q.emoji, 20.))
                 .on_click(move |_, _, cx| {
                     e.update(cx, |a, cx| {
                         a.chat.menu = None;
                         a.react_with(ch, id, q.emoji.clone(), q.id, cx);
                     })
                 }),
-        );
+        ));
     }
     let mut items = vec![MenuItem::Custom(strip.into_any_element())];
     let mut frequent: Vec<MenuItem> = crate::ui::pickers::grid::build(app, "", true, cx)

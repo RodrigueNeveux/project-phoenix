@@ -449,7 +449,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                                 .top(z(text_pad_y() - 1.5))
                                                 .h(fz(22.))
                                                 .left_0()
-                                                .right_0()
+                                                .right(z(10.))
                                                 .flex()
                                                 .items_center()
                                                 .text_color(super::tk(idx::CHANNEL_TEXT_AREA_PLACEHOLDER))
