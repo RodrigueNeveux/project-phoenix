@@ -66,7 +66,7 @@ pub struct RoleEdit {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AdminCall {
-    CreateChannel { guild: Snowflake, name: String, kind: NewChannelKind, parent: Option<Snowflake>, private: bool, me: Snowflake },
+    CreateChannel { guild: Snowflake, name: String, kind: NewChannelKind, parent: Option<Snowflake>, private: bool, me: Snowflake, members: Vec<(Snowflake, u8)> },
     EditChannel { channel: Snowflake, edit: ChannelEdit },
     DeleteChannel { channel: Snowflake },
     EditThread { thread: Snowflake, edit: ThreadEdit },
@@ -137,13 +137,21 @@ pub fn toggle_list(current: &Value, guild: Snowflake, present: bool) -> Value {
 pub fn build(call: &AdminCall) -> ApiReq {
     use AdminCall as C;
     match call {
-        C::CreateChannel { guild, name, kind, parent, private, me } => {
+        C::CreateChannel { guild, name, kind, parent, private, me, members } => {
             let mut b = json!({ "name": name.trim(), "type": *kind as u8 });
             if let (Some(p), false) = (parent, *kind == NewChannelKind::Category) {
                 b["parent_id"] = json!(p);
             }
             if *private {
-                b["permission_overwrites"] = private_overwrites(*guild, *me, matches!(kind, NewChannelKind::Voice | NewChannelKind::Stage));
+                let voice = matches!(kind, NewChannelKind::Voice | NewChannelKind::Stage);
+                let mut ow = private_overwrites(*guild, *me, voice);
+                let bits = if voice { VIEW_CHANNEL | CONNECT } else { VIEW_CHANNEL };
+                if let Some(list) = ow.as_array_mut() {
+                    for (id, t) in members.iter().filter(|(id, _)| id != me) {
+                        list.push(json!({ "id": id, "type": t, "allow": bits.to_string(), "deny": "0" }));
+                    }
+                }
+                b["permission_overwrites"] = ow;
             }
             req(Method::POST, format!("/guilds/{guild}/channels"), Some(b))
         }
@@ -357,7 +365,7 @@ mod tests {
 
     #[test]
     fn create_private_voice() {
-        let r = build(&AdminCall::CreateChannel { guild: G, name: " vc ".into(), kind: NewChannelKind::Voice, parent: Some(Snowflake(9)), private: true, me: Snowflake(5) });
+        let r = build(&AdminCall::CreateChannel { guild: G, name: " vc ".into(), kind: NewChannelKind::Voice, parent: Some(Snowflake(9)), private: true, me: Snowflake(5), members: vec![(Snowflake(7), 0)] });
         assert_eq!((r.method, r.path.as_str()), (Method::POST, "/guilds/1/channels"));
         let b = r.body.unwrap();
         assert_eq!(b["name"], "vc");
@@ -365,6 +373,7 @@ mod tests {
         assert_eq!(b["parent_id"], "9");
         assert_eq!(b["permission_overwrites"][0]["deny"], (VIEW_CHANNEL | CONNECT).to_string());
         assert_eq!(b["permission_overwrites"][1]["id"], "5");
+        assert_eq!(b["permission_overwrites"][2], json!({ "id": "7", "type": 0, "allow": (VIEW_CHANNEL | CONNECT).to_string(), "deny": "0" }));
     }
 
     #[test]
@@ -405,7 +414,7 @@ mod tests {
 
     #[test]
     fn create_category_has_no_parent() {
-        let b = build(&AdminCall::CreateChannel { guild: G, name: "c".into(), kind: NewChannelKind::Category, parent: Some(C), private: false, me: G }).body.unwrap();
+        let b = build(&AdminCall::CreateChannel { guild: G, name: "c".into(), kind: NewChannelKind::Category, parent: Some(C), private: false, me: G, members: Vec::new() }).body.unwrap();
         assert_eq!(b["type"], 4);
         assert!(b.get("parent_id").is_none() && b.get("permission_overwrites").is_none());
     }

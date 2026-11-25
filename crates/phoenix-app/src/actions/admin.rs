@@ -144,13 +144,13 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    pub fn create_channel(&mut self, guild: Id, parent: Option<Id>, kind: ChannelKind, name: String, private: bool, cx: &mut Context<Self>) {
+    pub fn create_channel(&mut self, guild: Id, parent: Option<Id>, kind: ChannelKind, name: String, private: bool, members: Vec<(Id, u8)>, cx: &mut Context<Self>) {
         let name = channel_name(kind, &name);
         if name.is_empty() {
             return;
         }
         let me = self.me.id;
-        let call = AdminCall::CreateChannel { guild: sf(guild), name: name.clone(), kind: new_kind(kind), parent: parent.map(sf), private, me: sf(me) };
+        let call = AdminCall::CreateChannel { guild: sf(guild), name: name.clone(), kind: new_kind(kind), parent: parent.map(sf), private, me: sf(me), members: members.into_iter().map(|(i, t)| (sf(i), t)).collect() };
         self.admin(call, cx, move |a, r, cx| match r {
             Ok(v) => {
                 if let Some(id) = id_of(&v) {
@@ -194,7 +194,7 @@ impl PhoenixApp {
                 submit: crate::t!(if cat { "menu.delete_category" } else { "menu.delete_channel" }),
                 danger: true,
                 preview: None,
-                width: 440.,
+                width: 400.,
                 on_submit: Rc::new(move |a, _, _, cx| a.delete_channel(channel, cx)),
             }),
             None,
@@ -282,7 +282,7 @@ mod tests {
     #[test]
     fn mock_lists() {
         assert!(mock_reply(&AdminCall::Bans { guild: Snowflake(1) }).as_array().is_some_and(|a| !a.is_empty()));
-        let v = mock_reply(&AdminCall::CreateChannel { guild: Snowflake(1), name: "x".into(), kind: NewChannelKind::Text, parent: None, private: false, me: Snowflake(2) });
+        let v = mock_reply(&AdminCall::CreateChannel { guild: Snowflake(1), name: "x".into(), kind: NewChannelKind::Text, parent: None, private: false, me: Snowflake(2), members: Vec::new() });
         assert!(id_of(&v).is_some());
     }
 }

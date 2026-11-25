@@ -193,5 +193,6 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("settings/quote", &["QuoteIcon"]),
     ("settings/synced", &["RefreshIcon"]),
     ("settings/clock", &["ClockIcon"]),
+    ("settings/globe", &["GlobeEarthIcon"]),
     ("settings/unsynced", &["RefreshIcon"]),
 ];

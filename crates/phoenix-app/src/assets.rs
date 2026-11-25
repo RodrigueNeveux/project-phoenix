@@ -257,6 +257,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/settings/strike.svg" => s!(r#"<path d="M4 12h16M16 6.5A4 4 0 0 0 12 5c-2.5 0-4 1.3-4 3M8 17.5A4 4 0 0 0 12 19c2.5 0 4-1.3 4-3.5"/>"#),
         "icons/settings/synced.svg" => s!(r#"<path d="M20 11a8 8 0 0 0-14.6-4.5M4 13a8 8 0 0 0 14.6 4.5M5 3v4h4M19 21v-4h-4"/>"#),
         "icons/settings/unsynced.svg" => s!(r#"<path d="M20 11a8 8 0 0 0-14.6-4.5M4 13a8 8 0 0 0 14.6 4.5M5 3v4h4M19 21v-4h-4M12 8v4M12 16h0"/>"#),
+        "icons/settings/globe.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>"#),
         "icons/settings/clock.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="M12 7v5l3 2"/>"#),
         "icons/settings/quote.svg" => s!(r#"<path d="M5 5v14M10 8h9M10 12h9M10 16h6"/>"#),
         "icons/close-small.svg" => s!(r#"<path d="m7 7 10 10M17 7 7 17"/>"#),
