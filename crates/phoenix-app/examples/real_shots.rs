@@ -1291,7 +1291,7 @@ fn main() -> anyhow::Result<()> {
                 "schedmodal" | "schedbar" | "schedmenu" => {
                     if let Some(ch) = app.selected_channel {
                         let at = phoenix_app::ui::chat::scheduled::default_at(chrono::Local::now());
-                        match kind {
+                        match kind.as_str() {
                             "schedmodal" => app.open_schedule(ch, cx),
                             "schedbar" => phoenix_app::ui::chat::scheduled::set_draft(ch, Some(at)),
                             _ => {
