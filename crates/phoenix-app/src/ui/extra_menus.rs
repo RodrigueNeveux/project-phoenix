@@ -91,7 +91,7 @@ pub fn image_items(e: &Ent, url: SharedString) -> Vec<MenuItem> {
 pub fn wishlist_add_items(e: &Ent) -> Vec<MenuItem> {
     vec![
         act(e, crate::t!("wishlist.discord_shop"), |a, _, cx| a.open_home_view(crate::ui::home::data::HomeView::Shop, cx)).with_icon("shop"),
-        act(e, crate::t!("wishlist.nitro"), |a, _, cx| a.blocked_write(phoenix_api::rest::account::GuardedWrite::wishlist_add_sku(NITRO_SKU), cx)).with_icon("nitro"),
+        act(e, crate::t!("wishlist.nitro"), |a, _, cx| a.blocked_write(crate::actions::guard::GuardedWrite::wishlist_add_sku(NITRO_SKU), cx)).with_icon("nitro"),
     ]
 }
 
@@ -99,7 +99,7 @@ pub fn wishlist_more_items(e: &Ent, wishlist: Option<String>) -> Vec<MenuItem> {
     let ev = e.clone();
     vec![
         MenuItem::check(crate::t!("wishlist.public"), wishlist_public(), move |_, _, cx: &mut App| {
-            let w = phoenix_api::rest::account::GuardedWrite::wishlist_visibility(wishlist.as_deref().unwrap_or_default(), !wishlist_public());
+            let w = crate::actions::guard::GuardedWrite::wishlist_visibility(wishlist.as_deref().unwrap_or_default(), !wishlist_public());
             ev.update(cx, |a, cx| a.blocked_write(w, cx))
         })
         .with_subtext(crate::t!("wishlist.public_sub")),
@@ -431,7 +431,7 @@ pub fn settings_more_items(e: &Ent) -> Vec<MenuItem> {
 }
 
 impl PhoenixApp {
-    pub fn blocked_write(&mut self, w: phoenix_api::rest::account::GuardedWrite, cx: &mut Context<Self>) {
+    pub fn blocked_write(&mut self, w: crate::actions::guard::GuardedWrite, cx: &mut Context<Self>) {
         let fut = self.backend.guarded_write(w);
         cx.spawn(async move |this, cx| {
             let res = fut.await;
@@ -597,7 +597,7 @@ mod tests {
 
     #[test]
     fn wishlist_writes_are_guarded() {
-        let w = phoenix_api::rest::account::GuardedWrite::wishlist_add_sku(NITRO_SKU);
+        let w = crate::actions::guard::GuardedWrite::wishlist_add_sku(NITRO_SKU);
         assert!(w.refusal().is_write_blocked());
         assert_eq!(w.body, Some(serde_json::json!({ "sku_id": NITRO_SKU })));
     }

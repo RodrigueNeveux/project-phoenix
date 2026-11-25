@@ -1,14 +1,24 @@
 use reqwest::Method;
 
+pub use phoenix_api::rest::guard::{GuardedWrite, blocked, read_only};
+
 use super::ActionRequest;
 use crate::commands::ParityRequest;
 
-pub fn read_only_action(req: &ActionRequest) -> bool {
+fn action_method(req: &ActionRequest) -> Option<Method> {
     match req {
-        ActionRequest::Admin(c) => phoenix_api::rest::guild_manage::build(c).method == Method::GET,
-        ActionRequest::Reminders | ActionRequest::ReportMenu(_) => true,
-        _ => false,
+        ActionRequest::Admin(c) => Some(phoenix_api::rest::guild_manage::build(c).method),
+        ActionRequest::Reminders | ActionRequest::ReportMenu(_) => Some(Method::GET),
+        _ => None,
     }
+}
+
+pub fn read_only_action(req: &ActionRequest) -> bool {
+    action_method(req).is_some_and(|m| read_only(&m))
+}
+
+pub fn read_only_write(w: &GuardedWrite) -> bool {
+    read_only(&w.method)
 }
 
 pub fn read_only_parity(req: &ParityRequest) -> bool {
@@ -60,5 +70,22 @@ mod tests {
             assert!(!read_only_parity(&ParityRequest::Moderate { guild: Id(1), user: Id(2), action }));
         }
         assert!(read_only_parity(&ParityRequest::SavedMessages));
+    }
+
+    #[test]
+    fn guarded_writes_share_the_same_policy() {
+        for w in [
+            GuardedWrite::change_password("a", "b"),
+            GuardedWrite::wishlist_add_sku("1"),
+            GuardedWrite::crosspost(3, 4),
+            GuardedWrite::put_onboarding(5, serde_json::json!({})),
+            GuardedWrite::change_call_region(5, "rotterdam"),
+        ] {
+            assert!(!read_only_write(&w));
+            assert!(w.refusal().is_write_blocked());
+        }
+        let kick = phoenix_api::rest::guild_manage::build(&AdminCall::Kick { guild: G, user: U });
+        assert!(!read_only(&kick.method));
+        assert!(blocked(&kick.method, "/guilds/1/members/2").is_write_blocked());
     }
 }

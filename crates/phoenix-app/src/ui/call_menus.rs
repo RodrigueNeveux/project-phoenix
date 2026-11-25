@@ -72,7 +72,7 @@ fn region_item(app: &PhoenixApp, channel: Id, e: gpui::Entity<PhoenixApp>) -> Me
             let e = e.clone();
             let checked = current.as_ref() == Some(&id);
             MenuItem::radio(region, checked, move |_, _, cx: &mut App| {
-                let w = phoenix_api::rest::account::GuardedWrite::change_call_region(channel.0, &id);
+                let w = crate::actions::guard::GuardedWrite::change_call_region(channel.0, &id);
                 e.update(cx, |a, cx| a.blocked_write(w, cx));
             })
         })

@@ -8,11 +8,12 @@ use gpui::{
     AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div,
     prelude::*,
 };
-use phoenix_api::rest::{account::GuardedWrite, guild_server::ServerCall};
+use phoenix_api::rest::guild_server::ServerCall;
 use serde_json::{Value, json};
 
 use super::{fetch, icon, sf, str_of, t, text};
 use crate::{
+    actions::guard::GuardedWrite,
     app::PhoenixApp,
     model::Id,
     theme::{generated::idx, z},

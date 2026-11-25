@@ -1,10 +1,9 @@
 use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, img, prelude::*};
 use gpui_component::input::{Input, InputState};
-use phoenix_api::rest::account::GuardedWrite;
 
 use super::{Modal, card, close_action, field_label};
 use crate::{
-    actions::{close_modal, open_modal, with_modal},
+    actions::{close_modal, guard::GuardedWrite, open_modal, with_modal},
     app::PhoenixApp,
     theme::{c, generated::idx, tok, z},
     ui::controls::{BtnKind, button},

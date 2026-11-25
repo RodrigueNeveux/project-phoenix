@@ -6,6 +6,14 @@ use crate::error::{Error, Result};
 
 pub const CHANGE_PHONE_REASON: &str = "user_settings_update";
 
+pub fn read_only(method: &Method) -> bool {
+    *method == Method::GET
+}
+
+pub fn blocked(method: &Method, path: impl Into<String>) -> Error {
+    Error::WriteBlocked { method: method.to_string(), path: path.into() }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct GuardedWrite {
     pub method: Method,
@@ -107,7 +115,7 @@ impl GuardedWrite {
     }
 
     pub fn refusal(&self) -> Error {
-        Error::WriteBlocked { method: self.method.to_string(), path: self.path.clone() }
+        blocked(&self.method, self.path.clone())
     }
 }
 
@@ -146,6 +154,15 @@ mod tests {
     }
 
     #[test]
+    fn only_get_is_read_only() {
+        assert!(read_only(&Method::GET));
+        for m in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE, Method::HEAD, Method::OPTIONS] {
+            assert!(!read_only(&m), "{m}");
+        }
+        assert!(blocked(&Method::DELETE, "/guilds/1/members/2").is_write_blocked());
+    }
+
+    #[test]
     fn bodies_match_the_client() {
         let pw = GuardedWrite::change_password("old", "new");
         assert_eq!((pw.method.clone(), pw.path.as_str()), (Method::PATCH, "/users/@me"));
@@ -171,7 +188,7 @@ mod tests {
         let addr = listener.local_addr().unwrap();
         let rest = RestClient::with_base(Some("test-token".into()), crate::ClientProperties::linux_desktop(), format!("http://{addr}"));
         for w in every_write() {
-            assert_ne!(w.method, Method::GET);
+            assert!(!read_only(&w.method), "{} {} is not a write", w.method, w.path);
             let err = rest.guarded_write(&w).await.unwrap_err();
             assert!(err.is_write_blocked(), "{} {} was not blocked: {err}", w.method, w.path);
         }
