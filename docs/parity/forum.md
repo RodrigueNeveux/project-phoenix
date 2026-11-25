@@ -99,7 +99,7 @@ and `d4030cd60f4ad310.js` (`Context Menu`).
 ### Menus (live dumps)
 - Sidebar right click (`Context Menu`): Mark As Read | Favorites › | Close, Lock, Edit, Copy Link | Mute ›, Notification Settings › | Delete | Leave (Join when not joined, assumed) | Copy ID. ✅
 - Full view `Plus` (`Toolbar Overflow`): [Join when not joined] | Jump To Top, Edit, Open in Split View | Favorites › | Close/Open, Lock/Unlock, Delete | Leave | Copy Link, Copy ID. ✅ (joined, left and archived variants dumped)
-- Split view `Plus` (`Sidebar Overflow`): from the bundle: [Join] Open in Full View | … | Search ⧉, Pins ⧉ | … | Leave | Copy Link, Copy ID. ⚠ Search/Pins rows not built; French label « Ouvrir en plein écran » not confirmed.
+- Split view `Plus` (`Sidebar Overflow`): from the bundle: [Join] Open in Full View | … | Search ⧉, Pins ⧉ | … | Leave | Copy Link, Copy ID. ⚠ Search/Pins rows not built; French label « Ouvrir en pleine fenêtre » (`IxVmZi`, used by the thread menus chunk `9b3cd218fe829ac6.js`) ✅, split view « Ouvrir en fenêtre fractionnée » (`bX7EaG`) ✅.
 - Notification submenu values 2 / 4 / 8 (« Tous les messages », « @mentions seulement », « Aucun message »). Mute submenu 15 min … « Jusqu'à ce que je le change ». ✅
 
 ### Views
