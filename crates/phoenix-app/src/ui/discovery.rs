@@ -468,7 +468,7 @@ fn card(g: &DiscoverableGuild, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let icon = div()
         .absolute()
         .left(z(12.))
-        .top(z(BANNER_H - 30.))
+        .top(z(BANNER_H - 32.))
         .size(z(56.))
         .p(z(4.))
         .rounded(z(16.))
@@ -611,7 +611,7 @@ fn clear_search(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     cx.notify();
 }
 
-fn bar(left: gpui::AnyElement, right: gpui::Div) -> AnyElement {
+fn bar(left: gpui::AnyElement, right: gpui::Div, opaque: bool) -> AnyElement {
     div()
         .absolute()
         .top_0()
@@ -622,7 +622,7 @@ fn bar(left: gpui::AnyElement, right: gpui::Div) -> AnyElement {
         .flex()
         .items_center()
         .gap(z(20.))
-        .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+        .when(opaque, |d| d.bg(tk(idx::BACKGROUND_BASE_LOWEST)))
         .border_b_1()
         .border_color(tk(idx::BORDER_SUBTLE))
         .child(div().flex_1().min_w_0().h_full().flex().items_center().gap(z(20.)).child(left))
@@ -653,6 +653,7 @@ fn header_bar(icon: &'static str, cats: &[&'static str]) -> AnyElement {
     bar(
         div().h_full().flex().items_center().gap(z(20.)).child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))).child(tabs).into_any_element(),
         static_search(),
+        false,
     )
 }
 
@@ -777,7 +778,7 @@ pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>)
     let guilds = STATE.with(|s| s.borrow().lists.get(&cat).cloned().flatten());
     let cols = columns(vw);
     let texts = category_text(cat);
-    let mut body = div().id("discovery-scroll").size_full().overflow_y_scroll().pt(z(HEADER_H)).pr(z(8.));
+    let mut body = div().id("discovery-scroll").size_full().overflow_y_scroll().pr(z(8.));
     body = SCROLL.with(|s| body.track_scroll(s));
     body = body.child(hero(&[crate::t!(texts.title)], crate::t!(texts.desc)));
     if let Some(sec) = texts.section {
@@ -787,7 +788,7 @@ pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>)
     }
     let items = CATEGORIES.iter().enumerate().map(|(n, c)| (gpui::ElementId::from(("discovery-cat", n)), crate::t!(category_text(*c).tab), *c == cat, Some(*c))).collect();
     let left = div().h_full().flex().items_center().gap(z(20.)).child(gpui::svg().path(crate::icons::path("server/server")).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))).child(tab_strip(items, cx));
-    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(body).child(bar(left.into_any_element(), search_field(cx))).into_any_element()
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(body).child(bar(left.into_any_element(), search_field(cx), false)).into_any_element()
 }
 
 pub fn search_columns(width: f32) -> usize {
@@ -864,7 +865,7 @@ fn search_page(vw: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .gap(z(20.))
         .child(back)
         .child(text(20., 24., FontWeight::SEMIBOLD, tk(idx::TEXT_STRONG), crate::t!("discovery.search_results", query = query)).min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap());
-    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOW)).child(body).child(bar(left.into_any_element(), search_field(cx))).into_any_element()
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOW)).child(body).child(bar(left.into_any_element(), search_field(cx), true)).into_any_element()
 }
 
 #[derive(Clone, Debug, PartialEq)]
