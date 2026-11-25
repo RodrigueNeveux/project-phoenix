@@ -288,7 +288,7 @@ pub fn format_toolbar(id: &'static str, extra: bool, on_wrap: Rc<dyn Fn(&'static
     let w = on_wrap.clone();
     row = row.child(div().my(z(6.)).mx(z(6.)).w(z(1.)).h(z(20.)).bg(c(tok(idx::BORDER_SUBTLE)))).child(
         div()
-            .id((id, 99))
+            .id((id, 99usize))
             .size(z(32.))
             .flex()
             .items_center()
