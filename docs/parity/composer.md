@@ -122,7 +122,7 @@ Tests: `markdown::input::tests` (bold, each style, nesting, tokens opaque, unclo
 links, subtext, code blocks, per-line, `blocks_find_code_lines_and_quotes`,
 `an_unclosed_fence_runs_to_the_end_like_the_client`), `rich_input::tests::rich_styles_follow_the_client_css`,
 `settings_fx_tests::composer_markdown_is_styled_while_typing` (decorations follow the preview setting),
-`composer_quote_hides_its_marker_and_indents_the_caret`, `composer_inline_code_is_drawn_smaller_with_its_border`.
+`composer_quote_hides_its_marker_and_indents_the_caret`, `composer_inline_code_gets_the_code_font_and_a_bordered_box`.
 Engine: GPUI patches 12 and 13 (`docs/gpui-patches.md`).
 
 Typing cost (`shortcuts_shot bench`: 2219-character draft with every style, 60 keystrokes, median and p90):

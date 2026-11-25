@@ -133,12 +133,18 @@ fn composer_quote_hides_its_marker_and_indents_the_caret(cx: &mut TestAppContext
 }
 
 #[gpui::test]
-fn composer_inline_code_is_drawn_smaller_with_its_border(cx: &mut TestAppContext) {
+fn composer_inline_code_gets_the_code_font_and_a_bordered_box(cx: &mut TestAppContext) {
     let mut h = setup(cx);
     let start = caret_after(&mut h, "", true);
     let off = caret_after(&mut h, "`abcdefgh`", false) - start;
     let on = caret_after(&mut h, "`abcdefgh`", true) - start;
-    assert!(on < off && on > off * 0.85, "off {off} on {on}");
+    assert!(on > off, "the code box border moves the caret: off {off} on {on}");
+    let code = h.act(|a, _, cx| {
+        let rich = a.composer.read(cx).rich_decorations().spans().to_vec();
+        rich.iter().any(|s| s.font_size == Some(gpui::px(13.6)) && s.font_family.is_some())
+            && rich.iter().any(|s| s.text_box.as_ref().is_some_and(|b| b.border_width == gpui::px(1.)))
+    });
+    assert!(code);
     let state = h.act(|a, _, cx| crate::ui::chat::rich_input::needs_sync(a, cx));
     assert!(!state);
 }
