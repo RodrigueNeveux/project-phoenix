@@ -9,7 +9,11 @@ by `src/mock_showcase.rs` with one message of each kind). ✅ = matches CSS/JS v
 | feature | CSS / JS source | values | our code | status |
 |---|---|---|---|---|
 | Bold / italic / underline / strike | `markup_` | strong 700, em italic, u, s | markdown.rs `DELIMS` | ✅ |
-| `***bold italic***`, `__*u+i*__` | – | nested emphasis | markdown.rs `find_close` (run end) | ✅ (was rendering `*…*` literally) |
+| `***bold italic***`, `__*u+i*__` | – | nested emphasis | markdown.rs `emphasis` | ✅ (was rendering `*…*` literally) |
+| `_italic_` (underscore em) | simple-markdown `defaultRules.em` in chunk 361020 (`K` lookbehind flag is forced false, so the `_` branch is `^\b_((?:__\|\\[\s\S]\|[^\\_])+?)_\b`) + Discord `text` rule (chunk 704726) which stops before every `_`, so `mot_x_ y` italicises `x` while `snake_case_var` stays plain | `_x_` anywhere a `_` starts, closing `_` must not be followed by `[A-Za-z0-9_]`, `__` allowed inside, URLs and `<:custom_emoji:id>` stay literal | markdown.rs `em_underscore`, `custom_emoji_len` | ✅ (Phoenix refused a `_` glued to a letter and stopped at the first inner `_`) |
+| em / strong / u arbitration | simple-markdown parser: same `order`, highest `quality` wins (em len+0.2, looseEm len+0.2, strong len+0.1, u len), ties go alphabetically | `***x***` = em(strong), `___x___` = em(u), `*a *` = looseEm | markdown.rs `emphasis` | ✅ |
+| `~~x~~`, `\|\|x\|\|` | chat rules `s: ^~~([\s\S]+?)~~(?!_)`, `spoiler: ^\|\|([\s\S]+?)\|\|` (web chunk) | lazy, `~~x~~_` stays literal | markdown.rs `paired` | ✅ |
+| Escape `\x` | simple-markdown `escape: ^\\([^0-9A-Za-z\s])` | `\ ` (backslash + space) stays literal | markdown.rs, markdown/input.rs | ✅ |
 | Headers `#`/`##`/`###`, `-#` subtext | `markup_ h1/h2/h3`, `small` | 24/20/16, subtext 12 --text-subtle | markdown.rs `line_block`, ui/components.rs | ✅ (see text.md) |
 | Lists (nested, ordered) | `markup_ ul/ol` margin-inline 16, nested `ul ul` circle; `li` margin-bottom 4 | | markdown.rs `ListItem`, ui/chat.rs `block` | ✅ (live dump: ul margin 4 0 0 16, li margin-bottom 4) |
 | Block quotes | `blockquoteContainer_` margin-block --space-4; `blockquoteDivider_` 4px radius 4 --spine-default; `blockquote` padding-inline 12 8, --text-subtle, max 90% | | ui/chat.rs `block`, richtext.rs | ✅ (live dump: divider 4 wide radius 4, blockquote padding 0 8 0 12) |

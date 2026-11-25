@@ -19,7 +19,7 @@ pub fn messages(channel: Id, guild: Id, other_channel: Id, next_id: &mut u64, ts
     };
     let now = ts;
 
-    push(3, text("**bold** *italic* __underline__ ~~strike~~ ***bold italic*** __*underlined italic*__"), &mut out);
+    push(3, text("**bold** *italic* _italic_ __underline__ ~~strike~~ ***bold italic*** __*underlined italic*__"), &mut out);
     push(3, text(&format!("||a hidden spoiler|| · [a masked link](https://example.com) · `inline code` · <t:{}:R> · <t:{}:f>", now - 3600, now)), &mut out);
     push(4, text("# Heading 1\n## Heading 2\n### Heading 3\n-# subtext under the headings"), &mut out);
     push(4, text("- first item\n- second item\n  - nested item\n1. ordered one\n2. ordered two"), &mut out);

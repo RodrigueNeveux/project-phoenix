@@ -263,15 +263,6 @@ struct Ctx<'a> {
     spoilers: &'a mut usize,
 }
 
-const DELIMS: &[(&str, Style)] = &[
-    ("**", Style::BOLD),
-    ("__", Style::UNDERLINE),
-    ("~~", Style::STRIKE),
-    ("||", Style::SPOILER),
-    ("*", Style::ITALIC),
-    ("_", Style::ITALIC),
-];
-
 impl Ctx<'_> {
     fn push(&mut self, text: &str, style: Style, spoiler: Option<usize>) {
         self.push_full(text, style, None, None, spoiler)
@@ -320,7 +311,7 @@ impl Ctx<'_> {
             let rest = &src[i..];
             let c = bytes[i];
 
-            if c == b'\\' && i + 1 < bytes.len() && !bytes[i + 1].is_ascii_alphanumeric() {
+            if c == b'\\' && i + 1 < bytes.len() && !bytes[i + 1].is_ascii_alphanumeric() && !src[i + 1..].starts_with(char::is_whitespace) {
                 self.push(&src[plain_start..i], style, spoiler);
                 let ch_len = src[i + 1..].chars().next().map_or(1, char::len_utf8);
                 self.push(&src[i + 1..i + 1 + ch_len], style, spoiler);
@@ -460,28 +451,14 @@ impl Ctx<'_> {
                 }
             }
 
-            let mut matched = false;
-            for &(d, s) in DELIMS {
-                if !rest.starts_with(d) {
-                    continue;
-                }
-                if d == "_" && i > 0 && bytes[i - 1].is_ascii_alphanumeric() {
-                    continue;
-                }
-                let body = &rest[d.len()..];
-                if body.starts_with(char::is_whitespace) && d.len() == 1 {
-                    continue;
-                }
-                let Some(end) = find_close(body, d) else { continue };
-                if end == 0 {
-                    continue;
-                }
-                if d == "_" {
-                    let after = body.as_bytes().get(end + 1);
-                    if after.is_some_and(|b| b.is_ascii_alphanumeric()) {
-                        continue;
-                    }
-                }
+            if c == b'<'
+                && let Some(len) = custom_emoji_len(rest)
+            {
+                i += len;
+                continue;
+            }
+
+            if let Some((len, body, s)) = emphasis(rest) {
                 self.push(&src[plain_start..i], style, spoiler);
                 let sp = if s == Style::SPOILER {
                     let n = *self.spoilers;
@@ -490,13 +467,9 @@ impl Ctx<'_> {
                 } else {
                     spoiler
                 };
-                self.run(&body[..end], style | s, sp);
-                i += d.len() * 2 + end;
+                self.run(&rest[body], style | s, sp);
+                i += len;
                 plain_start = i;
-                matched = true;
-                break;
-            }
-            if matched {
                 continue;
             }
             i += src[i..].chars().next().map_or(1, char::len_utf8);
@@ -505,31 +478,139 @@ impl Ctx<'_> {
     }
 }
 
-fn find_close(body: &str, d: &str) -> Option<usize> {
-    let b = body.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'`'
-            && let Some(e) = body[i + 1..].find('`')
-        {
-            i += e + 2;
-            continue;
+fn char_len(s: &str, j: usize) -> usize {
+    s[j..].chars().next().map_or(1, char::len_utf8)
+}
+
+fn is_word(b: Option<&u8>) -> bool {
+    b.is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+}
+
+fn escape_len(s: &str, j: usize) -> Option<usize> {
+    (s.as_bytes()[j] == b'\\' && j + 1 < s.len()).then(|| 1 + char_len(s, j + 1))
+}
+
+fn em_underscore(s: &str) -> Option<(usize, Range<usize>)> {
+    let b = s.as_bytes();
+    if b.first() != Some(&b'_') {
+        return None;
+    }
+    let mut j = 1;
+    while j < b.len() {
+        if j > 1 && b[j] == b'_' && !is_word(b.get(j + 1)) {
+            return Some((j + 1, 1..j));
         }
-        if body[i..].starts_with(d) {
-            if d == "*" && body[i..].starts_with("**") {
-                i += 2;
-                continue;
-            }
-            if d.len() == 2 && (d == "**" || d == "__") {
-                let ch = d.as_bytes()[0];
-                let run = b[i..].iter().take_while(|&&c| c == ch).count();
-                return Some(i + run - 2);
-            }
-            return Some(i);
+        if s[j..].starts_with("__") {
+            j += 2;
+        } else if let Some(n) = escape_len(s, j) {
+            j += n;
+        } else if b[j] != b'\\' && b[j] != b'_' {
+            j += char_len(s, j);
+        } else {
+            return None;
         }
-        i += body[i..].chars().next().map_or(1, char::len_utf8);
     }
     None
+}
+
+fn em_star(s: &str, loose: bool) -> Option<(usize, Range<usize>)> {
+    let b = s.as_bytes();
+    if b.first() != Some(&b'*') || s[1..].chars().next().is_none_or(char::is_whitespace) {
+        return None;
+    }
+    let plain = |j: usize| b[j] != b'*' && b[j] != b'\\' && !s[j..].starts_with(char::is_whitespace);
+    let mut j = 1;
+    while j < b.len() {
+        if j > 1 {
+            let lo = usize::from(loose);
+            let spaces = if loose { b[j..].iter().take(2).take_while(|&&c| c == b' ').count() } else { 0 };
+            for k in (lo..=spaces).rev() {
+                if b.get(j + k) == Some(&b'*') && b.get(j + k + 1) != Some(&b'*') {
+                    return Some((j + k + 1, 1..j));
+                }
+            }
+        }
+        if s[j..].starts_with("**") {
+            j += 2;
+        } else if let Some(n) = escape_len(s, j) {
+            j += n;
+        } else if s[j..].starts_with(char::is_whitespace) {
+            let ws = s[j..].find(|ch: char| !ch.is_whitespace()).map_or(s.len(), |n| j + n);
+            if ws >= b.len() {
+                return None;
+            }
+            j = if s[ws..].starts_with("**") {
+                ws + 2
+            } else if let Some(n) = escape_len(s, ws) {
+                ws + n
+            } else if plain(ws) {
+                ws + char_len(s, ws)
+            } else {
+                return None;
+            };
+        } else if plain(j) {
+            j += char_len(s, j);
+        } else {
+            return None;
+        }
+    }
+    None
+}
+
+fn paired(s: &str, d: &str, escapes: bool, not_after: Option<u8>) -> Option<(usize, Range<usize>)> {
+    if !s.starts_with(d) {
+        return None;
+    }
+    let b = s.as_bytes();
+    let n = d.len();
+    let mut j = n;
+    while j < b.len() {
+        if j > n && s[j..].starts_with(d) && not_after.is_none_or(|x| b.get(j + n) != Some(&x)) {
+            return Some((j + n, n..j));
+        }
+        if escapes {
+            if let Some(e) = escape_len(s, j) {
+                j += e;
+                continue;
+            }
+            if b[j] == b'\\' {
+                return None;
+            }
+        }
+        j += char_len(s, j);
+    }
+    None
+}
+
+pub(crate) fn emphasis(s: &str) -> Option<(usize, Range<usize>, Style)> {
+    match s.as_bytes().first()? {
+        b'*' | b'_' => {
+            let candidates = [
+                (em_underscore(s).or_else(|| em_star(s, false)), Style::ITALIC, 0.2),
+                (em_star(s, true), Style::ITALIC, 0.2),
+                (paired(s, "**", true, Some(b'*')), Style::BOLD, 0.1),
+                (paired(s, "__", true, Some(b'_')), Style::UNDERLINE, 0.0),
+            ];
+            let mut best: Option<(f32, usize, Range<usize>, Style)> = None;
+            for (m, style, q) in candidates {
+                if let Some((len, body)) = m {
+                    let quality = len as f32 + q;
+                    if best.as_ref().is_none_or(|b| quality > b.0) {
+                        best = Some((quality, len, body, style));
+                    }
+                }
+            }
+            best.map(|(_, len, body, style)| (len, body, style))
+        }
+        b'~' => paired(s, "~~", false, Some(b'_')).map(|(l, r)| (l, r, Style::STRIKE)),
+        b'|' => paired(s, "||", false, None).map(|(l, r)| (l, r, Style::SPOILER)),
+        _ => None,
+    }
+}
+
+fn custom_emoji_len(s: &str) -> Option<usize> {
+    let end = s.find('>')?;
+    crate::media::emoji::parse_custom(&s[..=end]).map(|_| end + 1)
 }
 
 pub fn clickable(inline: &Inline) -> impl Iterator<Item = &Span> {
@@ -575,6 +656,63 @@ mod tests {
 
     fn styled(i: &Inline) -> Vec<(&str, Style)> {
         i.spans.iter().map(|s| (&i.text[s.range.clone()], s.style)).collect()
+    }
+
+    fn italic_text(i: &Inline) -> Vec<&str> {
+        styled(i).into_iter().filter(|(_, st)| st.has(Style::ITALIC)).map(|(t, _)| t).collect()
+    }
+
+    #[test]
+    fn underscore_italic_follows_simple_markdown_em() {
+        assert_eq!(styled(&inline("_italique_")), vec![("italique", Style::ITALIC)]);
+        assert_eq!(italic_text(&inline("du texte en _italique_.")), vec!["italique"]);
+        assert_eq!(italic_text(&inline("mot_collé_ ici")), vec!["collé"]);
+        assert_eq!(italic_text(&inline("(_x_) é_y_")), vec!["x", "y"]);
+        assert_eq!(italic_text(&inline("_ espace _")), vec![" espace "]);
+        let i = inline("_snake_case_");
+        assert_eq!(i.text, "_snakecase");
+        assert_eq!(italic_text(&i), vec!["case"]);
+        for plain in ["snake_case_var", "_x_y", "_x__", "a _ b", "__"] {
+            let i = inline(plain);
+            assert_eq!(i.text, plain);
+            assert!(italic_text(&i).is_empty(), "{plain}");
+        }
+        let i = inline("_a__b_");
+        assert_eq!(styled(&i), vec![("a__b", Style::ITALIC)]);
+        let i = inline(r"\_x\_");
+        assert_eq!(i.text, "_x_");
+        assert!(italic_text(&i).is_empty());
+    }
+
+    #[test]
+    fn underscores_in_urls_and_custom_emoji_stay_literal() {
+        let i = inline("https://a.b/x_y_z _it_");
+        assert_eq!(i.text, "https://a.b/x_y_z it");
+        assert_eq!(italic_text(&i), vec!["it"]);
+        let src = "<:a_b:1> mid <:c_d:2> <a:e_:3>_f_";
+        let i = inline(src);
+        assert!(i.text.starts_with("<:a_b:1> mid <:c_d:2> <a:e_:3>"));
+        assert_eq!(italic_text(&i), vec!["f"]);
+    }
+
+    #[test]
+    fn emphasis_picks_the_best_quality_like_the_client() {
+        let i = inline("___x___");
+        assert_eq!(styled(&i), vec![("x", Style::UNDERLINE | Style::ITALIC)]);
+        let i = inline("***x***");
+        assert_eq!(styled(&i), vec![("x", Style::BOLD | Style::ITALIC)]);
+        assert_eq!(styled(&inline("*x*")), vec![("x", Style::ITALIC)]);
+        assert_eq!(styled(&inline("__x__")), vec![("x", Style::UNDERLINE)]);
+        assert_eq!(styled(&inline("~~x~~")), vec![("x", Style::STRIKE)]);
+        assert_eq!(styled(&inline("||x||")), vec![("x", Style::SPOILER)]);
+        assert_eq!(styled(&inline("**x**")), vec![("x", Style::BOLD)]);
+        assert_eq!(styled(&inline("*loose *")), vec![("loose", Style::ITALIC)]);
+        assert_eq!(inline("~~x~~_").text, "~~x~~_");
+        assert_eq!(inline("* x*").text, "* x*");
+        let i = inline("*a **b** c*");
+        assert_eq!(styled(&i), vec![("a ", Style::ITALIC), ("b", Style::ITALIC | Style::BOLD), (" c", Style::ITALIC)]);
+        let i = inline("**gras _et italique_**");
+        assert_eq!(styled(&i), vec![("gras ", Style::BOLD), ("et italique", Style::BOLD | Style::ITALIC)]);
     }
 
     #[test]

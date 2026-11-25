@@ -14,8 +14,6 @@ pub const LANG: u16 = 1 << 10;
 pub const SUBTEXT: u16 = 1 << 11;
 pub const SUBTEXT_MARK: u16 = 1 << 12;
 
-const DELIMS: &[(&str, u16)] = &[("**", BOLD), ("__", UNDERLINE), ("~~", STRIKE), ("||", SPOILER), ("*", ITALIC), ("_", ITALIC)];
-
 struct Out {
     spans: Vec<(Range<usize>, u16)>,
 }
@@ -191,7 +189,7 @@ fn run(text: &str, start: usize, end: usize, attrs: u16, out: &mut Out) {
         let c = bytes[i];
         let at = start + i;
 
-        if c == b'\\' && i + 1 < bytes.len() && !bytes[i + 1].is_ascii_alphanumeric() {
+        if c == b'\\' && i + 1 < bytes.len() && !bytes[i + 1].is_ascii_alphanumeric() && !src[i + 1..].starts_with(char::is_whitespace) {
             out.push(start + plain..at, attrs);
             out.push(at..at + 1, SYNTAX | LIGHT);
             let len = src[i + 1..].chars().next().map_or(1, char::len_utf8);
@@ -253,37 +251,21 @@ fn run(text: &str, start: usize, end: usize, attrs: u16, out: &mut Out) {
             continue;
         }
 
-        let mut matched = false;
-        for &(d, s) in DELIMS {
-            if !rest.starts_with(d) {
-                continue;
-            }
-            if d == "_" && i > 0 && bytes[i - 1].is_ascii_alphanumeric() {
-                continue;
-            }
-            let body = &rest[d.len()..];
-            if d.len() == 1 && body.starts_with(char::is_whitespace) {
-                continue;
-            }
-            let Some(n) = super::find_close(body, d) else { continue };
-            if n == 0 {
-                continue;
-            }
-            if d == "_" && body.as_bytes().get(n + 1).is_some_and(u8::is_ascii_alphanumeric) {
-                continue;
-            }
+        if let Some((len, body, st)) = super::emphasis(rest) {
+            let s = match st {
+                super::Style::BOLD => BOLD,
+                super::Style::UNDERLINE => UNDERLINE,
+                super::Style::STRIKE => STRIKE,
+                super::Style::SPOILER => SPOILER,
+                _ => ITALIC,
+            };
             out.push(start + plain..at, attrs);
             let m = marker(attrs, s);
-            let dl = d.len();
-            out.push(at..at + dl, m);
-            run(text, at + dl, at + dl + n, attrs | s, out);
-            out.push(at + dl + n..at + dl * 2 + n, m);
-            i += dl * 2 + n;
+            out.push(at..at + body.start, m);
+            run(text, at + body.start, at + body.end, attrs | s, out);
+            out.push(at + body.end..at + len, m);
+            i += len;
             plain = i;
-            matched = true;
-            break;
-        }
-        if matched {
             continue;
         }
         i += src[i..].chars().next().map_or(1, char::len_utf8);
