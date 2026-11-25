@@ -40,6 +40,17 @@ Code: `crates/phoenix-app/src/notifications.rs` (rules, gateway hooks, click rou
 | "Show content" switch | no desktop setting in the 2026 client (`notifications` proto has none; the Notifications page has no such row) | none | ✅ (nothing to hide) |
 | Activity started, stage, events, reminders, threads created | `ACTIVITY_START`, `STAGE_INSTANCE_UPDATE`, `GUILD_SCHEDULED_EVENT_UPDATE`, `MESSAGE_REMINDER_DUE`, `THREAD_CREATE` | — | ❌ not yet |
 
+## Taskbar badge (wt/setfx, checked)
+
+Client (`web.b63d846b329d6470.js`, app root `Cd`): `count = getTotalMentionCount() + pendingIncoming`
+(`RelationshipStore.getPendingCount()` without spam / ignored, plus game friend requests);
+`0 && hasAnyUnread && !disableUnreadBadge` → `-1` (dot); `setBadge` on Linux is
+`app.setBadgeCount(max(count, 0))`, so the dot never shows there and the "badge" switch does not
+change the count. Phoenix `tray::TrayState`: `count = mentions + pending` sent as
+`com.canonical.Unity.LauncherEntry` `count` / `count-visible` (what Electron's `setBadgeCount` does
+on Linux), the switch only drives the unread tray icon. ✅ consistent; pending requests count every
+incoming request (Phoenix has no spam / ignored split, and no game friends) ❌ minor.
+
 ## Content (`TB`)
 
 | Part | Client | Phoenix | State |
