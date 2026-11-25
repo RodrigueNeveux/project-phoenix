@@ -78,7 +78,13 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         .border_1()
         .border_color(tk(idx::BORDER_MUTED))
         .rounded(z(8.))
-        .shadow_sm();
+        .shadow(vec![gpui::BoxShadow {
+            color: gpui::hsla(0., 0., 0., 0.14),
+            offset: gpui::point(z(0.), z(1.)),
+            blur_radius: z(4.),
+            spread_radius: z(0.),
+            inset: false,
+        }]);
     if local {
         if msg.send_state != crate::model::SendState::Failed {
             return div().into_any_element();
