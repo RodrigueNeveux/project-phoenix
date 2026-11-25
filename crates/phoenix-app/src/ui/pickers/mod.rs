@@ -267,7 +267,10 @@ pub fn load_frecency(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         let _ = this.update(cx, |app, cx| {
             let p = cx.global_mut::<Pickers>();
             p.frecency_loading = false;
-            p.frecency = Some(res.unwrap_or_default());
+            let Ok(f) = res else { return };
+            let tone = p.prefs.tone;
+            app.chat.quick_reactions = Some(quick_reactions(app, &f, tone)).filter(|q| !q.is_empty());
+            cx.global_mut::<Pickers>().frecency = Some(f);
             if matches!(open_tab(cx), Some((Tab::Emoji, _))) {
                 on_query(app, cx);
             }
@@ -275,6 +278,30 @@ pub fn load_frecency(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         });
     })
     .detach();
+}
+
+pub fn quick_reactions(app: &PhoenixApp, f: &types::Frecency, tone: u8) -> Vec<crate::ui::chat::state::QuickReaction> {
+    let customs: Vec<types::GuildEmoji> = app.guilds.iter().flat_map(|g| app.backend.guild_emojis(g.id)).collect();
+    let mut out: Vec<crate::ui::chat::state::QuickReaction> = Vec::new();
+    for key in f.favorite_emojis.iter().chain(f.reactions.iter()) {
+        let q = match key.parse::<u64>() {
+            Ok(id) => match customs.iter().find(|e| e.id.0 == id && e.available) {
+                Some(e) => crate::ui::chat::state::QuickReaction { emoji: e.token().into(), id: Some(e.id), guild: Some(e.guild) },
+                None => continue,
+            },
+            Err(_) => match emoji::by_shortcode(key).or_else(|| emoji::index_of(key)) {
+                Some(ix) => crate::ui::chat::state::QuickReaction { emoji: emoji::toned(ix, tone).into(), id: None, guild: None },
+                None => continue,
+            },
+        };
+        if !out.contains(&q) {
+            out.push(q);
+        }
+        if out.len() >= 12 {
+            break;
+        }
+    }
+    out
 }
 
 const TOP_EMOJIS_TTL: Duration = Duration::from_secs(24 * 3600);

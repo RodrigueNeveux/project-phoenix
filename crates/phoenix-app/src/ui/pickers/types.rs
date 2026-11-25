@@ -61,6 +61,8 @@ pub struct GifHome {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct Frecency {
     pub emojis: Vec<SharedString>,
+    pub reactions: Vec<SharedString>,
+    pub favorite_emojis: Vec<SharedString>,
     pub stickers: Vec<Id>,
     pub favorite_gifs: Vec<GifItem>,
     pub applications: Vec<u64>,

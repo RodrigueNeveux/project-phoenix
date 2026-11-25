@@ -11,10 +11,21 @@ pub struct Usage {
     pub last: i64,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NewlySeen {
+    pub id: u64,
+    pub last_seen: i64,
+    pub acknowledged: bool,
+}
+
+const NEWLY_SEEN_WINDOW_MS: i64 = 14 * 86_400_000;
+
 #[derive(Debug, Default)]
 pub struct Prefs {
     pub tone: u8,
     pub usage: HashMap<String, Usage>,
+    pub newly_seen: HashMap<u64, NewlySeen>,
+    newly_pending: HashMap<u64, NewlySeen>,
     path: Option<PathBuf>,
 }
 
@@ -69,7 +80,60 @@ impl Prefs {
                     .collect()
             })
             .unwrap_or_default();
-        Self { tone, usage, path: None }
+        let newly_seen = v["newly_seen"]
+            .as_object()
+            .map(|o| {
+                o.iter()
+                    .filter_map(|(g, n)| {
+                        Some((
+                            g.parse::<u64>().ok()?,
+                            NewlySeen {
+                                id: n["id"].as_str().and_then(|x| x.parse().ok())?,
+                                last_seen: n["last_seen"].as_i64().unwrap_or(0),
+                                acknowledged: n["acknowledged"].as_bool().unwrap_or(false),
+                            },
+                        ))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self { tone, usage, newly_seen, newly_pending: HashMap::new(), path: None }
+    }
+
+    pub fn is_newer_than_last_seen(&self, guild: u64, emoji: u64, now_ms: i64) -> bool {
+        match self.newly_seen.get(&guild) {
+            None => true,
+            Some(s) if emoji > s.id => true,
+            Some(s) => now_ms < s.last_seen + NEWLY_SEEN_WINDOW_MS && !s.acknowledged,
+        }
+    }
+
+    fn newly_current(&self, guild: u64) -> Option<NewlySeen> {
+        self.newly_pending.get(&guild).or_else(|| self.newly_seen.get(&guild)).copied()
+    }
+
+    pub fn newly_mark_pending(&mut self, guild: u64, emoji: u64, now_ms: i64) {
+        if self.newly_current(guild).is_none_or(|c| c.id < emoji) {
+            self.newly_pending.insert(guild, NewlySeen { id: emoji, last_seen: now_ms, acknowledged: false });
+        }
+    }
+
+    pub fn newly_acknowledge(&mut self, guild: u64, emoji: u64, now_ms: i64) {
+        let next = match self.newly_current(guild) {
+            Some(c) if c.id >= emoji => NewlySeen { acknowledged: true, ..c },
+            _ => NewlySeen { id: emoji, last_seen: now_ms, acknowledged: true },
+        };
+        self.newly_pending.insert(guild, next);
+    }
+
+    pub fn newly_commit(&mut self) {
+        if self.newly_pending.is_empty() {
+            return;
+        }
+        for (g, s) in self.newly_pending.drain() {
+            self.newly_seen.insert(g, s);
+        }
+        self.save();
     }
 
     pub fn to_json(&self) -> Value {
@@ -78,7 +142,12 @@ impl Prefs {
             .iter()
             .map(|(k, u)| (k.clone(), json!({ "count": u.count, "last": u.last })))
             .collect();
-        json!({ "tone": self.tone, "usage": usage })
+        let newly: serde_json::Map<String, Value> = self
+            .newly_seen
+            .iter()
+            .map(|(g, n)| (g.to_string(), json!({ "id": n.id.to_string(), "last_seen": n.last_seen, "acknowledged": n.acknowledged })))
+            .collect();
+        json!({ "tone": self.tone, "usage": usage, "newly_seen": newly })
     }
 
     pub fn save(&self) {
@@ -169,5 +238,25 @@ mod tests {
             PickItem::Custom(e) => assert!(e.animated && e.name == "blob"),
             _ => panic!(),
         }
+    }
+
+    #[test]
+    fn newly_added_seen_state_follows_the_client_store() {
+        let day = 86_400_000;
+        let mut p = Prefs::default();
+        assert!(p.is_newer_than_last_seen(1, 50, 0));
+        p.newly_commit();
+        p.newly_mark_pending(1, 50, 10 * day);
+        assert!(p.is_newer_than_last_seen(1, 50, 10 * day));
+        p.newly_commit();
+        assert!(p.is_newer_than_last_seen(1, 50, 20 * day));
+        assert!(!p.is_newer_than_last_seen(1, 50, 25 * day));
+        assert!(p.is_newer_than_last_seen(1, 51, 25 * day));
+        p.newly_acknowledge(1, 50, 11 * day);
+        p.newly_commit();
+        assert!(!p.is_newer_than_last_seen(1, 50, 11 * day));
+        assert_eq!(p.newly_seen[&1].last_seen, 10 * day);
+        let back = Prefs::from_json(&p.to_json());
+        assert_eq!(back.newly_seen, p.newly_seen);
     }
 }

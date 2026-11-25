@@ -9,7 +9,7 @@ use gpui_component::input::Input;
 
 use super::{
     icons::{ChatIcon, icon},
-    state::{EmojiTarget, QUICK_REACTIONS},
+    state::EmojiTarget,
 };
 use crate::{
     app::{PhoenixApp, format_time_full, format_time_short},
@@ -110,7 +110,8 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         })
     };
     let mut strip = div().flex().gap(z(8.)).px(z(2.)).py(z(2.));
-    for (i, q) in QUICK_REACTIONS.iter().take(4).enumerate() {
+    let guild = app.channels.get(&ch).and_then(|c| c.guild);
+    for (i, q) in app.chat.quick_reactions_for(guild, app.backend.has_premium(), 4).into_iter().enumerate() {
         let e = e.clone();
         strip = strip.child(
             div()
@@ -123,11 +124,11 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 .justify_center()
                 .cursor_pointer()
                 .hover(|s| s.bg(crate::ui::chat::tk(crate::theme::generated::idx::BACKGROUND_MOD_NORMAL)))
-                .child(crate::media::emoji::emoji_element(q, 24.))
+                .child(crate::media::emoji::emoji_element(&q.emoji, 24.))
                 .on_click(move |_, _, cx| {
                     e.update(cx, |a, cx| {
                         a.chat.menu = None;
-                        a.react_with(ch, id, (*q).into(), None, cx);
+                        a.react_with(ch, id, q.emoji.clone(), q.id, cx);
                     })
                 }),
         );

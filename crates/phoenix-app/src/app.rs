@@ -818,7 +818,11 @@ impl PhoenixApp {
 
     pub fn handle_event(&mut self, ev: AppEvent, cx: &mut Context<Self>) {
         match ev {
-            AppEvent::Ready => {}
+            AppEvent::Ready => {
+                if cx.has_global::<crate::ui::pickers::Pickers>() {
+                    crate::ui::pickers::load_frecency(self, cx);
+                }
+            }
             AppEvent::MessageCreate(m) => self.append_message(m, cx),
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
             AppEvent::HistoryRefresh { channel, messages } => crate::history_ui::on_refresh(self, channel, messages, cx),

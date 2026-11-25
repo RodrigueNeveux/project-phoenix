@@ -86,6 +86,16 @@ pub struct FrecencyUserSettings {
     pub application_frecency: Option<ApplicationFrecency>,
     #[prost(message, optional, tag = "11")]
     pub played_sound_frecency: Option<PlayedSoundFrecency>,
+    #[prost(message, optional, tag = "5")]
+    pub favorite_emojis: Option<FavoriteEmojis>,
+    #[prost(message, optional, tag = "13")]
+    pub emoji_reaction_frecency: Option<EmojiFrecency>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct FavoriteEmojis {
+    #[prost(string, repeated, tag = "1")]
+    pub emojis: Vec<String>,
 }
 
 fn rank(it: &FrecencyItem) -> (i32, u32, u64) {
@@ -152,6 +162,7 @@ const DEFAULT_EMOJIS: [&str; 10] = ["thumbsup", "eyes", "laughing", "watermelon"
 pub struct FrecencyOrder {
     pub emojis: Vec<String>,
     pub stickers: Vec<u64>,
+    pub reactions: Vec<String>,
 }
 
 fn varint(b: &[u8], i: &mut usize) -> Option<u64> {
@@ -212,6 +223,7 @@ pub fn wire_order(bytes: &[u8]) -> FrecencyOrder {
     FrecencyOrder {
         emojis: map_keys(bytes, 6).into_iter().filter_map(|k| std::str::from_utf8(k).ok().map(str::to_owned)).collect(),
         stickers: map_keys(bytes, 4).into_iter().filter_map(|k| k.try_into().ok().map(u64::from_le_bytes)).collect(),
+        reactions: map_keys(bytes, 13).into_iter().filter_map(|k| std::str::from_utf8(k).ok().map(str::to_owned)).collect(),
     }
 }
 
@@ -248,6 +260,15 @@ pub fn client_frecency(it: &FrecencyItem, now_ms: i64) -> Option<i64> {
     Some((f64::from(it.total_uses) * (score / uses.len() as f64)).ceil() as i64)
 }
 
+pub fn reaction_frecency(it: &FrecencyItem, max_total_uses: u32, now_ms: i64) -> Option<i64> {
+    let uses: Vec<i64> = it.recent_uses.iter().map(|&t| t as i64).filter(|t| *t > 0).collect();
+    if uses.is_empty() || max_total_uses == 0 {
+        return None;
+    }
+    let score: f64 = uses.iter().take(MAX_SAMPLES).map(|&t| weight((now_ms - t) / DAY_MS)).sum();
+    Some((1000. * (f64::from(it.total_uses) / f64::from(max_total_uses) * 0.2 + score / 1000. * 0.8)).trunc() as i64)
+}
+
 pub fn rank_like_client<'a>(order: &[String], item: impl Fn(&str) -> Option<&'a FrecencyItem>, now_ms: i64) -> Vec<String> {
     let mut scored: Vec<(String, i64)> =
         js_key_order(order).into_iter().filter_map(|k| item(&k).and_then(|it| client_frecency(it, now_ms)).map(|f| (k, f))).collect();
@@ -275,6 +296,25 @@ impl FrecencyUserSettings {
             keys.extend(extra.into_iter().cloned());
         }
         rank_like_client(&keys, |k| map.and_then(|m| m.get(k)), now_ms)
+    }
+
+    pub fn favorite_emoji_keys(&self) -> Vec<String> {
+        self.favorite_emojis.as_ref().map(|f| f.emojis.clone()).unwrap_or_default()
+    }
+
+    pub fn reactions_ranked_at(&self, order: &FrecencyOrder, now_ms: i64) -> Vec<String> {
+        let Some(map) = self.emoji_reaction_frecency.as_ref().map(|e| &e.emojis) else { return Vec::new() };
+        let max = map.values().map(|it| it.total_uses).max().unwrap_or(0);
+        let mut keys = order.reactions.clone();
+        let mut extra: Vec<&String> = map.keys().filter(|k| !keys.contains(k)).collect();
+        extra.sort();
+        keys.extend(extra.into_iter().cloned());
+        let mut scored: Vec<(String, i64)> = js_key_order(&keys)
+            .into_iter()
+            .filter_map(|k| map.get(&k).and_then(|it| reaction_frecency(it, max, now_ms)).map(|f| (k, f)))
+            .collect();
+        scored.sort_by_key(|(_, f)| std::cmp::Reverse(*f));
+        scored.into_iter().map(|(k, _)| k).collect()
     }
 
     pub fn stickers_ranked_at(&self, order: &FrecencyOrder, now_ms: i64) -> Vec<u64> {
@@ -330,6 +370,7 @@ mod tests {
             played_sound_frecency: Some(PlayedSoundFrecency {
                 played_sounds: HashMap::from([("3".into(), item(202, 4)), ("1568753632852054267".into(), item(730, 23))]),
             }),
+            ..Default::default()
         };
         let b64 = STANDARD.encode(prost::Message::encode_to_vec(&s));
         let d = FrecencyUserSettings::decode_base64(&b64).unwrap();
@@ -388,6 +429,28 @@ mod tests {
         let bytes = prost::Message::encode_to_vec(&s);
         assert_eq!(wire_order(&bytes).stickers, vec![749054660769218631]);
         assert!(wire_order(&[0xff]).emojis.is_empty());
+    }
+
+    #[test]
+    fn reactions_use_the_client_reaction_formula() {
+        let now = 500 * DAY_MS;
+        let mut emojis = HashMap::new();
+        emojis.insert("white_check_mark".to_string(), uses(224, &[now - 100 * DAY_MS; 10]));
+        emojis.insert("heart".to_string(), uses(74, &[now - DAY_MS; 10]));
+        emojis.insert("1554467402027241472".to_string(), uses(8, &[now - 2 * DAY_MS; 8]));
+        let s = FrecencyUserSettings {
+            emoji_reaction_frecency: Some(EmojiFrecency { emojis }),
+            favorite_emojis: Some(FavoriteEmojis { emojis: vec!["wave".into()] }),
+            ..Default::default()
+        };
+        let b64 = STANDARD.encode(prost::Message::encode_to_vec(&s));
+        let (d, order) = FrecencyUserSettings::decode_base64_ordered(&b64).unwrap();
+        assert_eq!(order.reactions.len(), 3);
+        assert_eq!(d.favorite_emoji_keys(), vec!["wave".to_string()]);
+        let max = 224;
+        assert_eq!(reaction_frecency(&uses(74, &[now - DAY_MS; 10]), max, now), Some(866));
+        assert_eq!(reaction_frecency(&uses(224, &[now - 100 * DAY_MS; 10]), max, now), Some(208));
+        assert_eq!(d.reactions_ranked_at(&order, now), vec!["heart", "1554467402027241472", "white_check_mark"]);
     }
 
     #[test]

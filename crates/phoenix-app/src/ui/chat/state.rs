@@ -99,7 +99,24 @@ pub struct ChatState {
     pub shift_held: bool,
     pub flash: Option<Id>,
     pub hidden_open: std::collections::HashSet<Id>,
+    pub quick_reactions: Option<Vec<QuickReaction>>,
     next_key: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct QuickReaction {
+    pub emoji: SharedString,
+    pub id: Option<Id>,
+    pub guild: Option<Id>,
+}
+
+impl ChatState {
+    pub fn quick_reactions_for(&self, guild: Option<Id>, premium: bool, n: usize) -> Vec<QuickReaction> {
+        match &self.quick_reactions {
+            Some(q) => q.iter().filter(|r| premium || r.guild.is_none() || r.guild == guild).take(n).cloned().collect(),
+            None => QUICK_REACTIONS.iter().take(n).map(|e| QuickReaction { emoji: (*e).into(), id: None, guild: None }).collect(),
+        }
+    }
 }
 
 impl Default for ChatState {
@@ -123,6 +140,7 @@ impl Default for ChatState {
             shift_held: false,
             flash: None,
             hidden_open: Default::default(),
+            quick_reactions: None,
             next_key: 0,
         }
     }

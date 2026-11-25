@@ -61,6 +61,9 @@ pub struct Grid {
     pub premium: bool,
     pub current_guild: Option<crate::model::Id>,
     pub top: std::ops::Range<usize>,
+    pub newly: std::ops::Range<usize>,
+    pub newly_unseen: std::ops::Range<usize>,
+    pub newly_newest: Option<crate::model::Id>,
 }
 
 impl Grid {
@@ -131,6 +134,11 @@ impl Grid {
 }
 
 const TOP_ROW: usize = 9;
+const NEWLY_GREEN: u32 = 0x2d7d46;
+
+thread_local! {
+    static HOVER_SINCE: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
 const NEWLY_ADDED_DAYS: i64 = 60;
 const NEWLY_ADDED_MAX: usize = 3;
 
@@ -175,17 +183,31 @@ pub fn build(app: &PhoenixApp, query: &str, reaction: bool, cx: &App) -> Grid {
         {
             let own: &[GuildEmoji] = customs.iter().find(|(gg, _)| gg.id == g).map(|(_, es)| es.as_slice()).unwrap_or(&[]);
             let all: Vec<&GuildEmoji> = customs.iter().flat_map(|(_, es)| es.iter()).collect();
-            let (items, n_top) = top_section(&ids, own, &all, chrono::Utc::now().timestamp_millis());
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            let (mut items, n_top) = top_section(&ids, own, &all, now_ms);
             if !items.is_empty() {
                 let name = app.guilds.iter().find(|x| x.id == g).map(|x| x.name.clone()).unwrap_or_default();
+                let newly: Vec<PickItem> = items.split_off(n_top);
+                grid.newly_newest = newly.first().and_then(|it| if let PickItem::Custom(e) = it { Some(e.id) } else { None });
+                let prefs = cx.try_global::<Pickers>().map(|p| &p.prefs);
+                let unseen = |it: &PickItem| match (it, prefs) {
+                    (PickItem::Custom(e), Some(p)) => p.is_newer_than_last_seen(g.0, e.id.0, now_ms),
+                    (PickItem::Custom(_), None) => true,
+                    _ => false,
+                };
+                let (fresh, seen): (Vec<PickItem>, Vec<PickItem>) = newly.into_iter().partition(|it| unseen(it));
                 let start = grid.items.len();
                 grid.top = start..start + n_top;
+                grid.newly = start + n_top..start + n_top + seen.len() + fresh.len();
+                grid.newly_unseen = start + n_top + seen.len()..grid.newly.end;
+                items.extend(seen);
+                items.extend(fresh);
                 grid.push_section(crate::t!("picker.top_guild", g = name), SectionIcon::Top, items, true);
             }
         }
         let mut freq: Vec<PickItem> = Vec::new();
         if let Some(f) = cx.try_global::<Pickers>().and_then(|p| p.frecency.as_ref()) {
-            for key in &f.emojis {
+            for key in if reaction { &f.reactions } else { &f.emojis } {
                 let item = match key.parse::<u64>() {
                     Ok(id) => customs.iter().flat_map(|(_, es)| es).find(|e| e.id.0 == id).cloned().map(PickItem::Custom),
                     Err(_) => emoji::by_shortcode(key).or_else(|| emoji::index_of(key)).map(PickItem::Unicode),
@@ -270,55 +292,127 @@ fn render_row(ix: usize, cx: &mut App) -> AnyElement {
         }
         Some(Row::Cells { start, end }) => {
             let selected = op.selected;
-            let mut row = div().flex().pl(px(8.)).when(last_of_section, |d| d.pb(px(12.)));
-            for i in start..end {
+            let newly = op.grid.newly.clone();
+            let guild = op.grid.current_guild;
+            let newest = op.grid.newly_newest;
+            let cell = |i: usize| {
                 let item = op.grid.items[i].clone();
                 let is_sel = i == selected;
                 let locked = op.grid.locked(&item);
-                row = row.child(
-                    div()
-                        .id(("emoji-cell", i))
-                        .relative()
-                        .size(px(CELL))
-                        .flex_none()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(4.))
-                        .cursor_pointer()
-                        .when(is_sel, |d| {
-                            if crate::theme::is_light() {
-                                d.bg(tk(idx::BACKGROUND_BASE_LOW)).border_1().border_color(tk(idx::BORDER_SUBTLE))
-                            } else {
-                                d.bg(tk(idx::INTERACTIVE_BACKGROUND_SELECTED))
+                let is_newly = newly.contains(&i);
+                div()
+                    .id(("emoji-cell", i))
+                    .relative()
+                    .size(px(CELL))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded(px(4.))
+                    .cursor_pointer()
+                    .when(is_sel, |d| {
+                        if crate::theme::is_light() {
+                            d.bg(tk(idx::BACKGROUND_BASE_LOW)).border_1().border_color(tk(idx::BORDER_SUBTLE))
+                        } else {
+                            d.bg(tk(idx::INTERACTIVE_BACKGROUND_SELECTED))
+                        }
+                    })
+                    .on_hover(move |h, w, cx| {
+                        if is_newly {
+                            let since = HOVER_SINCE.with(|c| c.replace((*h).then(std::time::Instant::now)));
+                            if !*h
+                                && since.is_some_and(|t| t.elapsed() >= std::time::Duration::from_millis(250))
+                                && let (Some(g), Some(n)) = (guild, newest)
+                                && cx.has_global::<Pickers>()
+                            {
+                                cx.global_mut::<Pickers>().prefs.newly_acknowledge(g.0, n.0, chrono::Utc::now().timestamp_millis());
                             }
-                        })
-                        .on_hover(move |h, w, cx| {
-                            if *h {
-                                with_app(cx, w, |_, _, cx| {
-                                    if let Some(op) = cx.global_mut::<Pickers>().open.as_mut()
-                                        && (op.hovered != Some(i) || op.selected != i)
-                                    {
-                                        op.hovered = Some(i);
-                                        op.selected = i;
-                                        cx.notify();
-                                    }
-                                });
-                            }
-                        })
-                        .when(!locked, |d| {
-                            d.on_click({
-                                let item = item.clone();
-                                move |ev, w, cx| {
-                                    let keep = ev.modifiers().shift;
-                                    let item = item.clone();
-                                    with_app(cx, w, move |a, w, cx| pick(a, item, keep, w, cx));
+                        }
+                        if *h {
+                            with_app(cx, w, |_, _, cx| {
+                                if let Some(op) = cx.global_mut::<Pickers>().open.as_mut()
+                                    && (op.hovered != Some(i) || op.selected != i)
+                                {
+                                    op.hovered = Some(i);
+                                    op.selected = i;
+                                    cx.notify();
                                 }
-                            })
+                            });
+                        }
+                    })
+                    .when(!locked, |d| {
+                        d.on_click({
+                            let item = item.clone();
+                            move |ev, w, cx| {
+                                let keep = ev.modifiers().shift;
+                                let item = item.clone();
+                                with_app(cx, w, move |a, w, cx| pick(a, item, keep, w, cx));
+                            }
                         })
-                        .child(div().when(locked, |d| d.opacity(0.3)).child(item_element_hover(&item, tone, EMOJI_PX)))
-                        .when(locked, |d| d.child(lock_badge())),
-                );
+                    })
+                    .child(div().when(locked, |d| d.opacity(0.3)).child(item_element_hover(&item, tone, EMOJI_PX)))
+                    .when(locked, |d| d.child(lock_badge()))
+            };
+            let fresh = op.grid.newly_unseen.clone();
+            if !fresh.is_empty() && start <= fresh.start && fresh.end <= end {
+                let seen_n = fresh.start - start;
+                let one = fresh.len() == 1;
+                let right = seen_n > 0;
+                let mut seen_row = div().flex().pl(px(8.));
+                for i in start..fresh.start {
+                    seen_row = seen_row.child(cell(i));
+                }
+                let mut fresh_row = div().flex().border_1().border_color(gpui::rgb(NEWLY_GREEN)).rounded_tl(px(4.)).rounded_tr(px(4.));
+                fresh_row = match (one, right) {
+                    (true, _) => fresh_row,
+                    (false, true) => fresh_row.rounded_bl(px(4.)),
+                    (false, false) => fresh_row.rounded_br(px(4.)),
+                };
+                for i in fresh.clone() {
+                    fresh_row = fresh_row.child(cell(i));
+                }
+                let badge = div()
+                    .absolute()
+                    .bottom(px(-16.))
+                    .when(right, |d| d.right_0())
+                    .when(!right, |d| d.left_0())
+                    .w(px(EMOJI_PX + 4. * 2. + 2.))
+                    .h(px(16.))
+                    .rounded_bl(px(4.))
+                    .rounded_br(px(4.))
+                    .bg(gpui::rgb(NEWLY_GREEN))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(gpui::svg().path(crate::icons::path("picker/sparkle")).size(px(12.)).mr(px(2.)).flex_none().text_color(gpui::white()))
+                    .child(
+                        div()
+                            .text_size(px(12.))
+                            .line_height(px(16.))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(tk(idx::TEXT_OVERLAY_LIGHT))
+                            .child(crate::t!("picker.newly_badge").to_uppercase()),
+                    );
+                return div()
+                    .id("emoji-top-newly")
+                    .flex()
+                    .pb(px(20.))
+                    .when(seen_n > 0, |d| d.child(seen_row))
+                    .child(
+                        div()
+                            .id("emoji-newly-block")
+                            .group("newly")
+                            .relative()
+                            .flex()
+                            .flex_col()
+                            .child(fresh_row.group_hover("newly", |s| s.border_color(gpui::rgba(NEWLY_GREEN << 8 | 0x80))))
+                            .child(badge.group_hover("newly", |s| s.bg(gpui::rgba(NEWLY_GREEN << 8 | 0x80)))),
+                    )
+                    .into_any_element();
+            }
+            let mut row = div().flex().pl(px(8.)).when(last_of_section, |d| d.pb(px(12.)));
+            for i in start..end {
+                row = row.child(cell(i));
             }
             row.into_any_element()
         }
@@ -494,6 +588,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let preview_ix = op.hovered.or(Some(op.selected));
     let preview = preview_ix.and_then(|i| op.grid.items.get(i).cloned());
     let popular = preview_ix.is_some_and(|i| op.grid.top.contains(&i));
+    let newly = preview_ix.is_some_and(|i| op.grid.newly.contains(&i));
     let preview_from: Option<SharedString> = match &preview {
         Some(PickItem::Custom(e)) => op.grid.guild_names.iter().find(|(g, _)| *g == e.guild).map(|(_, n)| n.clone()),
         _ => None,
@@ -595,7 +690,13 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
             Some(item_element(&item, tone, 28.)),
             Some(SharedString::from(format!(":{}:", item.name()))),
             preview_from,
-            popular.then(|| popular_badge().into_any_element()),
+            if popular {
+                Some(popular_badge().into_any_element())
+            } else if newly {
+                Some(newly_badge().into_any_element())
+            } else {
+                None
+            },
         ),
         None => inspector(None, None, None, None),
     };
@@ -615,6 +716,31 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                 .child(footer),
         )
         .into_any_element()
+}
+
+fn newly_badge() -> gpui::Div {
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .px(px(8.))
+        .py(px(4.))
+        .rounded(px(4.))
+        .bg(gpui::linear_gradient(
+            268.26,
+            gpui::linear_color_stop(gpui::rgb(0x097d8d), 0.),
+            gpui::linear_color_stop(gpui::rgb(0x5ea455), 1.),
+        ))
+        .child(gpui::svg().path(crate::icons::path("picker/sparkle")).size(px(14.)).flex_none().text_color(gpui::white()))
+        .child(
+            div()
+                .text_size(px(14.))
+                .line_height(px(18.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_OVERLAY_LIGHT))
+                .child(crate::t!("picker.newly_added").to_uppercase()),
+        )
 }
 
 fn popular_badge() -> gpui::Div {

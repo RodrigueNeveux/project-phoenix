@@ -6,7 +6,7 @@ use gpui_component::input::Input;
 
 use super::{
     icons::{ChatIcon, icon},
-    state::{EmojiTarget, QUICK_REACTIONS},
+    state::EmojiTarget,
 };
 use crate::{
     app::PhoenixApp,
@@ -89,12 +89,13 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
             .child(tool_button("tb-discard", id.0, ChatIcon::Trash.path(), 20.).on_click(move |_, _, cx| e.update(cx, |a, cx| a.discard_local(ch, id, cx))))
             .into_any_element();
     }
-    for (i, q) in QUICK_REACTIONS.iter().take(3).enumerate() {
+    let guild = app.channels.get(&ch).and_then(|c| c.guild);
+    for (i, q) in app.chat.quick_reactions_for(guild, app.backend.has_premium(), 3).into_iter().enumerate() {
         let e = e.clone();
         bar = bar.child(
             bar_button(("quick", i))
-                .child(crate::media::emoji::emoji_element(q, 20.))
-                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.react_with(ch, id, (*q).into(), None, cx))),
+                .child(crate::media::emoji::emoji_element(&q.emoji, 20.))
+                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.react_with(ch, id, q.emoji.clone(), q.id, cx))),
         );
     }
     bar = bar.child(div().w(z(1.)).h(z(24.)).my(z(2.)).mx(z(4.)).rounded_full().bg(tk(idx::BORDER_SUBTLE)));

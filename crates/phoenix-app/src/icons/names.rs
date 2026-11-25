@@ -206,4 +206,5 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("server/drag", &["DragIcon"]),
     ("server/dropper", &["EyeDropperIcon"]),
     ("event/location", &["LocationIcon"]),
+    ("picker/sparkle", &["SparkleIcon"]),
 ];
