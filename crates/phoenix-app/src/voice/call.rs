@@ -842,7 +842,7 @@ fn preview_loop(generation: u64, key: String) {
     let mut next = Instant::now();
     loop {
         let alive = |st: &State| st.own.as_ref().is_some_and(|o| o.generation == generation);
-        if Instant::now() >= next {
+        if Instant::now() >= next && !super::stream::hide_preview() {
             let mut frame = None;
             for _ in 0..60 {
                 let f = {

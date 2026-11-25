@@ -200,6 +200,20 @@ pub fn settings_items(app: &PhoenixApp, entity: gpui::Entity<PhoenixApp>) -> Vec
         }
     }
     let (e, set2) = (entity.clone(), set.clone());
+    let hide = stream::hide_preview();
+    let e3 = entity.clone();
+    let mut advanced = vec![MenuItem::check(crate::t!("golive.hide_preview"), hide, move |_, _, cx| {
+        stream::set_hide_preview(!hide);
+        e3.update(cx, |_, cx| cx.notify());
+    })];
+    if crate::ui::go_live::notify_shown(app) {
+        let on = crate::ui::go_live::notify_friends();
+        let e4 = entity.clone();
+        advanced.push(MenuItem::check(crate::t!("golive.notify_friends"), on, move |_, _, cx| {
+            crate::ui::go_live::set_notify_friends(!on);
+            e4.update(cx, |_, cx| cx.notify());
+        }));
+    }
     vec![
         MenuItem::Custom(group_label(crate::t!("golive.mode"))),
         radio(crate::t!("golive.gaming"), Preset::Video).with_subtext(preset_sub(Preset::Video)),
@@ -210,6 +224,7 @@ pub fn settings_items(app: &PhoenixApp, entity: gpui::Entity<PhoenixApp>) -> Vec
         MenuItem::submenu(crate::t!("golive.fps"), fps_items),
         MenuItem::Separator,
         MenuItem::check(crate::t!("golive.mute"), !q.sound, move |_, _, cx| set2(&e, cx, Quality { sound: !q.sound, ..q })),
+        MenuItem::submenu(crate::t!("golive.advanced"), advanced),
     ]
 }
 

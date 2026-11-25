@@ -8,6 +8,21 @@ use crate::voice::{StreamSource, VoiceControl};
 
 thread_local! {
     static QUALITY: Cell<Quality> = Cell::new(Quality::default());
+    static NOTIFY_FRIENDS: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn notify_friends() -> bool {
+    NOTIFY_FRIENDS.with(Cell::get)
+}
+
+pub fn set_notify_friends(on: bool) {
+    NOTIFY_FRIENDS.with(|c| c.set(on));
+}
+
+pub fn notify_shown(app: &PhoenixApp) -> bool {
+    let guild = app.voice_channel.and_then(|c| app.channels.get(&c)).and_then(|c| c.guild);
+    let members = guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).and_then(|g| g.member_count);
+    crate::voice::stream::notify_option_shown(guild.is_some(), members)
 }
 
 pub fn quality() -> Quality {

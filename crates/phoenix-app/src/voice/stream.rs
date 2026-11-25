@@ -143,6 +143,23 @@ pub fn parse_key(k: &str) -> Option<Key> {
 pub const PREVIEW_MAX: (u32, u32) = (512, 288);
 pub const PREVIEW_FIRST_MS: u64 = 500;
 pub const PREVIEW_EVERY_MS: u64 = 300_000;
+
+pub const NOTIFY_GUILD_MAX: u32 = 50;
+
+static HIDE_PREVIEW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn hide_preview() -> bool {
+    HIDE_PREVIEW.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub fn set_hide_preview(on: bool) {
+    HIDE_PREVIEW.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn notify_option_shown(guild: bool, members: Option<u32>) -> bool {
+    !guild || members.is_none_or(|n| n > 30 && n <= NOTIFY_GUILD_MAX)
+}
+
 pub const PREVIEW_RETRY_MS: u64 = 60_000;
 
 pub fn is_black(rgba: &[u8]) -> bool {
@@ -163,6 +180,16 @@ pub fn preview_jpeg(width: u32, height: u32, rgba: &[u8]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn notify_friends_only_for_small_servers() {
+        assert!(super::notify_option_shown(false, None));
+        assert!(super::notify_option_shown(true, None));
+        assert!(!super::notify_option_shown(true, Some(30)));
+        assert!(super::notify_option_shown(true, Some(31)));
+        assert!(super::notify_option_shown(true, Some(50)));
+        assert!(!super::notify_option_shown(true, Some(51)));
+    }
+
     use super::*;
 
     #[test]
