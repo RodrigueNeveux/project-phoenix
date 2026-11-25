@@ -241,8 +241,18 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
 
 pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> Option<Div> {
     let ed = app.chat.edit.as_ref().filter(|e| e.id == msg.id)?;
+    Some(edit_frame(&ed.input, entity, |a, w, cx| a.cancel_edit(w, cx), |a, w, cx| a.save_edit(w, cx)))
+}
+
+pub fn edit_frame(
+    input: &Entity<gpui_component::input::InputState>,
+    entity: &Entity<PhoenixApp>,
+    cancel: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + Clone + 'static,
+    save: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + 'static,
+) -> Div {
     let e1 = entity.clone();
     let e2 = entity.clone();
+    let cancel2 = cancel.clone();
     let link = |id: &'static str, label: gpui::SharedString| {
         div()
             .id(id)
@@ -251,52 +261,51 @@ pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) ->
             .hover(|s| s.underline())
             .child(label)
     };
-    Some(
-        div()
-            .flex()
-            .flex_col()
-            .min_w_0()
-            .child(
-                div()
-                    .id("edit-box")
-                    .mt(z(8.))
-                    .min_h(z(56.))
-                    .px(z(16.))
-                    .rounded(z(8.))
-                    .border_1()
-                    .border_color(tk(idx::BORDER_SUBTLE))
-                    .bg(tk(idx::CHAT_BACKGROUND_DEFAULT))
-                    .flex()
-                    .items_center()
-                    .text_size(z(16.))
-                    .text_color(c(Palette::TEXT_NORMAL))
-                    .capture_key_down({
-                        let e = entity.clone();
-                        move |ev, w, cx| {
-                            if ev.keystroke.key == "escape" {
-                                cx.stop_propagation();
-                                e.update(cx, |a, cx| a.cancel_edit(w, cx));
-                            }
+    div()
+        .flex()
+        .flex_col()
+        .min_w_0()
+        .child(
+            div()
+                .id("edit-box")
+                .mt(z(8.))
+                .min_h(z(56.))
+                .px(z(16.))
+                .rounded(z(8.))
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .bg(tk(idx::CHAT_BACKGROUND_DEFAULT))
+                .flex()
+                .items_center()
+                .text_size(z(16.))
+                .text_color(c(Palette::TEXT_NORMAL))
+                .capture_key_down({
+                    let e = entity.clone();
+                    move |ev, w, cx| {
+                        if ev.keystroke.key == "escape" {
+                            cx.stop_propagation();
+                            let cancel = cancel.clone();
+                            e.update(cx, |a, cx| cancel(a, w, cx));
                         }
-                    })
-                    .child(div().flex_1().min_w_0().child(Input::new(&ed.input).appearance(false).bordered(false)))
-                    .child(ui::icon(Icon::Emoji, 22., c(Palette::INTERACTIVE))),
-            )
-            .child(
-                div()
-                    .py(z(7.))
-                    .flex()
-                    .gap(z(4.))
-                    .text_size(z(12.))
-                    .line_height(z(16.))
-                    .font_weight(gpui::FontWeight::NORMAL)
-                    .text_color(tk(idx::TEXT_DEFAULT))
-                    .child(crate::t!("edit.escape_to"))
-                    .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| a.cancel_edit(w, cx))))
-                    .child(crate::t!("edit.enter_to"))
-                    .child(link("edit-save", crate::t!("edit.save")).on_click(move |_, w, cx| e2.update(cx, |a, cx| a.save_edit(w, cx)))),
-            ),
-    )
+                    }
+                })
+                .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false)))
+                .child(ui::icon(Icon::Emoji, 22., c(Palette::INTERACTIVE))),
+        )
+        .child(
+            div()
+                .py(z(7.))
+                .flex()
+                .gap(z(4.))
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(gpui::FontWeight::NORMAL)
+                .text_color(tk(idx::TEXT_DEFAULT))
+                .child(crate::t!("edit.escape_to"))
+                .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| cancel2(a, w, cx))))
+                .child(crate::t!("edit.enter_to"))
+                .child(link("edit-save", crate::t!("edit.save")).on_click(move |_, w, cx| e2.update(cx, |a, cx| save(a, w, cx)))),
+        )
 }
 
 pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef, system: bool) -> AnyElement {

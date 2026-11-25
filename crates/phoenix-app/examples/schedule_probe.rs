@@ -43,6 +43,12 @@ fn main() -> anyhow::Result<()> {
         let id = mine.id;
         rest.admin(&AdminCall::EditScheduled { id, at: Some(scheduled::iso(now + 20 * 60)), content: None, flags: None }).await?;
         println!("rescheduled");
+        let edited = format!("{} (modifié)", mine.content());
+        rest.admin(&scheduled::edit_content_call(Id(id.0), edited.clone(), mine.create_args.flags)).await?;
+        let list = rest.get_scheduled_messages().await?;
+        let after = list.iter().find(|s| s.id == id).ok_or_else(|| anyhow::anyhow!("edited message not listed"))?;
+        anyhow::ensure!(after.content() == edited, "content edit not applied");
+        println!("edited: at {} content ok", after.scheduled_timestamp);
         if std::env::var("PROBE_SEND_NOW").as_deref() == Ok("1") {
             rest.admin(&AdminCall::SendScheduledNow { id }).await?;
             println!("sent now");

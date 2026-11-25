@@ -1291,11 +1291,20 @@ fn main() -> anyhow::Result<()> {
                         app.open_edit_group(ch, cx);
                     }
                 }
-                "schedmodal" | "schedbar" | "schedmenu" => {
+                "schedmodal" | "schedbar" | "schedmenu" | "schedcal" | "schedtime" => {
                     if let Some(ch) = app.selected_channel {
                         let at = phoenix_app::ui::chat::scheduled::default_at(chrono::Local::now());
                         match kind.as_str() {
                             "schedmodal" => app.open_schedule(ch, cx),
+                            "schedcal" | "schedtime" => {
+                                app.open_schedule(ch, cx);
+                                let which = if kind == "schedcal" { 0 } else { 1 };
+                                phoenix_app::actions::with_modal(|m| {
+                                    if let Some(phoenix_app::ui::modals::Modal::Schedule(p)) = m {
+                                        p.open = Some(which);
+                                    }
+                                });
+                            }
                             "schedbar" => phoenix_app::ui::chat::scheduled::set_draft(ch, Some(at)),
                             _ => {
                                 app.chat.attach_menu = true;

@@ -220,7 +220,7 @@ impl PhoenixApp {
                     }
                     InboxTab::Scheduled => {
                         i.scheduled = msgs.into_iter().map(|m| Message { author: me, ..m }).collect();
-                        i.scheduled.sort_by_key(|m| m.timestamp);
+                        i.scheduled.sort_by_key(|m| std::cmp::Reverse(m.timestamp));
                     }
                     _ => i.saved = msgs,
                 },
@@ -774,6 +774,10 @@ fn channel_head(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>
 }
 
 fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixApp>) -> gpui::Div {
+    cozy_message_with(app, m, pad_y, cx, None)
+}
+
+fn cozy_message_with(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixApp>, editor: Option<AnyElement>) -> gpui::Div {
     let guild = app.channel_guild(m.channel);
     let author_cow = app.member_user(guild, m.author);
     let u = author_cow.as_deref();
@@ -829,7 +833,10 @@ fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixA
                 .when(bot, |d| d.child(crate::ui::chat::bot_tag(u.is_some_and(|u| u.verified_bot))))
                 .child(div().ml(z(4.)).text_size(z(12.)).font_weight(FontWeight::MEDIUM).text_color(tk(idx::CHAT_TEXT_MUTED)).child(crate::app::format_time_full(m.timestamp))),
         )
-        .child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id)))
+        .map(|d| match editor {
+            Some(ed) => d.child(ed),
+            None => d.child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id))),
+        })
         .children(m.attachments.iter().map(|a| crate::ui::chat::attachment(a, cx)))
 }
 
@@ -1160,11 +1167,25 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             list = scroller(list);
             for m in &i.scheduled {
                 let (id, at) = (m.id, m.timestamp);
+                let tip = crate::ui::tooltip::tip;
                 let buttons = vec![
-                    sm_icon_button(("sched-send", id.0), "send").on_click(cx.listener(move |a, _, _, cx| a.scheduled_send_now(id, cx))),
-                    sm_icon_button(("sched-edit", id.0), "inbox/clock").on_click(cx.listener(move |a, _, _, cx| a.edit_scheduled_time(id, at, cx))),
-                    sm_icon_button(("sched-cancel", id.0), "close").on_click(cx.listener(move |a, _, _, cx| a.cancel_scheduled(id, cx))),
+                    sm_icon_button(("sched-send", id.0), "send")
+                        .tooltip(tip(crate::t!("sched.send_now")))
+                        .on_click(cx.listener(move |a, _, _, cx| a.scheduled_send_now(id, cx))),
+                    sm_icon_button(("sched-text", id.0), "pen")
+                        .tooltip(tip(crate::t!("sched.edit_message")))
+                        .on_click(cx.listener(move |a, _, w, cx| a.edit_scheduled_message(id, w, cx))),
+                    sm_icon_button(("sched-edit", id.0), "inbox/clock")
+                        .tooltip(tip(crate::t!("sched.edit_time")))
+                        .on_click(cx.listener(move |a, _, _, cx| a.edit_scheduled_time(id, at, cx))),
+                    sm_icon_button(("sched-cancel", id.0), "settings/circle-x")
+                        .tooltip(tip(crate::t!("sched.cancel")))
+                        .on_click(cx.listener(move |a, _, _, cx| a.cancel_scheduled(id, cx))),
                 ];
+                let editor = i.sched_edit.as_ref().filter(|e| e.id == id).map(|e| {
+                    crate::ui::chat::message_ext::edit_frame(&e.input, &cx.entity(), |a, w, cx| a.cancel_scheduled_edit(w, cx), |a, w, cx| a.save_scheduled_edit(w, cx))
+                        .into_any_element()
+                });
                 list = list.child(
                     inbox_box()
                         .child(channel_head(app, m.channel, buttons))
@@ -1176,7 +1197,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
                                 .text_color(tk(idx::TEXT_MUTED))
                                 .child(crate::ui::chat::scheduled::done_text(at)),
                         )
-                        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message(app, m, 2., cx))),
+                        .child(div().pt(z(12.)).pb(z(12.)).child(cozy_message_with(app, m, 2., cx, editor))),
                 );
             }
         }

@@ -17,7 +17,7 @@ pub struct ScheduledArgs {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct ScheduledMessage {
-    #[serde(alias = "scheduled_message_id")]
+    #[serde(rename = "scheduled_message_id")]
     pub id: Snowflake,
     #[serde(default, alias = "send_at_timestamp", deserialize_with = "null_default")]
     pub scheduled_timestamp: String,
@@ -25,6 +25,8 @@ pub struct ScheduledMessage {
     pub create_args: ScheduledArgs,
     #[serde(default)]
     pub state: Value,
+    #[serde(default)]
+    pub attachment_uploads: Vec<Value>,
 }
 
 impl ScheduledMessage {
@@ -151,11 +153,13 @@ mod tests {
     #[test]
     fn parses_scheduled() {
         let s: Vec<ScheduledMessage> = serde_json::from_str(
-            r#"[{"user_id":"9","scheduled_message_id":"1","send_at_timestamp":"2026-11-24T09:00:00+00:00","state":1,
-                "create_args":{"channel_id":"2","content":"hi","type":0,"flags":0,"message_reference":null},"attachment_uploads":[]}]"#,
+            r#"[{"id":"7","user_id":"9","scheduled_message_id":"1","send_at_timestamp":"2026-11-24T09:00:00+00:00","state":1,
+                "create_args":{"channel_id":"2","content":"hi","type":0,"flags":0,"message_reference":null},"attachment_uploads":[{"filename":"a.png"}],
+                "message_preview":{"id":"7","content":"hi"}}]"#,
         )
         .unwrap();
         assert_eq!((s[0].id, s[0].channel_id(), s[0].content()), (Snowflake(1), Snowflake(2), "hi"));
         assert_eq!(s[0].scheduled_timestamp, "2026-11-24T09:00:00+00:00");
+        assert_eq!(s[0].attachment_uploads.len(), 1);
     }
 }

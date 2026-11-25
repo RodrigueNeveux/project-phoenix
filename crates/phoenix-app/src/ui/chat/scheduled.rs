@@ -22,6 +22,7 @@ const SLOT: i64 = 15 * 60;
 
 thread_local! {
     static DRAFTS: RefCell<HashMap<Id, i64>> = RefCell::new(HashMap::new());
+    static LIST_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
 
 pub fn draft(channel: Id) -> Option<i64> {
@@ -173,6 +174,43 @@ pub struct Picker {
     pub editing: bool,
     pub open: Option<u8>,
     pub existing: Option<Id>,
+    pub month: Option<NaiveDate>,
+}
+
+pub fn month_start(d: NaiveDate) -> NaiveDate {
+    d.with_day(1).unwrap_or(d)
+}
+
+pub fn shift_month(d: NaiveDate, by: i32) -> NaiveDate {
+    let m = d.year() * 12 + d.month0() as i32 + by;
+    NaiveDate::from_ymd_opt(m.div_euclid(12), m.rem_euclid(12) as u32 + 1, 1).unwrap_or(d)
+}
+
+pub fn week_starts_sunday() -> bool {
+    crate::i18n::locale() == "en"
+}
+
+pub fn month_grid(month: NaiveDate, sunday: bool) -> Vec<Vec<NaiveDate>> {
+    let first = month_start(month);
+    let back = if sunday { first.weekday().num_days_from_sunday() } else { first.weekday().num_days_from_monday() };
+    let mut day = first - Duration::days(back as i64);
+    let next = shift_month(first, 1);
+    let mut weeks = Vec::new();
+    while day < next {
+        weeks.push((0..7).map(|i| day + Duration::days(i)).collect());
+        day += Duration::days(7);
+    }
+    weeks
+}
+
+pub fn day_names(sunday: bool) -> Vec<SharedString> {
+    (0..7)
+        .map(|i| {
+            let n = if sunday { (i + 6) % 7 } else { i };
+            let name = crate::t!(&format!("weekday.{n}"));
+            SharedString::from(name.chars().take(2).collect::<String>().to_uppercase())
+        })
+        .collect()
 }
 
 pub fn days(now: i64) -> Vec<NaiveDate> {
@@ -214,18 +252,27 @@ fn field(id: &'static str, value: SharedString, open: bool, which: u8, cx: &mut 
     let base = if which == 0 { date_field(value) } else { crate::ui::controls::select_field(id, value) };
     base.when(open, |d| d.border_color(c(tok(idx::INPUT_BORDER_ACTIVE))))
         .on_click(cx.listener(move |_, _, _, cx| {
+            let mut at = None;
             with_modal(|m| {
                 if let Some(Modal::Schedule(p)) = m {
                     p.open = if p.open == Some(which) { None } else { Some(which) };
+                    p.month = None;
+                    at = (p.open == Some(1)).then_some(p.at);
                 }
             });
+            if let Some(at) = at {
+                let ix = slots(local(at).date_naive()).iter().position(|t| *t == at).unwrap_or(0);
+                LIST_SCROLL.with(|h| h.scroll_to_top_of_item(ix));
+            }
             cx.notify();
         }))
 }
 
 fn list(options: Vec<(SharedString, i64, bool)>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let scroll = LIST_SCROLL.with(|h| h.clone());
     let mut col = div()
         .id("sched-list")
+        .track_scroll(&scroll)
         .absolute()
         .top(z(44.))
         .left_0()
@@ -268,19 +315,151 @@ fn list(options: Vec<(SharedString, i64, bool)>, cx: &mut Context<PhoenixApp>) -
     col.into_any_element()
 }
 
+fn set_picker(f: impl FnOnce(&mut Picker)) {
+    with_modal(|m| {
+        if let Some(Modal::Schedule(p)) = m {
+            f(p);
+        }
+    });
+}
+
+fn alpha(token: usize, a: f32) -> gpui::Hsla {
+    let mut h = c(tok(token));
+    h.a *= a;
+    h
+}
+
+fn nav_button(id: &'static str, next: bool, by: i32, month: NaiveDate, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let glyph = gpui::svg().path(crate::icons::path("chevron-right")).size(z(12.)).text_color(c(tok(idx::TEXT_DEFAULT)));
+    let glyph = if next { glyph } else { glyph.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))) };
+    div()
+        .id(id)
+        .absolute()
+        .top(z(20.))
+        .when(next, |d| d.right(z(20.)))
+        .when(!next, |d| d.left(z(20.)))
+        .size(z(18.))
+        .rounded(z(2.))
+        .border_1()
+        .border_color(c(tok(idx::PRIMARY_800)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .on_click(cx.listener(move |_, _, _, cx| {
+            set_picker(|p| p.month = Some(shift_month(month, by)));
+            cx.notify();
+        }))
+        .child(glyph)
+        .into_any_element()
+}
+
+fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let selected = local(p.at).date_naive();
+    let month = month_start(p.month.unwrap_or(selected));
+    let first = local(now + MIN_AHEAD).date_naive();
+    let last = local(now + MAX_AHEAD).date_naive();
+    let today = local(now).date_naive();
+    let sunday = week_starts_sunday();
+    let weeks = month_grid(month, sunday);
+    let rows = weeks.len();
+    let title = format!("{} {}", crate::t!(&format!("month.{}", month.month())), month.year()).to_uppercase();
+    let names = div().flex().mb(z(10.)).children(day_names(sunday).into_iter().map(|n| {
+        div()
+            .w(z(40.))
+            .flex()
+            .justify_center()
+            .text_size(z(13.))
+            .line_height(z(13.))
+            .font_weight(gpui::FontWeight::MEDIUM)
+            .text_color(alpha(idx::PRIMARY_100, 0.6))
+            .child(n)
+    }));
+    let mut grid = div().flex().flex_col();
+    for (w, week) in weeks.into_iter().enumerate() {
+        let mut row = div().flex();
+        for (n, d) in week.into_iter().enumerate() {
+            let outside = d.month() != month.month();
+            let disabled = d < first || d > last;
+            let sel = d == selected && !outside;
+            let at = with_day(p.at, d);
+            row = row.child(
+                div()
+                    .id(("sched-day", (w * 7 + n) as u64))
+                    .relative()
+                    .size(z(40.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .border_t_1()
+                    .border_l_1()
+                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    .when(n == 6, |d| d.border_r_1())
+                    .when(w + 1 == rows, |d| d.border_b_1())
+                    .when(w == 0 && n == 0, |d| d.rounded_tl(z(3.)))
+                    .when(w == 0 && n == 6, |d| d.rounded_tr(z(3.)))
+                    .when(w + 1 == rows && n == 0, |d| d.rounded_bl(z(3.)))
+                    .when(w + 1 == rows && n == 6, |d| d.rounded_br(z(3.)))
+                    .text_size(z(12.8))
+                    .text_color(c(tok(idx::TEXT_STRONG)))
+                    .when(d == today, |d| d.font_weight(gpui::FontWeight::BOLD))
+                    .when(outside || disabled, |d| d.font_weight(gpui::FontWeight::MEDIUM).text_color(alpha(idx::PRIMARY_100, 0.3)))
+                    .when(disabled, |d| d.bg(c(tok(idx::PRIMARY_630))))
+                    .when(!disabled, |d| {
+                        d.cursor_pointer().hover(|s| s.bg(c(tok(idx::BRAND_500))).text_color(c(tok(idx::WHITE)))).on_click(cx.listener(move |_, _, _, cx| {
+                            set_picker(|p| {
+                                p.at = at;
+                                p.open = None;
+                                p.month = None;
+                            });
+                            cx.notify();
+                        }))
+                    })
+                    .child(SharedString::from(d.day().to_string()))
+                    .when(sel, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(z(3.)).bg(c(tok(idx::BRAND_500))))),
+            );
+        }
+        grid = grid.child(row);
+    }
+    div()
+        .id("sched-calendar")
+        .occlude()
+        .absolute()
+        .top(z(8.))
+        .left_0()
+        .p(z(20.))
+        .rounded(z(4.8))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .mb(z(10.))
+                .pb(z(20.))
+                .border_b_1()
+                .border_color(alpha(idx::PRIMARY_800, 0.3))
+                .flex()
+                .justify_center()
+                .text_size(z(13.))
+                .line_height(z(20.))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::TEXT_STRONG)))
+                .child(title),
+        )
+        .child(nav_button("sched-prev", false, -1, month, cx))
+        .child(nav_button("sched-next", true, 1, month, cx))
+        .child(names)
+        .child(grid)
+        .into_any_element()
+}
+
 pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let now = Local::now().timestamp();
     let cur = local(p.at);
     let err = problem(p.at, now);
-    let date_opts = days(now)
-        .into_iter()
-        .map(|d| (SharedString::from(crate::i18n::medium_date(d)), with_day(p.at, d), d == cur.date_naive()))
-        .collect();
-    let time_opts = slots(cur.date_naive())
-        .into_iter()
-        .filter(|t| problem(*t, now).is_none())
-        .map(|t| (SharedString::from(crate::i18n::clock(local(t))), t, t == p.at))
-        .collect();
+    let time_opts = slots(cur.date_naive()).into_iter().map(|t| (SharedString::from(crate::i18n::clock(local(t))), t, t == p.at)).collect();
     let date = div()
         .flex_1()
         .relative()
@@ -288,7 +467,7 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .flex_col()
         .child(field_label(crate::t!("sched.date"), true))
         .child(field("sched-date", crate::i18n::medium_date(cur.date_naive()).into(), p.open == Some(0), 0, cx))
-        .when(p.open == Some(0), |d| d.child(div().relative().child(list(date_opts, cx))));
+        .when(p.open == Some(0), |d| d.child(div().relative().child(calendar(p, now, cx))));
     let time = div()
         .flex_1()
         .relative()
@@ -333,6 +512,17 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
     card(480., title, None, body.into_any_element(), Some(footer.into_any_element()), cx)
 }
 
+pub struct SchedEdit {
+    pub id: Id,
+    pub flags: u64,
+    pub input: gpui::Entity<gpui_component::input::InputState>,
+    _sub: gpui::Subscription,
+}
+
+pub fn edit_content_call(id: Id, content: String, flags: u64) -> AdminCall {
+    AdminCall::EditScheduled { id: Snowflake(id.0), at: None, content: Some(content), flags: Some(flags) }
+}
+
 pub fn create_call(channel: Id, at: i64, message: &phoenix_api::rest::CreateMessage) -> AdminCall {
     AdminCall::ScheduleMessage { channel: Snowflake(channel.0), at: iso(at), message: serde_json::to_value(message).unwrap_or_default() }
 }
@@ -341,12 +531,12 @@ impl PhoenixApp {
     pub fn open_schedule(&mut self, channel: Id, cx: &mut Context<Self>) {
         let editing = draft(channel).is_some();
         let at = draft(channel).unwrap_or_else(|| default_at(Local::now()));
-        open_modal(Modal::Schedule(Picker { channel, at, editing, open: None, existing: None }), None);
+        open_modal(Modal::Schedule(Picker { channel, at, editing, open: None, existing: None, month: None }), None);
         cx.notify();
     }
 
     pub fn edit_scheduled_time(&mut self, id: Id, at: i64, cx: &mut Context<Self>) {
-        open_modal(Modal::Schedule(Picker { channel: Id(0), at, editing: true, open: None, existing: Some(id) }), None);
+        open_modal(Modal::Schedule(Picker { channel: Id(0), at, editing: true, open: None, existing: Some(id), month: None }), None);
         cx.notify();
     }
 
@@ -367,6 +557,46 @@ impl PhoenixApp {
 
     pub fn scheduled_send_now(&mut self, id: Id, cx: &mut Context<Self>) {
         self.scheduled_call(AdminCall::SendScheduledNow { id: Snowflake(id.0) }, crate::t!("sched.sent"), cx);
+    }
+
+    pub fn edit_scheduled_message(&mut self, id: Id, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        let Some(m) = self.parity.inbox.scheduled.iter().find(|m| m.id == id) else { return };
+        let (content, flags) = (m.content.clone(), m.flags);
+        let input = cx.new(|cx| gpui_component::input::InputState::new(window, cx));
+        input.update(cx, |s, cx| {
+            s.set_value(content, window, cx);
+            s.focus(window, cx);
+        });
+        let sub = cx.subscribe_in(&input, window, |this, _, ev: &gpui_component::input::InputEvent, window, cx| {
+            if let gpui_component::input::InputEvent::PressEnter { shift: false, .. } = ev {
+                this.save_scheduled_edit(window, cx);
+            }
+        });
+        self.parity.inbox.sched_edit = Some(SchedEdit { id, flags, input, _sub: sub });
+        cx.notify();
+    }
+
+    pub fn cancel_scheduled_edit(&mut self, _: &mut gpui::Window, cx: &mut Context<Self>) {
+        self.parity.inbox.sched_edit = None;
+        cx.notify();
+    }
+
+    pub fn save_scheduled_edit(&mut self, _: &mut gpui::Window, cx: &mut Context<Self>) {
+        let Some(ed) = self.parity.inbox.sched_edit.take() else { return };
+        let text = ed.input.read(cx).value().trim().to_string();
+        if text.is_empty() {
+            self.cancel_scheduled(ed.id, cx);
+            return;
+        }
+        if let Some(m) = self.parity.inbox.scheduled.iter_mut().find(|m| m.id == ed.id) {
+            if m.content.as_ref() == text.as_str() {
+                cx.notify();
+                return;
+            }
+            m.content = text.clone().into();
+        }
+        self.scheduled_call(edit_content_call(ed.id, text, ed.flags), crate::t!("sched.updated"), cx);
+        cx.notify();
     }
 
     pub fn cancel_scheduled(&mut self, id: Id, cx: &mut Context<Self>) {
@@ -435,5 +665,26 @@ mod tests {
         assert_eq!(b["message_reference"]["message_id"], "6");
         assert_eq!(b["allowed_mentions"]["replied_user"], false);
         assert!(b.get("nonce").is_none());
+    }
+
+    #[test]
+    fn calendar_grid() {
+        let nov = NaiveDate::from_ymd_opt(2026, 11, 25).unwrap();
+        let g = month_grid(nov, false);
+        assert_eq!(g.len(), 6);
+        assert_eq!(g[0][0], NaiveDate::from_ymd_opt(2026, 10, 26).unwrap());
+        assert_eq!(g[5][6], NaiveDate::from_ymd_opt(2026, 12, 6).unwrap());
+        let g = month_grid(nov, true);
+        assert_eq!(g[0][0], NaiveDate::from_ymd_opt(2026, 11, 1).unwrap());
+        assert_eq!(g.len(), 5);
+        assert_eq!(shift_month(nov, 2), NaiveDate::from_ymd_opt(2027, 1, 1).unwrap());
+        assert_eq!(shift_month(nov, -11), NaiveDate::from_ymd_opt(2025, 12, 1).unwrap());
+    }
+
+    #[test]
+    fn content_edit_matches_the_client() {
+        let r = phoenix_api::rest::guild_manage::build(&edit_content_call(Id(9), "[Test Phoenix] edited".into(), 4096));
+        assert_eq!((r.method.as_str(), r.path.as_str()), ("PATCH", "/users/@me/scheduled-messages/9"));
+        assert_eq!(r.body.unwrap(), serde_json::json!({"content": "[Test Phoenix] edited", "flags": 4096}));
     }
 }
