@@ -1208,6 +1208,9 @@ impl Backend for DiscordBackend {
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         self.account_standing_impl()
     }
+    fn guild_affinities(&self) -> BoxFuture<Vec<crate::model::Id>> {
+        self.guild_affinities_impl()
+    }
     fn guarded_write(&self, w: crate::actions::guard::GuardedWrite) -> BoxFuture<()> {
         self.with_session(move |_, s| async move {
             s.rest.guarded_write(&w).await.map_err(api_err)?;

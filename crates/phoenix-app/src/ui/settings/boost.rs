@@ -135,9 +135,40 @@ fn notice() -> Div {
     )
 }
 
+static AFFINITIES: parking_lot::RwLock<Option<Vec<crate::model::Id>>> = parking_lot::RwLock::new(None);
+
+pub(super) fn fetch(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if AFFINITIES.read().is_some() {
+        return;
+    }
+    let fut = app.backend.guild_affinities();
+    cx.spawn(async move |this, cx| {
+        if let Ok(ids) = fut.await {
+            *AFFINITIES.write() = Some(ids);
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }
+    })
+    .detach();
+}
+
+fn suggested(affinities: &[crate::model::Id], rail: &[crate::model::Id]) -> Vec<crate::model::Id> {
+    let mut out: Vec<crate::model::Id> = affinities.iter().take(3).copied().collect();
+    for id in rail {
+        if out.len() >= 3 {
+            break;
+        }
+        if !out.contains(id) {
+            out.push(*id);
+        }
+    }
+    out
+}
+
 fn guild_cards(app: &PhoenixApp) -> Div {
     let mut cards = div().flex().flex_col().gap(z(8.));
-    for g in app.guilds.iter().take(3) {
+    let rail: Vec<crate::model::Id> = app.guilds.iter().map(|g| g.id).collect();
+    let ids = suggested(AFFINITIES.read().as_deref().unwrap_or_default(), &rail);
+    for g in ids.iter().filter_map(|id| app.guilds.iter().find(|g| g.id == *id)) {
         cards = cards.child(
             div()
                 .flex()
@@ -293,4 +324,16 @@ fn faq() -> Div {
         list = list.child(row);
     }
     div().flex().flex_col().gap(z(16.)).w(relative(1.)).child(heading_xl(tr("sp.bo.faq"))).child(list)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::model::Id;
+
+    #[test]
+    fn affinities_first_then_the_rail() {
+        assert_eq!(super::suggested(&[Id(5), Id(2)], &[Id(1), Id(2), Id(3), Id(4)]), vec![Id(5), Id(2), Id(1)]);
+        assert_eq!(super::suggested(&[Id(9), Id(8), Id(7), Id(6)], &[Id(1)]), vec![Id(9), Id(8), Id(7)]);
+        assert_eq!(super::suggested(&[], &[Id(1), Id(2)]), vec![Id(1), Id(2)]);
+    }
 }

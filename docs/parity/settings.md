@@ -259,8 +259,9 @@ Client: the user's running Discord, settings opened over the current route with 
 | Gift redeem field | `input_0PLWhS` placeholder « WUMP-AAAAA-BBBBB-CCCCC », md primary button 100 wide at opacity .5 while empty | `gift::redeem` | ✅ |
 | Connected apps tiles | `applicationIcon_jn4e52` 28px, border-radius 28px (round) | `connection_tiles` | ✅ |
 | Server Boost header | lead text with the « En savoir plus » anchor inline, 364 wide | `boost::header` | ✅ |
-| Server Boost guild cards | stats `body-xs/semibold` `--text-subtle`; 0 boosts → plural `pob/cL` « Pas de boost », no level | `boost::guild_cards` | ✅; ❌ the client's guild selection (it skips some guilds, e.g. the user's own Project Phoenix server) is not known |
-| Server Boost art | `gemIcon_xDn2Ui` 15x24 image, `thumbnail_DV7fsY` video still | — | ❌ images not loaded yet |
+| Server Boost guild cards | stats `body-xs/semibold` `--text-subtle`; 0 boosts → plural `pob/cL` « Pas de boost », no level | `boost::guild_cards` | ✅ |
+| Server Boost suggested guilds | `g8()`: first 3 of `GET /users/@me/affinities/guilds` (`guild_affinities`, response order), then the flattened rail order until 3; same guilds as the client on the real account | `boost::suggested`, `guild_affinities()` (GET only) | ✅ |
+| Server Boost art | `gemIcon_xDn2Ui` 15x24 (`/assets/263e4cc9043cab70.svg`), `thumbnail_DV7fsY` still (`content/7b8d6c9c….png`), `memberContainer_DV7fsY` 1px `--border-subtle` r10, `memberGradientOverlay_DV7fsY` radial rgba(26,26,30,.2→.85) | `boost::header`, runtime URLs in `art.rs` | ✅ (GPUI has no radial gradient: uniform rgba(26,26,30,.55), the area-weighted mean) |
 | Content filter tabs | `tab_9mZA96 vertical`: padding 10, border-left 2 (selected, ml -1) / 1, 4px margin-bottom (20 apart) | `content_filters` | ✅ |
 | Notifications « Quelqu'un réagit » select | `container_VhFsFg[data-layout=horizontal]` grid `auto auto`, gap 24: the select gets max-content + half the free space (316px here) | fixed 280px | ❌ |
 | Subscriptions | Nitro Squad card and credits | `real_shots` now forwards `subscriptions()` (GETs only) | ✅ data in the offscreen render |

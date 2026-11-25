@@ -325,6 +325,13 @@ impl DiscordBackend {
 }
 
 impl DiscordBackend {
+    pub(super) fn guild_affinities_impl(&self) -> BoxFuture<Vec<crate::model::Id>> {
+        self.with_session(move |_, s| async move {
+            let v = s.rest.request_json(reqwest::Method::GET, "/users/@me/affinities/guilds", None).await.map_err(api_err)?;
+            Ok(parse_guild_affinities(&v))
+        })
+    }
+
     pub(super) fn authorized_apps_impl(&self) -> BoxFuture<Option<Vec<crate::ui::settings::authorized_apps::AuthorizedApp>>> {
         self.with_session(move |_, s| async move {
             let v = s.rest.request_json(reqwest::Method::GET, "/oauth2/tokens", None).await.map_err(api_err)?;
@@ -336,5 +343,21 @@ impl DiscordBackend {
             let v = s.rest.request_json(reqwest::Method::GET, "/users/@me/connections", None).await.map_err(api_err)?;
             Ok(Some(crate::ui::settings::connections::parse(&v)))
         })
+    }
+}
+
+pub(crate) fn parse_guild_affinities(v: &serde_json::Value) -> Vec<crate::model::Id> {
+    v.get("guild_affinities")
+        .and_then(serde_json::Value::as_array)
+        .map(|a| a.iter().filter_map(|e| e.get("guild_id")?.as_str()?.parse().ok().map(crate::model::Id)).collect())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod affinity_tests {
+    #[test]
+    fn keeps_the_server_order() {
+        let v = serde_json::json!({"guild_affinities": [{"guild_id": "30", "affinity": 1.5}, {"guild_id": "10", "affinity": 9.0}, {"affinity": 2.0}]});
+        assert_eq!(super::parse_guild_affinities(&v), vec![crate::model::Id(30), crate::model::Id(10)]);
     }
 }

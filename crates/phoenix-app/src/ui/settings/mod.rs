@@ -398,6 +398,7 @@ pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         subscriptions::fetch(app, cx);
         authorized_apps::fetch(app, cx);
         connections::fetch(app, cx);
+        boost::fetch(app, cx);
         cx.notify();
     }
 }

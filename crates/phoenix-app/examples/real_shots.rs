@@ -299,6 +299,9 @@ impl Backend for ReadOnly {
     fn subscriptions(&self) -> BoxFuture<Option<phoenix_app::ui::settings::subscriptions::Subs>> {
         self.0.subscriptions()
     }
+    fn guild_affinities(&self) -> BoxFuture<Vec<Id>> {
+        self.0.guild_affinities()
+    }
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         self.0.account_standing()
     }
