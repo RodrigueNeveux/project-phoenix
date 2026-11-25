@@ -104,6 +104,7 @@ pub enum AdminCall {
     UserSettings,
     PatchUserSettings { patch: Value },
     EditGroupDm { channel: Snowflake, name: Option<String>, icon: Option<Option<String>> },
+    Server(super::guild_server::ServerCall),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -272,6 +273,7 @@ pub fn build(call: &AdminCall) -> ApiReq {
         ),
         C::UserSettings => req(Method::GET, "/users/@me/settings".into(), None),
         C::PatchUserSettings { patch } => req(Method::PATCH, "/users/@me/settings".into(), Some(patch.clone())),
+        C::Server(s) => super::guild_server::build(s),
     }
 }
 

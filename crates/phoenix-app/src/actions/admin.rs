@@ -82,6 +82,7 @@ pub fn mock_reply(c: &AdminCall) -> Value {
             { "id": "21", "user_id": "2", "action_type": 22, "target_id": "4", "reason": "Spam" }
         ], "users": [user(2, "ferris"), user(4, "spammer")] }),
         C::UserSettings => json!({ "restricted_guilds": [], "message_request_restricted_guild_ids": [] }),
+        C::Server(s) => crate::ui::server_pages::mock::reply(s),
         _ => Value::Null,
     }
 }

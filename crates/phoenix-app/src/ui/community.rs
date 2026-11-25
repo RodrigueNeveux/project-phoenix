@@ -439,7 +439,7 @@ fn ensure_my_profile(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) 
     .detach();
 }
 
-fn checkbox(on: bool) -> gpui::Div {
+pub fn checkbox(on: bool) -> gpui::Div {
     let (bg, border) = if on {
         (idx::CHECKBOX_BACKGROUND_SELECTED_DEFAULT, idx::CHECKBOX_BORDER_SELECTED_DEFAULT)
     } else {

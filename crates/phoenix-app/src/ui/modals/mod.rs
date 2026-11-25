@@ -215,7 +215,10 @@ pub fn close_action(cx: &mut Context<PhoenixApp>) -> crate::ui::modal::Action {
 }
 
 pub fn card(width: f32, title: SharedString, subtitle: Option<SharedString>, body: AnyElement, footer: Option<AnyElement>, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let close = close_action(cx);
+    card_with(width, title, subtitle, body, footer, close_action(cx))
+}
+
+pub fn card_with(width: f32, title: SharedString, subtitle: Option<SharedString>, body: AnyElement, footer: Option<AnyElement>, close: crate::ui::modal::Action) -> AnyElement {
     let close2 = close.clone();
     let el = div()
         .relative()

@@ -51,6 +51,7 @@ pub mod profile_bio;
 pub mod search;
 pub mod search_filters;
 pub mod server_bar;
+pub mod server_pages;
 pub mod sidebar;
 pub mod sidebar_resize;
 pub mod states;

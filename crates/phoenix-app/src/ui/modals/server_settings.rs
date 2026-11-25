@@ -131,8 +131,13 @@ pub fn render(app: &PhoenixApp, guild: Id, section: usize, cx: &mut Context<Phoe
         .max_w(z(740.))
         .flex()
         .flex_col()
-        .child(div().pb(z(20.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!(SECTIONS[section])))
-        .child(content(app, guild, section));
+        .children(match crate::ui::server_pages::content(app, guild, SECTIONS[section], cx) {
+            Some(page) => vec![page],
+            None => vec![
+                div().pb(z(20.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!(SECTIONS[section])).into_any_element(),
+                content(app, guild, section).into_any_element(),
+            ],
+        });
     let close = div()
         .id("gs-close")
         .flex_none()
@@ -173,7 +178,8 @@ pub fn render(app: &PhoenixApp, guild: Id, section: usize, cx: &mut Context<Phoe
                     .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
                     .child(div().id("gs-main").flex_1().min_h_0().flex().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("gs-main")).child(body).child(close))
                     .children(crate::ui::chat::scrollbar::bar_for("gs-main", crate::ui::chat::scrollbar::Bar::Auto)),
-            ),
+            )
+            .children(crate::ui::server_pages::modal(app, cx)),
     )
     .with_priority(20)
     .into_any_element()
