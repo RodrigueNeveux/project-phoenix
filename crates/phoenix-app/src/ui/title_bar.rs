@@ -148,6 +148,28 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                 .flex()
                 .items_center()
                 .gap(z(12.))
+                .when(crate::updater::available_release().is_some(), |d| {
+                    d.child(
+                        div()
+                            .id("title-update")
+                            .debug_selector(|| "title-update".to_owned())
+                            .size(z(24.))
+                            .flex_none()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(z(m::TITLE_BAR_ITEM_RADIUS))
+                            .occlude()
+                            .cursor_pointer()
+                            .hover(|s| s.bg(c(tok(idx::BACKGROUND_FEEDBACK_POSITIVE))))
+                            .child(icon(Icon::Download, 18. * zoom(), c(tok(idx::ICON_FEEDBACK_POSITIVE))))
+                            .tip(crate::t!("update.titlebar_tip"))
+                            .on_click(cx.listener(|_, _, w, cx| {
+                                crate::actions::open_modal(crate::ui::modals::Modal::Update, Some(w));
+                                cx.notify();
+                            })),
+                    )
+                })
                 .child(
                     bar_button("title-inbox", Icon::Inbox, app.parity.inbox.open, crate::t!("inbox.title"))
                         .on_click(cx.listener(|a, _, _, cx| a.toggle_inbox(cx))),

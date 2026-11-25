@@ -23,6 +23,7 @@ pub mod report;
 pub mod server_settings;
 pub mod settings_form;
 pub mod settings_layout;
+pub mod update;
 pub mod webhooks;
 
 use std::rc::Rc;
@@ -119,6 +120,7 @@ pub enum Modal {
     ClearPending(usize),
     AcceptStranger(crate::model::Id),
     GiftNitro(gift_nitro::State),
+    Update,
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -242,6 +244,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::ClearPending(n) => friend_requests::render_clear(*n, cx),
             Modal::AcceptStranger(u) => friend_requests::render_stranger(*u, cx),
             Modal::GiftNitro(s) => gift_nitro::render(app, s, cx),
+            Modal::Update => update::render(app, cx),
         })
     })
 }

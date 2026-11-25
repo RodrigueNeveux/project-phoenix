@@ -149,6 +149,7 @@ pub struct LocalPrefs {
     pub animate_emoji: bool,
     pub saturation: u32,
     pub minimize_to_tray: bool,
+    pub beta_channel: bool,
     pub ui: std::collections::BTreeMap<String, u64>,
     pub trusted_domains: std::collections::BTreeSet<String>,
     pub trusted_protocols: std::collections::BTreeSet<String>,
@@ -165,6 +166,7 @@ impl Default for LocalPrefs {
             animate_emoji: true,
             saturation: 100,
             minimize_to_tray: true,
+            beta_channel: false,
             ui: Default::default(),
             trusted_domains: Default::default(),
             trusted_protocols: Default::default(),
@@ -202,6 +204,7 @@ impl LocalPrefs {
             animate_emoji: b("animate_emoji", d.animate_emoji),
             saturation: f("saturation").map(|x| (x as u32).min(100)).unwrap_or(d.saturation),
             minimize_to_tray: b("minimize_to_tray", d.minimize_to_tray),
+            beta_channel: b("beta_channel", d.beta_channel),
             ui: v
                 .get("ui")
                 .and_then(Value::as_object)
@@ -221,6 +224,7 @@ impl LocalPrefs {
             "animate_emoji": self.animate_emoji,
             "saturation": self.saturation,
             "minimize_to_tray": self.minimize_to_tray,
+            "beta_channel": self.beta_channel,
             "ui": self.ui,
             "trusted_domains": self.trusted_domains,
             "trusted_protocols": self.trusted_protocols,

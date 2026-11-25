@@ -1555,6 +1555,10 @@ static SYSTEM: &[B] = &[
     B::Switch("hwaccel", "sp.sy.hwaccel", "sp.sy.hwaccel_d", Bind::Pref(true)),
     B::Custom("sp.sy.hwaccel", hwaccel_banner),
     B::Divider,
+    B::Title("sp.sy.updates"),
+    B::Switch("beta-channel", "sp.sy.beta_channel", "sp.sy.beta_channel_d", Bind::Local(|p| p.beta_channel, |p, v| p.beta_channel = v)),
+    B::Custom("sp.sy.updates", updates_section),
+    B::Divider,
     B::Custom("sp.sy.t2", custom_keybinds),
     B::Divider,
     B::Title("sp.sy.t3"),
@@ -1817,6 +1821,56 @@ fn hwaccel_banner(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
         .child(gpui::svg().path(crate::icons::path("warning")).flex_none().size(z(20.)).mr(z(10.)).text_color(c(tok(idx::ICON_FEEDBACK_WARNING))))
         .child(div().flex_1().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr("sp.sy.hwaccel_off")))
         .into_any_element()
+}
+
+fn updates_section(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    use crate::updater::{self, UpdateStatus};
+    let status = updater::status();
+    let beta = app.prefs.local.beta_channel;
+    let status_text: SharedString = match &status {
+        UpdateStatus::Idle => format!("Discord Phoenix v{}", crate::diagnostics::VERSION).into(),
+        UpdateStatus::Checking => crate::t!("update.checking"),
+        UpdateStatus::UpToDate => format!("{} (v{})", crate::t!("update.up_to_date"), crate::diagnostics::VERSION).into(),
+        UpdateStatus::Available(r)
+        | UpdateStatus::Downloading { release: r, .. }
+        | UpdateStatus::Verifying(r)
+        | UpdateStatus::ReadyToRestart { release: r, .. }
+        | UpdateStatus::Installed { release: r, .. } => format!("{} {}", crate::t!("update.available_short"), r.tag).into(),
+        UpdateStatus::Error(e) => e.clone().into(),
+    };
+    let status_color = match &status {
+        UpdateStatus::Available(_) | UpdateStatus::ReadyToRestart { .. } | UpdateStatus::Installed { .. } => idx::TEXT_FEEDBACK_POSITIVE,
+        UpdateStatus::Error(_) => idx::TEXT_FEEDBACK_CRITICAL,
+        _ => idx::TEXT_SUBTLE,
+    };
+    let check_btn = controls::button(eid("check-updates"), crate::t!("update.check_now"), BtnKind::Secondary).on_click(cx.listener(move |_, _, _, cx| {
+        let weak = cx.entity().downgrade();
+        let async_cx = cx.to_async();
+        let on_change: std::sync::Arc<dyn Fn() + Send + Sync> = std::sync::Arc::new(move || {
+            let weak = weak.clone();
+            let _ = async_cx.update(|cx| {
+                let _ = weak.update(cx, |_, cx| cx.notify());
+            });
+        });
+        updater::check_now(beta, on_change);
+    }));
+    let has_release = status.release().is_some();
+    let mut row = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(z(12.))
+        .child(div().flex_1().min_w_0().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(status_color))).child(status_text))
+        .child(check_btn);
+    if has_release {
+        row = row.child(
+            controls::button(eid("view-update"), crate::t!("update.view_update"), BtnKind::Active).on_click(cx.listener(|_, _, w, cx| {
+                crate::actions::open_modal(crate::ui::modals::Modal::Update, Some(w));
+                cx.notify();
+            })),
+        );
+    }
+    row.into_any_element()
 }
 
 fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {

@@ -44,6 +44,7 @@ pub mod tray {
     pub fn set_target(_: &mut gpui::App, _: gpui::WeakEntity<crate::app::PhoenixApp>) {}
 }
 pub mod ui;
+pub mod updater;
 pub mod voice;
 
 use std::sync::Arc;

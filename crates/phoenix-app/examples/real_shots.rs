@@ -1579,6 +1579,29 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 400);
     }
+    if let Ok(mode) = std::env::var("PHX_UPDATE_MOCK") {
+        phoenix_app::updater::set_mock_available(phoenix_app::updater::ReleaseInfo {
+            tag: "v0.2.0-beta.2".into(),
+            name: "Discord Phoenix v0.2.0-beta.2".into(),
+            body: "## Nouveautés\n- Vérification automatique des mises à jour GitHub\n- Bouton vert dans la barre de titre et modale de notes de version\n- Vérification `SHA256SUMS.txt` avant installation\n\n## Corrections\n- Meilleure stabilité du rendu GPUI".into(),
+            html_url: "https://github.com/RoxasYTB/project-phoenix/releases/tag/v0.2.0-beta.2".into(),
+            prerelease: true,
+            published_at: "2026-11-25T14:00:00Z".into(),
+            asset: Some(phoenix_app::updater::ReleaseAsset {
+                name: "discord-phoenix-0.2.0-beta.2-x86_64.AppImage".into(),
+                download_url: "https://github.com/RoxasYTB/project-phoenix/releases/download/v0.2.0-beta.2/discord-phoenix-0.2.0-beta.2-x86_64.AppImage".into(),
+                size: 28_450_816,
+            }),
+            sha256sums_url: Some("https://github.com/RoxasYTB/project-phoenix/releases/download/v0.2.0-beta.2/SHA256SUMS.txt".into()),
+        });
+        cx.update_window(win.into(), |_, window, cx| {
+            if mode == "modal" {
+                phoenix_app::actions::open_modal(phoenix_app::ui::modals::Modal::Update, Some(window));
+            }
+            v.update(cx, |_, cx| cx.notify());
+        })?;
+        pump(&mut cx, 300);
+    }
     if let Ok(q) = std::env::var("PHX_SETTINGS_SEARCH") {
         pump(&mut cx, 300);
         cx.update_window(win.into(), |_, window, cx| {

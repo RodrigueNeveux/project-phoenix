@@ -274,6 +274,23 @@ impl PhoenixApp {
         })
         .detach();
 
+        if !crate::paths::is_sandboxed() {
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(Duration::from_secs(3)).await;
+                let include_beta = this.update(cx, |this, _| this.prefs.local.beta_channel).unwrap_or(false);
+                let weak = this.clone();
+                let async_cx = cx.clone();
+                let on_change: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+                    let weak = weak.clone();
+                    let _ = async_cx.update(|cx| {
+                        let _ = weak.update(cx, |_, cx| cx.notify());
+                    });
+                });
+                crate::updater::check_now(include_beta, on_change);
+            })
+            .detach();
+        }
+
         let message_list = ListState::new(0, ListAlignment::Bottom, px(800.));
         let weak = cx.entity().downgrade();
         message_list.set_scroll_handler(move |ev: &gpui::ListScrollEvent, _w, cx: &mut App| {
