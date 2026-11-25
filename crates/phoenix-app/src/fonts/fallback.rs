@@ -218,19 +218,43 @@ pub fn cmap_format12(map: &[(u32, u16)]) -> Vec<u8> {
     out
 }
 
-pub fn emoji_presentation_font(font: &[u8], family: &str) -> Option<Vec<u8>> {
-    let face = ttf_parser::Face::parse(font, 0).ok()?;
+fn unicode_map(face: &ttf_parser::Face) -> Option<std::collections::BTreeMap<u32, u16>> {
     let cmap = face.tables().cmap?;
     let mut map = std::collections::BTreeMap::new();
     for sub in cmap.subtables.into_iter().filter(|s| s.is_unicode()) {
         sub.codepoints(|c| {
-            if emoji_keeps(c)
-                && let Some(g) = sub.glyph_index(c).filter(|g| g.0 != 0)
-            {
+            if let Some(g) = sub.glyph_index(c).filter(|g| g.0 != 0) {
                 map.entry(c).or_insert(g.0);
             }
         });
     }
+    Some(map)
+}
+
+fn keep_loadable(map: &mut std::collections::BTreeMap<u32, u16>, space: Option<u16>) {
+    if let Some(g) = space {
+        map.entry('m' as u32).or_insert(g);
+    }
+}
+
+pub fn text_face(font: &[u8], family: &str) -> Option<Vec<u8>> {
+    let face = ttf_parser::Face::parse(font, 0).ok()?;
+    let mut map = unicode_map(&face)?;
+    if !map.keys().any(|&c| emoji_presentation(c)) && map.contains_key(&('m' as u32)) {
+        return rename(font, family);
+    }
+    let space = map.get(&0x20).copied();
+    map.retain(|&c, _| !emoji_presentation(c));
+    keep_loadable(&mut map, space);
+    let kept: Vec<(u32, u16)> = map.into_iter().collect();
+    rebuild(font, family, None, Some(cmap_format12(&kept)))
+}
+
+pub fn emoji_presentation_font(font: &[u8], family: &str) -> Option<Vec<u8>> {
+    let face = ttf_parser::Face::parse(font, 0).ok()?;
+    let mut map = unicode_map(&face)?;
+    let space = map.get(&0x20).copied();
+    map.retain(|&c, _| emoji_keeps(c));
     if map.is_empty() {
         return None;
     }
@@ -240,6 +264,7 @@ pub fn emoji_presentation_font(font: &[u8], family: &str) -> Option<Vec<u8>> {
         .filter(|n| n.name_id == 6 && n.is_unicode())
         .find_map(|n| n.to_string())
         .unwrap_or_else(|| family.replace(' ', ""));
+    keep_loadable(&mut map, space);
     let map: Vec<(u32, u16)> = map.into_iter().collect();
     rebuild(font, family, Some(&ps), Some(cmap_format12(&map)))
 }
@@ -293,7 +318,7 @@ pub fn register(cx: &mut gpui::App) {
                 if super::ttf_family(&bytes).as_deref() != Some(e.family.as_str()) {
                     break;
                 }
-                let Some(r) = rename(&bytes, &name) else { break };
+                let Some(r) = text_face(&bytes, &name) else { break };
                 renamed.push(r);
             }
         }
@@ -527,9 +552,21 @@ mod tests {
         assert!(face.glyph_index('\u{200D}').is_some());
         assert!(face.glyph_index('❄').is_none());
         assert!(face.glyph_index('☺').is_none());
+        assert!(face.glyph_index('m').is_some());
         assert_eq!(crate::fonts::ttf_family(&r).as_deref(), Some("Phx Noto Color Emoji"));
         let ps = face.names().into_iter().find(|n| n.name_id == 6 && n.is_unicode()).and_then(|n| n.to_string());
         assert_eq!(ps.as_deref(), Some("NotoColorEmoji"));
+    }
+
+    #[test]
+    fn text_faces_lose_emoji_presentation_code_points() {
+        let Ok(b) = std::fs::read("/usr/share/fonts/opentype/freefont/FreeSerif.otf") else { return };
+        let r = super::text_face(&b, "Phx FreeSerif").expect("built");
+        let face = ttf_parser::Face::parse(&r, 0).expect("parses");
+        assert!(face.glyph_index('🔊').is_none());
+        assert!(face.glyph_index('❄').is_some());
+        assert!(face.glyph_index('𝓢').is_some());
+        assert_eq!(crate::fonts::ttf_family(&r).as_deref(), Some("Phx FreeSerif"));
     }
 
     #[test]
