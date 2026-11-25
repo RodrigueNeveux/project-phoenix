@@ -1802,6 +1802,24 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 300);
     }
+    if let Ok(edit) = std::env::var("PHX_EDIT") {
+        let draft = edit.replace("\\n", "\n");
+        cx.update_window(win.into(), |_, window, cx| {
+            v.update(cx, |app, cx| {
+                let me = app.me.id;
+                let last = app.selected_channel.and_then(|ch| app.messages.get(&ch)).and_then(|e| e.msgs.iter().rev().find(|m| m.author == me).map(|m| m.id));
+                if let Some(id) = last {
+                    app.start_edit(id, window, cx);
+                    if let Some(input) = app.chat.edit.as_ref().map(|e| e.input.clone()).filter(|_| !draft.is_empty()) {
+                        input.update(cx, |s, cx| s.set_value(draft.clone(), window, cx));
+                    }
+                    phoenix_app::ui::chat::rich_input::sync(app, cx);
+                    cx.notify();
+                }
+            })
+        })?;
+        pump(&mut cx, 300);
+    }
     if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
         let (x, y) = v.split_once(',')?;
         Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))
