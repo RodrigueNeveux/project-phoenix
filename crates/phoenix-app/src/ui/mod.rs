@@ -74,7 +74,6 @@ pub mod voice_row;
 pub mod shop_page;
 pub mod emoji_text;
 pub mod shake;
-pub mod server_pages;
 
 use crate::theme::z;
 use gpui::{

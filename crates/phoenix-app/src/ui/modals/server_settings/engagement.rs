@@ -61,8 +61,8 @@ fn channel_value(app: &PhoenixApp, ch: Option<u64>, none: SharedString) -> AnyEl
         .items_center()
         .min_w_0()
         .child(gpui::svg().path(crate::icons::path(if ch.kind == ChannelKind::Voice { "speaker" } else { "hash" })).flex_none().size(z(16.)).text_color(c(tok(idx::ICON_MUTED))))
-        .child(text(ch.name.clone(), 16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT).mx(z(4.)).flex_shrink().min_w_0().truncate())
-        .children(cat.map(|n| text(n, 14., 18., FontWeight::MEDIUM, idx::TEXT_MUTED).ml(z(4.)).flex_shrink().min_w_0().truncate()))
+        .child(text(ch.name.clone(), 16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT).mx(z(4.)).flex_shrink(1.).min_w_0().truncate())
+        .children(cat.map(|n| text(n, 14., 18., FontWeight::MEDIUM, idx::TEXT_MUTED).ml(z(4.)).flex_shrink(1.).min_w_0().truncate()))
         .into_any_element()
 }
 

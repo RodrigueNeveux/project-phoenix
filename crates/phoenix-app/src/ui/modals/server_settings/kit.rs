@@ -9,8 +9,8 @@ use crate::{
     theme::{c, generated::idx, tok, z},
 };
 
-pub type Cx = Context<PhoenixApp>;
-pub type OnPick = Rc<dyn Fn(&mut PhoenixApp, usize, &mut Cx)>;
+pub type Cx<'a> = Context<'a, PhoenixApp>;
+pub type OnPick = Rc<dyn Fn(&mut PhoenixApp, usize, &mut Context<'_, PhoenixApp>)>;
 
 pub fn text(t: impl Into<SharedString>, size: f32, line: f32, weight: FontWeight, color: usize) -> Div {
     div().text_size(z(size)).line_height(z(line)).font_weight(weight).text_color(c(tok(color))).child(t.into())

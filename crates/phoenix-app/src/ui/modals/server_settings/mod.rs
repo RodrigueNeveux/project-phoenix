@@ -9,7 +9,7 @@ pub mod roles;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use gpui::{AnyElement, Context, Entity, IntoElement, ParentElement, SharedString, Styled, Window, div};
+use gpui::{AnyElement, Context, Entity, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*};
 use gpui_component::input::{InputState, TextareaState};
 use phoenix_api::rest::guild_manage::AdminCall;
 use serde_json::Value;
