@@ -55,7 +55,7 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             let (b, a) = join_text(msg.id.0);
             (ChatIcon::Join, Palette::GREEN, b, a)
         }
-        MessageKind::Pin => (ChatIcon::Join, Palette::INTERACTIVE, "".into(), crate::t!("sys.pin")),
+        MessageKind::Pin => (ChatIcon::Join, Palette::INTERACTIVE, "".into(), crate::t!("sys.pin_lead")),
         MessageKind::Boost(0) => (ChatIcon::Boost, 0xFF73FA, "".into(), crate::t!("sys.boost")),
         MessageKind::Boost(t) => (
             ChatIcon::Boost,
@@ -110,13 +110,15 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
         .text_size(z(16.))
         .text_color(c(Palette::TEXT_MUTED))
         .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
-        .child(
+        .child(if msg.kind == MessageKind::Pin {
             div()
                 .absolute()
-                .left(z(36.))
-                .top(z(7.))
-                .child(super::icons::icon(icon, 16., c(color))),
-        )
+                .left(z(35.))
+                .top(z(6.))
+                .child(gpui::svg().path(crate::icons::path("pin")).size(z(18.)).text_color(c(Palette::TEXT_MUTED)))
+        } else {
+            div().absolute().left(z(36.)).top(z(7.)).child(super::icons::icon(icon, 16., c(color)))
+        })
         .child(before)
         .child({
             let author = app.users.get(&msg.author);
@@ -152,6 +154,29 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
             .child(crate::t!("sys.thread_see_all"))
             .child(link(("sys-thread-all", msg.id.0), crate::t!("sys.thread_all_link")).on_click(move |_, _, cx| {
                 e2.update(cx, |a, cx| a.toggle_threads_popout(cx));
+            }))
+            .child(".")
+        })
+        .when(msg.kind == MessageKind::Pin, |d| {
+            let (e1, e2) = (entity.clone(), entity.clone());
+            let (ch, pinned) = (msg.channel, msg.reply_to);
+            let link = |id: (&'static str, u64), text: SharedString| {
+                div()
+                    .id(id)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(crate::theme::tok(crate::theme::generated::idx::TEXT_STRONG)))
+                    .cursor_pointer()
+                    .hover(|s| s.underline())
+                    .child(text)
+            };
+            d.child(link(("sys-pin-msg", msg.id.0), crate::t!("sys.pin_link")).on_click(move |_, _, cx| {
+                if let Some(id) = pinned {
+                    e1.update(cx, |a, cx| a.jump_to_message(ch, id, cx));
+                }
+            }))
+            .child(crate::t!("sys.pin_tail"))
+            .child(link(("sys-pin-all", msg.id.0), crate::t!("sys.pin_all")).on_click(move |_, _, cx| {
+                e2.update(cx, |a, cx| a.toggle_pins(cx));
             }))
             .child(".")
         })
