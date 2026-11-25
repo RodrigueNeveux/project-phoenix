@@ -398,9 +398,6 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     }
     if s.confirm_hwaccel.is_some() {
         s.confirm_hwaccel = None;
-    } else if s.nested.is_some() && s.open_select.is_none() && !s.confirm_logout {
-        nested::close(app, cx);
-        return true;
     } else if s.confirm_logout {
         s.confirm_logout = false;
     } else if s.open_select.is_some() {
