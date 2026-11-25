@@ -222,7 +222,11 @@ Egyptian Hieroglyphs) both 15.2 px below the top. Headless Chrome 158, scale 1.2
 **Patch.** The baseline (and the strikethrough) use the metrics of `primary_font`, the font the
 first run asked for, like the underline of patch 8. Bare `LineLayout::paint` keeps the line maximum.
 For a line that only uses its primary font the metrics are the same values (cosmic-text's
-`max_ascent` is the same swash ascent × size), so plain text does not move. Search
+`max_ascent` is the same swash ascent × size), so plain text does not move. Careful: the cosmic
+backend's `FontMetrics::descent` is negative (swash's positive descent, negated) while
+`LineLayout::descent` is positive, so the patch takes `.abs()` of both, like `underline_geometry`.
+The first version (rev `4c7d4f5a`) missed it and lowered every line by the font's descent
+(about 0.3 em); fixed in `0c04d8e7`. Search
 `PHOENIX PATCH (primary baseline)`.
 
 ## 10. Emoji presentation selectors (`vendor/gpui-pre-wgpu/src/cosmic_text_system.rs`, `pick_grapheme_slot`)
@@ -264,7 +268,7 @@ rasterizing it calls swash's `embolden(ppem / 48)` (swash's port of `FT_Outline_
 halve the strength as FreeType does). Shaping and advances are untouched. Search
 `PHOENIX PATCH (synthetic bold)`. Test `synthetic_bold_follows_chromium`.
 
-Rev: `4c7d4f5a` on `gpui-baseline` (patches 4 to 11). Previous: `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+Rev: `0c04d8e7` on `gpui-baseline2` (patches 4 to 11). Before: `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug). Previous: `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## Running the vendored tests
 
