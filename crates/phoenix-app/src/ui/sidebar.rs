@@ -95,11 +95,11 @@ pub fn build_rows(app: &mut PhoenixApp) {
                 rows.push(SidebarRow::Channel(id));
                 rows.extend(threads.into_iter().map(SidebarRow::Thread));
                 let stage = ch.kind == ChannelKind::Stage;
-                let mut vu: Vec<(String, Id)> = ch
+                let mut vu: Vec<((bool, String, String), Id)> = ch
                     .voice_users
                     .iter()
                     .filter(|u| !stage || !crate::ui::voice_panel::flags(**u).suppress)
-                    .map(|u| (voice_user_name(app, *u).to_lowercase(), *u))
+                    .map(|u| (voice_sort_key(app, *u), *u))
                     .collect();
                 vu.sort();
                 let take = if crate::ui::voice_row::names_hidden(id) { 1 } else { usize::MAX };
@@ -139,6 +139,10 @@ pub fn build_rows(app: &mut PhoenixApp) {
             app.sidebar_list.scroll_to(gpui::ListOffset { item_ix, offset_in_item: anchor.offset_in_item });
         }
     }
+}
+
+pub fn voice_sort_key(app: &PhoenixApp, user: Id) -> (bool, String, String) {
+    (!crate::ui::voice_panel::flags(user).stream, voice_user_name(app, user).to_lowercase(), user.0.to_string())
 }
 
 pub fn voice_user_name(app: &PhoenixApp, user: Id) -> SharedString {
@@ -555,8 +559,8 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         SidebarRow::VoiceUser { user } => {
             let hidden = app.channels.values().find(|c| c.voice_users.contains(&user) && crate::ui::voice_row::names_hidden(c.id));
             if let Some(ch) = hidden {
-                let mut vu: Vec<(String, Id)> =
-                    ch.voice_users.iter().map(|u| (voice_user_name(app, *u).to_lowercase(), *u)).collect();
+                let mut vu: Vec<((bool, String, String), Id)> =
+                    ch.voice_users.iter().map(|u| (voice_sort_key(app, *u), *u)).collect();
                 vu.sort();
                 let users: Vec<Id> = vu.into_iter().map(|(_, u)| u).collect();
                 return crate::ui::voice_row::collapsed_list(app, &users);
@@ -921,14 +925,34 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         crate::ui::inbox::has_perm(app.backend.guild_permissions(g), 1 << 4)
     });
     let action = |i: Icon, path: Option<&'static str>| {
-        let col = t(if selected { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT });
-        let hov = |s: gpui::StyleRefinement| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER));
+        let col = t(if selected { idx::ICON_STRONG } else { idx::INTERACTIVE_TEXT_DEFAULT });
+        let hov = move |s: gpui::StyleRefinement| s.text_color(t(if selected { idx::ICON_STRONG } else { idx::INTERACTIVE_TEXT_HOVER }));
         let act = |s: gpui::StyleRefinement| s.text_color(t(idx::INTERACTIVE_TEXT_ACTIVE)).mt(z(0.5));
         div().id(gpui::ElementId::Name(format!("ch-act-{}", path.unwrap_or("gear")).into())).size(z(24.)).p(z(4.)).flex_none().group("ch-action").child(match path {
             Some(p) => gpui::svg().path(crate::icons::path(p)).size(z(16.)).text_color(col).group_hover("ch-action", hov).id("g").group_active("ch-action", act).into_any_element(),
             None => icon(i, 16., col).group_hover("ch-action", hov).id("g").group_active("ch-action", act).into_any_element(),
         })
     };
+    let timer = (matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) && !ch.voice_users.is_empty())
+        .then(|| crate::voice::start_time::get(id.0))
+        .flatten()
+        .map(|st| {
+            div()
+                .flex_none()
+                .group_hover(group.clone(), |s| s.hidden())
+                .ml(z(12.))
+                .pr(z(4.))
+                .font_family(crate::theme::FONT_MONO())
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .text_color(t(idx::TEXT_FEEDBACK_POSITIVE))
+                .child(crate::voice::start_time::format(crate::voice::start_time::now_s() - st))
+        });
+    let limit_pill = (timer.is_none() && ch.kind == ChannelKind::Voice)
+        .then(|| app.backend.channel_user_limit(id))
+        .flatten()
+        .map(|limit| div().flex_none().group_hover(group.clone(), |s| s.hidden()).child(user_limit_pill(ch.voice_users.len() as u32, limit)));
+    let has_info = timer.is_some() || limit_pill.is_some();
     let is_voice = matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage);
     let chat_entity = entity.clone();
     let invite_hover = (!is_dm).then(|| {
@@ -937,7 +961,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             .flex_none()
             .my(z(-4.))
             .mr(z(-4.))
-            .when(!selected, |d| d.hidden().group_hover(group.clone(), |s| s.flex()))
+            .when(!selected || has_info, |d| d.hidden().group_hover(group.clone(), |s| s.flex()))
             .when(is_voice, |d| {
                 d.child(
                     div()
@@ -954,24 +978,6 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             .child(action(Icon::Members, Some("invite")).tooltip(crate::ui::tooltip::tip(crate::t!("perm.create_invite"))))
             .when(can_edit, |d| d.child(action(Icon::Gear, None).tooltip(crate::ui::tooltip::tip(crate::t!("menu.edit_channel")))))
     });
-    let timer = (matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) && !ch.voice_users.is_empty())
-        .then(|| crate::voice::start_time::get(id.0))
-        .flatten()
-        .map(|st| {
-            div()
-                .flex_none()
-                .ml(z(12.))
-                .pr(z(4.))
-                .font_family(crate::theme::FONT_MONO())
-                .text_size(z(12.))
-                .line_height(z(16.))
-                .text_color(t(idx::TEXT_FEEDBACK_POSITIVE))
-                .child(crate::voice::start_time::format(crate::voice::start_time::now_s() - st))
-        });
-    let limit_pill = (timer.is_none() && ch.kind == ChannelKind::Voice)
-        .then(|| app.backend.channel_user_limit(id))
-        .flatten()
-        .map(|limit| user_limit_pill(ch.voice_users.len() as u32, limit));
     div()
         .id(("ch", id.0))
         .relative()
