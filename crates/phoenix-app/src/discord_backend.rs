@@ -1007,6 +1007,9 @@ impl Backend for DiscordBackend {
     fn premium_group_member(&self) -> bool {
         self.inner.session().ok().and_then(|s| s.cache.current_user()).is_some_and(|u| u.is_premium_group_member())
     }
+    fn premium_with_group(&self) -> bool {
+        self.inner.session().ok().and_then(|s| s.cache.current_user()).is_some_and(|u| u.is_premium_with_premium_group())
+    }
     fn premium_tier2(&self) -> bool {
         self.inner.session().ok().and_then(|s| s.cache.current_user()).is_some_and(|u| u.premium_type == Some(2))
     }

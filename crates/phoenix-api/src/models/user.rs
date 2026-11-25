@@ -70,11 +70,15 @@ pub const PREMIUM_SOURCE_SUBSCRIPTION_GROUP: u64 = 4;
 pub const PREMIUM_GROUP_ROLE_MEMBER: u64 = 2;
 
 impl User {
-    pub fn is_premium_group_member(&self) -> bool {
+    pub fn is_premium_with_premium_group(&self) -> bool {
         let Some(p) = self.premium_state.as_ref() else { return false };
-        self.premium_type == Some(2)
-            && p.get("premium_source").and_then(serde_json::Value::as_u64) == Some(PREMIUM_SOURCE_SUBSCRIPTION_GROUP)
-            && p.get("premium_subscription_group_role").and_then(serde_json::Value::as_u64) == Some(PREMIUM_GROUP_ROLE_MEMBER)
+        self.premium_type == Some(2) && p.get("premium_source").and_then(serde_json::Value::as_u64) == Some(PREMIUM_SOURCE_SUBSCRIPTION_GROUP)
+    }
+
+    pub fn is_premium_group_member(&self) -> bool {
+        self.is_premium_with_premium_group()
+            && self.premium_state.as_ref().and_then(|p| p.get("premium_subscription_group_role")).and_then(serde_json::Value::as_u64)
+                == Some(PREMIUM_GROUP_ROLE_MEMBER)
     }
 
     pub fn nameplate(&self) -> Option<(String, Option<String>)> {
@@ -205,7 +209,9 @@ mod nameplate_tests {
         assert!(m.is_premium_group_member());
         let owner: User = serde_json::from_str(r#"{"id":"1","username":"a","discriminator":"0","premium_type":2,"premium_state":{"premium_source":4,"premium_subscription_group_role":1}}"#).unwrap();
         assert!(!owner.is_premium_group_member());
+        assert!(owner.is_premium_with_premium_group() && m.is_premium_with_premium_group());
         let solo: User = serde_json::from_str(r#"{"id":"1","username":"a","discriminator":"0","premium_type":2}"#).unwrap();
         assert!(!solo.is_premium_group_member());
+        assert!(!solo.is_premium_with_premium_group());
     }
 }

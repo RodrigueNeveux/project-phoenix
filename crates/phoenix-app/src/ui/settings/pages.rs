@@ -888,7 +888,8 @@ fn current_game(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
 
 static NITRO: &[B] = &[B::Custom("sp.ni.title", nitro_page)];
 
-fn nitro_page(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
+fn nitro_page(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+    let title: SharedString = if app.backend.premium_with_group() { tr("sp.su.squad").to_uppercase().into() } else { tr("sp.ni.title") };
     let perk = |icon: &'static str, t: &'static str| {
         div()
             .h(z(24.))
@@ -934,7 +935,7 @@ fn nitro_page(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                 .w(z(327.))
                 .flex()
                 .flex_col()
-                .child(crate::fonts::nitro(div().h(z(36.)).text_size(z(32.)).line_height(z(24.)), true).text_color(gpui::white()).child(tr("sp.ni.title")))
+                .child(crate::fonts::nitro(div().h(z(36.)).text_size(z(32.)).line_height(z(24.)), true).text_color(gpui::white()).child(title))
                 .child(
                     div()
                         .flex()

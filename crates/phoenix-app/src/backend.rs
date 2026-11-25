@@ -274,6 +274,9 @@ pub trait Backend: Send + Sync + 'static {
     fn premium_group_member(&self) -> bool {
         false
     }
+    fn premium_with_group(&self) -> bool {
+        false
+    }
     fn premium_tier2(&self) -> bool {
         false
     }
