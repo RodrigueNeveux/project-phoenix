@@ -282,6 +282,48 @@ pub fn open_add_modal() {
     crate::actions::open_modal(crate::ui::modals::Modal::Forward(crate::ui::modals::forward::Forward::favorites()), None);
 }
 
+pub fn create_category(app: &mut PhoenixApp, name: &str, cx: &mut Context<PhoenixApp>) {
+    if name.trim().is_empty() {
+        return;
+    }
+    let mut fav = data(app).clone();
+    fav.prune(|id| known(app, id));
+    if let Some(limit) = fav.limit_reached(phoenix_api::rest::favorites::CATEGORY, app.backend.premium_tier2()) {
+        app.parity_toast(crate::t!("fav.limit", count = limit), cx);
+        return;
+    }
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    fav.create_category(name.trim(), snowflake_at(now));
+    save(app, fav, cx);
+}
+
+pub fn hide(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let mut fav = data(app).clone();
+    fav.set_guild_visible(false);
+    save(app, fav, cx);
+    if app.favorites_view {
+        app.select_guild(None, cx);
+    }
+}
+
+pub fn open_create_category(cx: &mut Context<PhoenixApp>) {
+    let form = crate::ui::modals::Form {
+        title: crate::t!("fav.create_category"),
+        subtitle: None,
+        fields: vec![crate::ui::modals::Field::new(crate::t!("fav.category_name"), crate::t!("fav.category_ph"), "").max_len(100)],
+        choices: Vec::new(),
+        choice: None,
+        check: None,
+        submit: crate::t!("fav.create_category"),
+        danger: false,
+        preview: None,
+        width: 480.,
+        on_submit: std::rc::Rc::new(|a, v, _, cx| create_category(a, v.first().map(String::as_str).unwrap_or(""), cx)),
+    };
+    crate::actions::open_modal(crate::ui::modals::Modal::Form(form), None);
+    cx.notify();
+}
+
 pub fn add_to_new_category(app: &mut PhoenixApp, channel: Id, name: &str, cx: &mut Context<PhoenixApp>) {
     if name.trim().is_empty() {
         return;

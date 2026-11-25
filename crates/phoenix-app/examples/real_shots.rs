@@ -1561,6 +1561,12 @@ fn main() -> anyhow::Result<()> {
                         phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::FriendRow(u), gpui::point(px(900.), px(250.)), window);
                     }
                 }
+                "favmenu" => phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Favorites, gpui::point(px(40.), px(130.)), window),
+                "favaddmenu" => phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::FavoritesAdd, gpui::point(px(300.), px(70.)), window),
+                "favheader" => {
+                    app.nav.guild_menu = true;
+                    cx.notify();
+                }
                 "foldermenu" | "foldermodal" => {
                     let id = app.nav.folders.iter().filter_map(|f| f.id).nth(arg.parse().unwrap_or(0));
                     if let Some(f) = id {

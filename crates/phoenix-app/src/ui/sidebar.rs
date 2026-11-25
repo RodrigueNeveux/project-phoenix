@@ -189,7 +189,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .children(crate::ui::chat::scrollbar::thin_fade_scrollbar(&app.sidebar_list))
                 .children(crate::ui::channel_unread_bar::render(app)),
         )
-        .when_some(app.selected_guild.filter(|_| app.nav.guild_menu), |d, g| {
+        .when(app.favorites_view && app.nav.guild_menu, |d| d.child(crate::ui::guild_menu::render_favorites(m::HEADER_H + 4., cx)))
+        .when_some(app.selected_guild.filter(|_| app.nav.guild_menu && !app.favorites_view), |d, g| {
             d.child(crate::ui::guild_menu::render(app, g, m::HEADER_H + 4., cx))
         })
         .child(
@@ -205,35 +206,75 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .into_any_element()
 }
 
-fn favorites_header() -> AnyElement {
+fn favorites_header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let menu_open = app.nav.guild_menu;
+    let fg = t(idx::TEXT_STRONG);
     div()
         .h(px(m::HEADER_H + 1.))
         .flex_none()
         .p(z(10.))
         .flex()
         .items_center()
+        .justify_between()
+        .gap(z(4.))
         .border_b_1()
         .border_color(t(idx::BORDER_SUBTLE))
         .child(
             div()
+                .id("favorites-header")
                 .h(z(32.))
                 .min_w_0()
                 .px(z(10.))
                 .flex()
                 .items_center()
-                .text_size(z(16.))
-                .line_height(z(20.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t(idx::TEXT_STRONG))
-                .text_ellipsis()
-                .child(crate::t!("fav.title")),
+                .gap(z(2.))
+                .rounded(z(8.))
+                .cursor_pointer()
+                .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                .when(menu_open, |d| d.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                .on_click(cx.listener(|a, _, _, cx| {
+                    a.nav.guild_menu = !a.nav.guild_menu;
+                    cx.notify();
+                }))
+                .child(
+                    div()
+                        .min_w_0()
+                        .text_size(z(16.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(fg)
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .child(crate::t!("fav.title")),
+                )
+                .child(icon(if menu_open { Icon::Close } else { Icon::Chevron }, 16. * crate::theme::zoom(), fg)),
+        )
+        .child(
+            div()
+                .id("favorites-add")
+                .tooltip(crate::ui::tooltip::tip(crate::t!("fav.add_title")))
+                .size(z(32.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(z(8.))
+                .cursor_pointer()
+                .hover(|s| s.bg(t(idx::BACKGROUND_MOD_NORMAL)))
+                .on_mouse_down(gpui::MouseButton::Left, |ev, w, cx| {
+                    cx.stop_propagation();
+                    let pos = gpui::point(ev.position.x - z(16.), ev.position.y + z(20.));
+                    crate::ui::nav_menus::open(crate::ui::nav_menus::Target::FavoritesAdd, pos, w);
+                })
+                .child(gpui::svg().path(crate::icons::path("plus-medium")).size(z(20.)).flex_none().text_color(fg)),
         )
         .into_any_element()
 }
 
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if app.favorites_view {
-        return favorites_header();
+        return favorites_header(app, cx);
     }
     match app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
         None => div()

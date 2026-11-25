@@ -521,6 +521,7 @@ fn favorites(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Option<AnyElement
     Some(
         row("favorites", FAVORITES_KEY, entity)
             .on_click(move |_, _, cx| e.update(cx, crate::ui::favorites::open))
+            .on_mouse_down(gpui::MouseButton::Right, |ev, w, _| crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Favorites, ev.position, w))
             .child(pill(FAVORITES_KEY, selected, hover, unread))
             .child(
                 div()

@@ -5,6 +5,15 @@ use crate::{app::PhoenixApp, model::Id};
 
 pub fn render(app: &PhoenixApp, guild: Id, top: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let items = crate::ui::nav_menus::guild_dropdown(app, guild, cx);
+    render_items(items, top, cx)
+}
+
+pub fn render_favorites(top: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let items = crate::ui::nav_menus::favorites_items(&cx.entity());
+    render_items(items, top, cx)
+}
+
+fn render_items(items: Vec<crate::ui::context_menu::MenuItem>, top: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let e = cx.entity();
     let dismiss: crate::ui::context_menu::Dismiss = std::rc::Rc::new(move |_, cx| {
         e.update(cx, |a, cx| {

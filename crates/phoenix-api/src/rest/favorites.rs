@@ -116,6 +116,10 @@ impl Favorites {
         out
     }
 
+    pub fn set_guild_visible(&mut self, visible: bool) {
+        self.guild_visible = Some(BoolValue { value: visible });
+    }
+
     pub fn guild_enabled(&self) -> bool {
         self.guild_visible.as_ref().map_or(!self.favorite_channels.is_empty(), |v| v.value)
     }

@@ -23,6 +23,8 @@ pub enum Target {
     Thread(Id),
     Guild(Id),
     Folder(u64),
+    Favorites,
+    FavoritesAdd,
 }
 
 type Scope = (Option<Id>, Option<Id>);
@@ -270,6 +272,26 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
         items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
     }
     items
+}
+
+pub fn favorites_items(e: &Ent) -> Vec<MenuItem> {
+    let hide = e.clone();
+    vec![
+        stub(e, "fav.thread_settings"),
+        MenuItem::Separator,
+        MenuItem::danger(crate::t!("fav.hide"), None, move |_, _, cx: &mut App| hide.update(cx, |a, cx| crate::ui::favorites::hide(a, cx))),
+    ]
+}
+
+pub fn favorites_add_items(e: &Ent) -> Vec<MenuItem> {
+    vec![
+        act(e, crate::t!("fav.add_title"), |_, _, cx| {
+            crate::ui::favorites::open_add_modal();
+            cx.notify();
+        }),
+        MenuItem::Separator,
+        act(e, crate::t!("fav.create_category"), |_, _, cx| crate::ui::favorites::open_create_category(cx)),
+    ]
 }
 
 fn stub(e: &Ent, key: &'static str) -> MenuItem {
@@ -586,6 +608,8 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             items.extend(notify_radios(app, &e, guild, Some(id)));
         }
         Target::Thread(id) => items.extend(crate::ui::thread_menu::items(app, &e, id, crate::actions::thread::Place::ContextMenu)),
+        Target::Favorites => items = favorites_items(&e),
+        Target::FavoritesAdd => items = favorites_add_items(&e),
         Target::Folder(f) => {
             let members: Vec<Id> = app.nav.folders.iter().filter(|x| x.id == Some(f)).flat_map(|x| x.guilds.clone()).collect();
             let unread = app.guilds.iter().any(|g| members.contains(&g.id) && (g.unread || g.mentions > 0));
@@ -633,7 +657,7 @@ impl PhoenixApp {
                 }
                 NavRequest::AckChannel(id)
             }
-            Target::Folder(_) => return,
+            Target::Folder(_) | Target::Favorites | Target::FavoritesAdd => return,
             Target::Guild(g) => {
                 for id in self.guild_channels.get(&g).cloned().unwrap_or_default() {
                     if let Some(ch) = self.channels.get_mut(&id) {
