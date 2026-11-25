@@ -994,7 +994,14 @@ fn popout_card_inner(
             }
         }
     }
-    if let Some(w) = crate::ui::profile_board::get(app, uid, cx).widgets.first() {
+    let board = crate::ui::profile_board::get(app, uid, cx);
+    if board.widgets.is_empty()
+        && let Some(crumb) = crate::ui::profile_games::breadcrumb(&board.games, theme.is_some())
+    {
+        let e_crumb = e.clone();
+        body = body.child(crumb.on_click(move |_, _, cx| e_crumb.update(cx, |a, cx| a.open_profile_modal(uid, cx))));
+    }
+    if let Some(w) = board.widgets.first() {
         let col = crate::ui::settings::profile_widgets::WidgetColors {
             strong: c(tok(idx::TEXT_STRONG)),
             muted: c(tok(idx::TEXT_MUTED)),

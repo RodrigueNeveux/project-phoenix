@@ -462,7 +462,7 @@ impl Backend for MockBackend {
     }
     fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
         use crate::ui::profile_games::{Game, GameWidget, Kind};
-        let g = |id: u64, n: &str| Game { id, name: n.to_owned().into(), cover: None };
+        let g = |id: u64, n: &str| Game { id, name: n.to_owned().into(), cover: None, icon: None };
         Box::pin(async move {
             Ok(vec![
                 GameWidget { kind: Kind::Favorite, games: vec![g(1, "Ferris Quest")] },
