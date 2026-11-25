@@ -453,9 +453,13 @@ fn role_text_w(cx: &gpui::App, s: &str) -> f32 {
     s.chars().map(|ch| ts.advance(id, px(12.), ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum()
 }
 
-fn roles_fit(widths: &[f32], second_row: f32) -> usize {
+fn roles_fit(widths: &[f32], second_row: f32) -> (usize, usize) {
     let mut shown = 0;
+    let mut row2 = 0;
     for row in 0..2 {
+        if row == 1 {
+            row2 = shown;
+        }
         let cap = if row == 1 { second_row } else { ROLE_ROW_W };
         let mut used = 0.;
         while shown < widths.len() {
@@ -467,7 +471,7 @@ fn roles_fit(widths: &[f32], second_row: f32) -> usize {
             shown += 1;
         }
     }
-    shown
+    (shown, row2)
 }
 
 fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::model::Role>, cx: &mut Context<PhoenixApp>) -> Div {
@@ -481,7 +485,8 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
     let expanded = ROLES_EXPANDED.with(|e| e.borrow().contains(&uid));
     let total = roles.len();
     let expand_w = 2. + 6. + 8. + role_text_w(cx, &format!("+{total}")) + 4.;
-    let shown = if expanded { total } else { roles_fit(&widths, ROLE_ROW_W - expand_w) };
+    let second_row = ROLE_ROW_W - expand_w;
+    let (shown, row2) = if expanded { (total, total) } else { roles_fit(&widths, second_row) };
     let toggle = (shown < total || expanded).then(|| {
         let label = if expanded { crate::t!("profile.roles_collapse") } else { crate::t!("profile.roles_view_all") };
         div()
@@ -527,7 +532,8 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
                 }
             })
     });
-    div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().take(shown).map(|r| {
+    div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().take(shown).enumerate().map(|(i, r)| {
+        let cap = if !expanded && shown < total && i >= row2 { second_row } else { ROLE_ROW_W };
         let remove = guild.filter(|g| role_removable(app, *g, uid, &r)).map(|g| {
             let e = entity.clone();
             let role = r.clone();
@@ -561,7 +567,7 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
             .flex()
             .items_center()
             .min_h(z(24.))
-            .max_w(z(268.))
+            .max_w(z(cap))
             .pl(z(2.))
             .when(remove.is_none(), |d| d.pr(z(8.)))
             .rounded(z(8.))
@@ -1529,9 +1535,9 @@ mod role_fit_tests {
 
     #[test]
     fn roles_fill_two_rows_like_the_client() {
-        assert_eq!(roles_fit(&[100., 100., 100.], 230.), 3);
-        assert_eq!(roles_fit(&[100., 100., 100., 100., 100.], 230.), 4);
-        assert_eq!(roles_fit(&[300., 300., 300.], 230.), 2);
-        assert_eq!(roles_fit(&[], 230.), 0);
+        assert_eq!(roles_fit(&[100., 100., 100.], 230.), (3, 2));
+        assert_eq!(roles_fit(&[100., 100., 100., 100., 100.], 230.), (4, 2));
+        assert_eq!(roles_fit(&[300., 300., 300.], 230.), (2, 1));
+        assert_eq!(roles_fit(&[], 230.), (0, 0));
     }
 }
