@@ -152,10 +152,12 @@ impl Player {
     }
 }
 
+type FrameCache = (HashMap<FrameKey, Arc<RenderImage>>, VecDeque<FrameKey>);
+
 thread_local! {
     static PLAYERS: RefCell<HashMap<u64, Player>> = RefCell::new(HashMap::new());
     static FROZEN: Cell<Option<Duration>> = const { Cell::new(None) };
-    static FRAMES: RefCell<(HashMap<FrameKey, Arc<RenderImage>>, VecDeque<FrameKey>)> = RefCell::new(Default::default());
+    static FRAMES: RefCell<FrameCache> = RefCell::new(Default::default());
 }
 
 pub fn freeze(elapsed: Option<Duration>) {

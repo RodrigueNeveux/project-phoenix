@@ -26,6 +26,7 @@ Relevé du 25/11/2026 sur le client 2026 (chunks JS et CSS du cache local, survo
 | Panneau vocal | Partage d'écran | `Lottie_Hover_Screenshare` | enable 0/70, disable 90/70, hover_enabled 180/40, hover_disabled 240/40 | hover_disabled ou hover_enabled | changement d'état | ✅ `voice_panel::screen_button` |
 | Panneau vocal | Activités | `Shapes-ButtonDark 2` (96×96) | hover 0/59, click 68/26 | hover | clic : click | ✅ `voice-activity` |
 | Panneau vocal | Soundboard | `Lottie_HoverOn_Soundboard` | all 0/66 | all | clic : all | ✅ `pickers::soundboard::panel_button` |
+| Vue d'appel | Micro, caméra, partage, activités, soundboard, raccrocher | mêmes JSON et hooks que le panneau vocal (`905216` raccrocher, `528057` partage, caméra `K`) | idem | idem | idem | ✅ `call_view::bottom_controls`, `soundboard::call_button` |
 | Compositeur | Cadeau | `Lottie_Web_Gift` | all 0/66 | all | aucun | ✅ `composer_button_ext("gift")` |
 | Compositeur | GIF | `Lottie_HoverOn_GIF` | click 0/66, hover 90/40 | hover | clic : click | ✅ `composer_button("gif")` |
 | Compositeur | Autocollants | `Lottie_HoverOn_Sticker` | click 0/66, hover 90/40 | hover | clic : click | ✅ `composer_button("sticker")` |
@@ -44,5 +45,4 @@ Aucun `@keyframes` ni changement de `d`/`stroke-dashoffset` au survol sur les ic
 ## Non couvert
 
 - Barre d'en-tête (fils, notifications, épingles, membres), boîte de réception, aide, « + » d'ajout de serveur, Découvrir, Nitro, Quêtes : icônes statiques dans le client 2026 (pas de Lottie, pas de keyframes), seule la couleur change.
-- Boutons de la vue d'appel (barre du bas : micro, caméra, partage, activités, raccrocher) : mêmes hooks Lottie, pas encore branchés dans `call_view.rs`.
 - ⚠ Survoler « Commencer une activité » dans la vue d'appel du client officiel envoie `PATCH /users/@me/settings-proto/1`. Ne plus le survoler en CDP.

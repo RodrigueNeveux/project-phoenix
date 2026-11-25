@@ -206,6 +206,14 @@ fn glyph(path: impl Into<SharedString>, size: f32, color: Hsla) -> gpui::Svg {
     svg().path(path.into()).size(z(size)).flex_none().text_color(color)
 }
 
+fn call_key(id: &'static str) -> u64 {
+    crate::ui::states::key(("call-btn", id))
+}
+
+fn anim(id: &'static str, kind: crate::icons::lottie_icons::Lottie, on: bool, color: Hsla, fallback: gpui::Svg) -> AnyElement {
+    crate::ui::hover_icon::icon(call_key(id), kind, on, 20. * crate::theme::zoom(), (color, color), || fallback.into_any_element())
+}
+
 fn named(name: &str, size: f32, color: Hsla) -> gpui::Svg {
     glyph(crate::icons::path(name), size, color)
 }
@@ -1225,7 +1233,7 @@ type CaretClick = std::rc::Rc<dyn Fn(&mut PhoenixApp, &mut Context<PhoenixApp>)>
 
 fn center_button(
     id: &'static str,
-    icon: gpui::Svg,
+    icon: impl IntoElement,
     look: Look,
     caret: bool,
     tip: SharedString,
@@ -1238,7 +1246,7 @@ fn center_button(
 #[allow(clippy::too_many_arguments)]
 fn center_button_ex(
     id: &'static str,
-    icon: gpui::Svg,
+    icon: impl IntoElement,
     look: Look,
     caret: bool,
     on_caret: Option<CaretClick>,
@@ -1254,8 +1262,7 @@ fn center_button_ex(
     };
     let bg = if active { hover } else { bg };
     let group: SharedString = format!("{id}-grp").into();
-    let btn = div()
-        .id(id)
+    let btn = crate::ui::states::track(div().id(id), call_key(id))
         .size(z(40.))
         .flex_none()
         .flex()
@@ -1359,7 +1366,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                     section()
                         .child(center_button(
                             "call-mic",
-                            crate::ui::icon(mic_i, 20. * crate::theme::zoom(), icon_color(mic_look)),
+                            anim("call-mic", crate::icons::lottie_icons::Lottie::Mute, muted, icon_color(mic_look), crate::ui::icon(mic_i, 20. * crate::theme::zoom(), icon_color(mic_look))),
                             mic_look,
                             true,
                             if muted { crate::t!("voice.unmute") } else { crate::t!("voice.mute") },
@@ -1372,7 +1379,13 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         ))
                         .child(center_button(
                             "call-camera",
-                            glyph(if me.video { "icons/voice/camera.svg" } else { CAMERA_OFF }, 20., icon_color(cam_look)),
+                            anim(
+                                "call-camera",
+                                crate::icons::lottie_icons::Lottie::Camera,
+                                me.video,
+                                icon_color(cam_look),
+                                glyph(if me.video { "icons/voice/camera.svg" } else { CAMERA_OFF }, 20., icon_color(cam_look)),
+                            ),
                             cam_look,
                             true,
                             if me.video { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") },
@@ -1391,7 +1404,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                                 .relative()
                                 .child(center_button_ex(
                                     "call-screen",
-                                    glyph("icons/voice/screen.svg", 20., icon_color(screen_look)),
+                                    anim("call-screen", crate::icons::lottie_icons::Lottie::Stream, live, icon_color(screen_look), glyph("icons/voice/screen.svg", 20., icon_color(screen_look))),
                                     screen_look,
                                     live,
                                     Some(std::rc::Rc::new(|_: &mut PhoenixApp, cx: &mut Context<PhoenixApp>| {
@@ -1407,11 +1420,11 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         )
                         .child(center_button(
                             "call-activity",
-                            glyph("icons/voice/activity.svg", 20., white),
+                            anim("call-activity", crate::icons::lottie_icons::Lottie::Activities, false, white, glyph("icons/voice/activity.svg", 20., white)),
                             Look::Dark,
                             false,
                             crate::t!("voice.start_activity"),
-                            |_, _| {},
+                            |_, _| crate::ui::hover_icon::clicked(call_key("call-activity")),
                             cx,
                         ))
                         .child(crate::ui::pickers::soundboard::call_button(app, cx))
@@ -1436,8 +1449,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         ),
                 ))
                 .child(
-                    div()
-                        .id("call-disconnect")
+                    crate::ui::states::track(div().id("call-disconnect"), call_key("call-disconnect"))
                         .w(z(65.))
                         .h(z(49.))
                         .rounded(z(12.))
@@ -1448,10 +1460,12 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         .hover(|s| s.bg(t(idx::CONTROL_CRITICAL_PRIMARY_BACKGROUND_HOVER)))
                         .cursor_pointer()
                         .tip(crate::t!("voice.disconnect"))
-                        .child(crate::ui::icon(
-                            crate::assets::Icon::PhoneHangup,
-                            20. * crate::theme::zoom(),
+                        .child(anim(
+                            "call-disconnect",
+                            crate::icons::lottie_icons::Lottie::Disconnect,
+                            false,
                             t(idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT),
+                            crate::ui::icon(crate::assets::Icon::PhoneHangup, 20. * crate::theme::zoom(), t(idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT)),
                         ))
                         .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
                 ),

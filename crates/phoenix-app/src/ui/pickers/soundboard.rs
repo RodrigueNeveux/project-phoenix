@@ -780,8 +780,8 @@ pub fn call_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     let off = disabled(app);
     let open = is_open(cx);
     let hover = tk(idx::BACKGROUND_MOD_MUTED);
-    div()
-        .id("call-soundboard")
+    let hk = crate::ui::states::key("call-soundboard");
+    crate::ui::states::track(div().id("call-soundboard"), hk)
         .relative()
         .size(z(40.))
         .flex_none()
@@ -793,10 +793,13 @@ pub fn call_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
         .when(!off, |d| d.hover(move |s| s.bg(hover)).cursor_pointer())
         .when(off, |d| d.opacity(0.5).cursor_not_allowed())
         .tip(disabled_reason(app).unwrap_or_else(|| crate::t!("voice.soundboard")))
-        .child(gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(tk(idx::WHITE)))
+        .child(crate::ui::hover_icon::icon(hk, crate::icons::lottie_icons::Lottie::Soundboard, false, 20. * crate::theme::zoom(), (tk(idx::WHITE), tk(idx::WHITE)), || {
+            gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(tk(idx::WHITE)).into_any_element()
+        }))
         .child(anchor_probe())
         .on_click(cx.listener(move |app, _, window, cx| {
             if !off {
+                crate::ui::hover_icon::clicked(hk);
                 toggle_from_call(app, window, cx);
             }
         }))
