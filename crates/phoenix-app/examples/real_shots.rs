@@ -877,7 +877,7 @@ fn main() -> anyhow::Result<()> {
         pump(&mut cx, 500);
     }
     eprintln!("[{:.1}s] waited", t0.elapsed().as_secs_f32());
-    if let Some(c) = channel {
+    if let Some(c) = channel.filter(|_| std::env::var("PHX_VIEW").as_deref() != Ok("favorites")) {
         let missed = cx.update(|cx| v.read(cx).selected_channel != Some(c));
         if missed {
             eprintln!("location: {} not selected after the wait, opening it again", c.0);
