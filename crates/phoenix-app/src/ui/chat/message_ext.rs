@@ -240,20 +240,91 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -
     .into_any_element()
 }
 
-pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message) -> Option<Div> {
+pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, cx: &App) -> Option<Div> {
     let ed = app.chat.edit.as_ref().filter(|e| e.id == msg.id)?;
-    Some(edit_frame(&ed.input, entity, |a, w, cx| a.cancel_edit(w, cx), |a, w, cx| a.save_edit(w, cx)))
+    let input = ed.input.clone();
+    let len = input.read(cx).value().chars().count() as i64;
+    let (remaining, show_count) = super::composer::char_count(app.backend.has_premium(), len);
+    let emoji_open = matches!(crate::ui::pickers::open_tab(cx), Some((_, crate::ui::pickers::EmojiTarget::Edit)));
+    let fz = |v: f32| z(v * crate::theme::font_scale());
+    let pad_y = ((56. - 22. * crate::theme::font_scale()) / 2.).max(0.);
+    let e_cancel = entity.clone();
+    let e_emoji = entity.clone();
+    let area = div()
+        .id("edit-box")
+        .mt(z(8.))
+        .relative()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(tk(idx::BORDER_MUTED))
+        .bg(tk(idx::CHAT_BACKGROUND_DEFAULT))
+        .child(crate::ui::autocomplete::edit_box_probe())
+        .on_mouse_down(gpui::MouseButton::Right, |_, _, cx| cx.stop_propagation())
+        .capture_key_down(move |ev, w, cx| {
+            if ev.keystroke.key == "escape" && !ev.keystroke.modifiers.shift {
+                cx.stop_propagation();
+                e_cancel.update(cx, |a, cx| a.cancel_edit(w, cx));
+            }
+        })
+        .child(
+            div()
+                .relative()
+                .min_h(z(if show_count { 88. } else { 56. }))
+                .pl(z(15.))
+                .flex()
+                .items_start()
+                .when(show_count, |d| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .right(z(14.))
+                            .bottom(z(10.))
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(tk(if remaining < 0 { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_DEFAULT }))
+                            .child(SharedString::from(remaining.to_string())),
+                    )
+                })
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .pr(z(10.))
+                        .py(z(pad_y))
+                        .text_size(fz(16.))
+                        .line_height(fz(22.))
+                        .text_color(c(Palette::TEXT_NORMAL))
+                        .child(
+                            div().mx(z(-4.)).child(
+                                gpui_component::input::Textarea::new(&input)
+                                    .token(super::rich_input::render_token)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .xsmall()
+                                    .text_size(fz(16.))
+                                    .line_height(fz(22.)),
+                            ),
+                        ),
+                )
+                .child(
+                    div().mr(z(10.4)).h(z(56.)).flex().items_center().child(
+                        crate::ui::states::composer_button_ext("edit-emoji", Icon::Emoji, 18., true)
+                            .when(emoji_open, |d| d.bg(c(crate::theme::tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
+                            .on_click(move |_, _, cx| e_emoji.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Edit, cx))),
+                    ),
+                ),
+        );
+    Some(div().flex().flex_col().min_w_0().child(area).child(operations(entity, |a, w, cx| a.cancel_edit(w, cx), |a, w, cx| a.save_edit(w, cx))))
 }
 
-pub fn edit_frame(
-    input: &Entity<gpui_component::input::InputState>,
+fn operations(
     entity: &Entity<PhoenixApp>,
-    cancel: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + Clone + 'static,
+    cancel: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + 'static,
     save: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + 'static,
 ) -> Div {
     let e1 = entity.clone();
     let e2 = entity.clone();
-    let cancel2 = cancel.clone();
     let link = |id: &'static str, label: gpui::SharedString| {
         div()
             .id(id)
@@ -262,6 +333,27 @@ pub fn edit_frame(
             .hover(|s| s.underline())
             .child(label)
     };
+    div()
+        .py(z(7.))
+        .flex()
+        .text_size(z(12.))
+        .line_height(z(12.))
+        .font_weight(gpui::FontWeight::NORMAL)
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .whitespace_nowrap()
+        .child(crate::t!("edit.escape_to"))
+        .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| cancel(a, w, cx))))
+        .child(crate::t!("edit.enter_to"))
+        .child(link("edit-save", crate::t!("edit.save")).on_click(move |_, w, cx| e2.update(cx, |a, cx| save(a, w, cx))))
+}
+
+pub fn edit_frame(
+    input: &Entity<gpui_component::input::InputState>,
+    entity: &Entity<PhoenixApp>,
+    cancel: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + Clone + 'static,
+    save: impl Fn(&mut PhoenixApp, &mut Window, &mut gpui::Context<PhoenixApp>) + 'static,
+) -> Div {
+    let cancel2 = cancel.clone();
     div()
         .flex()
         .flex_col()
@@ -293,20 +385,7 @@ pub fn edit_frame(
                 .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false)))
                 .child(ui::icon(Icon::Emoji, 22., c(Palette::INTERACTIVE))),
         )
-        .child(
-            div()
-                .py(z(7.))
-                .flex()
-                .gap(z(4.))
-                .text_size(z(12.))
-                .line_height(z(16.))
-                .font_weight(gpui::FontWeight::NORMAL)
-                .text_color(tk(idx::TEXT_DEFAULT))
-                .child(crate::t!("edit.escape_to"))
-                .child(link("edit-cancel", crate::t!("edit.cancel")).on_click(move |_, w, cx| e1.update(cx, |a, cx| cancel2(a, w, cx))))
-                .child(crate::t!("edit.enter_to"))
-                .child(link("edit-save", crate::t!("edit.save")).on_click(move |_, w, cx| e2.update(cx, |a, cx| save(a, w, cx)))),
-        )
+        .child(operations(entity, cancel2, save))
 }
 
 pub fn thread_chip(app: &PhoenixApp, entity: &Entity<PhoenixApp>, t: &ThreadRef, system: bool) -> AnyElement {

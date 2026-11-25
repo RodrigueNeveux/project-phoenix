@@ -18,7 +18,7 @@ pub const QUICK_REACTIONS: [&str; 4] = ["👍", "❤️", "😂", "🔥"];
 pub struct EditState {
     pub id: Id,
     pub channel: Id,
-    pub input: Entity<InputState>,
+    pub input: Entity<gpui_component::input::TextareaState>,
     _sub: Subscription,
 }
 
@@ -76,6 +76,7 @@ impl Sending {
 pub enum EmojiTarget {
     Reaction { channel: Id, msg: Id },
     Composer,
+    Edit,
 }
 
 const FLASH_HOLD: std::time::Duration = std::time::Duration::from_millis(2600);
@@ -317,16 +318,21 @@ impl PhoenixApp {
             return;
         }
         let content = m.content.clone();
-        let input = cx.new(|cx| InputState::new(window, cx));
+        let max_rows = ((f32::from(window.viewport_size().height) * 0.5 / 22.).floor() as usize).max(2);
+        let input = cx.new(|cx| gpui_component::input::TextareaState::new(window, cx).auto_grow(1, max_rows).submit_on_enter(true));
         input.update(cx, |s, cx| {
             s.set_value(content, window, cx);
             s.focus(window, cx);
         });
-        let sub = cx.subscribe_in(&input, window, |this, _, ev: &InputEvent, window, cx| {
-            if let InputEvent::PressEnter { shift: false, .. } = ev {
-                this.save_edit(window, cx);
+        let sub = cx.subscribe_in(&input, window, |this, input, ev: &InputEvent, window, cx| match ev {
+            InputEvent::PressEnter { shift: false, .. } => this.save_edit(window, cx),
+            InputEvent::Change => {
+                super::rich_input::sync_area(this, input, cx);
+                crate::ui::autocomplete::refresh(this, window, cx);
             }
+            _ => {}
         });
+        crate::ui::autocomplete::dismiss(cx);
         self.chat.menu = None;
         self.chat.edit = Some(EditState { id, channel, input, _sub: sub });
         if let Some(ix) = self.messages.get(&channel).and_then(|e| e.msgs.iter().position(|m| m.id == id)) {
@@ -339,6 +345,10 @@ impl PhoenixApp {
         if let Some(e) = self.chat.edit.take() {
             self.refresh_row(e.channel, e.id);
         }
+        crate::ui::autocomplete::dismiss(cx);
+        if crate::ui::pickers::open_tab(cx).is_some_and(|(_, t)| t == crate::ui::pickers::EmojiTarget::Edit) {
+            crate::ui::pickers::close(self, window, cx);
+        }
         self.composer.update(cx, |s, cx| s.focus(window, cx));
         cx.notify();
     }
@@ -346,8 +356,9 @@ impl PhoenixApp {
     pub fn save_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(e) = self.chat.edit.as_ref() else { return };
         let (id, channel) = (e.id, e.channel);
-        let text = e.input.read(cx).value().trim().to_string();
-        if text.is_empty() {
+        let text = super::rich_input::peek_plain(e.input.read(cx).value().trim());
+        let bare = self.find_msg(channel, id).is_none_or(|m| m.attachments.is_empty());
+        if text.is_empty() && bare {
             self.chat.edit = None;
             self.chat.confirm_delete = Some((channel, id));
             cx.notify();
@@ -429,7 +440,15 @@ impl PhoenixApp {
     pub fn emoji_picked(&mut self, emoji: SharedString, emoji_id: Option<Id>, window: &mut Window, cx: &mut Context<Self>) {
         match self.chat.emoji_target.take() {
             Some(EmojiTarget::Reaction { channel, msg }) => self.react_with(channel, msg, emoji, emoji_id, cx),
-            Some(EmojiTarget::Composer) | None => {
+            Some(EmojiTarget::Edit) if self.chat.edit.is_some() => {
+                if let Some(e) = self.chat.edit.as_ref().map(|e| e.input.clone()) {
+                    e.update(cx, |s, cx| {
+                        s.insert(emoji.to_string(), window, cx);
+                        s.focus(window, cx);
+                    });
+                }
+            }
+            Some(EmojiTarget::Composer | EmojiTarget::Edit) | None => {
                 self.composer.update(cx, |s, cx| {
                     s.insert(emoji.to_string(), window, cx);
                     s.focus(window, cx);

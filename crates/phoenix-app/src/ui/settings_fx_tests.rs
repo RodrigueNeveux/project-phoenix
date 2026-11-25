@@ -168,3 +168,33 @@ fn composer_tokens_follow_the_preview_setting(cx: &mut TestAppContext) {
     });
     assert!(tokens(&mut h).is_empty());
 }
+
+#[gpui::test]
+fn message_edit_uses_the_rich_composer(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let here = h.channels[0];
+    let id = Id(9_200_001);
+    h.act(|a, w, cx| {
+        a.prefs.synced.proto.insert("md-preview", 1);
+        a.prefs.synced.proto.insert("legacy-input", 0);
+        let me = a.me.id;
+        a.append_message(Message { id, channel: here, author: me, content: "a **b**\nsecond".into(), ..Default::default() }, cx);
+        a.start_edit(id, w, cx);
+    });
+    h.act(|a, _, cx| crate::ui::chat::rich_input::sync(a, cx));
+    let (value, bold) = h.act(|a, _, cx| {
+        let s = a.chat.edit.as_ref().expect("editing").input.read(cx);
+        (s.value().to_string(), s.decorations().iter().any(|d| d.style.font_weight == Some(gpui::FontWeight::BOLD)))
+    });
+    assert_eq!(value, "a **b**\nsecond");
+    assert!(bold);
+    h.act(|a, w, cx| {
+        crate::ui::pickers::open(a, crate::ui::pickers::Tab::Emoji, crate::ui::pickers::EmojiTarget::Edit, w, cx);
+        crate::ui::pickers::pick(a, crate::ui::pickers::PickItem::Unicode(0), false, w, cx);
+    });
+    let (edit_len, composer) = h.act(|a, _, cx| (a.chat.edit.as_ref().unwrap().input.read(cx).value().len(), a.composer.read(cx).value().to_string()));
+    assert!(edit_len > "a **b**\nsecond".len());
+    assert!(composer.is_empty());
+    h.act(|a, w, cx| a.cancel_edit(w, cx));
+    assert!(h.act(|a, _, cx| a.chat.edit.is_none() && !crate::ui::pickers::is_open(cx)));
+}

@@ -32,6 +32,7 @@ use types::{GifHome, GifItem, StickerPackData};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EmojiTarget {
     Composer,
+    Edit,
     Reaction { channel: Id, message: Id },
     Status,
     Field(Field),
@@ -240,8 +241,10 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         if let (Some(g), Some(n)) = (op.grid.current_guild, op.grid.newly_newest) {
             prefs.newly_mark_pending(g.0, n.0, chrono::Utc::now().timestamp_millis());
         }
-        if !matches!(op.target, EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_)) {
-            app.composer.update(cx, |s, cx| s.focus(window, cx));
+        match (op.target, app.chat.edit.as_ref().map(|e| e.input.clone())) {
+            (EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_), _) => {}
+            (EmojiTarget::Edit, Some(edit)) => edit.update(cx, |s, cx| s.focus(window, cx)),
+            _ => app.composer.update(cx, |s, cx| s.focus(window, cx)),
         }
         cx.notify();
     }
@@ -414,6 +417,18 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
                 close(app, window, cx);
             }
         }
+        EmojiTarget::Edit => {
+            let text = match &item {
+                PickItem::Unicode(ix) => emoji::toned(*ix, tone),
+                PickItem::Custom(e) => e.token(),
+            };
+            if let Some(edit) = app.chat.edit.as_ref().map(|e| e.input.clone()) {
+                edit.update(cx, |s, cx| s.insert(text, window, cx));
+            }
+            if !keep_open {
+                close(app, window, cx);
+            }
+        }
         EmojiTarget::Status => {
             let e = match &item {
                 PickItem::Unicode(ix) => crate::ui::modals::custom_status::StatusEmoji { id: None, name: emoji::toned(*ix, tone).into(), animated: false },
@@ -484,6 +499,7 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
     {
         let target = match t {
             crate::ui::chat::state::EmojiTarget::Composer => EmojiTarget::Composer,
+            crate::ui::chat::state::EmojiTarget::Edit => EmojiTarget::Edit,
             crate::ui::chat::state::EmojiTarget::Reaction { channel, msg } => EmojiTarget::Reaction { channel, message: msg },
         };
         cx.defer_in(window, move |app, window, cx| open(app, Tab::Emoji, target, window, cx));

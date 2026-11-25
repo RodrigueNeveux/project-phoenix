@@ -1051,7 +1051,7 @@ pub(crate) fn message(
     if msg.flags & crate::model::FLAG_EPHEMERAL != 0 {
         content = content.child(crate::ui::chat::pending::ephemeral_footer(entity, msg));
     }
-    let content = match message_ext::edit_box(app, entity, msg) {
+    let content = match message_ext::edit_box(app, entity, msg, cx) {
         Some(b) => b,
         None => content,
     };

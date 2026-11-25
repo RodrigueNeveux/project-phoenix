@@ -93,8 +93,10 @@ pub fn content(text: &str, r: &dyn MentionResolver) -> InputContent {
     content
 }
 
-fn wanted(app: &PhoenixApp, cx: &App) -> InputContent {
-    let text = app.composer.read(cx).value().to_string();
+type Area = gpui::Entity<gpui_component::input::TextareaState>;
+
+fn wanted(app: &PhoenixApp, area: &Area, cx: &App) -> InputContent {
+    let text = area.read(cx).value().to_string();
     if !enabled(app) {
         return InputContent::new(text);
     }
@@ -255,11 +257,11 @@ thread_local! {
     static WANTED: RefCell<Option<Cached>> = const { RefCell::new(None) };
 }
 
-fn wanted_rich(app: &PhoenixApp, cx: &App) -> std::rc::Rc<Rich> {
+fn wanted_rich(app: &PhoenixApp, area: &Area, cx: &App) -> std::rc::Rc<Rich> {
     if !enabled(app) {
         return std::rc::Rc::new(Rich { decorations: Vec::new(), spans: Vec::new(), lines: Vec::new() });
     }
-    let text = app.composer.read(cx).value().to_string();
+    let text = area.read(cx).value().to_string();
     let print = fingerprint();
     WANTED.with_borrow_mut(|w| {
         if let Some((t, p, r)) = w.as_ref()
@@ -275,9 +277,17 @@ fn wanted_rich(app: &PhoenixApp, cx: &App) -> std::rc::Rc<Rich> {
 }
 
 pub fn sync(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
-    let want = wanted(app, cx);
-    let rich = wanted_rich(app, cx);
-    app.composer.update(cx, |s, cx| {
+    let composer = app.composer.clone();
+    sync_area(app, &composer, cx);
+    if let Some(edit) = app.chat.edit.as_ref().map(|e| e.input.clone()) {
+        sync_area(app, &edit, cx);
+    }
+}
+
+pub fn sync_area(app: &mut PhoenixApp, area: &Area, cx: &mut Context<PhoenixApp>) {
+    let want = wanted(app, area, cx);
+    let rich = wanted_rich(app, area, cx);
+    area.update(cx, |s, cx| {
         let _ = s.set_tokens(want, cx);
         s.set_decorations(rich.decorations.clone(), cx);
         s.set_rich_decorations(rich.spans.clone(), rich.lines.clone(), cx);
@@ -285,9 +295,13 @@ pub fn sync(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
 }
 
 pub fn needs_sync(app: &PhoenixApp, cx: &App) -> bool {
-    let want = wanted(app, cx);
-    let rich = wanted_rich(app, cx);
-    let state = app.composer.read(cx);
+    area_needs_sync(app, &app.composer, cx) || app.chat.edit.as_ref().is_some_and(|e| area_needs_sync(app, &e.input, cx))
+}
+
+fn area_needs_sync(app: &PhoenixApp, area: &Area, cx: &App) -> bool {
+    let want = wanted(app, area, cx);
+    let rich = wanted_rich(app, area, cx);
+    let state = area.read(cx);
     let have = state.tokens();
     have.len() != want.tokens().len()
         || have.iter().zip(want.tokens()).any(|(a, b)| a.range() != b.range() || a.token().label() != b.token().label())
@@ -364,6 +378,11 @@ pub fn resolve(text: &str, map: &[(String, String)]) -> String {
         i += ch.len_utf8().max(1);
     }
     out
+}
+
+pub fn peek_plain(text: &str) -> String {
+    let map = PLAIN.with_borrow(Clone::clone);
+    if map.is_empty() { text.to_owned() } else { resolve(text, &map) }
 }
 
 pub fn take_plain(text: &str) -> String {

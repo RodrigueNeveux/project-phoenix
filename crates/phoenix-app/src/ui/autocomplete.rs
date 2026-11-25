@@ -1,11 +1,13 @@
 use gpui::{
-    AnyElement, App, Context, Focusable, FontWeight, ParentElement, SharedString, Styled, Window,
+    AnyElement, App, Context, Entity, Focusable, FontWeight, ParentElement, SharedString, Styled, Window,
     div, prelude::*,
 };
 
 fn tk(i: usize) -> gpui::Hsla {
     c(tok(i))
 }
+
+use gpui_component::input::TextareaState;
 
 use crate::{
     app::PhoenixApp,
@@ -54,6 +56,7 @@ pub struct Active {
     pub end: usize,
     pub items: Vec<Item>,
     pub selected: usize,
+    pub edit: bool,
 }
 
 impl gpui::Global for Autocomplete {}
@@ -211,12 +214,21 @@ fn with_stickers(emojis: Vec<Item>, stickers: Vec<Item>) -> Vec<Item> {
     emojis.into_iter().take(n_em).chain(stickers.into_iter().take(n_st)).collect()
 }
 
-pub fn refresh(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) {
+fn focused_edit(app: &PhoenixApp, window: &Window, cx: &App) -> Option<Entity<TextareaState>> {
+    app.chat.edit.as_ref().map(|e| e.input.clone()).filter(|i| i.focus_handle(cx).is_focused(window))
+}
+
+fn target(app: &PhoenixApp, edit: bool) -> Entity<TextareaState> {
+    app.chat.edit.as_ref().filter(|_| edit).map_or_else(|| app.composer.clone(), |e| e.input.clone())
+}
+
+pub fn refresh(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     if !cx.has_global::<Autocomplete>() {
         cx.set_global(Autocomplete::default());
     }
+    let edit = focused_edit(app, window, cx).is_some();
     let (text, cursor) = {
-        let s = app.composer.read(cx);
+        let s = target(app, edit).read(cx);
         (s.value().to_string(), s.cursor())
     };
     let next = token_at(&text, cursor).and_then(|(kind, query, start)| {
@@ -224,7 +236,7 @@ pub fn refresh(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoe
         if kind == Kind::Emoji && app.prefs.synced.flag("ac-stickers") {
             items = with_stickers(items, sticker_matches(app, &query, cx));
         }
-        (!items.is_empty()).then_some(Active { kind, query, start, end: cursor, items, selected: 0 })
+        (!items.is_empty()).then_some(Active { kind, query, start, end: cursor, items, selected: 0, edit })
     });
     if next.as_ref().is_some_and(|a| a.kind == Kind::Emoji) && cx.has_global::<Pickers>() {
         crate::ui::pickers::sticker::load_packs(app, cx);
@@ -255,6 +267,7 @@ pub fn accept(app: &mut PhoenixApp, index: usize, window: &mut Window, cx: &mut 
     let Some(a) = cx.try_global::<Autocomplete>().and_then(|a| a.active.as_ref()) else { return };
     let Some(item) = a.items.get(index).cloned() else { return };
     let range = a.start..a.end;
+    let area = target(app, a.edit);
     let tone = cx.try_global::<Pickers>().map(|p| p.prefs.tone).unwrap_or(0);
     if let (Item::Emoji(pi), true) = (&item, cx.has_global::<Pickers>()) {
         cx.global_mut::<Pickers>().prefs.record(pi);
@@ -267,7 +280,7 @@ pub fn accept(app: &mut PhoenixApp, index: usize, window: &mut Window, cx: &mut 
         _ => format!("{} ", crate::ui::chat::rich_input::insertion(app, insertion(app, &item, tone))),
     };
     cx.global_mut::<Autocomplete>().active = None;
-    app.composer.update(cx, |s, cx| {
+    area.update(cx, |s, cx| {
         s.set_selected_range(range, cx);
         s.replace(text, window, cx);
     });
@@ -276,7 +289,7 @@ pub fn accept(app: &mut PhoenixApp, index: usize, window: &mut Window, cx: &mut 
 
 pub fn on_key(app: &mut PhoenixApp, key: &str, _shift: bool, window: &mut Window, cx: &mut Context<PhoenixApp>) -> bool {
     let Some(a) = cx.try_global::<Autocomplete>().and_then(|a| a.active.as_ref()) else { return false };
-    if !app.composer.focus_handle(cx).is_focused(window) {
+    if !target(app, a.edit).focus_handle(cx).is_focused(window) {
         return false;
     }
     let (n, sel) = (a.items.len(), a.selected);
@@ -302,7 +315,41 @@ pub fn on_key(app: &mut PhoenixApp, key: &str, _shift: bool, window: &mut Window
     }
 }
 
+thread_local! {
+    static EDIT_BOX: std::cell::Cell<Option<gpui::Bounds<gpui::Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+pub fn edit_box_probe() -> impl IntoElement {
+    gpui::canvas(|b, _, _| EDIT_BOX.with(|c| c.set(Some(b))), |_, _, _, _| {}).absolute().inset_0()
+}
+
+pub fn render_for_edit(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    let edit = cx.try_global::<Autocomplete>()?.active.as_ref()?.edit;
+    let b = EDIT_BOX.with(std::cell::Cell::get).filter(|_| edit && app.chat.edit.is_some())?;
+    let list = popup(app, cx)?;
+    Some(
+        gpui::deferred(
+            div()
+                .absolute()
+                .left(b.origin.x)
+                .top(b.origin.y)
+                .w(b.size.width)
+                .h(b.size.height)
+                .child(list),
+        )
+        .with_priority(20)
+        .into_any_element(),
+    )
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if cx.try_global::<Autocomplete>()?.active.as_ref()?.edit {
+        return None;
+    }
+    popup(app, cx)
+}
+
+fn popup(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let a = cx.try_global::<Autocomplete>()?.active.as_ref()?;
     let tone = cx.try_global::<Pickers>().map(|p| p.prefs.tone).unwrap_or(0);
     let title: SharedString = match a.kind {
