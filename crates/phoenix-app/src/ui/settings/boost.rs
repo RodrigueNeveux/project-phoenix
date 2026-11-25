@@ -82,7 +82,7 @@ fn header() -> Div {
                 .flex()
                 .flex_col()
                 .gap(z(4.))
-                .child(div().flex().items_center().gap(z(10.)).child(icon("boost", 20., idx::GUILD_BOOSTING_PINK)).child(heading_xl(tr("sp.bo.title"))))
+                .child(div().flex().items_center().gap(z(10.)).child(gpui::img(SharedString::from(super::art::boost_gem())).flex_none().w(z(15.)).h(z(24.))).child(heading_xl(tr("sp.bo.title"))))
                 .child(
                     div()
                         .text_size(z(14.))
@@ -107,6 +107,7 @@ fn header() -> Div {
                 .border_color(c(tok(idx::BORDER_NORMAL)))
                 .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
                 .overflow_hidden()
+                .child(gpui::img(SharedString::from(super::art::boost_video_still())).absolute().size_full().object_fit(gpui::ObjectFit::Cover))
                 .child(div().absolute().top(z(12.)).left(z(12.)).child(text(14., 18., FontWeight::SEMIBOLD, idx::WHITE, tr("sp.bo.video"))))
                 .child(
                     div()

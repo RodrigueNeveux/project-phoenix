@@ -65,3 +65,11 @@ pub fn nitro_tier() -> String {
 pub fn nitro_gift() -> String {
     a("9f5bdd034cc313ae.svg")
 }
+
+pub fn boost_gem() -> String {
+    a("263e4cc9043cab70.svg")
+}
+
+pub fn boost_video_still() -> String {
+    format!("{C}7b8d6c9c9f8bc8092089a2f55081695d40f7f303f053fcc6f944bf4b38403573.png")
+}
