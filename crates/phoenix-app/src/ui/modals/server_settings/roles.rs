@@ -793,7 +793,7 @@ fn display(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
     div()
         .flex()
         .flex_col()
-        .child(div().mt(z(16.)).flex().flex_col().child(required(crate::t!("gs.role.name")).mb(z(8.))).children(e.name.as_ref().map(|i| super::super::input_box(i))))
+        .child(div().mt(z(16.)).flex().flex_col().child(required(crate::t!("gs.role.name")).mb(z(8.))).children(e.name.as_ref().map(super::super::input_box)))
         .child(line())
         .child(text(crate::t!("gs.role.style"), 16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG).mb(z(8.)))
         .child(

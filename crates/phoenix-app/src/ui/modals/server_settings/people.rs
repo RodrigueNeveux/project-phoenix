@@ -257,7 +257,7 @@ fn member_menu(guild: Id, user: u64, cx: &mut Cx) -> AnyElement {
 
 pub fn invite_rows(list: &[Value]) -> Vec<&Value> {
     let mut v: Vec<&Value> = list.iter().collect();
-    v.sort_by(|a, b| kit::s(b, "created_at").cmp(&kit::s(a, "created_at")));
+    v.sort_by_key(|i| std::cmp::Reverse(kit::s(i, "created_at")));
     v
 }
 

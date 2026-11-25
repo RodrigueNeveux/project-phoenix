@@ -46,7 +46,7 @@ pub fn kind_color(action: u32) -> u32 {
         20..=22 | 27 => idx::ICON_FEEDBACK_CRITICAL,
         23 | 28 => idx::ICON_FEEDBACK_POSITIVE,
         24..=26 => idx::ICON_FEEDBACK_WARNING,
-        a if a % 10 == 0 => idx::ICON_FEEDBACK_POSITIVE,
+        a if a.is_multiple_of(10) => idx::ICON_FEEDBACK_POSITIVE,
         a if a % 10 == 2 => idx::ICON_FEEDBACK_CRITICAL,
         _ => idx::ICON_FEEDBACK_WARNING,
     })
