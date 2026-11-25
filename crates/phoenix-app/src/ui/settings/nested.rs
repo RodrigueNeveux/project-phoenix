@@ -502,8 +502,9 @@ fn family_tabs(tab: usize, cx: &mut Cx) -> Div {
             .relative()
             .when(ix > 0, |d| d.ml(z(30.)))
             .pb(z(16.))
-            .text_size(z(16.))
+            .text_size(z(14.))
             .line_height(z(14.))
+            .font_weight(FontWeight::MEDIUM)
             .whitespace_nowrap()
             .text_color(c(tok(if active { idx::TEXT_BRAND } else { idx::TEXT_SUBTLE })))
             .when(!active, |d| d.cursor_pointer().hover(|s| s.text_color(c(tok(idx::TEXT_STRONG)))))
@@ -520,8 +521,8 @@ fn family_tabs(tab: usize, cx: &mut Cx) -> Div {
 fn family_hero(cx: &mut Cx) -> Div {
     let body = crate::t!("settings.family.hero_body");
     let link = crate::t!("settings.family.learn_more");
-    let full = format!("{body}{link}");
-    let range = body.len()..full.len();
+    let full = format!("{body} {link}");
+    let range = body.len() + 1..full.len();
     let styled = gpui::StyledText::new(full).with_highlights([(range.clone(), gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() })]);
     let text_block = div()
         .max_w(z(364.))
@@ -689,6 +690,7 @@ fn family_members() -> Div {
         .items_start()
         .child(
             div()
+                .w_full()
                 .flex()
                 .items_start()
                 .child(
@@ -752,7 +754,7 @@ fn family_center(app: &PhoenixApp, cx: &mut Cx) -> Div {
         2 => family_settings(app),
         _ => family_activity(cx),
     };
-    div().flex().flex_col().child(family_tabs(tab, cx)).child(body)
+    div().pt(z(12.)).flex().flex_col().child(family_tabs(tab, cx)).child(body)
 }
 
 thread_local! {

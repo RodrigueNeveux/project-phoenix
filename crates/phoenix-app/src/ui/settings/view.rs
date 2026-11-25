@@ -961,6 +961,39 @@ fn logout_modal(cx: &mut Cx) -> AnyElement {
     })
 }
 
+fn changelog_inline(inline: &crate::markdown::Inline) -> AnyElement {
+    use crate::markdown::Style;
+    let mut hl = Vec::new();
+    for span in &inline.spans {
+        if span.range.end > inline.text.len() || span.range.start >= span.range.end {
+            continue;
+        }
+        let mut h = gpui::HighlightStyle::default();
+        if span.style.has(Style::BOLD) {
+            h.font_weight = Some(FontWeight::BOLD);
+        }
+        if span.style.has(Style::ITALIC) {
+            h.font_style = Some(gpui::FontStyle::Italic);
+        }
+        if span.style.has(Style::CODE) {
+            h.background_color = Some(c(tok(idx::BACKGROUND_BASE_LOWER)));
+        }
+        if span.style.has(Style::LINK) || span.link.is_some() {
+            h.color = Some(c(tok(idx::TEXT_LINK)));
+        }
+        hl.push((span.range.clone(), h));
+    }
+    hl.sort_by_key(|(r, _)| r.start);
+    let mut clean: Vec<(std::ops::Range<usize>, gpui::HighlightStyle)> = Vec::new();
+    for (r, h) in hl {
+        if clean.last().is_some_and(|(p, _)| r.start < p.end) {
+            continue;
+        }
+        clean.push((r, h));
+    }
+    div().w_full().min_w_0().child(gpui::StyledText::new(inline.text.clone()).with_highlights(clean)).into_any_element()
+}
+
 fn changelog_body(entries: &[crate::updater::ChangelogEntry]) -> Vec<AnyElement> {
     use crate::markdown::{Block, NoResolve, parse};
     let body_text = |d: Div| d.text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT)));
@@ -988,12 +1021,12 @@ fn changelog_body(entries: &[crate::updater::ChangelogEntry]) -> Vec<AnyElement>
         }
         for block in parse(&e.body, &NoResolve) {
             let el = match block {
-                Block::Heading(_, inline) => body_text(div().mt(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG)))).child(crate::ui::modals::update::render_inline(&inline)),
+                Block::Heading(_, inline) => body_text(div().mt(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG)))).child(changelog_inline(&inline)),
                 Block::ListItem { depth, inline, ordered } => body_text(div().mt(z(4.)).mb(z(12.)).ml(z(20. + f32::from(depth) * 20.)).flex().gap(z(8.)))
                     .child(div().flex_none().text_color(c(tok(idx::TEXT_MUTED))).child(SharedString::from(ordered.map_or("•".to_owned(), |n| format!("{n}.")))))
-                    .child(div().flex_1().min_w_0().child(crate::ui::modals::update::render_inline(&inline))),
+                    .child(div().flex_1().min_w_0().child(changelog_inline(&inline))),
                 Block::Code { code, .. } => body_text(div().my(z(8.)).p(z(8.)).rounded(z(4.)).bg(c(tok(idx::BACKGROUND_BASE_LOWER))).text_size(z(14.))).child(SharedString::from(code)),
-                Block::Paragraph(inline) | Block::Quote(inline) | Block::Subtext(inline) => body_text(div().my(z(8.))).child(crate::ui::modals::update::render_inline(&inline)),
+                Block::Paragraph(inline) | Block::Quote(inline) | Block::Subtext(inline) => body_text(div().my(z(8.))).child(changelog_inline(&inline)),
             };
             out.push(el.into_any_element());
         }
@@ -1065,7 +1098,7 @@ fn changelog_modal(cx: &mut Cx) -> AnyElement {
                 .on_click(move |_, w, cx| close_btn(w, cx))
                 .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT)))),
         )
-        .child(div().id("changelog-body").flex_1().min_h_0().overflow_y_scroll().px(z(24.)).pb(z(20.)).children(content))
+        .child(div().id("changelog-body").flex_1().min_h_0().overflow_y_scroll().px(z(24.)).pb(z(20.)).flex().flex_col().children(content))
         .child(
             div()
                 .flex_none()
