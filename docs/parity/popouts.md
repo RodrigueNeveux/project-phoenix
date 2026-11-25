@@ -293,7 +293,7 @@ the press that closes the popout never reaches what lies under it.
 | threads browser | closes, press swallowed | closes | closes | — | `close_on_press_outside`; closes on channel switch; test `threads_popout_closes_like_the_client` | ✅ (was: no outside press, no Esc) |
 | channel notification menu (bell) | closes, press swallowed | closes | closes | — | `nav_menus::Target::ChannelBell` + `toggle_bell` / `close_bell` (Mute Channel > + notification level radios), wired on header bell button and closed on outside press, Esc, toggle, and channel switch | ✅ (wt/bell-and-menus) |
 | guild header menu | closes, press swallowed | closes | closes | — | `guild_menu.rs` backdrop (already) | ✅ |
-| search options popout | closes, the press goes through (trap without `trapClicks_`) | closes and blurs | — | — | `search.rs` `on_mouse_down_out` (press outside the bar and the popout closes the search; the press reaches what is under it) | ✅ ⚠ the typed query is dropped; the client keeps it in the bar |
+| search options popout | closes, the press goes through (trap without `trapClicks_`) | closes and blurs | — | — | `search.rs` `on_mouse_down_out` (press outside the bar and the popout closes the search; the press reaches what is under it) | ✅ an empty bar closes the search; with a query the popout closes, the bar keeps the text and loses focus (`set_idle`), and focusing the bar again shows the popout |
 | context menus, profile popout, status picker, voice popout, pickers, switcher | — | — | — | — | full-window backdrops (already) | ✅ code audit (not re-measured) |
 | account popout (user panel) | not detected by the layer probe | — | — | — | `people.status_picker` backdrop | ➖ not measured |
 

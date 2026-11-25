@@ -59,6 +59,7 @@ pub struct SearchState {
     sort_menu: bool,
     dm_menu: bool,
     seq: u64,
+    idle: bool,
     _sub: Subscription,
 }
 
@@ -222,6 +223,9 @@ pub fn is_focused(window: &Window, cx: &App) -> bool {
 pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     if let Some(s) = cx.try_global::<Search>().and_then(|s| s.0.as_ref()) {
         let input = s.input.clone();
+        if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+            s.idle = false;
+        }
         input.update(cx, |s, cx| s.focus(window, cx));
         cx.notify();
         return;
@@ -242,6 +246,7 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         sort_menu: false,
         dm_menu: false,
         seq: 0,
+        idle: false,
         _sub: sub,
     })));
     cx.notify();
@@ -250,6 +255,19 @@ pub fn open(_app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     if cx.has_global::<Search>() {
         cx.global_mut::<Search>().0 = None;
+    }
+    app.composer.update(cx, |s, cx| s.focus(window, cx));
+    cx.notify();
+}
+
+fn set_idle(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    let empty = cx.try_global::<Search>().and_then(|s| s.0.as_ref()).is_none_or(|s| s.input.read(cx).value().trim().is_empty());
+    if empty {
+        close(app, window, cx);
+        return;
+    }
+    if let Some(s) = cx.global_mut::<Search>().0.as_mut() {
+        s.idle = true;
     }
     app.composer.update(cx, |s, cx| s.focus(window, cx));
     cx.notify();
@@ -542,6 +560,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let page = s.page.clone();
     let req = s.request.clone();
     let sort_menu = s.sort_menu;
+    if s.idle && (page.is_none() || req.is_none()) && !gpui::Focusable::focus_handle(input.read(cx), cx).is_focused(window) {
+        return None;
+    }
     if (page.is_none() || req.is_none())
         && let Some(modal) = crate::ui::search_filters::render(app, window, cx)
     {
@@ -1264,7 +1285,7 @@ fn options_popout(app: &PhoenixApp, input: Entity<InputState>, error: Option<Sha
                         gpui::size(z(244.), z(32.)),
                     );
                     if !bar.contains(&ev.position) && !crate::ui::search_filters::is_open(cx) {
-                        close(a, w, cx);
+                        set_idle(a, w, cx);
                     }
                 }))
                 .absolute()
