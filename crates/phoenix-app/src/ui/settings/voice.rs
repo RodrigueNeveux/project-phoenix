@@ -329,6 +329,7 @@ fn select(
                         .mr(z(14.3))
                         .overflow_hidden()
                         .whitespace_nowrap()
+                        .text_ellipsis()
                         .text_size(z(16.))
                         .line_height(z(20.))
                         .font_weight(FontWeight::MEDIUM)

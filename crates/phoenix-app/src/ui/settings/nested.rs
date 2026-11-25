@@ -198,6 +198,7 @@ fn session_row(icon: &'static str, muted: bool, label: SharedString, sub: Option
         .gap(z(16.))
         .child(
             div()
+                .flex_none()
                 .w(z(48.))
                 .h(z(48.))
                 .rounded(z(8.))
@@ -209,7 +210,8 @@ fn session_row(icon: &'static str, muted: bool, label: SharedString, sub: Option
         )
         .child(
             div()
-                .w_full()
+                .flex_1()
+                .min_w_0()
                 .flex()
                 .flex_col()
                 .gap(z(4.))

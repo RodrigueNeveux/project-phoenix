@@ -940,10 +940,10 @@ fn nitro_page(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
                         .flex_col()
                         .gap(z(8.))
                         .child(perk("chat/upload", "sp.ni.p1"))
-                        .child(perk("chat/add-reaction", "sp.ni.p2"))
-                        .child(perk("emoji", "sp.ni.p3"))
+                        .child(perk("chat/add-reaction", "sp.ni.p3"))
+                        .child(perk("super-reaction", "sp.ni.p2"))
                         .child(perk("voice/screen", "sp.ni.p4"))
-                        .child(perk("user-profile", "sp.ni.p5")),
+                        .child(perk("user-square", "sp.ni.p5")),
                 )
                 .child(
                     div()

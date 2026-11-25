@@ -82,6 +82,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("chat/trash", &["TrashIcon"]),
     ("chat/more", &["MoreHorizontalIcon"]),
     ("chat/add-reaction", &["ReactionIcon"]),
+    ("super-reaction", &["SuperReactionIcon"]),
+    ("user-square", &["UserSquareIcon"]),
     ("chat/copy", &["CopyIcon"]),
     ("chat/id", &["IdIcon"]),
     ("chat/unread", &["ChatMarkUnreadIcon"]),

@@ -756,7 +756,7 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
         None => SharedString::from(e.original.name.clone()).into_any_element(),
     };
     let pronouns: AnyElement = match &e.pronouns {
-        Some(i) => div().w(z(134.)).child(Input::new(i).appearance(false).bordered(false)).into_any_element(),
+        Some(i) => div().w(z(134.)).child(Input::new(i).appearance(false).bordered(false).px(z(5.)).text_size(z(14.)).line_height(z(18.))).into_any_element(),
         None => SharedString::from(e.original.pronouns.clone()).into_any_element(),
     };
     let bio_text: SharedString = e.bio.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| e.original.bio.clone()).into();
