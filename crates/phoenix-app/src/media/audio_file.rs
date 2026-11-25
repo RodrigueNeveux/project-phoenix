@@ -55,11 +55,7 @@ fn decode_symphonia(bytes: &[u8], name: &str) -> Option<Pcm> {
     let tid = track.id;
     let mut dec = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default()).ok()?;
     let (mut samples, mut rate, mut channels) = (Vec::new(), 0u32, 0u16);
-    loop {
-        let pkt = match format.next_packet() {
-            Ok(p) => p,
-            Err(_) => break,
-        };
+    while let Ok(pkt) = format.next_packet() {
         if pkt.track_id() != tid {
             continue;
         }

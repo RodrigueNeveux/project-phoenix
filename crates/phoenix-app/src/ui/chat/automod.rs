@@ -164,7 +164,7 @@ pub fn alert_actions(d: &Data) -> Option<Vec<AlertAction>> {
             })
         })
         .collect();
-    out.sort_by(|a, b| b.action_type.to_string().cmp(&a.action_type.to_string()));
+    out.sort_by_key(|a| std::cmp::Reverse(a.action_type.to_string()));
     Some(out)
 }
 
@@ -327,7 +327,7 @@ pub fn avatar(group: SharedString) -> AnyElement {
         .rounded_full()
         .overflow_hidden()
         .bg(tk(idx::BACKGROUND_BASE_LOWEST))
-        .child(gpui::img(SharedString::new_static(AVATAR_PNG)).size(z(40.)).group_hover(group.clone(), |s| s.opacity(0.)))
+        .child(div().size(z(40.)).group_hover(group.clone(), |s| s.opacity(0.)).child(gpui::img(SharedString::new_static(AVATAR_PNG)).size(z(40.))))
         .child(div().absolute().inset_0().opacity(0.).group_hover(group, |s| s.opacity(1.)).child(gpui::img(SharedString::new_static(AVATAR_GIF)).size(z(40.))))
         .into_any_element()
 }
@@ -652,13 +652,13 @@ fn notification_card(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Messag
                                 .cursor_pointer()
                                 .on_click(super::message_ext::open_user(entity, uid, msg.channel))
                                 .child(div().size(z(16.)).child(crate::ui::avatar(Some(user), f32::from(z(16.)))))
-                                .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(color).child(format!(" @{}", user.username))),
+                                .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(color).child(format!(" @{}", user.name))),
                         )
                         .into_any_element(),
                 );
             }
             sub.push(dot().into_any_element());
-            sub.push(small(r.time_full.clone(), idx::TEXT_DEFAULT).into_any_element());
+            sub.push(small(crate::ui::settings::sessions::from_now(chrono::Utc::now().timestamp() - msg.timestamp), idx::TEXT_DEFAULT).into_any_element());
             card(
                 card_header("settings-info", idx::TEXT_FEEDBACK_POSITIVE, crate::t!("sys.am_alerts_on")),
                 Some(div().flex().items_center().gap(z(4.)).children(sub).into_any_element()),
@@ -707,10 +707,10 @@ mod tests {
         assert_eq!(header(&x), Header::Channel("sys.am_flagged"));
         assert_eq!(header(&d(&[], "")), Header::Channel("sys.am_flagged"));
         assert_eq!(buttons(&x, true), Buttons { jump: true, delete: true });
-        assert_eq!(buttons(&x, false).delete, false);
+        assert!(!buttons(&x, false).delete);
         let done = d(&[("flagged_message_id", "9"), ("alert_actions_execution", r#"{"actions":{"3":{"actor":"1","ts":"2026-11-25T10:00:00Z"},"1":{"actor":"1","ts":"2026-11-25T10:01:00Z"}}}"#)], "");
         assert!(deleted_already(&done));
-        assert_eq!(buttons(&done, true).delete, false);
+        assert!(!buttons(&done, true).delete);
         assert_eq!(alert_actions(&done).unwrap().iter().map(|a| a.action_type).collect::<Vec<_>>(), vec![3, 1]);
         assert_eq!(footer("en", &x), vec![Foot::Text("Rule: Liens".into())]);
     }

@@ -2188,7 +2188,7 @@ pub fn ensure_metadata(url: &SharedString, cx: &mut App) {
             if let Some(d) = secs {
                 let st = store(cx);
                 if st.meta.get(&key).is_some_and(Option::is_none) {
-                    st.meta.insert(key, Some(d as f32));
+                    st.meta.insert(key.clone(), Some(d as f32));
                 }
             }
             cx.refresh_windows();
