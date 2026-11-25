@@ -2067,7 +2067,7 @@ pub(crate) fn embed(app: &PhoenixApp, e: &Embed, cx: &App) -> AnyElement {
                         })
                         .children(author)
                         .children(title)
-                        .when_some(e.description.clone(), |d, t| d.child(embed_markdown(app, &t, 14.)))
+                        .when_some(e.description.clone().filter(|_| !matches!(e.kind.as_deref(), Some("image" | "video" | "gifv"))), |d, t| d.child(embed_markdown(app, &t, 14.)))
                         .children(fields)
                         .when_some(big, |d, m| {
                             let size = media::fit(m.width, m.height, 400., 300.);

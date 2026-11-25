@@ -851,17 +851,20 @@ fn cozy_message_with(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<Pho
     let role_gradient = app.author_role_gradient_in(guild, m.author);
     let role_dot = app.author_role_dot_in(guild, m.author);
     let bot = u.is_some_and(|u| u.bot);
+    let reply = reply_line(app, m, guild);
+    let reply_h = if reply.is_some() { 22. } else { 0. };
     div()
         .relative()
         .pl(z(80.))
         .pr(z(20.))
         .py(z(pad_y))
         .min_h(z(44.))
+        .children(reply)
         .child(
             div()
                 .absolute()
                 .left(z(20.))
-                .top(z(pad_y + 2.))
+                .top(z(pad_y + 2. + reply_h))
                 .child(avatar(u, 40.))
                 .when_some(crate::ui::avatar_deco::source(u, None), |d, src| d.child(crate::ui::avatar_deco::layer(src, 40. * crate::theme::zoom()))),
         )
@@ -898,6 +901,68 @@ fn cozy_message_with(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<Pho
             None => d.when(!m.content.is_empty(), |d| d.child(message_text(app, m, cx))),
         })
         .children(message_extras(app, m, cx))
+}
+
+fn reply_line(app: &PhoenixApp, m: &Message, guild: Option<Id>) -> Option<AnyElement> {
+    m.reply_to?;
+    let (ru, nick, text) = match &m.reply_preview {
+        Some((a, nick, text)) => {
+            let (t, _) = crate::richtext::preview_with_mentions(&crate::markdown::parse(text, &app.resolver()));
+            (app.member_user(guild, *a), nick.clone().or_else(|| app.member_nick_in(guild, *a)), SharedString::from(t))
+        }
+        None => (None, None, crate::t!("chat.reply_deleted")),
+    };
+    let ru = ru.as_deref();
+    let name = format!(
+        "{}{}",
+        if m.reply_mentions_author { "@" } else { "" },
+        nick.map(|n| n.to_string()).or_else(|| ru.map(|u| u.display_name.to_string())).unwrap_or_else(|| crate::t!("common.unknown").to_string())
+    );
+    let color = ru.and_then(|u| app.author_color_in(guild, u.id)).map(|c2| crate::theme::role_color(Some(c2))).unwrap_or_else(|| tk(idx::TEXT_STRONG));
+    let gradient = ru.and_then(|u| app.author_role_gradient_in(guild, u.id));
+    let empty = m.reply_preview.is_none() || text.is_empty();
+    let text = if m.reply_preview.is_some() && text.is_empty() { crate::t!("chat.reply_click_to_see") } else { text };
+    Some(
+        div()
+            .relative()
+            .h(z(18.))
+            .mb(z(4.))
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .child(
+                div()
+                    .absolute()
+                    .left(z(-41.))
+                    .top(z(9.))
+                    .w(z(37.))
+                    .h(z(13.))
+                    .border_l_2()
+                    .border_t_2()
+                    .rounded_tl(z(6.))
+                    .border_color(tk(idx::SPINE_DEFAULT)),
+            )
+            .child(avatar(ru, 16.))
+            .when(ru.is_some_and(|u| u.bot), |d| d.child(crate::ui::chat::bot_tag(ru.is_some_and(|u| u.verified_bot)).ml_0()))
+            .child(
+                crate::fonts::styled_name(div().flex_none().font_weight(FontWeight::MEDIUM).text_color(color).opacity(0.64), ru, false)
+                    .child(crate::fonts::name_text_with(name.into(), ru, 14., gradient)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .text_color(tk(idx::TEXT_DEFAULT))
+                    .whitespace_nowrap()
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .when(empty, |d| d.italic())
+                    .child(crate::ui::emoji_text::label_with_custom(text, 14.)),
+            )
+            .into_any_element(),
+    )
 }
 
 fn message_text(app: &PhoenixApp, m: &Message, cx: &Context<PhoenixApp>) -> gpui::Div {
