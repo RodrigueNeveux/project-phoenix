@@ -79,8 +79,17 @@ pub fn clamp_position(x: f32, y: f32, vw: f32, vh: f32) -> (f32, f32) {
     (x.clamp(MARGIN, max_x), y.clamp(TOP_INSET, max_y))
 }
 
+pub fn has_video(app: &PhoenixApp, ch_id: Id) -> bool {
+    app.channels.get(&ch_id).is_some_and(|ch| {
+        ch.voice_users.iter().any(|&u| {
+            let f = crate::ui::voice_panel::flags(u);
+            f.stream || f.video
+        })
+    })
+}
+
 pub fn active(app: &PhoenixApp) -> bool {
-    app.voice_channel.is_some()
+    app.voice_channel.is_some_and(|ch| has_video(app, ch))
         && !crate::ui::call_view::active(app)
         && !crate::ui::call_popout::is_open()
 }
