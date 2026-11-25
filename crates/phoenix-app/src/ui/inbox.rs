@@ -1337,7 +1337,20 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             } else {
                 list = scroller(list);
             }
+            let mut prev_sort = None;
             for card in i.unreads.iter().filter(|c| c.loaded) {
+                let sort = card.entry.sort;
+                if prev_sort != Some(sort) {
+                    let label = match sort {
+                        crate::ui::inbox_unreads::SORT_REALLY_OLD => Some(crate::t!("inbox.older_than_10_days")),
+                        crate::ui::inbox_unreads::SORT_NO_NOTIFICATIONS => Some(crate::t!("inbox.notifications_disabled")),
+                        _ => None,
+                    };
+                    if let Some(l) = label {
+                        list = list.child(day_divider(l).flex_none().mx(z(0.)).mt(z(48.)).mb(z(32.)));
+                    }
+                }
+                prev_sort = Some(sort);
                 list = list.child(unread_card(app, card, cx));
             }
             if i.unreads_loading {

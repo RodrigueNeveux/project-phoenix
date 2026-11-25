@@ -1279,6 +1279,8 @@ inbox.read_all_body: "This will mark all your unmuted channels as read. Are you 
 inbox.mark_guild_read: "Mark Server As Read"
 inbox.collapse: "Collapse"
 inbox.expand: "Expand"
+inbox.older_than_10_days: "Messages older than 10 days"
+inbox.notifications_disabled: "Notifications disabled"
 inbox.protip: "Pro Tip:"
 inbox.unreads_tip: "Open the inbox by pressing CTRL+I, and mark your top message as read with CTRL+Shift+E."
 inbox.saved_title: "Collect your favorite memories"

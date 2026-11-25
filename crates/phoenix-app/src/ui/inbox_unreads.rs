@@ -4,6 +4,8 @@ const DISCORD_EPOCH_MS: u64 = 1_420_070_400_000;
 const DAY_MS: u64 = 86_400_000;
 pub const FETCH_LIMIT: u32 = 30;
 pub const SHOWN: usize = 25;
+pub const SORT_NO_NOTIFICATIONS: u8 = 7;
+pub const SORT_REALLY_OLD: u8 = 8;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Notify {
@@ -73,14 +75,14 @@ fn sort_order(c: &Candidate, last: u64, now_ms: u64) -> u8 {
     }
     let age = now_ms.saturating_sub(snowflake_ms(last));
     if age > 10 * DAY_MS {
-        return 8;
+        return SORT_REALLY_OLD;
     }
     if age > 2 * DAY_MS {
         return 6;
     }
     match c.notify {
         Notify::All => 4,
-        Notify::Nothing => 7,
+        Notify::Nothing => SORT_NO_NOTIFICATIONS,
         Notify::Default => 5,
     }
 }

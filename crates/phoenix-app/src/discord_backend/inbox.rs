@@ -14,6 +14,7 @@ const CH_UNREADS_MENTIONS: u64 = 512;
 const G_UNREADS_ALL: u64 = 2048;
 const G_UNREADS_MENTIONS: u64 = 4096;
 const TH_ALL: u64 = 2;
+const TH_MENTIONS: u64 = 4;
 const TH_NONE: u64 = 8;
 
 pub struct Ctx<'a> {
@@ -41,6 +42,19 @@ impl Ctx<'_> {
             Level::All => Notify::All,
             Level::Nothing => Notify::Nothing,
             _ => Notify::Default,
+        }
+    }
+
+    fn thread_parent_notify(&self, g: u64, thread: &api::Channel) -> Notify {
+        let Some(parent) = thread.parent_id.and_then(|p| self.cache.channel(p)) else { return Notify::Nothing };
+        let category = parent.parent_id.map(|p| p.0);
+        if self.notify.is_guild_or_category_or_channel_muted(Some(g), parent.id.0, category) {
+            return Notify::Nothing;
+        }
+        match self.notify.resolved_level(Some(g), parent.id.0, category) {
+            Level::Nothing => Notify::Nothing,
+            Level::Mentions => Notify::Default,
+            _ => Notify::All,
         }
     }
 
@@ -89,16 +103,13 @@ impl Ctx<'_> {
             _ => self.notify.is_guild_or_category_or_channel_muted(g, c.id.0, c.parent_id.map(|p| p.0)),
         };
         let notify = match (g, thread) {
-            (Some(_), true) => {
-                let f = member.and_then(|m| m.get("flags")).and_then(Value::as_u64).unwrap_or(0);
-                if f & TH_ALL != 0 {
-                    Notify::All
-                } else if f & TH_NONE != 0 {
-                    Notify::Nothing
-                } else {
-                    Notify::Default
-                }
-            }
+            (Some(g), true) => match member.map(|m| m.get("flags").and_then(Value::as_u64).unwrap_or(0)) {
+                None => Notify::Nothing,
+                Some(f) if f & TH_ALL != 0 => Notify::All,
+                Some(f) if f & TH_MENTIONS != 0 => Notify::Default,
+                Some(f) if f & TH_NONE != 0 => Notify::Nothing,
+                Some(_) => self.thread_parent_notify(g, c),
+            },
             (Some(g), false) => self.notify_of(g, c.id.0),
             (None, _) => Notify::Default,
         };

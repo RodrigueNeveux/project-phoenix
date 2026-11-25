@@ -1279,6 +1279,8 @@ inbox.read_all_body: "Cela marquera tous tes salons (qui ne sont pas muets) comm
 inbox.mark_guild_read: "Marquer le serveur comme lu"
 inbox.collapse: "Réduire"
 inbox.expand: "Afficher plus"
+inbox.older_than_10_days: "Messages de plus de 10 jours"
+inbox.notifications_disabled: "Notifications désactivées"
 inbox.protip: "Conseil de pro :"
 inbox.unreads_tip: "Ouvre la boîte de réception en appuyant sur CTRL+I, et marque ton premier message comme lu avec CTRL+Maj+E."
 inbox.saved_title: "Collectionne tes souvenirs favoris"
