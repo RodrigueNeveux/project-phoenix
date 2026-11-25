@@ -430,7 +430,7 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
             } else {
                 0.
             };
-            let right = 16. + side;
+            let right = 34. + side;
             ((vw - right - PICKER_W).max(8.), (vh - 75. - ph).max(8.))
         }
     };
