@@ -1260,6 +1260,7 @@ impl Backend for DiscordBackend {
                     emoji_name: x.emoji_name.map(Into::into),
                     volume: x.volume as f32,
                     available: x.available,
+                    user: x.user_id.map(|u| Id(u.0)),
                 })
                 .collect())
         })

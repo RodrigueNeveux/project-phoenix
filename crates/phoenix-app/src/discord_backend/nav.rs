@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use base64::Engine;
 use phoenix_api::{
     Cache, RestClient,
@@ -88,6 +90,55 @@ pub(crate) fn fields(b: &[u8]) -> Vec<(u64, u8, &[u8], u64)> {
         }
     }
     out
+}
+
+const SOUNDBOARD_NEW_SOUNDS_BADGE: u64 = 870;
+const NEW_SOUNDS_SINCE_MS: u64 = 1_793_491_200_000;
+
+pub fn sounds_dismissed(proto: &[u8]) -> HashMap<u64, u64> {
+    let mut out = HashMap::new();
+    for (n, w, guilds, _) in fields(proto) {
+        if n != 3 || w != 2 {
+            continue;
+        }
+        for (n, w, entry, _) in fields(guilds) {
+            if n != 1 || w != 2 {
+                continue;
+            }
+            let ef = fields(entry);
+            let Some(g) = ef.iter().find(|f| f.0 == 1).map(|f| f.3) else { continue };
+            let Some(gs) = ef.iter().find(|f| f.0 == 2 && f.1 == 2).map(|f| f.2) else { continue };
+            for (n, w, st, _) in fields(gs) {
+                if n != 12 || w != 2 {
+                    continue;
+                }
+                let sf = fields(st);
+                if sf.iter().find(|f| f.0 == 1).map(|f| f.3) != Some(SOUNDBOARD_NEW_SOUNDS_BADGE) {
+                    continue;
+                }
+                let Some(v) = sf.iter().find(|f| f.0 == 2 && f.1 == 2).map(|f| f.2) else { continue };
+                if let Some(o) = fields(v).iter().find(|f| f.0 == 4 && f.1 == 0).map(|f| f.3).filter(|o| *o != 0) {
+                    out.insert(g, o);
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn sounds_seen(cache: &Cache, proto: &[u8]) -> Vec<(Id, u64)> {
+    let dismissed = sounds_dismissed(proto);
+    let since = crate::ui::inbox_unreads::snowflake_from_ms(NEW_SOUNDS_SINCE_MS);
+    cache
+        .guilds()
+        .iter()
+        .filter_map(|g| {
+            let at = g.joined_at.as_deref()?;
+            let ms = chrono::DateTime::parse_from_rfc3339(at).ok()?.timestamp_millis().max(0) as u64;
+            let joined = crate::ui::inbox_unreads::snowflake_from_ms(ms);
+            Some((id(g.id), since.max(joined).max(dismissed.get(&g.id.0).copied().unwrap_or(0))))
+        })
+        .collect()
 }
 
 fn wrapped_u64(b: &[u8]) -> Option<u64> {
@@ -285,9 +336,11 @@ pub fn snapshot(cache: &Cache, ready: &Ready) -> Vec<AppEvent> {
     extras.extend(cache.private_channels().iter().map(|c| (id(c.id), extra(cache, c))));
     let message_requests = cache.private_channels().iter().filter(|c| c.is_message_request && !c.is_spam).map(|c| id(c.id)).collect();
     let spam_requests = cache.private_channels().iter().filter(|c| c.is_spam).map(|c| id(c.id)).collect();
+    let proto = ready.user_settings_proto.as_deref().and_then(|b| base64::engine::general_purpose::STANDARD.decode(b.trim()).ok()).unwrap_or_default();
     vec![
         AppEvent::Nav(NavEvent::Snapshot { relationships, folders, threads, extras, message_requests, spam_requests }),
         AppEvent::Nav(NavEvent::Banners(banners)),
+        AppEvent::Nav(NavEvent::SoundsSeen(sounds_seen(cache, &proto))),
     ]
 }
 
@@ -329,6 +382,10 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
                 let f = folders_from_proto(p);
                 if !f.is_empty() {
                     out.push(AppEvent::Nav(NavEvent::Folders(f)));
+                }
+                let seen = base64::engine::general_purpose::STANDARD.decode(p.trim()).map(|b| sounds_seen(cache, &b)).unwrap_or_default();
+                if !seen.is_empty() {
+                    out.push(AppEvent::Nav(NavEvent::SoundsSeen(seen)));
                 }
             }
         }
@@ -862,6 +919,44 @@ mod tests {
     fn top_emojis_sorted_by_rank() {
         let v = json!({"items":[{"emoji_id":"30","emoji_rank":3},{"emoji_id":"10","emoji_rank":1},{"emoji_id":"20","emoji_rank":2}]});
         assert_eq!(top_emoji_ids(&v), vec![Id(10), Id(20), Id(30)]);
+    }
+
+    #[test]
+    fn sounds_badge_reads_the_guild_dismissed_state() {
+        let varint = |mut v: u64, out: &mut Vec<u8>| loop {
+            let b = (v & 0x7f) as u8;
+            v >>= 7;
+            if v == 0 {
+                out.push(b);
+                break;
+            }
+            out.push(b | 0x80);
+        };
+        let ld = |n: u64, body: Vec<u8>, out: &mut Vec<u8>| {
+            varint((n << 3) | 2, out);
+            varint(body.len() as u64, out);
+            out.extend(body);
+        };
+        let mut st = Vec::new();
+        varint(4 << 3, &mut st);
+        varint(1_600_000_000_000_000_000, &mut st);
+        let mut entry = Vec::new();
+        varint(1 << 3, &mut entry);
+        varint(870, &mut entry);
+        ld(2, st, &mut entry);
+        let mut gs = Vec::new();
+        ld(12, entry, &mut gs);
+        let mut ge = Vec::new();
+        varint((1 << 3) | 1, &mut ge);
+        ge.extend(42u64.to_le_bytes());
+        ld(2, gs, &mut ge);
+        let mut all = Vec::new();
+        ld(1, ge, &mut all);
+        let mut top = Vec::new();
+        ld(3, all, &mut top);
+        let d = sounds_dismissed(&top);
+        assert_eq!(d.get(&42), Some(&1_600_000_000_000_000_000));
+        assert!(sounds_dismissed(&[]).is_empty());
     }
 
     #[test]

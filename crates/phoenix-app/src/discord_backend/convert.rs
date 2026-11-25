@@ -279,6 +279,7 @@ pub fn message(m: &api::Message) -> model::Message {
             emoji_name: s.emoji_name.clone().filter(|n| !n.is_empty()).map(Into::into),
             volume: 1.0,
             available: true,
+            user: None,
         }).collect(),
         reactions: m
             .reactions
@@ -1280,6 +1281,7 @@ impl Adapter {
                         emoji_name: x.emoji_name.clone().map(Into::into),
                         volume: x.volume as f32,
                         available: x.available,
+                        user: x.user_id.map(|u| Id(u.0)),
                     })
                     .collect();
                 out.push(AppEvent::SoundboardSounds { guild: Id(s.guild_id.0), sounds });

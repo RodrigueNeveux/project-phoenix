@@ -111,6 +111,7 @@ pub enum NavEvent {
     Extras(Vec<(Id, ChannelExtra)>),
     Banners(Vec<(Id, Option<String>)>),
     Folders(Vec<GuildFolder>),
+    SoundsSeen(Vec<(Id, u64)>),
 }
 
 #[derive(Clone, Debug)]
@@ -195,6 +196,7 @@ pub enum Overlay {
 pub struct NavState {
     pub relationships: Vec<Relationship>,
     pub folders: Vec<GuildFolder>,
+    pub sounds_seen: HashMap<Id, u64>,
     pub expanded_folders: HashSet<u64>,
     pub threads: HashMap<Id, Vec<Channel>>,
     pub extras: HashMap<Id, ChannelExtra>,
@@ -282,6 +284,7 @@ impl NavState {
             },
             NavEvent::ThreadUpsert(t) => self.upsert_thread(t),
             NavEvent::Folders(f) => self.folders = f,
+            NavEvent::SoundsSeen(s) => self.sounds_seen.extend(s),
             NavEvent::ThreadDelete(id) => {
                 for v in self.threads.values_mut() {
                     v.retain(|t| t.id != id);

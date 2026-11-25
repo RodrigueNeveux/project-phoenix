@@ -27,6 +27,56 @@ thread_local! {
     static ANCHOR: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
     static PANEL_ANCHOR: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
     static FROM_PANEL: Cell<bool> = const { Cell::new(false) };
+    static BADGE_EXP: Cell<Option<bool>> = const { Cell::new(None) };
+    static BADGE_FETCHING: Cell<bool> = const { Cell::new(false) };
+    static BADGE_REQUESTED: std::cell::RefCell<HashSet<Id>> = std::cell::RefCell::new(HashSet::new());
+}
+
+pub fn is_new_sound(s: &SoundboardSound, seen: u64, me: Id) -> bool {
+    s.available && s.user != Some(me) && s.id.0 > seen
+}
+
+pub fn set_badge_experiment(list: &[(u32, i64)]) {
+    let on = phoenix_api::rest::experiments::bucket(list, phoenix_api::rest::experiments::SOUNDBOARD_NEW_SOUNDS_BADGE) == 1;
+    BADGE_EXP.with(|e| e.set(Some(on)));
+}
+
+fn badge_experiment(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
+    if let Some(on) = BADGE_EXP.with(Cell::get) {
+        return on;
+    }
+    if !BADGE_FETCHING.with(|f| f.replace(true)) {
+        let fut = app.backend.user_experiments();
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |_, cx| {
+                match res {
+                    Ok(list) => set_badge_experiment(&list),
+                    Err(_) => BADGE_EXP.with(|e| e.set(Some(false))),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+    false
+}
+
+pub fn has_new_sounds(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
+    let Some(g) = voice_guild(app) else { return false };
+    if !badge_experiment(app, cx) {
+        return false;
+    }
+    let Some(seen) = app.nav.sounds_seen.get(&g).copied() else { return false };
+    match cx.global::<Pickers>().soundboard.guild_sounds.get(&g) {
+        Some(sounds) => sounds.iter().any(|s| is_new_sound(s, seen, app.me.id)),
+        None => {
+            if BADGE_REQUESTED.with(|r| r.borrow_mut().insert(g)) {
+                app.backend.request_soundboard_sounds(vec![g]);
+            }
+            false
+        }
+    }
 }
 
 pub fn anchor_probe() -> impl IntoElement {
@@ -811,6 +861,8 @@ pub fn panel_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let off = disabled(app);
     let hk = crate::ui::states::key("voice-soundboard");
     let fg = tk(idx::CONTROL_SECONDARY_TEXT_DEFAULT);
+    let dot = !off && has_new_sounds(app, cx);
+    let cut = tk(if crate::ui::states::hovered(hk) { idx::CONTROL_SECONDARY_BACKGROUND_HOVER } else { idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT });
     crate::ui::states::track(div().id("voice-soundboard"), hk)
         .relative()
         .flex_1()
@@ -826,9 +878,19 @@ pub fn panel_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
         .items_center()
         .justify_center()
         .tip(disabled_reason(app).unwrap_or_else(|| crate::t!("voice.soundboard")))
-        .child(crate::ui::hover_icon::icon(hk, crate::icons::lottie_icons::Lottie::Soundboard, false, 20. * crate::theme::zoom(), (fg, fg), || {
-            gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(fg).into_any_element()
-        }))
+        .child(
+            div()
+                .relative()
+                .flex_none()
+                .size(z(20.))
+                .child(crate::ui::hover_icon::icon(hk, crate::icons::lottie_icons::Lottie::Soundboard, false, 20. * crate::theme::zoom(), (fg, fg), || {
+                    gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(fg).into_any_element()
+                }))
+                .when(dot, |d| {
+                    d.child(div().absolute().left(z(12.)).top(z(12.)).size(z(10.)).rounded_full().bg(cut))
+                        .child(div().absolute().right_0().bottom_0().size(z(6.)).rounded_full().bg(tk(idx::BLURPLE_50)))
+                }),
+        )
         .child(panel_anchor_probe())
         .on_click(cx.listener(move |app, _, window, cx| {
             if !off {
@@ -845,6 +907,18 @@ mod tests {
 
     fn s(id: u64, g: u64) -> SoundboardSound {
         SoundboardSound { id: Id(id), guild: Some(Id(g)), name: Some(format!("s{id}").into()), volume: 1., available: true, ..Default::default() }
+    }
+
+    #[test]
+    fn new_sounds_follow_the_seen_threshold() {
+        let me = Id(7);
+        let mut a = s(50, 1);
+        assert!(is_new_sound(&a, 40, me));
+        assert!(!is_new_sound(&a, 50, me));
+        a.user = Some(me);
+        assert!(!is_new_sound(&a, 40, me));
+        let b = SoundboardSound { available: false, ..s(60, 1) };
+        assert!(!is_new_sound(&b, 40, me));
     }
 
     #[test]
