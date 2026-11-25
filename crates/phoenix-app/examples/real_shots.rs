@@ -435,6 +435,9 @@ impl Backend for ReadOnly {
     fn orbs_balance(&self) -> BoxFuture<Option<u64>> {
         self.0.orbs_balance()
     }
+    fn directory_get(&self, path: String) -> BoxFuture<serde_json::Value> {
+        self.0.directory_get(path)
+    }
     fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
         self.0.shop_storefront()
     }
@@ -1299,7 +1302,20 @@ fn main() -> anyhow::Result<()> {
                 "accounts" => app.open_switch_accounts(cx),
                 "gdmclean" => app.open_gdm_cleanup(cx),
                 "discovery" => {
-                    phoenix_app::ui::discovery::open(if arg == "apps" { phoenix_app::ui::discovery::Tab::Apps } else { phoenix_app::ui::discovery::Tab::Servers });
+                    use phoenix_app::ui::discovery as d;
+                    let apps = arg == "apps" || arg.starts_with("app:");
+                    d::open(if apps { d::Tab::Apps } else { d::Tab::Servers });
+                    if let Some(id) = arg.strip_prefix("app:").and_then(|x| x.parse().ok()) {
+                        phoenix_app::ui::app_profile::open(id);
+                    } else if let Some(c) = arg.strip_prefix("cat:").and_then(|x| x.parse().ok()) {
+                        d::set_category(d::Category::Id(c));
+                    } else if let Some(q) = arg.strip_prefix("search:") {
+                        d::start_search(app, q.to_owned(), None, cx);
+                    }
+                    cx.notify();
+                }
+                "questsview" => {
+                    phoenix_app::ui::quests_page::debug_open(arg == "claimed", arg.as_str());
                     cx.notify();
                 }
                 "boost" => {

@@ -73,6 +73,7 @@ pub mod voice_panel;
 pub mod go_live;
 pub mod voice_row;
 pub mod boost_layer;
+pub mod app_profile;
 pub mod discovery;
 pub mod quests_page;
 pub mod shop_page;

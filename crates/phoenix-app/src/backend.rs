@@ -362,6 +362,12 @@ pub trait Backend: Send + Sync + 'static {
     fn orbs_balance(&self) -> BoxFuture<Option<u64>> {
         Box::pin(async { Ok(None) })
     }
+    fn directory_get(&self, _path: String) -> BoxFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::Value::Null) })
+    }
+    fn lurk_guild(&self, _guild: Id) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("lurking is not available".into())) })
+    }
     fn collectible_product(&self, _sku: u64) -> BoxFuture<Option<crate::ui::settings::collectibles::Collectible>> {
         Box::pin(async { Ok(None) })
     }

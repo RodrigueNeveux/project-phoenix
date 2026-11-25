@@ -407,6 +407,12 @@ pub fn encode_custom_status(c: &CustomStatusProto) -> Vec<u8> {
     o
 }
 
+pub fn custom_status_expires_ms(raw: &[u8]) -> Option<u64> {
+    let status = fields(raw).into_iter().rev().find(|(t, w, ..)| *t == 11 && *w == 2)?.3;
+    let custom = fields(status).into_iter().rev().find(|(t, w, ..)| *t == 2 && *w == 2)?.3;
+    Some(fields(custom).into_iter().rev().find(|(t, w, ..)| *t == 4 && *w == 1).map_or(0, |f| f.2))
+}
+
 pub fn with_custom_status(raw: &[u8], custom: Option<&CustomStatusProto>) -> Vec<u8> {
     let mut out = Vec::new();
     let mut status = Vec::new();
@@ -602,6 +608,17 @@ pub fn from_json(v: &Value) -> PreloadedUserSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_custom_status_expiry() {
+        let c = CustomStatusProto { text: "x".into(), expires_at_ms: 1_700_000_000_000, ..Default::default() };
+        let raw = with_custom_status(&[], Some(&c));
+        assert_eq!(custom_status_expires_ms(&raw), Some(1_700_000_000_000));
+        let never = with_custom_status(&[], Some(&CustomStatusProto { text: "x".into(), ..Default::default() }));
+        assert_eq!(custom_status_expires_ms(&never), Some(0));
+        assert_eq!(custom_status_expires_ms(&with_custom_status(&[], None)), None);
+        assert_eq!(custom_status_expires_ms(&[]), None);
+    }
 
     #[test]
     fn custom_status_save_replaces_only_the_custom_status() {

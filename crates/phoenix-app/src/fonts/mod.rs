@@ -51,6 +51,20 @@ fn is_font(b: &[u8]) -> bool {
 
 pub const UI_FAMILIES: &[&str] = &["gg sans", "gg mono"];
 
+pub const DISPLAY_FAMILIES: &[&str] = &["ABC Ginto Discord Nord", "ABC Ginto Discord", "ABC Ginto Nord"];
+
+pub const NITRO: &str = "ABC Ginto Discord Nord";
+pub const MARKETING: &str = "ABC Ginto Discord";
+pub const HEADLINE: &str = "ABC Ginto Nord";
+
+pub fn display_family(css: &str) -> gpui::SharedString {
+    FAMILIES.read().as_ref().and_then(|m| m.get(css).cloned()).unwrap_or_else(|| ui_family().into())
+}
+
+fn has_display(dir: &Path) -> bool {
+    std::fs::read_dir(dir).into_iter().flatten().flatten().any(|e| e.file_name().to_string_lossy().starts_with("ABC_Ginto"))
+}
+
 pub fn parse_font_faces(css: &str) -> Vec<(String, u16, String)> {
     parse_font_faces_styled(css).into_iter().map(|(f, w, _, a)| (f, w, a)).collect()
 }
@@ -99,7 +113,7 @@ pub fn extract(cache: &Path, dir: &Path) -> Vec<PathBuf> {
     faces.sort();
     faces.dedup();
     for (family, weight, italic, asset) in faces {
-        if !NAME_STYLE_FAMILIES.contains(&family.as_str()) && !UI_FAMILIES.contains(&family.as_str()) {
+        if !NAME_STYLE_FAMILIES.contains(&family.as_str()) && !UI_FAMILIES.contains(&family.as_str()) && !DISPLAY_FAMILIES.contains(&family.as_str()) {
             continue;
         }
         let Some(b) = entries.get(&asset).and_then(|p| body(p)).filter(|b| is_font(b)) else { continue };
@@ -207,10 +221,12 @@ fn install(fonts: Vec<(String, String, Vec<u8>)>, cx: &mut gpui::App) -> bool {
     } else {
         fonts
     };
+    let known: Vec<String> = FAMILIES.read().as_ref().map(|m| m.keys().cloned().collect()).unwrap_or_default();
+    let fonts: Vec<_> = fonts.into_iter().filter(|(css, ..)| !known.contains(css)).collect();
     if fonts.is_empty() {
-        return false;
+        return !known.is_empty();
     }
-    let mut map = HashMap::new();
+    let mut map = FAMILIES.read().clone().unwrap_or_default();
     let mut blobs = Vec::new();
     for (css, fam, ttf) in fonts {
         map.insert(css, gpui::SharedString::from(fam));
@@ -219,7 +235,9 @@ fn install(fonts: Vec<(String, String, Vec<u8>)>, cx: &mut gpui::App) -> bool {
     if cx.text_system().add_fonts(blobs).is_err() {
         return false;
     }
-    GG_SANS.store(map.get("gg sans").is_some_and(|f| f == "gg sans"), Ordering::Relaxed);
+    if map.get("gg sans").is_some_and(|f| f == "gg sans") {
+        GG_SANS.store(true, Ordering::Relaxed);
+    }
     if let Some(m) = map.get("gg mono") {
         *GG_MONO_NAME.write() = Box::leak(m.to_string().into_boxed_str());
         GG_MONO.store(true, Ordering::Relaxed);
@@ -231,7 +249,7 @@ fn install(fonts: Vec<(String, String, Vec<u8>)>, cx: &mut gpui::App) -> bool {
 pub fn register(cx: &mut gpui::App) {
     fallback::register(cx);
     let cached = out_dir().map(|d| load_decoded(&d)).unwrap_or_default();
-    if install(cached, cx) && GG_SANS.load(Ordering::Relaxed) {
+    if install(cached, cx) && GG_SANS.load(Ordering::Relaxed) && out_dir().is_some_and(|d| has_display(&d)) {
         return;
     }
     let task = cx.background_executor().spawn(async move { extract_and_decode() });

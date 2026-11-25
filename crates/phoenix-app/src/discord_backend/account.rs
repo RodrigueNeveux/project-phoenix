@@ -165,6 +165,9 @@ fn synced_raw(raw: &[u8]) -> Result<SyncedSettings, crate::backend::BackendError
     let p = PreloadedUserSettings::decode_raw(raw).map_err(api_err)?;
     let mut s = synced(&p);
     s.proto = crate::ui::settings::synced_map::read_all(raw);
+    if let Some(e) = phoenix_api::rest::settings::custom_status_expires_ms(raw) {
+        s.proto.insert(crate::ui::modals::custom_status::EXPIRES_KEY, e);
+    }
     s.favorites = phoenix_api::rest::favorites::Favorites::from_settings(raw);
     Ok(s)
 }

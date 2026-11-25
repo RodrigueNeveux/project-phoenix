@@ -1129,24 +1129,33 @@ impl Backend for DiscordBackend {
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/quests/@me", None).await.map_err(api_err) })
     }
     fn discoverable_guilds(&self, category: Option<u32>, offset: u32) -> BoxFuture<serde_json::Value> {
-        self.with_session(move |_, s| async move {
-            let path = match category {
-                Some(c) => format!("/discoverable-guilds?offset={offset}&limit=24&categories={c}"),
-                None => format!("/discoverable-guilds?offset={offset}&limit=24"),
-            };
-            s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err)
-        })
+        let path = crate::ui::discovery::featured_path(category, offset);
+        self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err) })
     }
     fn discovery_categories(&self, locale: String) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move {
-            let path = format!("/discovery/categories?locale={locale}&primary_only=true");
+            let path = format!("/discovery/categories?locale={locale}");
             s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err)
         })
     }
     fn app_directory_collections(&self, locale: String) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move {
-            let path = format!("/application-directory-static/collections?surface=2&active_state=1&platform=1&locale={locale}");
+            let path = format!("/application-directory-static/collections?surface=1&active_state=1&platform=4&locale={locale}&cache=true");
             s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err)
+        })
+    }
+    fn directory_get(&self, path: String) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move {
+            if !crate::ui::discovery::directory_path_allowed(&path) {
+                return Err(BackendError(format!("directory_get refused: {path}")));
+            }
+            s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err)
+        })
+    }
+    fn lurk_guild(&self, guild: Id) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            let path = crate::ui::discovery::lurk_path(guild.0, &crate::commands::session_id());
+            s.rest.request_json(reqwest::Method::PUT, &path, Some(serde_json::json!({}))).await.map_err(api_err).map(|_| ())
         })
     }
     fn orbs_balance(&self) -> BoxFuture<Option<u64>> {

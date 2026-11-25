@@ -25,6 +25,24 @@ pub enum ClearAfter {
     Never,
 }
 
+pub const EXPIRES_KEY: &str = "custom-status-expires";
+
+pub const STEPS: [(ClearAfter, i64); 3] = [(ClearAfter::Minutes30, 1_800_000), (ClearAfter::Hours1, 3_600_000), (ClearAfter::Hours4, 14_400_000)];
+
+pub fn default_clear_after(expires_ms: Option<u64>, now: chrono::DateTime<Local>) -> ClearAfter {
+    use chrono::{Datelike, TimeZone};
+    let Some(e) = expires_ms else { return ClearAfter::Today };
+    if e == 0 {
+        return ClearAfter::Never;
+    }
+    let Some(at) = Local.timestamp_millis_opt(e as i64).single() else { return ClearAfter::Today };
+    if (at.year(), at.month(), at.day()) != (now.year(), now.month(), now.day()) {
+        return ClearAfter::Today;
+    }
+    let left = e as i64 - now.timestamp_millis();
+    STEPS.iter().find(|(_, ms)| left <= *ms).map_or(ClearAfter::Today, |(c, _)| *c)
+}
+
 pub const CHOICES: [ClearAfter; 5] = [ClearAfter::Today, ClearAfter::Hours4, ClearAfter::Hours1, ClearAfter::Minutes30, ClearAfter::Never];
 
 impl ClearAfter {
@@ -351,7 +369,8 @@ impl PhoenixApp {
             .and_then(|a| a.emoji.as_deref())
             .and_then(StatusEmoji::from_token);
         self.people.close_overlays();
-        open_modal(Modal::CustomStatus(CustomStatus { input: None, initial, clear_after: ClearAfter::Today, select_open: false, emoji }), None);
+        let clear_after = default_clear_after(self.prefs.synced.proto.get(EXPIRES_KEY).copied(), Local::now());
+        open_modal(Modal::CustomStatus(CustomStatus { input: None, initial, clear_after, select_open: false, emoji }), None);
         cx.notify();
     }
 
@@ -364,6 +383,14 @@ impl PhoenixApp {
         let Some(d) = out else { return };
         crate::actions::close_modal();
         self.people.custom_status = d.as_ref().map(|d| d.text.clone()).filter(|t| !t.is_empty()).map(Into::into);
+        match &d {
+            Some(d) => {
+                self.prefs.synced.proto.insert(EXPIRES_KEY, d.expires_at_ms);
+            }
+            None => {
+                self.prefs.synced.proto.remove(EXPIRES_KEY);
+            }
+        }
         cx.background_spawn(self.backend.save_custom_status(self.presence, d)).detach();
         cx.notify();
     }
@@ -399,5 +426,19 @@ mod tests {
         assert_eq!(c.token(), "<a:dance:42>");
         assert_eq!(StatusEmoji::from_token("\u{1f980}").unwrap().token(), "\u{1f980}");
         assert_eq!(StatusEmoji::from_token(" "), None);
+    }
+
+    #[test]
+    fn default_duration_reads_the_current_expiry_like_the_client() {
+        use chrono::TimeZone;
+        let now = Local.with_ymd_and_hms(2026, 11, 25, 10, 0, 0).unwrap();
+        let ms = |m: i64| Some((now.timestamp_millis() + m * 60_000) as u64);
+        assert_eq!(default_clear_after(None, now), ClearAfter::Today);
+        assert_eq!(default_clear_after(Some(0), now), ClearAfter::Never);
+        assert_eq!(default_clear_after(ms(20), now), ClearAfter::Minutes30);
+        assert_eq!(default_clear_after(ms(45), now), ClearAfter::Hours1);
+        assert_eq!(default_clear_after(ms(200), now), ClearAfter::Hours4);
+        assert_eq!(default_clear_after(ms(300), now), ClearAfter::Today);
+        assert_eq!(default_clear_after(ms(24 * 60), now), ClearAfter::Today);
     }
 }
