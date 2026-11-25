@@ -429,6 +429,9 @@ impl Backend for ReadOnly {
     fn app_directory_collections(&self, locale: String) -> BoxFuture<serde_json::Value> {
         self.0.app_directory_collections(locale)
     }
+    fn orbs_balance(&self) -> BoxFuture<Option<u64>> {
+        self.0.orbs_balance()
+    }
     fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
         self.0.shop_storefront()
     }

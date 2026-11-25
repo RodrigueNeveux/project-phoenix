@@ -192,6 +192,10 @@ pub fn sidebar(cx: &mut Context<PhoenixApp>) -> AnyElement {
         .into_any_element()
 }
 
+pub fn verified_check_badge() -> AnyElement {
+    verified_badge(false)
+}
+
 fn verified_badge(partner: bool) -> AnyElement {
     div()
         .size(z(16.))
