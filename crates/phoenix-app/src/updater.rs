@@ -535,6 +535,40 @@ pub fn restart_app(path: &Path) {
     std::process::exit(0);
 }
 
+pub fn spawn_check(include_beta: bool, cx: &mut gpui::Context<crate::app::PhoenixApp>) {
+    use futures::StreamExt;
+    let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
+    let on_change: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let _ = tx.unbounded_send(());
+    });
+    cx.spawn(async move |this, cx| {
+        while rx.next().await.is_some() {
+            if this.update(cx, |_, cx| cx.notify()).is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
+    check_now(include_beta, on_change);
+}
+
+pub fn spawn_install(release: ReleaseInfo, cx: &mut gpui::Context<crate::app::PhoenixApp>) {
+    use futures::StreamExt;
+    let (tx, mut rx) = futures::channel::mpsc::unbounded::<()>();
+    let on_change: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let _ = tx.unbounded_send(());
+    });
+    cx.spawn(async move |this, cx| {
+        while rx.next().await.is_some() {
+            if this.update(cx, |_, cx| cx.notify()).is_err() {
+                break;
+            }
+        }
+    })
+    .detach();
+    download_and_install(release, on_change);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

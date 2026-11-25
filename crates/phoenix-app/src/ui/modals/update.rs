@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
 
 use crate::{
     app::PhoenixApp,
-    markdown::{Block, Inline, Style, parse},
+    markdown::{Block, Inline, NoResolve, Style, parse},
     theme::{c, generated::idx, tok, z},
     ui::controls::{BtnKind, button},
     updater::{self, UpdateStatus},
@@ -51,7 +49,7 @@ fn render_inline(inline: &Inline) -> AnyElement {
 }
 
 fn render_markdown(body: &str) -> AnyElement {
-    let blocks = parse(body);
+    let blocks = parse(body, &NoResolve);
     let mut col = div().flex().flex_col().gap(z(8.)).text_size(z(14.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT)));
     if blocks.is_empty() {
         return col.child(div().text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("update.no_notes"))).into_any_element();
@@ -228,15 +226,7 @@ pub fn render(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
             let html_fallback = release.html_url.clone();
             button("update-install", crate::t!("update.install_now"), BtnKind::Active).on_click(cx.listener(move |_, _, _, cx| {
                 if has_asset {
-                    let weak = cx.entity().downgrade();
-                    let async_cx = cx.to_async();
-                    let on_change: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-                        let weak = weak.clone();
-                        let _ = async_cx.update(|cx| {
-                            let _ = weak.update(cx, |_, cx| cx.notify());
-                        });
-                    });
-                    updater::download_and_install(rel_for_dl.clone(), on_change);
+                    updater::spawn_install(rel_for_dl.clone(), cx);
                 } else {
                     cx.open_url(&html_fallback);
                 }

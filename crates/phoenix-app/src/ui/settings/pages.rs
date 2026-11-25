@@ -1843,17 +1843,8 @@ fn updates_section(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
         UpdateStatus::Error(_) => idx::TEXT_FEEDBACK_CRITICAL,
         _ => idx::TEXT_SUBTLE,
     };
-    let check_btn = controls::button(eid("check-updates"), crate::t!("update.check_now"), BtnKind::Secondary).on_click(cx.listener(move |_, _, _, cx| {
-        let weak = cx.entity().downgrade();
-        let async_cx = cx.to_async();
-        let on_change: std::sync::Arc<dyn Fn() + Send + Sync> = std::sync::Arc::new(move || {
-            let weak = weak.clone();
-            let _ = async_cx.update(|cx| {
-                let _ = weak.update(cx, |_, cx| cx.notify());
-            });
-        });
-        updater::check_now(beta, on_change);
-    }));
+    let check_btn = controls::button(eid("check-updates"), crate::t!("update.check_now"), BtnKind::Secondary)
+        .on_click(cx.listener(move |_, _, _, cx| updater::spawn_check(beta, cx)));
     let has_release = status.release().is_some();
     let mut row = div()
         .flex()

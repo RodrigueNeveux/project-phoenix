@@ -277,16 +277,10 @@ impl PhoenixApp {
         if !crate::paths::is_sandboxed() {
             cx.spawn(async move |this, cx| {
                 cx.background_executor().timer(Duration::from_secs(3)).await;
-                let include_beta = this.update(cx, |this, _| this.prefs.local.beta_channel).unwrap_or(false);
-                let weak = this.clone();
-                let async_cx = cx.clone();
-                let on_change: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-                    let weak = weak.clone();
-                    let _ = async_cx.update(|cx| {
-                        let _ = weak.update(cx, |_, cx| cx.notify());
-                    });
+                let _ = this.update(cx, |this, cx| {
+                    let include_beta = this.prefs.local.beta_channel;
+                    crate::updater::spawn_check(include_beta, cx);
                 });
-                crate::updater::check_now(include_beta, on_change);
             })
             .detach();
         }
