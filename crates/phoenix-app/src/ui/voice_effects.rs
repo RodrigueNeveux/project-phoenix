@@ -135,11 +135,6 @@ pub fn emoji_url(e: &Effect) -> Option<String> {
     e.emoji_name.as_ref().and_then(|n| crate::media::emoji::twemoji_url(n.as_ref())).map(|u| u.to_string())
 }
 
-fn http_client() -> Option<&'static reqwest::Client> {
-    static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
-    CLIENT.get_or_init(|| reqwest::Client::builder().timeout(Duration::from_secs(15)).build().ok()).as_ref()
-}
-
 fn fetch(url: &str) -> Option<Vec<u8>> {
     static EMOJI_CACHE: OnceLock<Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
     let cache = EMOJI_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
@@ -148,9 +143,9 @@ fn fetch(url: &str) -> Option<Vec<u8>> {
     {
         return Some(bytes.clone());
     }
-    let client = http_client()?;
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
     let bytes = rt.block_on(async {
+        let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().ok()?;
         let r = client.get(url).send().await.ok()?;
         if !r.status().is_success() {
             return None;
@@ -158,20 +153,12 @@ fn fetch(url: &str) -> Option<Vec<u8>> {
         Some(r.bytes().await.ok()?.to_vec())
     })?;
     if let Ok(mut guard) = cache.lock() {
-        if guard.len() >= 128 {
+        if guard.len() >= 32 {
             guard.clear();
         }
         guard.insert(url.to_owned(), bytes.clone());
     }
     Some(bytes)
-}
-
-type EffectKey = (u8, u32, String);
-type CachedEffect = (Arc<RenderImage>, Duration);
-
-fn raster_cache() -> &'static Mutex<HashMap<EffectKey, CachedEffect>> {
-    static CACHE: OnceLock<Mutex<HashMap<EffectKey, CachedEffect>>> = OnceLock::new();
-    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 pub fn geometry(w: f32, h: f32) -> (f32, f32, f32, f32) {
@@ -214,15 +201,6 @@ pub fn start(app: &PhoenixApp, e: &Effect, cx: &mut Context<PhoenixApp>) {
             .spawn(async move {
                 let log = std::env::var_os("PHOENIX_SOUND_LOG").is_some();
                 let t = Instant::now();
-                let cache_key = (kind, id, url.clone());
-                if let Ok(guard) = raster_cache().lock()
-                    && let Some(hit) = guard.get(&cache_key)
-                {
-                    if log {
-                        eprintln!("phoenix-soundboard: effect cache hit after {:?}", t.elapsed());
-                    }
-                    return Some(hit.clone());
-                }
                 let list = animations();
                 let anim = pick(list, kind, id);
                 if log {
@@ -243,14 +221,7 @@ pub fn start(app: &PhoenixApp, e: &Effect, cx: &mut Context<PhoenixApp>) {
                 if log {
                     eprintln!("phoenix-soundboard: effect frames {:?} after {:?}, lasts {dur:?}", img.as_ref().map(gpui::RenderImage::frame_count), t.elapsed());
                 }
-                let out = (Arc::new(img?), dur);
-                if let Ok(mut guard) = raster_cache().lock() {
-                    if guard.len() >= 64 {
-                        guard.clear();
-                    }
-                    guard.insert(cache_key, out.clone());
-                }
-                Some(out)
+                Some((Arc::new(img?), dur))
             })
             .await;
         let Some((img, dur)) = made else { return };

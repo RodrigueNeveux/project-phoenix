@@ -894,21 +894,21 @@ impl SubText {
             .find(|a| a.kind == K::Custom)
             .map(|a| (a.emoji.clone(), a.state.as_ref().map(|t| SharedString::from(t.trim().to_string())).filter(|t| !t.is_empty())))
             .filter(|(e, t)| e.is_some() || t.is_some());
+        let stream_game = acts.iter().find(|a| go_live && a.kind == K::Playing);
         let mut seen: Vec<&crate::presence::Activity> = Vec::new();
-        let mut skipped_golive = false;
-        for a in acts.iter().filter(|a| a.kind != K::Custom && !a.name.trim().is_empty()) {
-            if go_live && !skipped_golive && a.kind == K::Playing {
-                skipped_golive = true;
-                continue;
-            }
+        for a in acts.iter().filter(|a| a.kind != K::Custom && stream_game.is_none_or(|g| a.name != g.name)) {
             let same = |b: &&crate::presence::Activity| {
-                (a.application_id.is_some() && a.application_id == b.application_id) || a.name.eq_ignore_ascii_case(&b.name)
+                (a.application_id.is_some() && b.application_id.is_some() && a.application_id == b.application_id) || a.name == b.name
             };
             if !seen.iter().any(same) {
                 seen.push(a);
             }
         }
-        let main = seen.first().map(|a| (activity_text(a).unwrap_or_default(), activity_icon(a)));
+        let main = if go_live {
+            stream_game.map(|g| (g.name.clone(), Some("tv")))
+        } else {
+            seen.first().map(|a| (activity_text(a).unwrap_or_default(), activity_icon(a)))
+        };
         let count = seen.len();
         (custom.is_some() || main.is_some()).then_some(Self { custom, main, count })
     }
@@ -990,25 +990,56 @@ mod tests {
         }
     }
 
-    #[test]
-    fn sub_text_deduplicates_activities_and_excludes_golive_game() {
-        let custom = act(ActivityKind::Custom, "Custom Status", None, Some("Intensely doing nothing"));
-        let game = act(ActivityKind::Playing, "VALORANT", Some("123"), None);
-        let game_dup_id = act(ActivityKind::Playing, "Valorant RPC", Some("123"), None);
-        let game_dup_name = act(ActivityKind::Playing, "valorant", None, None);
-        let spotify = act(ActivityKind::Listening, "Spotify", None, Some("Track"));
+    fn total(acts: &[Activity], go_live: bool, in_voice: bool) -> usize {
+        SubText::of(acts, go_live).map_or(0, |s| s.count) + usize::from(in_voice)
+    }
 
+    #[test]
+    fn game_and_custom_status_has_no_counter() {
+        let custom = act(ActivityKind::Custom, "Custom Status", None, Some("Intensely doing nothing"));
+        let game = act(ActivityKind::Playing, "VALORANT", Some("700136079562375258"), None);
         let s = SubText::of(&[custom.clone(), game.clone()], false).unwrap();
         assert_eq!(s.count, 1);
         assert!(s.custom.is_some());
+        assert_eq!(total(&[custom.clone(), game.clone()], false, false), 1);
+        assert_eq!(total(&[game, custom], false, false), 1);
+    }
 
-        let s = SubText::of(&[custom.clone(), game.clone(), game_dup_id, game_dup_name], false).unwrap();
-        assert_eq!(s.count, 1);
+    #[test]
+    fn same_application_or_same_name_counts_once() {
+        let game = act(ActivityKind::Playing, "VALORANT", Some("1"), None);
+        let same_app = act(ActivityKind::Playing, "VALORANT RPC", Some("1"), None);
+        let same_name = act(ActivityKind::Playing, "VALORANT", None, None);
+        let other_case = act(ActivityKind::Playing, "valorant", None, None);
+        let spotify = act(ActivityKind::Listening, "Spotify", None, Some("Track"));
+        assert_eq!(total(&[game.clone(), same_app, same_name], false, false), 1);
+        assert_eq!(total(&[game.clone(), other_case], false, false), 2);
+        assert_eq!(total(&[game, spotify], false, false), 2);
+    }
 
+    #[test]
+    fn missing_application_ids_do_not_merge_different_names() {
+        let a = act(ActivityKind::Playing, "Minecraft", None, None);
+        let b = act(ActivityKind::Playing, "Terraria", None, None);
+        assert_eq!(total(&[a, b], false, false), 2);
+    }
+
+    #[test]
+    fn voice_channel_adds_one() {
+        let game = act(ActivityKind::Playing, "VALORANT", Some("1"), None);
+        assert_eq!(total(std::slice::from_ref(&game), false, true), 2);
+        assert_eq!(total(&[], false, true), 1);
+    }
+
+    #[test]
+    fn go_live_replaces_the_streamed_game() {
+        let custom = act(ActivityKind::Custom, "Custom Status", None, Some("hi"));
+        let game = act(ActivityKind::Playing, "VALORANT", Some("1"), None);
+        let spotify = act(ActivityKind::Listening, "Spotify", None, Some("Track"));
         let s = SubText::of(&[custom.clone(), game.clone()], true).unwrap();
         assert_eq!(s.count, 0);
-
-        let s = SubText::of(&[custom, game, spotify], true).unwrap();
-        assert_eq!(s.count, 1);
+        assert_eq!(s.main.map(|m| m.0.to_string()).as_deref(), Some("VALORANT"));
+        assert_eq!(total(&[custom, game.clone()], true, true), 1);
+        assert_eq!(total(&[game, spotify], true, true), 2);
     }
 }

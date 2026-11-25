@@ -551,6 +551,9 @@ impl PhoenixApp {
             list.sort_by_key(|id| self.channels[id].position);
         }
         self.voice_channel = self.pending_own_voice.take().or(in_call);
+        if self.voice_channel.is_some() {
+            crate::ui::voice_effects::prewarm();
+        }
         for ch in r.dm_channels {
             self.dms.push(ch.id);
             self.channels.insert(ch.id, ch);
@@ -922,6 +925,9 @@ impl PhoenixApp {
                     self.pending_voice.insert(user, c);
                 }
                 if user == self.me.id && own {
+                    if channel.is_some() {
+                        crate::ui::voice_effects::prewarm();
+                    }
                     self.voice_channel = channel;
                     self.pending_own_voice = channel.filter(|c| !self.channels.contains_key(c));
                 }

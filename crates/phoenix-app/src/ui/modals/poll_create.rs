@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, MouseButton, ParentElement, SharedString, Styled, Window, div, prelude::*};
+use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*};
 use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 
 use crate::{
@@ -142,10 +142,9 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
     for (i, slot) in s.answers.iter().enumerate() {
         let Some(a) = &slot.input else { continue };
         let emoji_el = match &slot.emoji {
-            Some(e) => crate::media::emoji::emoji_element(&e.token(), 20. * crate::theme::zoom()),
+            Some(e) => crate::media::emoji::emoji_element(&e.token(), 18. * crate::theme::zoom()),
             None => gpui::svg().path(crate::icons::path("emoji")).size(z(18.)).text_color(c(tok(idx::INTERACTIVE_ICON_DEFAULT))).into_any_element(),
         };
-        let has_emoji = slot.emoji.is_some();
         answers = answers.child(
             field_box()
                 .id(("poll-answer-field", i))
@@ -155,31 +154,16 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
                 .child(
                     div()
                         .id(("poll-answer-emoji", i))
-                        .w(z(34.))
-                        .h(z(32.))
-                        .rounded(z(4.))
+                        .w(z(38.))
+                        .h(z(18.))
                         .flex()
                         .items_center()
                         .justify_center()
                         .cursor_pointer()
-                        .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
                         .child(emoji_el)
                         .on_click(cx.listener(move |a, _, w, cx| {
                             crate::ui::pickers::open_emoji_picker(a, crate::ui::pickers::EmojiTarget::PollAnswer(i), w, cx);
-                        }))
-                        .when(has_emoji, |d| {
-                            d.on_mouse_down(
-                                MouseButton::Right,
-                                cx.listener(move |_, _, _, cx| {
-                                    update(|s| {
-                                        if let Some(slot) = s.answers.get_mut(i) {
-                                            slot.emoji = None;
-                                        }
-                                    });
-                                    cx.notify();
-                                }),
-                            )
-                        }),
+                        })),
                 )
                 .child(div().flex_1().min_w_0().child(Input::new(a).appearance(false).bordered(false)))
                 .child(

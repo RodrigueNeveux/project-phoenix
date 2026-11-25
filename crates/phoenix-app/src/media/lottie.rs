@@ -459,26 +459,48 @@ pub fn duration(root: &Value) -> std::time::Duration {
 }
 
 pub fn rasterize_value(root: &Value, renderer: &SvgRenderer, px: u32, still: bool) -> Option<RenderImage> {
-    frames_of(root, renderer, px, still, 1.)
+    frames_of(root, renderer, px, still, 1., 1)
 }
 
 pub fn rasterize_speed(root: &Value, renderer: &SvgRenderer, px: u32, speed: f64) -> Option<RenderImage> {
-    frames_of(root, renderer, px, false, speed)
+    frames_of(root, renderer, px, false, speed, effect_workers())
 }
 
-fn frames_of(root: &Value, renderer: &SvgRenderer, px: u32, still: bool, speed: f64) -> Option<RenderImage> {
+fn frames_of(root: &Value, renderer: &SvgRenderer, px: u32, still: bool, speed: f64, workers: usize) -> Option<RenderImage> {
     let (ip, step, count, delay) = timeline(root);
     let delay = ((delay as f64) / speed.max(0.01)).round().max(1.) as u32;
-    let mut frames = Vec::new();
-    for n in 0..if still { 1 } else { count } {
+    let total = if still { 1 } else { count };
+    let one = |n: usize| -> Option<image::Frame> {
         let svg = frame_svg(root, ip + n as f64 * step, (px / 2).max(1));
         let one = renderer.render_single_frame(svg.as_bytes(), 1.0).ok()?;
         let size = one.size(0);
         let (w, h) = (u32::try_from(size.width.0).ok()?, u32::try_from(size.height.0).ok()?);
         let buf = image::RgbaImage::from_raw(w, h, one.as_bytes(0)?.to_vec())?;
-        frames.push(image::Frame::from_parts(buf, 0, 0, image::Delay::from_numer_denom_ms(delay, 1)));
-    }
-    Some(RenderImage::new(frames))
+        Some(image::Frame::from_parts(buf, 0, 0, image::Delay::from_numer_denom_ms(delay, 1)))
+    };
+    let workers = if workers > 1 { workers.min(total) } else { 1 };
+    let frames: Option<Vec<image::Frame>> = if workers <= 1 {
+        (0..total).map(one).collect()
+    } else {
+        let mut slots: Vec<Option<image::Frame>> = (0..total).map(|_| None).collect();
+        let chunk = total.div_ceil(workers);
+        std::thread::scope(|s| {
+            for (k, part) in slots.chunks_mut(chunk).enumerate() {
+                let one = &one;
+                s.spawn(move || {
+                    for (j, slot) in part.iter_mut().enumerate() {
+                        *slot = one(k * chunk + j);
+                    }
+                });
+            }
+        });
+        slots.into_iter().collect()
+    };
+    Some(RenderImage::new(frames?))
+}
+
+pub fn effect_workers() -> usize {
+    std::thread::available_parallelism().map_or(1, |n| (n.get() / 2).clamp(1, 4))
 }
 
 enum State {
