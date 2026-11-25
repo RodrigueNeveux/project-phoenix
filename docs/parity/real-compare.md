@@ -205,14 +205,14 @@ emoji / gif / sticker rows of the after table reuse the client captures of the b
 
 | Gap | Probable cause | Where |
 |---|---|---|
-| **Big** — Invite links (`discord.gg/…`) render as plain links: no "Tu as été invité(e)" card, no invalid-invite card, in chat and in pins | no invite embed at all (needs `GET /invites/{code}?with_counts=true` and the card) | `ui/chat.rs` embeds, `ui/inbox.rs` `cozy_message` |
-| **Big** — Emoji picker: no "Émojis populaires sur <serveur>" section (trophy rail icon, first row) and no "POPULAIRES" badge in the footer | client section `TOP_GUILD_EMOJI` (`TrophyIcon`, `topEmojiSectionContainer_6OcK5D`), data from the guild top-emojis store | `ui/pickers/` |
+| ✅ (wt/invites) — Invite links (`discord.gg/…`) render as plain links: no "Tu as été invité(e)" card, no invalid-invite card, in chat and in pins | no invite embed at all (needs `GET /invites/{code}?with_counts=true` and the card) | `ui/chat.rs` embeds, `ui/inbox.rs` `cozy_message` |
+| ✅ (wt/invites) — Emoji picker: no "Émojis populaires sur <serveur>" section (trophy rail icon, first row) and no "POPULAIRES" badge in the footer | client section `TOP_GUILD_EMOJI` (`TrophyIcon`, `topEmojiSectionContainer_6OcK5D`), data from the guild top-emojis store | `ui/pickers/` |
 | ✅ (wt/unreads) Inbox "Messages non lus" — the list is built (wt/popouts) and loads on the real account; cards were blank because embeds were not drawn, the header lacked the check-double icon (icon extractor picked `ChatCheckIcon` from an earlier file), and the card bell / collapse buttons were missing | see popouts.md "Inbox > Unreads" | `ui/inbox.rs`, `icons/mod.rs` |
 | ✅ (wt/details2) **Medium** — "+" menu 30–40 px lower than the client | client bottom = plus button top − 8; Phoenix bottom lands ~30 px under it (ATTACH_BTN bounds or anchored offset) | `ui/chat/composer.rs` `attach_menu` |
 | **Medium** — "+" menu "Programmer un message" disabled, no chevron submenu | scheduled messages not implemented (client: `CalendarPlusIcon` + `ChevronSmallRightIcon`) | `composer.rs` |
 | ✅ (wt/unreads) Threads popout "Commencé par" empty for an owner outside the member cache | `parity()` now sends archived thread / forum post owners and first authors to `ensure_authors` (op 8 for the missing ones) | `discord_backend.rs` |
 | ✅ (wt/unreads) Search results: the name was ellipsized instead of wrapping the timestamp | the client header flows inline, so the time goes under a long name (ml 4); Phoenix header is now `flex-wrap` with no truncation. Server avatars: results already go through `ensure_message_authors`; the after capture shows them | `ui/search.rs` `result_card` |
-| **Medium** — Frequent emoji / sticker order differs (✅ ❤ … vs ❤ …, Wave first in the client) | frecency scoring | `ui/pickers/` |
+| ✅ (wt/invites) — Frequent emoji / sticker order differs (✅ ❤ … vs ❤ …, Wave first in the client) | frecency scoring | `ui/pickers/` |
 | ✅ (wt/unreads) Channel list showed the top pill where the client shows the bottom one | the rule (`ChannelListUnreadsStore` `rh`) was already the client's; rows below the rendered range of the virtual list had no bounds and were skipped, so the bottom side looked empty. Unmeasured rows after the scroll top now count as below. Still open: the client's "N in voice" bottom bar (`voice-channels` mode) | `channel_unread_bar.rs` |
 | ✅ (wt/details2) **Medium** — Settings: the selected page does not scroll into view in the sidebar, Voix & Vidéo device names "Par défaut" vs the real names, modal ~3 px lower at 1280×720 | sidebar scroll, audio device enumeration | `ui/settings/` |
 | ✅ (wt/details2) **Small** — Voice row avatars sharper than the client | client loads `size=32` for a 24 px avatar at dpr 1.5 | `ui::avatar` size choice |
@@ -233,3 +233,8 @@ emoji / gif / sticker rows of the after table reuse the client captures of the b
 | GIF "Favoris" tile shows another favorite | `favoritesTile: src = _.sample(_.values(favorites)).src` (random favorite, picked when the GIF picker mounts) | `pickers/gif.rs`: random favorite per picker opening; `real_shots` can pin the client's pick with `PHX_GIF_FAV` (URL substring) |
 | Threads search field 248 px | `container_VhFsFg` flex 1 1 auto (content basis 205.2) and `spacer_c0tu5x` flex 1 share the free space: 276.5 px at 1536 (popout 537.6), 247.7 px at 1280 (popout 480) | `inbox.rs`: `flex_grow` + `flex_basis(205.2)` next to the existing `flex_1` spacer |
 
+Closed by wt/invites (2026-11-25): invite cards (profile card v2, invalid, legacy, group DM,
+friend) in chat, pins, inbox and search; the top server emoji row with its trophy and POPULAIRES
+badge; the frequent emoji and sticker order (client frecency, checked item for item on the live
+proto). Details and what stays open (event, stream and voice v2 invite cards, the newly added
+emoji block, reaction frecency) are in `message-content.md` (Invite cards) and `pickers.md`.
