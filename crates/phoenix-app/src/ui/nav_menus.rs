@@ -19,6 +19,7 @@ use crate::{
 pub enum Target {
     Channel(Id),
     ChannelBell(Id),
+    InboxBell(Id),
     Thread(Id),
     Guild(Id),
     Folder(u64),
@@ -38,21 +39,37 @@ pub fn open(target: Target, pos: Point<Pixels>, window: &mut Window) {
 }
 
 pub fn toggle_bell(channel: Id, pos: Point<Pixels>, window: &mut Window) {
+    toggle(Target::ChannelBell(channel), pos, window);
+}
+
+pub fn toggle_inbox_bell(channel: Id, pos: Point<Pixels>, window: &mut Window) {
+    toggle(Target::InboxBell(channel), pos, window);
+}
+
+fn toggle(target: Target, pos: Point<Pixels>, window: &mut Window) {
     OPEN.with(|o| {
         let mut cur = o.borrow_mut();
-        if matches!(*cur, Some((Target::ChannelBell(c), _)) if c == channel) {
+        if cur.is_some_and(|(t, _)| t == target) {
             *cur = None;
         } else {
-            *cur = Some((Target::ChannelBell(channel), pos));
+            *cur = Some((target, pos));
         }
     });
     window.refresh();
 }
 
+pub fn is_inbox_bell_open(channel: Id) -> bool {
+    OPEN.with(|o| matches!(*o.borrow(), Some((Target::InboxBell(c), _)) if c == channel))
+}
+
+pub fn any_inbox_bell_open() -> bool {
+    OPEN.with(|o| matches!(*o.borrow(), Some((Target::InboxBell(_), _))))
+}
+
 pub fn close_bell() -> bool {
     OPEN.with(|o| {
         let mut cur = o.borrow_mut();
-        if matches!(*cur, Some((Target::ChannelBell(_), _))) {
+        if matches!(*cur, Some((Target::ChannelBell(_) | Target::InboxBell(_), _))) {
             *cur = None;
             true
         } else {
@@ -289,7 +306,16 @@ fn rail_move(app: &PhoenixApp, e: &Ent, item: crate::ui::modals::gdm::RailRef) -
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
-    let (target, pos) = OPEN.with(|o| *o.borrow())?;
+    let (target, pos) = OPEN.with(|o| *o.borrow()).filter(|(t, _)| !matches!(t, Target::InboxBell(_)))?;
+    render_target(app, target, pos, cx)
+}
+
+pub fn render_inbox_bell(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    let (target, pos) = OPEN.with(|o| *o.borrow()).filter(|(t, _)| matches!(t, Target::InboxBell(_)))?;
+    render_target(app, target, pos, cx)
+}
+
+fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let e = cx.entity();
     let dev = app.prefs.synced.developer_mode;
     let mut items = Vec::new();
@@ -526,7 +552,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
             }
         }
-        Target::ChannelBell(id) if app.backend.thread_info(id).is_some() => {
+        Target::ChannelBell(id) | Target::InboxBell(id) if app.backend.thread_info(id).is_some() => {
             items.push(crate::ui::thread_menu::mute_item(app, &e, id));
             items.push(MenuItem::Separator);
             if let MenuItem::Submenu { items: radios, .. } = crate::ui::thread_menu::notify_item(app, &e, id) {
@@ -535,7 +561,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(crate::ui::thread_menu::notify_item(app, &e, id));
             }
         }
-        Target::ChannelBell(id) => {
+        Target::ChannelBell(id) | Target::InboxBell(id) => {
             let ch = app.channels.get(&id)?;
             let guild = ch.guild;
             let muted = ch.muted;
@@ -548,6 +574,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 Some(id),
             ));
             items.push(MenuItem::Separator);
+            if let (Target::InboxBell(_), Some(g)) = (target, guild) {
+                items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), guild_muted(app, g), Some(g), None));
+                items.push(MenuItem::Separator);
+            }
             items.extend(notify_radios(app, &e, guild, Some(id)));
         }
         Target::Thread(id) => items.extend(crate::ui::thread_menu::items(app, &e, id, crate::actions::thread::Place::ContextMenu)),
@@ -582,13 +612,16 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         OPEN.with(|o| *o.borrow_mut() = None);
         w.refresh();
     });
-    Some(context_menu::render(pos, items, dismiss))
+    Some(match target {
+        Target::InboxBell(_) => context_menu::render_anchored(pos, gpui::Anchor::TopRight, items, dismiss),
+        _ => context_menu::render(pos, items, dismiss),
+    })
 }
 
 impl PhoenixApp {
     pub fn mark_nav_read(&mut self, target: Target, cx: &mut Context<Self>) {
         let req = match target {
-            Target::Channel(id) | Target::ChannelBell(id) | Target::Thread(id) => {
+            Target::Channel(id) | Target::ChannelBell(id) | Target::InboxBell(id) | Target::Thread(id) => {
                 if let Some(ch) = self.channels.get_mut(&id) {
                     ch.unread = false;
                     ch.mentions = 0;

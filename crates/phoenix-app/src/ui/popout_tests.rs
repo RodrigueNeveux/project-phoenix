@@ -331,3 +331,41 @@ fn unreads_tab_shows_messages_without_acking(cx: &mut TestAppContext) {
     assert_eq!(h.acks(), 1);
     assert_eq!(h.read(|a| a.parity.inbox.unreads.first().map(|c| c.entry.channel)), Some(entries[1].channel));
 }
+
+#[gpui::test]
+fn unreads_mark_all_asks_first_and_cards_collapse(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let entries: Vec<Entry> = h
+        .channels
+        .iter()
+        .take(2)
+        .map(|c| Entry { channel: *c, guild: None, kind: Kind::Messages, oldest_read: Id(0), newest: Id(u64::MAX), mentions: 0, sort: 5 })
+        .collect();
+    *h.probe.unreads.lock().unwrap() = entries.clone();
+    h.act(|a, _, cx| {
+        a.parity.inbox.tab = crate::commands::state::InboxTab::Unreads;
+        a.parity.inbox.open = false;
+        a.toggle_inbox(cx);
+    });
+    for _ in 0..10 {
+        h.act(|_, _, cx| cx.notify());
+    }
+    h.act(|a, _, cx| {
+        if let Some(c) = a.parity.inbox.unreads.first_mut() {
+            c.collapsed = true;
+        }
+        cx.notify();
+    });
+    assert_eq!(h.read(|a| a.parity.inbox.unreads.len()), 2);
+    assert_eq!(h.acks(), 0, "collapsing a card sent a read marker");
+
+    h.act(|a, _, cx| a.confirm_mark_all_unreads(cx));
+    let asked = crate::actions::with_modal(|m| matches!(m, Some(crate::ui::modals::Modal::Form(_))));
+    assert!(asked, "Mark All as Read did not ask for confirmation");
+    assert_eq!(h.acks(), 0, "Mark All as Read acked before the confirmation");
+    crate::actions::close_modal();
+
+    h.act(|a, _, cx| a.mark_all_unread_cards_read(cx));
+    assert_eq!(h.acks(), entries.len());
+    assert!(h.read(|a| a.parity.inbox.unreads.is_empty()));
+}

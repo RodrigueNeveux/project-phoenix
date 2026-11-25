@@ -1,3 +1,4 @@
+use crate::ui::tooltip::Tipped as _;
 use crate::theme::z;
 use gpui::{AnyElement, App, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Window, div, prelude::*};
 use gpui_component::input::{Input, InputState};
@@ -44,6 +45,9 @@ impl PhoenixApp {
         let i = &mut self.parity.inbox;
         i.open = !i.open;
         self.parity.threads_open = false;
+        if crate::ui::nav_menus::any_inbox_bell_open() {
+            crate::ui::nav_menus::close_bell();
+        }
         if self.parity.inbox.open {
             self.load_inbox_tab(true, cx);
         }
@@ -121,7 +125,7 @@ impl PhoenixApp {
         i.unreads_loading = false;
         i.unreads = entries
             .into_iter()
-            .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false, error: None })
+            .map(|entry| crate::commands::state::UnreadCard { loaded: entry.kind != Kind::Messages, entry, msgs: Vec::new(), more: false, error: None, collapsed: false })
             .collect();
         self.load_next_unread(cx);
         cx.notify();
@@ -165,6 +169,38 @@ impl PhoenixApp {
     pub fn mark_unread_card_read(&mut self, channel: Id, cx: &mut Context<Self>) {
         self.parity.inbox.unreads.retain(|c| c.entry.channel != channel);
         self.mark_nav_read(crate::ui::nav_menus::Target::Channel(channel), cx);
+    }
+
+    pub fn mark_unread_guild_read(&mut self, guild: Id, cx: &mut Context<Self>) {
+        self.parity.inbox.unreads.retain(|c| c.entry.guild != Some(guild));
+        self.mark_nav_read(crate::ui::nav_menus::Target::Guild(guild), cx);
+    }
+
+    pub fn mark_all_unread_cards_read(&mut self, cx: &mut Context<Self>) {
+        let ids: Vec<Id> = self.parity.inbox.unreads.iter().map(|c| c.entry.channel).collect();
+        for id in ids {
+            self.mark_unread_card_read(id, cx);
+        }
+    }
+
+    pub fn confirm_mark_all_unreads(&mut self, cx: &mut Context<Self>) {
+        crate::actions::open_modal(
+            crate::ui::modals::Modal::Form(crate::ui::modals::Form {
+                title: crate::t!("inbox.read_all_title"),
+                subtitle: Some(crate::t!("inbox.read_all_body")),
+                fields: Vec::new(),
+                choices: Vec::new(),
+                choice: None,
+                check: None,
+                submit: crate::t!("menu.mark_read"),
+                danger: false,
+                on_submit: std::rc::Rc::new(|a, _, _, cx| a.mark_all_unread_cards_read(cx)),
+                preview: None,
+                width: 440.,
+            }),
+            None,
+        );
+        cx.notify();
     }
 
     pub(crate) fn reload_scheduled(&mut self, cx: &mut Context<Self>) {
@@ -726,6 +762,10 @@ fn channel_label(app: &PhoenixApp, ch: Id) -> (SharedString, Option<SharedString
 }
 
 fn channel_head(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>>) -> gpui::Div {
+    channel_head_with(app, ch, buttons, false, 0)
+}
+
+fn channel_head_with(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>>, collapsed: bool, mentions: u32) -> gpui::Div {
     let (name, guild_name) = channel_label(app, ch);
     let channel = app.channels.get(&ch).or_else(|| app.nav.find_thread(ch));
     let guild = channel.and_then(|c| c.guild).and_then(|g| app.guilds.iter().find(|x| x.id == g));
@@ -741,7 +781,7 @@ fn channel_head(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>
         .items_center()
         .gap(z(8.))
         .bg(tk(idx::BACKGROUND_SURFACE_HIGHER))
-        .border_b_1()
+        .when(!collapsed, |d| d.border_b_1())
         .border_color(tk(idx::BORDER_SUBTLE))
         .child(match guild {
             Some(g) => div().size(z(32.)).rounded(z(8.)).overflow_hidden().child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 32. * crate::theme::zoom())),
@@ -764,13 +804,14 @@ fn channel_head(app: &PhoenixApp, ch: Id, buttons: Vec<gpui::Stateful<gpui::Div>
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(tk(idx::TEXT_DEFAULT))
                         .child(named(glyph, 12., tk(idx::TEXT_DEFAULT)))
-                        .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(name)),
+                        .child(div().min_w_0().whitespace_nowrap().overflow_hidden().text_ellipsis().child(name))
+                        .when(mentions > 0, |d| d.child(div().flex_none().ml(z(4.)).child(crate::ui::badge(mentions)))),
                 )
                 .when_some(guild_name, |d, g| {
                     d.child(div().text_size(z(12.)).line_height(z(16.)).text_color(tk(idx::TEXT_DEFAULT)).whitespace_nowrap().overflow_hidden().text_ellipsis().child(g))
                 }),
         )
-        .child(div().flex().gap(z(8.)).children(buttons))
+        .child(div().flex().flex_none().items_center().gap(z(8.)).children(buttons))
 }
 
 fn cozy_message(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<PhoenixApp>) -> gpui::Div {
@@ -835,9 +876,25 @@ fn cozy_message_with(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<Pho
         )
         .map(|d| match editor {
             Some(ed) => d.child(ed),
-            None => d.child(div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id))),
+            None => d.when(!m.content.is_empty(), |d| d.child(message_text(app, m, cx))),
         })
-        .children(m.attachments.iter().map(|a| crate::ui::chat::attachment(a, cx)))
+        .children(message_extras(app, m, cx))
+}
+
+fn message_text(app: &PhoenixApp, m: &Message, cx: &Context<PhoenixApp>) -> gpui::Div {
+    div().text_size(z(16.)).line_height(z(22.)).text_color(tk(idx::TEXT_DEFAULT)).child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id))
+}
+
+fn message_extras(app: &PhoenixApp, m: &Message, cx: &Context<PhoenixApp>) -> Vec<AnyElement> {
+    let acx: &App = cx;
+    let sy = &app.prefs.synced;
+    let show = |e: &&crate::model::Embed| sy.flag("embeds") && (!matches!(e.kind.as_deref(), Some("image" | "gifv" | "video")) || sy.flag("media-links"));
+    m.attachments
+        .iter()
+        .map(|a| crate::ui::chat::attachment(a, acx))
+        .chain(m.embeds.iter().filter(show).map(|e| crate::ui::chat::embed(app, e, acx)))
+        .chain(crate::ui::components::render_static(app, &cx.entity(), m, acx))
+        .collect()
 }
 
 fn inbox_box() -> gpui::Div {
@@ -908,6 +965,50 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
             .into_any_element();
     }
     let first = card.msgs.first().map(|m| m.id);
+    let collapsed = card.collapsed;
+    let guild = card.entry.guild;
+    let guild_mode = app.chat.shift_held && guild.is_some();
+    let read_tip = crate::t!(if guild_mode { "inbox.mark_guild_read" } else { "menu.mark_read" });
+    let bell = sm_icon_button(("inbox-unread-bell", ch.0), "bell")
+        .when(crate::ui::nav_menus::is_inbox_bell_open(ch), |d| d.bg(tk(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE)))
+        .tip(crate::t!("menu.notify_settings"))
+        .on_click(cx.listener(move |_, ev: &gpui::ClickEvent, w, cx| {
+            cx.stop_propagation();
+            crate::ui::nav_menus::toggle_inbox_bell(ch, ev.position(), w);
+            cx.notify();
+        }));
+    let read = sm_icon_button(("inbox-unread-read", ch.0), if guild_mode { "inbox/read-all" } else { "check" })
+        .tip(read_tip)
+        .on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| {
+            cx.stop_propagation();
+            match guild.filter(|_| ev.modifiers().shift) {
+                Some(g) => a.mark_unread_guild_read(g, cx),
+                None => a.mark_unread_card_read(ch, cx),
+            }
+        }));
+    let chevron = div()
+        .id(("inbox-unread-collapse", ch.0))
+        .flex_none()
+        .p(z(4.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .tip(crate::t!(if collapsed { "inbox.expand" } else { "inbox.collapse" }))
+        .child(
+            gpui::svg()
+                .path(crate::icons::path("chevron"))
+                .size(z(16.))
+                .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
+                .when(collapsed, |s| s.with_transformation(gpui::Transformation::rotate(gpui::radians(-std::f32::consts::FRAC_PI_2)))),
+        )
+        .on_click(cx.listener(move |a, _, _, cx| {
+            cx.stop_propagation();
+            if let Some(c) = a.parity.inbox.unreads.iter_mut().find(|c| c.entry.channel == ch) {
+                c.collapsed = !c.collapsed;
+            }
+            cx.notify();
+        }));
     let head = div()
         .id(("inbox-unread", ch.0))
         .cursor_pointer()
@@ -918,14 +1019,10 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
                 a.select_channel(ch, cx);
             }
         }))
-        .child(channel_head(
-            app,
-            ch,
-            vec![sm_icon_button(("inbox-unread-read", ch.0), "check").on_click(cx.listener(move |a, _, _, cx| {
-                cx.stop_propagation();
-                a.mark_unread_card_read(ch, cx);
-            }))],
-        ));
+        .child(channel_head_with(app, ch, vec![bell, read, chevron], collapsed, card.entry.mentions));
+    if collapsed {
+        return inbox_box().child(head).into_any_element();
+    }
     let local_day = |ts: i64| chrono::DateTime::from_timestamp(ts, 0).map(|d| d.with_timezone(&chrono::Local).date_naive());
     let today = chrono::Local::now().date_naive();
     let days = card.msgs.first().is_some_and(|m| local_day(m.timestamp) != Some(today));
@@ -951,7 +1048,8 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
                 .text_size(z(16.))
                 .line_height(z(22.))
                 .text_color(tk(idx::TEXT_DEFAULT))
-                .child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id))
+                .when(!m.content.is_empty(), |d| d.child(crate::ui::components::markdown_in(app, &m.content, &cx.entity(), m.id)))
+                .children(message_extras(app, m, cx))
         };
         let group: SharedString = format!("inbox-unread-msg-{}", id.0).into();
         body = body.child(
@@ -1064,12 +1162,17 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let mut controls = div().ml_auto().flex().items_center().gap(z(8.));
     match i.tab {
         InboxTab::Unreads => {
-            controls = controls.child(sm_icon_button("inbox-read-all", "inbox/read-all").on_click(cx.listener(|a, _, _, cx| {
-                let ids: Vec<Id> = a.parity.inbox.unreads.iter().map(|c| c.entry.channel).collect();
-                for id in ids {
-                    a.mark_unread_card_read(id, cx);
-                }
-            })))
+            controls = controls.child(
+                sm_icon_button("inbox-read-all", "inbox/read-all")
+                    .tip(crate::t!("inbox.read_all"))
+                    .on_click(cx.listener(|a, ev: &gpui::ClickEvent, _, cx| {
+                        if ev.modifiers().shift {
+                            a.mark_all_unread_cards_read(cx);
+                        } else {
+                            a.confirm_mark_all_unreads(cx);
+                        }
+                    })),
+            )
         }
         InboxTab::Mentions => {
             controls = controls.child(sm_icon_button("inbox-filter", "inbox/filter").on_click(cx.listener(|a, _, _, cx| {
@@ -1599,7 +1702,7 @@ fn close_on_press_outside(el: gpui::Stateful<gpui::Div>, cx: &mut Context<Phoeni
             |_, _, _| {},
             move |bounds, (), window, _| {
                 window.on_mouse_event(move |ev: &gpui::MouseDownEvent, phase, _, cx| {
-                    if phase != gpui::DispatchPhase::Capture || bounds.contains(&ev.position) {
+                    if phase != gpui::DispatchPhase::Capture || bounds.contains(&ev.position) || crate::ui::nav_menus::any_inbox_bell_open() {
                         return;
                     }
                     let Some(app) = app.upgrade() else { return };
@@ -1619,6 +1722,9 @@ pub fn popouts(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement
     let mut out = Vec::new();
     out.extend(inbox(app, cx));
     out.extend(threads(app, cx));
+    if app.parity.inbox.open {
+        out.extend(crate::ui::nav_menus::render_inbox_bell(app, cx));
+    }
     out
 }
 

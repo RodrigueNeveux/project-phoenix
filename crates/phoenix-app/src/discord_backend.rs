@@ -543,10 +543,26 @@ impl Backend for DiscordBackend {
     }
 
     fn parity(&self, req: crate::commands::ParityRequest) -> BoxFuture<crate::commands::ParityReply> {
+        let posts_in = match &req {
+            crate::commands::ParityRequest::ArchivedThreads { channel } => Some(*channel),
+            crate::commands::ParityRequest::ForumPosts { forum, .. } => Some(*forum),
+            _ => None,
+        };
         self.with_session(move |inner, s| async move {
             let sink = inner.clone();
             let emit: crate::backend::EventSink = Arc::new(move |e| sink.emit(e));
             let reply = crate::commands::exec::request(s.rest.clone(), req, emit).await?;
+            if let crate::commands::ParityReply::ForumPosts { ref posts, .. } = reply
+                && let Some(g) = posts_in.and_then(|c| s.cache.channel(sf(c))).and_then(|c| c.guild_id)
+            {
+                let mut ids: Vec<api::Snowflake> = Vec::new();
+                for u in posts.iter().flat_map(|p| p.owner.into_iter().chain(p.first_message.as_ref().map(|m| m.author))) {
+                    if !ids.contains(&sf(u)) {
+                        ids.push(sf(u));
+                    }
+                }
+                ensure_authors(&inner, &s, g, ids);
+            }
             if let crate::commands::ParityReply::Messages(ref msgs) = reply {
                 let mut by_guild: std::collections::HashMap<api::Snowflake, Vec<api::Snowflake>> = std::collections::HashMap::new();
                 for m in msgs {

@@ -138,6 +138,7 @@ pub struct UnreadCard {
     pub more: bool,
     pub loaded: bool,
     pub error: Option<SharedString>,
+    pub collapsed: bool,
 }
 
 pub struct InboxState {

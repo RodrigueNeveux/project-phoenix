@@ -26,6 +26,7 @@ fn bars(app: &PhoenixApp) -> (Bar, Bar) {
     let list = &app.sidebar_list;
     let (mut above, mut below) = (Side::default(), Side::default());
     let (mut unread_visible, mut mention_visible) = (false, false);
+    let laid_out = list.item_is_above_viewport(0).is_some();
     for (r, row) in app.sidebar_rows.iter().enumerate() {
         let (SidebarRow::Channel(id) | SidebarRow::Thread(id)) = *row else { continue };
         let Some(ch) = app.channels.get(&id) else { continue };
@@ -42,6 +43,7 @@ fn bars(app: &PhoenixApp) -> (Bar, Bar) {
                 mention_visible |= ch.mentions > 0;
                 continue;
             }
+            (None, None) if laid_out => (&mut below, false),
             _ => continue,
         };
         if unread && (is_above || side.unread.is_none()) {

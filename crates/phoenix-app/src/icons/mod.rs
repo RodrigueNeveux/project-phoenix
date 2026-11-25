@@ -94,7 +94,7 @@ pub fn refresh(dir: &Path) -> bool {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     entries.iter().for_each(|(k, _)| k.hash(&mut h));
     NAMES.hash(&mut h);
-    2u8.hash(&mut h);
+    3u8.hash(&mut h);
     let stamp = format!("{:016x}", h.finish());
     let stamp_file = dir.join(".build");
     if std::fs::read_to_string(&stamp_file).is_ok_and(|s| s.trim() == stamp) {
@@ -117,7 +117,7 @@ fn extract_all(entries: &[(String, PathBuf)]) -> HashMap<&'static str, String> {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    let found: Mutex<HashMap<&'static str, (usize, String)>> = Mutex::new(HashMap::new());
+    let found: Mutex<HashMap<&'static str, ((usize, usize), String)>> = Mutex::new(HashMap::new());
     let next = AtomicUsize::new(0);
     let workers = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(1, 4);
     std::thread::scope(|sc| {
@@ -127,7 +127,7 @@ fn extract_all(entries: &[(String, PathBuf)]) -> HashMap<&'static str, String> {
                 let Some((_, p)) = entries.get(i) else { break };
                 let todo: Vec<_> = {
                     let f = found.lock().unwrap_or_else(|e| e.into_inner());
-                    NAMES.iter().filter(|(n, _)| f.get(n).is_none_or(|(j, _)| *j > i)).collect()
+                    NAMES.iter().filter(|(n, _)| f.get(n).is_none_or(|(r, _)| *r > (0, i))).collect()
                 };
                 if todo.is_empty() {
                     break;
@@ -137,10 +137,10 @@ fn extract_all(entries: &[(String, PathBuf)]) -> HashMap<&'static str, String> {
                     continue;
                 }
                 for (name, candidates) in todo {
-                    if let Some(svg) = candidates.iter().find_map(|c| extract::icon_svg(&js, c)) {
+                    if let Some((rank, svg)) = candidates.iter().enumerate().find_map(|(ci, c)| extract::icon_svg(&js, c).map(|s| ((ci, i), s))) {
                         let mut f = found.lock().unwrap_or_else(|e| e.into_inner());
-                        if f.get(name).is_none_or(|(j, _)| *j > i) {
-                            f.insert(*name, (i, svg));
+                        if f.get(name).is_none_or(|(r, _)| *r > rank) {
+                            f.insert(*name, (rank, svg));
                         }
                     }
                 }

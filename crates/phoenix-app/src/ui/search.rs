@@ -441,14 +441,14 @@ fn result_card(app: &PhoenixApp, ix: usize, m: &Message, hl: &Highlighter, cx: &
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
-                .h(z(22.))
+                .min_h(z(22.))
                 .min_w_0()
                 .child(
                     crate::fonts::styled_name(
                         div()
-                            .min_w_0()
-                            .truncate()
+                            .max_w_full()
                             .text_size(z(16.))
                             .line_height(z(22.))
                             .font_weight(FontWeight::MEDIUM)
