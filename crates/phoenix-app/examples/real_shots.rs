@@ -1625,6 +1625,21 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 "textmenu" => phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::Textarea, gpui::point(px(500.), px(560.)), window),
+                "profileoverflow" => {
+                    let (user, sub) = arg.split_once(',').unwrap_or((arg.as_str(), ""));
+                    if let Some(user) = parse_id(user) {
+                        let target = phoenix_app::ui::extra_menus::Target::ProfileOverflow { user, guild: app.selected_guild };
+                        phoenix_app::ui::extra_menus::open(target, gpui::point(px(900.), px(250.)), window);
+                        if let Ok(ix) = sub.parse::<usize>() {
+                            phoenix_app::ui::context_menu::debug_open_submenu(ix);
+                        }
+                    }
+                }
+                "shoplook" => {
+                    if let Some(user) = parse_id(&arg) {
+                        phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::ShopLook(user), gpui::point(px(900.), px(250.)), window);
+                    }
+                }
                 "profilemenu" => {
                     let u = app.selected_guild.and_then(|g| app.members.get(&g)?.get(arg.parse().unwrap_or(0)).map(|m| m.user));
                     if let Some(user) = u {
