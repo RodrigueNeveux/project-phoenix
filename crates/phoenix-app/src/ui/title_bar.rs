@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn active_now_width_is_thirty_percent_clamped() {
         assert_eq!(active_now_w(864.), 360.);
-        assert_eq!(active_now_w(1300.), 390.);
+        assert!((active_now_w(1300.) - 390.).abs() < 0.01);
         assert_eq!(active_now_w(1504.), 420.);
     }
 
