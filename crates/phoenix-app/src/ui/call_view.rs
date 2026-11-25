@@ -1182,7 +1182,13 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
                         .items_center()
                         .justify_center()
                         .gap(z(10.))
-                        .child(glyph("icons/voice/screen.svg", 40., white))
+                        .child(
+                            div().w(gpui::relative(0.8)).h(gpui::relative(0.6)).child(
+                                gpui::img(SharedString::from(stream_empty_preview(crate::theme::is_light())))
+                                    .size_full()
+                                    .object_fit(gpui::ObjectFit::Contain),
+                            ),
+                        )
                         .child(
                             div()
                                 .text_center()
@@ -1539,6 +1545,10 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         .on_click(cx.listener(|_, _, w, _| w.toggle_fullscreen())),
                 ),
         )
+}
+
+fn stream_empty_preview(light: bool) -> &'static str {
+    if light { "https://discord.com/assets/bc689a4cf705a445.svg" } else { "https://discord.com/assets/6b1a461f35c05c7a.svg" }
 }
 
 #[cfg(test)]
