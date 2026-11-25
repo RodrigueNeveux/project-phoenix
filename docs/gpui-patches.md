@@ -353,7 +353,24 @@ nothing fits. An emoji sequence is one grapheme. Unit tests
 `shaped_end_cut_keeps_the_last_glyph_that_fits_like_chromium`,
 `shaped_end_truncation_counts_an_emoji_as_one_glyph`; app tests in `ui::emoji_text`.
 
-Rev: `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14). Before: `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+Rev: `776d5b2c` on `gpui-rewrap` (patches 4 to 15). Before: `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14), `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+
+## 15. Rewrap slack (`src/elements/text.rs` `needs_rewrap`)
+
+**Problem.** After patch 14 a chip sized to its own text could break its last glyph onto a
+second line: server tags « GLA » + « D » and « Zz » + « z » over the status line in the
+member list (`real_shots` #honeypot, DPR 1.5). The text's prepaint wraps again when the
+painted width differs from the last measured one by more than 0.5px. `layout_bounds`
+rounds both edges to device pixels, so a box paints up to one device pixel narrower than
+its layout width (0.667px at 1.5x, 0.8px at 1.25x). With widths in whole device pixels this
+loss was hidden; with LayoutUnit widths it went over the 0.5px threshold.
+
+**Reference.** Chromium wraps at the layout width and only snaps the painted rect, so the
+snapping never re-wraps a line.
+
+**Patch.** The rewrap needs a change of more than `max(0.5px, 1 device px)`, and wraps at the
+painted width plus one device pixel. Unit test `snapping_to_device_pixels_does_not_rewrap`.
+Search `PHOENIX PATCH (rewrap slack)`.
 
 ## Running the vendored tests
 
