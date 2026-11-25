@@ -618,6 +618,7 @@ pub fn member_row_in(
             .is_some_and(|ids| ids.iter().filter_map(|i| app.channels.get(i)).any(|ch| ch.voice_users.contains(&uid))),
         None => app.channels.values().any(|ch| ch.guild.is_some() && ch.voice_users.contains(&uid)),
     } && !crate::ui::voice_panel::flags(uid).undiscoverable;
+    let voice_icon = if in_voice && crate::ui::voice_panel::flags(uid).stream { "golive/screen" } else { "speaker" };
     let two_lines = !offline && (in_voice || sub.is_some() || (acts.is_empty() && mem.activity.is_some()));
     let has_plate = user.is_some_and(|u| u.nameplate.is_some());
     div().py(z(1.)).child(div()
@@ -767,7 +768,7 @@ pub fn member_row_in(
                                     )
                                 }),
                         )
-                        .when(two_lines, |d| d.child(sub_text(in_voice, user.is_some_and(|u| u.bot), sub, mem.activity.clone().filter(|_| acts.is_empty())))),
+                        .when(two_lines, |d| d.child(sub_text(in_voice, voice_icon, user.is_some_and(|u| u.bot), sub, mem.activity.clone().filter(|_| acts.is_empty())))),
                 )
                 .when(has_plate, |d| d.child(crate::ui::nameplate::width_probe(crate::ui::nameplate::Place::Member, uid.0))),
         ))
@@ -915,7 +916,7 @@ impl SubText {
     }
 }
 
-fn sub_text(in_voice: bool, bot: bool, sub: Option<SubText>, fallback: Option<SharedString>) -> gpui::Div {
+fn sub_text(in_voice: bool, voice_icon: &'static str, bot: bool, sub: Option<SubText>, fallback: Option<SharedString>) -> gpui::Div {
     let green = c(tok(idx::STATUS_ONLINE));
     let (custom, main, count) = sub.map(|s| (s.custom, s.main, s.count)).unwrap_or((None, None, 0));
     let total = count + usize::from(in_voice);
@@ -933,7 +934,7 @@ fn sub_text(in_voice: bool, bot: bool, sub: Option<SubText>, fallback: Option<Sh
         .overflow_hidden();
     let piece = match main {
         Some((t, icon)) => Some((Some(t), icon)),
-        None if in_voice => Some((Some(crate::t!("members.in_voice")), Some("speaker"))),
+        None if in_voice => Some((Some(crate::t!("members.in_voice")), Some(voice_icon))),
         None => None,
     };
     if let Some((t, icon)) = piece {
