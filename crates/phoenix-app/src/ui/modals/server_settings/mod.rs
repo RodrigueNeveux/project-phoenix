@@ -192,6 +192,7 @@ pub struct State {
     pub audit_action: Option<u32>,
     pub menu: Option<String>,
     pub uploads: HashMap<&'static str, std::path::PathBuf>,
+    pub ban_page: usize,
     pub subs: Vec<gpui::Subscription>,
 }
 
@@ -215,6 +216,7 @@ impl State {
             audit_action: None,
             menu: None,
             uploads: HashMap::new(),
+            ban_page: 0,
             subs: Vec::new(),
         }
     }

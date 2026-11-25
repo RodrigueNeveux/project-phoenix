@@ -365,6 +365,31 @@ pub fn invites(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
         .into_any_element()
 }
 
+pub const BANS_PER_PAGE: usize = 100;
+
+pub fn page_count(n: usize) -> usize {
+    n.div_ceil(BANS_PER_PAGE).max(1)
+}
+
+fn page_button(id: (&'static str, usize), label: SharedString, active: bool) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .m(z(4.))
+        .min_w(z(28.))
+        .h(z(28.))
+        .px(z(6.))
+        .rounded(z(14.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .cursor_pointer()
+        .text_size(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .when(active, |d| d.bg(c(tok(idx::BRAND_500))).text_color(c(tok(idx::WHITE))))
+        .when(!active, |d| d.text_color(c(tok(idx::TEXT_STRONG))).hover(|d| d.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))))
+        .child(label)
+}
+
 pub fn bans(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let q = kit::input_value(s.inputs.get("ban_search"), cx).to_lowercase();
     let all = s.list("bans");
@@ -375,37 +400,93 @@ pub fn bans(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
             q.is_empty() || kit::user_name(&u).to_lowercase().contains(&q) || kit::s(&u, "username").to_lowercase().contains(&q) || kit::s(&u, "id") == q
         })
         .collect();
-    let mut grid = div().flex().flex_col();
-    for (i, b) in shown.iter().enumerate() {
+    let pages = page_count(shown.len());
+    let page = s.ban_page.min(pages - 1);
+    let mut list = div().flex().flex_col();
+    for (i, b) in shown.iter().enumerate().skip(page * BANS_PER_PAGE).take(BANS_PER_PAGE) {
         let u = b.get("user").cloned().unwrap_or(Value::Null);
-        grid = grid.child(
+        list = list.child(
             div()
                 .id(("ss-ban", i))
-                .h(z(48.))
-                .px(z(8.))
-                .rounded(z(4.))
+                .h(z(56.))
+                .mb(z(4.))
+                .p(z(8.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
                 .flex()
                 .items_center()
-                .gap(z(12.))
                 .cursor_pointer()
                 .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
-                .child(kit::avatar(kit::user_avatar(&u, 64), 32.))
-                .child(text(kit::user_name(&u), 16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG).truncate())
-                .child(text(kit::s(&u, "username"), 14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE).truncate()),
+                .child(kit::avatar(kit::user_avatar(&u, 80), 40.))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .pl(z(8.))
+                        .flex()
+                        .flex_col()
+                        .child(text(kit::user_name(&u), 16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG).truncate())
+                        .child(text(kit::s(&u, "username"), 14., 18., FontWeight::MEDIUM, idx::TEXT_DEFAULT).truncate()),
+                ),
         );
     }
+    let body: AnyElement = if shown.is_empty() && !s.pending.contains("bans") {
+        text(crate::t!(if q.is_empty() { "gs.bans.empty" } else { "gs.bans.no_match" }), 14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE).into_any_element()
+    } else {
+        div()
+            .h(z(760.))
+            .p(z(8.))
+            .rounded(z(12.))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .bg(c(tok(idx::CARD_BACKGROUND_DEFAULT)))
+            .child(div().id("ss-bans-scroll").size_full().overflow_y_scroll().pr(z(8.)).child(list))
+            .into_any_element()
+    };
+    let mut pager = div().flex().items_center().justify_end().py(z(4.));
+    if pages > 1 {
+        pager = pager.child(page_button(("ss-ban-prev", 0), crate::t!("gs.bans.prev"), false).px(z(12.)).on_click(cx.listener(move |_, _, _, cx| {
+            super::with_state(|s| s.ban_page = s.ban_page.saturating_sub(1));
+            cx.notify();
+        })));
+        for n in 0..pages {
+            pager = pager.child(page_button(("ss-ban-page", n), SharedString::from((n + 1).to_string()), n == page).on_click(cx.listener(move |_, _, _, cx| {
+                super::with_state(|s| s.ban_page = n);
+                cx.notify();
+            })));
+        }
+        pager = pager.child(page_button(("ss-ban-next", 0), crate::t!("gs.bans.next"), false).px(z(12.)).on_click(cx.listener(move |_, _, _, cx| {
+            super::with_state(|s| s.ban_page = (s.ban_page + 1).min(pages - 1));
+            cx.notify();
+        })));
+    }
+    let desc = div()
+        .mb(z(20.))
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
+        .child(gpui::StyledText::new(format!("{}{}.", crate::t!("gs.bans.desc_lead"), crate::t!("gs.bans.desc_link"))).with_highlights([(
+            crate::t!("gs.bans.desc_lead").len()..crate::t!("gs.bans.desc_lead").len() + crate::t!("gs.bans.desc_link").len(),
+            gpui::HighlightStyle { color: Some(c(tok(idx::TEXT_LINK))), ..Default::default() },
+        )]));
     div()
+        .pt(z(56.))
+        .px(z(24.))
+        .pb(z(24.))
         .flex()
         .flex_col()
-        .gap(z(16.))
-        .child(kit::page_head(crate::t!("menu.gs.bans"), Some(crate::t!("gs.bans.desc"))))
-        .child(div().flex().items_center().justify_between().child(text(crate::t!("gs.bans.count", n = all.len()), 14., 18., FontWeight::SEMIBOLD, idx::TEXT_STRONG)))
-        .child(kit::search_box(s.inputs.get("ban_search")))
-        .child(if shown.is_empty() && !s.pending.contains("bans") {
-            text(crate::t!("gs.bans.empty"), 14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE).into_any_element()
-        } else {
-            grid.into_any_element()
-        })
+        .gap(z(12.))
+        .child(div().flex().flex_col().child(text(crate::t!("gs.bans.title"), 20., 24., FontWeight::SEMIBOLD, idx::TEXT_STRONG)).child(desc))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(div().flex_1().min_w_0().child(kit::search_box(s.inputs.get("ban_search"))))
+                .child(crate::ui::controls::button("ss-ban-search", crate::t!("gs.bans.search_btn"), BtnKind::Primary)),
+        )
+        .child(body)
+        .child(pager)
         .into_any_element()
 }
 
@@ -413,6 +494,13 @@ pub fn bans(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn bans_paginate_by_100() {
+        assert_eq!(page_count(0), 1);
+        assert_eq!(page_count(100), 1);
+        assert_eq!(page_count(101), 2);
+    }
 
     #[test]
     fn sort_cycles_per_column() {
