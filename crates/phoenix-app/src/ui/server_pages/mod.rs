@@ -13,7 +13,7 @@ pub mod template;
 use std::{cell::RefCell, collections::HashMap};
 
 use gpui::{AnyElement, App, Context, Entity, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div, prelude::*};
-use gpui_component::input::InputState;
+use gpui_component::input::{InputState, TextareaState};
 use phoenix_api::{
     models::Snowflake,
     rest::{guild_manage::AdminCall, guild_server::ServerCall},
@@ -64,6 +64,8 @@ pub struct Store {
     pub menu: Option<(Id, AutomodMenu)>,
     pub inputs: HashMap<(Id, String), Entity<InputState>>,
     pub want: Vec<(Id, String, String)>,
+    pub areas: HashMap<(Id, String), Entity<TextareaState>>,
+    pub want_area: Vec<(Id, String, String, usize)>,
     pub subs: Vec<gpui::Subscription>,
 }
 
@@ -101,6 +103,62 @@ pub fn input(guild: Id, key: &str, initial: &str, cx: &mut Context<PhoenixApp>) 
     None
 }
 
+pub fn area(guild: Id, key: &str, initial: &str, rows: usize, cx: &mut Context<PhoenixApp>) -> Option<Entity<TextareaState>> {
+    let k = (guild, key.to_owned());
+    if let Some(e) = with(|s| s.areas.get(&k).cloned()) {
+        return Some(e);
+    }
+    with(|s| {
+        if !s.want_area.iter().any(|(g, kk, _, _)| *g == guild && kk == key) {
+            s.want_area.push((guild, key.to_owned(), initial.to_owned(), rows));
+        }
+    });
+    cx.notify();
+    None
+}
+
+pub fn area_value(guild: Id, key: &str, cx: &App) -> Option<String> {
+    with(|s| s.areas.get(&(guild, key.to_owned())).cloned()).map(|e| e.read(cx).value().to_string())
+}
+
+pub fn forget_prefix(guild: Id, prefix: &str) {
+    with(|s| {
+        s.inputs.retain(|(g, k), _| !(*g == guild && k.starts_with(prefix)));
+        s.areas.retain(|(g, k), _| !(*g == guild && k.starts_with(prefix)));
+    });
+}
+
+pub fn area_field(guild: Id, key: &str, initial: &str, rows: usize, h: f32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    let shell = div()
+        .relative()
+        .min_h(z(h))
+        .px(z(10.))
+        .py(z(10.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(t(idx::INPUT_BORDER_DEFAULT))
+        .bg(t(idx::INPUT_BACKGROUND_DEFAULT))
+        .text_size(z(16.))
+        .line_height(z(20.));
+    match area(guild, key, initial, rows, cx) {
+        Some(e) => shell.child(gpui_component::input::Textarea::new(&e).appearance(false).bordered(false)),
+        None => shell.child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, initial.to_owned())),
+    }
+}
+
+pub fn split_list(v: &str, max: usize) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for w in v.split([',', '\n']).map(str::trim).filter(|w| !w.is_empty()) {
+        if out.len() >= max {
+            break;
+        }
+        if !out.iter().any(|x| x == w) {
+            out.push(w.to_owned());
+        }
+    }
+    out
+}
+
 pub fn value(guild: Id, key: &str, cx: &App) -> Option<String> {
     with(|s| s.inputs.get(&(guild, key.to_owned())).cloned()).map(|e| e.read(cx).value().to_string())
 }
@@ -128,6 +186,15 @@ pub fn field(guild: Id, key: &str, initial: &str, cx: &mut Context<PhoenixApp>) 
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    let areas = with(|s| std::mem::take(&mut s.want_area));
+    for (g, k, init, rows) in areas {
+        let e = cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows.max(1), 12).default_value(init));
+        let sub = cx.observe(&e, |_, _, cx| cx.notify());
+        with(|s| {
+            s.areas.insert((g, k), e);
+            s.subs.push(sub);
+        });
+    }
     let want = with(|s| std::mem::take(&mut s.want));
     if want.is_empty() {
         return;
@@ -137,10 +204,18 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         if !init.is_empty() {
             e.update(cx, |s, cx| s.set_value(init, window, cx));
         }
-        let sub = cx.subscribe_in(&e, window, |_, _, ev: &gpui_component::input::InputEvent, _, cx| {
-            if matches!(ev, gpui_component::input::InputEvent::Change) {
+        let enter_key = (g, k.clone());
+        let sub = cx.subscribe_in(&e, window, move |_, st, ev: &gpui_component::input::InputEvent, w, cx| match ev {
+            gpui_component::input::InputEvent::Change => cx.notify(),
+            gpui_component::input::InputEvent::PressEnter { .. } if enter_key.1.starts_with("am-rx:") => {
+                let v = st.read(cx).value().trim().to_owned();
+                if !v.is_empty() {
+                    automod::add_regex(&v);
+                    st.update(cx, |s, cx| s.set_value("", w, cx));
+                }
                 cx.notify();
             }
+            _ => {}
         });
         with(|s| {
             s.inputs.insert((g, k), e);

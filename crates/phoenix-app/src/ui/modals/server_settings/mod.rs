@@ -191,6 +191,7 @@ pub struct State {
     pub audit_user: Option<u64>,
     pub audit_action: Option<u32>,
     pub menu: Option<String>,
+    pub uploads: HashMap<&'static str, std::path::PathBuf>,
     pub subs: Vec<gpui::Subscription>,
 }
 
@@ -213,6 +214,7 @@ impl State {
             audit_user: None,
             audit_action: None,
             menu: None,
+            uploads: HashMap::new(),
             subs: Vec::new(),
         }
     }
@@ -235,7 +237,7 @@ impl State {
     }
 
     pub fn dirty(&self, cx: &gpui::App) -> bool {
-        self.edits.banner_preset.is_some() || !pending_writes(self, cx).is_empty()
+        self.edits.banner_preset.is_some() || self.uploads.contains_key("icon") || self.uploads.contains_key("banner") || !pending_writes(self, cx).is_empty()
     }
 }
 
@@ -383,8 +385,41 @@ pub fn prepare(s: &mut State, window: &mut Window, cx: &mut Context<PhoenixApp>)
     }
 }
 
+pub fn profile_upload_patch(icon: Option<String>, banner: Option<String>) -> Option<phoenix_api::rest::guild_server::ProfilePatch> {
+    (icon.is_some() || banner.is_some()).then(|| phoenix_api::rest::guild_server::ProfilePatch { icon: icon.map(Some), custom_banner: banner.map(Some), ..Default::default() })
+}
+
+pub fn pick_upload(key: &'static str, exts: &'static [&'static str], cx: &mut Context<PhoenixApp>) {
+    crate::ui::file_pick::pick(exts, cx, move |a, path, cx| match key {
+        "emoji" => {
+            let guild = with_state(|s| s.guild);
+            if let (Some(g), Some(image)) = (guild, crate::ui::file_pick::data_uri(&path)) {
+                a.admin_toast(AdminCall::CreateEmoji { guild: sf(g), name: emoji_name_from_file(&path), image }, None, cx);
+                with_state(|s| s.data.remove("emojis"));
+                load(a, cx);
+            }
+        }
+        _ => {
+            with_state(|s| {
+                s.uploads.insert(key, path);
+            });
+        }
+    });
+}
+
+pub fn emoji_name_from_file(path: &std::path::Path) -> String {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+    let mut name: String = stem.chars().map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' }).collect();
+    name.truncate(32);
+    while name.len() < 2 {
+        name.push('_');
+    }
+    name
+}
+
 fn reset(a: &mut PhoenixApp, w: &mut Window, cx: &mut Context<PhoenixApp>) {
     with_state(|s| {
+        s.uploads.clear();
         s.edits = Edits::default();
         s.role_order = None;
         if let Some(r) = s.role.as_mut() {
@@ -403,6 +438,7 @@ fn save(a: &mut PhoenixApp, _w: &mut Window, cx: &mut Context<PhoenixApp>) {
         a.admin_toast(call, None, cx);
     }
     with_state(|s| {
+        s.uploads.clear();
         s.edits = Edits::default();
         s.role_order = None;
         if let Some(r) = s.role.as_mut() {
@@ -426,6 +462,9 @@ pub fn pending_writes(s: &State, cx: &gpui::App) -> Vec<AdminCall> {
         let enabled = s.edits.widget_enabled.unwrap_or_else(|| w.get("enabled").and_then(Value::as_bool).unwrap_or(false));
         let channel = s.edits.widget_channel.unwrap_or_else(|| kit::id_of(&w, "channel_id"));
         out.push(AdminCall::EditWidget { guild: g, enabled, channel: channel.map(phoenix_api::models::Snowflake) });
+    }
+    if let Some(patch) = profile_upload_patch(s.uploads.get("icon").and_then(|p| crate::ui::file_pick::data_uri(p)), s.uploads.get("banner").and_then(|p| crate::ui::file_pick::data_uri(p))) {
+        out.push(AdminCall::Server(phoenix_api::rest::guild_server::ServerCall::SetProfile { guild: g, patch }));
     }
     if let Some(order) = &s.role_order {
         out.push(AdminCall::ReorderRoles { guild: g, order: roles::positions(order) });
@@ -484,6 +523,15 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
 mod tests {
     use super::*;
     use crate::actions::{ADMINISTRATOR, MANAGE_GUILD, MANAGE_ROLES};
+
+    #[test]
+    fn uploads_follow_the_client_requests() {
+        assert_eq!(emoji_name_from_file(std::path::Path::new("/tmp/My Cat-01.png")), "My_Cat_01");
+        assert_eq!(emoji_name_from_file(std::path::Path::new("x.gif")), "x_");
+        assert!(profile_upload_patch(None, None).is_none());
+        let p = profile_upload_patch(Some("data:image/png;base64,AA".into()), None).unwrap();
+        assert_eq!((p.icon, p.custom_banner), (Some(Some("data:image/png;base64,AA".into())), None));
+    }
 
     #[test]
     fn sections() {

@@ -103,7 +103,9 @@ fn tile(id: (&'static str, usize), bg: gpui::Background, selected: bool) -> gpui
 fn banners(s: &State, guild: u64, cx: &mut Cx) -> AnyElement {
     let p = s.get("profile").cloned().unwrap_or(Value::Null);
     let uploaded = banner_url(guild, &p);
-    let current = s.edits.banner_preset.or(if uploaded.is_some() { Some(BANNERS.len()) } else { None });
+    let local = s.uploads.get("banner").cloned();
+    let current = s.edits.banner_preset.or(if uploaded.is_some() || local.is_some() { Some(BANNERS.len()) } else { None });
+    let has_image = uploaded.is_some() || local.is_some();
     let mut cells: Vec<AnyElement> = BANNERS
         .iter()
         .enumerate()
@@ -122,6 +124,7 @@ fn banners(s: &State, guild: u64, cx: &mut Cx) -> AnyElement {
         .min_w(z(100.))
         .group("ss-banner-up")
         .cursor_pointer()
+        .on_click(cx.listener(|_, _, _, cx| super::pick_upload("banner", &crate::ui::file_pick::IMAGES, cx)))
         .when(current == Some(BANNERS.len()), |d| d.m(z(-4.)).p(z(3.)).rounded(z(10.)).border_1().border_color(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW))))
         .flex()
         .child(
@@ -136,9 +139,13 @@ fn banners(s: &State, guild: u64, cx: &mut Cx) -> AnyElement {
                 .flex()
                 .items_center()
                 .justify_center()
-                .children(uploaded.clone().map(|u| gpui::img(u).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)))
-                .child(div().absolute().inset_0().bg(c(tok(idx::BACKGROUND_SCRIM))).opacity(if uploaded.is_some() { 0. } else { 1. }).group_hover("ss-banner-up", |s| s.opacity(1.)))
-                .child(gpui::svg().path(crate::icons::path("image-plus")).size(z(24.)).text_color(gpui::white()).opacity(if uploaded.is_some() { 0. } else { 1. }).group_hover("ss-banner-up", |s| s.opacity(1.))),
+                .children(match (&local, &uploaded) {
+                    (Some(p), _) => Some(gpui::img(p.clone()).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)),
+                    (None, Some(u)) => Some(gpui::img(u.clone()).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)),
+                    _ => None,
+                })
+                .child(div().absolute().inset_0().bg(c(tok(idx::BACKGROUND_SCRIM))).opacity(if has_image { 0. } else { 1. }).group_hover("ss-banner-up", |s| s.opacity(1.)))
+                .child(gpui::svg().path(crate::icons::path("image-plus")).size(z(24.)).text_color(gpui::white()).opacity(if has_image { 0. } else { 1. }).group_hover("ss-banner-up", |s| s.opacity(1.))),
         )
         .into_any_element();
     cells.push(up);
@@ -295,10 +302,16 @@ pub fn preview(s: &State, guild: u64) -> AnyElement {
     };
     let banner: AnyElement = match (s.edits.banner_preset, banner_url(guild, &p)) {
         (Some(i), _) if i < BANNERS.len() => div().h(z(120.)).bg(gradient(BANNERS[i].1, BANNERS[i].2)).into_any_element(),
+        _ if s.uploads.contains_key("banner") => gpui::img(s.uploads["banner"].clone()).w_full().h(z(120.)).object_fit(gpui::ObjectFit::Cover).into_any_element(),
         (_, Some(u)) => gpui::img(u).w_full().h(z(120.)).object_fit(gpui::ObjectFit::Cover).into_any_element(),
         _ => div().h(z(120.)).bg(gradient(BANNERS[0].1, BANNERS[0].2)).into_any_element(),
     };
-    let icon = icon_url(guild, g, 128).map(|u| gpui::img(u).size(z(70.)).rounded(z(20.)).into_any_element()).unwrap_or_else(|| div().size(z(70.)).rounded(z(20.)).bg(c(tok(idx::BACKGROUND_BASE_LOWER))).into_any_element());
+    let icon = s
+        .uploads
+        .get("icon")
+        .map(|p| gpui::img(p.clone()).size(z(70.)).rounded(z(20.)).object_fit(gpui::ObjectFit::Cover).into_any_element())
+        .or_else(|| icon_url(guild, g, 128).map(|u| gpui::img(u).size(z(70.)).rounded(z(20.)).into_any_element()))
+        .unwrap_or_else(|| div().size(z(70.)).rounded(z(20.)).bg(c(tok(idx::BACKGROUND_BASE_LOWER))).into_any_element());
     let tag = kit::s(&p, "tag");
     let online = kit::n(&p, "online_count");
     let members = kit::n(&p, "member_count");
@@ -386,7 +399,7 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let icon_buttons = div()
         .flex()
         .gap(z(8.))
-        .child(kit::btn_sm("ss-icon-change", crate::t!("gs.profile.icon_change"), BtnKind::Primary))
+        .child(kit::btn_sm("ss-icon-change", crate::t!("gs.profile.icon_change"), BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| super::pick_upload("icon", &crate::ui::file_pick::IMAGES, cx))))
         .child(kit::critical_secondary("ss-icon-remove", crate::t!("gs.profile.icon_remove")));
     let left = div()
         .flex_1()

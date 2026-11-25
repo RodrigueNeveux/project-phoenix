@@ -135,10 +135,11 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         .child(div().mt(z(32.)).child(content_row(app, crate::t!("gs2.channel_summaries"), crate::t!("gs2.channel_summaries_desc"), sums.get("enabled").and_then(Value::as_bool).unwrap_or(false), &ids(&sums), "gs2-sum-sw")))
         .child(div().mt(z(32.)).child(content_row(app, crate::t!("gs2.channel_messages"), crate::t!("gs2.channel_messages_desc"), msgs.get("enabled").and_then(Value::as_bool).unwrap_or(false), &ids(&msgs), "gs2-msg-sw")))
         .child(divider(40.));
+    let desc0 = str_of(&g, "description").to_owned();
     p = p
         .child(label(crate::t!("gs2.server_description")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.presence_description_desc"))))
-        .child(div().mt(z(8.)).child(field(str_of(&g, "description").to_owned(), 88.)))
+        .child(div().mt(z(8.)).child(super::area_field(guild, "pr-desc", &desc0, 3, 88., cx)))
         .child(divider(40.))
         .child(label(crate::t!("gs2.reasons")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.reasons_desc"))));
@@ -158,17 +159,20 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                 .items_center()
                 .gap(z(10.))
                 .child(div().w(z(19.)).child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, r.map(|r| str_of(r, "emoji_name").to_owned()).unwrap_or_default())))
-                .child(div().flex_1().child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, r.map(|r| str_of(r, "reason").to_owned()).unwrap_or_default())))
+                .child(div().flex_1().min_w_0().child(match super::input(guild, &format!("pr-reason-{i}"), r.map(|r| str_of(r, "reason")).unwrap_or_default(), cx) {
+                    Some(e) => gpui_component::input::Input::new(&e).appearance(false).bordered(false).into_any_element(),
+                    None => text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, r.map(|r| str_of(r, "reason").to_owned()).unwrap_or_default()).into_any_element(),
+                }))
                 .child(icon("close-small", 16., idx::ICON_SUBTLE)),
         );
     }
     let about = str_of(&meta, "about").to_owned();
-    let n = about.chars().count();
+    let n = super::area_value(guild, "pr-about", cx).unwrap_or_else(|| about.clone()).chars().count();
     p = p
         .child(divider(40.))
         .child(label(crate::t!("gs2.about")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.about_desc"))))
-        .child(div().mt(z(8.)).child(field(about, 232.)))
+        .child(div().mt(z(8.)).child(super::area_field(guild, "pr-about", &about, 10, 232., cx)))
         .child(div().mt(z(4.)).flex().justify_end().child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, format!("{n} / 2400"))))
         .child(divider(40.))
         .child(label(crate::t!("gs2.social")))
@@ -182,12 +186,99 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                 .flex()
                 .gap(z(12.))
                 .child(div().w(z(186.)).child(crate::ui::controls::select_field(("gs2-social-plat", i), plat)))
-                .child(field(format!("{prefix}{}", l.trim_start_matches("https://").split_once('/').map(|x| x.1).unwrap_or("")), 40.).flex_1()),
+                .child(match super::input(guild, &format!("pr-social-{i}"), &social_display(l, prefix), cx) {
+                    Some(e) => crate::ui::modals::input_box(&e).flex_1().into_any_element(),
+                    None => field(social_display(l, prefix), 40.).flex_1().into_any_element(),
+                }),
         );
     }
-    p.child(div().mt(z(20.)).flex().child(button_sm("gs2-social-add", crate::t!("gs2.add_another"), BtnKind::Secondary)))
-        .child(div().mt(z(80.)).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.presence_remove_hint"))))
-        .into_any_element()
+    p = p
+        .child(div().mt(z(20.)).flex().child(button_sm("gs2-social-add", crate::t!("gs2.add_another"), BtnKind::Secondary)))
+        .child(div().mt(z(80.)).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.presence_remove_hint"))));
+    let draft = Draft::read(guild, &meta, cx);
+    let orig = Draft::original(&g, &meta);
+    if let Some(d) = draft.filter(|d| *d != orig) {
+        let reset: crate::ui::modals::settings_layout::Act = std::rc::Rc::new(move |_, _, _| super::forget_prefix(guild, "pr-"));
+        let reasons0: Vec<Value> = meta.get("reasons_to_join").and_then(Value::as_array).cloned().unwrap_or_default();
+        let save: crate::ui::modals::settings_layout::Act = std::rc::Rc::new(move |a, _, cx| {
+            let (meta_patch, desc) = d.patch(&orig, &reasons0);
+            if let Some(patch) = meta_patch {
+                super::write(a, ServerCall::EditDiscoveryMetadata { guild: sf(guild), patch }, None, cx);
+            }
+            if let Some(description) = desc {
+                a.admin_toast(
+                    phoenix_api::rest::guild_manage::AdminCall::EditGuild { guild: sf(guild), edit: phoenix_api::rest::guild_manage::GuildEdit { description: Some(description), ..Default::default() } },
+                    None,
+                    cx,
+                );
+            }
+            super::forget_prefix(guild, "pr-");
+        });
+        p = p.child(div().mt(z(16.)).child(crate::ui::modals::settings_layout::unsaved_bar(reset, save, cx)));
+    }
+    p.into_any_element()
+}
+
+fn social_display(l: &str, prefix: &str) -> String {
+    format!("{prefix}{}", l.trim_start_matches("https://").trim_start_matches("http://"))
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Draft {
+    pub description: String,
+    pub about: String,
+    pub reasons: Vec<String>,
+    pub social: Vec<String>,
+}
+
+impl Draft {
+    pub fn original(g: &Value, meta: &Value) -> Self {
+        let reasons = meta.get("reasons_to_join").and_then(Value::as_array).cloned().unwrap_or_default();
+        Self {
+            description: str_of(g, "description").to_owned(),
+            about: str_of(meta, "about").to_owned(),
+            reasons: (0..4).map(|i| reasons.get(i).map(|r| str_of(r, "reason").to_owned()).unwrap_or_default()).collect(),
+            social: meta.get("social_links").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(|l| social_display(l, "")).collect(),
+        }
+    }
+
+    fn read(guild: Id, meta: &Value, cx: &gpui::App) -> Option<Self> {
+        let social_n = meta.get("social_links").and_then(Value::as_array).map_or(0, |a| a.len());
+        let desc = super::area_value(guild, "pr-desc", cx)?;
+        Some(Self {
+            description: desc,
+            about: super::area_value(guild, "pr-about", cx)?,
+            reasons: (0..4).map(|i| super::value(guild, &format!("pr-reason-{i}"), cx).unwrap_or_default()).collect(),
+            social: (0..social_n).map(|i| super::value(guild, &format!("pr-social-{i}"), cx).unwrap_or_default()).collect(),
+        })
+    }
+
+    pub fn patch(&self, orig: &Self, reasons0: &[Value]) -> (Option<Value>, Option<String>) {
+        let mut m = serde_json::Map::new();
+        if self.about != orig.about {
+            m.insert("about".into(), Value::from(self.about.trim()));
+        }
+        if self.reasons != orig.reasons {
+            let list: Vec<Value> = self
+                .reasons
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| !r.trim().is_empty())
+                .map(|(i, r)| {
+                    let mut o = reasons0.get(i).cloned().filter(Value::is_object).unwrap_or_else(|| serde_json::json!({ "emoji_id": null, "emoji_name": null }));
+                    o["reason"] = Value::from(r.trim());
+                    o
+                })
+                .collect();
+            m.insert("reasons_to_join".into(), Value::from(list));
+        }
+        if self.social != orig.social {
+            let links: Vec<Value> = self.social.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).map(|s| Value::from(format!("https://{s}"))).collect();
+            m.insert("social_links".into(), Value::from(links));
+        }
+        let desc = (self.description != orig.description).then(|| self.description.trim().to_owned());
+        ((!m.is_empty()).then_some(Value::Object(m)), desc)
+    }
 }
 
 pub fn social_platform(url: &str) -> (&'static str, &'static str) {
@@ -210,5 +301,27 @@ mod tests {
         let cats = json!([{ "id": 49, "name": "Bots" }, { "id": 14, "name": "Discussion générale" }]);
         assert_eq!(category_name(&cats, 49), "Bots");
         assert_eq!(social_platform("https://instagram.com/gladosofficiel").0, "Instagram");
+    }
+
+    #[test]
+    fn presence_saves_only_changed_fields() {
+        let g = json!({ "description": "Desc" });
+        let meta = json!({ "about": "A", "reasons_to_join": [{ "reason": "r1", "emoji_name": "🔥" }], "social_links": ["https://instagram.com/x"] });
+        let orig = Draft::original(&g, &meta);
+        assert_eq!(orig.social, vec!["instagram.com/x"]);
+        let r0 = meta["reasons_to_join"].as_array().unwrap().clone();
+        assert_eq!(orig.patch(&orig, &r0), (None, None));
+        let mut d = orig.clone();
+        d.about = " Nouveau ".into();
+        d.social[0] = "instagram.com/y".into();
+        let (m, desc) = d.patch(&orig, &r0);
+        assert_eq!(m, Some(json!({ "about": "Nouveau", "social_links": ["https://instagram.com/y"] })));
+        assert_eq!(desc, None);
+        d.description = "Autre".into();
+        d.reasons[0] = "r2".into();
+        d.reasons[1] = "neuf".into();
+        let (m, desc) = d.patch(&orig, &r0);
+        assert_eq!(desc.as_deref(), Some("Autre"));
+        assert_eq!(m.unwrap()["reasons_to_join"], json!([{ "reason": "r2", "emoji_name": "🔥" }, { "reason": "neuf", "emoji_id": null, "emoji_name": null }]));
     }
 }

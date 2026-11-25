@@ -69,6 +69,8 @@ pub struct ProfilePatch {
     pub badge: Option<u32>,
     pub badge_color_primary: Option<String>,
     pub badge_color_secondary: Option<String>,
+    pub icon: Option<Option<String>>,
+    pub custom_banner: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -260,6 +262,12 @@ pub fn build(call: &ServerCall) -> ApiReq {
             if let Some(x) = &patch.badge_color_secondary {
                 b["badge_color_secondary"] = json!(x);
             }
+            if let Some(x) = &patch.icon {
+                b["icon"] = json!(x);
+            }
+            if let Some(x) = &patch.custom_banner {
+                b["custom_banner"] = json!(x);
+            }
             req(Method::PATCH, format!("/guilds/{guild}/profile"), Some(b))
         }
         S::EditSafety { guild, edit } => {
@@ -386,5 +394,7 @@ mod tests {
         assert_eq!((r.method, r.path.as_str()), (Method::PUT, "/applications/7/guilds/1/commands/8/permissions"));
         assert_eq!(r.body.unwrap(), json!({ "permissions": [{ "id": "1", "type": 1, "permission": false }] }));
         assert!(!ServerCall::DeleteGuild { guild: G }.is_read());
+        let r = build(&ServerCall::SetProfile { guild: G, patch: ProfilePatch { icon: Some(Some("data:image/png;base64,AA".into())), custom_banner: Some(None), ..Default::default() } });
+        assert_eq!(r.body, Some(json!({ "icon": "data:image/png;base64,AA", "custom_banner": null })));
     }
 }

@@ -27,13 +27,13 @@ pub fn sound_slots(tier: u8) -> usize {
     [8, 24, 36, 48][tier.min(3) as usize]
 }
 
-fn header(title: SharedString, desc: SharedString, upload: SharedString, id: &'static str) -> gpui::Div {
+fn header(title: SharedString, desc: SharedString, upload: SharedString, id: &'static str, cx: &mut kit::Cx) -> gpui::Div {
     div()
         .flex()
         .flex_col()
         .gap(z(20.))
         .child(div().flex().flex_col().gap(z(4.)).child(kit::h2(title)).child(text(desc, 16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT)))
-        .child(div().flex().child(crate::ui::controls::button(id, upload, BtnKind::Primary)))
+        .child(div().flex().child(crate::ui::controls::button(id, upload, BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| super::pick_upload("emoji", &crate::ui::file_pick::IMAGES, cx)))))
 }
 
 fn uploader(u: Option<&Value>) -> AnyElement {
@@ -125,7 +125,7 @@ pub fn emoji(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                 .mb(z(24.))
                 .border_b_1()
                 .border_color(c(tok(idx::BORDER_SUBTLE)))
-                .child(header(crate::t!("menu.gs.emoji"), crate::t!("gs.expr.emoji_desc", n = slots), crate::t!("gs.expr.emoji_upload"), "ss-emoji-upload"))
+                .child(header(crate::t!("menu.gs.emoji"), crate::t!("gs.expr.emoji_desc", n = slots), crate::t!("gs.expr.emoji_upload"), "ss-emoji-upload", cx))
                 .child(text(crate::t!("gs.expr.emoji_drop"), 12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT)),
         )
         .child(emoji_table(crate::t!("menu.gs.emoji"), &stat, slots, cx))
@@ -177,7 +177,7 @@ pub fn stickers(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                 .items_center()
                 .justify_between()
                 .child(text(crate::t!("gs.expr.slots_of", used = list.len(), n = slots), 16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG))
-                .child(kit::btn_sm("ss-sticker-upload", crate::t!("gs.expr.sticker_upload"), BtnKind::Primary)),
+                .child(kit::btn_sm("ss-sticker-upload", crate::t!("gs.expr.sticker_upload"), BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| super::pick_upload("sticker", &crate::ui::file_pick::STICKERS, cx)))),
         )
         .child(grid)
         .into_any_element()
@@ -221,7 +221,7 @@ pub fn soundboard(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
         .flex_col()
         .child(kit::h2(crate::t!("menu.gs.soundboard")))
         .child(text(crate::t!("gs.expr.sound_desc"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).mt(z(16.)))
-        .child(div().mt(z(24.)).flex().child(crate::ui::controls::button("ss-sound-upload", crate::t!("gs.expr.sound_upload"), BtnKind::Primary)))
+        .child(div().mt(z(24.)).flex().child(crate::ui::controls::button("ss-sound-upload", crate::t!("gs.expr.sound_upload"), BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| super::pick_upload("sound", &crate::ui::file_pick::SOUNDS, cx)))))
         .child(text(crate::t!("gs.expr.sound_slots", tier = t, n = slots.saturating_sub(items.len()), total = slots), 16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG).mt(z(50.)).h(z(24.)))
         .child(div().mt(z(32.)).child(head))
         .child(rows)

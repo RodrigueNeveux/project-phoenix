@@ -185,6 +185,41 @@ fn field(v: impl Into<SharedString>, h: f32, count: String) -> gpui::Div {
         .child(div().absolute().right(z(12.)).bottom(z(8.)).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, count)))
 }
 
+pub fn add_regex(v: &str) {
+    super::with(|s| {
+        if let Some((_, r)) = s.rule_draft.as_mut() {
+            let list = &mut r.trigger_metadata.regex_patterns;
+            if list.len() < REGEX_MAX && !list.iter().any(|x| x == v) {
+                list.push(v.to_owned());
+            }
+        }
+    });
+}
+
+pub fn rule_key(r: &AutomodRule) -> u64 {
+    r.id.map(|s| s.0).unwrap_or(0)
+}
+
+pub const KEYWORDS_MAX: usize = 1000;
+pub const REGEX_MAX: usize = 10;
+pub const ALLOW_MAX: usize = 100;
+
+pub fn sync_draft(guild: Id, cx: &gpui::App) {
+    let Some(id) = super::with(|s| s.rule_draft.as_ref().filter(|(g, _)| *g == guild).map(|(_, r)| rule_key(r))) else { return };
+    let kw = super::area_value(guild, &format!("am-kw:{id}"), cx);
+    let allow = super::area_value(guild, &format!("am-allow:{id}"), cx);
+    super::with(|s| {
+        if let Some((_, r)) = s.rule_draft.as_mut() {
+            if let Some(v) = kw {
+                r.trigger_metadata.keyword_filter = super::split_list(&v, KEYWORDS_MAX);
+            }
+            if let Some(v) = allow {
+                r.trigger_metadata.allow_list = super::split_list(&v, ALLOW_MAX);
+            }
+        }
+    });
+}
+
 fn chip(s: &str) -> gpui::Div {
     div()
         .px(z(4.))
@@ -202,15 +237,31 @@ fn editor(app: &PhoenixApp, guild: Id, d: &AutomodRule, cx: &mut Context<Phoenix
     let m = &d.trigger_metadata;
     let mut out = div().flex().flex_col();
     if d.trigger_type == trigger::KEYWORD || d.trigger_type == trigger::MEMBER_PROFILE {
-        let mut chips = div().flex().flex_wrap().gap(z(8.));
-        for r in &m.regex_patterns {
-            chips = chips.child(chip(r));
+        let mut chips = div().flex().flex_wrap().items_center().gap(z(8.));
+        for (i, r) in m.regex_patterns.iter().enumerate() {
+            let pat = r.clone();
+            chips = chips.child(chip(r).id(("am-rx-chip", i)).cursor_pointer().on_click(cx.listener(move |_, _, _, cx| {
+                super::with(|s| {
+                    if let Some((_, r)) = s.rule_draft.as_mut() {
+                        r.trigger_metadata.regex_patterns.retain(|x| *x != pat);
+                    }
+                });
+                cx.notify();
+            })));
         }
+        if m.regex_patterns.len() < REGEX_MAX {
+            let key = format!("am-rx:{}", rule_key(d));
+            chips = chips.child(match super::input(guild, &key, "", cx) {
+                Some(e) => div().flex_1().min_w(z(120.)).child(gpui_component::input::Input::new(&e).appearance(false).bordered(false)).into_any_element(),
+                None => div().into_any_element(),
+            });
+        }
+        let kw_key = format!("am-kw:{}", rule_key(d));
         let keywords = div()
             .flex()
             .flex_col()
             .gap(z(8.))
-            .child(field(m.keyword_filter.join(", "), 98., format!("{} / 1000", m.keyword_filter.len())))
+            .child(super::area_field(guild, &kw_key, &m.keyword_filter.join(", "), 4, 98., cx).child(div().absolute().right(z(12.)).bottom(z(8.)).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, format!("{} / {KEYWORDS_MAX}", m.keyword_filter.len())))))
             .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.am_keywords_hint")))
             .child(
                 div()
@@ -231,7 +282,7 @@ fn editor(app: &PhoenixApp, guild: Id, d: &AutomodRule, cx: &mut Context<Phoenix
                             .border_1()
                             .border_color(t(idx::INPUT_BORDER_DEFAULT))
                             .child(chips)
-                            .child(div().absolute().right(z(12.)).bottom(z(8.)).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, format!("{} / 10", m.regex_patterns.len())))),
+                            .child(div().absolute().right(z(12.)).bottom(z(8.)).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, format!("{} / {REGEX_MAX}", m.regex_patterns.len())))),
                     )
                     .child(text(12., 16., FontWeight::MEDIUM, idx::TEXT_MUTED, crate::t!("gs2.am_regex_hint"))),
             )
@@ -242,7 +293,7 @@ fn editor(app: &PhoenixApp, guild: Id, d: &AutomodRule, cx: &mut Context<Phoenix
                     .flex_col()
                     .gap(z(8.))
                     .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG, crate::t!("gs2.am_allow")))
-                    .child(field(m.allow_list.join(", "), 78., format!("{} / 100", m.allow_list.len()))),
+                    .child(super::area_field(guild, &format!("am-allow:{}", rule_key(d)), &m.allow_list.join(", "), 3, 78., cx).child(div().absolute().right(z(12.)).bottom(z(8.)).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, format!("{} / {ALLOW_MAX}", m.allow_list.len()))))),
             );
         out = out.child(step(1, crate::t!("gs2.am_step_keywords"), keywords.into_any_element()));
     } else if d.trigger_type == trigger::MENTION_SPAM {
@@ -379,6 +430,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         return p.child(super::loading()).into_any_element();
     };
     let rules = parse_rules(&rules);
+    sync_draft(guild, cx);
     let draft = super::with(|s| s.rule_draft.clone()).filter(|(g, _)| *g == guild).map(|(_, r)| r);
     let groups = [("gs2.am_members", true), ("gs2.am_content", false)];
     for (key, members) in groups {
@@ -410,10 +462,14 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     }
     let dirty = draft.as_ref().is_some_and(|d| rules.iter().any(|r| r.id == d.id && r != d));
     if let Some(d) = draft.filter(|_| dirty) {
-        let reset: crate::ui::modals::settings_layout::Act = Rc::new(move |_, _, _| super::with(|s| s.rule_draft = None));
+        let reset: crate::ui::modals::settings_layout::Act = Rc::new(move |_, _, _| {
+            super::with(|s| s.rule_draft = None);
+            super::forget_prefix(guild, "am-");
+        });
         let save: crate::ui::modals::settings_layout::Act = Rc::new(move |a, _, cx| {
             let r = d.clone();
             super::with(|s| s.rule_draft = None);
+            super::forget_prefix(guild, "am-");
             write(a, ServerCall::EditAutomodRule { guild: sf(guild), rule: r }, None, cx);
         });
         p = p.child(div().mt(z(16.)).child(crate::ui::modals::settings_layout::unsaved_bar(reset, save, cx)));
@@ -447,6 +503,13 @@ mod tests {
         assert_eq!(duration(3600), "1\u{a0}heure");
         assert_eq!(duration(86_400), "1\u{a0}jour");
         assert_eq!(duration(604_800), "1\u{a0}semaine");
+    }
+
+    #[test]
+    fn keyword_lists_split_like_the_client() {
+        assert_eq!(super::super::split_list("dox, *spam*,\n  dox ,, test", KEYWORDS_MAX), vec!["dox", "*spam*", "test"]);
+        assert_eq!(super::super::split_list("a,b,c", 2), vec!["a", "b"]);
+        assert!(super::super::split_list(" , ", 10).is_empty());
     }
 
     #[test]
