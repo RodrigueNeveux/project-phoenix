@@ -122,7 +122,7 @@ pub fn call_state(call: Option<&crate::model::CallInfo>, active: bool, me: crate
 const ASSET_DISCOVERY_OUT: &str = "https://discord.com/assets/49dd33256719a93e.svg";
 const ASSET_DISCOVERY_BACK: &str = "https://discord.com/assets/5c56b22c17556059.svg";
 
-const FALLBACK_TYPES: [u8; 7] = [35, 48, 49, 50, 51, 64, 65];
+const FALLBACK_TYPES: [u8; 3] = [35, 50, 64];
 
 const AUTOMOD_TYPES: [u8; 4] = [36, 37, 38, 39];
 
@@ -147,6 +147,7 @@ pub enum SysLink {
     Followed,
     JoinStream,
     HelpCenter,
+    Learn,
     Inert,
 }
 
@@ -162,6 +163,8 @@ pub struct SysCtx<'a> {
     pub mine: bool,
     pub other: Option<String>,
     pub time: String,
+    pub names: Vec<String>,
+    pub call_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -364,6 +367,35 @@ pub fn generic_in(code: &str, ctx: &SysCtx) -> Option<Generic> {
             vars.push(("o", ctx.other.clone().unwrap_or_default()));
             (SysIcon::Named(icon, 20., None), key, &[], false)
         }
+        49 => {
+            vars.push(("a", ctx.data.and_then(|d| d.app_name.as_deref())?.to_string()));
+            (SysIcon::Named("refresh", 18., Some(idx::STATUS_POSITIVE)), "sys.lobby_linked", &[Learn], false)
+        }
+        51 => {
+            vars.push(("a", ctx.data.and_then(|d| d.app_name.as_deref())?.to_string()));
+            (SysIcon::Named("game-controller", 18., None), "sys.in_game_nux", &[Learn], false)
+        }
+        65 => {
+            let icon = SysIcon::Named("speaker", 24., Some(idx::STATUS_POSITIVE));
+            match ctx.call_ms {
+                None => (icon, "sys.vs_started", &[Inert], false),
+                Some(ms) => {
+                    vars.push(("d", humanize_in(code, ms).to_string()));
+                    let n = ctx.names.len();
+                    for (k, v) in ["a", "b"].into_iter().zip(ctx.names.iter()) {
+                        vars.push((k, v.clone()));
+                    }
+                    vars.push(("o", n.saturating_sub(1).to_string()));
+                    let key = match n {
+                        0 => "sys.vs_1",
+                        1 => "sys.vs_2",
+                        2 => "sys.vs_3",
+                        _ => "sys.vs_n",
+                    };
+                    (icon, key, &[], false)
+                }
+            }
+        }
         67 => {
             vars.push(("o", ctx.other.clone()?));
             vars.push(("note", ctx.content.to_string()));
@@ -482,7 +514,7 @@ fn generic_line(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r:
             Seg::Author => children.push(author_el(app, entity, msg)),
             Seg::Link(i, label) => {
                 let kind = g.links.get(i).copied();
-                let color = if kind == Some(SysLink::EditGroup) { idx::TEXT_LINK } else { idx::INTERACTIVE_TEXT_ACTIVE };
+                let color = if matches!(kind, Some(SysLink::EditGroup | SysLink::Learn)) { idx::TEXT_LINK } else { idx::INTERACTIVE_TEXT_ACTIVE };
                 let e = entity.clone();
                 let sk = stream_key.clone();
                 let el = div()
@@ -513,7 +545,7 @@ fn generic_line(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r:
                         Some(SysLink::HelpCenter) => {
                             cx.open_url(&format!("https://support.discord.com/hc/{}/articles/{INTEGRATIONS_ARTICLE}", crate::i18n::locale().to_lowercase()));
                         }
-                        Some(SysLink::Followed | SysLink::Inert) | None => {}
+                        Some(SysLink::Followed | SysLink::Learn | SysLink::Inert) | None => {}
                     });
                 children.push(el.into_any_element());
             }
@@ -572,6 +604,54 @@ fn automod_line(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r:
         .child(div().absolute().left(z(24.)).top(z(2.)).child(gpui::img(SharedString::new_static(AUTOMOD_AVATAR)).size(z(40.)).rounded_full()))
         .child(header)
         .child(div().flex().flex_wrap().items_center().line_height(z(24.)).text_color(c(tok(idx::TEXT_DEFAULT))).children(children))
+        .into_any_element()
+}
+
+fn nitro_notification(msg: &Message, r: &RenderedMessage) -> AnyElement {
+    use crate::theme::{generated::idx, tok};
+    let pink = c(tok(idx::PREMIUM_NITRO_PINK_LIGHT));
+    let button = crate::ui::controls::button(("nitro-notif", msg.id.0), SharedString::default(), crate::ui::controls::BtnKind::Expressive)
+        .h(z(32.))
+        .px(z(16.))
+        .gap(z(4.))
+        .text_size(z(14.))
+        .child(gpui::svg().path(crate::icons::path("nitro")).flex_none().size(z(16.)).text_color(gpui::white()))
+        .child(crate::t!("sys.get_nitro"));
+    div()
+        .id(("sysmsg", msg.id.0))
+        .relative()
+        .pl(z(80.))
+        .pr(z(48.))
+        .py(z(2.))
+        .mt(z(if r.group_start { 17. } else { 0. }))
+        .hover(|s| s.bg(c(Palette::BG_MSG_HOVER)))
+        .child(div().absolute().left(z(36.)).top(z(14.)).child(gpui::svg().path(crate::icons::path("bell")).size(z(16.)).text_color(pink)))
+        .child(
+            div().pt(z(12.)).flex().child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .p(z(16.))
+                    .rounded(z(8.))
+                    .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                    .text_color(c(tok(idx::TEXT_STRONG)))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).child(msg.content.clone()))
+                            .child(
+                                div()
+                                    .mt(z(2.))
+                                    .flex()
+                                    .items_center()
+                                    .child(gpui::svg().path(crate::icons::path("nitro")).flex_none().size(z(16.)).text_color(pink))
+                                    .child(div().ml(z(4.)).text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(pink).child(crate::t!("sys.nitro_powered"))),
+                            ),
+                    )
+                    .child(div().flex_none().ml(z(24.)).pt(z(2.)).child(button)),
+            ),
+        )
         .into_any_element()
 }
 
@@ -636,6 +716,12 @@ pub fn ctx_of<'a>(app: &'a PhoenixApp, msg: &'a Message) -> SysCtx<'a> {
         mine: msg.author == app.me.id,
         other,
         time: if type_id == 36 { alert_time(&msg.content) } else { String::new() },
+        names: if type_id == 65 {
+            msg.call.as_ref().map(|c| c.participants.iter().filter(|u| **u != msg.author).map(|u| user_name(app, *u)).collect()).unwrap_or_default()
+        } else {
+            Vec::new()
+        },
+        call_ms: if type_id == 65 { msg.call.as_ref().and_then(|c| c.duration_ms) } else { None },
     }
 }
 
@@ -654,6 +740,9 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
     if msg.type_id == 24 {
         let card = super::automod::render(app, entity, msg, r);
         return Some(with_divider(r, card));
+    }
+    if msg.type_id == 48 {
+        return Some(with_divider(r, nitro_notification(msg, r)));
     }
     if let Some(g) = generic_in(crate::i18n::locale(), &ctx_of(app, msg)) {
         let line = if AUTOMOD_TYPES.contains(&msg.type_id) { automod_line(app, entity, msg, r, g) } else { generic_line(app, entity, msg, r, g) };
@@ -1270,6 +1359,31 @@ mod tests {
         assert_eq!(plain(&f("fr", false, "yo")), "<Bob> a accepté ta demande d'ami. Tu as dit : <yo>");
         assert_eq!(f("fr", false, "").icon, SysIcon::Named("user-check", 18., Some(crate::theme::generated::idx::STATUS_POSITIVE)));
         assert!(generic_in("fr", &SysCtx { type_id: 67, ..Default::default() }).is_none());
+    }
+
+    #[test]
+    fn voice_session_lobby_and_in_game_cards() {
+        let vs = |code: &str, names: &[&str], ms: Option<i64>| {
+            plain(&generic_in(code, &SysCtx { type_id: 65, names: names.iter().map(|n| n.to_string()).collect(), call_ms: ms, ..Default::default() }).unwrap())
+        };
+        assert_eq!(vs("fr", &[], None), "@U a lancé [0:une discussion vocale].");
+        assert_eq!(vs("en", &[], Some(120_000)), "@U was hanging out for 2 minutes.");
+        assert_eq!(vs("fr", &["Bob"], Some(3_600_000)), "@U et <Bob> étaient en discussion vocale pendant une heure.");
+        assert_eq!(vs("en", &["Bob", "Eve"], Some(30_000)), "@U, <Bob>, and <Eve> were hanging out for a few seconds.");
+        assert_eq!(vs("fr", &["Bob", "Eve", "Joe"], Some(30_000)), "@U, <Bob>, et <2 autres> étaient en discussion vocale pendant quelques secondes.");
+        let g = generic_in("fr", &SysCtx { type_id: 65, ..Default::default() }).unwrap();
+        assert_eq!(g.icon, SysIcon::Named("speaker", 24., Some(crate::theme::generated::idx::STATUS_POSITIVE)));
+        let app = crate::model::SysData { app_name: Some("Jeu".into()), ..Default::default() };
+        let lobby = generic_in("en", &SysCtx { type_id: 49, data: Some(&app), ..Default::default() }).unwrap();
+        assert_eq!(plain(&lobby), "@U has linked this channel to <Jeu>. Messages are now syncing. [0:Learn More]");
+        assert_eq!(lobby.links, &[SysLink::Learn]);
+        assert!(generic_in("en", &SysCtx { type_id: 49, ..Default::default() }).is_none());
+        let nux = generic_in("fr", &SysCtx { type_id: 51, data: Some(&app), ..Default::default() }).unwrap();
+        assert!(plain(&nux).starts_with("@U t'a envoyé un message depuis <Jeu>. "));
+        assert!(generic_in("fr", &SysCtx { type_id: 51, ..Default::default() }).is_none());
+        for t in [24u8, 48, 49, 51, 65] {
+            assert!(!FALLBACK_TYPES.contains(&t));
+        }
     }
 
     #[test]
