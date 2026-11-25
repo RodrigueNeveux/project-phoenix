@@ -504,7 +504,18 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
     Ok(match req {
         NavRequest::FetchInvite(code) => {
             let v = call(Method::GET, format!("/invites/{}?with_counts=true&with_expiration=true", enc(&code)), None).await?;
-            NavReply::Invite(Box::new(invite_preview(&v)))
+            let mut p = invite_preview(&v);
+            if let Some(prof) = p.profile.as_mut().filter(|p| !p.games.is_empty()) {
+                let mut fetched = Vec::new();
+                for chunk in prof.games.chunks(20) {
+                    let q: Vec<String> = chunk.iter().map(|g| format!("game_ids={}", g.id)).collect();
+                    if let Ok(Value::Array(a)) = call(Method::GET, format!("/games?{}", q.join("&")), None).await {
+                        fetched.extend(a);
+                    }
+                }
+                crate::commands::guide::apply_games(&mut prof.games, &Value::Array(fetched));
+            }
+            NavReply::Invite(Box::new(p))
         }
         NavRequest::FetchInviteEvent(code, event) => {
             let v = call(

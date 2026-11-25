@@ -49,6 +49,37 @@ pub struct GuildProfile {
     pub premium_tier: u8,
     pub premium_subscription_count: u32,
     pub features: Vec<String>,
+    pub games: Vec<ProfileGame>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ProfileGame {
+    pub id: u64,
+    pub name: String,
+    pub icon: Option<String>,
+    pub high: bool,
+    pub score: u64,
+}
+
+pub fn apply_games(games: &mut Vec<ProfileGame>, fetched: &Value) {
+    let found: std::collections::HashMap<u64, &Value> = fetched
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|g| Some((g.get("id")?.as_str()?.parse().ok()?, g)))
+        .collect();
+    games.retain_mut(|g| {
+        let Some(v) = found.get(&g.id) else { return false };
+        g.name = s(v, "name");
+        let icon = v.get("media").and_then(|m| m.get("icon"));
+        g.icon = match (icon.and_then(|i| i.get("type")).and_then(Value::as_str), icon.and_then(|i| i.get("value")).and_then(Value::as_str)) {
+            (Some("hash"), Some(h)) if !h.is_empty() => Some(format!("https://cdn.discordapp.com/app-icons/{}/{h}.png?size=48", g.id)),
+            (Some("url"), Some(u)) if !u.is_empty() => Some(u.to_owned()),
+            _ => v.get("icon_hash").and_then(Value::as_str).filter(|h| !h.is_empty()).map(|h| format!("https://cdn.discordapp.com/app-icons/{}/{h}.png?size=48", g.id)),
+        };
+        true
+    });
+    games.sort_by(|a, b| b.score.cmp(&a.score));
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -150,12 +181,44 @@ pub fn parse_profile(v: &Value) -> GuildProfile {
             .and_then(|a| a.as_array())
             .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect())
             .unwrap_or_default(),
+        games: v
+            .get("game_application_ids")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x.as_str()?.parse::<u64>().ok())
+            .map(|id| {
+                let act = v.get("game_activity").and_then(|a| a.get(id.to_string()));
+                ProfileGame {
+                    id,
+                    high: act.and_then(|a| a.get("activity_level")).and_then(Value::as_u64) == Some(2),
+                    score: act.and_then(|a| a.get("activity_score")).and_then(Value::as_u64).unwrap_or(0),
+                    ..Default::default()
+                }
+            })
+            .collect(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_games_follow_activity_and_the_games_store() {
+        let mut p = parse_profile(&serde_json::json!({
+            "game_application_ids": ["1", "2", "3"],
+            "game_activity": { "2": { "activity_level": 2, "activity_score": 50 } }
+        }));
+        assert_eq!(p.games.iter().map(|g| g.id).collect::<Vec<_>>(), vec![1, 2, 3]);
+        apply_games(&mut p.games, &serde_json::json!([
+            { "id": "1", "name": "A", "media": { "icon": { "type": "hash", "value": "ab" } } },
+            { "id": "2", "name": "B", "icon_hash": "cd" }
+        ]));
+        assert_eq!(p.games.iter().map(|g| (g.id, g.high)).collect::<Vec<_>>(), vec![(2, true), (1, false)]);
+        assert_eq!(p.games[1].icon.as_deref(), Some("https://cdn.discordapp.com/app-icons/1/ab.png?size=48"));
+        assert_eq!(p.games[0].icon.as_deref(), Some("https://cdn.discordapp.com/app-icons/2/cd.png?size=48"));
+    }
 
     #[test]
     fn parses_home_settings() {

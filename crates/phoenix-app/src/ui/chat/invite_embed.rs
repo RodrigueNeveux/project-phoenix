@@ -666,6 +666,88 @@ fn baked_banner(base: u32) -> Arc<RenderImage> {
     arc
 }
 
+fn game_icon(guild: u64, g: &crate::commands::guide::ProfileGame, tip: bool) -> gpui::Stateful<gpui::Div> {
+    use crate::ui::tooltip::Tipped as _;
+    let el = div()
+        .id(SharedString::from(format!("invite-game-{guild}-{}", g.id)))
+        .relative()
+        .size(z(26.))
+        .flex_none()
+        .child(
+            div()
+                .size_full()
+                .rounded(z(4.))
+                .border_1()
+                .border_color(tk(idx::BORDER_MUTED))
+                .overflow_hidden()
+                .when_some(g.icon.clone(), |d, u| {
+                    d.child(img(ImageSource::from(SharedString::from(u))).size_full().object_fit(gpui::ObjectFit::Contain))
+                }),
+        )
+        .when(g.high, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .top(z(-4.))
+                    .right(z(-4.))
+                    .size(z(14.))
+                    .rounded_full()
+                    .bg(tk(idx::BACKGROUND_SURFACE_HIGHEST))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(gpui::svg().path(crate::icons::path("picker/fire")).size(z(10.)).text_color(tk(idx::ORANGE_330))),
+            )
+        });
+    if tip { el.tip(SharedString::from(g.name.clone())) } else { el }
+}
+
+pub fn games_layout(n: usize) -> (usize, Option<usize>) {
+    if n <= 5 { (n, None) } else { (5, Some(n - 5)) }
+}
+
+fn games_row(guild: u64, games: &[crate::commands::guide::ProfileGame]) -> Option<AnyElement> {
+    let first = games.first()?;
+    let row = div().w_full().flex().gap(z(4.));
+    if games.len() == 1 {
+        return Some(
+            row.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(z(8.))
+                    .child(game_icon(guild, first, false))
+                    .child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_DEFAULT).child(SharedString::from(first.name.clone()))),
+            )
+            .into_any_element(),
+        );
+    }
+    let (shown, extra) = games_layout(games.len());
+    let row = row.children(games[..shown].iter().map(|g| game_icon(guild, g, true)));
+    let row = match (extra, games.get(5)) {
+        (Some(n), Some(last)) => {
+            use crate::ui::tooltip::Tipped as _;
+            let names: Vec<String> = games[5..].iter().map(|g| g.name.clone()).collect();
+            row.child(
+                game_icon(guild, last, false)
+                    .child(div().absolute().inset_0().rounded(z(4.)).bg(tk(idx::BACKGROUND_SCRIM)))
+                    .child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_OVERLAY_LIGHT).child(format!("+{n}"))),
+                    )
+                    .tip(SharedString::from(names.join("\n"))),
+            )
+        }
+        _ => row,
+    };
+    Some(row.into_any_element())
+}
+
 fn parse_hex(s: &str) -> Option<u32> {
     u32::from_str_radix(s.trim_start_matches('#'), 16)
         .ok()
@@ -765,7 +847,8 @@ fn profile_card(
             p.channel_id,
         ))
     };
-    let has_body = !prof.description.is_empty() || !prof.traits.is_empty();
+    let has_body = !prof.description.is_empty() || !prof.traits.is_empty() || !prof.games.is_empty();
+    let games = games_row(gid.0, &prof.games);
     let mut traits = div().flex().flex_wrap().items_center().gap(z(4.));
     for tr in &prof.traits {
         traits = traits.child(
@@ -888,6 +971,7 @@ fn profile_card(
                         .when(!prof.description.is_empty(), |d| {
                             d.child(subtle(prof.description.clone().into()))
                         })
+                        .children(games)
                         .when(!prof.traits.is_empty(), |d| d.child(traits)),
                 )
             } else {
@@ -1338,6 +1422,14 @@ fn friend_card(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn games_row_shows_five_then_a_count() {
+        assert_eq!(super::games_layout(1), (1, None));
+        assert_eq!(super::games_layout(5), (5, None));
+        assert_eq!(super::games_layout(6), (5, Some(1)));
+        assert_eq!(super::games_layout(7), (5, Some(2)));
+    }
+
     #[test]
     fn resolving_shimmer_follows_the_keyframes() {
         assert_eq!(super::resolving_offset(0.), -380.);
