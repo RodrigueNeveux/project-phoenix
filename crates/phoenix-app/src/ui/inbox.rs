@@ -2148,7 +2148,7 @@ pub(crate) fn thread_browser_row(app: &PhoenixApp, t: &crate::model::Channel, pa
                     )
                 })
                 .child(div().flex_none().child(": "))
-                .child(div().flex_shrink().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
+                .child(div().flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
                 .child(div().flex_none().w(z(20.)).flex().justify_center().child("•"))
                 .child(div().flex_none().child(when))
         }
