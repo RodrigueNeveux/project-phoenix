@@ -316,6 +316,10 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
     let show_send_button = should_show_send_button(app.prefs.local.flag("send-btn", false), blocked);
     let can_send = !placeholder_empty || !app.chat.uploads.is_empty();
+    let announce = app.selected_channel.filter(|id| {
+        app.channels.get(id).is_some_and(|ch| ch.kind == crate::model::ChannelKind::Announcement) && app.nav.thread_parent(*id).is_none()
+    });
+    let announce_thread = announce.is_some_and(|id| crate::commands::builtin::Context::of(app, id).thread);
     let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
     let vbar = super::voice_message::bar(app, window, cx);
     let voice_on = vbar.is_some();
@@ -523,7 +527,16 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                                             .tooltip(crate::ui::tooltip::tip(crate::t!("menu.send_message")))
                                                             .on_click(cx.listener(|a, _, w, cx| a.submit_composer(w, cx)))
                                                     })
-                                                    .when(!can_send, |b| b.cursor(gpui::CursorStyle::OperationNotAllowed)),
+                                                    .when(!can_send, |b| b.cursor(gpui::CursorStyle::OperationNotAllowed))
+                                                    .when_some(announce, |b, channel| {
+                                                        b.on_hover(move |on, w, _| {
+                                                            use crate::ui::extra_menus::{Target, open, opened};
+                                                            if *on && opened().is_none() {
+                                                                let pos = w.mouse_position();
+                                                                open(Target::AnnouncementSend { channel, can_thread: announce_thread }, pos, w);
+                                                            }
+                                                        })
+                                                    }),
                                             )
                                     }),
                             )),

@@ -321,22 +321,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }
     if let Some(url) = MENU_MEDIA.with(|m| m.borrow().1.clone()) {
         items.push(MenuItem::Separator);
-        let (ci, si) = (url.clone(), url.clone());
-        let (ec, es) = (e.clone(), e.clone());
-        items.push(MenuItem::action(crate::t!("msg.copy_image"), Some(crate::icons::path("image")), move |_, _, cx| {
-            let u = ci.clone();
-            ec.update(cx, |a, cx| a.copy_image(u, cx))
-        }));
-        items.push(MenuItem::action(crate::t!("msg.save_image"), Some(crate::icons::path("image")), move |_, _, cx| {
-            let u = si.clone();
-            es.update(cx, |a, cx| a.save_image(u, cx))
-        }));
-        items.push(MenuItem::Separator);
-        let u = url.clone();
-        items.push(MenuItem::action(crate::t!("msg.copy_image_link"), Some(crate::icons::path("chat/link")), move |_, _, cx| {
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.to_string()))
-        }));
-        items.push(MenuItem::action(crate::t!("msg.open_image_link"), Some(crate::icons::path("menu/open-link")), move |_, _, cx| cx.open_url(&url)));
+        items.extend(crate::ui::extra_menus::image_items(&e, url));
     }
     if let Some(url) = MENU_LINK.with(|m| m.borrow().1.clone()) {
         items.push(MenuItem::Separator);

@@ -21,6 +21,109 @@ pub enum Target {
     Viewer,
     SettingsMore,
     DmMore,
+    Image(SharedString),
+    WishlistAdd,
+    WishlistMore(Option<String>),
+    AnnouncementSend { channel: Id, can_thread: bool },
+}
+
+pub const NITRO_SKU: &str = "521847234246082599";
+pub const WISHLIST_ARTICLE: &str = "4403147417623#h_01K6DY1CJBBQHBFPETCDTJHE9B";
+
+thread_local! {
+    static ANNOUNCE: RefCell<std::collections::HashMap<Id, (bool, bool)>> = RefCell::new(std::collections::HashMap::new());
+    static WISHLIST_PUBLIC: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+pub fn announce_flags(channel: Id) -> (bool, bool) {
+    ANNOUNCE.with(|a| a.borrow().get(&channel).copied().unwrap_or((true, true)))
+}
+
+fn set_announce(channel: Id, f: impl FnOnce(&mut (bool, bool))) {
+    ANNOUNCE.with(|a| f(a.borrow_mut().entry(channel).or_insert((true, true))));
+}
+
+pub fn wishlist_public() -> bool {
+    WISHLIST_PUBLIC.with(|w| w.get())
+}
+
+pub fn wishlist_article_url() -> String {
+    format!("https://support.discord.com/hc/{}/articles/{WISHLIST_ARTICLE}", crate::i18n::locale().to_lowercase())
+}
+
+pub fn link_keys(url: &str) -> (&'static str, &'static str) {
+    let (host, path) = url.split_once("://").map(|(_, r)| r.split_once('/').map_or((r, ""), |(h, p)| (h, p))).unwrap_or(("", url));
+    let path = path.split(['?', '#']).next().unwrap_or_default().to_ascii_lowercase();
+    let ext = path.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
+    let image = ["png", "jpg", "jpeg", "webp", "avif", "bmp", "svg"].contains(&ext);
+    let media = image || ["gif", "mp4", "webm", "mov"].contains(&ext);
+    if host == "cdn.discordapp.com" && image {
+        ("msg.copy_image_link", "msg.open_image_link")
+    } else if media {
+        ("viewer.copy_link", "msg.open_media_link")
+    } else {
+        ("menu.copy_link", "msg.open_link")
+    }
+}
+
+pub fn image_items(e: &Ent, url: SharedString) -> Vec<MenuItem> {
+    let (ci, si, cl) = (url.clone(), url.clone(), url.clone());
+    let (ec, es) = (e.clone(), e.clone());
+    let (copy_key, open_key) = link_keys(&url);
+    vec![
+        MenuItem::action(crate::t!("msg.copy_image"), Some(crate::icons::path("image")), move |_, _, cx: &mut App| {
+            let u = ci.clone();
+            ec.update(cx, |a, cx| a.copy_image(u, cx))
+        }),
+        MenuItem::action(crate::t!("msg.save_image"), Some(crate::icons::path("image")), move |_, _, cx: &mut App| {
+            let u = si.clone();
+            es.update(cx, |a, cx| a.save_image(u, cx))
+        }),
+        MenuItem::Separator,
+        MenuItem::action(crate::t!(copy_key), Some(crate::icons::path("chat/link")), move |_, _, cx: &mut App| {
+            cx.write_to_clipboard(ClipboardItem::new_string(cl.to_string()))
+        }),
+        MenuItem::action(crate::t!(open_key), Some(crate::icons::path("menu/open-link")), move |_, _, cx: &mut App| cx.open_url(&url)),
+    ]
+}
+
+pub fn wishlist_add_items(e: &Ent) -> Vec<MenuItem> {
+    vec![
+        act(e, crate::t!("wishlist.discord_shop"), |a, _, cx| a.open_home_view(crate::ui::home::data::HomeView::Shop, cx)).with_icon("shop"),
+        act(e, crate::t!("wishlist.nitro"), |a, _, cx| a.blocked_write(phoenix_api::rest::account::GuardedWrite::wishlist_add_sku(NITRO_SKU), cx)).with_icon("nitro"),
+    ]
+}
+
+pub fn wishlist_more_items(e: &Ent, wishlist: Option<String>) -> Vec<MenuItem> {
+    let ev = e.clone();
+    vec![
+        MenuItem::check(crate::t!("wishlist.public"), wishlist_public(), move |_, _, cx: &mut App| {
+            let w = phoenix_api::rest::account::GuardedWrite::wishlist_visibility(wishlist.as_deref().unwrap_or_default(), !wishlist_public());
+            ev.update(cx, |a, cx| a.blocked_write(w, cx))
+        })
+        .with_subtext(crate::t!("wishlist.public_sub")),
+        MenuItem::Separator,
+        MenuItem::action(crate::t!("wishlist.learn_more"), Some(crate::icons::path("menu/open-link")), |_, _, cx: &mut App| cx.open_url(&wishlist_article_url())),
+    ]
+}
+
+pub fn announcement_items(channel: Id, can_thread: bool) -> Vec<MenuItem> {
+    let (thread, publish) = announce_flags(channel);
+    let thread_item = if can_thread {
+        MenuItem::check(crate::t!("announce.create_thread"), thread && can_thread, move |_, w, _| {
+            set_announce(channel, |f| f.0 = !f.0);
+            w.refresh();
+        })
+    } else {
+        MenuItem::disabled(crate::t!("announce.create_thread"), None)
+    };
+    vec![
+        thread_item,
+        MenuItem::check(crate::t!("announce.publish"), publish, move |_, w, _| {
+            set_announce(channel, |f| f.1 = !f.1);
+            w.refresh();
+        }),
+    ]
 }
 
 thread_local! {
@@ -214,6 +317,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         }
         Target::SettingsMore => settings_more_items(&e),
         Target::DmMore => vec![act(&e, crate::t!("gdm.cleanup.menu"), |a, _, cx| a.open_gdm_cleanup(cx))],
+        Target::Image(url) => image_items(&e, url.clone()),
+        Target::WishlistAdd => wishlist_add_items(&e),
+        Target::WishlistMore(w) => wishlist_more_items(&e, w.clone()),
+        Target::AnnouncementSend { channel, can_thread } => announcement_items(*channel, *can_thread),
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
         close();
@@ -221,6 +328,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     });
     if target == Target::DmMore {
         return Some(context_menu::render_anchored(pos, gpui::Anchor::TopLeft, items, dismiss));
+    }
+    if matches!(target, Target::WishlistAdd | Target::WishlistMore(_)) {
+        return Some(context_menu::render_anchored(pos, gpui::Anchor::TopRight, items, dismiss));
+    }
+    if matches!(target, Target::AnnouncementSend { .. }) {
+        return Some(context_menu::render_anchored(pos, gpui::Anchor::BottomRight, items, dismiss));
     }
     if target == Target::SettingsMore {
         return Some(context_menu::render_anchored(pos, gpui::Anchor::BottomCenter, items, dismiss));
@@ -249,6 +362,19 @@ pub fn settings_more_items(e: &Ent) -> Vec<MenuItem> {
 }
 
 impl PhoenixApp {
+    pub fn blocked_write(&mut self, w: phoenix_api::rest::account::GuardedWrite, cx: &mut Context<Self>) {
+        let fut = self.backend.guarded_write(w);
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |a, cx| {
+                if res.is_err() {
+                    a.parity_toast(crate::t!("acct.blocked"), cx);
+                }
+            });
+        })
+        .detach();
+    }
+
     pub fn confirm_remove_friend(&mut self, user: Id, cx: &mut Context<Self>) {
         let name = self.users.get(&user).map(|u| u.display_name.to_string()).unwrap_or_default();
         crate::actions::open_modal(
@@ -363,6 +489,30 @@ mod tests {
             sized("https://cdn.discordapp.com/banners/1/b.png?animated=true&size=600", 1024),
             "https://cdn.discordapp.com/banners/1/b.png?animated=true&size=1024"
         );
+    }
+
+    #[test]
+    fn image_link_labels_follow_the_client() {
+        assert_eq!(link_keys("https://cdn.discordapp.com/avatars/1/a.webp?size=128"), ("msg.copy_image_link", "msg.open_image_link"));
+        assert_eq!(link_keys("https://cdn.discordapp.com/avatars/1/a_b.gif?size=128"), ("viewer.copy_link", "msg.open_media_link"));
+        assert_eq!(link_keys("https://media.tenor.com/x.png"), ("viewer.copy_link", "msg.open_media_link"));
+        assert_eq!(link_keys("https://discord.com/x"), ("menu.copy_link", "msg.open_link"));
+    }
+
+    #[test]
+    fn announcement_options_default_on_and_toggle_locally() {
+        let ch = Id(42);
+        assert_eq!(announce_flags(ch), (true, true));
+        set_announce(ch, |f| f.1 = false);
+        assert_eq!(announce_flags(ch), (true, false));
+        assert_eq!(announce_flags(Id(43)), (true, true));
+    }
+
+    #[test]
+    fn wishlist_writes_are_guarded() {
+        let w = phoenix_api::rest::account::GuardedWrite::wishlist_add_sku(NITRO_SKU);
+        assert!(w.refusal().is_write_blocked());
+        assert_eq!(w.body, Some(serde_json::json!({ "sku_id": NITRO_SKU })));
     }
 
     #[test]

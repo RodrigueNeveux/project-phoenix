@@ -316,11 +316,23 @@ pub(crate) fn banner(i: &Info, h: f32, radius: f32) -> Div {
         .overflow_hidden()
         .border_b_1()
         .border_color(c(tok(idx::BORDER_MUTED)))
-        .when_some(i.prof.and_then(|p| p.banner.clone()), |d, b| d.child(img(b).w_full().h(z(h)).rounded_t(z(radius))))
+        .when_some(i.prof.and_then(|p| p.banner.clone()), |d, b| d.child(img(b.clone()).w_full().h(z(h)).rounded_t(z(radius))).on_mouse_down(gpui::MouseButton::Right, image_menu(b)))
+}
+
+pub(crate) fn image_menu(url: SharedString) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut gpui::App) + 'static {
+    move |ev, w, cx| {
+        cx.stop_propagation();
+        crate::ui::extra_menus::open(crate::ui::extra_menus::Target::Image(url.clone()), ev.position, w);
+    }
 }
 
 pub(crate) fn avatar_block(i: &Info, size: f32, ring: f32, ring_color: u32) -> Div {
+    let src = i.user.as_deref().and_then(|u| match &u.avatar {
+        ImageRef::Url(url) => Some(url.clone()),
+        ImageRef::Default(_) => None,
+    });
     div()
+        .when_some(src, |d, url| d.on_mouse_down(gpui::MouseButton::Right, image_menu(url)))
         .p(z(ring))
         .rounded_full()
         .bg(c(ring_color))
@@ -751,6 +763,32 @@ pub fn mana_button(id: impl Into<gpui::ElementId>, label: impl Into<SharedString
         .text_color(c(tok(fg)))
         .whitespace_nowrap()
         .child(label.into())
+}
+
+fn wishlist_controls(owner: bool, cx: &mut Context<PhoenixApp>) -> Div {
+    use crate::ui::extra_menus::{Target, open, opened};
+    let row = div().flex().items_center().gap(z(8.));
+    if !owner {
+        return row.child(
+            mana_button("profile-wishlist-shop", crate::t!("profile.browse_shop"), false, false)
+                .gap(z(4.))
+                .child(gpui::svg().path(crate::icons::path("shop")).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+                .on_click(cx.listener(|a, _, _, cx| a.open_home_view(crate::ui::home::data::HomeView::Shop, cx))),
+        );
+    }
+    let add_open = opened() == Some(Target::WishlistAdd);
+    let chevron = if add_open { "close-small" } else { "chevron" };
+    let add = mana_button("profile-wishlist-add", crate::t!("wishlist.add_item"), false, false)
+        .gap(z(4.))
+        .child(gpui::svg().path(crate::icons::path(chevron)).size(z(16.)).flex_none().text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+        .on_click(|ev, w, _| open(Target::WishlistAdd, ev.position(), w));
+    let more = mana_button("profile-wishlist-more", SharedString::default(), false, false)
+        .min_w(z(32.))
+        .w(z(32.))
+        .px_0()
+        .child(gpui::svg().path(crate::icons::path("more-horizontal")).size(z(16.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+        .on_click(|ev, w, _| open(Target::WishlistMore(None), ev.position(), w));
+    row.child(add).child(more)
 }
 
 pub(crate) fn banner_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<Div> {
@@ -1333,7 +1371,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                             .items_center()
                             .justify_between()
                             .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_SUBTLE))).child(crate::t!("profile.wishlist_items", n = items.len())))
-                            .child(mana_button("profile-wishlist-shop", crate::t!("profile.browse_shop"), false, false)),
+                            .child(wishlist_controls(uid == app.me.id, cx)),
                     )
                     .child(div().py(z(12.)).flex().flex_wrap().gap(z(16.)).children(items.iter().map(|it| {
                         div()
