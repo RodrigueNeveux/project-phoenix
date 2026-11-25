@@ -376,6 +376,10 @@ fn status_bubble(t: SharedString) -> Div {
 }
 
 pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> Div {
+    name_block_with(i, big, trailing, false)
+}
+
+pub(crate) fn name_block_with(i: &Info, big: bool, trailing: Option<AnyElement>, underline_on_hover: bool) -> Div {
     let tag = i.user.as_deref().and_then(|u| u.tag.clone());
     let pronouns = i.prof.map(|p| p.pronouns.clone()).filter(|p| !p.is_empty());
     let bot = i.user.as_deref().is_some_and(|u| u.bot);
@@ -395,6 +399,7 @@ pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> D
                         .line_height(z(if big { 32. } else { 24. }))
                         .font_weight(FontWeight::SEMIBOLD)
                         .when(crate::fonts::name_style(i.user.as_deref()).is_none_or(|s| s.2.is_empty()), |d| d.text_color(c(tok(idx::TEXT_STRONG))))
+                        .when(underline_on_hover, |d| d.hover(|s| s.underline()))
                         .text_ellipsis()
                         .child(crate::fonts::name_text(i.display.clone(), i.user.as_deref(), if big { 24. } else { 20. })),
                 )
@@ -705,7 +710,7 @@ fn popout_card_inner(
                 .id(("profile-name", uid.0))
                 .cursor_pointer()
                 .on_click(move |_, _, cx| e_name.update(cx, |a, cx| a.open_profile_modal(uid, cx)))
-                .child(name_block(&i, false, (uid != app.me.id && !app.prefs.local.streamer_hides_info()).then(|| crate::ui::profile_note::note_button(uid, cx)))),
+                .child(name_block_with(&i, false, (uid != app.me.id && !app.prefs.local.streamer_hides_info()).then(|| crate::ui::profile_note::note_button(uid, cx)), true)),
         );
     if uid == app.me.id {
         body = body.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(status_label(i.presence)));
