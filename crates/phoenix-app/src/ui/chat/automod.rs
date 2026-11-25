@@ -719,7 +719,7 @@ mod tests {
     fn member_timed_out() {
         let x = d(&[("rule_name", "Spam"), ("keyword", "free nitro"), ("timeout_duration", "600"), ("decision_outcome", "blocked")], "free nitro");
         let f = footer("fr", &x);
-        assert_eq!(f.last(), Some(&Foot::Text("Exclusion temporaire\u{a0}: 10 min".into())));
+        assert_eq!(f.last(), Some(&Foot::Text("Exclusion temporaire\u{a0}: 10\u{a0}min".into())));
         assert_eq!(f[f.len() - 2], Foot::Dot);
         assert_eq!(timeout_text("en", Some("60")).as_deref(), Some("60 secs"));
         assert_eq!(timeout_text("fr", Some("3600")).as_deref(), Some("1 heure"));
@@ -750,7 +750,7 @@ mod tests {
         assert_eq!(notice(&x), Notice::Raid);
         let rc = raid_card("fr", &x);
         assert!(!rc.dm);
-        assert_eq!(rc.subheader, vec!["~42 adhésions traitées".to_string()]);
+        assert_eq!(rc.subheader, vec!["~42\u{a0}adhésions traitées".to_string()]);
         assert!(rc.began.is_some());
         assert_eq!(rc.resolve, "sys.am_resolve");
         let dm = d(&[("raid_type", "DM_RAID"), ("dms_sent", "7"), ("resolved_reason", "DM_SPAM")], "");
