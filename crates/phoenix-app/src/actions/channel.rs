@@ -42,6 +42,73 @@ pub fn move_entries(app: &PhoenixApp, guild: Id, channel: Id, dest: Dest) -> Vec
     }
 }
 
+pub type ChannelSlot = (Id, ChannelKind, Option<Id>, i32);
+
+fn deltas(order: &[ChannelSlot]) -> Vec<(Id, i32)> {
+    order.iter().enumerate().filter(|(i, c)| c.3 != *i as i32).map(|(i, c)| (c.0, i as i32)).collect()
+}
+
+fn by_position(a: &ChannelSlot, b: &ChannelSlot) -> std::cmp::Ordering {
+    (a.3, a.0.0).cmp(&(b.3, b.0.0))
+}
+
+pub fn category_order(chans: &[ChannelSlot]) -> Vec<ChannelSlot> {
+    let mut cats: Vec<ChannelSlot> = chans.iter().copied().filter(|c| c.1 == ChannelKind::Category).collect();
+    cats.sort_by(by_position);
+    cats
+}
+
+fn flattened(cats: &[ChannelSlot], chans: &[ChannelSlot], keep: impl Fn(ChannelKind) -> bool) -> Vec<ChannelSlot> {
+    let under = |parent: Option<Id>| {
+        let mut v: Vec<ChannelSlot> = chans.iter().copied().filter(|c| c.1 != ChannelKind::Category && c.2 == parent && keep(c.1)).collect();
+        v.sort_by(by_position);
+        v
+    };
+    let mut out = under(None);
+    for c in cats {
+        out.extend(under(Some(c.0)));
+    }
+    out
+}
+
+pub fn category_move(chans: &[ChannelSlot], cat: Id, last: bool) -> Vec<(Id, i32)> {
+    let mut cats = category_order(chans);
+    let Some(from) = cats.iter().position(|c| c.0 == cat) else { return Vec::new() };
+    let moved = cats.remove(from);
+    if last {
+        cats.push(moved);
+    } else {
+        cats.insert(0, moved);
+    }
+    let mut out = deltas(&cats);
+    let text = |k: ChannelKind| matches!(k, ChannelKind::Text | ChannelKind::Announcement | ChannelKind::Forum);
+    let vocal = |k: ChannelKind| matches!(k, ChannelKind::Voice | ChannelKind::Stage);
+    out.extend(deltas(&flattened(&cats, chans, text)));
+    out.extend(deltas(&flattened(&cats, chans, vocal)));
+    out
+}
+
+pub fn guild_slots(app: &PhoenixApp, guild: Id) -> Vec<ChannelSlot> {
+    app.guild_channels.get(&guild).into_iter().flatten().filter_map(|id| app.channels.get(id)).map(|c| (c.id, c.kind, c.parent, c.position)).collect()
+}
+
+pub fn category_move_item(app: &PhoenixApp, e: &Ent, guild: Id, cat: Id) -> Option<MenuItem> {
+    let cats = category_order(&guild_slots(app, guild));
+    if cats.len() < 2 {
+        return None;
+    }
+    let first = cats.first().is_some_and(|c| c.0 == cat);
+    let last = cats.last().is_some_and(|c| c.0 == cat);
+    let place = |key: &str, at_end: bool, disabled: bool| {
+        if disabled {
+            MenuItem::disabled(crate::t!(key), None)
+        } else {
+            item(e, crate::t!(key), move |a, cx| a.move_category(guild, cat, at_end, cx))
+        }
+    };
+    Some(MenuItem::submenu(crate::t!("menu.move_to"), vec![place("menu.move_first", false, first), place("menu.move_last", true, last)]))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Dest {
     First,
@@ -50,6 +117,20 @@ pub enum Dest {
 }
 
 impl PhoenixApp {
+    pub fn move_category(&mut self, guild: Id, cat: Id, last: bool, cx: &mut Context<Self>) {
+        let updates = category_move(&guild_slots(self, guild), cat, last);
+        if updates.is_empty() {
+            return;
+        }
+        for (id, pos) in &updates {
+            if let Some(c) = self.channels.get_mut(id) {
+                c.position = *pos;
+            }
+        }
+        let entries = updates.into_iter().map(|(id, pos)| (id, pos, None)).collect();
+        self.action_toast(ActionRequest::MoveChannels { guild, entries }, None, cx);
+    }
+
     pub fn open_clone_channel(&mut self, guild: Id, channel: Id, cx: &mut Context<Self>) {
         let name = self.channels.get(&channel).map(|c| c.name.to_string()).unwrap_or_default();
         open_modal(
@@ -246,6 +327,29 @@ pub fn show_all_item(app: &PhoenixApp, e: &Ent, guild: Id) -> Option<MenuItem> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn slot(id: u64, kind: ChannelKind, parent: Option<u64>, pos: i32) -> ChannelSlot {
+        (Id(id), kind, parent.map(Id), pos)
+    }
+
+    #[test]
+    fn moving_a_category_matches_the_client() {
+        use ChannelKind::*;
+        let chans = vec![
+            slot(1, Category, None, 0),
+            slot(2, Category, None, 1),
+            slot(3, Category, None, 2),
+            slot(10, Text, None, 0),
+            slot(11, Text, Some(1), 1),
+            slot(12, Text, Some(2), 2),
+            slot(13, Text, Some(3), 3),
+            slot(20, Voice, Some(3), 0),
+            slot(21, Voice, Some(1), 1),
+        ];
+        assert_eq!(category_move(&chans, Id(3), false), vec![(Id(3), 0), (Id(1), 1), (Id(2), 2), (Id(13), 1), (Id(11), 2), (Id(12), 3)]);
+        assert_eq!(category_move(&chans, Id(1), true), vec![(Id(2), 0), (Id(3), 1), (Id(1), 2), (Id(12), 1), (Id(13), 2), (Id(11), 3)]);
+        assert_eq!(category_move(&chans, Id(3), true), vec![(Id(21), 0), (Id(20), 1)]);
+    }
 
     #[test]
     fn places() {

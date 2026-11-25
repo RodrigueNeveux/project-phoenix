@@ -288,18 +288,6 @@ fn rail_move(app: &PhoenixApp, e: &Ent, item: crate::ui::modals::gdm::RailRef) -
     (!items.is_empty()).then(|| MenuItem::submenu(crate::t!("menu.move_to"), items))
 }
 
-fn move_to(e: &Ent, folder: bool) -> MenuItem {
-    let (to, first, last) = if folder {
-        ("menu.move_folder", "menu.move_first_folder", "menu.move_last_folder")
-    } else {
-        ("menu.move_category", "menu.move_first", "menu.move_last")
-    };
-    MenuItem::submenu(
-        crate::t!("menu.move_to"),
-        vec![MenuItem::submenu(crate::t!(to), vec![stub(e, "menu.apps_none")]), MenuItem::Separator, stub(e, first), stub(e, last)],
-    )
-}
-
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let (target, pos) = OPEN.with(|o| *o.borrow())?;
     let e = cx.entity();
@@ -374,7 +362,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 }
                 if manage {
                     items.push(MenuItem::Separator);
-                    items.push(if cat { move_to(&e, false) } else { crate::actions::channel::move_to_item(app, &e, g, id) });
+                    if cat {
+                        items.extend(crate::actions::channel::category_move_item(app, &e, g, id));
+                    } else {
+                        items.push(crate::actions::channel::move_to_item(app, &e, g, id));
+                    }
                     items.push(MenuItem::Separator);
                     if cat {
                         items.push(act(&e, crate::t!("menu.edit_category"), move |a, _, cx| a.open_channel_settings(id, cx)));
