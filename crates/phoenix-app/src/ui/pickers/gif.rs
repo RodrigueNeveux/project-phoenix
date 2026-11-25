@@ -149,10 +149,12 @@ fn favorite_tile_preview(favs: &[GifItem], picker: Option<gpui::EntityId>) -> Op
     if favs.is_empty() {
         return None;
     }
-    if let Some(part) = PINNED_FAVORITE.with(|p| p.borrow().clone())
-        && let Some(g) = favs.iter().find(|g| g.url.contains(part.as_str()) || g.preview.contains(part.as_str()))
-    {
-        return Some(g.preview.clone());
+    if let Some(key) = PINNED_FAVORITE.with(|p| p.borrow().clone()) {
+        let stem = key.rsplit('/').next().unwrap_or(key.as_str());
+        let hit = |part: &str| favs.iter().find(|g| g.url.contains(part) || g.preview.contains(part));
+        if let Some(g) = hit(key.as_str()).or_else(|| hit(stem)) {
+            return Some(g.preview.clone());
+        }
     }
     let ix = FAVORITE_TILE.with(|t| {
         let mut t = t.borrow_mut();
