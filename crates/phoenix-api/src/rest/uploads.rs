@@ -14,6 +14,16 @@ pub const UPLOAD_CANCELLED: &str = "upload cancelled";
 
 pub const UPLOAD_CHUNK: usize = 4 << 20;
 
+pub const ADAPTIVE_CHUNK: usize = usize::MAX;
+
+const CHUNK_UNIT: usize = 256 << 10;
+
+const PROGRESS_STEPS: usize = 16;
+
+pub fn adaptive_chunk(len: usize) -> usize {
+    (len.div_ceil(PROGRESS_STEPS).div_ceil(CHUNK_UNIT) * CHUNK_UNIT).clamp(CHUNK_UNIT, UPLOAD_CHUNK)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct CloudUpload {
     #[serde(default, deserialize_with = "id_string")]
@@ -266,10 +276,24 @@ impl RestClient {
         let mut done = 0u64;
         for (f, slot) in files.iter().zip(&slots) {
             let base = done;
+            let chunk = if chunk == ADAPTIVE_CHUNK { adaptive_chunk(f.bytes.len()) } else { chunk };
             self.put_upload(&slot.upload_url, &f.bytes, chunk, &|n| report(base + n)).await?;
             done += f.bytes.len() as u64;
         }
         Ok(slots)
+    }
+
+    pub async fn upload_one(&self, channel: ChannelId, file: &FileUpload, on_sent: &(dyn Fn(u64) -> bool + Send + Sync)) -> Result<CloudUpload> {
+        let slot = self.request_upload_urls(channel, std::slice::from_ref(file)).await?.remove(0);
+        self.put_upload(&slot.upload_url, &file.bytes, adaptive_chunk(file.bytes.len()), on_sent).await?;
+        Ok(slot)
+    }
+
+    pub async fn send_message_with_uploaded(&self, channel: ChannelId, msg: &mut CreateMessage, files: &[FileUpload], slots: &[CloudUpload]) -> Result<Message> {
+        fill_nonce(msg);
+        msg.attachments = message_attachments(files, slots).as_array().cloned().unwrap_or_default();
+        let body = serde_json::to_value(&*msg)?;
+        self.call(Method::POST, &format!("/channels/{channel}/messages"), Body::Json(body)).await
     }
 
     #[doc(hidden)]
@@ -352,6 +376,16 @@ mod tests {
         assert_eq!(max_file_size(Some(2), Some((Some(3), vec![]))), 500 * MIB);
         assert_eq!(message_upload_limit(10 * MIB), 20 * MIB);
         assert_eq!(message_upload_limit(500 * MIB), 500 * MIB);
+    }
+
+    #[test]
+    fn adaptive_chunks_move_the_bar_under_4_mib() {
+        assert_eq!(adaptive_chunk(100), 256 << 10);
+        assert_eq!(chunk_ranges(100 << 10, adaptive_chunk(100 << 10)).len(), 1);
+        assert_eq!(chunk_ranges(1 << 20, adaptive_chunk(1 << 20)).len(), 4);
+        assert_eq!(chunk_ranges(4 << 20, adaptive_chunk(4 << 20)).len(), 16);
+        assert_eq!(adaptive_chunk(100 << 20), UPLOAD_CHUNK);
+        assert_eq!(adaptive_chunk(10 << 20) % (256 << 10), 0);
     }
 
     #[test]

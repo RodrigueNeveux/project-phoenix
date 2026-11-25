@@ -49,6 +49,7 @@ pub struct PendingFile {
     pub spoiler: bool,
     pub blurred: Option<Arc<Image>>,
     pub description: String,
+    pub pre: Option<u64>,
 }
 
 pub struct Sending {
@@ -201,7 +202,7 @@ pub fn is_image_name(name: &str) -> Option<gpui::ImageFormat> {
 
 pub fn pending_file(name: String, bytes: Vec<u8>) -> PendingFile {
     let image = is_image_name(&name).map(|f| Arc::new(Image::from_bytes(f, bytes.clone())));
-    PendingFile { name: name.into(), bytes: Arc::new(bytes), image, spoiler: false, blurred: None, description: String::new() }
+    PendingFile { name: name.into(), bytes: Arc::new(bytes), image, spoiler: false, blurred: None, description: String::new(), pre: None }
 }
 
 impl PhoenixApp {
@@ -231,7 +232,11 @@ impl PhoenixApp {
         self.chat.edit = None;
         self.chat.menu = None;
         self.chat.confirm_delete = None;
-        self.chat.uploads.clear();
+        for f in self.chat.uploads.drain(..) {
+            if let Some(k) = f.pre {
+                self.backend.drop_preupload(k);
+            }
+        }
         self.chat.attach_menu = false;
         self.chat.new_messages = None;
         self.chat.at_bottom = true;
@@ -751,7 +756,14 @@ impl PhoenixApp {
                 Some(crate::t!("chat.total_too_large", max = phoenix_api::rest::uploads::MAX_TOTAL_SIZE >> 20));
             return false;
         }
-        self.chat.uploads.push(pending_file(name, bytes));
+        let mut file = pending_file(name, bytes);
+        if let Some(ch) = self.selected_channel {
+            let key = self.chat.next_key;
+            self.chat.next_key += 1;
+            self.backend.preupload(ch, key, file.name.to_string(), file.bytes.clone());
+            file.pre = Some(key);
+        }
+        self.chat.uploads.push(file);
         true
     }
 
@@ -827,7 +839,10 @@ impl PhoenixApp {
 
     pub fn remove_upload(&mut self, ix: usize, cx: &mut Context<Self>) {
         if ix < self.chat.uploads.len() {
-            self.chat.uploads.remove(ix);
+            let f = self.chat.uploads.remove(ix);
+            if let Some(k) = f.pre {
+                self.backend.drop_preupload(k);
+            }
         }
         cx.notify();
     }
@@ -899,6 +914,7 @@ impl PhoenixApp {
                 bytes: Arc::unwrap_or_clone(f.bytes),
                 spoiler: f.spoiler,
                 description: Some(f.description).filter(|d| !d.trim().is_empty()),
+                pre: f.pre,
             })
             .collect();
         let key = self.chat.next_key;

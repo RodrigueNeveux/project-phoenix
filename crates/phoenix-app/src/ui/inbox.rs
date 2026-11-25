@@ -1521,7 +1521,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
                 .debug_selector(|| "threads-popout".into())
                 .map(|d| close_on_press_outside(d, cx))
                 .absolute()
-                .top(z(m::TITLE_BAR_H + m::HEADER_H - 3.))
+                .top(z(m::TITLE_BAR_H + m::HEADER_H))
                 .right(z(HDR_RIGHT_THREADS))
                 .w(z((crate::ui::title_bar::viewport_w_css() * 0.35).clamp(480., 600.)))
                 .h(z(400.))
@@ -1549,7 +1549,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
 const fn hdr_right(buttons_after: f32) -> f32 {
     8. + 248. + buttons_after * 42.
 }
-const HDR_RIGHT_THREADS: f32 = hdr_right(3.);
+const HDR_RIGHT_THREADS: f32 = hdr_right(3.) + 10.;
 
 pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let p = app.chat.pins.as_ref()?;
@@ -2097,7 +2097,12 @@ fn archived_row(app: &PhoenixApp, p: crate::commands::ForumPost, cx: &mut Contex
                         .overflow_hidden()
                         .child(div().flex_none().mr(z(8.)).child(avatar(owner, 16.)))
                         .child(div().flex_none().child(crate::t!("threads.started_by")))
-                        .child(div().flex_none().ml(z(4.)).font_weight(FontWeight::SEMIBOLD).text_color(owner_color).child(owner_name))
+                        .child(div().flex_none().ml(z(4.)).font_weight(FontWeight::SEMIBOLD).text_color(owner_color).child(
+                            match p.owner.and_then(|o| app.author_role_gradient_in(app.selected_guild, o)) {
+                                Some(stops) => crate::fonts::name_text_with(owner_name, owner, 14., Some(stops)),
+                                None => owner_name.into_any_element(),
+                            },
+                        ))
                         .child(div().flex_none().w(z(20.)).flex().justify_center().text_color(gpui::rgba(0x97979f14)).child("•"))
                         .child(crate::t!("threads.last_activity", date = date)),
                 ),
@@ -2133,9 +2138,17 @@ pub(crate) fn thread_browser_row(app: &PhoenixApp, t: &crate::model::Channel, pa
                 .items_center()
                 .min_w_0()
                 .child(div().flex_none().mr(z(8.)).child(avatar(u.as_deref(), 16.)))
-                .child(div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(app.member_nick(r.author).unwrap_or_else(|| r.name.clone())))
+                .child({
+                    let name = app.member_nick(r.author).unwrap_or_else(|| r.name.clone());
+                    div().flex_none().max_w(z(160.)).overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(color).child(
+                        match app.author_role_gradient_in(guild, r.author) {
+                            Some(stops) => crate::fonts::name_text_with(name, u.as_deref(), 14., Some(stops)),
+                            None => name.into_any_element(),
+                        },
+                    )
+                })
                 .child(div().flex_none().child(": "))
-                .child(div().flex_1().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
+                .child(div().flex_shrink().min_w_0().overflow_hidden().text_ellipsis().child(r.content.clone()))
                 .child(div().flex_none().w(z(20.)).flex().justify_center().child("•"))
                 .child(div().flex_none().child(when))
         }

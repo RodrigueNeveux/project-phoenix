@@ -98,6 +98,7 @@ pub struct Upload {
     pub bytes: Vec<u8>,
     pub spoiler: bool,
     pub description: Option<String>,
+    pub pre: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -160,6 +161,12 @@ pub trait Backend: Send + Sync + 'static {
     ) -> BoxFuture<Message> {
         let _ = (files, nonce, progress);
         self.send_message(channel, content, reply.map(|r| r.0))
+    }
+    fn preupload(&self, channel: Id, key: u64, filename: String, bytes: Arc<Vec<u8>>) {
+        let _ = (channel, key, filename, bytes);
+    }
+    fn drop_preupload(&self, key: u64) {
+        let _ = key;
     }
     fn send_voice_message(&self, channel: Id, voice: VoiceUpload, reply: Option<(Id, bool)>, nonce: u64) -> BoxFuture<Message> {
         let _ = (channel, voice, reply, nonce);

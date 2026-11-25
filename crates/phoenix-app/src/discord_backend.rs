@@ -15,6 +15,7 @@ mod history;
 mod inbox;
 mod msg_cache;
 mod snapshot;
+mod preupload;
 #[cfg(test)]
 pub(crate) use profile_edit::bodies as profile_edit_bodies;
 pub mod store;
@@ -878,6 +879,7 @@ impl Backend for DiscordBackend {
             if let Some((r, mention)) = reply {
                 msg = msg.reply_to(sf(channel), sf(r), mention);
             }
+            let pres: Vec<Option<preupload::Pre>> = files.iter().map(|f| f.pre.and_then(preupload::take)).collect();
             let files: Vec<phoenix_api::rest::FileUpload> = files
                 .into_iter()
                 .map(|f| phoenix_api::rest::FileUpload {
@@ -891,7 +893,7 @@ impl Backend for DiscordBackend {
             let attachments = if files.is_empty() {
                 Vec::new()
             } else {
-                let slots = s.rest.upload_files(sf(channel), &files, progress, phoenix_api::rest::uploads::UPLOAD_CHUNK).await.map_err(|e| match e {
+                let slots = preupload::resolve(&s.rest, sf(channel), &files, pres, progress).await.map_err(|e| match e {
                     e @ ApiError::Api { status: 400..=499, .. } => BackendError::rejected(api_err(e)),
                     e => api_err(e),
                 })?;
@@ -914,6 +916,30 @@ impl Backend for DiscordBackend {
             s.adapter.lock().mark_read(m.channel_id.0, m.id.0);
             Ok(convert::message(&m))
         })
+    }
+
+    fn preupload(&self, channel: Id, key: u64, filename: String, bytes: Arc<Vec<u8>>) {
+        let Ok(s) = self.inner.session() else { return };
+        let (tx, rx) = tokio::sync::watch::channel(None);
+        let sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let counter = sent.clone();
+        let task = self.inner.rt.spawn(async move {
+            let file = phoenix_api::rest::FileUpload { filename, bytes: bytes.to_vec(), ..Default::default() };
+            let res = s
+                .rest
+                .upload_one(sf(channel), &file, &|n| {
+                    counter.store(n, std::sync::atomic::Ordering::Relaxed);
+                    true
+                })
+                .await
+                .map_err(|e| e.to_string());
+            let _ = tx.send(Some(res));
+        });
+        preupload::insert(key, preupload::Pre { sent, rx, abort: task.abort_handle() });
+    }
+
+    fn drop_preupload(&self, key: u64) {
+        preupload::drop_key(key);
     }
 
     fn send_voice_message(&self, channel: Id, voice: crate::backend::VoiceUpload, reply: Option<(Id, bool)>, nonce: u64) -> BoxFuture<Message> {
