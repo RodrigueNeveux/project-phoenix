@@ -1314,7 +1314,7 @@ fn theme_banner(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
         .py(z(16.))
         .px(z(25.))
         .rounded(z(8.))
-        .bg(gpui::black())
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
         .child(gpui::img(SharedString::from(super::art::theme_banner())).w(z(117.)).h(z(69.)).flex_none())
         .child(
             div()
