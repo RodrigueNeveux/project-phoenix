@@ -224,7 +224,7 @@ fn tile(q: &Quest, premium: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .child(util_button("more-horizontal")),
                 )
                 .child(div().flex_1())
-                .children(q.logotype.clone().map(|l| div().mb(z(4.)).h(z(17.)).max_w(z(121.)).child(img(l).h_full().max_w(z(121.)).object_fit(gpui::ObjectFit::Contain))))
+                .children(q.logotype.clone().map(|l| div().mb(z(4.)).h(z(34.)).w(z(121.)).flex().items_end().child(img(l).max_h(z(34.)).max_w(z(121.)).object_fit(gpui::ObjectFit::Contain))))
                 .child(
                     div()
                         .flex()
@@ -283,7 +283,7 @@ fn tile(q: &Quest, premium: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     }
     let mid = div()
         .w_full()
-        .h(z(168.))
+        .h(z(104.))
         .flex_none()
         .bg(surface)
         .flex()
@@ -307,18 +307,7 @@ fn tile(q: &Quest, premium: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .child(header)
                         .child(text(12., 16., FontWeight::MEDIUM, tk(idx::TEXT_MUTED), description(q, &reward_label))),
                 ),
-        )
-        .when(q.enrolled && !q.completed, |d| {
-            d.child(
-                div()
-                    .px(z(12.))
-                    .flex()
-                    .items_center()
-                    .gap(z(8.))
-                    .child(text(12., 16., FontWeight::SEMIBOLD, tk(idx::TEXT_DEFAULT), format!("{}%", (q.progress * 100.).round() as u32)))
-                    .child(div().flex_1().h(z(8.)).rounded_full().bg(tk(idx::BACKGROUND_MOD_NORMAL)).child(div().h_full().w(gpui::relative(q.progress)).rounded_full().bg(tk(idx::BRAND_500)))),
-            )
-        });
+        );
     let primary: SharedString = match q.task {
         Task::Video { seconds } if !q.enrolled => crate::t!("quests.watch", d = duration_short(seconds)),
         _ if !q.enrolled => crate::t!("quests.accept"),
