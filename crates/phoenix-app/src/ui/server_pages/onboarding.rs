@@ -1790,6 +1790,8 @@ fn dashed_add(id: &'static str, label: SharedString) -> gpui::Stateful<gpui::Div
         .child(text(16., 20., FontWeight::NORMAL, idx::TEXT_LINK, label))
 }
 
+type TaskRow = (AnyElement, SharedString, Option<(usize, SharedString)>);
+
 fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let guild = c.guild;
     let h = &c.home;
@@ -1910,7 +1912,7 @@ fn home_step(c: &Ctx, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let mut items: Vec<(AnyElement, SharedString, Option<(usize, SharedString)>)> = Vec::new();
+    let mut items: Vec<TaskRow> = Vec::new();
     for (i, a) in list.iter().enumerate() {
         let cid = str_of(a, "channel_id").to_owned();
         items.push((
