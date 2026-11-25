@@ -151,6 +151,7 @@ pub enum HomeView {
     Dm,
     Shop,
     Nitro,
+    Quests,
 }
 
 #[derive(Clone, Debug, PartialEq)]

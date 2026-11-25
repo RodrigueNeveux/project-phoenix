@@ -42,6 +42,9 @@ fn page_content(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     if app.selected_guild.is_none() && app.nav.home == HomeView::Shop {
         return crate::ui::shop_page::render(app, window, cx);
     }
+    if app.selected_guild.is_none() && app.nav.home == HomeView::Quests {
+        return crate::ui::quests_page::render(app, window, cx);
+    }
     if app.selected_guild.is_none() && app.nav.home == HomeView::Nitro {
         return nitro::render(app, window, cx);
     }

@@ -1093,6 +1093,24 @@ impl Backend for DiscordBackend {
     fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
         self.shop_storefront_impl()
     }
+    fn quests(&self) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/quests/@me", None).await.map_err(api_err) })
+    }
+    fn discoverable_guilds(&self, category: Option<u32>, offset: u32) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move {
+            let path = match category {
+                Some(c) => format!("/discoverable-guilds?offset={offset}&limit=24&categories={c}"),
+                None => format!("/discoverable-guilds?offset={offset}&limit=24"),
+            };
+            s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err)
+        })
+    }
+    fn discovery_categories(&self, locale: String) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move {
+            let path = format!("/discovery/categories?locale={locale}&primary_only=true");
+            s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err)
+        })
+    }
     fn app_directory_collections(&self, locale: String) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move {
             let path = format!("/application-directory-static/collections?surface=2&active_state=1&platform=1&locale={locale}");

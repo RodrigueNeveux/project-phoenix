@@ -327,6 +327,15 @@ pub trait Backend: Send + Sync + 'static {
     fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
         Box::pin(async { Ok(serde_json::Value::Null) })
     }
+    fn quests(&self) -> BoxFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::Value::Null) })
+    }
+    fn discoverable_guilds(&self, _category: Option<u32>, _offset: u32) -> BoxFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::Value::Null) })
+    }
+    fn discovery_categories(&self, _locale: String) -> BoxFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::Value::Null) })
+    }
     fn app_directory_collections(&self, _locale: String) -> BoxFuture<serde_json::Value> {
         Box::pin(async { Ok(serde_json::Value::Null) })
     }

@@ -71,6 +71,7 @@ pub mod voice_effects;
 pub mod voice_panel;
 pub mod go_live;
 pub mod voice_row;
+pub mod quests_page;
 pub mod shop_page;
 pub mod emoji_text;
 pub mod shake;

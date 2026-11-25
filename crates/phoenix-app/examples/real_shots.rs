@@ -400,6 +400,18 @@ impl Backend for ReadOnly {
     fn inbox_unreads(&self, order: &[Id]) -> Vec<phoenix_app::ui::inbox_unreads::Entry> {
         self.0.inbox_unreads(order)
     }
+    fn quests(&self) -> BoxFuture<serde_json::Value> {
+        self.0.quests()
+    }
+    fn discoverable_guilds(&self, category: Option<u32>, offset: u32) -> BoxFuture<serde_json::Value> {
+        self.0.discoverable_guilds(category, offset)
+    }
+    fn discovery_categories(&self, locale: String) -> BoxFuture<serde_json::Value> {
+        self.0.discovery_categories(locale)
+    }
+    fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
+        self.0.shop_storefront()
+    }
     fn load_pins(&self, c: Id) -> BoxFuture<Vec<Message>> {
         self.0.load_pins(c)
     }
@@ -764,6 +776,10 @@ fn main() -> anyhow::Result<()> {
                     "add" => F::AddFriend,
                     _ => F::Online,
                 };
+            } else if view == "quests" {
+                app.select_guild(None, cx);
+                app.nav.home = phoenix_app::ui::home::data::HomeView::Quests;
+                app.selected_channel = None;
             } else if let (Some(g), None) = (guild, channel) {
                 app.select_guild(Some(g), cx);
                 let first = app.guild_channels.get(&g).and_then(|l| {

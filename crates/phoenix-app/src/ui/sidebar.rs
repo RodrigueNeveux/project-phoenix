@@ -537,7 +537,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         })
         .child(nav("nitro", Icon::Nitro, crate::t!("dm.nitro"), Some(HomeView::Nitro), 0))
         .child(nav("shop", Icon::Gift, crate::t!("dm.shop"), Some(HomeView::Shop), 0))
-        .child(nav("quests", Icon::Quests, crate::t!("dm.quests"), None, 0))
+        .child(nav("quests", Icon::Quests, crate::t!("dm.quests"), Some(HomeView::Quests), 0))
         .child(div().mx(z(8.)).my(z(12.)).h(z(1.)).bg(t(idx::BORDER_SUBTLE)))
         .child(
             div()
