@@ -1397,7 +1397,7 @@ fn threads(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement>
         .child(div().mr(z(16.)).w(z(1.)).h(z(24.)).bg(tk(idx::BORDER_SUBTLE)))
         .child(
             div()
-                .flex_grow()
+                .flex_grow(1.)
                 .flex_basis(z(205.2))
                 .min_w_0()
                 .h(z(32.))
