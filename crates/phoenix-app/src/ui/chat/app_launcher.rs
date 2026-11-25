@@ -237,14 +237,16 @@ fn pick(a: &LauncherApp, cx: &mut Context<PhoenixApp>) -> impl Fn(&gpui::ClickEv
 }
 
 fn card(a: &LauncherApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let banner = div().w_full().h(px(126.)).flex_none().bg(tk(idx::BACKGROUND_BASE_LOW)).when_some(a.cover.clone(), |d, u| d.child(img(u).size_full().object_fit(gpui::ObjectFit::Cover)));
+    let banner = div().w_full().h(px(126.)).flex_none().bg(tk(idx::BACKGROUND_SURFACE_HIGHEST)).when_some(a.cover.clone(), |d, u| d.child(img(u).size_full().object_fit(gpui::ObjectFit::Cover)));
     div()
         .id(SharedString::from(format!("launcher-card-{}", a.id)))
         .w(px(224.))
         .h(px(180.))
         .rounded(px(12.))
         .overflow_hidden()
-        .bg(tk(idx::CARD_BACKGROUND_DEFAULT))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+        .active(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
         .cursor_pointer()
         .flex()
         .flex_col()
@@ -268,7 +270,9 @@ fn rows(apps: &[LauncherApp], cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .flex()
                 .items_center()
                 .gap(px(12.))
-                .bg(tk(idx::CARD_BACKGROUND_DEFAULT))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+        .active(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 .when(first, |d| d.rounded_tl(px(12.)).rounded_tr(px(12.)))
                 .when(last, |d| d.rounded_bl(px(12.)).rounded_br(px(12.)))
                 .when(!last, |d| d.border_b_1().border_color(tk(idx::BACKGROUND_MOD_SUBTLE)))
@@ -325,6 +329,11 @@ fn recents_section(apps: &[LauncherApp], cx: &mut Context<PhoenixApp>) -> AnyEle
         .children(apps.iter().map(|a| {
             div()
                 .id(SharedString::from(format!("launcher-recent-{}", a.id)))
+                .rounded(px(12.))
+                .overflow_hidden()
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+                .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+                .active(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 .cursor_pointer()
                 .child(app_icon(a, 48.))
                 .on_click(pick(a, cx))
@@ -355,7 +364,9 @@ fn command_rows(cmds: &[SlashCommand], cx: &mut Context<PhoenixApp>) -> AnyEleme
                 .flex()
                 .items_center()
                 .gap(px(12.))
-                .bg(tk(idx::CARD_BACKGROUND_DEFAULT))
+                .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_HOVER)))
+        .active(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 .when(first, |d| d.rounded_tl(px(12.)).rounded_tr(px(12.)))
                 .when(last, |d| d.rounded_bl(px(12.)).rounded_br(px(12.)))
                 .when(!last, |d| d.border_b_1().border_color(tk(idx::BACKGROUND_MOD_SUBTLE)))
