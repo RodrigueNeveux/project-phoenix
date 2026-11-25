@@ -41,4 +41,6 @@ $EX pin avances 1574898068434714644
 
 | Date | Channel | Message |
 |---|---|---|
+| 2026-11-25 | `📢・annonces` | `1575061609292890135` (4 screenshots) |
+| 2026-11-25 | `📸・captures` | `1575061633758134332` (10 screenshots) |
 | 2026-11-25 | `⚙️・avancés` | `1574898068434714644` (edited and pinned) |
