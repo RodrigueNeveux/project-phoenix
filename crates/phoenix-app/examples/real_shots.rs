@@ -1358,7 +1358,14 @@ fn main() -> anyhow::Result<()> {
                             "serverprofile" => app.open_server_profile(g, cx),
                             "security" => app.open_security_actions(g, cx),
                             "createevent" => app.open_create_event(g, cx),
-                            _ => app.open_nickname(g, None, cx),
+                            _ => {
+                                let me = app.me.id;
+                                let list = app.members.get(&g);
+                                let pick = list
+                                    .and_then(|l| l.iter().find(|m| m.user != me && m.nick.is_some()).or_else(|| l.iter().find(|m| m.user != me)))
+                                    .map(|m| m.user);
+                                app.open_nickname(g, pick, cx);
+                            }
                         }
                     }
                 }
@@ -1573,6 +1580,12 @@ fn main() -> anyhow::Result<()> {
                                 phoenix_app::ui::context_menu::debug_open_submenu(arg.parse().unwrap_or(4));
                             }
                         }
+                    }
+                }
+                "friendnick" => {
+                    let friend = app.nav.relationships.iter().find(|r| r.kind == phoenix_app::ui::home::data::RelationshipKind::Friend).map(|r| r.user);
+                    if let Some(u) = friend {
+                        app.open_friend_nickname(u, cx);
                     }
                 }
                 "remindcustom" | "remindcal" | "remindtime" => {

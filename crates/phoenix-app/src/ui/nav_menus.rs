@@ -449,8 +449,8 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                         items.push(act(&e, crate::t!("menu.profile"), move |a, _, cx| a.open_profile_modal(u, cx)));
                         items.push(act(&e, crate::t!("menu.call"), move |a, _, cx| a.open_call_ui(u, cx)));
                         items.push(act(&e, crate::t!(crate::actions::user::note_label(app, u)), move |a, _, cx| a.open_profile_modal(u, cx)).with_subtext(crate::t!("menu.note_subtext")));
-                        if app.nav.relationship(u).is_some() {
-                            items.push(act(&e, crate::t!("menu.friend_nickname"), move |a, _, cx| a.open_friend_nickname(u, cx)));
+                        if let Some(r) = app.nav.relationship(u).filter(|r| r.kind == crate::ui::home::data::RelationshipKind::Friend) {
+                            items.push(act(&e, crate::ui::modals::nickname::friend_title(r.nickname.is_some()), move |a, _, cx| a.open_friend_nickname(u, cx)));
                         }
                     }
                     items.push(act(&e, crate::t!("menu.close_dm"), move |a, _, cx| a.close_dm(id, cx)));

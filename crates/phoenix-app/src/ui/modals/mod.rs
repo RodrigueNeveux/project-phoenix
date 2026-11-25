@@ -19,6 +19,7 @@ pub mod ignore;
 pub mod guild_notify;
 pub mod leave_link;
 pub mod member;
+pub mod nickname;
 pub mod poll_create;
 pub mod privacy;
 pub mod reactions;
@@ -114,6 +115,7 @@ pub enum Modal {
     GroupInvites(gdm::Invites),
     FolderSettings(gdm::Folder),
     Schedule(crate::ui::chat::scheduled::Picker),
+    Nickname(nickname::Nickname),
     SwitchAccounts,
     Ignore(crate::model::Id),
     GdmCleanup(gdm_cleanup::Cleanup),
@@ -135,6 +137,8 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
             channel_settings::prepare_area(s, window, cx);
         } else if let Some(Modal::CreatePoll(s)) = m {
             poll_create::prepare_question(s, window, cx);
+        } else if let Some(Modal::Nickname(s)) = m {
+            nickname::prepare(s, window, cx);
         }
     });
     with_modal(|m| {
@@ -247,6 +251,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::GroupInvites(s) => gdm::render_invites(s, cx),
             Modal::FolderSettings(f) => gdm::render_folder(f, cx),
             Modal::Schedule(p) => crate::ui::chat::scheduled::render(p, cx),
+            Modal::Nickname(s) => nickname::render(s, cx),
             Modal::SwitchAccounts => accounts::render(app, cx),
             Modal::Ignore(u) => ignore::render(app, *u, cx),
             Modal::GdmCleanup(s) => gdm_cleanup::render(app, s, cx),

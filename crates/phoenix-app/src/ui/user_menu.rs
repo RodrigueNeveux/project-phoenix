@@ -76,7 +76,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let voice = if me { crate::actions::user::VoiceItems::default() } else { crate::actions::user::voice_items(app, u, g, &e) };
     items.extend(voice.watch);
     if !me && friend {
-        items.push(act(crate::t!("menu.friend_nickname"), Rc::new(move |a, _, _, cx| a.open_friend_nickname(u, cx))));
+        let has = app.nav.relationship(u).is_some_and(|r| r.nickname.is_some());
+        items.push(act(crate::ui::modals::nickname::friend_title(has), Rc::new(move |a, _, _, cx| a.open_friend_nickname(u, cx))));
     }
     items.push(MenuItem::Separator);
     if let Some(gid) = g {

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{cell::RefCell, collections::HashSet};
 
 use gpui::{App, Context};
 use phoenix_api::rest::{members::VoiceMod, reporting::ReportTarget};
@@ -8,10 +8,7 @@ use crate::{
     app::PhoenixApp,
     discord_backend::convert::sf,
     model::{ChannelKind, Id},
-    ui::{
-        context_menu::MenuItem,
-        modals::{Field, Form, Modal},
-    },
+    ui::{context_menu::MenuItem, modals::Modal},
 };
 
 thread_local! {
@@ -26,49 +23,7 @@ pub fn note_label(app: &PhoenixApp, u: Id) -> &'static str {
     if app.people.profiles.get(&u).is_some_and(|p| !p.note.is_empty()) { "menu.edit_note" } else { "menu.add_note" }
 }
 
-fn text_form(title: gpui::SharedString, label: gpui::SharedString, initial: String, on: impl Fn(&mut PhoenixApp, String, &mut Context<PhoenixApp>) + 'static) -> Modal {
-    Modal::Form(Form {
-        title,
-        subtitle: None,
-        fields: vec![Field::new(label, gpui::SharedString::default(), initial)],
-        choices: Vec::new(),
-        choice: None,
-        check: None,
-        submit: crate::t!("common.save"),
-        danger: false,
-        preview: None,
-        width: 440.,
-        on_submit: Rc::new(move |a, v, _, cx| on(a, v.into_iter().next().unwrap_or_default(), cx)),
-    })
-}
-
 impl PhoenixApp {
-    pub fn open_nickname(&mut self, guild: Id, user: Option<Id>, cx: &mut Context<Self>) {
-        let who = user.unwrap_or(self.me.id);
-        let initial = self.users.get(&who).map(|u| u.display_name.to_string()).unwrap_or_default();
-        open_modal(
-            text_form(crate::t!("menu.change_nickname"), crate::t!("nick.label"), initial, move |a, nick, cx| {
-                a.action_toast(ActionRequest::SetNick { guild, user, nick }, Some(crate::t!("nick.saved")), cx);
-            }),
-            None,
-        );
-        cx.notify();
-    }
-
-    pub fn open_friend_nickname(&mut self, user: Id, cx: &mut Context<Self>) {
-        let initial = self.nav.relationship(user).and_then(|r| r.nickname.clone()).map(|s| s.to_string()).unwrap_or_default();
-        open_modal(
-            text_form(crate::t!("menu.friend_nickname"), crate::t!("nick.friend_label"), initial, move |a, nick, cx| {
-                if let Some(r) = a.nav.relationships.iter_mut().find(|r| r.user == user) {
-                    r.nickname = (!nick.trim().is_empty()).then(|| nick.trim().to_owned().into());
-                }
-                a.action_toast(ActionRequest::FriendNick { user, nick }, Some(crate::t!("nick.saved")), cx);
-            }),
-            None,
-        );
-        cx.notify();
-    }
-
     pub fn open_server_profile(&mut self, guild: Id, cx: &mut Context<Self>) {
         crate::ui::settings::open(self, cx);
         if let Some(s) = self.settings.as_mut() {
