@@ -47,7 +47,7 @@ fn bio_lines(bio: &str) -> gpui::Div {
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
-    if !app.show_members {
+    if !app.show_members || !crate::ui::title_bar::dm_profile_fits(crate::ui::title_bar::viewport_w_css()) {
         return None;
     }
     let uid = peer(app)?;

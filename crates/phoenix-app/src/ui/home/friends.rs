@@ -70,7 +70,7 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
                 .flex()
                 .flex_row()
                 .child(div().flex_1().min_w_0().h_full().child(body))
-                .child(active_now(app, cx)),
+                .when(crate::ui::title_bar::active_now_shown(crate::ui::title_bar::viewport_w_css()), |d| d.child(active_now(app, cx))),
         )
         .into_any_element()
 }
@@ -283,29 +283,31 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
                 .child(crate::t!("friends.add_tab")),
         )
         .child(div().flex_1())
-        .child(
-            div()
-                .pl(z(10.))
-                .pr(z(8.))
-                .child(
-                    div()
-                        .id("fr-new-group-dm")
-                        .group("fr-new-group-dm")
-                        .size(z(32.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .cursor_pointer()
-                        .tip(crate::t!("friends.new_group_dm"))
-                        .child(
-                            gpui::svg()
-                                .path(crate::icons::path("new-group-dm"))
-                                .size(z(20.))
-                                .text_color(c(tok(idx::ICON_MUTED)))
-                                .group_hover("fr-new-group-dm", |s| s.text_color(c(tok(idx::ICON_SUBTLE)))),
-                        ),
-                ),
-        )
+        .when(crate::ui::title_bar::friends_invite_shown(crate::ui::title_bar::viewport_w_css()), |d| {
+            d.child(
+                div()
+                    .pl(z(10.))
+                    .pr(z(8.))
+                    .child(
+                        div()
+                            .id("fr-new-group-dm")
+                            .group("fr-new-group-dm")
+                            .size(z(32.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .cursor_pointer()
+                            .tip(crate::t!("friends.new_group_dm"))
+                            .child(
+                                gpui::svg()
+                                    .path(crate::icons::path("new-group-dm"))
+                                    .size(z(20.))
+                                    .text_color(c(tok(idx::ICON_MUTED)))
+                                    .group_hover("fr-new-group-dm", |s| s.text_color(c(tok(idx::ICON_SUBTLE)))),
+                            ),
+                    ),
+            )
+        })
 }
 
 pub fn in_tab(r: &Relationship, tab: FriendsTab, online: bool) -> bool {
@@ -1002,6 +1004,14 @@ fn add_friend(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -
         .child(div().flex_none().px(z(20.)).flex().gap(z(32.)).child(div().flex_1().min_w_0().child(explore)).child(div().flex_1()))
 }
 
+fn active_now_width() -> f32 {
+    let vw = crate::ui::title_bar::viewport_w_css();
+    if vw <= 0. {
+        return 360.;
+    }
+    crate::ui::title_bar::active_now_w(vw - crate::theme::m::SERVER_BAR_W - crate::ui::sidebar_resize::width())
+}
+
 fn active_now(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let scroll = ACTIVE_NOW_SCROLL.with(|h| h.clone());
     div()
@@ -1034,7 +1044,7 @@ fn active_now_column(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::St
     active.sort_by_key(|(u, _)| (!in_voice(*u), std::cmp::Reverse(start_of(*u)), u.0));
     let mut col = div()
         .id("active-now")
-        .w(z(360.))
+        .w(z(active_now_width()))
         .flex_none()
         .h_full()
         .border_l_1()

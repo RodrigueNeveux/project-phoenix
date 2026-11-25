@@ -85,10 +85,10 @@ pub fn inbox_right_inset() -> f32 {
 
 static VIEWPORT_H_CSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 static VIEWPORT_W_CSS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-static DRAWER_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-pub const COMPACT_MEMBERS_W: f32 = 940.;
-pub const COMPACT_SIDEBAR_W: f32 = 720.;
+pub const DM_PROFILE_MIN_W: f32 = 1132.;
+pub const ACTIVE_NOW_MAX_HIDDEN_W: f32 = 1200.;
+pub const FRIENDS_INVITE_MAX_HIDDEN_W: f32 = 940.;
 
 pub fn viewport_w_css() -> f32 {
     f32::from_bits(VIEWPORT_W_CSS.load(std::sync::atomic::Ordering::Relaxed))
@@ -98,27 +98,27 @@ pub fn viewport_h_css() -> f32 {
     f32::from_bits(VIEWPORT_H_CSS.load(std::sync::atomic::Ordering::Relaxed))
 }
 
-pub fn compact_members(vw: f32) -> bool {
-    vw > 0. && vw < COMPACT_MEMBERS_W
+pub fn dm_profile_fits(vw: f32) -> bool {
+    vw <= 0. || vw >= DM_PROFILE_MIN_W
 }
 
-pub fn compact_sidebar(vw: f32) -> bool {
-    vw > 0. && vw < COMPACT_SIDEBAR_W
+pub fn active_now_shown(vw: f32) -> bool {
+    vw <= 0. || vw > ACTIVE_NOW_MAX_HIDDEN_W
 }
 
-pub fn drawer_open() -> bool {
-    DRAWER_OPEN.load(std::sync::atomic::Ordering::Relaxed)
+pub fn friends_invite_shown(vw: f32) -> bool {
+    vw <= 0. || vw > FRIENDS_INVITE_MAX_HIDDEN_W
 }
 
-pub fn set_drawer_open(open: bool) {
-    DRAWER_OPEN.store(open, std::sync::atomic::Ordering::Relaxed);
+pub fn active_now_w(body_w: f32) -> f32 {
+    (body_w * 0.3).clamp(360., 420.)
 }
 
 pub fn title_max_w(vw: f32) -> f32 {
     if vw <= 0. {
         return 480.;
     }
-    (vw - 280.).clamp(80., 480.)
+    vw * 0.5
 }
 
 pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -144,46 +144,40 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                 .flex()
                 .items_center()
                 .justify_center()
-                .gap(z(8.))
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(tok(idx::TEXT_STRONG)))
-                .map(|d| match guild {
-                    Some(g) => d.child(
-                        div().rounded(z(4.)).overflow_hidden().child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16. * zoom())),
-                    ),
-                    None => d.child(icon(glyph, 16. * zoom(), c(tok(idx::INTERACTIVE_ICON_DEFAULT)))),
-                })
-                .child(div().max_w(z(title_max_w(vw))).text_ellipsis().child(text)),
+                .child(
+                    div()
+                        .max_w(z(title_max_w(vw)))
+                        .min_w_0()
+                        .flex()
+                        .items_center()
+                        .gap(z(8.))
+                        .text_size(z(14.))
+                        .line_height(z(18.))
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c(tok(idx::TEXT_STRONG)))
+                        .map(|d| match guild {
+                            Some(g) => d.child(
+                                div()
+                                    .flex_none()
+                                    .rounded(z(4.))
+                                    .overflow_hidden()
+                                    .child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16. * zoom())),
+                            ),
+                            None => d.child(div().flex_none().child(icon(glyph, 16. * zoom(), c(tok(idx::INTERACTIVE_ICON_DEFAULT))))),
+                        })
+                        .child(div().min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().child(text)),
+                ),
         )
         .child(
             div()
                 .relative()
+                .w(z(80.))
                 .h(z(24.))
-                .pl(z(8.))
                 .flex()
-                .items_center()
-                .gap(z(4.))
-                .when(compact_sidebar(vw), |d| {
-                    d.child(
-                        bar_button("title-drawer", Icon::Hash, drawer_open(), crate::t!("title.toggle_sidebar"))
-                            .on_click(cx.listener(|_, _, _, cx| {
-                                set_drawer_open(!drawer_open());
-                                cx.notify();
-                            })),
-                    )
-                })
-                .child(
-                    div()
-                        .w(z(64.))
-                        .h(z(24.))
-                        .flex()
-                        .justify_center()
-                        .gap(z(2.))
-                        .child(nav_arrow("title-back", "nav/back", true, true))
-                        .child(nav_arrow("title-forward", "nav/forward", false, false)),
-                ),
+                .justify_center()
+                .gap(z(2.))
+                .child(nav_arrow("title-back", "nav/back", true, true))
+                .child(nav_arrow("title-forward", "nav/forward", false, false)),
         )
         .child(
             div()
@@ -321,23 +315,43 @@ fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
-    use super::{compact_members, compact_sidebar, title_max_w};
+    use super::{active_now_shown, active_now_w, dm_profile_fits, friends_invite_shown, title_max_w};
 
     #[test]
-    fn compact_breakpoints_match_narrow_thresholds() {
-        assert!(!compact_members(0.));
-        assert!(compact_members(939.));
-        assert!(!compact_members(940.));
-        assert!(!compact_sidebar(0.));
-        assert!(compact_sidebar(719.));
-        assert!(!compact_sidebar(720.));
+    fn dm_profile_panel_needs_1132_css_px() {
+        assert!(dm_profile_fits(0.));
+        assert!(!dm_profile_fits(1131.));
+        assert!(dm_profile_fits(1132.));
+        assert!(dm_profile_fits(1700. / 1.5));
+        assert!(!dm_profile_fits(1600. / 1.5));
+        assert!(dm_profile_fits(1920. / 1.5));
+        assert!(!dm_profile_fits(1280. / 1.25));
+        assert!(dm_profile_fits(1920. / 1.25));
     }
 
     #[test]
-    fn title_max_width_clamps_for_narrow_windows() {
+    fn friends_columns_follow_media_queries() {
+        assert!(!active_now_shown(1200.));
+        assert!(active_now_shown(1201.));
+        assert!(!friends_invite_shown(940.));
+        assert!(friends_invite_shown(941.));
+        assert!(!active_now_shown(1700. / 1.5));
+        assert!(active_now_shown(1920. / 1.5));
+        assert!(!friends_invite_shown(1700. / 2.));
+        assert!(friends_invite_shown(1920. / 2.));
+    }
+
+    #[test]
+    fn active_now_width_is_thirty_percent_clamped() {
+        assert_eq!(active_now_w(864.), 360.);
+        assert_eq!(active_now_w(1300.), 390.);
+        assert_eq!(active_now_w(1504.), 420.);
+    }
+
+    #[test]
+    fn title_is_capped_at_half_the_viewport() {
         assert_eq!(title_max_w(0.), 480.);
-        assert_eq!(title_max_w(1280.), 480.);
-        assert_eq!(title_max_w(500.), 220.);
-        assert_eq!(title_max_w(300.), 80.);
+        assert_eq!(title_max_w(1280.), 640.);
+        assert_eq!(title_max_w(640.), 320.);
     }
 }

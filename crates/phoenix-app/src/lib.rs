@@ -64,7 +64,7 @@ fn window_icon() -> Option<Arc<image::RgbaImage>> {
 }
 
 pub fn window_options(cx: &App) -> WindowOptions {
-    let bounds = Bounds::centered(None, size(px(1280.), px(800.)), cx);
+    let bounds = Bounds::centered(None, size(px(1280.), px(720.)), cx);
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
@@ -75,7 +75,7 @@ pub fn window_options(cx: &App) -> WindowOptions {
         window_decorations: Some(WindowDecorations::Client),
         app_id: Some(APP_ID.into()),
         icon: window_icon(),
-        window_min_size: Some(size(px(500.), px(400.))),
+        window_min_size: Some(size(px(940.), px(500.))),
         ..Default::default()
     }
 }

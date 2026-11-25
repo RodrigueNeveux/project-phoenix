@@ -197,6 +197,19 @@ pub fn header_button(id: &'static str, path: gpui::SharedString, selected: bool,
         .map(|d| crate::ui::focus_ring::ring(d, k, 4.))
 }
 
+pub fn header_button_disabled(id: &'static str, path: gpui::SharedString, label: gpui::SharedString) -> gpui::Stateful<Div> {
+    let k = key(("hdr-btn", id));
+    track(div().id(id), k)
+        .relative()
+        .size(z(32.))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(svg().path(path).size(z(20.)).flex_none().text_color(c(tok(idx::CHANNEL_ICON))))
+        .children(hovered(k).then(|| below_tip(label, 32., 32.)))
+}
+
 pub fn fade_to(key: u64, on: bool, rest: gpui::Hsla, hover: gpui::Hsla, ms: u64, radius: f32) -> gpui::AnyElement {
     HOVER.with(|h| {
         let mut h = h.borrow_mut();
