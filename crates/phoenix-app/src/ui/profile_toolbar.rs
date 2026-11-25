@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use gpui::{AnimationExt, AnyElement, Bounds, Context, Div, Entity, IntoElement, ParentElement, Pixels, SharedString, Styled, Window, div, prelude::*};
-use gpui_component::input::{InputEvent, Textarea, TextareaState};
+use gpui_component::{Sizable as _, input::{InputEvent, Textarea, TextareaState}};
 
 use crate::{
     app::PhoenixApp,
