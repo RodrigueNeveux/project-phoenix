@@ -48,6 +48,8 @@ pub fn local_copy(app: &PhoenixApp, channel: Id, nonce: u64, content: &str, repl
     }
 }
 
+const CLYDE_AVATAR: &str = "https://discord.com/assets/9380e4b5bd8d267c.png";
+
 pub fn ephemeral_footer(entity: &Entity<PhoenixApp>, msg: &Message) -> AnyElement {
     let (e, ch, id) = (entity.clone(), msg.channel, msg.id);
     div()
@@ -168,7 +170,7 @@ impl PhoenixApp {
             id: SYSTEM_BOT,
             name: "clyde".into(),
             display_name: "Clyde".into(),
-            avatar: ImageRef::Default(0),
+            avatar: ImageRef::Url(CLYDE_AVATAR.into()),
             bot: true,
             verified_bot: true,
             tag: None,
