@@ -986,6 +986,7 @@ pub(crate) fn message(
         color,
         time: r.time_full.clone(),
     }));
+    content = content.children(invite_embed::render(app, entity, msg.author, &msg.content, cx));
     let visual: Vec<&Attachment> = msg.attachments.iter().filter(|a| mosaic::is_visual(a)).collect();
     if visual.len() >= 2 && crate::ui::settings::effects::inline_attachments() {
         content = content.child(mosaic::render(&visual, cx));
@@ -1000,7 +1001,6 @@ pub(crate) fn message(
     for e in msg.embeds.iter().filter(show_embed) {
         content = content.child(embed(app, e, cx));
     }
-    content = content.children(invite_embed::render(app, entity, msg.author, &msg.content, cx));
     media::set_current_author(None);
     if let Some(f) = &msg.forward {
         content = div().flex().flex_col().min_w_0().text_size(fz(16.)).text_color(c(Palette::TEXT_NORMAL)).child(forward::wrap(app, f, content));
