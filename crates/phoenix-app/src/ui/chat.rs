@@ -16,6 +16,7 @@ use crate::{
 
 pub mod app_launcher;
 pub mod attach;
+pub mod plaintext;
 pub mod composer;
 pub mod icons;
 pub mod invite_embed;
@@ -1747,6 +1748,11 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
                 return voice_message::player(&a.url, meta, cx);
             }
             return div().mt(z(4.)).child(attach::audio_card(a)).into_any_element();
+        }
+        AttachmentKind::File if a.url.starts_with("https://") && inline && plaintext::previewable(&a.filename) => {
+            if let Some(el) = plaintext::render(a, cx) {
+                return el;
+            }
         }
         _ => {}
     }
