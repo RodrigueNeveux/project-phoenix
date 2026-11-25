@@ -285,6 +285,7 @@ fn extra(cache: &Cache, c: &api::Channel) -> ChannelExtra {
             .map(|h| ImageRef::Url(format!("{}/channel-icons/{}/{h}.png?size=64", api::CDN_BASE, c.id).into())),
         recipients: if c.kind.is_private() { c.recipient_user_ids().len() } else { 0 },
         group_name: group.then(|| group_name(cache, c)).flatten(),
+        group_named: group && c.name.as_deref().is_some_and(|n| !n.is_empty()),
         members: if group { c.recipient_user_ids().into_iter().map(id).collect() } else { Vec::new() },
         owner: c.owner_id.filter(|_| group || c.kind.is_thread()).map(id),
     }
@@ -306,11 +307,18 @@ fn guild_extras(cache: &Cache, g: api::Snowflake) -> Vec<(Id, ChannelExtra)> {
 }
 
 fn group_name(cache: &Cache, c: &api::Channel) -> Option<gpui::SharedString> {
-    if c.name.as_deref().is_some_and(|n| !n.is_empty()) || !c.recipients.is_empty() {
+    if c.name.as_deref().is_some_and(|n| !n.is_empty()) {
         return None;
     }
-    let names: Vec<String> =
-        c.recipient_ids.iter().filter_map(|u| cache.user(*u)).map(|u| u.display_name().to_owned()).collect();
+    let names: Vec<String> = c
+        .recipient_user_ids()
+        .into_iter()
+        .filter_map(|u| {
+            let nick = cache.relationship(u).and_then(|r| r.nickname.clone()).filter(|n| !n.is_empty());
+            nick.or_else(|| c.recipients.iter().find(|r| r.id == u).map(|r| r.display_name().to_owned()))
+                .or_else(|| cache.user(u).map(|r| r.display_name().to_owned()))
+        })
+        .collect();
     (!names.is_empty()).then(|| names.join(", ").into())
 }
 
@@ -837,6 +845,33 @@ mod rel_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unnamed_group_names_use_friend_nicknames() {
+        let cache = Cache::default();
+        let ready = phoenix_api::gateway::parse_dispatch(
+            "READY",
+            &json!({
+                "v": 9,
+                "user": {"id": "1", "username": "me"},
+                "session_id": "s",
+                "guilds": [],
+                "private_channels": [
+                    {"id": "50", "type": 3, "recipients": [{"id": "2", "username": "alice"}, {"id": "3", "username": "bob"}]},
+                    {"id": "51", "type": 3, "name": "Team", "recipients": [{"id": "2", "username": "alice"}, {"id": "3", "username": "bob"}]}
+                ],
+                "relationships": [{"id": "2", "type": 1, "nickname": "Ali", "user": {"id": "2", "username": "alice"}}]
+            })
+            .to_string(),
+        );
+        cache.apply(&ready);
+        let unnamed = cache.channel(api::Snowflake(50)).unwrap();
+        let named = cache.channel(api::Snowflake(51)).unwrap();
+        assert_eq!(group_name(&cache, &unnamed).as_deref(), Some("Ali, bob"));
+        assert!(extra(&cache, &unnamed).group_name.is_some() && !extra(&cache, &unnamed).group_named);
+        assert_eq!(group_name(&cache, &named), None);
+        assert!(extra(&cache, &named).group_named);
+    }
 
     #[test]
     fn thread_list_sync_lists_only_joined_threads() {

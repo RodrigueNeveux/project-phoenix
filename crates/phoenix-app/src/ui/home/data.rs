@@ -39,6 +39,7 @@ pub struct ChannelExtra {
     pub group_icon: Option<ImageRef>,
     pub recipients: usize,
     pub group_name: Option<SharedString>,
+    pub group_named: bool,
     pub members: Vec<Id>,
     pub owner: Option<Id>,
     pub slowmode: u32,

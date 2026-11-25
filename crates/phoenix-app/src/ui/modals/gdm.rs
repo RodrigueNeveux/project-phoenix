@@ -109,8 +109,12 @@ fn clamp(input: &Entity<InputState>, max: usize, cx: &gpui::App) -> String {
 impl PhoenixApp {
     pub fn open_edit_group(&mut self, channel: Id, cx: &mut Context<Self>) {
         let ex = self.nav.extras.get(&channel);
-        let initial = ex.and_then(|e| e.group_name.clone()).map(|n| n.to_string()).unwrap_or_default();
         let placeholder = self.channels.get(&channel).map(|c| c.name.clone()).unwrap_or_default();
+        let initial = if ex.is_some_and(|e| e.group_named) {
+            ex.and_then(|e| e.group_name.clone()).unwrap_or_else(|| placeholder.clone()).to_string()
+        } else {
+            String::new()
+        };
         let current_icon = match ex.and_then(|e| e.group_icon.clone()) {
             Some(ImageRef::Url(u)) => Some(u),
             _ => None,
@@ -151,6 +155,7 @@ impl PhoenixApp {
         if let Some(AdminCall::EditGroupDm { name, icon, .. }) = group_patch(&g.initial, &name, &g.icon) {
             if let (Some(n), Some(ex)) = (&name, self.nav.extras.get_mut(&g.channel)) {
                 ex.group_name = (!n.is_empty()).then(|| n.clone().into());
+                ex.group_named = !n.is_empty();
             }
             let call = AdminCall::EditGroupDm { channel: Snowflake(g.channel.0), name, icon };
             self.action(ActionRequest::Admin(call), cx, |a, r, cx| {

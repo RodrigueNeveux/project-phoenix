@@ -127,6 +127,10 @@ impl Cache {
         self.inner.state.read().relationships.values().cloned().collect()
     }
 
+    pub fn relationship(&self, user: UserId) -> Option<Arc<Relationship>> {
+        self.inner.state.read().relationships.get(&user).cloned()
+    }
+
     pub fn read_state(&self) -> Option<Value> {
         self.inner.state.read().read_state.clone()
     }
