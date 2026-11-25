@@ -7,8 +7,41 @@ pub fn composer_button(id: &'static str, i: Icon) -> gpui::Stateful<Div> {
     composer_button_ext(id, i, 20., true)
 }
 
+pub fn composer_lottie(id: &str) -> Option<crate::icons::lottie_icons::Lottie> {
+    use crate::icons::lottie_icons::Lottie;
+    match id {
+        "gift" => Some(Lottie::Gift),
+        "gif" => Some(Lottie::Gif),
+        "sticker" => Some(Lottie::Sticker),
+        _ => None,
+    }
+}
+
 pub fn composer_button_ext(id: &'static str, i: Icon, glyph: f32, hover_bg: bool) -> gpui::Stateful<Div> {
+    composer_button_full(id, i, glyph, hover_bg, false)
+}
+
+pub fn composer_button_full(id: &'static str, i: Icon, glyph: f32, hover_bg: bool, active: bool) -> gpui::Stateful<Div> {
+    use gpui::IntoElement as _;
     let k = key(("composer-btn", id));
+    let fallback = move || {
+        svg()
+            .path(i.path())
+            .size(z(glyph))
+            .flex_none()
+            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+            .group_hover(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
+            .id("glyph")
+            .group_active(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))))
+            .into_any_element()
+    };
+    let size = glyph * crate::theme::zoom();
+    let colors = (c(tok(idx::INTERACTIVE_TEXT_DEFAULT)), c(tok(idx::INTERACTIVE_TEXT_HOVER)));
+    let glyph_el = match composer_lottie(id) {
+        Some(kind) => crate::ui::hover_icon::icon(k, kind, false, size, colors, fallback),
+        None if id == "emoji" => crate::ui::hover_icon::emoji_button(k, active, size, colors.0, fallback),
+        None => fallback(),
+    };
     let el = track(div().id(id), k)
         .relative()
         .when(hover_bg, |d| d.child(fade_layer(k, gpui::transparent_black(), c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED)), 200, 8.)))
@@ -20,16 +53,8 @@ pub fn composer_button_ext(id: &'static str, i: Icon, glyph: f32, hover_bg: bool
         .justify_center()
         .rounded(z(8.))
         .cursor_pointer()
-        .child(
-            svg()
-                .path(i.path())
-                .size(z(glyph))
-                .flex_none()
-                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-                .group_hover(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
-                .id("glyph")
-                .group_active(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
-        );
+        .child(glyph_el)
+        .when(composer_lottie(id).is_some(), |d| d.on_click(move |_, _, _| crate::ui::hover_icon::clicked(k)));
     let dx = if id == "emoji" { -4. } else { 0. };
     crate::ui::focus_ring::ring_inset(el, k, if hover_bg { 8. } else { 4. }, dx, 4.)
 }

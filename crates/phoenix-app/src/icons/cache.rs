@@ -61,6 +61,14 @@ fn find(h: &[u8], n: &[u8], from: usize) -> Option<usize> {
     memchr::memmem::find(h.get(from..)?, n).map(|p| p + from)
 }
 
+pub fn read_bytes(entry: &Path) -> Option<Vec<u8>> {
+    let b = std::fs::read(entry).ok()?;
+    let kl = u32::from_le_bytes(b.get(12..16)?.try_into().ok()?) as usize;
+    let start = 24 + kl;
+    let end = find(&b, &EOF_MAGIC, start).unwrap_or(b.len());
+    Some(b.get(start..end)?.to_vec())
+}
+
 pub fn read_body(entry: &Path) -> Option<String> {
     let b = std::fs::read(entry).ok()?;
     let kl = u32::from_le_bytes(b.get(12..16)?.try_into().ok()?) as usize;

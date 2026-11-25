@@ -806,8 +806,9 @@ pub fn call_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
 pub fn panel_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     use crate::theme::z;
     let off = disabled(app);
-    div()
-        .id("voice-soundboard")
+    let hk = crate::ui::states::key("voice-soundboard");
+    let fg = tk(idx::CONTROL_SECONDARY_TEXT_DEFAULT);
+    crate::ui::states::track(div().id("voice-soundboard"), hk)
         .relative()
         .flex_1()
         .min_w_0()
@@ -822,10 +823,13 @@ pub fn panel_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
         .items_center()
         .justify_center()
         .tip(disabled_reason(app).unwrap_or_else(|| crate::t!("voice.soundboard")))
-        .child(gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(tk(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+        .child(crate::ui::hover_icon::icon(hk, crate::icons::lottie_icons::Lottie::Soundboard, false, 20. * crate::theme::zoom(), (fg, fg), || {
+            gpui::svg().path("icons/voice/soundboard.svg").size(z(20.)).flex_none().text_color(fg).into_any_element()
+        }))
         .child(panel_anchor_probe())
         .on_click(cx.listener(move |app, _, window, cx| {
             if !off {
+                crate::ui::hover_icon::clicked(hk);
                 toggle_from_panel(app, window, cx);
             }
         }))

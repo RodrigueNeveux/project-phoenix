@@ -1,7 +1,9 @@
 pub mod art;
 pub mod clan_badges;
 pub(crate) mod cache;
+pub mod emoji_sprite;
 mod extract;
+pub mod lottie_icons;
 mod names;
 
 use std::collections::HashMap;
@@ -82,6 +84,8 @@ pub fn init() {
                 load_dir(&dir);
             }
             art::init(&dir);
+            lottie_icons::init(&dir);
+            emoji_sprite::init(&dir);
             clan_badges::init(&dir);
         })
         .ok();

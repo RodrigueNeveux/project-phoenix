@@ -241,33 +241,134 @@ fn items(v: Option<&Value>) -> &[Value] {
     v.and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[])
 }
 
-fn geometry(items_: &[Value], f: f64, m: &M, out: &mut Vec<(String, M)>) {
-    for it in items_ {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Trim {
+    s: f64,
+    e: f64,
+    o: f64,
+}
+
+fn trim_at(it: &Value, f: f64) -> Trim {
+    Trim {
+        s: num_of(&value(it.get("s"), f), 0.) / 100.,
+        e: num_of(&value(it.get("e"), f), 100.) / 100.,
+        o: num_of(&value(it.get("o"), f), 0.) / 360.,
+    }
+}
+
+fn trims_after(items_: &[Value], j: usize, f: f64, inherited: &[Trim]) -> Vec<Trim> {
+    let mut out: Vec<Trim> = items_[j + 1..].iter().filter(|x| ty(x) == "tm" && !hidden(x)).map(|x| trim_at(x, f)).collect();
+    out.extend_from_slice(inherited);
+    out
+}
+
+pub(crate) fn visible(trims: &[Trim]) -> Option<(f64, f64)> {
+    let (mut a, mut b) = (0., 1.);
+    for t in trims {
+        let (s, e) = (t.s.min(t.e).clamp(0., 1.), t.s.max(t.e).clamp(0., 1.));
+        let span = b - a;
+        let (na, nb) = (a + span * s + t.o * span, a + span * e + t.o * span);
+        a = na;
+        b = nb;
+    }
+    (b - a > 1e-4).then_some((a, b))
+}
+
+fn cubic_len(p0: [f64; 2], p1: [f64; 2], p2: [f64; 2], p3: [f64; 2]) -> f64 {
+    let at = |u: f64| {
+        let v = 1. - u;
+        let k = [v * v * v, 3. * v * v * u, 3. * v * u * u, u * u * u];
+        [k[0] * p0[0] + k[1] * p1[0] + k[2] * p2[0] + k[3] * p3[0], k[0] * p0[1] + k[1] * p1[1] + k[2] * p2[1] + k[3] * p3[1]]
+    };
+    let mut prev = p0;
+    let mut len = 0.;
+    for n in 1..=24 {
+        let q = at(n as f64 / 24.);
+        len += ((q[0] - prev[0]).powi(2) + (q[1] - prev[1]).powi(2)).sqrt();
+        prev = q;
+    }
+    len
+}
+
+fn path_len(sh: &Value) -> f64 {
+    let (v, i, o) = (points(sh.get("v")), points(sh.get("i")), points(sh.get("o")));
+    let n = v.len();
+    if n == 0 || i.len() < n || o.len() < n {
+        return 0.;
+    }
+    let closed = sh.get("c").and_then(Value::as_bool).unwrap_or(false);
+    (1..n + usize::from(closed))
+        .map(|j| {
+            let (a, b) = (v[(j - 1) % n], v[j % n]);
+            let (ao, bi) = (o[(j - 1) % n], i[j % n]);
+            cubic_len(a, [a[0] + ao[0], a[1] + ao[1]], [b[0] + bi[0], b[1] + bi[1]], b)
+        })
+        .sum()
+}
+
+struct Geo {
+    d: String,
+    m: M,
+    len: f64,
+    trims: Vec<Trim>,
+}
+
+fn geometry(items_: &[Value], limit: usize, f: f64, m: &M, inherited: &[Trim], out: &mut Vec<Geo>) {
+    for (j, it) in items_.iter().enumerate().take(limit) {
         if hidden(it) {
             continue;
         }
-        let d = match ty(it) {
-            "sh" => path_d(&value(it.get("ks"), f)),
-            "el" => ellipse_d(vec2(&value(it.get("p"), f), [0., 0.]), vec2(&value(it.get("s"), f), [0., 0.])),
-            "rc" => rect_d(
-                vec2(&value(it.get("p"), f), [0., 0.]),
-                vec2(&value(it.get("s"), f), [0., 0.]),
-                num_of(&value(it.get("r"), f), 0.),
-            ),
+        let (d, len) = match ty(it) {
+            "sh" => {
+                let sh = value(it.get("ks"), f);
+                (path_d(&sh), path_len(&sh))
+            }
+            "el" => {
+                let s = vec2(&value(it.get("s"), f), [0., 0.]);
+                let (a, b) = (s[0] / 2., s[1] / 2.);
+                let len = std::f64::consts::PI * (3. * (a + b) - ((3. * a + b) * (a + 3. * b)).max(0.).sqrt());
+                (ellipse_d(vec2(&value(it.get("p"), f), [0., 0.]), s), len)
+            }
+            "rc" => {
+                let s = vec2(&value(it.get("s"), f), [0., 0.]);
+                (
+                    rect_d(vec2(&value(it.get("p"), f), [0., 0.]), s, num_of(&value(it.get("r"), f), 0.)),
+                    2. * (s[0] + s[1]),
+                )
+            }
             "gr" => {
                 let (gm, _) = transform(group_tr(it), f);
-                geometry(items(it.get("it")), f, &mul(m, &gm), out);
+                let sub = items(it.get("it"));
+                geometry(sub, sub.len(), f, &mul(m, &gm), &trims_after(items_, j, f, inherited), out);
                 continue;
             }
             _ => continue,
         };
         if !d.is_empty() {
-            out.push((d, *m));
+            out.push(Geo { d, m: *m, len, trims: trims_after(items_, j, f, inherited) });
         }
     }
 }
 
-fn shapes(items_: &[Value], f: f64, out: &mut String) {
+fn dash(g: &Geo) -> Option<String> {
+    if g.trims.is_empty() {
+        return Some(String::new());
+    }
+    let (a, b) = visible(&g.trims)?;
+    if b - a >= 1. - 1e-4 || g.len <= 0. {
+        return Some(String::new());
+    }
+    let l = g.len;
+    let shift = a.floor();
+    let (a, b) = (a - shift, b - shift);
+    Some(if b <= 1. {
+        format!(r#" stroke-dasharray="{:.3} {:.3}" stroke-dashoffset="{:.3}""#, (b - a) * l, l * 2., -a * l)
+    } else {
+        format!(r#" stroke-dasharray="{:.3} {:.3} {:.3} {:.3}""#, (b - 1.) * l, (a - (b - 1.)) * l, (1. - a) * l, l * 2.)
+    })
+}
+
+fn shapes(items_: &[Value], f: f64, tint: Option<&str>, inherited: &[Trim], out: &mut String) {
     for (j, it) in items_.iter().enumerate().rev() {
         if hidden(it) {
             continue;
@@ -276,16 +377,16 @@ fn shapes(items_: &[Value], f: f64, out: &mut String) {
             "gr" => {
                 let (m, o) = transform(group_tr(it), f);
                 let _ = write!(out, r#"<g transform="{}" opacity="{o:.3}">"#, mstr(&m));
-                shapes(items(it.get("it")), f, out);
+                shapes(items(it.get("it")), f, tint, &trims_after(items_, j, f, inherited), out);
                 out.push_str("</g>");
             }
             kind @ ("fl" | "st") => {
                 let mut geo = Vec::new();
-                geometry(&items_[..j], f, &IDENT, &mut geo);
+                geometry(items_, j, f, &IDENT, inherited, &mut geo);
                 if geo.is_empty() {
                     continue;
                 }
-                let c = color(&value(it.get("c"), f));
+                let c = tint.map_or_else(|| color(&value(it.get("c"), f)), str::to_owned);
                 let op = num_of(&value(it.get("o"), f), 100.) / 100.;
                 if kind == "fl" {
                     let rule = if it.get("r").and_then(Value::as_u64) == Some(2) { "evenodd" } else { "nonzero" };
@@ -308,8 +409,18 @@ fn shapes(items_: &[Value], f: f64, out: &mut String) {
                         r#"<g fill="none" stroke="{c}" stroke-opacity="{op:.3}" stroke-width="{w:.2}" stroke-linecap="{lc}" stroke-linejoin="{lj}" stroke-miterlimit="{ml}">"#
                     );
                 }
-                for (d, m) in &geo {
-                    let _ = write!(out, r#"<path d="{d}" transform="{}"/>"#, mstr(m));
+                for g in &geo {
+                    let extra = if kind == "st" {
+                        match dash(g) {
+                            Some(x) => x,
+                            None => continue,
+                        }
+                    } else if !g.trims.is_empty() && visible(&g.trims).is_none() {
+                        continue;
+                    } else {
+                        String::new()
+                    };
+                    let _ = write!(out, r#"<path d="{}" transform="{}"{extra}/>"#, g.d, mstr(&g.m));
                 }
                 out.push_str("</g>");
             }
@@ -322,6 +433,7 @@ struct Ctx<'a> {
     assets: HashMap<&'a str, &'a [Value]>,
     images: HashMap<&'a str, (f64, f64, &'a str)>,
     ids: u32,
+    tint: Option<String>,
 }
 
 impl Ctx<'_> {
@@ -350,7 +462,7 @@ fn layer(cx: &mut Ctx, l: &Value, by: &HashMap<i64, &Value>, f: f64, depth: u32)
     let (_, o) = transform(l.get("ks"), f);
     let mut body = String::new();
     match l.get("ty").and_then(Value::as_i64) {
-        Some(4) => shapes(items(l.get("shapes")), f, &mut body),
+        Some(4) => shapes(items(l.get("shapes")), f, cx.tint.as_deref(), &[], &mut body),
         Some(0) if depth < 8 => {
             let Some(sub) = l.get("refId").and_then(Value::as_str).and_then(|r| cx.assets.get(r).copied()) else {
                 return String::new();
@@ -376,16 +488,24 @@ fn layer(cx: &mut Ctx, l: &Value, by: &HashMap<i64, &Value>, f: f64, depth: u32)
     }
     let masks: Vec<&Value> = items(l.get("masksProperties"))
         .iter()
-        .filter(|mk| mk.get("mode").and_then(Value::as_str) == Some("a") && mk.get("inv").and_then(Value::as_bool) != Some(true))
+        .filter(|mk| matches!(mk.get("mode").and_then(Value::as_str), Some("a" | "s")))
         .collect();
     if !masks.is_empty() {
         let id = cx.id();
         let mut md = String::new();
+        let first_sub = masks[0].get("mode").and_then(Value::as_str) == Some("s");
+        let first_inv = masks[0].get("inv").and_then(Value::as_bool) == Some(true);
+        if first_sub || first_inv {
+            md.push_str(r##"<rect x="-100000" y="-100000" width="200000" height="200000" fill="#ffffff"/>"##);
+        }
         for mk in masks {
             let mo = num_of(&value(mk.get("o"), f), 100.) / 100.;
-            let _ = write!(md, r##"<path d="{}" fill="#ffffff" fill-opacity="{mo:.3}"/>"##, path_d(&value(mk.get("pt"), f)));
+            let sub = mk.get("mode").and_then(Value::as_str) == Some("s");
+            let inv = mk.get("inv").and_then(Value::as_bool) == Some(true);
+            let fill = if sub != inv { "#000000" } else { "#ffffff" };
+            let _ = write!(md, r#"<path d="{}" fill="{fill}" fill-opacity="{mo:.3}"/>"#, path_d(&value(mk.get("pt"), f)));
         }
-        body = format!(r#"<mask id="m{id}" mask-type="alpha" {BIG}>{md}</mask><g mask="url(#m{id})">{body}</g>"#);
+        body = format!(r#"<mask id="m{id}" mask-type="luminance" {BIG}>{md}</mask><g mask="url(#m{id})">{body}</g>"#);
     }
     format!(r#"<g transform="{}" opacity="{o:.3}">{body}</g>"#, mstr(&m))
 }
@@ -402,14 +522,30 @@ fn layers(cx: &mut Ctx, ls: &[Value], f: f64, clip: Option<(f64, f64)>, depth: u
         let mut s = layer(cx, l, &by, f, depth);
         let tt = l.get("tt").and_then(Value::as_i64);
         if !s.is_empty()
-            && let Some(kind @ (1 | 3)) = tt
+            && let Some(kind @ 1..=4) = tt
             && k > 0
             && flag(&ls[k - 1], "td")
         {
             let id = cx.id();
+            let saved = cx.tint.take();
+            if kind == 2 {
+                cx.tint = Some("#000000".into());
+            }
             let matte = layer(cx, &ls[k - 1], &by, f, depth);
+            cx.tint = saved;
+            let content = match kind {
+                1 => matte,
+                2 => format!(r##"<rect x="-100000" y="-100000" width="200000" height="200000" fill="#ffffff"/>{matte}"##),
+                3 => matte,
+                _ => format!(r#"<g filter="url(#i{id})">{matte}</g>"#),
+            };
+            let defs = if kind == 4 {
+                format!(r#"<filter id="i{id}"><feColorMatrix type="matrix" values="-1 0 0 0 1 0 -1 0 0 1 0 0 -1 0 1 0 0 0 1 0"/></filter>"#)
+            } else {
+                String::new()
+            };
             let mt = if kind == 1 { "alpha" } else { "luminance" };
-            s = format!(r#"<mask id="t{id}" mask-type="{mt}" {BIG}>{matte}</mask><g mask="url(#t{id})">{s}</g>"#);
+            s = format!(r#"{defs}<mask id="t{id}" mask-type="{mt}" {BIG}>{content}</mask><g mask="url(#t{id})">{s}</g>"#);
         }
         out.push_str(&s);
     }
@@ -421,7 +557,11 @@ fn layers(cx: &mut Ctx, ls: &[Value], f: f64, clip: Option<(f64, f64)>, depth: u
 }
 
 pub fn frame_svg(root: &Value, f: f64, px: u32) -> String {
-    let mut cx = Ctx { assets: HashMap::new(), images: HashMap::new(), ids: 0 };
+    frame_svg_tinted(root, f, px, None)
+}
+
+pub fn frame_svg_tinted(root: &Value, f: f64, px: u32, tint: Option<(&str, f32)>) -> String {
+    let mut cx = Ctx { assets: HashMap::new(), images: HashMap::new(), ids: 0, tint: tint.map(|t| t.0.to_owned()) };
     for a in items(root.get("assets")) {
         if let (Some(id), Some(ls)) = (a.get("id").and_then(Value::as_str), a.get("layers").and_then(Value::as_array)) {
             cx.assets.insert(id, ls.as_slice());
@@ -433,7 +573,10 @@ pub fn frame_svg(root: &Value, f: f64, px: u32) -> String {
     let w = root.get("w").and_then(Value::as_f64).unwrap_or(512.);
     let h = root.get("h").and_then(Value::as_f64).unwrap_or(512.);
     let ph = (px as f64 * h / w.max(1.)).round();
-    let body = layers(&mut cx, items(root.get("layers")), f, Some((w, h)), 0);
+    let mut body = layers(&mut cx, items(root.get("layers")), f, Some((w, h)), 0);
+    if let Some((_, a)) = tint.filter(|t| t.1 < 1.) {
+        body = format!(r#"<g opacity="{a:.3}">{body}</g>"#);
+    }
     format!(r#"<svg xmlns="http://www.w3.org/2000/svg" width="{px}" height="{ph}" viewBox="0 0 {w} {h}">{body}</svg>"#)
 }
 
@@ -577,6 +720,66 @@ mod tests {
         assert_eq!(vec2(&value(Some(&p), 20.), [0., 0.]), [100., 20.]);
         let hold = serde_json::json!({"a": 1, "k": [{"t": 0, "s": [3], "h": 1}, {"t": 10, "s": [9]}]});
         assert_eq!(num_of(&value(Some(&hold), 5.), 0.), 3.);
+    }
+
+    #[test]
+    fn trims_strokes_with_a_dash() {
+        let root = serde_json::json!({
+            "fr": 60, "ip": 0, "op": 60, "w": 24, "h": 24,
+            "layers": [{"ty": 4, "ind": 1, "ip": 0, "op": 60, "ks": {},
+                "shapes": [
+                    {"ty": "gr", "it": [
+                        {"ty": "sh", "ks": {"a": 0, "k": {"c": false, "v": [[0, 0], [10, 0]], "i": [[0, 0], [0, 0]], "o": [[0, 0], [0, 0]]}}},
+                        {"ty": "st", "c": {"a": 0, "k": [0.2, 0.4, 0.9, 1]}, "o": {"a": 0, "k": 100}, "w": {"a": 0, "k": 2}},
+                        {"ty": "tr"}
+                    ]},
+                    {"ty": "tm", "s": {"a": 0, "k": 0}, "e": {"a": 1, "k": [{"t": 0, "s": [0]}, {"t": 10, "s": [100]}]}, "o": {"a": 0, "k": 0}, "m": 1}
+                ]}]
+        });
+        let half = frame_svg_tinted(&root, 5., 24, Some(("#abcdef", 1.)));
+        assert!(half.contains(r#"stroke-dasharray="5.000 20.000""#), "{half}");
+        assert!(half.contains(r##"stroke="#abcdef""##), "{half}");
+        let none = frame_svg(&root, 0., 24);
+        assert!(!none.contains("<path"), "{none}");
+        let full = frame_svg(&root, 10., 24);
+        assert!(full.contains("<path") && !full.contains("dasharray"), "{full}");
+        assert!(full.contains(r##"stroke="#3366e6""##), "{full}");
+        let faded = frame_svg_tinted(&root, 10., 24, Some(("#000000", 0.5)));
+        assert!(faded.contains(r#"<g opacity="0.500">"#), "{faded}");
+    }
+
+    #[test]
+    fn composes_trims_and_wraps_offsets() {
+        let t = |s: f64, e: f64, o: f64| Trim { s, e, o };
+        assert_eq!(visible(&[t(0., 1., 0.)]), Some((0., 1.)));
+        assert_eq!(visible(&[t(0.5, 0.5, 0.)]), None);
+        let (a, b) = visible(&[t(0., 0.5, 0.), t(0.5, 1., 0.)]).unwrap();
+        assert!((a - 0.25).abs() < 1e-9 && (b - 0.5).abs() < 1e-9);
+        let (a, b) = visible(&[t(1., 0.2, 0.)]).unwrap();
+        assert!((a - 0.2).abs() < 1e-9 && (b - 1.).abs() < 1e-9);
+        let g = Geo { d: String::new(), m: IDENT, len: 10., trims: vec![t(0., 0.5, 0.75)] };
+        assert_eq!(dash(&g).as_deref(), Some(r#" stroke-dasharray="2.500 5.000 2.500 20.000""#));
+    }
+
+    #[test]
+    fn subtract_masks_and_inverted_mattes() {
+        let sq = |x: f64| serde_json::json!({"a": 0, "k": {"c": true, "v": [[x, x], [x + 4., x], [x + 4., x + 4.]], "i": [[0, 0], [0, 0], [0, 0]], "o": [[0, 0], [0, 0], [0, 0]]}});
+        let fill = serde_json::json!({"ty": "fl", "c": {"a": 0, "k": [1, 1, 1, 1]}, "o": {"a": 0, "k": 100}});
+        let root = serde_json::json!({
+            "fr": 60, "ip": 0, "op": 60, "w": 24, "h": 24,
+            "layers": [
+                {"ty": 4, "ind": 1, "td": 1, "ip": 0, "op": 60, "ks": {}, "shapes": [{"ty": "sh", "ks": sq(2.)}, fill.clone()]},
+                {"ty": 4, "ind": 2, "tt": 2, "ip": 0, "op": 60, "ks": {},
+                    "masksProperties": [{"mode": "s", "inv": false, "pt": sq(8.), "o": {"a": 0, "k": 100}}],
+                    "shapes": [{"ty": "sh", "ks": sq(0.)}, fill]}
+            ]
+        });
+        let svg = frame_svg_tinted(&root, 0., 24, Some(("#123456", 1.)));
+        assert!(svg.contains(r#"mask-type="luminance""#), "{svg}");
+        assert!(svg.contains(r##"fill="#000000" fill-opacity="1.000""##), "{svg}");
+        assert!(svg.contains(r##"<g fill="#000000" fill-opacity="1.000" fill-rule="nonzero""##), "{svg}");
+        assert!(svg.contains(r##"<g fill="#123456""##), "{svg}");
+        assert_eq!(svg.matches(r##"<rect x="-100000""##).count(), 2, "{svg}");
     }
 
     #[test]

@@ -478,13 +478,12 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                             crate::ui::pickers::open_tab(cx),
                                             Some((crate::ui::pickers::Tab::Emoji, crate::ui::pickers::EmojiTarget::Composer))
                                         );
-                                        crate::ui::states::composer_button_ext("emoji", Icon::Emoji, 18., true)
+                                        crate::ui::states::composer_button_full("emoji", Icon::Emoji, 18., true, emoji_open)
                                             .when(emoji_open, |d| d.bg(c(crate::theme::tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
                                             .on_click(cx.listener(|a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx)))
                                     })
                                     .child(crate::ui::focus_ring::ring_inset(
-                                        div()
-                                            .id("apps")
+                                        crate::ui::states::track(div().id("apps"), crate::ui::states::key(("composer-btn", "apps")))
                                             .relative()
                                             .size(z(32.))
                                             .rounded(z(8.))
@@ -494,18 +493,29 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                             .cursor_pointer()
                                             .group("apps")
                                             .hover(|s| s.bg(c(crate::theme::tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
-                                            .child(
-                                                gpui::svg()
-                                                    .path(crate::icons::path("apps"))
-                                                    .size(z(20.))
-                                                    .flex_none()
-                                                    .text_color(ic)
-                                                    .group_hover("apps", |s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_HOVER))))
-                                                    .id("g")
-                                                    .group_active("apps", |s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
-                                            )
+                                            .child(crate::ui::hover_icon::icon(
+                                                crate::ui::states::key(("composer-btn", "apps")),
+                                                crate::icons::lottie_icons::Lottie::Activities,
+                                                false,
+                                                20. * crate::theme::zoom(),
+                                                (ic, c(crate::theme::tok(idx::INTERACTIVE_TEXT_HOVER))),
+                                                || {
+                                                    gpui::svg()
+                                                        .path(crate::icons::path("apps"))
+                                                        .size(z(20.))
+                                                        .flex_none()
+                                                        .text_color(ic)
+                                                        .group_hover("apps", |s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_HOVER))))
+                                                        .id("g")
+                                                        .group_active("apps", |s| s.text_color(c(crate::theme::tok(idx::INTERACTIVE_TEXT_ACTIVE))))
+                                                        .into_any_element()
+                                                },
+                                            ))
                                             .child(super::app_launcher::anchor_probe())
-                                            .on_click(cx.listener(|a, _, w, cx| super::app_launcher::toggle(a, w, cx))),
+                                            .on_click(cx.listener(|a, _, w, cx| {
+                                                crate::ui::hover_icon::clicked(crate::ui::states::key(("composer-btn", "apps")));
+                                                super::app_launcher::toggle(a, w, cx)
+                                            })),
                                         crate::ui::states::key(("composer-btn", "apps")),
                                         8.,
                                         -4.,

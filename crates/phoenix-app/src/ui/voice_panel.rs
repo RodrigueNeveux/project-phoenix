@@ -16,6 +16,7 @@ fn t(i: usize) -> Hsla {
     c(tok(i))
 }
 use crate::model::{Id, VoiceFlags};
+use crate::icons::lottie_icons::Lottie;
 use crate::ui::context_menu::{self, MenuItem};
 use crate::ui::icon;
 use crate::voice::prefs::{prefs, update};
@@ -132,6 +133,16 @@ pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool
         .map(|d| crate::ui::focus_ring::ring_inset_edges(d, key, 8., -1., -1., 1., 1.))
 }
 
+pub fn panel_key(id: &str, red: bool) -> u64 {
+    crate::ui::states::key(("panel-btn", gpui::ElementId::from(SharedString::from(id.to_owned())).to_string(), red))
+}
+
+pub fn lottie_glyph(key: u64, kind: Lottie, on: bool, red: bool, fallback: impl FnOnce() -> AnyElement) -> AnyElement {
+    let rest = t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE });
+    let hover = if red { rest } else { t(idx::INTERACTIVE_TEXT_HOVER) };
+    crate::ui::hover_icon::icon(key, kind, on, 20. * crate::theme::zoom(), (rest, hover), fallback)
+}
+
 pub fn panel_glyph(i: Icon, red: bool) -> AnyElement {
     let g = icon(i, 20. * crate::theme::zoom(), t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE }));
     if red { g.into_any_element() } else { g.group_hover("panel-btn", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))).into_any_element() }
@@ -160,16 +171,21 @@ pub fn audio_button(
             })
     };
     let open = AUDIO_MENU.with(|m| m.borrow().as_ref().is_some_and(|(k, _, _)| *k == kind));
+    let hk = crate::ui::states::key(("audio-btn", format!("{kind:?}")));
+    let lottie = match kind {
+        Audio::Mic => Lottie::Mute,
+        Audio::Deafen => Lottie::Deafen,
+    };
     div()
         .group(group.clone())
         .flex()
         .flex_none()
         .gap(z(1.))
         .child(
-            base(div().id(SharedString::from(format!("audio-btn-{kind:?}"))))
+            base(crate::ui::states::track(div().id(SharedString::from(format!("audio-btn-{kind:?}"))), hk))
                 .w(z(32.))
                 .rounded_l(z(8.))
-                .child(panel_glyph(i, red))
+                .child(lottie_glyph(hk, lottie, red, red, || panel_glyph(i, red)))
                 .tip(tip)
                 .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx))),
         )
@@ -290,8 +306,9 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Co
 }
 
 fn action_button(id: &'static str, path: &'static str, label: SharedString, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    div()
-        .id(id)
+    let hk = crate::ui::states::key(id);
+    let fg = t(idx::CONTROL_SECONDARY_TEXT_DEFAULT);
+    crate::ui::states::track(div().id(id), hk)
         .flex_1()
         .min_w_0()
         .h(z(32.))
@@ -304,9 +321,14 @@ fn action_button(id: &'static str, path: &'static str, label: SharedString, cx: 
         .flex()
         .items_center()
         .justify_center()
-        .child(asset_icon(path, 20. * crate::theme::zoom(), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT)))
+        .child(crate::ui::hover_icon::icon(hk, Lottie::Activities, false, 20. * crate::theme::zoom(), (fg, fg), || {
+            asset_icon(path, 20. * crate::theme::zoom(), fg).into_any_element()
+        }))
         .tip(label.clone())
-        .on_click(cx.listener(move |a, _, _, cx| a.stub(&label, cx)))
+        .on_click(cx.listener(move |a, _, _, cx| {
+            crate::ui::hover_icon::clicked(hk);
+            a.stub(&label, cx)
+        }))
 }
 
 fn camera_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -316,8 +338,8 @@ fn camera_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
     } else {
         (t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT), t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT))
     };
-    div()
-        .id("voice-camera")
+    let hk = crate::ui::states::key("voice-camera");
+    crate::ui::states::track(div().id("voice-camera"), hk)
         .flex_1()
         .min_w_0()
         .h(z(32.))
@@ -330,7 +352,9 @@ fn camera_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
         .flex()
         .items_center()
         .justify_center()
-        .child(asset_icon(if on { CAMERA } else { "icons/call/camera-off.svg" }, 20. * crate::theme::zoom(), fg))
+        .child(crate::ui::hover_icon::icon(hk, Lottie::Camera, on, 20. * crate::theme::zoom(), (fg, fg), || {
+            asset_icon(if on { CAMERA } else { "icons/call/camera-off.svg" }, 20. * crate::theme::zoom(), fg).into_any_element()
+        }))
         .tip(if on { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") })
         .on_click(cx.listener(move |a, _, _, cx| {
             drop(a.backend.voice_control(crate::voice::VoiceControl::SetCamera(!on)));
@@ -345,8 +369,8 @@ fn screen_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
     } else {
         (t(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT), t(idx::CONTROL_SECONDARY_BACKGROUND_HOVER), t(idx::CONTROL_SECONDARY_TEXT_DEFAULT))
     };
-    div()
-        .id("voice-screen")
+    let hk = crate::ui::states::key("voice-screen");
+    crate::ui::states::track(div().id("voice-screen"), hk)
         .flex_1()
         .min_w_0()
         .h(z(32.))
@@ -359,7 +383,9 @@ fn screen_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
         .flex()
         .items_center()
         .justify_center()
-        .child(asset_icon(SCREEN, 20. * crate::theme::zoom(), fg))
+        .child(crate::ui::hover_icon::icon(hk, Lottie::Stream, on, 20. * crate::theme::zoom(), (fg, fg), || {
+            asset_icon(SCREEN, 20. * crate::theme::zoom(), fg).into_any_element()
+        }))
         .tip(crate::ui::go_live::label(app))
         .on_click(cx.listener(|a, _, _, cx| crate::ui::go_live::toggle(a, cx)))
 }
@@ -561,7 +587,9 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                         .child(
                             panel_button(
                                 "voice-noise",
-                                asset_icon(NOISE, 20. * crate::theme::zoom(), t(idx::ICON_SUBTLE)).into_any_element(),
+                                lottie_glyph(panel_key("voice-noise", false), Lottie::Krisp, noise, false, || {
+                                    asset_icon(NOISE, 20. * crate::theme::zoom(), t(idx::ICON_SUBTLE)).into_any_element()
+                                }),
                                 false,
                             )
                             .when(noise, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
@@ -576,7 +604,11 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             })),
                         )
                         .child(
-                            panel_button("hangup", panel_glyph(Icon::PhoneHangup, false), false)
+                            panel_button(
+                                "hangup",
+                                lottie_glyph(panel_key("hangup", false), Lottie::Disconnect, false, false, || panel_glyph(Icon::PhoneHangup, false)),
+                                false,
+                            )
                                 .tip(crate::t!("voice.disconnect"))
                                 .on_click(cx.listener(|a, _, _, cx| a.join_voice(None, cx))),
                         ),

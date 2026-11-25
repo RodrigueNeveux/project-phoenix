@@ -2109,6 +2109,28 @@ fn main() -> anyhow::Result<()> {
         }
         pump(&mut cx, (hold + 3000).saturating_sub(steps * 250));
     }
+    if let Ok(spec) = std::env::var("PHX_HOVER_ANIM") {
+        for ms in spec.split(',').filter_map(|v| v.trim().parse::<u64>().ok()) {
+            phoenix_app::ui::hover_icon::freeze(Some(std::time::Duration::from_millis(ms)));
+            shoot(&mut cx, &format!("{}-t{ms:04}.png", out.trim_end_matches(".png")))?;
+        }
+        phoenix_app::ui::hover_icon::freeze(None);
+        if let Some((x, y)) = std::env::var("PHX_MOUSE_LEAVE").ok().and_then(|v| {
+            let (x, y) = v.split_once(',')?;
+            Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))
+        }) {
+            let ev = gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                position: gpui::point(px(x), px(y)),
+                pressed_button: None,
+                modifiers: gpui::Modifiers::default(),
+            });
+            cx.update_window(win.into(), |_, window, cx| {
+                window.dispatch_event(ev, cx);
+            })?;
+            pump(&mut cx, 200);
+            shoot(&mut cx, &format!("{}-leave.png", out.trim_end_matches(".png")))?;
+        }
+    }
     let shot = shoot(&mut cx, &out);
     if voice_test {
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::SetCamera(false)))))?;

@@ -1397,7 +1397,17 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     cx,
                 ))
                 .child(
-                    panel_button("settings", panel_glyph(Icon::Gear, false), false)
+                    panel_button(
+                        "settings",
+                        crate::ui::voice_panel::lottie_glyph(
+                            crate::ui::voice_panel::panel_key("settings", false),
+                            crate::icons::lottie_icons::Lottie::Settings,
+                            false,
+                            false,
+                            || panel_glyph(Icon::Gear, false),
+                        ),
+                        false,
+                    )
                         .tip(crate::t!("settings.user_settings"))
                         .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
                 ),
