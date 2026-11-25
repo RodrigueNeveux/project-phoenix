@@ -110,6 +110,7 @@ Les noms, messages, URLs et autres contenus réels n’apparaissent jamais dans 
 ## 9. `real_shots` : survol et réglages en mémoire
 
 - `PHX_MOUSE=x,y` envoie un déplacement de souris (px logiques) avant la capture. Le pilote de balayage place la souris du client en `W-2,H-2` (dans la liste des membres à 1280×720) : passer la même position pour comparer les états de survol, par exemple la scrollbar fine `thin fade`.
+- `PHX_HOVER_ANIM=0,100,200` (avec `PHX_MOUSE`) écrit une capture par instant de l'animation au survol (`<out>-t0100.png`), le temps étant figé à N ms après l'entrée ; `PHX_MOUSE_LEAVE=x,y` ajoute `<out>-leave.png` après la sortie. Voir `docs/parity/hover-animations.md`.
 - `PHX_PROTO=id=valeur,...` force des réglages synchronisés (ids de `ui/settings/synced_map.rs`) en mémoire seulement, par exemple `PHX_PROTO=alt-text=1` pour le badge ALT. Rien n'est envoyé au compte.
 - `PHX_LOCAL=id=valeur,...` fait de même pour les préférences locales (`LocalPrefs::ui`), par exemple `PHX_LOCAL=streamer=1` pour le bandeau du mode streamer ou `PHX_LOCAL=indicators=1` pour les indicateurs d'interrupteur. Rien n'est écrit dans `settings.json`.
 - `PHX_OPEN=modview` accepte `PHX_MODVIEW_PANEL=perms|audit|history`, `PHX_MODVIEW_PAGE=n` (page n de l'historique) et `PHX_MODVIEW_SLIDE=1` (capture pendant la glissade au lieu de l'état posé). `PHX_OPEN=poll_create:scheduled` rend la modale avec une heure programmée, `poll_create:picker` ouvre la modale de programmation par-dessus.
