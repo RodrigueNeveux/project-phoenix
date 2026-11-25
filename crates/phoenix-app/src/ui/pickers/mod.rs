@@ -444,6 +444,20 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
     out
 }
 
+thread_local! {
+    static STATUS_ANCHOR: std::cell::Cell<Option<gpui::Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+pub fn status_anchor_probe() -> impl IntoElement {
+    gpui::canvas(|b, _, _| STATUS_ANCHOR.with(|a| a.set(Some(b))), |_, _, _, _| {}).absolute().inset_0()
+}
+
+pub fn status_picker_origin(button: gpui::Bounds<Pixels>, vw: f32, vh: f32, ph: f32) -> (f32, f32) {
+    let x = (f32::from(button.origin.x) - PICKER_W - 8.).clamp(8., (vw - PICKER_W - 8.).max(8.));
+    let y = f32::from(button.origin.y).clamp(8., (vh - ph - 8.).max(8.));
+    (x, y)
+}
+
 pub fn render_status_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if open_tab(cx)?.1 != EmojiTarget::Status {
         return None;
@@ -467,13 +481,15 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
     let ph = if has_tabs { PICKER_H } else { PICKER_H_NO_TABS };
     let vp = window.viewport_size();
     let (vw, vh) = (f32::from(vp.width), f32::from(vp.height));
-    let (left, top) = match anchor {
-        Some(p) => {
+    let status_anchor = (target == EmojiTarget::Status).then(|| STATUS_ANCHOR.with(|a| a.get())).flatten();
+    let (left, top) = match (status_anchor, anchor) {
+        (Some(b), _) => status_picker_origin(b, vw, vh, ph),
+        (None, Some(p)) => {
             let x = (f32::from(p.x) - PICKER_W - 8.).clamp(8., (vw - PICKER_W - 8.).max(8.));
             let y = (f32::from(p.y) - 40.).clamp(8., (vh - ph - 8.).max(8.));
             (x, y)
         }
-        None => {
+        (None, None) => {
             let side = if !app.show_members {
                 0.
             } else if crate::ui::dm_profile_panel::peer(app).is_some() {
@@ -692,4 +708,18 @@ pub fn svg_asset(path: &str) -> Option<&'static str> {
         "icons/picker/nitro.svg" => sv!(r#"<circle cx="14" cy="12" r="7"/><circle cx="14" cy="12" r="3"/><path d="M3 10h4M4 14h3"/>"#),
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_picker_sits_left_of_the_emoji_button() {
+        let b = gpui::Bounds::new(gpui::point(px(700.), px(460.)), gpui::size(px(42.), px(46.)));
+        assert_eq!(status_picker_origin(b, 1536., 840., PICKER_H_NO_TABS), (700. - PICKER_W - 8., 840. - PICKER_H_NO_TABS - 8.));
+        let top = gpui::Bounds::new(gpui::point(px(700.), px(100.)), gpui::size(px(42.), px(46.)));
+        assert_eq!(status_picker_origin(top, 1536., 840., PICKER_H_NO_TABS).1, 100.);
+        assert_eq!(status_picker_origin(gpui::Bounds::new(gpui::point(px(100.), px(100.)), gpui::size(px(42.), px(46.))), 1536., 840., 440.).0, 8.);
+    }
 }

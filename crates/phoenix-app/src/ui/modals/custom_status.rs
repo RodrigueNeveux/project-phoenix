@@ -220,6 +220,7 @@ pub fn render(app: &PhoenixApp, s: &CustomStatus, cx: &mut Context<PhoenixApp>) 
                 .justify_center()
                 .cursor_pointer()
                 .on_click(cx.listener(|a, _, w, cx| crate::ui::pickers::open_emoji_picker(a, crate::ui::pickers::EmojiTarget::Status, w, cx)))
+                .child(crate::ui::pickers::status_anchor_probe())
                 .child(match &s.emoji {
                     Some(e) => crate::media::emoji::emoji_element(&e.token(), 24. * crate::theme::zoom()),
                     None => gpui::svg().path(crate::icons::path("emoji")).size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)).into_any_element(),
