@@ -249,8 +249,10 @@ fn fingerprint() -> [u32; 4] {
     [h(idx::TEXT_DEFAULT), h(idx::TEXTBOX_MARKDOWN_SYNTAX), h(idx::BACKGROUND_CODE), h(idx::SPINE_DEFAULT)]
 }
 
+type Cached = (String, [u32; 4], std::rc::Rc<Rich>);
+
 thread_local! {
-    static WANTED: RefCell<Option<(String, [u32; 4], std::rc::Rc<Rich>)>> = const { RefCell::new(None) };
+    static WANTED: RefCell<Option<Cached>> = const { RefCell::new(None) };
 }
 
 fn wanted_rich(app: &PhoenixApp, cx: &App) -> std::rc::Rc<Rich> {

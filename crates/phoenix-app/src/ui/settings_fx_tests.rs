@@ -119,7 +119,7 @@ fn caret_after(h: &mut Harness, text: &str, preview: bool) -> f32 {
         w.refresh();
     });
     h.act(|_, w, _| w.refresh());
-    h.act(|a, _, cx| f32::from(a.composer.read(cx).cursor_bounds().left()))
+    h.act(|a, _, cx| f32::from(a.composer.read(cx).cursor_layout().expect("caret laid out").0.left()))
 }
 
 #[gpui::test]
