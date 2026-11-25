@@ -2,10 +2,11 @@ use std::{cell::RefCell, collections::HashMap};
 
 use futures::AsyncReadExt;
 use gpui::{
-    AnyElement, App, IntoElement, ParentElement, SharedString, StyledText, Styled, div,
+    AnyElement, App, Entity, FontWeight, IntoElement, ParentElement, SharedString, StyledText, Styled, div,
     http_client::{AsyncBody, Request},
     prelude::*,
 };
+use gpui_component::input::{Input, InputState};
 
 use crate::{
     model::Attachment,
@@ -423,11 +424,35 @@ pub struct Entry {
     pub expanded: bool,
     pub wrap: bool,
     pub markdown: bool,
+    pub language: Option<String>,
+}
+
+impl Entry {
+    pub fn language(&self, filename: &str) -> String {
+        self.language.clone().unwrap_or_else(|| extension(filename).to_owned())
+    }
+
+    pub fn renders_markdown(&self, filename: &str) -> bool {
+        self.markdown && MARKDOWN.contains(&self.language(filename).as_str())
+    }
+}
+
+pub fn filter_languages(query: &str) -> Vec<&'static str> {
+    let q = query.trim().to_lowercase();
+    LANGUAGES.iter().copied().filter(|l| q.is_empty() || l.contains(q.as_str())).collect()
+}
+
+struct LangPicker {
+    url: SharedString,
+    pos: gpui::Point<gpui::Pixels>,
+    above: bool,
+    search: Entity<InputState>,
 }
 
 thread_local! {
     static ENTRIES: RefCell<HashMap<SharedString, Entry>> = RefCell::new(HashMap::new());
     static MENU: RefCell<Option<(SharedString, gpui::Point<gpui::Pixels>)>> = const { RefCell::new(None) };
+    static LANG: RefCell<Option<LangPicker>> = const { RefCell::new(None) };
 }
 
 fn entry(url: &SharedString) -> Option<Entry> {
@@ -508,6 +533,101 @@ fn icon_button(id: impl Into<gpui::ElementId>, icon: &str) -> gpui::Stateful<gpu
         .child(gpui::svg().path(crate::icons::path(icon)).size(z(20.)).text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT)))
 }
 
+fn lang_button(id: &'static str, url: SharedString, above: bool) -> gpui::Stateful<gpui::Div> {
+    icon_button(id, "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language"))).on_click(move |ev, w, cx: &mut App| {
+        let pos = ev.position();
+        let search = cx.new(|cx| InputState::new(w, cx).placeholder(crate::t!("plaintext.language_search")));
+        search.update(cx, |s, cx| s.focus(w, cx));
+        LANG.with(|l| *l.borrow_mut() = Some(LangPicker { url: url.clone(), pos, above, search }));
+        w.refresh();
+    })
+}
+
+fn close_lang(w: &mut gpui::Window) {
+    LANG.with(|l| *l.borrow_mut() = None);
+    w.refresh();
+}
+
+fn lang_popout(url: &SharedString, current: &str, defer: bool, cx: &App) -> Option<AnyElement> {
+    let (pos, above, search) = LANG.with(|l| l.borrow().as_ref().filter(|p| p.url == *url).map(|p| (p.pos, p.above, p.search.clone())))?;
+    let query = search.read(cx).value().to_string();
+    let mut list = div().id("plaintext-lang-list").max_h(z(240.)).overflow_y_scroll().mt(z(4.)).flex().flex_col();
+    for (n, l) in filter_languages(&query).into_iter().enumerate() {
+        let sel = l == current;
+        let u = url.clone();
+        list = list.child(
+            div()
+                .id(("plaintext-lang-opt", n))
+                .px(z(8.))
+                .py(z(6.))
+                .rounded(z(4.))
+                .flex()
+                .items_center()
+                .justify_between()
+                .cursor_pointer()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tk(if sel { idx::TEXT_STRONG } else { idx::TEXT_DEFAULT }))
+                .when(sel, |d| d.bg(tk(idx::BACKGROUND_MOD_NORMAL)))
+                .hover(|d| d.bg(tk(idx::BACKGROUND_MOD_SUBTLE)))
+                .on_click(move |_, w, _| {
+                    update(&u, |e| e.language = Some(l.to_owned()));
+                    close_lang(w);
+                })
+                .child(l)
+                .when(sel, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(tk(idx::BRAND_500)))),
+        );
+    }
+    let card = div()
+        .id("plaintext-lang")
+        .occlude()
+        .w(z(176.))
+        .pt(z(8.))
+        .px(z(8.))
+        .pb(z(4.))
+        .rounded(z(4.))
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .shadow_lg()
+        .on_mouse_down_out(|_, w, _| close_lang(w))
+        .child(
+            div()
+                .h(z(32.))
+                .px(z(8.))
+                .rounded(z(4.))
+                .bg(tk(idx::INPUT_BACKGROUND_DEFAULT))
+                .border_1()
+                .border_color(tk(idx::INPUT_BORDER_DEFAULT))
+                .flex()
+                .items_center()
+                .text_size(z(14.))
+                .child(Input::new(&search).appearance(false).bordered(false)),
+        )
+        .child(list);
+    let corner = if above { gpui::Anchor::BottomRight } else { gpui::Anchor::TopRight };
+    let at = gpui::point(pos.x - z(12.), pos.y);
+    let el = gpui::anchored().position(at).anchor(corner).snap_to_window_with_margin(z(8.)).child(card);
+    Some(if defer { gpui::deferred(el).with_priority(20).into_any_element() } else { el.into_any_element() })
+}
+
+fn markdown_view(id: &'static str, text: &str, notice: Option<&str>) -> AnyElement {
+    let style = gpui_component::text::TextViewStyle::default().paragraph_gap(gpui::rems(0.5)).heading_font_size(|level, _| match level {
+        1 => z(24.),
+        2 => z(20.),
+        _ => z(16.),
+    });
+    div()
+        .p(z(8.))
+        .text_size(z(16.))
+        .line_height(z(22.))
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .child(gpui_component::text::TextView::markdown(id, text.to_owned()).style(style))
+        .children(notice.filter(|n| !n.is_empty()).map(|n| div().mt(z(4.)).text_color(tk(idx::TEXT_MUTED)).child(n.to_owned())))
+        .into_any_element()
+}
+
 pub fn size_label(bytes: u64) -> SharedString {
     super::attach::human_size(bytes)
 }
@@ -521,7 +641,8 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
     if e.failed {
         return None;
     }
-    let lang = extension(&a.filename).to_owned();
+    let lang = e.language(&a.filename);
+    let as_md = e.renders_markdown(&a.filename);
     let text = e.text.clone().unwrap_or_default();
     let lines = text.split('\n').count();
     let (shown, notice) = visible(&text, e.expanded, e.bytes_left);
@@ -532,22 +653,28 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
             crate::t!("plaintext.bytes_left", size = size_label(e.bytes_left))
         }
     });
-    let body = match &notice {
-        Some(n) if e.expanded && e.bytes_left == 0 => format!("{shown}\n... {n}"),
-        Some(n) => format!("{shown}... {n}"),
-        None => shown,
+    let suffix = match &notice {
+        Some(n) if e.expanded && e.bytes_left == 0 => format!("\n... {n}"),
+        Some(n) => format!("... {n}"),
+        None => String::new(),
     };
-    let runs = crate::richtext::code_runs(&body, Some(&lang));
-    let code = div()
-        .min_h(z(100.))
-        .p(z(8.))
-        .font_family(crate::theme::FONT_MONO())
-        .text_size(z(14.))
-        .line_height(z(16.))
-        .text_color(tk(idx::TEXT_CODE))
-        .when(!e.wrap, |d| d.whitespace_nowrap())
-        .child(StyledText::new(body).with_runs(runs));
-    let max_h = if e.expanded { 500. } else { (COLLAPSED_LINES as f32 * 16.).max(100.) + 26. };
+    let code = if as_md {
+        markdown_view("plaintext-md", &shown, Some(suffix.trim()))
+    } else {
+        let body = format!("{shown}{suffix}");
+        let runs = crate::richtext::code_runs(&body, Some(&lang));
+        div()
+            .min_h(z(100.))
+            .p(z(8.))
+            .font_family(crate::theme::FONT_MONO())
+            .text_size(z(14.))
+            .line_height(z(16.))
+            .text_color(tk(idx::TEXT_CODE))
+            .when(!e.wrap, |d| d.whitespace_nowrap())
+            .child(StyledText::new(body).with_runs(runs))
+            .into_any_element()
+    };
+    let max_h = if e.expanded || as_md { 500. } else { (COLLAPSED_LINES as f32 * 16.).max(100.) + 26. };
     let text_box = div()
         .id(("plaintext-body", a.size))
         .min_h(z(118.))
@@ -614,7 +741,7 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         .children(expand)
         .child(name)
         .child(div().flex_grow(200.).min_w(z(16.)))
-        .child(icon_button("plaintext-lang", "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language"))))
+        .child(lang_button("plaintext-lang", url.clone(), false))
         .child(icon_button("plaintext-full", "maximize").ml(z(16.)).tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.whole_file"))).on_click({
             let filename = a.filename.clone();
             let size = a.size;
@@ -654,17 +781,31 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         });
         crate::ui::context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
     });
-    Some(div().mt(z(4.)).min_w(z(302.)).max_w(z(560.)).w_full().flex().flex_col().child(text_box).child(footer).children(menu).into_any_element())
+    let picker = lang_popout(&url, &lang, true, cx);
+    Some(div().mt(z(4.)).min_w(z(302.)).max_w(z(560.)).w_full().flex().flex_col().child(text_box).child(footer).children(menu).children(picker).into_any_element())
 }
 
 pub fn render_full(url: &SharedString, filename: &SharedString, size: u64, viewport: Option<gpui::Size<gpui::Pixels>>, cx: &mut gpui::Context<crate::app::PhoenixApp>) -> AnyElement {
     let e = entry(url).unwrap_or_default();
-    let lang = extension(filename).to_owned();
-    let mut body = e.text.clone().unwrap_or_default();
-    if e.bytes_left > 0 {
-        body.push_str(&format!("... {}", crate::t!("plaintext.bytes_left", size = size_label(e.bytes_left))));
-    }
-    let runs = crate::richtext::code_runs(&body, Some(&lang));
+    let lang = e.language(filename);
+    let as_md = e.renders_markdown(filename);
+    let text = e.text.clone().unwrap_or_default();
+    let notice = if e.bytes_left > 0 { format!("... {}", crate::t!("plaintext.bytes_left", size = size_label(e.bytes_left))) } else { String::new() };
+    let content = if as_md {
+        markdown_view("plaintext-full-md", &text, Some(&notice))
+    } else {
+        let body = format!("{text}{notice}");
+        let runs = crate::richtext::code_runs(&body, Some(&lang));
+        div()
+            .p(z(8.))
+            .font_family(crate::theme::FONT_MONO())
+            .text_size(z(14.))
+            .line_height(z(16.))
+            .text_color(tk(idx::TEXT_CODE))
+            .when(!e.wrap, |d| d.whitespace_nowrap())
+            .child(StyledText::new(body).with_runs(runs))
+            .into_any_element()
+    };
     let zoom = crate::theme::zoom();
     let (vw, vh) = viewport.map_or((1280., 800.), |v| (f32::from(v.width) / zoom, f32::from(v.height) / zoom));
     let w = (vw * 0.8).min(1280.);
@@ -688,15 +829,7 @@ pub fn render_full(url: &SharedString, filename: &SharedString, size: u64, viewp
                 .min_h_0()
                 .overflow_scroll()
                 .bg(tk(idx::BACKGROUND_BASE_LOWER))
-                .child(
-                    div()
-                        .p(z(8.))
-                        .font_family(crate::theme::FONT_MONO())
-                        .text_size(z(14.))
-                        .line_height(z(16.))
-                        .text_color(tk(idx::TEXT_CODE))
-                        .child(StyledText::new(body).with_runs(runs)),
-                ),
+                .child(content),
         )
         .child(
             div()
@@ -718,8 +851,9 @@ pub fn render_full(url: &SharedString, filename: &SharedString, size: u64, viewp
                         .child(div().text_size(z(12.)).line_height(z(16.)).text_color(tk(idx::TEXT_SUBTLE)).child(size_label(size))),
                 )
                 .child(div().flex_grow(200.).min_w(z(16.)))
-                .child(icon_button("plaintext-full-lang", "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language")))),
-        );
+                .child(lang_button("plaintext-full-lang", url.clone(), true)),
+        )
+        .children(lang_popout(url, &lang, false, cx));
     crate::ui::modal::frame("plaintext-full", close, card)
 }
 
@@ -735,6 +869,24 @@ mod tests {
         assert!(!previewable("photo.png"));
         assert_eq!(remaining(Some("bytes 0-50000/120000"), 50001), 69999);
         assert_eq!(remaining(None, 10), 0);
+    }
+
+    #[test]
+    fn language_choice_drives_highlight_and_markdown() {
+        let mut e = Entry { markdown: true, ..Default::default() };
+        assert_eq!(e.language("notes.md"), "md");
+        assert!(e.renders_markdown("notes.md"));
+        assert!(!e.renders_markdown("main.rs"));
+        e.language = Some("python".into());
+        assert_eq!(e.language("notes.md"), "python");
+        assert!(!e.renders_markdown("notes.md"));
+        e.language = Some("markdown".into());
+        assert!(e.renders_markdown("main.rs"));
+        e.markdown = false;
+        assert!(!e.renders_markdown("main.rs"));
+        assert_eq!(filter_languages("").len(), LANGUAGES.len());
+        assert!(filter_languages("PYTH").iter().all(|l| l.contains("pyth")));
+        assert!(filter_languages("pyth").contains(&"python"));
     }
 
     #[test]
