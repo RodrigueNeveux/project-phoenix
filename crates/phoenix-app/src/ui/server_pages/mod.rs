@@ -344,7 +344,16 @@ pub fn back(guild: Id, section: &'static str, cx: &mut Context<PhoenixApp>) -> i
 }
 
 pub fn loading() -> AnyElement {
-    div().py(z(40.)).flex().justify_center().child(description(crate::t!("gs2.loading"))).into_any_element()
+    let err = with(|s| {
+        s.data.values().find_map(|l| match l {
+            Load::Failed(e) => Some(e.clone()),
+            _ => None,
+        })
+    });
+    match err {
+        Some(e) => error(e),
+        None => div().py(z(40.)).flex().justify_center().child(description(crate::t!("gs2.loading"))).into_any_element(),
+    }
 }
 
 pub fn error(e: String) -> AnyElement {
@@ -370,28 +379,9 @@ pub fn channel_label(app: &PhoenixApp, ch: Option<Id>) -> SharedString {
     }
 }
 
-pub fn date_fr(iso: &str) -> String {
-    let Ok(d) = chrono::DateTime::parse_from_rfc3339(iso) else { return String::new() };
-    let d = d.with_timezone(&chrono::Local);
-    use chrono::Datelike;
-    let months = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
-    format!("{} {} {}", d.day(), months[d.month0() as usize], d.year())
-}
-
-pub fn snowflake_date(id: u64) -> String {
-    let ms = (id >> 22) + phoenix_api::models::DISCORD_EPOCH_MS;
-    chrono::DateTime::from_timestamp_millis(ms as i64).map(|d| date_fr(&d.to_rfc3339())).unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn dates() {
-        assert_eq!(date_fr("2026-10-06T12:00:00+00:00"), "6 oct. 2026");
-        assert!(snowflake_date(1_369_382_919_948_210_248).ends_with("2025"));
-    }
 
     #[test]
     fn sub_pages() {

@@ -49,7 +49,7 @@ pub fn apps(integrations: &Value, webhooks: &Value) -> Vec<App> {
             Some(App {
                 name: str_of(a, "name").to_owned(),
                 icon_url,
-                added: super::snowflake_date(str_of(i, "id").parse().unwrap_or(0)),
+                added: crate::ui::modals::webhooks::snowflake_date(str_of(i, "id").parse().unwrap_or(0)),
                 by: user.map(|u| str_of(u, "username").to_owned()).unwrap_or_default(),
                 verified: a.get("is_verified").and_then(Value::as_bool).unwrap_or(false),
                 bot: a.get("bot").is_some() || scopes.contains(&"bot"),
@@ -279,32 +279,25 @@ pub fn group_by_channel(hooks: &Value) -> Vec<(Option<Id>, Vec<Value>)> {
 }
 
 fn webhook_row(guild: Id, w: &Value, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let id = str_of(w, "id").to_owned();
-    let avatar = w.get("avatar").and_then(Value::as_str).map(|h| format!("https://cdn.discordapp.com/avatars/{id}/{h}.png?size=96"));
-    let by = w.get("user").map(|u| str_of(u, "username").to_owned()).unwrap_or_default();
-    let date = super::snowflake_date(id.parse().unwrap_or(0));
-    let wid: u64 = id.parse().unwrap_or(0);
-    card_row(
-        SharedString::from(format!("gs2-webhook-{id}")),
-        app_icon(avatar.as_deref(), 48.),
-        str_of(w, "name").to_owned().into(),
-        div()
-            .mt(z(4.))
-            .flex()
-            .items_center()
-            .gap(z(4.))
-            .child(icon("calendar", 16., idx::ICON_SUBTLE))
-            .child(text(12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.created_by", date = date, user = by))),
-        icon("chevron-right", 16., idx::TEXT_DEFAULT).into_any_element(),
+    let wid = crate::ui::modals::webhooks::webhook_id(w).unwrap_or(0);
+    let key = format!("webhook:{wid}");
+    let open = super::with(|s| s.open.get(&guild) == Some(&key));
+    let e = cx.entity();
+    crate::ui::modals::webhooks::webhook_row(
+        w,
+        open,
+        move |_, _, cx| {
+            super::with(|s| {
+                if s.open.get(&guild) == Some(&key) {
+                    s.open.remove(&guild);
+                } else {
+                    s.open.insert(guild, key.clone());
+                }
+            });
+            e.update(cx, |_, cx| cx.notify());
+        },
+        None,
     )
-    .cursor_pointer()
-    .on_click(cx.listener(move |_, _, _, cx| {
-        super::with(|s| {
-            s.open.insert(guild, format!("webhook:{wid}"));
-        });
-        cx.notify();
-    }))
-    .into_any_element()
 }
 
 pub fn commands(v: &Value) -> Vec<String> {

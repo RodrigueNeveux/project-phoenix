@@ -325,7 +325,9 @@ impl Backend for ReadOnly {
         self.0.collectible_product(sku)
     }
     fn action(&self, req: phoenix_app::actions::ActionRequest) -> BoxFuture<phoenix_app::actions::ActionReply> {
+        let admin_get = matches!(&req, phoenix_app::actions::ActionRequest::Admin(c) if phoenix_api::rest::guild_manage::build(c).method == reqwest::Method::GET);
         match req {
+            _ if admin_get => self.0.action(req),
             phoenix_app::actions::ActionRequest::Reminders => self.0.action(req),
             phoenix_app::actions::ActionRequest::ReportMenu(_) => self.0.action(req),
             _ => denied(),
