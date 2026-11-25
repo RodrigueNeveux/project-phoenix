@@ -815,7 +815,7 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         crate::ui::context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
     });
     let picker = lang_popout(&url, &lang, true, cx);
-    Some(div().mt(z(4.)).w(z(card_w)).max_w_full().flex().flex_col().child(text_box).child(footer).children(menu).children(picker).into_any_element())
+    Some(div().mt(z(4.)).w(z(card_w)).max_w_full().min_w(z(302.)).flex().flex_col().child(text_box).child(footer).children(menu).children(picker).into_any_element())
 }
 
 pub fn render_full(url: &SharedString, filename: &SharedString, size: u64, viewport: Option<gpui::Size<gpui::Pixels>>, cx: &mut gpui::Context<crate::app::PhoenixApp>) -> AnyElement {
