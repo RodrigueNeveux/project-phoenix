@@ -374,7 +374,19 @@ impl Backend for ReadOnly {
             phoenix_app::commands::ParityRequest::ArchivedThreads { .. } => self.0.parity(req),
             phoenix_app::commands::ParityRequest::Mentions { .. }
             | phoenix_app::commands::ParityRequest::SavedMessages
-            | phoenix_app::commands::ParityRequest::ScheduledMessages => self.0.parity(req),
+            | phoenix_app::commands::ParityRequest::ScheduledMessages => {
+                let what = format!("{req:?}");
+                let fut = self.0.parity(req);
+                Box::pin(async move {
+                    let r = fut.await;
+                    match &r {
+                        Ok(phoenix_app::commands::ParityReply::Messages(m)) => eprintln!("real_shots: {what}: {} messages", m.len()),
+                        Ok(_) => {}
+                        Err(e) => eprintln!("real_shots: {what} failed: {}", e.0),
+                    }
+                    r
+                })
+            }
             _ => denied(),
         }
     }
