@@ -92,7 +92,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                 .child(button_sm("gs2-copy-url", crate::t!("gs2.copy"), BtnKind::Secondary).on_click(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(url.clone())))),
         )
         .child(div().mt(z(16.)).flex().child(button_sm("gs2-open-page", crate::t!("gs2.view_page"), BtnKind::Primary)))
-        .child(divider(80.).my(z(0.)).mt(z(80.)).mb(z(80.)));
+        .child(divider(40.));
     let primary = meta.get("primary_category_id").and_then(Value::as_u64).unwrap_or(0);
     let mut subs = div().flex().flex_wrap().gap(z(4.));
     for c in meta.get("category_ids").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_u64) {
@@ -104,7 +104,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         .child(div().mt(z(8.)).child(crate::ui::controls::select_field("gs2-category", category_name(&cats, primary))))
         .child(div().mt(z(40.)).child(label(crate::t!("gs2.subcategories"))))
         .child(div().mt(z(8.)).min_h(z(40.)).p(z(6.)).rounded(z(8.)).border_1().border_color(t(idx::INPUT_BORDER_DEFAULT)).bg(t(idx::INPUT_BACKGROUND_DEFAULT)).child(subs))
-        .child(divider(60.));
+        .child(divider(40.));
     let splash = g.get("discovery_splash").and_then(Value::as_str).map(|h| format!("https://cdn.discordapp.com/discovery-splashes/{}/{h}.jpg?size=512", guild.0));
     p = p.child(
         div()
@@ -129,17 +129,17 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     let sums = sect("channel_summaries");
     let msgs = sect("channel_messages");
     p = p
-        .child(divider(60.))
+        .child(divider(40.))
         .child(div().flex().items_center().gap(z(16.)).child(text(16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG, crate::t!("gs2.web_content"))).child(div().px(z(4.)).rounded(z(4.)).bg(t(idx::BACKGROUND_BRAND)).child(text(12., 16., FontWeight::SEMIBOLD, idx::WHITE, crate::t!("gs2.new")))))
         .child(div().mt(z(4.)).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.web_content_desc"))))
         .child(div().mt(z(32.)).child(content_row(app, crate::t!("gs2.channel_summaries"), crate::t!("gs2.channel_summaries_desc"), sums.get("enabled").and_then(Value::as_bool).unwrap_or(false), &ids(&sums), "gs2-sum-sw")))
         .child(div().mt(z(32.)).child(content_row(app, crate::t!("gs2.channel_messages"), crate::t!("gs2.channel_messages_desc"), msgs.get("enabled").and_then(Value::as_bool).unwrap_or(false), &ids(&msgs), "gs2-msg-sw")))
-        .child(divider(80.));
+        .child(divider(40.));
     p = p
         .child(label(crate::t!("gs2.server_description")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.presence_description_desc"))))
         .child(div().mt(z(8.)).child(field(str_of(&g, "description").to_owned(), 88.)))
-        .child(divider(80.))
+        .child(divider(40.))
         .child(label(crate::t!("gs2.reasons")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.reasons_desc"))));
     let reasons: Vec<Value> = meta.get("reasons_to_join").and_then(Value::as_array).cloned().unwrap_or_default();
@@ -165,12 +165,12 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     let about = str_of(&meta, "about").to_owned();
     let n = about.chars().count();
     p = p
-        .child(divider(80.))
+        .child(divider(40.))
         .child(label(crate::t!("gs2.about")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.about_desc"))))
         .child(div().mt(z(8.)).child(field(about, 232.)))
         .child(div().mt(z(4.)).flex().justify_end().child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, format!("{n} / 2400"))))
-        .child(divider(80.))
+        .child(divider(40.))
         .child(label(crate::t!("gs2.social")))
         .child(div().mt(z(4.)).child(description(crate::t!("gs2.social_desc"))));
     for (i, l) in meta.get("social_links").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).enumerate() {

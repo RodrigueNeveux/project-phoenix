@@ -68,8 +68,8 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     let (start, end) = window();
     let call = |kind| ServerCall::Analytics { guild: sf(guild), kind, start: start.clone(), end: end.clone() };
     let eng = fetch(app, guild, call(AnalyticsKind::Engagement), cx);
-    let growth = fetch(app, guild, call(AnalyticsKind::Growth), cx);
-    let ret = fetch(app, guild, call(AnalyticsKind::Retention), cx);
+    let growth = eng.as_ref().and_then(|_| fetch(app, guild, call(AnalyticsKind::Growth), cx));
+    let ret = growth.as_ref().and_then(|_| fetch(app, guild, call(AnalyticsKind::Retention), cx));
     let mut p = page()
         .child(title(crate::t!("menu.gs.analytics")))
         .child(div().mt(z(8.)).child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.analytics_lead"))))

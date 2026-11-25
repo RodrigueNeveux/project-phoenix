@@ -76,9 +76,10 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                 .flex()
                 .gap(z(32.))
                 .child(
-                    div().w(z(314.)).flex_none().flex().gap(z(28.)).child(
+                    div().w(z(314.)).flex_none().flex().items_start().gap(z(28.)).child(
                         div()
                             .flex_1()
+                            .min_w_0()
                             .flex()
                             .flex_col()
                             .gap(z(4.))
@@ -89,7 +90,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                         write(a, ServerCall::EditSafety { guild: sf(guild), edit: SafetyEdit { premium_progress_bar_enabled: Some(!bar), ..Default::default() } }, None, cx);
                     }))),
                 )
-                .child(progress_preview(&g)),
+                .child(progress_preview()),
         )
         .child(divider(32.))
         .child(perk_section(
@@ -112,9 +113,11 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     p.into_any_element()
 }
 
-fn progress_preview(g: &Value) -> gpui::Div {
-    let boosts = g.get("premium_subscription_count").and_then(Value::as_u64).unwrap_or(0);
-    let name = str_of(g, "name").to_owned();
+fn progress_preview() -> gpui::Div {
+    let mut channels = div().mt(z(8.)).pt(z(12.)).border_t_1().border_color(t(idx::BORDER_SUBTLE)).flex().flex_col().gap(z(12.));
+    for name in ["general", "memes", "gaming"] {
+        channels = channels.child(div().flex().items_center().gap(z(8.)).child(icon("hash", 20., idx::CHANNEL_ICON)).child(text(16., 20., FontWeight::MEDIUM, idx::CHANNELS_DEFAULT, name)));
+    }
     div()
         .w(z(314.))
         .h(z(312.))
@@ -131,7 +134,7 @@ fn progress_preview(g: &Value) -> gpui::Div {
                 .flex()
                 .flex_col()
                 .gap(z(12.))
-                .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, name).truncate())
+                .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, "Xena\u{2019}s Lounge").truncate())
                 .child(
                     div()
                         .h(z(24.))
@@ -142,8 +145,9 @@ fn progress_preview(g: &Value) -> gpui::Div {
                         .items_center()
                         .justify_between()
                         .child(text(12., 16., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.boost_goal")))
-                        .child(text(12., 16., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.boost_count", n = boosts, of = next_goal(boosts)))),
-                ),
+                        .child(text(12., 16., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.boost_count", n = 9, of = 20))),
+                )
+                .child(channels),
         )
 }
 

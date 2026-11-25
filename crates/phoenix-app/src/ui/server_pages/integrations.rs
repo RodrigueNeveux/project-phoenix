@@ -124,8 +124,8 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
 fn overview(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let ints = fetch(app, guild, ServerCall::Integrations { guild: sf(guild) }, cx);
     let hooks = fetch(app, guild, ServerCall::Webhooks { guild: sf(guild) }, cx);
-    let n_hooks = hooks.as_ref().and_then(Value::as_array).map_or(0, Vec::len);
-    let followed = hooks.as_ref().and_then(Value::as_array).into_iter().flatten().filter(|w| w.get("type").and_then(Value::as_u64) == Some(2)).count();
+    let count = |kind: u64| hooks.as_ref().and_then(Value::as_array).into_iter().flatten().filter(|w| w.get("type").and_then(Value::as_u64) == Some(kind)).count();
+    let (incoming, followed) = (count(1), count(2));
     let mut p = page()
         .child(title(crate::t!("menu.gs.integrations")))
         .child(div().mt(z(20.)).child(lead(crate::t!("gs2.int_lead"))))
@@ -136,7 +136,7 @@ fn overview(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyEle
                 "gs2-int-webhooks",
                 icon_tile("link").into_any_element(),
                 crate::t!("gs2.webhooks"),
-                text(12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.n_webhooks", n = n_hooks - followed)),
+                text(12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.n_webhooks", n = incoming)),
                 icon("chevron-right", 16., idx::TEXT_DEFAULT).into_any_element(),
             )
             .cursor_pointer()
@@ -300,6 +300,25 @@ fn webhook_row(guild: Id, w: &Value, cx: &mut Context<PhoenixApp>) -> AnyElement
     )
 }
 
+pub fn plain_description(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('<') {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let emoji = tail.starts_with("<:") || tail.starts_with("<a:");
+        match tail.find('>') {
+            Some(j) if emoji => rest = tail[j + 1..].trim_start_matches(' '),
+            _ => {
+                out.push('<');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out.replace("**", "").replace("__", "")
+}
+
 pub fn commands(v: &Value) -> Vec<String> {
     let mut out: Vec<String> = v
         .get("application_commands")
@@ -403,7 +422,7 @@ fn app_page(app: &PhoenixApp, guild: Id, id: &str, cx: &mut Context<PhoenixApp>)
                         ),
                 ),
         )
-        .child(div().mt(z(28.)).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, a.description.replace("**", ""))));
+        .child(div().mt(z(28.)).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, plain_description(&a.description))));
     if a.commands {
         let (everyone, all_channels) = everyone_allowed(perms.as_ref(), guild);
         let gid = guild;
@@ -508,6 +527,11 @@ mod tests {
         let g = group_by_channel(&hooks);
         assert_eq!(g.len(), 1);
         assert_eq!(g[0].1.len(), 1);
+    }
+
+    #[test]
+    fn descriptions_drop_markdown() {
+        assert_eq!(plain_description("<:fr:135> French.gg **est** __ok__ <3"), "French.gg est ok <3");
     }
 
     #[test]

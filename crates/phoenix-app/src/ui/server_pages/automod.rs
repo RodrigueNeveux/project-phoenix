@@ -16,7 +16,7 @@ pub fn plural(n: usize, one: &str, many: &str) -> String {
 }
 
 pub fn summary(r: &AutomodRule) -> Option<String> {
-    if r.trigger_type != trigger::KEYWORD && r.trigger_type != trigger::MEMBER_PROFILE {
+    if r.trigger_type != trigger::KEYWORD {
         return None;
     }
     let k = r.trigger_metadata.keyword_filter.len();
