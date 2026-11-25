@@ -312,7 +312,7 @@ fn list(options: Vec<(SharedString, i64, bool)>, cx: &mut Context<PhoenixApp>) -
                 .child(text),
         );
     }
-    gpui::deferred(col).with_priority(1).into_any_element()
+    gpui::deferred(col).with_priority(30).into_any_element()
 }
 
 fn set_picker(f: impl FnOnce(&mut Picker)) {
@@ -452,7 +452,7 @@ fn calendar(p: &Picker, now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .child(nav_button("sched-next", true, 1, month, cx))
         .child(names)
         .child(grid);
-    gpui::deferred(cal).with_priority(1).into_any_element()
+    gpui::deferred(cal).with_priority(30).into_any_element()
 }
 
 pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
