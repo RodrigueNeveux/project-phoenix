@@ -82,7 +82,7 @@ pub(super) fn value_chevron(v: Option<SharedString>) -> AnyElement {
         .items_center()
         .gap(z(16.))
         .children(v.map(value))
-        .child(gpui::svg().path(crate::icons::path("chevron-right")).size(z(24.)).text_color(c(tok(idx::TEXT_DEFAULT))))
+        .child(gpui::svg().path(crate::icons::path("mod/chevron-large-right")).size(z(24.)).text_color(c(tok(idx::INTERACTIVE_ICON_DEFAULT))))
         .into_any_element()
 }
 
@@ -92,7 +92,7 @@ pub(super) fn reveal_button(id: &'static str, shown: bool, on: impl Fn(&mut Phoe
         .text_size(z(16.))
         .line_height(z(20.))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(c(tok(idx::TEXT_LINK)))
+        .text_color(c(tok(idx::TEXT_BRAND)))
         .cursor_pointer()
         .on_click(cx.listener(move |a, _, _, cx| {
             on(a);

@@ -1264,6 +1264,11 @@ fn main() -> anyhow::Result<()> {
                         s.show_changelog = true;
                         phoenix_app::updater::spawn_changelog(cx);
                     }
+                    if let (Some(s), Some(y)) =
+                        (app.settings.as_mut(), std::env::var("PHX_SETTINGS_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()))
+                    {
+                        s.scroll.set_offset(gpui::point(px(0.), px(-y)));
+                    }
                 }
                 "server_settings" => {
                     if let Some(g) = app.selected_guild {

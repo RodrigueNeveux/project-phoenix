@@ -110,7 +110,7 @@ fn item_ex(title: SharedString, desc: Option<AnyElement>, trailing: Option<AnyEl
         .gap(z(12.))
         .mx(z(-12.))
         .px(z(12.))
-        .when(top, |d| d.py(z(10.)))
+        .when(top, |d| d.py(z(10.)).min_h(z(48.)))
         .when(!top, |d| d.py(z(12.)).min_h(z(48.)))
         .rounded(z(16.))
         .child(div().flex_1().min_w_0().flex().flex_col().justify_center().gap(z(4.)).child(title_text(title).when(dim, |d| d.opacity(0.5))).children(desc.map(|d| div().when(top, |d| d.max_w(z(572.))).child(d))))
@@ -429,8 +429,8 @@ fn related(app: &PhoenixApp, icon: &'static str, title: &'static str, desc: &'st
 
 fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: &mut Cx) {
     match b {
-        B::Title(t) => out.push(controls::section_title(tr(t)).into_any_element()),
-        B::Lead(t) => out.push(div().mt(z(-30.)).pb(z(22.)).child(desc_text(tr(t))).into_any_element()),
+        B::Title(t) => out.push(controls::section_title(tr(t)).pb(z(15.)).into_any_element()),
+        B::Lead(t) => out.push(div().mt(z(-21.)).pb(z(22.)).child(desc_text(tr(t))).into_any_element()),
         B::Legend(t) => out.push(
             div()
                 .pt(z(10.))
