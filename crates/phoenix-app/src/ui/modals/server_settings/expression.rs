@@ -107,9 +107,10 @@ fn emoji_table(title: SharedString, list: &[&Value], slots: usize, cx: &mut Cx) 
 }
 
 pub fn emoji(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
-    let all = s.list("emojis");
-    let stat: Vec<&Value> = all.iter().filter(|e| !e.get("animated").and_then(Value::as_bool).unwrap_or(false)).collect();
-    let anim: Vec<&Value> = all.iter().filter(|e| e.get("animated").and_then(Value::as_bool).unwrap_or(false)).collect();
+    let mut all: Vec<&Value> = s.list("emojis").iter().collect();
+    all.sort_by_key(|e| std::cmp::Reverse(kit::n(e, "id")));
+    let stat: Vec<&Value> = all.iter().copied().filter(|e| !e.get("animated").and_then(Value::as_bool).unwrap_or(false)).collect();
+    let anim: Vec<&Value> = all.iter().copied().filter(|e| e.get("animated").and_then(Value::as_bool).unwrap_or(false)).collect();
     let slots = emoji_slots(tier(s));
     div()
         .flex()
