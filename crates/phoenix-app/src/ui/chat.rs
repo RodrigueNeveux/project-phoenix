@@ -17,6 +17,7 @@ use crate::{
 pub mod announce;
 pub mod app_launcher;
 pub mod attach;
+pub mod automod;
 pub mod plaintext;
 pub mod composer;
 pub mod icons;

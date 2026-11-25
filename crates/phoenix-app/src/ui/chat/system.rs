@@ -122,7 +122,7 @@ pub fn call_state(call: Option<&crate::model::CallInfo>, active: bool, me: crate
 const ASSET_DISCOVERY_OUT: &str = "https://discord.com/assets/49dd33256719a93e.svg";
 const ASSET_DISCOVERY_BACK: &str = "https://discord.com/assets/5c56b22c17556059.svg";
 
-const FALLBACK_TYPES: [u8; 8] = [24, 35, 48, 49, 50, 51, 64, 65];
+const FALLBACK_TYPES: [u8; 7] = [35, 48, 49, 50, 51, 64, 65];
 
 const AUTOMOD_TYPES: [u8; 4] = [36, 37, 38, 39];
 
@@ -650,6 +650,10 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, r: &
     if let MessageKind::PollResult(poll) = msg.kind {
         let line = poll_result(app, entity, msg, r, poll);
         return Some(with_divider(r, line));
+    }
+    if msg.type_id == 24 {
+        let card = super::automod::render(app, entity, msg, r);
+        return Some(with_divider(r, card));
     }
     if let Some(g) = generic_in(crate::i18n::locale(), &ctx_of(app, msg)) {
         let line = if AUTOMOD_TYPES.contains(&msg.type_id) { automod_line(app, entity, msg, r, g) } else { generic_line(app, entity, msg, r, g) };
