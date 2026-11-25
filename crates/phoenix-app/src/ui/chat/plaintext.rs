@@ -634,7 +634,17 @@ fn markdown_view(id: &'static str, text: &str, notice: Option<&str>) -> AnyEleme
 }
 
 pub fn size_label(bytes: u64) -> SharedString {
-    super::attach::human_size(bytes)
+    let kb = bytes as f64 / 1000.;
+    if kb / 1000. < 1. {
+        return crate::t!("size.kb", size = kb.ceil() as u64);
+    }
+    let mb = (kb / 1000.).ceil();
+    if mb < 1000. {
+        return crate::t!("size.mb", size = mb as u64);
+    }
+    let gb = (mb / 100.).round() / 10.;
+    let n = if gb.fract() == 0. { format!("{gb:.0}") } else { format!("{gb:.1}").replace('.', crate::t!("size.decimal").as_ref()) };
+    crate::t!("size.gb", size = n)
 }
 
 pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
@@ -874,6 +884,15 @@ mod tests {
         assert!(!previewable("photo.png"));
         assert_eq!(remaining(Some("bytes 0-50000/120000"), 50001), 69999);
         assert_eq!(remaining(None, 10), 0);
+    }
+
+    #[test]
+    fn size_label_follows_the_client_decimal_units() {
+        assert_eq!(size_label(512), crate::t!("size.kb", size = 1));
+        assert_eq!(size_label(69_999), crate::t!("size.kb", size = 70));
+        assert_eq!(size_label(4_213_337), crate::t!("size.mb", size = 5));
+        assert_eq!(size_label(2_000_000_000), crate::t!("size.gb", size = 2));
+        assert!(size_label(1_500_000_000).starts_with('1'));
     }
 
     #[test]

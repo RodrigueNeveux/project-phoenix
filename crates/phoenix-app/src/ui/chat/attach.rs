@@ -15,13 +15,20 @@ fn tk(i: usize) -> gpui::Hsla {
 }
 
 pub fn human_size(n: u64) -> SharedString {
-    if n >= 1 << 20 {
-        format!("{:.2} MB", n as f64 / (1 << 20) as f64).into()
-    } else if n >= 1024 {
-        format!("{:.2} KB", n as f64 / 1024.).into()
-    } else {
-        format!("{n} bytes").into()
+    if n < 1024 {
+        return format!("{n} bytes").into();
     }
+    let units = ["KB", "MB", "GB", "TB", "PB"];
+    let mut v = n as f64 / 1024.;
+    let mut u = 0;
+    while v >= 1024. && u + 1 < units.len() {
+        v /= 1024.;
+        u += 1;
+    }
+    let num = format!("{v:.2}");
+    let (int, frac) = num.split_once('.').unwrap_or((num.as_str(), "00"));
+    let int = if int.len() > 3 { format!("{},{}", &int[..int.len() - 3], &int[int.len() - 3..]) } else { int.to_owned() };
+    format!("{int}.{frac} {}", units[u]).into()
 }
 
 fn named_icon(name: &str, size: f32, color: gpui::Hsla) -> gpui::Svg {
@@ -403,5 +410,7 @@ mod tests {
         assert_eq!(human_size(512).as_ref(), "512 bytes");
         assert_eq!(human_size(2048).as_ref(), "2.00 KB");
         assert_eq!(human_size(4_213_337).as_ref(), "4.02 MB");
+        assert_eq!(human_size(1_610_612_736).as_ref(), "1.50 GB");
+        assert_eq!(human_size(1_024_500).as_ref(), "1,000.49 KB");
     }
 }
