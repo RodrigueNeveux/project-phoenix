@@ -957,7 +957,7 @@ fn popout_card_inner(
     if uid == app.me.id {
         body = body.child(div().text_size(z(12.)).text_color(c(tok(idx::TEXT_MUTED))).child(status_label(i.presence)));
     }
-    if !app.prefs.local.streamer_hides_info() {
+    if uid != app.me.id && !app.prefs.local.streamer_hides_info() && crate::ui::profile_note::editing(uid).is_some() {
         body = body.children(crate::ui::profile_note::note_section(i.prof.map(|p| p.note.clone()), uid, cx));
     }
     match i.prof {

@@ -21,7 +21,7 @@ thread_local! {
     static EDIT: RefCell<Option<Editor>> = const { RefCell::new(None) };
 }
 
-fn editing(uid: Id) -> Option<Entity<InputState>> {
+pub fn editing(uid: Id) -> Option<Entity<InputState>> {
     EDIT.with(|e| e.borrow().as_ref().filter(|e| e.user == uid).map(|e| e.input.clone()))
 }
 
