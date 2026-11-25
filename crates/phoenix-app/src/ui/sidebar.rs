@@ -76,18 +76,24 @@ pub fn build_rows(app: &mut PhoenixApp) {
                     continue;
                 }
                 let collapsed = current_cat.is_some_and(|c| app.collapsed.contains(&c));
-                if collapsed && !selected && !(ch.unread && !ch.muted) && ch.voice_users.is_empty() {
+                let all_threads = selected || (!collapsed && !ch.muted);
+                let threads: Vec<Id> = app
+                    .nav
+                    .threads
+                    .get(&id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|t| all_threads || (t.unread && !t.muted) || Some(t.id) == app.selected_channel)
+                    .map(|t| t.id)
+                    .collect();
+                if collapsed && !selected && threads.is_empty() && !(ch.unread && !ch.muted) && ch.voice_users.is_empty() {
                     continue;
                 }
-                if hide_muted && ch.muted && !selected {
+                if hide_muted && ch.muted && !selected && threads.is_empty() {
                     continue;
                 }
                 rows.push(SidebarRow::Channel(id));
-                for t in app.nav.threads.get(&id).into_iter().flatten() {
-                    if !collapsed || Some(t.id) == app.selected_channel {
-                        rows.push(SidebarRow::Thread(t.id));
-                    }
-                }
+                rows.extend(threads.into_iter().map(SidebarRow::Thread));
                 let stage = ch.kind == ChannelKind::Stage;
                 let mut vu: Vec<(String, Id)> = ch
                     .voice_users
