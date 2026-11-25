@@ -12,6 +12,12 @@ pub const HEADER_IMAGE: &str = "https://cdn.discordapp.com/assets/content/f91111
 pub const CONTENT_MAX_W: f32 = 1224.;
 pub const TIER_BOOSTS: [u32; 4] = [0, 2, 7, 14];
 pub const STACK_BELOW: f32 = 1100.;
+pub const VIDEO_THUMB: &str = "https://cdn.discordapp.com/assets/content/7b8d6c9c9f8bc8092089a2f55081695d40f7f303f053fcc6f944bf4b38403573.png";
+pub const TIER_ICONS: [&str; 3] = [
+    "https://cdn.discordapp.com/assets/content/33e98755a49cf85d07b8189a0001926c17d91599d53662a39999329f5253254f.svg",
+    "https://cdn.discordapp.com/assets/content/3bc18204c2bf43975ded85a602c7816d032bc07cf9b1d5589e52404f9bc1d687.svg",
+    "https://cdn.discordapp.com/assets/content/cb869ee40a8ed5d6210e69a02cebbf03025be47006b310ec2564f74f6ad1dff8.svg",
+];
 
 thread_local! {
     static OPEN: Cell<Option<Id>> = const { Cell::new(None) };
@@ -137,7 +143,7 @@ fn tier_card(tier: u8, perks: &[Perk], active: bool) -> AnyElement {
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(gem(24., gpui::white())),
+                .child(img(TIER_ICONS[(tier as usize).saturating_sub(1).min(2)]).size(z(24.))),
         );
     let title = text(24., 30., FontWeight::SEMIBOLD, if active { tk(idx::TEXT_STRONG) } else { muted }, crate::t!(match tier {
         1 => "boost.level1",
@@ -214,8 +220,15 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(div().flex().flex_col().items_center().gap(z(4.)).child(text(20., 24., FontWeight::SEMIBOLD, white, g.name.clone())).child(count));
     let boost_btn = crate::ui::controls::button_icon("boost-layer-cta", "boost", crate::t!("boost.cta"), crate::ui::controls::BtnKind::Expressive)
         .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("boost.cta"), cx)));
-    let nitro_btn = crate::ui::controls::button("boost-layer-nitro", crate::t!("boost.get_nitro"), crate::ui::controls::BtnKind::Secondary)
-        .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("boost.get_nitro"), cx)));
+    let tier2 = app.backend.premium_tier2();
+    let nitro_label = if tier2 { crate::t!("boost.gift_nitro") } else { crate::t!("boost.get_nitro") };
+    let nl = nitro_label.clone();
+    let nitro_btn = if tier2 {
+        crate::ui::controls::button_icon("boost-layer-nitro", "gift", nitro_label, crate::ui::controls::BtnKind::Secondary)
+    } else {
+        crate::ui::controls::button("boost-layer-nitro", nitro_label, crate::ui::controls::BtnKind::Secondary)
+    }
+    .on_click(cx.listener(move |a, _, _, cx| a.stub(&nl, cx)));
     let hero = div()
         .flex()
         .flex_col()
@@ -255,7 +268,24 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
             ))),
         )
         .child(img(HEADER_IMAGE).w_full().object_fit(gpui::ObjectFit::Cover));
-    let content = div().relative().w_full().max_w(z(CONTENT_MAX_W)).mx_auto().pt(z(64.)).px(z(32.)).pb(z(32.)).flex().flex_col().child(top).child(cards);
+    let video = div()
+        .w_full()
+        .flex()
+        .justify_center()
+        .mb(z(40.))
+        .child(
+            div()
+                .relative()
+                .w(z(772.))
+                .h(z(435.))
+                .rounded(z(16.))
+                .overflow_hidden()
+                .border_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .child(img(VIDEO_THUMB).size_full().object_fit(gpui::ObjectFit::Cover))
+                .child(div().absolute().inset_0().flex().items_center().justify_center().child(div().size(z(76.)).rounded_full().bg(gpui::white()).flex().items_center().justify_center().child(gpui::svg().path(crate::icons::path("play")).size(z(36.)).text_color(gpui::black())))),
+        );
+    let content = div().relative().w_full().max_w(z(CONTENT_MAX_W)).mx_auto().pt(z(64.)).px(z(32.)).pb(z(32.)).flex().flex_col().child(top).child(video).child(cards);
     let scroller = SCROLL.with(|s| {
         div()
             .id("boost-layer-scroll")
