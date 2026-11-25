@@ -117,7 +117,12 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .child({
             let e = entity.clone();
             action(&entity, "discover", Icon::Compass, crate::t!("rail.discover"))
-                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.stub(&crate::t!("rail.discover"), cx)))
+                .on_click(move |_, _, cx| {
+                    e.update(cx, |_, cx| {
+                        crate::ui::discovery::open(crate::ui::discovery::Tab::Servers);
+                        cx.notify();
+                    })
+                })
         });
     let (above, below, m_above, m_below) = offscreen_unread(&scroll, &spans);
     div()
@@ -468,7 +473,7 @@ const ADD_KEY: u64 = 2;
 const DISCOVER_KEY: u64 = 3;
 
 fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
-    let selected = app.selected_guild.is_none() && !app.favorites_view;
+    let selected = app.selected_guild.is_none() && !app.favorites_view && crate::ui::discovery::current().is_none();
     let hover = hovered(HOME_KEY);
     let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
     let e = entity.clone();
@@ -800,8 +805,9 @@ fn separator() -> AnyElement {
 fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedString) -> gpui::Stateful<gpui::Div> {
     let key = if id == "add-server" { ADD_KEY } else { DISCOVER_KEY };
     let hover = hovered(key);
+    let selected = key == DISCOVER_KEY && crate::ui::discovery::current().is_some();
     row(id, key, entity)
-        .child(pill(key, false, hover, false))
+        .child(pill(key, selected, hover, false))
         .child(
             div()
                 .size(z(ICON))
@@ -809,7 +815,7 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedS
                 .relative()
                 .child(crate::ui::states::fade_to(
                     crate::ui::states::key(("rail-tile", key)),
-                    hover,
+                    hover || selected,
                     c(Palette::GUILD_ICON_BG),
                     c(Palette::BLURPLE),
                     150,
@@ -818,7 +824,7 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedS
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icon(i, 20. * crate::theme::zoom(), c(Palette::TEXT_NORMAL))),
+                .child(icon(i, 20. * crate::theme::zoom(), if hover || selected { gpui::white() } else { c(Palette::TEXT_NORMAL) })),
         )
         .when(hover, |d| d.child(right_tooltip(label, ICON)))
 }

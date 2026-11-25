@@ -124,7 +124,20 @@ pub fn voice_user_name(app: &PhoenixApp, user: Id) -> SharedString {
         .unwrap_or_default()
 }
 
-pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    if crate::ui::discovery::current().is_some() {
+        return div()
+            .w(z(crate::ui::sidebar_resize::width() + m::sidebar_extra_w()))
+            .flex_none()
+            .h_full()
+            .rounded_tl(z(m::FRAME_RADIUS))
+            .overflow_hidden()
+            .relative()
+            .child(crate::ui::discovery::sidebar(cx))
+            .child(div().absolute().inset_0().border_l_1().border_t_1().border_color(c(Palette::APP_FRAME_BORDER)).rounded_tl(z(m::FRAME_RADIUS)))
+            .child(crate::ui::sidebar_resize::handle(cx))
+            .into_any_element();
+    }
     let entity = cx.entity();
     let weak = entity.downgrade();
     app.sidebar_list.set_scroll_handler(move |ev: &gpui::ListScrollEvent, _w, cx: &mut App| {
@@ -166,6 +179,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 .rounded_tl(z(m::FRAME_RADIUS)),
         )
         .child(crate::ui::sidebar_resize::handle(cx))
+        .into_any_element()
 }
 
 fn favorites_header() -> AnyElement {

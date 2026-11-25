@@ -547,6 +547,7 @@ impl PhoenixApp {
     }
 
     pub fn select_guild(&mut self, guild: Option<Id>, cx: &mut Context<Self>) {
+        crate::ui::discovery::close();
         self.selected_guild = guild;
         self.favorites_view = false;
         self.rebuild_sidebar();
@@ -591,6 +592,7 @@ impl PhoenixApp {
     }
 
     pub fn open_channel_chat(&mut self, id: Id, cx: &mut Context<Self>) {
+        crate::ui::discovery::close();
         crate::ui::favorites::on_channel_opened(self, id);
         crate::commands::state::remember_read_mark(self, id);
         let Some(ch) = self.channels.get_mut(&id) else { return };

@@ -779,6 +779,10 @@ fn main() -> anyhow::Result<()> {
                     "add" => F::AddFriend,
                     _ => F::Online,
                 };
+            } else if view == "discovery" {
+                app.select_guild(None, cx);
+                app.selected_channel = None;
+                phoenix_app::ui::discovery::open(if tab == "apps" { phoenix_app::ui::discovery::Tab::Apps } else { phoenix_app::ui::discovery::Tab::Servers });
             } else if view == "quests" {
                 app.select_guild(None, cx);
                 app.nav.home = phoenix_app::ui::home::data::HomeView::Quests;
