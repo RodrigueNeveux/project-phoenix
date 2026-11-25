@@ -980,7 +980,7 @@ fn changelog_body(entries: &[crate::updater::ChangelogEntry]) -> Vec<AnyElement>
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(c(tok(if e.prerelease { idx::TEXT_FEEDBACK_WARNING } else { idx::TEXT_BRAND })))
                 .child(SharedString::from(e.name.to_uppercase()))
-                .child(div().flex_1().h(z(1.)).opacity(0.6).bg(c(tok(if e.prerelease { idx::TEXT_FEEDBACK_WARNING } else { idx::TEXT_BRAND })))))
+                .child(div().flex_1().h(z(1.)).opacity(0.6).bg(c(tok(if e.prerelease { idx::TEXT_FEEDBACK_WARNING } else { idx::TEXT_BRAND }))))
                 .into_any_element(),
         );
         if !date.is_empty() {
