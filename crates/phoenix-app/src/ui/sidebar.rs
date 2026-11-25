@@ -810,7 +810,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             Some(crate::model::ImageRef::Url(u)) => {
                 gpui::img(u).size(z(32.)).rounded_full().flex_none().into_any_element()
             }
-            _ if !ex.members.is_empty() => crate::ui::group_dm::group_avatar(
+            _ if !ex.members.is_empty() => crate::ui::group_dm::group_avatar_with_status(
                 app,
                 id,
                 32. * crate::theme::zoom(),

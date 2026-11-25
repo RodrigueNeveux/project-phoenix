@@ -42,6 +42,24 @@ pub fn group_avatar(app: &PhoenixApp, ch: Id, size: f32, ring: Hsla) -> AnyEleme
         .into_any_element()
 }
 
+pub fn list_status(app: &PhoenixApp, ch: Id) -> Option<crate::model::Presence> {
+    members(app, ch).iter().any(|u| app.presence_of(*u) == crate::model::Presence::Online).then_some(crate::model::Presence::Online)
+}
+
+pub fn group_avatar_with_status(app: &PhoenixApp, ch: Id, size: f32, ring: Hsla) -> AnyElement {
+    let pile = group_avatar(app, ch, size, ring);
+    let Some(p) = list_status(app, ch) else { return pile };
+    let (cx, r, s) = crate::ui::status_svg::geometry(size);
+    div()
+        .relative()
+        .flex_none()
+        .size(gpui::px(size))
+        .child(pile)
+        .child(div().absolute().left(gpui::px(cx - r)).top(gpui::px(cx - r)).size(gpui::px(2. * r)).rounded_full().bg(ring))
+        .child(div().absolute().left(gpui::px(cx - s / 2.)).top(gpui::px(cx - s / 2.)).child(crate::ui::status_dot(p, s, ring)))
+        .into_any_element()
+}
+
 pub fn members_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let ch = app.selected_channel?;
     if !app.show_members || app.channels.get(&ch).is_none_or(|c| c.guild.is_some()) || !crate::ui::dm_profile_panel::is_group_dm(app, ch) {
