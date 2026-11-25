@@ -652,26 +652,18 @@ pub(super) fn filter(blocks: &'static [B], q: &str) -> Vec<&'static B> {
 fn push_texts(blocks: &'static [B], out: &mut Vec<&'static str>) {
     for b in blocks {
         match b {
-            B::Title(t) | B::Lead(t) | B::Legend(t) | B::Sound(_, t) | B::Custom(t, _) => out.push(t),
-            B::Switch(_, t, d, _) | B::Action(t, d, _, _) | B::Related(_, t, d, _) => out.extend([*t, *d]),
-            B::Radios(_, t, d, o, _) => {
-                out.extend([*t, *d]);
-                out.extend(o.iter().flat_map(|(a, b)| [*a, *b]));
-            }
-            B::Select(_, t, d, o, _) => {
-                out.extend([*t, *d]);
-                out.extend(o.iter().copied());
-            }
-            B::Expand(_, t, d, inner) => {
-                out.extend([*t, *d]);
+            B::Title(t) | B::Legend(t) | B::Sound(_, t) | B::Custom(t, _) => out.push(t),
+            B::Switch(_, t, _, _) | B::Action(t, _, _, _) | B::Related(_, t, _, _) | B::Radios(_, t, _, _, _) | B::Select(_, t, _, _, _) => out.push(t),
+            B::Expand(_, t, _, inner) => {
+                out.push(t);
                 push_texts(inner, out);
             }
             B::Collapse(_, _, inner) => push_texts(inner, out),
-            B::KeyGroup(l, d, rows) => {
-                out.extend([*l, *d]);
+            B::KeyGroup(l, _, rows) => {
+                out.push(l);
                 out.extend(rows.iter().map(|r| r.0));
             }
-            B::Divider => {}
+            B::Lead(_) | B::Divider => {}
         }
     }
 }
@@ -693,6 +685,13 @@ pub fn matches(p: Page, q: &str) -> bool {
 fn extra_search(p: Page) -> &'static [&'static str] {
     match p {
         Page::MyAccount => &[
+            "settings.account.mfa",
+            "settings.account.devices",
+            "settings.account.age_group",
+            "settings.account.family",
+            "settings.account.family_setup",
+            "settings.account.disable",
+            "settings.account.close",
             "settings.account.info",
             "settings.account.display_name",
             "settings.account.username",

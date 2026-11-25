@@ -725,7 +725,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
                         }
                         cx.notify();
                     }))
-                    .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(c(tok(idx::INPUT_ICON_DEFAULT)))),
+                    .child(gpui::svg().path(crate::icons::path("settings/circle-x")).size(z(16.)).text_color(c(tok(idx::TEXT_SUBTLE)))),
             )
         });
     let fixed = div()
