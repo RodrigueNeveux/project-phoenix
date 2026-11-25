@@ -329,7 +329,31 @@ types: Phoenix depends on `gpui-base` directly.
 
 Tests: the app tests below drive it (gpui-base's own tests are not in the vendored test workspace).
 
-Rev: `5e340a80` on `gpui-richtext` (patches 4 to 13). Before: `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+## 14. LayoutUnit ellipsis (`src/taffy.rs` `snap_measured_size_to_device_pixels`, `src/elements/text.rs`, `src/text_system/line_wrapper.rs` `truncate_line_end_shaped`)
+
+**Problem.** Texts next to an emoji or a measured sibling lost their last glyph to the
+ellipsis: member group "💻 ─ ☲☲ Responsable du Dé…" for the client's "Dév…", composer
+placeholder "#〢🍯・hone…" for "honey…" (sweep audit-live-channel, DPR 1.25 and 1.5). Box
+widths and glyph positions matched within 1 device px. The bridge to taffy rounded every
+measured leaf up to a whole device pixel, so the count "\u{a0}— 2" (24.958px) took 25.333px at
+DPR 1.5 and the name box lost 0.375px. "Dév" + "…" fits the client's 191.042px box with
+0.08px to spare (harfbuzz on the cached gg sans 500 14px: "Dév" ends at 180.811, "…" 10.15).
+
+**Reference.** Chromium sizes a text box in LayoutUnits, 1/64 of a device pixel at
+zoom-for-DSF: the dump widths are whole multiples of 1/96 css px at DPR 1.5 (191.042 × 96 =
+18340, 122.51 × 96 = 11761). `LineTruncator` keeps the glyphs whose end fits in the box
+minus the ellipsis' `SnappedWidth()` (rounded up to a LayoutUnit), and the first box of a
+line keeps at least one character.
+
+**Patch.** Measured widths round up to 1/64 dp (heights keep the whole device pixel), the
+text box width of patch 7 rounds up to 1/64 dp too, and `truncate_line_end_shaped` takes the
+scale factor, rounds the ellipsis width up to 1/64 dp and keeps the first grapheme when
+nothing fits. An emoji sequence is one grapheme. Unit tests
+`measured_width_rounds_up_to_a_device_layout_unit`, `text_width_rounds_up_to_a_layout_unit`,
+`shaped_end_cut_keeps_the_last_glyph_that_fits_like_chromium`,
+`shaped_end_truncation_counts_an_emoji_as_one_glyph`; app tests in `ui::emoji_text`.
+
+Rev: `56ab21b5` on `gpui-ellipsis2` (patches 4 to 14). Before: `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## Running the vendored tests
 
