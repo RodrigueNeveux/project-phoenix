@@ -83,7 +83,7 @@ pub fn has_video(app: &PhoenixApp, ch_id: Id) -> bool {
     app.channels.get(&ch_id).is_some_and(|ch| {
         ch.voice_users.iter().any(|&u| {
             let f = crate::ui::voice_panel::flags(u);
-            f.stream || f.video
+            f.video || (f.stream && crate::ui::call_view::stream_key(app, u).is_some_and(|k| app.voice.watching.contains(&k)))
         })
     })
 }
@@ -100,7 +100,7 @@ pub fn select_subject(app: &PhoenixApp, ch_id: Id) -> Option<(Id, bool)> {
     if users.is_empty() {
         return Some((app.me.id, false));
     }
-    if let Some(&u) = users.iter().find(|&&u| crate::ui::voice_panel::flags(u).stream) {
+    if let Some(&u) = users.iter().find(|&&u| crate::ui::voice_panel::flags(u).stream && crate::ui::call_view::stream_key(app, u).is_some_and(|k| app.voice.watching.contains(&k))) {
         return Some((u, true));
     }
     if let Some(&u) = users.iter().find(|&&u| crate::ui::voice_panel::flags(u).video) {
