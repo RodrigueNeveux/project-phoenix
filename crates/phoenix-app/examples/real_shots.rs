@@ -1561,6 +1561,7 @@ fn main() -> anyhow::Result<()> {
                         phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::FriendRow(u), gpui::point(px(900.), px(250.)), window);
                     }
                 }
+                "addserver" => app.open_add_server(window, cx),
                 "favmenu" => phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::Favorites, gpui::point(px(40.), px(130.)), window),
                 "favaddmenu" => phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::FavoritesAdd, gpui::point(px(300.), px(70.)), window),
                 "favheader" => {
