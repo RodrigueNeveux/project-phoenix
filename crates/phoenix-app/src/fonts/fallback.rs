@@ -80,6 +80,35 @@ fn fc(args: &[&str], format: &str) -> Vec<String> {
     String::from_utf8_lossy(&out.stdout).lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
 }
 
+pub const CODE_STACK: &[&str] = &[
+    "Source Code Pro",
+    "Consolas",
+    "Andale Mono WT",
+    "Andale Mono",
+    "Lucida Console",
+    "Lucida Sans Typewriter",
+    "DejaVu Sans Mono",
+    "Bitstream Vera Sans Mono",
+    "Liberation Mono",
+    "Nimbus Mono L",
+    "Monaco",
+    "Courier New",
+    "Courier",
+];
+
+pub fn pick_code_family(installed: impl Fn(&str) -> bool) -> Option<&'static str> {
+    CODE_STACK.iter().copied().find(|f| installed(f))
+}
+
+pub fn code_family() -> &'static str {
+    static CODE: OnceLock<&'static str> = OnceLock::new();
+    CODE.get_or_init(|| {
+        pick_code_family(|name| fc(&[name], "%{family[0]}\n").first().is_some_and(|f| f == name))
+            .or_else(|| fc(&["monospace"], "%{family[0]}\n").into_iter().next().map(|f| -> &'static str { Box::leak(f.into_boxed_str()) }))
+            .unwrap_or("DejaVu Sans Mono")
+    })
+}
+
 fn preferred_script_fonts(locale: &str) -> &'static [&'static str] {
     match locale {
         "ja" => &["Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic"],
@@ -564,7 +593,15 @@ fn rename_table(t: &[u8], family: &str, ps: Option<&str>) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Entry, SortedFace, plan};
+    use super::{CODE_STACK, Entry, SortedFace, pick_code_family, plan};
+
+    #[test]
+    fn code_stack_follows_the_client_order() {
+        assert_eq!(CODE_STACK.first(), Some(&"Source Code Pro"));
+        assert_eq!(pick_code_family(|f| f == "DejaVu Sans Mono" || f == "Liberation Mono"), Some("DejaVu Sans Mono"));
+        assert_eq!(pick_code_family(|f| f == "Courier" || f == "Liberation Mono"), Some("Liberation Mono"));
+        assert_eq!(pick_code_family(|_| false), None);
+    }
 
     fn face(family: &str, style: &str, file: &str) -> SortedFace {
         SortedFace { family: family.into(), style: style.into(), file: file.into() }

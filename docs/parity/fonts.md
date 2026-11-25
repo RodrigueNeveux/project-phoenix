@@ -7,7 +7,7 @@ Sources: the `@font-face` rules and the `--font-*` variables of the client CSS (
 | variable | stack |
 |---|---|
 | `--font-primary` | "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif |
-| `--font-code` | "gg mono", "Source Code Pro", Consolas, …, "DejaVu Sans Mono", …, monospace |
+| `--font-code` | "gg mono", "Source Code Pro", Consolas, "Andale Mono WT", "Andale Mono", "Lucida Console", "Lucida Sans Typewriter", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Liberation Mono", "Nimbus Mono L", Monaco, "Courier New", Courier, monospace (6 identical rules in `current-client/css`) |
 | `--font-nitro` (`nitro-*`, `display-*` text variants) | "ABC Ginto Discord Nord", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif |
 | `--font-headline` | "ABC Ginto Nord", "Noto Sans", … |
 | `--font-display-marketing` | "ABC Ginto Discord", "gg sans", serif, "Noto Sans", … |
@@ -38,3 +38,8 @@ gg sans 400, 500, 600, 700, 800, each normal and italic; gg mono 400 and 700; AB
 ## Settings pages
 
 Line widths in `real_shots PHX_OPEN=settings:<page>` already matched the client within 1 device px (Data and privacy, Notifications at dpr 1.5): the settings text was gg sans before this change. The wrapping difference left on "Utiliser des données tierces…" ("les" moves to the next line) is a sub-pixel width difference, not a font change.
+
+## `--font-code` without gg mono
+
+When gg mono is not in the Discord cache, `fonts::mono_family` walks `fallback::CODE_STACK` (the client stack above, minus gg mono and `monospace`) and keeps the first family that fontconfig returns under its own name (`fc-match "<name>"` → `%{family[0]}` equal to the name, so an alias such as Consolas → DejaVu Sans Mono does not count), then `fc-match monospace`, then DejaVu Sans Mono. Chromium takes the first installed family of the list the same way. On this machine: Source Code Pro → Noto Sans (absent), Consolas → alias (absent), so DejaVu Sans Mono, as before. Unit test `code_stack_follows_the_client_order`. ✅
+

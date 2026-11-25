@@ -237,7 +237,7 @@ pub fn ui_family() -> &'static str {
 }
 
 pub fn mono_family() -> &'static str {
-    if GG_MONO.load(Ordering::Relaxed) { *GG_MONO_NAME.read() } else { "DejaVu Sans Mono" }
+    if GG_MONO.load(Ordering::Relaxed) { *GG_MONO_NAME.read() } else { fallback::code_family() }
 }
 
 pub fn ui_root<E: gpui::Styled>(mut el: E) -> E {
