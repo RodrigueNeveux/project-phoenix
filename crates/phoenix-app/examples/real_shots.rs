@@ -296,6 +296,9 @@ impl Backend for ReadOnly {
     fn billing(&self) -> BoxFuture<Option<phoenix_app::ui::settings::billing::Billing>> {
         self.0.billing()
     }
+    fn subscriptions(&self) -> BoxFuture<Option<phoenix_app::ui::settings::subscriptions::Subs>> {
+        self.0.subscriptions()
+    }
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         self.0.account_standing()
     }
