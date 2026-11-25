@@ -1045,7 +1045,7 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
     let local_day = |ts: i64| chrono::DateTime::from_timestamp(ts, 0).map(|d| d.with_timezone(&chrono::Local).date_naive());
     let today = chrono::Local::now().date_naive();
     let days = card.msgs.first().is_some_and(|m| local_day(m.timestamp) != Some(today));
-    let mut body = div().py(z(8.)).flex().flex_col();
+    let mut body = div().pb(z(16.)).flex().flex_col();
     let mut prev: Option<&Message> = None;
     for m in &card.msgs {
         let day = local_day(m.timestamp);
@@ -1058,12 +1058,12 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
         let start = prev.is_none_or(|p| p.author != m.author || m.timestamp - p.timestamp > 7 * 60);
         let id = m.id;
         let row = if start {
-            cozy_message(app, m, 2., cx)
+            cozy_message(app, m, 2., cx).mt(z(17.))
         } else {
             div()
                 .pl(z(80.))
                 .pr(z(20.))
-                .py(z(1.))
+                .py(z(2.))
                 .text_size(z(16.))
                 .line_height(z(22.))
                 .text_color(tk(idx::TEXT_DEFAULT))
