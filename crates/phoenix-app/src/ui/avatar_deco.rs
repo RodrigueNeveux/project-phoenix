@@ -46,6 +46,10 @@ pub fn hover_key(kind: u8, id: u64) -> u64 {
     ((kind as u64) << 56) ^ id
 }
 
+pub fn hovered(key: u64) -> bool {
+    HOVER.with(|h| h.get()) == Some(key)
+}
+
 pub fn set_hover(key: u64, hovered: bool) -> bool {
     HOVER.with(|h| {
         let next = if hovered { Some(key) } else if h.get() == Some(key) { None } else { h.get() };
@@ -74,7 +78,7 @@ pub fn src(deco: &SharedString, play: bool) -> SharedString {
 }
 
 pub fn src_for(deco: &SharedString, key: u64) -> SharedString {
-    src(deco, HOVER.with(|h| h.get()) == Some(key))
+    src(deco, hovered(key))
 }
 
 #[cfg(test)]
