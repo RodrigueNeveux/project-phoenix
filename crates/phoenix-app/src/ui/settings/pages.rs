@@ -851,6 +851,7 @@ static GAMES: &[B] = &[
 
 fn current_game(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     div()
+        .mt(z(10.))
         .flex()
         .flex_col()
         .gap(z(4.))
@@ -1036,7 +1037,7 @@ fn billing_sources(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
         div().mt(z(-20.)).child(desc_text(crate::t!("sp.bl.country", name = name)))
     });
     div()
-        .mt(z(-10.))
+        .mt(z(-1.))
         .flex()
         .flex_col()
         .children(country)
@@ -1068,7 +1069,7 @@ fn billing_history(_: &PhoenixApp, _: &mut Cx) -> AnyElement {
     let pays = super::billing::get().map(|b| b.payments).unwrap_or_default();
     let col = |t: &str| div().text_size(z(12.)).line_height(z(12.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_DEFAULT))).child(tr(t));
     div()
-        .mt(z(-10.))
+        .mt(z(-1.))
         .flex()
         .flex_col()
         .child(
