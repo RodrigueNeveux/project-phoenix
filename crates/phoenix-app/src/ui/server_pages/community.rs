@@ -191,8 +191,8 @@ pub fn onboarding(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> 
             .w_full()
             .flex()
             .gap(z(48.))
-            .child(div().flex_1().flex().flex_col().gap(z(12.)).child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.ob_prompts_title"))).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.ob_prompts_desc"))).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("gs2.ob_n_prompts", n = prompts.len()))))
-            .child(div().flex_1().flex().flex_col().gap(z(12.)).child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.ob_defaults_title"))).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.ob_defaults_desc"))).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("gs2.ob_n_defaults", n = defaults)))),
+            .child(div().flex_1().min_w_0().flex().flex_col().gap(z(12.)).child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.ob_prompts_title"))).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.ob_prompts_desc"))).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("gs2.ob_n_prompts", n = prompts.len()))))
+            .child(div().flex_1().min_w_0().flex().flex_col().gap(z(12.)).child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.ob_defaults_title"))).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.ob_defaults_desc"))).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("gs2.ob_n_defaults", n = defaults)))),
     )
     .into_any_element()
 }
