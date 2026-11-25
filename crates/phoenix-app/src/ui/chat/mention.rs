@@ -14,6 +14,45 @@ use crate::{
 thread_local! {
     static HOVER: Cell<Option<(u64, usize, u64, usize)>> = const { Cell::new(None) };
     static HOVER_LINK: std::cell::RefCell<Option<(u64, usize, u64, gpui::SharedString)>> = const { std::cell::RefCell::new(None) };
+    static HOVER_PILL: Cell<Option<(u64, usize, usize, u64)>> = const { Cell::new(None) };
+}
+
+pub fn hovered_pill(msg: Id, bi: usize) -> Option<usize> {
+    HOVER_PILL.with(Cell::get).filter(|(m, b, _, _)| *m == msg.0 && *b == bi).map(|(_, _, s, _)| s)
+}
+
+pub fn hover_pill(msg: Id, bi: usize, start: usize, part: u64, hovered: bool, window: &mut Window) {
+    let cur = HOVER_PILL.with(Cell::get);
+    let new = if hovered {
+        Some((msg.0, bi, start, part))
+    } else if cur == Some((msg.0, bi, start, part)) {
+        None
+    } else {
+        cur
+    };
+    if new != cur {
+        HOVER_PILL.with(|h| h.set(new));
+        window.refresh();
+    }
+}
+
+pub fn pill_runs(runs: &[TextRun], r: &Range<usize>, role: bool) -> Vec<TextRun> {
+    let mut out = runs.to_vec();
+    let mut at = 0;
+    for run in &mut out {
+        let span = at..at + run.len;
+        if span.start < r.end && r.start < span.end {
+            match run.background_color {
+                Some(bg) if role && is_role_tint(bg, run.color) => run.background_color = Some(gpui::Hsla { a: 0.3, ..bg }),
+                _ => {
+                    run.background_color = Some(c(tok(idx::BRAND_500)));
+                    run.color = c(tok(idx::WHITE));
+                }
+            }
+        }
+        at = span.end;
+    }
+    out
 }
 
 pub fn hovered_link(msg: Id, bi: usize, seed: u64) -> Option<gpui::SharedString> {
@@ -62,22 +101,7 @@ pub fn hovered_runs(
     }
     let r = ranges.get(k)?.clone();
     let role = matches!(targets.get(k), Some(ClickTarget::Mention(Mention::Role(_))));
-    let mut out = runs.to_vec();
-    let mut at = 0;
-    for run in &mut out {
-        let span = at..at + run.len;
-        if span.start < r.end && r.start < span.end {
-            match run.background_color {
-                Some(bg) if role && is_role_tint(bg, run.color) => run.background_color = Some(gpui::Hsla { a: 0.3, ..bg }),
-                _ => {
-                    run.background_color = Some(c(tok(idx::BRAND_500)));
-                    run.color = c(tok(idx::WHITE));
-                }
-            }
-        }
-        at = span.end;
-    }
-    Some(out)
+    Some(pill_runs(runs, &r, role))
 }
 
 fn is_role_tint(bg: gpui::Hsla, fg: gpui::Hsla) -> bool {

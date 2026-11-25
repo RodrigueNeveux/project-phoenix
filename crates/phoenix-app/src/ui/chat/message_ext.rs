@@ -409,8 +409,15 @@ pub fn unread_end_cap() -> gpui::Div {
 }
 
 pub fn open_author(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static {
+    open_user(entity, msg.author, msg.channel)
+}
+
+pub fn open_user(
+    entity: &Entity<PhoenixApp>,
+    user: crate::model::Id,
+    ch: crate::model::Id,
+) -> impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static {
     let e = entity.clone();
-    let (user, ch) = (msg.author, msg.channel);
     move |ev, w, cx| {
         let pos = ev.position();
         e.update(cx, |a, cx| {
@@ -536,12 +543,41 @@ pub fn rich_with_emoji_scaled(
     let mut last = 0;
     let mut seg = 0usize;
     let code = code_ranges(t);
+    let mentions = t.mentions();
+    let hovered = super::mention::hovered_pill(msg, bi).and_then(|s| mentions.iter().find(|(r, _)| r.start == s));
+    let mut runs = match hovered {
+        Some((r, m)) => super::mention::pill_runs(&t.runs, r, matches!(m, crate::markdown::Mention::Role(_))),
+        None => t.runs.clone(),
+    };
+    let pill_bg: Vec<Option<gpui::Hsla>> = mentions.iter().map(|(r, _)| run_bg_at(&runs, r.start)).collect();
+    clear_bg(&mut runs, mentions.iter().map(|(r, _)| r.clone()));
+    let runs = &runs;
+    let pill = |child: AnyElement, range: &std::ops::Range<usize>, part: u64| -> AnyElement {
+        let Some(i) = mentions.iter().position(|(r, _)| r.start <= range.start && range.end <= r.end) else {
+            return child;
+        };
+        let (r, m) = mentions[i].clone();
+        let (first, last) = (range.start == r.start, range.end == r.end);
+        let e = entity.clone();
+        let start = r.start;
+        div()
+            .id(("pill", msg.0.wrapping_mul(31).wrapping_add(((bi as u64) << 32) | part)))
+            .flex_none()
+            .h(z(22. * k))
+            .flex()
+            .items_center()
+            .cursor_pointer()
+            .on_hover(move |h, w, _| super::mention::hover_pill(msg, bi, start, part, *h, w))
+            .on_click(move |_, w, cx| super::mention::click(&e, &m, w, cx))
+            .child(mention_box(child, pill_bg[i], first, last, k))
+            .into_any_element()
+    };
     let push_text = |row: Div, range: std::ops::Range<usize>, seg: &mut usize, code: Option<(bool, bool)>| -> Div {
         if range.is_empty() {
             return row;
         }
         let text: SharedString = t.text[range.clone()].to_owned().into();
-        let mut seg_runs = slice_runs(&t.runs, range.clone());
+        let mut seg_runs = slice_runs(runs, range.clone());
         if code.is_some() {
             let bg = Some(c(crate::theme::tok(idx::BACKGROUND_CODE)));
             for r in seg_runs.iter_mut().filter(|r| r.background_color == bg) {
@@ -551,25 +587,30 @@ pub fn rich_with_emoji_scaled(
         let mut ranges = Vec::new();
         let mut targets = Vec::new();
         for (cr, tg) in t.click_ranges.iter().zip(t.click_targets.iter()) {
+            if matches!(tg, crate::richtext::ClickTarget::Mention(_)) {
+                continue;
+            }
             if cr.start < range.end && cr.end > range.start {
                 ranges.push(cr.start.max(range.start) - range.start..cr.end.min(range.end) - range.start);
                 targets.push(tg.clone());
             }
         }
         *seg += 1;
+        let part = *seg as u64;
         let cell = |child: AnyElement| match code {
             None => div().flex_none().max_w_full().child(child),
             Some((open, close)) => code_box(open, close, k, child),
         };
         if ranges.is_empty() {
-            return row.child(cell(gpui::StyledText::new(text).with_runs(seg_runs).into_any_element()));
+            let el = cell(gpui::StyledText::new(text).with_runs(seg_runs).into_any_element()).into_any_element();
+            return row.child(pill(el, &range, part));
         }
         let sd = *seg as u64;
         let seg_runs = super::mention::hovered_runs(msg, bi, sd, &ranges, &targets, &seg_runs).unwrap_or(seg_runs);
         let styled = gpui::StyledText::new(text).with_runs(seg_runs);
         let e = entity.clone();
         let (hr, ht) = (ranges.clone(), targets.clone());
-        row.child(cell(
+        let el = cell(
             gpui::InteractiveText::new(("rte", msg.0.wrapping_mul(31).wrapping_add(((bi as u64) << 32) | *seg as u64)), styled)
                 .on_hover(move |ix, _ev, w, _cx| super::mention::on_hover(msg, bi, sd, &hr, &ht, ix, w))
                 .on_click(
@@ -584,8 +625,11 @@ pub fn rich_with_emoji_scaled(
                 },
             )
             .into_any_element(),
-        ))
+        )
+        .into_any_element();
+        row.child(pill(el, &range, part))
     };
+    let bounds: Vec<usize> = mentions.iter().flat_map(|(r, _)| [r.start, r.end]).collect();
     let push_lines = |mut row: Div, range: std::ops::Range<usize>, seg: &mut usize| -> Div {
         let mut start = range.start;
         for (i, piece) in t.text[range.clone()].split('\n').enumerate() {
@@ -597,7 +641,7 @@ pub fn rich_with_emoji_scaled(
                 row = row.child(div().w_full().h(z(22. * k)));
             }
             for (piece, in_code) in split_code(&code, r.clone()) {
-                let ws = words(&t.text, piece.clone());
+                let ws: Vec<_> = split_at(&bounds, piece.clone()).into_iter().flat_map(|p| words(&t.text, p)).collect();
                 let n = ws.len();
                 for (wi, w) in ws.into_iter().enumerate() {
                     let edge = in_code.then(|| {
@@ -619,20 +663,15 @@ pub fn rich_with_emoji_scaled(
         }
         row = push_lines(row, last..r.start, &mut seg);
         if token.as_ref() == crate::richtext::CHANNEL_ICON_TOKEN {
-            let end = t.click_ranges.iter().find(|c| c.start == r.start).map_or(r.end, |c| c.end);
-            let pill = div().flex().flex_none().items_center().child(
-                div()
-                    .h(z(22.))
-                    .flex()
-                    .items_center()
-                    .pl(z(2.))
-                    .pr(z(4.))
-                    .rounded_l(z(3.))
-                    .bg(crate::theme::ca(crate::theme::Palette::MENTION_BG))
-                    .child(crate::ui::icon(crate::assets::Icon::Hash, 16., crate::theme::c(crate::theme::Palette::MENTION_FG))),
-            );
-            row = row.child(push_text(pill, r.end..end, &mut seg, None));
-            last = end;
+            let icon = div()
+                .h(z(22. * k))
+                .flex()
+                .items_center()
+                .pr(z(4.))
+                .child(crate::ui::icon(crate::assets::Icon::Hash, 16. * k, runs_fg_at(runs, r.end)));
+            seg += 1;
+            row = row.child(pill(icon.into_any_element(), r, seg as u64));
+            last = r.end;
             continue;
         }
         row = row.child(div().mx(z(1.)).when(jumbo, |d| d.py(z(4.))).child(crate::media::emoji::emoji_element(token, size)));
@@ -640,4 +679,64 @@ pub fn rich_with_emoji_scaled(
     }
     row = push_lines(row, last..t.text.len(), &mut seg);
     row.into_any_element()
+}
+
+pub(crate) fn mention_box(child: AnyElement, bg: Option<gpui::Hsla>, first: bool, last: bool, k: f32) -> Div {
+    div()
+        .h(z(MENTION_BOX_EM * 16. * k))
+        .flex()
+        .items_center()
+        .when_some(bg, |d, b| d.bg(b))
+        .when(first, |d| d.rounded_l(z(3.)).pl(z(2.)))
+        .when(last, |d| d.rounded_r(z(3.)).pr(z(2.)))
+        .child(child)
+}
+
+const MENTION_BOX_EM: f32 = 1.3;
+
+fn run_bg_at(runs: &[gpui::TextRun], ix: usize) -> Option<gpui::Hsla> {
+    let mut at = 0;
+    runs.iter().find(|r| {
+        at += r.len;
+        at > ix
+    })?
+    .background_color
+}
+
+fn runs_fg_at(runs: &[gpui::TextRun], ix: usize) -> gpui::Hsla {
+    let mut at = 0;
+    runs.iter()
+        .find(|r| {
+            at += r.len;
+            at > ix
+        })
+        .map_or(c(Palette::MENTION_FG), |r| r.color)
+}
+
+fn clear_bg(runs: &mut [gpui::TextRun], ranges: impl Iterator<Item = std::ops::Range<usize>>) {
+    let ranges: Vec<_> = ranges.collect();
+    let mut at = 0;
+    for r in runs {
+        let span = at..at + r.len;
+        at = span.end;
+        if ranges.iter().any(|m| m.start <= span.start && span.end <= m.end) {
+            r.background_color = None;
+        }
+    }
+}
+
+pub(crate) fn split_at(bounds: &[usize], range: std::ops::Range<usize>) -> Vec<std::ops::Range<usize>> {
+    let mut cuts: Vec<usize> = bounds.iter().copied().filter(|&b| range.start < b && b < range.end).collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    let mut out = Vec::with_capacity(cuts.len() + 1);
+    let mut at = range.start;
+    for c in cuts {
+        out.push(at..c);
+        at = c;
+    }
+    if at < range.end {
+        out.push(at..range.end);
+    }
+    out
 }

@@ -61,8 +61,12 @@ impl PhoenixApp {
     }
 
     pub fn open_profile_modal(&mut self, user: Id, cx: &mut Context<Self>) {
+        self.open_profile_modal_at(user, TAB_BOARD, cx);
+    }
+
+    pub fn open_profile_modal_at(&mut self, user: Id, tab: u8, cx: &mut Context<Self>) {
         self.people.popout = None;
-        set_modal_tab(TAB_BOARD);
+        set_modal_tab(tab);
         self.people.modal = Some(user);
         cx.notify();
     }
@@ -476,7 +480,7 @@ fn bio_block(bio: SharedString, clamp: bool) -> Div {
         })
 }
 
-pub(crate) fn mutuals_row(p: &Profile) -> Option<Div> {
+pub(crate) fn mutuals_row(p: &Profile, uid: Id, e: &gpui::Entity<PhoenixApp>) -> Option<Div> {
     let friends = p.mutual_friends_count;
     let servers = p.mutual_guilds;
     if friends == 0 && servers == 0 {
@@ -487,7 +491,18 @@ pub(crate) fn mutuals_row(p: &Profile) -> Option<Div> {
     let text = move |t: SharedString| {
         div().text_size(z(fs)).line_height(z(lh)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).child(t)
     };
-    let section = || div().flex().items_center().gap(z(4.)).py(z(4.));
+    let section = |tab: u8| {
+        let e = e.clone();
+        div()
+            .id(("profile-mutuals", uid.0.wrapping_mul(8).wrapping_add(tab as u64)))
+            .flex()
+            .items_center()
+            .gap(z(4.))
+            .py(z(4.))
+            .cursor_pointer()
+            .hover(|s| s.underline())
+            .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_profile_modal_at(uid, tab, cx)))
+    };
     let stack = div().flex().children(p.mutual_friends.iter().take(3).enumerate().map(|(n, u)| {
         div().when(n < 2.min(p.mutual_friends.len().saturating_sub(1)), |d| d.mr(z(-3.))).child(crate::ui::avatar(Some(u), 16.))
     }));
@@ -499,10 +514,10 @@ pub(crate) fn mutuals_row(p: &Profile) -> Option<Div> {
             .gap_x(z(6.))
             .gap_y(z(2.))
             .when(friends > 0, |d| {
-                d.child(section().when(!p.mutual_friends.is_empty(), |s| s.child(stack)).child(text(crate::t!("profile.mutual_friends", n = friends))))
+                d.child(section(TAB_FRIENDS).when(!p.mutual_friends.is_empty(), |s| s.child(stack)).child(text(crate::t!("profile.mutual_friends", n = friends))))
             })
             .when(both, |d| d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
-            .when(servers > 0, |d| d.child(section().child(text(crate::t!("profile.mutual_servers", n = servers))))),
+            .when(servers > 0, |d| d.child(section(TAB_SERVERS).child(text(crate::t!("profile.mutual_servers", n = servers))))),
     )
 }
 
@@ -680,7 +695,7 @@ fn popout_card_inner(
         }
         Some(p) => {
             if uid != app.me.id {
-                body = body.children(mutuals_row(p));
+                body = body.children(mutuals_row(p, uid, &cx.entity()));
             }
             if !p.bio.is_empty() {
                 body = body.child(bio_block(p.bio.clone(), true));
@@ -795,6 +810,8 @@ fn popout_card_inner(
     }
 }
 
+pub const TAB_FRIENDS: u8 = 1;
+pub const TAB_SERVERS: u8 = 2;
 pub const TAB_BOARD: u8 = 3;
 pub const TAB_WISHLIST: u8 = 4;
 
@@ -1008,7 +1025,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         div()
             .id(("profile-modal-tab", n as u64))
             .relative()
-            .map(|d| if n == 2 { d.flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis() } else { d.flex_none() })
+            .map(|d| if n == TAB_SERVERS { d.flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis() } else { d.flex_none() })
             .whitespace_nowrap()
             .when(n != first, |d| d.ml(z(16.)))
             .pb(z(16.))
@@ -1074,7 +1091,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                     })));
             }
         }
-        1 => {
+        TAB_FRIENDS => {
             panel = panel.gap(z(12.));
             let friends = i.prof.map(|p| p.mutual_friends.as_slice()).unwrap_or_default();
             if friends.is_empty() {
@@ -1095,7 +1112,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 );
             }
         }
-        2 => {
+        TAB_SERVERS => {
             panel = panel.gap(z(12.));
             let ids = i.prof.map(|p| p.mutual_guild_ids.as_slice()).unwrap_or_default();
             if ids.is_empty() {
@@ -1143,8 +1160,8 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .children(has_board.then(|| tab(TAB_BOARD, crate::t!("pe.tab.board"))))
                 .child(tab(0, crate::t!("profile.activity")))
                 .child(tab(TAB_WISHLIST, crate::t!("pe.tab.wishlist")))
-                .child(tab(1, crate::t!("profile.mutual_friends", n = mutual_f)))
-                .child(tab(2, crate::t!("profile.mutual_servers", n = mutual_s))),
+                .child(tab(TAB_FRIENDS, crate::t!("profile.mutual_friends", n = mutual_f)))
+                .child(tab(TAB_SERVERS, crate::t!("profile.mutual_servers", n = mutual_s))),
         )
         .child({
             let h = PANEL_SCROLL.with(|h| h.clone());

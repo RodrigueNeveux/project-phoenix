@@ -89,7 +89,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
                 .gap(z(8.))
                 .child(name_block(&i, false, Some(crate::ui::profile_note::note_button(uid, cx))))
                 .children(crate::ui::profile_note::note_section(i.prof.map(|p| p.note.clone()), uid, cx))
-                .children(i.prof.and_then(mutuals_row)),
+                .children(i.prof.and_then(|p| mutuals_row(p, uid, &cx.entity()))),
         );
     if let Some(b) = bio {
         let e2 = e.clone();

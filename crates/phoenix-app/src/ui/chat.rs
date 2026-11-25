@@ -1080,6 +1080,10 @@ pub(crate) fn message(
                     ru.as_deref(),
                     false,
                 )
+                .id(("reply-author", msg.id.0))
+                .when_some(ru.as_deref().map(|u| u.id), |d, uid| {
+                    d.cursor_pointer().hover(|s| s.underline()).on_click(message_ext::open_user(entity, uid, msg.channel))
+                })
                 .child({
                     let reply_text = SharedString::from(format!(
                         "{}{}",
@@ -1435,7 +1439,7 @@ fn with_edited(t: &RichText) -> (SharedString, Vec<gpui::TextRun>) {
 }
 
 fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: Option<i64>) -> AnyElement {
-    if !t.emoji.is_empty() || !message_ext::code_ranges(t).is_empty() {
+    if !t.emoji.is_empty() || t.has_mention() || !message_ext::code_ranges(t).is_empty() {
         let el = message_ext::rich_with_emoji(entity, msg, bi, t);
         if let Some(at) = edited {
             return div()

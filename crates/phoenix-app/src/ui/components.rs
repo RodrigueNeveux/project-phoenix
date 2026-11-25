@@ -134,7 +134,7 @@ fn markdown_lines(
                 })
                 .child(StyledText::new(text.text).with_runs(text.runs))
                 .into_any_element(),
-            RBlock::Text(t) if !t.emoji.is_empty() && ctx.is_some() => {
+            RBlock::Text(t) if (!t.emoji.is_empty() || t.has_mention()) && ctx.is_some() => {
                 let (e, msg) = ctx.unwrap();
                 crate::ui::chat::message_ext::rich_with_emoji_scaled(e, msg, 0, &t, k)
             }

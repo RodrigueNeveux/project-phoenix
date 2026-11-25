@@ -35,6 +35,7 @@ pub struct Layout {
     chars: Vec<(String, Pixels)>,
     ellipsis: Pixels,
     line_height: Pixels,
+    underline: Option<(Pixels, gpui::UnderlineStyle)>,
 }
 
 impl NameText {
@@ -42,6 +43,7 @@ impl NameText {
         let style = window.text_style();
         let mut run = style.to_run(s.len());
         run.color = color;
+        run.underline = None;
         let size = style.font_size.to_pixels(window.rem_size());
         window.text_system().shape_line(SharedString::from(s.to_owned()), size, &[run], None)
     }
@@ -84,6 +86,10 @@ impl Element for NameText {
         let per = per.into_iter().map(|(g, a)| if is_pictograph(&g) { (g, if a > em { em } else { a }) } else { (g, a) }).collect();
         let chars = merge_ligatures(per);
         let ellipsis = self.shape("\u{2026}", window, color).width;
+        let underline = window.text_style().underline.map(|u| {
+            let primary = self.shape(" ", window, color);
+            (gpui::underline_y_offset(line_height, primary.ascent, primary.descent), u)
+        });
         let natural = chars.iter().fold(px(0.), |w, (_, a)| w + *a + self.spacing);
         let mut style = Style::default();
         style.size.width = natural.into();
@@ -92,7 +98,7 @@ impl Element for NameText {
         style.max_size.width = relative(1.).into();
         style.flex_shrink = 1.;
         let id = window.request_layout(style, [], cx);
-        (id, Layout { chars, ellipsis, line_height })
+        (id, Layout { chars, ellipsis, line_height, underline })
     }
 
     fn prepaint(
@@ -138,6 +144,12 @@ impl Element for NameText {
         if !fits {
             let line = self.shape("\u{2026}", window, color_at(x + layout.ellipsis / 2.));
             let _ = line.paint(point(bounds.origin.x + x, bounds.origin.y), layout.line_height, TextAlign::Left, None, window, cx);
+            x += layout.ellipsis + self.spacing;
+        }
+        if let Some((y, mut u)) = layout.underline {
+            u.color = u.color.or_else(|| self.colors.first().copied()).or(Some(base));
+            let width = (x - self.spacing).max(px(0.));
+            window.paint_underline(point(bounds.origin.x, bounds.origin.y + y), width, &u);
         }
     }
 }

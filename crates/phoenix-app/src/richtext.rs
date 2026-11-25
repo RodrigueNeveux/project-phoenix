@@ -31,6 +31,23 @@ pub struct RichText {
     pub emoji: Vec<(Range<usize>, SharedString)>,
 }
 
+impl RichText {
+    pub fn mentions(&self) -> Vec<(Range<usize>, Mention)> {
+        self.click_ranges
+            .iter()
+            .zip(&self.click_targets)
+            .filter_map(|(r, t)| match t {
+                ClickTarget::Mention(m) => Some((r.clone(), m.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn has_mention(&self) -> bool {
+        self.click_targets.iter().any(|t| matches!(t, ClickTarget::Mention(_)))
+    }
+}
+
 #[derive(Clone)]
 pub enum RBlock {
     Text(RichText),
@@ -148,8 +165,10 @@ pub fn rich_inline(inline: &Inline, revealed: &dyn Fn(usize) -> bool, base: Hsla
     let in_code = |r: &Range<usize>| {
         inline.spans.iter().any(|s| s.style.has(Style::CODE) && s.range.start <= r.start && r.end <= s.range.end)
     };
+    let in_mention =
+        |r: &Range<usize>| inline.spans.iter().any(|s| s.mention.is_some() && s.range.start <= r.start && r.end <= s.range.end);
     let mut emoji: Vec<(Range<usize>, SharedString)> =
-        emoji_ranges(&inline.text).into_iter().filter(|(r, _)| !in_code(r)).collect();
+        emoji_ranges(&inline.text).into_iter().filter(|(r, _)| !in_code(r) && !in_mention(r)).collect();
     for s in &inline.spans {
         if matches!(s.mention, Some(Mention::Channel(_))) && inline.text[s.range.clone()].starts_with('#') {
             emoji.push((s.range.start..s.range.start + 1, CHANNEL_ICON_TOKEN.into()));
