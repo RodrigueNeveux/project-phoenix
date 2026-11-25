@@ -288,30 +288,24 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             ee.update(cx, |a, cx| a.report_message(ch, id, cx))
         }));
     }
-    let interaction_app = crate::commands::store::interaction_info(id)
-        .map(|i| i.app_id)
-        .or_else(|| crate::commands::store::get(id).map(|p| p.app))
-        .or_else(|| msg.and_then(|m| app.users.get(&m.author)).filter(|u| u.bot).map(|u| u.id));
-    if let Some(app_id) = interaction_app {
-        let app_name = msg
-            .and_then(|m| app.users.get(&m.author))
-            .map(|u| u.display_name.to_string())
-            .unwrap_or_else(|| app_id.0.to_string());
-        let ee = e.clone();
-        items.push(MenuItem::action(
-            crate::t!("msg.view_interaction_info"),
-            Some(crate::icons::path("info")),
-            move |_, _, cx| {
-                let text = crate::t!(
-                    "msg.interaction_info_body",
-                    app = app_name.clone(),
-                    app_id = app_id.0.to_string(),
-                    msg_id = id.0.to_string()
-                )
-                .to_string();
-                ee.update(cx, |a, cx| a.parity_toast(text, cx));
-            },
-        ));
+    if let Some(info) = crate::commands::store::interaction_info(id) {
+        let installed = crate::t!("msg.interaction_installed", app = info.app_name.clone());
+        let profile = |u: crate::model::Id| -> crate::ui::context_menu::Handler {
+            let ee = e.clone();
+            Rc::new(move |_, _, cx| ee.update(cx, |a, cx| a.open_profile_modal(u, cx)))
+        };
+        let mut sub = Vec::new();
+        if let Some(g) = info.guild_owner.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
+            let icon = crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 18.);
+            sub.push(MenuItem::leading(g.name.clone(), icon, Some(installed), None));
+        } else if let Some(u) = info.user_owner.and_then(|u| app.users.get(&u)) {
+            sub.push(MenuItem::leading(u.name.clone(), crate::ui::avatar(Some(u), 18.), Some(installed), Some(profile(u.id))));
+        }
+        if let Some(u) = info.user.as_ref() {
+            let known = app.users.get(&u.id).unwrap_or(u);
+            sub.push(MenuItem::leading(known.name.clone(), crate::ui::avatar(Some(known), 18.), Some(crate::t!("msg.interaction_triggered")), Some(profile(u.id))));
+        }
+        items.push(MenuItem::submenu_with_icon(crate::t!("msg.view_interaction_info"), "info", sub));
     }
     if app.prefs.synced.developer_mode {
     items.push(MenuItem::Separator);

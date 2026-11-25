@@ -423,6 +423,8 @@ pub struct InteractionMetadata {
     pub target_user: Option<User>,
     #[serde(default)]
     pub target_message_id: Option<MessageId>,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub authorizing_integration_owners: std::collections::HashMap<String, Snowflake>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

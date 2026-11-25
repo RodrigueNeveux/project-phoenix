@@ -119,9 +119,26 @@ pub struct Parts {
     pub poll: Option<PollView>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct InteractionInfo {
-    pub app_id: Id,
+    pub app_name: String,
+    pub guild_owner: Option<Id>,
+    pub user_owner: Option<Id>,
+    pub user: Option<crate::model::User>,
+}
+
+pub const GUILD_INSTALL: &str = "0";
+pub const USER_INSTALL: &str = "1";
+
+pub fn interaction_of(m: &api::Message) -> Option<InteractionInfo> {
+    let meta = m.interaction_metadata.as_ref()?;
+    let owner = |k: &str| meta.authorizing_integration_owners.get(k).filter(|s| s.0 != 0).map(|s| Id(s.0));
+    Some(InteractionInfo {
+        app_name: m.author.username.clone(),
+        guild_owner: owner(GUILD_INSTALL),
+        user_owner: owner(USER_INSTALL),
+        user: meta.user.as_ref().map(crate::discord_backend::convert::user),
+    })
 }
 
 fn interactions() -> &'static Mutex<HashMap<u64, InteractionInfo>> {
@@ -140,10 +157,8 @@ fn slot() -> &'static Mutex<HashMap<u64, Arc<Parts>>> {
 
 pub fn record(m: &api::Message) {
     let app = m.application_id.or(m.webhook_id).map(|s| s.0).unwrap_or(m.author.id.0);
-    if m.application_id.is_some()
-        || matches!(m.kind, api::MessageType::ChatInputCommand | api::MessageType::ContextMenuCommand)
-    {
-        interactions().lock().insert(m.id.0, InteractionInfo { app_id: Id(app) });
+    if let Some(info) = interaction_of(m) {
+        interactions().lock().insert(m.id.0, info);
     }
     let components = m.components.clone();
     let poll = m.poll.as_ref().and_then(PollView::from_value);
@@ -176,6 +191,20 @@ pub fn insert(msg: Id, parts: Parts) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn interaction_info_follows_the_client() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../phoenix-api/tests/fixtures/message_create.json");
+        let mut raw: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let plain: api::Message = serde_json::from_value(raw.clone()).unwrap();
+        assert!(interaction_of(&plain).is_none());
+        raw["interaction_metadata"] = json!({"id": "1", "type": 2, "user": {"id": "9", "username": "ann"}, "authorizing_integration_owners": {"0": "77", "1": "9"}});
+        let m: api::Message = serde_json::from_value(raw).unwrap();
+        let info = interaction_of(&m).unwrap();
+        assert_eq!((info.guild_owner, info.user_owner), (Some(Id(77)), Some(Id(9))));
+        assert_eq!(info.user.map(|u| u.id), Some(Id(9)));
+        assert_eq!(info.app_name, m.author.username);
+    }
 
     #[test]
     fn poll_counts_and_votes() {

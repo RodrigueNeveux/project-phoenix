@@ -18,6 +18,7 @@ pub enum MenuItem {
     Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString>, subtext: Option<SharedString> },
     Check { label: SharedString, checked: bool, radio: bool, subtext: Option<SharedString>, on_click: Handler },
     Disabled { label: SharedString, icon: Option<SharedString> },
+    Leading { label: SharedString, leading: AnyElement, subtext: Option<SharedString>, on_click: Option<Handler> },
 }
 
 thread_local! {
@@ -56,6 +57,7 @@ fn nav_of(items: &[MenuItem]) -> Vec<Nav> {
         .iter()
         .map(|i| match i {
             MenuItem::Action { on_click, .. } | MenuItem::Check { on_click, .. } => Nav::Act(on_click.clone()),
+            MenuItem::Leading { on_click: Some(h), .. } => Nav::Act(h.clone()),
             MenuItem::Submenu { items, .. } => Nav::Sub(
                 items
                     .iter()
@@ -63,6 +65,7 @@ fn nav_of(items: &[MenuItem]) -> Vec<Nav> {
                         MenuItem::Action { on_click, .. } | MenuItem::Check { on_click, .. } => {
                             Some(on_click.clone())
                         }
+                        MenuItem::Leading { on_click, .. } => on_click.clone(),
                         _ => None,
                     })
                     .collect(),
@@ -237,6 +240,15 @@ impl MenuItem {
         self
     }
 
+    pub fn leading(
+        label: impl Into<SharedString>,
+        leading: AnyElement,
+        subtext: Option<SharedString>,
+        on_click: Option<Handler>,
+    ) -> Self {
+        Self::Leading { label: label.into(), leading, subtext, on_click }
+    }
+
     pub fn submenu(label: impl Into<SharedString>, items: Vec<MenuItem>) -> Self {
         Self::Submenu { label: label.into(), items, icon: None, subtext: None }
     }
@@ -264,6 +276,7 @@ fn row_h(item: &MenuItem) -> f32 {
     match item {
         MenuItem::Separator => 17.,
         MenuItem::Disabled { icon, .. } => if icon.is_some() { 36. } else { 34. },
+        MenuItem::Leading { subtext, .. } => if subtext.is_some() { 52. } else { 36. },
         MenuItem::Custom(_) => 60.,
         MenuItem::Action { icon, subtext, .. } => {
             let text: f32 = 18. + if subtext.is_some() { 18. } else { 0. };
@@ -443,6 +456,44 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                 })
                 .child(label_box(label))
                 .into_any_element(),
+            MenuItem::Leading { label, leading, subtext, on_click } => {
+                let dismiss = dismiss.clone();
+                let enabled = on_click.is_some();
+                let body = div().flex_1().min_w_0().flex().flex_col().child(label_box(label)).when_some(subtext, |d, s| {
+                    d.child(
+                        div()
+                            .mt(z(2.))
+                            .text_size(z(12.))
+                            .line_height(z(16.))
+                            .font_weight(FontWeight::NORMAL)
+                            .text_color(c(tok(if lit && enabled { idx::TEXT_SUBTLE } else { idx::TEXT_MUTED })))
+                            .child(s),
+                    )
+                });
+                let el = if enabled { row(("menu-lead", ix), lit, false) } else { row(("menu-lead", ix), false, false).cursor_default().opacity(0.5) };
+                el.when(enabled, |d| {
+                    d.on_hover(move |h, w, _| {
+                        if *h {
+                            if depth == 0 {
+                                set_open_sub(None, w);
+                            }
+                            set_hl(depth, Some(ix), w);
+                        } else if hl == Some(ix) {
+                            set_hl(depth, None, w);
+                        }
+                    })
+                })
+                .when(!enabled, |d| d.hover(|s| s.bg(gpui::transparent_black())).active(|s| s.bg(gpui::transparent_black())))
+                .child(div().mr(z(8.)).size(z(20.)).flex_none().flex().items_center().justify_center().child(leading))
+                .child(body)
+                .when_some(on_click, |d, f| {
+                    d.on_click(move |ev, w, cx| {
+                        f(ev, w, cx);
+                        dismiss(w, cx);
+                    })
+                })
+                .into_any_element()
+            }
             MenuItem::Action { label, icon, subtext, danger, on_click } => {
                 let dismiss = dismiss.clone();
                 let icon_fg = if danger {
