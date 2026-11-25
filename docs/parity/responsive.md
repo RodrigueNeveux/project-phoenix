@@ -88,3 +88,27 @@ Zoom is not a CSS class: it is Chromium page zoom, so a zoom level is just anoth
 Offscreen check: `real_shots` now reads the density and font size from the client's `<html>` classes,
 or `PHX_DENSITY=compact|default|cozy` and `PHX_FONT=12..24`. `PHX_COMPACT=1` is compact message
 display only: it used to be turned on by `density-compact`.
+
+## Width thresholds from the client CSS and JS (2026-11-25)
+
+Sources: the client's cached CSS (every `@media` rule with a width or height query, 867 files) and
+JS bundles from the local cache. All values are CSS px (`innerWidth`, after zoom), so a 1700 px
+window at 150 % is 1133 CSS px.
+
+| Area | Client | Phoenix | State |
+|---|---|---|---|
+| DM profile panel | `9fbf85fbb6aa2c59.js` `l1()`: `useState(window.innerWidth>=1132)` + resize listener; below it the header button is `disabled` with tooltip `YneDgF` "Afficher le profil d'utilisateur (Indisponible)" | `title_bar::dm_profile_fits`, `dm_profile_panel::render`, disabled `states::header_button_disabled` in the DM header | ✅ |
+| Friends: Active Now column | `599618.*.css` `@media (max-width:1200px){.nowPlayingColumn_zrUwGA{display:none}}`; column `flex:0 1 30%; min-width:360px; max-width:420px` | `title_bar::active_now_shown`, `active_now_w` | ✅ |
+| Friends: invite toolbar (new group DM) | same file, `@media (max-width:940px){.inviteToolbar_zrUwGA{display:none}}` | `title_bar::friends_invite_shown` | ✅ |
+| Title bar title | `761444.*.css` `.title_LnjVAX{display:inline-flex;gap:var(--space-8);max-width:50vw}`; the 16 px guild icon stays, the text is clipped with an ellipsis | `title_bar::title_max_w` = 50 % of the CSS width; icon `flex_none`, text `min_w_0` + ellipsis | ✅ |
+| Member list | no width media query in the chat layout (the only `membersWrap_86es0b` query is `max-width:485px`, below the 940 px window minimum at 100 %) | always shown when toggled on | ✅ (the old `< 940 px` auto-hide was removed) |
+| Channel drawer | none in the client | removed (was `< 720 px`) | ✅ |
+| Window minimum | `core.asar`: 940 × 500 DIP, default 1280 × 720 | `lib.rs window_options` | ✅ |
+| Call PiP | empty for a voice-only call (live, CDP) | `pip::active` needs a camera or stream in the call | ✅ (the voice card covered the composer at every width) |
+| Message header | name, tags and time are inline in `.header_`, so the time wraps to the next line | header row `flex_wrap`, time 22 px tall | ✅ (the time was clipped at 752 CSS px) |
+
+Unit tests: `ui::title_bar::tests` cover each threshold on both sides and at the test widths
+(940, 1100, 1280, 1700 and 1920 px at 100, 125, 150 and 200 %).
+
+Not done: "Programmer un sondage" (`rlf0tb`) in the poll modal. Only the strings are in the cache;
+the modal chunk that uses them is lazy and absent, so its UI cannot be copied without guessing.
