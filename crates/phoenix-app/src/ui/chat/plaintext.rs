@@ -673,6 +673,16 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         Some(n) => format!("... {n}"),
         None => String::new(),
     };
+    let card_w = {
+        let ts = cx.text_system();
+        let id = ts.resolve_font(&gpui::font(crate::theme::FONT_MONO()));
+        let widest = format!("{shown}{suffix}")
+            .lines()
+            .map(|l| l.chars().map(|ch| ts.advance(id, gpui::px(14.), ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum::<f32>())
+            .fold(0., f32::max);
+        let half = crate::ui::title_bar::viewport_w_css() * 0.5;
+        (widest + 18.).min(half).max(302.)
+    };
     let code = if as_md {
         markdown_view("plaintext-md", &shown, Some(suffix.trim()))
     } else {
@@ -797,7 +807,7 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         crate::ui::context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
     });
     let picker = lang_popout(&url, &lang, true, cx);
-    Some(div().mt(z(4.)).min_w(z(302.)).max_w(z(560.)).w_full().flex().flex_col().child(text_box).child(footer).children(menu).children(picker).into_any_element())
+    Some(div().mt(z(4.)).w(z(card_w)).max_w_full().flex().flex_col().child(text_box).child(footer).children(menu).children(picker).into_any_element())
 }
 
 pub fn render_full(url: &SharedString, filename: &SharedString, size: u64, viewport: Option<gpui::Size<gpui::Pixels>>, cx: &mut gpui::Context<crate::app::PhoenixApp>) -> AnyElement {
