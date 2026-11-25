@@ -25,14 +25,15 @@ pub fn install(s: Sprite) {
 
 pub fn css_urls(css: &str) -> Option<(String, String)> {
     let url_after = |marker: &str, prop: &str| -> Option<String> {
-        let at = css.find(marker)?;
-        let rule_end = at + css[at..].find('}')?;
-        let rule = &css[at..rule_end];
-        let p = rule.find(prop)? + prop.len();
-        let rest = &rule[p..];
-        let name = rest.strip_prefix("url(\"/assets/").or_else(|| rest.strip_prefix("url(/assets/"))?;
-        let end = name.find(['"', ')'])?;
-        Some(name[..end].to_owned())
+        css.match_indices(marker).find_map(|(at, _)| {
+            let rule_end = at + css[at..].find('}')?;
+            let rule = &css[at..rule_end];
+            let p = rule.find(prop)? + prop.len();
+            let rest = &rule[p..];
+            let name = rest.strip_prefix("url(\"/assets/").or_else(|| rest.strip_prefix("url(/assets/"))?;
+            let end = name.find(['"', ')'])?;
+            Some(name[..end].to_owned())
+        })
     };
     Some((url_after(".spriteColored_", "background-image:")?, url_after(".spriteGreyscale_", "mask-image:")?))
 }
