@@ -328,6 +328,7 @@ fn select(
                     div()
                         .flex_1()
                         .min_w_0()
+                        .mr(z(14.3))
                         .overflow_hidden()
                         .whitespace_nowrap()
                         .text_size(z(16.))

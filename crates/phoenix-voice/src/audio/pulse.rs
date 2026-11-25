@@ -34,8 +34,46 @@ pub fn parse_devices(v: &Value) -> Vec<PulseDevice> {
         .unwrap_or_default()
 }
 
+pub fn parse_text_descriptions(text: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut name: Option<String> = None;
+    for line in text.lines() {
+        let line = line.trim_start();
+        if let Some(n) = line.strip_prefix("Name: ") {
+            name = Some(n.trim().to_owned());
+        } else if let Some(d) = line.strip_prefix("Description: ")
+            && let Some(n) = name.take()
+        {
+            out.push((n, d.trim().to_owned()));
+        }
+    }
+    out
+}
+
+fn text_descriptions(kind: &str) -> Vec<(String, String)> {
+    Command::new("pactl")
+        .env("LC_ALL", "C")
+        .args(["list", kind])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| parse_text_descriptions(&String::from_utf8_lossy(&o.stdout)))
+        .unwrap_or_default()
+}
+
 pub fn devices(input: bool) -> Option<Vec<PulseDevice>> {
-    let mut v = parse_devices(&pactl_json(&["list", if input { "sources" } else { "sinks" }])?);
+    let kind = if input { "sources" } else { "sinks" };
+    let mut v = parse_devices(&pactl_json(&["list", kind])?);
+    if v.iter().any(|d| d.description == "(null)" || d.description == d.name) {
+        let text = text_descriptions(kind);
+        for d in &mut v {
+            if (d.description == "(null)" || d.description == d.name)
+                && let Some((_, desc)) = text.iter().find(|(n, _)| *n == d.name)
+            {
+                d.description = desc.clone();
+            }
+        }
+    }
     let def = Command::new("pactl")
         .arg(if input { "get-default-source" } else { "get-default-sink" })
         .output()
@@ -86,6 +124,18 @@ pub fn route_own_streams(input: bool, node: String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_descriptions_keep_utf8() {
+        let t = "Sink #64\n\tState: RUNNING\n\tName: alsa_output.usb\n\tDescription: Logitech G PRO X Gaming Headset St\u{e9}r\u{e9}o analogique\nSink #67\n\tName: alsa_output.pci\n\tDescription: Audio interne\n";
+        assert_eq!(
+            parse_text_descriptions(t),
+            vec![
+                ("alsa_output.usb".to_owned(), "Logitech G PRO X Gaming Headset St\u{e9}r\u{e9}o analogique".to_owned()),
+                ("alsa_output.pci".to_owned(), "Audio interne".to_owned()),
+            ]
+        );
+    }
 
     #[test]
     fn skips_monitors() {

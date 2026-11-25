@@ -232,6 +232,10 @@ emoji / gif / sticker rows of the after table reuse the client captures of the b
 | Voice row avatars sharper | voice user avatars are loaded with `?size=32` for a 24 px avatar | `ui::avatar_cdn` + `media::with_cdn_size`, used by `voice_panel.rs` |
 | GIF "Favoris" tile shows another favorite | `favoritesTile: src = _.sample(_.values(favorites)).src` (random favorite, picked when the GIF picker mounts) | `pickers/gif.rs`: random favorite per picker opening; `real_shots` can pin the client's pick with `PHX_GIF_FAV` (URL substring) |
 | Threads search field 248 px | `container_VhFsFg` flex 1 1 auto (content basis 205.2) and `spacer_c0tu5x` flex 1 share the free space: 276.5 px at 1536 (popout 537.6), 247.7 px at 1280 (popout 480) | `inbox.rs`: `flex_grow` + `flex_basis(205.2)` next to the existing `flex_1` spacer |
+| Device names with accents showed "(null)" | `pactl -f json` cannot encode non-ASCII descriptions ("Stéréo") and prints `(null)` | `phoenix-voice` `pulse::devices` fills those from `LC_ALL=C pactl list sinks/sources` (UTF-8 text) |
+| Device label runs into the chevron | `deviceLabel_bUNrgk` ends 14.3 px before the 20 px chevron (label 284.7 of a 340 select, padding 8 8 8 12) | label `mr(14.3)` |
+
+Check pass after the merge (`compare/details2`, driver `sweep/{sweep3.mjs,run3.py}`, views prefixed `phx-` run in #phoenix): popout mismatch "+" 12.0 → 9.9 % at 1536 and 15.0 → 11.2 % at 1280 (menu bottom now 1 px from the client), GIF 10.2 → 6.0 % at 1280 with the client's favorite pinned (`PHX_GIF_FAV`). Remaining: the threads popout is ~2 px right and 3–4 px high (already in the sweep 2 capture), and the sidebar scroll of the `set-*` captures is the driver's `scrollIntoView({block:'center'})`, not the client's own nearest scroll. A real_shots panic on every settings page (two `hover` styles on the footer More link, eade0fe7) was fixed on the way (f251b4c5).
 
 Closed by wt/invites (2026-11-25): invite cards (profile card v2, invalid, legacy, group DM,
 friend) in chat, pins, inbox and search; the top server emoji row with its trophy and POPULAIRES
