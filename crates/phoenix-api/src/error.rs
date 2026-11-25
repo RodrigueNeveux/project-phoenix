@@ -36,9 +36,15 @@ pub enum Error {
     Protocol(String),
     #[error("gateway task stopped")]
     Closed,
+    #[error("write blocked: {method} {path}")]
+    WriteBlocked { method: String, path: String },
 }
 
 impl Error {
+    pub fn is_write_blocked(&self) -> bool {
+        matches!(self, Error::WriteBlocked { .. })
+    }
+
     pub fn is_unauthorized(&self) -> bool {
         matches!(self, Error::Api { status: 401, .. })
     }
