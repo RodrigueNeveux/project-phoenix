@@ -343,6 +343,17 @@ fn area_box(a: &Entity<TextareaState>, rows: usize) -> gpui::Div {
         .child(Textarea::new(a).appearance(false).bordered(false))
 }
 
+pub fn field_label(t: SharedString, required: bool) -> gpui::Div {
+    div()
+        .flex()
+        .gap(z(4.))
+        .mb(z(8.))
+        .text_size(z(16.))
+        .line_height(z(20.))
+        .child(div().font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(t))
+        .when(required, |d| d.child(div().text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL))).child("*")))
+}
+
 pub fn label(t: SharedString) -> gpui::Div {
     div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).mb(z(8.)).child(t)
 }

@@ -12,7 +12,7 @@ use crate::{
     ui::{
         context_menu::MenuItem,
         controls::{BtnKind, button},
-        modals::{Modal, card, close_action, label},
+        modals::{Modal, card, close_action, field_label},
     },
 };
 
@@ -191,9 +191,28 @@ pub fn with_day(at: i64, day: NaiveDate) -> i64 {
     Local.from_local_datetime(&day.and_time(t)).earliest().map(|d| d.timestamp()).unwrap_or(at)
 }
 
+fn date_field(value: SharedString) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id("sched-date")
+        .h(z(40.))
+        .px(z(12.))
+        .py(z(8.))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .hover(|s| s.border_color(c(tok(idx::INPUT_BORDER_HOVER))))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .child(div().flex_1().min_w_0().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(value))
+        .child(gpui::svg().path(crate::icons::path("calendar")).size(z(20.)).flex_none().text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
+}
+
 fn field(id: &'static str, value: SharedString, open: bool, which: u8, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
-    crate::ui::controls::select_field(id, value)
-        .when(open, |d| d.border_color(c(tok(idx::INPUT_BORDER_ACTIVE))))
+    let base = if which == 0 { date_field(value) } else { crate::ui::controls::select_field(id, value) };
+    base.when(open, |d| d.border_color(c(tok(idx::INPUT_BORDER_ACTIVE))))
         .on_click(cx.listener(move |_, _, _, cx| {
             with_modal(|m| {
                 if let Some(Modal::Schedule(p)) = m {
@@ -255,7 +274,7 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let err = problem(p.at, now);
     let date_opts = days(now)
         .into_iter()
-        .map(|d| (SharedString::from(crate::i18n::long_date(d)), with_day(p.at, d), d == cur.date_naive()))
+        .map(|d| (SharedString::from(crate::i18n::medium_date(d)), with_day(p.at, d), d == cur.date_naive()))
         .collect();
     let time_opts = slots(cur.date_naive())
         .into_iter()
@@ -267,15 +286,15 @@ pub fn render(p: &Picker, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .relative()
         .flex()
         .flex_col()
-        .child(label(crate::t!("sched.date")))
-        .child(field("sched-date", crate::i18n::long_date(cur.date_naive()).into(), p.open == Some(0), 0, cx))
+        .child(field_label(crate::t!("sched.date"), true))
+        .child(field("sched-date", crate::i18n::medium_date(cur.date_naive()).into(), p.open == Some(0), 0, cx))
         .when(p.open == Some(0), |d| d.child(div().relative().child(list(date_opts, cx))));
     let time = div()
         .flex_1()
         .relative()
         .flex()
         .flex_col()
-        .child(label(crate::t!("sched.time")))
+        .child(field_label(crate::t!("sched.time"), true))
         .child(field("sched-time", crate::i18n::clock(cur).into(), p.open == Some(1), 1, cx))
         .when_some(err, |d, k| {
             d.child(div().mt(z(8.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL))).child(crate::t!(k)))

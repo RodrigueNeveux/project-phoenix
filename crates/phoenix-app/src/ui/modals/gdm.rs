@@ -3,7 +3,7 @@ use std::sync::Arc;
 use gpui::{AnyElement, Context, Entity, FontWeight, Image, IntoElement, ParentElement, SharedString, Styled, div, img, prelude::*};
 use gpui_component::input::InputState;
 
-use super::{Modal, card, close_action, input_box, label};
+use super::{Modal, card, close_action, field_label, input_box};
 use crate::{
     actions::{ActionReply, ActionRequest, open_modal, with_modal},
     app::PhoenixApp,
@@ -562,9 +562,10 @@ fn swatch(id: (&'static str, usize), color: u32, size: (f32, f32), selected: boo
 
 pub fn render_folder(f: &Folder, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let current = f.color.unwrap_or(FOLDER_DEFAULT);
-    let custom = !FOLDER_COLORS.contains(&current) && current != FOLDER_DEFAULT;
+    let custom = current != FOLDER_DEFAULT;
+    let off_palette = custom && !FOLDER_COLORS.contains(&current);
     let big = |n: usize, color: u32, sel: bool, cx: &mut Context<PhoenixApp>| {
-        div().flex_1().mt(z(10.)).mr(z(10.)).min_w(z(60.)).max_w(z(70.)).child(swatch(("folder-big", n), color, (70., 50.), sel, cx).w_full())
+        div().relative().flex_1().mt(z(10.)).mr(z(10.)).min_w(z(60.)).max_w(z(70.)).child(swatch(("folder-big", n), color, (70., 50.), sel, cx).w_full())
     };
     let mut rows = div().flex_1().flex().flex_col();
     for (r, chunk) in FOLDER_COLORS.chunks(10).enumerate() {
@@ -581,7 +582,14 @@ pub fn render_folder(f: &Folder, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .mr(z(-10.))
         .child(big(0, FOLDER_DEFAULT, current == FOLDER_DEFAULT, cx))
         .child(if custom {
-            big(1, current, true, cx)
+            big(1, current, off_palette, cx).child(
+                div().absolute().top(z(4.)).right(z(4.)).child(
+                    gpui::svg()
+                        .path(crate::icons::path("pen"))
+                        .size(z(14.))
+                        .text_color(if luminance(current) > 0.5 { gpui::black() } else { gpui::white() }),
+                ),
+            )
         } else {
             div().flex_1().mt(z(10.)).mr(z(10.)).min_w(z(60.)).max_w(z(70.)).child(
                 div().w_full().h(z(50.)).rounded(z(8.)).border_1().border_color(c(tok(idx::OPACITY_WHITE_8))),
@@ -592,8 +600,8 @@ pub fn render_folder(f: &Folder, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .flex()
         .flex_col()
         .gap(z(16.))
-        .child(div().flex().flex_col().child(label(crate::t!("folder.name"))).children(f.name.as_ref().map(input_box)))
-        .child(div().flex().flex_col().child(label(crate::t!("folder.color"))).child(picker));
+        .child(div().flex().flex_col().child(field_label(crate::t!("folder.name"), false)).children(f.name.as_ref().map(input_box)))
+        .child(div().flex().flex_col().pb(z(2.)).child(field_label(crate::t!("folder.color"), false)).child(picker));
     let footer = button("folder-done", crate::t!("common.done"), BtnKind::Primary).flex_1().on_click(cx.listener(|a, _, _, cx| a.save_folder_settings(cx)));
     card(480., crate::t!("menu.folder_settings"), None, body.into_any_element(), Some(footer.into_any_element()), cx)
 }
