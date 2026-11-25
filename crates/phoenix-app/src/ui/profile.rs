@@ -445,9 +445,89 @@ fn guild_tag_pill(t: SharedString, badge: Option<SharedString>) -> impl IntoElem
         .child(t)
 }
 
+const ROLE_ROW_W: f32 = 268.;
+
+fn role_text_w(cx: &gpui::App, s: &str) -> f32 {
+    let ts = cx.text_system();
+    let id = ts.resolve_font(&gpui::font(crate::theme::FONT_UI()));
+    s.chars().map(|ch| ts.advance(id, px(12.), ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum()
+}
+
+fn roles_fit(widths: &[f32], second_row: f32) -> usize {
+    let mut shown = 0;
+    for row in 0..2 {
+        let cap = if row == 1 { second_row } else { ROLE_ROW_W };
+        let mut used = 0.;
+        while shown < widths.len() {
+            let w = widths[shown].min(cap);
+            if used + w > cap {
+                break;
+            }
+            used += w + 4.;
+            shown += 1;
+        }
+    }
+    shown
+}
+
 fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::model::Role>, cx: &mut Context<PhoenixApp>) -> Div {
     let entity = cx.entity();
-    div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().map(|r| {
+    let removable: Vec<bool> = roles.iter().map(|r| guild.is_some_and(|g| role_removable(app, g, uid, r))).collect();
+    let widths: Vec<f32> = roles
+        .iter()
+        .zip(&removable)
+        .map(|(r, rm)| 2. + 2. + 12. + 8. + role_text_w(cx, &r.name) + (if r.icon.is_some() { 16. } else { 0. }) + (if *rm { 23. } else { 8. }))
+        .collect();
+    let expanded = ROLES_EXPANDED.with(|e| e.borrow().contains(&uid));
+    let total = roles.len();
+    let expand_w = 2. + 6. + 8. + role_text_w(cx, &format!("+{total}")) + 4.;
+    let shown = if expanded { total } else { roles_fit(&widths, ROLE_ROW_W - expand_w) };
+    let toggle = (shown < total || expanded).then(|| {
+        let label = if expanded { crate::t!("profile.roles_collapse") } else { crate::t!("profile.roles_view_all") };
+        div()
+            .id(("profile-roles-toggle", uid.0))
+            .flex()
+            .flex_none()
+            .items_center()
+            .justify_center()
+            .min_h(z(24.))
+            .min_w(z(24.))
+            .when(expanded, |d| d.px(z(4.)))
+            .when(!expanded, |d| d.pl(z(6.)).pr(z(8.)))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::USER_PROFILE_BORDER)))
+            .text_size(z(12.))
+            .line_height(z(16.))
+            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+            .cursor_pointer()
+            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))).text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
+            .tooltip(crate::ui::tooltip::tip(label))
+            .on_click(move |_, w, cx| {
+                cx.stop_propagation();
+                ROLES_EXPANDED.with(|e| {
+                    let mut e = e.borrow_mut();
+                    if !e.remove(&uid) {
+                        e.insert(uid);
+                    }
+                });
+                w.refresh();
+            })
+            .map(|d| {
+                if expanded {
+                    d.child(
+                        gpui::svg()
+                            .path(crate::icons::path("chevron-right"))
+                            .size(z(12.))
+                            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                            .with_transformation(gpui::Transformation::rotate(gpui::percentage(0.5))),
+                    )
+                } else {
+                    d.child(SharedString::from(format!("+{}", total - shown)))
+                }
+            })
+    });
+    div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().take(shown).map(|r| {
         let remove = guild.filter(|g| role_removable(app, *g, uid, &r)).map(|g| {
             let e = entity.clone();
             let role = r.clone();
@@ -496,7 +576,7 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
                 d.child(div().flex_none().ml(z(4.)).child(img(u).size(z(12.)).object_fit(gpui::ObjectFit::Contain)))
             })
             .children(remove)
-    }))
+    })).children(toggle)
 }
 
 pub(crate) fn member_role_ids(app: &PhoenixApp, guild: Id, user: Id) -> Vec<Id> {
@@ -940,6 +1020,7 @@ pub const TAB_BOARD: u8 = 3;
 pub const TAB_WISHLIST: u8 = 4;
 
 thread_local! {
+    static ROLES_EXPANDED: std::cell::RefCell<std::collections::HashSet<Id>> = std::cell::RefCell::new(std::collections::HashSet::new());
     static PANEL_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
     static MODAL_TAB: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
 }
@@ -1439,5 +1520,18 @@ mod role_order_tests {
         assert!(sorts_before(g, &role(10, 0), &role(1, 0)));
         assert!(!sorts_before(g, &role(1, 0), &role(10, 0)));
         assert!(!sorts_before(g, &role(10, 4), &role(10, 4)));
+    }
+}
+
+#[cfg(test)]
+mod role_fit_tests {
+    use super::roles_fit;
+
+    #[test]
+    fn roles_fill_two_rows_like_the_client() {
+        assert_eq!(roles_fit(&[100., 100., 100.], 230.), 3);
+        assert_eq!(roles_fit(&[100., 100., 100., 100., 100.], 230.), 4);
+        assert_eq!(roles_fit(&[300., 300., 300.], 230.), 2);
+        assert_eq!(roles_fit(&[], 230.), 0);
     }
 }
