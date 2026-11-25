@@ -50,7 +50,7 @@ fn err(s: impl Into<String>) -> BackendError {
     BackendError(s.into())
 }
 
-const SEND_RETRY_DELAYS: [Duration; 2] = [Duration::from_millis(1500), Duration::from_millis(3000)];
+const SEND_RETRIES: u32 = 3;
 
 fn api_err(e: ApiError) -> BackendError {
     match &e {
@@ -819,15 +819,15 @@ impl Backend for DiscordBackend {
                 phoenix_api::rest::uploads::message_attachments(&files, &slots).as_array().cloned().unwrap_or_default()
             };
             msg.attachments = attachments;
-            let mut retries = SEND_RETRY_DELAYS.iter();
+            let mut backoff = phoenix_api::rest::backoff::Backoff::default();
             let m = loop {
-                let res = s.rest.send_message(sf(channel), msg.clone()).await;
+                let res = s.rest.send_message_failed(sf(channel), msg.clone(), backoff.fails()).await;
                 match res {
                     Ok(m) => break m,
-                    Err(ApiError::Http(e)) => match retries.next() {
-                        Some(d) => tokio::time::sleep(*d).await,
-                        None => return Err(api_err(ApiError::Http(e))),
-                    },
+                    Err(ApiError::Http(_)) if backoff.fails() < SEND_RETRIES => {
+                        tokio::time::sleep(backoff.fail()).await;
+                    }
+                    Err(ApiError::Http(e)) => return Err(api_err(ApiError::Http(e))),
                     Err(e @ ApiError::Api { status: 400..=499, .. }) => return Err(BackendError::rejected(api_err(e))),
                     Err(e) => return Err(api_err(e)),
                 }

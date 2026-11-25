@@ -21,6 +21,7 @@ pub mod favorites;
 pub mod soundboard;
 pub mod streams;
 pub mod uploads;
+pub mod backoff;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -273,16 +274,25 @@ impl RestClient {
     }
 
     async fn raw(&self, method: Method, path: &str, body: Body) -> Result<(StatusCode, Vec<u8>)> {
+        self.raw_failed(method, path, body, 0).await
+    }
+
+    async fn raw_failed(&self, method: Method, path: &str, body: Body, failed: u32) -> Result<(StatusCode, Vec<u8>)> {
         let route = route_key(method.as_str(), path);
         let major = major_param(path).to_owned();
         let url = format!("{}{}", self.inner.base, path);
         let mut attempt = 0;
+        let mut backoff = backoff::Backoff::default();
         loop {
             while let Some(wait) = self.inner.limiter.acquire(&route, &major, Instant::now()) {
                 tracing::debug!(%route, ?wait, "rate limit: waiting");
                 tokio::time::sleep(wait).await;
             }
             let mut req = self.inner.http.request(method.clone(), &url).headers(self.headers());
+            let retried = failed + backoff.fails();
+            if retried > 0 {
+                req = req.header("x-failed-requests", retried.to_string());
+            }
             req = match &body {
                 Body::None => req,
                 Body::Json(v) => req.json(v),
@@ -315,9 +325,9 @@ impl RestClient {
                 tracing::warn!(%route, ?retry, global, "429, retrying");
                 continue;
             }
-            if status.is_server_error() && attempt < self.inner.max_retries {
+            if backoff::retries_status(status.as_u16()) && attempt < self.inner.max_retries {
                 attempt += 1;
-                tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
+                tokio::time::sleep(backoff.fail()).await;
                 continue;
             }
             if !status.is_success() {
@@ -405,10 +415,15 @@ impl RestClient {
         self.call(Method::GET, &format!("/channels/{channel}/pins"), Body::None).await
     }
 
-    pub async fn send_message(&self, channel: ChannelId, mut msg: CreateMessage) -> Result<Message> {
+    pub async fn send_message(&self, channel: ChannelId, msg: CreateMessage) -> Result<Message> {
+        self.send_message_failed(channel, msg, 0).await
+    }
+
+    pub async fn send_message_failed(&self, channel: ChannelId, mut msg: CreateMessage, failed: u32) -> Result<Message> {
         fill_nonce(&mut msg);
         let body = serde_json::to_value(&msg)?;
-        self.call(Method::POST, &format!("/channels/{channel}/messages"), Body::Json(body)).await
+        let (_, bytes) = self.raw_failed(Method::POST, &format!("/channels/{channel}/messages"), Body::Json(body), failed).await?;
+        Ok(serde_json::from_slice(&bytes)?)
     }
 
     pub async fn send_message_with_files(
