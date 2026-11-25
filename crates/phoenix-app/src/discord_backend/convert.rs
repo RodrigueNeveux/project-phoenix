@@ -741,6 +741,7 @@ pub fn guild(g: &api::Guild, channels: &[model::Channel], muted: bool) -> model:
         community: g.properties.features.iter().any(|f| f == "COMMUNITY"),
         boosts: g.properties.premium_subscription_count.unwrap_or(0),
         boost_tier: g.properties.premium_tier.unwrap_or(0),
+        afk_channel: g.properties.afk_channel_id.map(id),
     }
 }
 

@@ -15,6 +15,7 @@ pub struct Snap {
     pub mute: bool,
     pub channel: Option<Id>,
     pub stage: bool,
+    pub afk: bool,
     pub connected: bool,
     pub video: bool,
     pub others: Vec<Id>,
@@ -51,7 +52,7 @@ fn voice_cues(a: &Snap, b: &Snap, moved: bool) -> Vec<&'static str> {
     if moved && a.channel.is_some() && b.channel.is_some() && a.channel != b.channel {
         out.push("user_moved");
     }
-    if a.channel == b.channel && b.channel.is_some() && !b.stage && a.connected && b.connected {
+    if a.channel == b.channel && b.channel.is_some() && !b.stage && !b.afk && a.connected && b.connected {
         let small = a.others.len() <= 25;
         if b.streamers.iter().any(|u| !a.streamers.contains(u)) {
             out.push("stream_started");
@@ -101,6 +102,7 @@ pub fn snapshot(app: &PhoenixApp) -> Snap {
         mute: app.mic_muted,
         channel,
         stage: ch.is_some_and(|c| c.kind == ChannelKind::Stage),
+        afk: ch.and_then(|c| c.guild).and_then(|g| app.guilds.iter().find(|x| x.id == g)).is_some_and(|g| g.afk_channel == channel),
         connected: channel.is_some() && app.voice.status == VoiceStatus::Connected,
         video: channel.is_some() && crate::ui::voice_panel::flags(app.me.id).video,
         others,
@@ -204,6 +206,8 @@ mod tests {
         let joined = Snap { others: vec![Id(5)], ..a.clone() };
         assert_eq!(cues(&a, &joined, false), ["user_join"]);
         assert_eq!(cues(&joined, &a, false), ["user_leave"]);
+        let afk = |x: &Snap| Snap { afk: true, ..x.clone() };
+        assert!(cues(&afk(&a), &afk(&joined), false).is_empty(), "AFK channel is silent");
         let big = Snap { others: (0..26).map(Id).collect(), ..a.clone() };
         assert!(cues(&big, &Snap { others: (0..27).map(Id).collect(), ..a.clone() }, false).is_empty(), "over 25 users");
         let live = Snap { streamers: vec![Id(5)], ..joined.clone() };

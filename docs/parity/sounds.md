@@ -24,7 +24,7 @@ default output, closed after 3 s idle); decoding: symphonia (mp3 only).
 | DND, quiet mode, @silent, blocked | `K`: status DND, `quiet_mode` proto (7.5), `SUPPRESS_NOTIFICATIONS` (1<<12), blocked/ignored | `message_sounds` | ✅ unit test (quiet mode reads the new `quiet-mode` proto entry) |
 | Deafen / mute | `Nc` | `watch::cues` | ✅ unit test |
 | Connect / disconnect | `N_`: RTC connected → `user_join`, lost → `disconnect`, not stages | `watch::cues` | ✅ unit test |
-| Others join / leave, streams | `Np` (same channel, previous count ≤ 25, not stages) | `watch::cues` (guild voice channels) | ✅ unit test; ⚠ AFK channel not excluded (no afk id in the UI model); ⚠ DM-call participants not counted |
+| Others join / leave, streams | `Np` (same channel, previous count ≤ 25, not stages) | `watch::cues` (guild voice channels) | ✅ unit test; AFK channel excluded like the client (`Nd`: `guild.afkChannelId === channel.id` returns before the join / leave / stream cues; `model::Guild.afk_channel`, `Snap.afk`); ⚠ DM-call participants not counted |
 | Moved | `Nh` `user_moved` | channel change we did not request | ✅ unit test |
 | Camera | `Nu` | own `VoiceFlags.video` | ✅ unit test |
 | PTT | `NE`: push-to-talk mode, not muted | `watch::on_ptt` from the PTT key hooks | ✅ |

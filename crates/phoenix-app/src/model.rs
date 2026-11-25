@@ -46,6 +46,7 @@ pub struct Guild {
     pub community: bool,
     pub boosts: u32,
     pub boost_tier: u8,
+    pub afk_channel: Option<Id>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
