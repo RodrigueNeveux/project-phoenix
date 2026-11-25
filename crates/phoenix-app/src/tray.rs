@@ -9,6 +9,8 @@ use futures::{StreamExt, channel::mpsc};
 use gpui::{App, Global, WeakEntity};
 use zbus::object_server::SignalEmitter;
 
+pub mod activation;
+
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub fn running() -> bool {
@@ -211,8 +213,16 @@ pub fn spawn(cx: &mut App) {
 }
 
 fn activate(cx: &mut App) {
+    let mut token = activation::take();
     for w in cx.windows() {
-        let _ = w.update(cx, |_, window, _| window.activate_window());
+        let _ = w.update(cx, |_, window, _| {
+            let granted = token.as_deref().is_some_and(|t| activation::activate(window, t));
+            if granted {
+                token = None;
+            } else {
+                window.activate_window();
+            }
+        });
     }
 }
 
@@ -319,7 +329,9 @@ impl Item {
     }
     fn context_menu(&self, _x: i32, _y: i32) {}
     fn scroll(&self, _delta: i32, _orientation: String) {}
-    fn provide_xdg_activation_token(&self, _token: String) {}
+    fn provide_xdg_activation_token(&self, token: String) {
+        activation::provide(token);
+    }
     #[zbus(signal)]
     async fn new_icon(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
     #[zbus(property)]

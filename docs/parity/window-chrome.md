@@ -23,7 +23,7 @@ CSS: ~/discord-phoenix-ref/current-client/css/300559.*.css. Dump: vanilla-guild-
 | maximized | — | resize strips | none when maximized/tiled/fullscreen | resize_handles | ✅ |
 
 State coverage: default, hover, active (min/max), close hover. No focus/tooltip on window buttons in the client.
-| close button | client "Minimize to tray" (default on) | behaviour | hide to tray | title_bar win-close → minimize when tray is up (Wayland cannot unmap); tray.rs SNI Open/Quit | ✅ (needs live check) |
+| close button | client "Minimize to tray" (default on) | behaviour | hide to tray | title_bar win-close → minimize when tray is up; tray.rs SNI Open/Quit | ⚠ minimised, not hidden: see "Hide to tray on Wayland" below |
 
 ## System tray (`tray.rs`)
 
@@ -33,10 +33,26 @@ web client's `SystemTrayManager` (strings `CK()`, states `C$()`).
 | Item | Client | Phoenix | Status |
 |---|---|---|---|
 | Protocol | Electron `Tray` on Linux = StatusNotifierItem + dbusmenu | zbus SNI (`org.kde.StatusNotifierItem-<pid>-1`) + `com.canonical.dbusmenu` | ✅ |
-| Left click | `click` → `onTrayClicked` (show the window) | `Activate` / `SecondaryActivate` → activate the window | ✅ / ⚠ KWin only raises a minimised window when the request carries a fresh input serial: the SNI activation token (`ProvideXdgActivationToken`) cannot be handed to GPUI yet |
+| Left click | `click` → `onTrayClicked` (show the window) | Plasma's system tray (`org.kde.plasma.systemtray`, `libKF6StatusNotifierItem`) calls `ProvideXdgActivationToken(token)` right before `Activate`; `tray::activation` keeps the token (single use, 10 s) and sends `xdg_activation_v1.activate(token, wl_surface)` for the window on GPUI's own `wl_display` (guest `wayland-client` backend from the raw window handle), so KWin raises and unminimises the window; without a token (X11, menu item "Open", other trays) it falls back to `Window::activate_window` | ✅ code + unit test; ⚠ not clicked live (a test instance would put a second window and tray icon on the user's screen) |
 | Tooltip | `setToolTip(appName)` | `ToolTip` = "Discord Phoenix" | ✅ |
 | Menu | `[Open {app}]`, then, connected only, `Rendre muet` / `Mettre en sourdine` (checkboxes) and `Ouvrir les paramètres vocaux et vidéo`, then `Rechercher les mises à jour…` / `Remerciements`, then `Quitter {app}`; a separator before each non-empty group | same order and labels (fr/en from the client's strings), checkmarks follow the panel mute/deafen, Voice settings opens Settings > Voix & vidéo, Remerciements opens `discord.com/acknowledgements` | ✅ / ➖ no "Check for updates" (Phoenix has no updater) |
 | Icons | `tray`, `tray-unread`, `tray-connected`, `tray-speaking`, `tray-muted`, `tray-deafened` from `app/images/systemtray/linux`; priority connected → deafened > muted > speaking > connected, else unread, else default | the same PNGs loaded at runtime from the local Discord install (never committed), app icon as fallback; state polled every 500 ms, `NewIcon` / `LayoutUpdated` signals | ✅ / ⚠ unread = any mention or unread DM (client `hasAnyUnread`), server mute/suppress not modelled |
 | Close hint balloon | `displayBalloon` (Windows only) | — | ➖ |
 
 Tests run on a separate process only: the user's Phoenix and windows are never closed or minimised.
+
+## Hide to tray on Wayland
+
+The client hides its window (`BrowserWindow.hide()`) when "Minimize to tray" is on. Phoenix minimises
+instead, on purpose:
+
+* an `xdg_toplevel` can only disappear by being unmapped (null buffer + commit), and mapping it again
+  needs a fresh initial commit / configure cycle;
+* GPUI 0.3.12 has no hide / show for a window (`PlatformWindow` has `minimize`, `activate` and
+  `remove`): an unmap done behind its back would be undone by the next frame, or break the configure
+  handshake;
+* closing the window and opening a new one on Open would rebuild the root view's window state
+  (focus handles, text inputs, IME, scroll positions, subscriptions) and needs GPUI work first.
+
+So the close button minimises when the tray is up (KWin keeps the task bar entry), and the tray Open
+action raises it with the token above. Revisit if GPUI gains `hide`/`show` for Wayland windows.
