@@ -7,8 +7,19 @@ use crate::codec::{Codec, H264Profile, VideoEncoderConfig};
 use crate::rtp::h264;
 use crate::{Error, Result};
 
+pub fn ffmpeg_command() -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new("ffmpeg");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    cmd
+}
+
 pub fn available() -> bool {
-    Command::new("ffmpeg").arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+    ffmpeg_command().arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
 }
 
 pub fn split_access_units(buf: &mut Vec<u8>, out: &mut Vec<Vec<u8>>) {
@@ -48,7 +59,7 @@ impl FfmpegH264 {
             H264Profile::ConstrainedBaseline => "baseline",
             H264Profile::Main => "main",
         };
-        let mut child = Command::new("ffmpeg")
+        let mut child = ffmpeg_command()
             .args(["-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s"])
             .arg(format!("{}x{}", config.width, config.height))
             .args(["-r", &config.fps.to_string(), "-i", "-", "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-profile:v", profile])
@@ -147,7 +158,7 @@ impl FfmpegDecoder {
     }
 
     pub fn spawn_sized(w: u32, h: u32) -> Result<Self> {
-        let mut child = Command::new("ffmpeg")
+        let mut child = ffmpeg_command()
             .args(["-hide_banner", "-loglevel", "error", "-probesize", "32", "-analyzeduration", "0", "-fflags", "nobuffer", "-flags", "low_delay"])
             .args(["-f", "h264", "-i", "-", "-vf"])
             .arg(format!("scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2"))

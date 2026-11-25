@@ -437,7 +437,10 @@ fn open_path_in_os(path: &Path) {
     #[cfg(target_os = "macos")]
     let _ = std::process::Command::new("open").arg(path).spawn();
     #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("cmd").args(["/C", "start", ""]).arg(path).spawn();
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("cmd").args(["/C", "start", ""]).arg(path).creation_flags(0x0800_0000).spawn();
+    }
 }
 
 fn try_atomic_replace_appimage(downloaded: &Path) -> Option<PathBuf> {
