@@ -7,6 +7,7 @@ Source: dumps `vanilla-picker-emoji`, `vanilla-picker-gif`, `vanilla-picker-stic
 | picker body | emojiPicker_-sZhZn (#2502) | size | 497x427 | pickers/mod.rs PICKER_W | ✅ |
 | nav tabs | nav_58b0l2 (#2495) | height / padding | 30 / 0 16 | pickers/mod.rs tab_button | ✅ |
 | search | container_VhFsFg (#2504) | size | 272x40 | pickers/mod.rs search_box | ✅ |
+| search focused | live GIF picker 2026-11-25 (`wrapper_UcGqzv container_0PLWhS md_`) | border | focused on open: 0.8px border + 1.6px outline, brand (--input-border-active), radius 8, 464.4×40 | search_box: 2px --input-border-active | ✅ (was 1px --border-focus, grey) |
 | diversity | diversitySelector_eHzdRB (#2511) | size | 38 | grid.rs tone_button | ✅ |
 | emoji cell | emojiItemMedium_6OcK5D | size / img | 48 / 40 | grid.rs render_row | ✅ |
 | rail | wrapper_6AvvhR (#2697) | width | 48 | grid.rs rail | ✅ |
@@ -16,7 +17,7 @@ Source: dumps `vanilla-picker-emoji`, `vanilla-picker-gif`, `vanilla-picker-stic
 | top server emoji | `TOP_GUILD_EMOJI` section (`categorySection_6c9R7U`), first section | source / count | `GET /guilds/{id}/top-emojis` → `items[{emoji_id, emoji_rank}]` sorted by rank, cached one day (`topEmojisTTL`), fetched for the current server only, never for reactions; row = `top.slice(0, 9 − newly)` + up to 3 emojis of the server created in the last 60 days (`fromTimestamp(now − 60 d)`, newest first) | grid.rs top_section + pickers::load_top_emojis | ✅ live (9 items, first one selected) |
 | top section header / rail | `header_kSdzCr`, `TrophyIcon` | icon | 16px trophy before "Émojis populaires sur <serveur>" (body-sm/semibold), 24px trophy in the rail before the clock | grid.rs section_icon, render_body | ✅ live |
 | POPULAIRES badge | `topGuildEmojiBadge_1bDrGE` | box | padding 4 8, gap 6, radius 4, `linear-gradient(268.26deg, rgb(191,81,81), rgb(219,128,63) 102.45%)`, 14px fire + body-sm/semibold uppercase white "Populaires"; only for the top (not newly added) items | grid.rs popular_badge | ✅ live; the client's flame is an inline 10×13 path, Phoenix uses the extracted `FireIcon` |
-| newly added sub-block | `NEWLY_ADDED_EMOJI` | | unseen newly added emojis get their own block and an "Ajouté(e) récemment" badge in the client | — | ❌ Phoenix keeps them in the row without badge (the "last seen" state is local to the client) |
+| newly added sub-block | `NEWLY_ADDED_EMOJI` | | unseen newly added emojis get their own block and an "Ajouté(e) récemment" badge in the client | grid.rs render_row, prefs.rs `newly_seen` | ✅ wt/fin-chat: CSS `31544.*` (`*_6OcK5D`): unseen ones (NewlyAddedEmojiStore `isNewerThanLastSeen`: no record, newer id, or < 2 weeks since last seen and not acknowledged) after the others in a 1px #2d7d46 box (radius 4 4 4 0 / 4 4 0 when after other emojis / 4 4 0 0 for one), 50×16 badge below (#2d7d46, radius 0 0 4 4, SparkleIcon 12 + "NOUVEAU" body-xs/semibold), 50 % alpha on hover, row margin-bottom 20; on close the picker commits the pending state then marks the newest newly added emoji pending (`uV`); hovering one ≥ 250 ms acknowledges it (`mz`); state kept in `expressions.json`. Inspector: "AJOUTÉ(E) RÉCEMMENT" badge, gradient 268.26deg #097d8d → #60a654, sparkle 14 (`newlyAddedBadge_1bDrGE`) |
 
 ### Frequent emoji and sticker order (frecency)
 
@@ -37,7 +38,15 @@ Source: `web.b63d846b329d6470.js` module `283047` (the generic `Frecency` class)
 - Empty emoji frecency: the client seeds thumbsup, eyes, laughing, watermelon, fork_and_knife,
   yum, weary, tired_face, poop, 100 (so "100" comes first).
 - Reactions use another history (`emojiReactionFrecency`, frecency
-  `trunc(1000 × (uses / maxUses × .2 + score / 1000 × .8))`): ❌ not read by Phoenix yet.
+  `trunc(1000 × (uses / maxUses × .2 + score / 1000 × .8))`, `maxUses` = largest totalUses of
+  the history, score = Σ weights of the first 10 uses): ✅ wt/fin-chat, settings-proto/2 field 13
+  (`emojiReactionFrecency`, same message as field 6) and favorites field 5, read only
+  (`rest/frecency.rs` `reactions_ranked_at`). Used where the client uses it: the reaction picker's
+  frequent row (`EmojiIntention.REACTION` → `emojiReactionFrecency.frequently`), the hover bar quick
+  reactions (3) and the message menu strip (4) = favorites then frequent reactions
+  (`getEmojiInPriorityOrderWithoutFetchingLatest`), customs of other servers dropped without Nitro.
+  Live check 2026-11-25: the client's hover bar shows heart, Keo_Wow, white_check_mark = the top 3
+  computed from the proto (Phoenix had a fixed 👍 ❤️ 😂).
 - Checked on the real account (2026-11-25): the 42 emojis computed from the live proto match the
   client's "Fréquemment utilisés" section item for item (✅ ❤ then customs, wilted_rose…).
 
