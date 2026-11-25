@@ -1184,6 +1184,9 @@ impl PhoenixApp {
 
     pub fn join_voice(&mut self, ch: Option<Id>, cx: &mut Context<Self>) {
         crate::voice::soundboard::stop_all();
+        if ch.is_some() {
+            crate::ui::voice_effects::prewarm();
+        }
         self.backend.join_voice(ch).detach_ok();
         crate::voice::on_join_clicked(self, ch);
         cx.notify();

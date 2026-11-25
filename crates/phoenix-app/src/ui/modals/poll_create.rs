@@ -1,5 +1,5 @@
-use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, prelude::*};
-use gpui_component::input::{Input, InputState};
+use gpui::{AnyElement, Context, Entity, FontWeight, IntoElement, MouseButton, ParentElement, SharedString, Styled, Window, div, prelude::*};
+use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 
 use crate::{
     actions::{close_modal, with_modal},
@@ -16,10 +16,32 @@ pub const MAX_ANSWER: usize = 55;
 pub const MAX_ANSWERS: usize = 10;
 pub const DURATIONS: [u32; 7] = [1, 4, 8, 24, 72, 168, 336];
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AnswerEmoji {
+    pub id: Option<Id>,
+    pub name: SharedString,
+    pub animated: bool,
+}
+
+impl AnswerEmoji {
+    pub fn token(&self) -> String {
+        match self.id {
+            Some(id) => format!("<{}:{}:{}>", if self.animated { "a" } else { "" }, self.name, id.0),
+            None => self.name.to_string(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct AnswerSlot {
+    pub input: Option<Entity<InputState>>,
+    pub emoji: Option<AnswerEmoji>,
+}
+
 pub struct State {
     pub channel: Id,
-    pub question: Option<Entity<InputState>>,
-    pub answers: Vec<Option<Entity<InputState>>>,
+    pub question: Option<Entity<TextareaState>>,
+    pub answers: Vec<AnswerSlot>,
     pub duration: usize,
     pub multi: bool,
     pub list_open: bool,
@@ -28,17 +50,39 @@ pub struct State {
 
 impl State {
     pub fn new(channel: Id) -> Self {
-        Self { channel, question: None, answers: vec![None, None], duration: 3, multi: false, list_open: false, sending: false }
+        Self {
+            channel,
+            question: None,
+            answers: vec![AnswerSlot::default(), AnswerSlot::default()],
+            duration: 3,
+            multi: false,
+            list_open: false,
+            sending: false,
+        }
+    }
+}
+
+pub fn prepare_question(s: &mut State, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    if s.question.is_none() {
+        let ph = crate::t!("poll.question_ph");
+        let q = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 5).placeholder(ph));
+        q.update(cx, |st, cx| st.focus(window, cx));
+        s.question = Some(q);
     }
 }
 
 pub fn prepare(s: &mut State, mk: &mut impl FnMut(SharedString, &str, bool) -> Entity<InputState>) {
-    if s.question.is_none() {
-        s.question = Some(mk(crate::t!("poll.question_ph"), "", true));
+    for a in s.answers.iter_mut().filter(|a| a.input.is_none()) {
+        a.input = Some(mk(crate::t!("poll.answer_ph"), "", false));
     }
-    for a in s.answers.iter_mut().filter(|a| a.is_none()) {
-        *a = Some(mk(crate::t!("poll.answer_ph"), "", false));
-    }
+}
+
+pub fn pick_emoji(index: usize, emoji: AnswerEmoji) {
+    update(|s| {
+        if let Some(slot) = s.answers.get_mut(index) {
+            slot.emoji = Some(emoji);
+        }
+    });
 }
 
 pub fn duration_label(hours: u32) -> SharedString {
@@ -81,7 +125,7 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
     if let Some(q) = &s.question {
         body = body
             .child(label(crate::t!("poll.question")))
-            .child(field_box().h(z(48.)).px(z(10.)).child(div().flex_1().child(Input::new(q).appearance(false).bordered(false))))
+            .child(field_box().min_h(z(48.)).py(z(6.)).px(z(10.)).child(div().flex_1().min_w_0().child(Textarea::new(q).appearance(false).bordered(false))))
             .child(
                 div()
                     .mt(z(4.))
@@ -95,17 +139,48 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
     }
     let n = s.answers.len();
     let mut answers = div().mt(z(26.)).flex().flex_col().gap(z(4.)).child(label(crate::t!("poll.answers")).mb(z(4.)));
-    for (i, a) in s.answers.iter().enumerate() {
-        let Some(a) = a else { continue };
+    for (i, slot) in s.answers.iter().enumerate() {
+        let Some(a) = &slot.input else { continue };
+        let emoji_el = match &slot.emoji {
+            Some(e) => crate::media::emoji::emoji_element(&e.token(), 20. * crate::theme::zoom()),
+            None => gpui::svg().path(crate::icons::path("emoji")).size(z(18.)).text_color(c(tok(idx::INTERACTIVE_ICON_DEFAULT))).into_any_element(),
+        };
+        let has_emoji = slot.emoji.is_some();
         answers = answers.child(
             field_box()
                 .id(("poll-answer-field", i))
                 .h(z(40.))
                 .px(z(4.))
                 .gap(z(4.))
-                .child(div().w(z(38.)).h(z(18.)).flex().items_center().justify_center().child(
-                    gpui::svg().path(crate::icons::path("emoji")).size(z(18.)).text_color(c(tok(idx::INTERACTIVE_ICON_DEFAULT))),
-                ))
+                .child(
+                    div()
+                        .id(("poll-answer-emoji", i))
+                        .w(z(34.))
+                        .h(z(32.))
+                        .rounded(z(4.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+                        .child(emoji_el)
+                        .on_click(cx.listener(move |a, _, w, cx| {
+                            crate::ui::pickers::open_emoji_picker(a, crate::ui::pickers::EmojiTarget::PollAnswer(i), w, cx);
+                        }))
+                        .when(has_emoji, |d| {
+                            d.on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(move |_, _, _, cx| {
+                                    update(|s| {
+                                        if let Some(slot) = s.answers.get_mut(i) {
+                                            slot.emoji = None;
+                                        }
+                                    });
+                                    cx.notify();
+                                }),
+                            )
+                        }),
+                )
                 .child(div().flex_1().min_w_0().child(Input::new(a).appearance(false).bordered(false)))
                 .child(
                     div()
@@ -134,7 +209,7 @@ pub fn render(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> Any
         answers = answers.child(
             div().flex().justify_end().child(button_icon("poll-add-answer", "plus", crate::t!("poll.add_answer"), BtnKind::Secondary).on_click(cx.listener(
                 |_, _, _, cx| {
-                    update(|s| s.answers.push(None));
+                    update(|s| s.answers.push(AnswerSlot::default()));
                     cx.notify();
                 },
             ))),
@@ -223,12 +298,17 @@ fn submit(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
             return;
         }
         let question: String = s.question.as_ref().map(|q| q.read(cx).value().trim().to_string()).unwrap_or_default();
-        let answers: Vec<String> = s
+        let answers: Vec<crate::commands::PollAnswerDraft> = s
             .answers
             .iter()
-            .flatten()
-            .map(|a| a.read(cx).value().trim().chars().take(MAX_ANSWER).collect::<String>())
-            .filter(|a| !a.is_empty())
+            .filter_map(|slot| {
+                let text: String = slot.input.as_ref()?.read(cx).value().trim().chars().take(MAX_ANSWER).collect();
+                if text.is_empty() {
+                    return None;
+                }
+                let emoji = slot.emoji.as_ref().map(|e| (e.id, e.name.to_string()));
+                Some((text, emoji))
+            })
             .collect();
         if question.is_empty() || answers.is_empty() || question.chars().count() > MAX_QUESTION {
             return;
@@ -237,7 +317,7 @@ fn submit(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
         req = Some(crate::commands::ParityRequest::CreatePoll {
             channel: s.channel,
             question,
-            answers: answers.into_iter().map(|a| (a, None)).collect(),
+            answers,
             hours: DURATIONS[s.duration],
             multi: s.multi,
         });
@@ -266,5 +346,13 @@ mod tests {
         assert_eq!(labels.len(), 7);
         assert!(labels[3].starts_with("24"));
         assert!(labels[6].starts_with('2'));
+    }
+
+    #[test]
+    fn answer_emoji_token_formats_unicode_and_custom() {
+        let u = AnswerEmoji { id: None, name: "🔥".into(), animated: false };
+        assert_eq!(u.token(), "🔥");
+        let c = AnswerEmoji { id: Some(Id(42)), name: "party".into(), animated: true };
+        assert_eq!(c.token(), "<a:party:42>");
     }
 }

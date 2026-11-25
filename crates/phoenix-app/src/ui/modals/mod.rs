@@ -128,6 +128,8 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     with_modal(|m| {
         if let Some(Modal::ChannelSettings(s)) = m {
             channel_settings::prepare_area(s, window, cx);
+        } else if let Some(Modal::CreatePoll(s)) = m {
+            poll_create::prepare_question(s, window, cx);
         }
     });
     with_modal(|m| {

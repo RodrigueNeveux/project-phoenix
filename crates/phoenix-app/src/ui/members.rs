@@ -606,7 +606,6 @@ pub fn member_row_in(
     let e = entity.clone();
     let tag = user.and_then(|u| u.tag.clone());
     let acts = app.people.activities.get(&uid).map(Vec::as_slice).unwrap_or(&[]);
-    let sub = SubText::of(acts);
     let streaming = !offline && acts.iter().any(|a| a.kind == crate::presence::ActivityKind::Streaming);
     let in_voice = match g {
         Some(g) => app
@@ -615,7 +614,9 @@ pub fn member_row_in(
             .is_some_and(|ids| ids.iter().filter_map(|i| app.channels.get(i)).any(|ch| ch.voice_users.contains(&uid))),
         None => app.channels.values().any(|ch| ch.guild.is_some() && ch.voice_users.contains(&uid)),
     } && !crate::ui::voice_panel::flags(uid).undiscoverable;
-    let voice_icon = if in_voice && crate::ui::voice_panel::flags(uid).stream { "golive/screen" } else { "speaker" };
+    let go_live = in_voice && crate::ui::voice_panel::flags(uid).stream;
+    let sub = SubText::of(acts, go_live);
+    let voice_icon = if go_live { "golive/screen" } else { "speaker" };
     let two_lines = !offline && (in_voice || sub.is_some() || (acts.is_empty() && mem.activity.is_some()));
     let has_plate = user.is_some_and(|u| u.nameplate.is_some());
     div().py(z(1.)).child(div()
@@ -886,7 +887,7 @@ pub(crate) fn activity_icon(a: &crate::presence::Activity) -> Option<&'static st
 }
 
 impl SubText {
-    fn of(acts: &[crate::presence::Activity]) -> Option<Self> {
+    fn of(acts: &[crate::presence::Activity], go_live: bool) -> Option<Self> {
         use crate::presence::ActivityKind as K;
         let custom = acts
             .iter()
@@ -894,15 +895,20 @@ impl SubText {
             .map(|a| (a.emoji.clone(), a.state.as_ref().map(|t| SharedString::from(t.trim().to_string())).filter(|t| !t.is_empty())))
             .filter(|(e, t)| e.is_some() || t.is_some());
         let mut seen: Vec<&crate::presence::Activity> = Vec::new();
-        for a in acts.iter().filter(|a| a.kind != K::Custom) {
+        let mut skipped_golive = false;
+        for a in acts.iter().filter(|a| a.kind != K::Custom && !a.name.trim().is_empty()) {
+            if go_live && !skipped_golive && a.kind == K::Playing {
+                skipped_golive = true;
+                continue;
+            }
             let same = |b: &&crate::presence::Activity| {
-                a.application_id.is_some() && a.application_id == b.application_id || a.name == b.name
+                (a.application_id.is_some() && a.application_id == b.application_id) || a.name.eq_ignore_ascii_case(&b.name)
             };
             if !seen.iter().any(same) {
                 seen.push(a);
             }
         }
-        let main = acts.iter().find(|a| a.kind != K::Custom).map(|a| (activity_text(a).unwrap_or_default(), activity_icon(a)));
+        let main = seen.first().map(|a| (activity_text(a).unwrap_or_default(), activity_icon(a)));
         let count = seen.len();
         (custom.is_some() || main.is_some()).then_some(Self { custom, main, count })
     }
@@ -962,4 +968,47 @@ fn sub_text(in_voice: bool, voice_icon: &'static str, bot: bool, sub: Option<Sub
         }
     }
     row
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::presence::{Activity, ActivityKind};
+
+    fn act(kind: ActivityKind, name: &str, app_id: Option<&str>, state: Option<&str>) -> Activity {
+        Activity {
+            kind,
+            name: name.to_owned().into(),
+            details: None,
+            state: state.map(|s| s.to_owned().into()),
+            emoji: None,
+            url: None,
+            display_type: None,
+            image: None,
+            start: None,
+            application_id: app_id.map(|s| s.to_owned().into()),
+        }
+    }
+
+    #[test]
+    fn sub_text_deduplicates_activities_and_excludes_golive_game() {
+        let custom = act(ActivityKind::Custom, "Custom Status", None, Some("Intensely doing nothing"));
+        let game = act(ActivityKind::Playing, "VALORANT", Some("123"), None);
+        let game_dup_id = act(ActivityKind::Playing, "Valorant RPC", Some("123"), None);
+        let game_dup_name = act(ActivityKind::Playing, "valorant", None, None);
+        let spotify = act(ActivityKind::Listening, "Spotify", None, Some("Track"));
+
+        let s = SubText::of(&[custom.clone(), game.clone()], false).unwrap();
+        assert_eq!(s.count, 1);
+        assert!(s.custom.is_some());
+
+        let s = SubText::of(&[custom.clone(), game.clone(), game_dup_id, game_dup_name], false).unwrap();
+        assert_eq!(s.count, 1);
+
+        let s = SubText::of(&[custom.clone(), game.clone()], true).unwrap();
+        assert_eq!(s.count, 0);
+
+        let s = SubText::of(&[custom, game, spotify], true).unwrap();
+        assert_eq!(s.count, 1);
+    }
 }

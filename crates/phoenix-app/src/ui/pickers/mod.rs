@@ -35,6 +35,7 @@ pub enum EmojiTarget {
     Reaction { channel: Id, message: Id },
     Status,
     Field(Field),
+    PollAnswer(usize),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -239,7 +240,7 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         if let (Some(g), Some(n)) = (op.grid.current_guild, op.grid.newly_newest) {
             prefs.newly_mark_pending(g.0, n.0, chrono::Utc::now().timestamp_millis());
         }
-        if !matches!(op.target, EmojiTarget::Status | EmojiTarget::Field(_)) {
+        if !matches!(op.target, EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_)) {
             app.composer.update(cx, |s, cx| s.focus(window, cx));
         }
         cx.notify();
@@ -431,6 +432,14 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
             crate::ui::modals::channel_settings::pick_field_emoji(f, text, custom, window, cx);
             close(app, window, cx);
         }
+        EmojiTarget::PollAnswer(i) => {
+            let e = match &item {
+                PickItem::Unicode(ix) => crate::ui::modals::poll_create::AnswerEmoji { id: None, name: emoji::toned(*ix, tone).into(), animated: false },
+                PickItem::Custom(e) => crate::ui::modals::poll_create::AnswerEmoji { id: Some(e.id), name: e.name.clone(), animated: e.animated },
+            };
+            crate::ui::modals::poll_create::pick_emoji(i, e);
+            close(app, window, cx);
+        }
         EmojiTarget::Reaction { channel, message } => {
             let (emoji, id) = match &item {
                 PickItem::Unicode(ix) => (emoji::toned(*ix, tone), None),
@@ -486,7 +495,7 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
         && t != EmojiTarget::Status
         && let Some(el) = render_picker(app, window, cx)
     {
-        out.push(if matches!(t, EmojiTarget::Field(_)) { gpui::deferred(el).with_priority(30).into_any_element() } else { el });
+        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_)) { gpui::deferred(el).with_priority(30).into_any_element() } else { el });
     }
     if let Some(el) = soundboard::render(app, window, cx) {
         out.push(el);

@@ -1,5 +1,9 @@
 use std::cell::RefCell;
-use std::sync::{Arc, OnceLock};
+use std::collections::HashMap;
+use std::sync::{
+    Arc, Mutex, OnceLock,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
@@ -87,6 +91,16 @@ pub fn animations() -> &'static Vec<Value> {
     })
 }
 
+pub fn prewarm() {
+    static WARMING: AtomicBool = AtomicBool::new(false);
+    if WARMING.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let _ = std::thread::Builder::new().name("voice-effects-prewarm".into()).spawn(|| {
+        let _ = animations();
+    });
+}
+
 pub fn pick(list: &[Value], kind: u8, id: u32) -> Option<&Value> {
     if kind == BASIC {
         return list.first();
@@ -121,16 +135,40 @@ pub fn emoji_url(e: &Effect) -> Option<String> {
     e.emoji_name.as_ref().and_then(|n| crate::media::emoji::twemoji_url(n.as_ref())).map(|u| u.to_string())
 }
 
+fn http_client() -> Option<&'static reqwest::Client> {
+    static CLIENT: OnceLock<Option<reqwest::Client>> = OnceLock::new();
+    CLIENT.get_or_init(|| reqwest::Client::builder().timeout(Duration::from_secs(15)).build().ok()).as_ref()
+}
+
 fn fetch(url: &str) -> Option<Vec<u8>> {
+    static EMOJI_CACHE: OnceLock<Mutex<HashMap<String, Vec<u8>>>> = OnceLock::new();
+    let cache = EMOJI_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock()
+        && let Some(bytes) = guard.get(url)
+    {
+        return Some(bytes.clone());
+    }
+    let client = http_client()?;
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
-    rt.block_on(async {
-        let client = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().ok()?;
+    let bytes = rt.block_on(async {
         let r = client.get(url).send().await.ok()?;
         if !r.status().is_success() {
             return None;
         }
         Some(r.bytes().await.ok()?.to_vec())
-    })
+    })?;
+    if let Ok(mut guard) = cache.lock() {
+        if guard.len() >= 128 {
+            guard.clear();
+        }
+        guard.insert(url.to_owned(), bytes.clone());
+    }
+    Some(bytes)
+}
+
+fn raster_cache() -> &'static Mutex<HashMap<(u8, u32, String), (Arc<RenderImage>, Duration)>> {
+    static CACHE: OnceLock<Mutex<HashMap<(u8, u32, String), (Arc<RenderImage>, Duration)>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 pub fn geometry(w: f32, h: f32) -> (f32, f32, f32, f32) {
@@ -173,6 +211,15 @@ pub fn start(app: &PhoenixApp, e: &Effect, cx: &mut Context<PhoenixApp>) {
             .spawn(async move {
                 let log = std::env::var_os("PHOENIX_SOUND_LOG").is_some();
                 let t = Instant::now();
+                let cache_key = (kind, id, url.clone());
+                if let Ok(guard) = raster_cache().lock()
+                    && let Some(hit) = guard.get(&cache_key)
+                {
+                    if log {
+                        eprintln!("phoenix-soundboard: effect cache hit after {:?}", t.elapsed());
+                    }
+                    return Some(hit.clone());
+                }
                 let list = animations();
                 let anim = pick(list, kind, id);
                 if log {
@@ -193,7 +240,14 @@ pub fn start(app: &PhoenixApp, e: &Effect, cx: &mut Context<PhoenixApp>) {
                 if log {
                     eprintln!("phoenix-soundboard: effect frames {:?} after {:?}, lasts {dur:?}", img.as_ref().map(gpui::RenderImage::frame_count), t.elapsed());
                 }
-                Some((Arc::new(img?), dur))
+                let out = (Arc::new(img?), dur);
+                if let Ok(mut guard) = raster_cache().lock() {
+                    if guard.len() >= 64 {
+                        guard.clear();
+                    }
+                    guard.insert(cache_key, out.clone());
+                }
+                Some(out)
             })
             .await;
         let Some((img, dur)) = made else { return };
