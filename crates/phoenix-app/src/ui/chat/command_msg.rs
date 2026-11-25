@@ -244,9 +244,10 @@ mod tests {
 
     #[test]
     fn loading_messages_time_out_after_15_minutes() {
-        let id = phoenix_api::models::Snowflake::from_timestamp_ms(1_000_000);
+        let base = 1_700_000_000_000;
+        let id = phoenix_api::models::Snowflake::from_timestamp_ms(base);
         let m = Message { id: Id(id.0), flags: FLAG_LOADING, ..Default::default() };
-        assert!(!timed_out(&m, 1_000_000 + LOADING_TTL_MS));
-        assert!(timed_out(&m, 1_000_001 + LOADING_TTL_MS));
+        assert!(!timed_out(&m, base + LOADING_TTL_MS));
+        assert!(timed_out(&m, base + 1 + LOADING_TTL_MS));
     }
 }

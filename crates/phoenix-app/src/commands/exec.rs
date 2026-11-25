@@ -359,7 +359,7 @@ mod tests {
         )
         .unwrap();
         let m = merge_commands(&[a.clone(), a]);
-        assert_eq!(m.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["alpha", "zeta"]);
+        assert_eq!(m.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Quote", "alpha", "zeta"]);
         assert_eq!(m[0].app_name, "Bot");
     }
 

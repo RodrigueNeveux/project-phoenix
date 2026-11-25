@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(match_command("/info activity user:1", &cmds, |c| c), Some((&"info activity", "user:1")));
         assert_eq!(match_command("/info", &cmds, |c| c), Some((&"info", "")));
         assert_eq!(match_command("/inf", &cmds, |c| c), None);
-        assert_eq!(option_at("member:<@1> role:ad", 18), Some(("role".into(), "ad".into())));
+        assert_eq!(option_at("member:<@1> role:ad", 19), Some(("role".into(), "ad".into())));
         assert_eq!(option_at("member:", 7), Some(("member".into(), "".into())));
         assert_eq!(option_at("", 0), None);
     }
