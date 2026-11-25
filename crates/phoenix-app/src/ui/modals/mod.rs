@@ -112,6 +112,7 @@ pub enum Modal {
     GdmCleanup(gdm_cleanup::Cleanup),
     CustomStatus(custom_status::CustomStatus),
     ActiveThreads(crate::model::Id),
+    PlaintextFull { url: SharedString, filename: SharedString, size: u64, viewport: Option<gpui::Size<gpui::Pixels>> },
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -194,6 +195,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         Some(Modal::Report(r)) => r.viewport = Some(vp),
         Some(m @ (Modal::EditGroup(_) | Modal::FolderSettings(_))) => gdm::prepare(m, &mut mk),
         Some(Modal::GoLive(g)) => g.viewport = Some(vp),
+        Some(Modal::PlaintextFull { viewport, .. }) => *viewport = Some(vp),
         Some(Modal::CustomStatus(s)) => custom_status::prepare(s, &mut mk),
         _ => {}
     });
@@ -226,6 +228,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::GdmCleanup(s) => gdm_cleanup::render(app, s, cx),
             Modal::CustomStatus(s) => custom_status::render(app, s, cx),
             Modal::ActiveThreads(g) => active_threads::render(app, *g, cx),
+            Modal::PlaintextFull { url, filename, size, viewport } => crate::ui::chat::plaintext::render_full(url, filename, *size, *viewport, cx),
         })
     })
 }

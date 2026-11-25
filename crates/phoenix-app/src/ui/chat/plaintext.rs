@@ -615,7 +615,13 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         .child(name)
         .child(div().flex_grow(200.).min_w(z(16.)))
         .child(icon_button("plaintext-lang", "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language"))))
-        .child(icon_button("plaintext-full", "maximize").ml(z(16.)).tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.whole_file"))).on_click(move |_, _, cx| cx.open_url(&open_url)))
+        .child(icon_button("plaintext-full", "maximize").ml(z(16.)).tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.whole_file"))).on_click({
+            let filename = a.filename.clone();
+            let size = a.size;
+            move |_, w, _| {
+                crate::actions::open_modal(crate::ui::modals::Modal::PlaintextFull { url: open_url.clone(), filename: filename.clone(), size, viewport: None }, Some(w));
+            }
+        }))
         .child(icon_button("plaintext-more", "more-horizontal").ml(z(16.)).mr(z(4.)).tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.more"))).on_click(move |ev, w, _| {
             let p = ev.position();
             MENU.with(|m| *m.borrow_mut() = Some((u2.clone(), p)));
@@ -649,6 +655,72 @@ pub fn render(a: &Attachment, cx: &App) -> Option<AnyElement> {
         crate::ui::context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
     });
     Some(div().mt(z(4.)).min_w(z(302.)).max_w(z(560.)).w_full().flex().flex_col().child(text_box).child(footer).children(menu).into_any_element())
+}
+
+pub fn render_full(url: &SharedString, filename: &SharedString, size: u64, viewport: Option<gpui::Size<gpui::Pixels>>, cx: &mut gpui::Context<crate::app::PhoenixApp>) -> AnyElement {
+    let e = entry(url).unwrap_or_default();
+    let lang = extension(filename).to_owned();
+    let mut body = e.text.clone().unwrap_or_default();
+    if e.bytes_left > 0 {
+        body.push_str(&format!("... {}", crate::t!("plaintext.bytes_left", size = size_label(e.bytes_left))));
+    }
+    let runs = crate::richtext::code_runs(&body, Some(&lang));
+    let zoom = crate::theme::zoom();
+    let (vw, vh) = viewport.map_or((1280., 800.), |v| (f32::from(v.width) / zoom, f32::from(v.height) / zoom));
+    let w = (vw * 0.8).min(1280.);
+    let h = vh * 0.8;
+    let close = crate::ui::modals::close_action(cx);
+    let card = div()
+        .w(z(w))
+        .h(z(h))
+        .rounded(z(12.))
+        .overflow_hidden()
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .border_1()
+        .border_color(tk(idx::BORDER_SUBTLE))
+        .flex()
+        .flex_col()
+        .pb(z(16.))
+        .child(
+            div()
+                .id("plaintext-full-body")
+                .flex_1()
+                .min_h_0()
+                .overflow_scroll()
+                .bg(tk(idx::BACKGROUND_BASE_LOWER))
+                .child(
+                    div()
+                        .p(z(8.))
+                        .font_family(crate::theme::FONT_MONO())
+                        .text_size(z(14.))
+                        .line_height(z(16.))
+                        .text_color(tk(idx::TEXT_CODE))
+                        .child(StyledText::new(body).with_runs(runs)),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .justify_end()
+                .pt(z(16.))
+                .px(z(16.))
+                .border_t_1()
+                .border_color(tk(idx::BORDER_SUBTLE))
+                .text_size(z(14.))
+                .text_color(tk(idx::TEXT_DEFAULT))
+                .child(
+                    div()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(div().min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap().text_size(z(14.)).line_height(z(18.)).child(filename.clone()))
+                        .child(div().text_size(z(12.)).line_height(z(16.)).text_color(tk(idx::TEXT_SUBTLE)).child(size_label(size))),
+                )
+                .child(div().flex_grow(200.).min_w(z(16.)))
+                .child(icon_button("plaintext-full-lang", "angle-brackets").tooltip(crate::ui::tooltip::tip(crate::t!("plaintext.language")))),
+        );
+    crate::ui::modal::frame("plaintext-full", close, card)
 }
 
 #[cfg(test)]
