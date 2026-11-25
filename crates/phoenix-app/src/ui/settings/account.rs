@@ -16,6 +16,7 @@ pub struct AccountInfo {
     pub mfa: bool,
     pub sms: bool,
     pub adult: Option<bool>,
+    pub verified: bool,
 }
 
 static INFO: RwLock<Option<AccountInfo>> = RwLock::new(None);
@@ -33,6 +34,7 @@ pub fn set_from_user(u: &phoenix_api::models::User) {
         mfa: u.mfa_enabled.unwrap_or(false),
         sms: u.flags.unwrap_or(0) & MFA_SMS != 0,
         adult: u.nsfw_allowed,
+        verified: u.verified.unwrap_or(false),
     });
 }
 

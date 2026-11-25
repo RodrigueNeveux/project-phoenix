@@ -1191,6 +1191,12 @@ impl Backend for DiscordBackend {
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         self.account_standing_impl()
     }
+    fn guarded_write(&self, w: phoenix_api::rest::account::GuardedWrite) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            s.rest.guarded_write(&w).await.map_err(api_err)?;
+            Ok(())
+        })
+    }
     fn auth_sessions(&self) -> BoxFuture<Option<Vec<crate::ui::settings::sessions::Session>>> {
         self.auth_sessions_impl()
     }

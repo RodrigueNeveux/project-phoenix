@@ -430,7 +430,11 @@ fn mfa(app: &PhoenixApp, cx: &mut Cx) -> Div {
             div().child(controls::control_item(
                 crate::t!("settings.account.mfa_on"),
                 None,
-                Some(critical_secondary("mfa-app-remove", crate::t!("settings.mfa.remove")).into_any_element()),
+                Some(
+                    critical_secondary("mfa-app-remove", crate::t!("settings.mfa.remove"))
+                        .on_click(cx.listener(|a, _, w, cx| a.open_account_edit(crate::ui::modals::account_edit::Flow::RemoveTotp, w, cx)))
+                        .into_any_element(),
+                ),
             )),
         );
     }
@@ -470,7 +474,9 @@ fn mfa(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     .p(z(12.))
                     .rounded(z(16.))
                     .child(div().flex_1().min_w_0().flex().flex_col().gap(z(4.)).child(text(16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG, crate::t!("settings.account.mfa_on"))).child(line))
-                    .child(div().flex_none().flex().items_center().child(critical_secondary("mfa-sms-remove", crate::t!("settings.mfa.remove")))),
+                    .child(div().flex_none().flex().items_center().child(critical_secondary("mfa-sms-remove", crate::t!("settings.mfa.remove")).on_click(cx.listener(|a, _, w, cx| {
+                        a.open_account_edit(crate::ui::modals::account_edit::Flow::Confirm(crate::ui::modals::account_edit::Confirm::DisableSms), w, cx)
+                    })))),
             );
     }
     if info.mfa {
@@ -478,7 +484,9 @@ fn mfa(app: &PhoenixApp, cx: &mut Cx) -> Div {
             .child(divider())
             .child(cat_header(crate::t!("settings.mfa.backup"), Some(subtitle(crate::t!("settings.mfa.backup_d"))), None))
             .child(div().h(z(1.)))
-            .child(div().py(z(10.)).flex().child(controls::button_sm("mfa-backup", crate::t!("settings.mfa.backup_btn"), BtnKind::Secondary)));
+            .child(div().py(z(10.)).flex().child(controls::button_sm("mfa-backup", crate::t!("settings.mfa.backup_btn"), BtnKind::Secondary).on_click(cx.listener(|a, _, w, cx| {
+                a.open_account_edit(crate::ui::modals::account_edit::Flow::Confirm(crate::ui::modals::account_edit::Confirm::BackupCodes), w, cx)
+            }))));
     }
     out
 }

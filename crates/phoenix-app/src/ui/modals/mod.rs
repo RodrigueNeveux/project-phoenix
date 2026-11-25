@@ -1,3 +1,4 @@
+pub mod account_edit;
 pub mod accounts;
 pub mod active_threads;
 pub mod channel_overview;
@@ -5,6 +6,7 @@ pub mod channel_perms;
 pub mod channel_perms_data;
 pub mod channel_settings;
 pub mod create_channel;
+pub mod countries;
 pub mod custom_status;
 pub mod follow;
 pub mod forward;
@@ -123,6 +125,7 @@ pub enum Modal {
     AcceptStranger(crate::model::Id),
     GiftNitro(gift_nitro::State),
     Update,
+    Account(account_edit::State),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -170,6 +173,11 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     with_modal(|m| {
         if let Some(Modal::ServerSettings(s)) = m {
             server_settings::prepare(s.as_mut(), window, cx);
+        }
+    });
+    with_modal(|m| {
+        if let Some(Modal::Account(s)) = m {
+            account_edit::prepare(s, window, cx);
         }
     });
     let vp = window.viewport_size();
@@ -250,6 +258,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::AcceptStranger(u) => friend_requests::render_stranger(*u, cx),
             Modal::GiftNitro(s) => gift_nitro::render(app, s, cx),
             Modal::Update => update::render(app, cx),
+            Modal::Account(s) => account_edit::render(app, s, cx),
         })
     })
 }

@@ -102,6 +102,16 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
         app.settings.as_ref().map_or((false, false), |s| (s.reveal_email, s.reveal_phone))
     };
     let trailing = |val: AnyElement, btn: Stateful<Div>| div().flex().items_center().gap(z(20.)).child(val).child(btn).into_any_element();
+    use crate::ui::modals::account_edit::{EmailStep, Flow};
+    let email_flow = if info.email.is_some() && info.verified { Flow::Email(EmailStep::Start) } else { Flow::Email(EmailStep::Form) };
+    let phone_flow = if info.phone.is_some() { Flow::Phone } else { Flow::PhoneEntry };
+    let edit = |id: &'static str, label: SharedString, flow: Flow| {
+        secondary(id, label).on_click(cx.listener(move |a, _, w, cx| a.open_account_edit(flow, w, cx)))
+    };
+    let edit_em = edit("edit-em", if info.email.is_some() { crate::t!("common.edit") } else { crate::t!("common.add") }, email_flow);
+    let edit_ph = edit("edit-ph", if info.phone.is_some() { crate::t!("common.edit") } else { crate::t!("common.add") }, phone_flow);
+    let edit_un = edit("edit-un", crate::t!("common.edit"), Flow::Username);
+    let change_pw = edit("change-pw", crate::t!("common.edit"), Flow::Password);
     let email_row = match info.email.clone() {
         Some(e) => {
             let m = acct::mask_email(&e);
@@ -110,9 +120,9 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     s.reveal_email = !s.reveal_email;
                 }
             }, cx);
-            controls::control_item(crate::t!("settings.account.email"), None, Some(trailing(v, secondary("edit-em", crate::t!("common.edit")))))
+            controls::control_item(crate::t!("settings.account.email"), None, Some(trailing(v, edit_em)))
         }
-        None => controls::control_item(crate::t!("settings.account.email"), None, Some(trailing(acct::value(crate::t!("settings.account.no_email")).into_any_element(), secondary("edit-em", crate::t!("common.add"))))),
+        None => controls::control_item(crate::t!("settings.account.email"), None, Some(trailing(acct::value(crate::t!("settings.account.no_email")).into_any_element(), edit_em))),
     }
     .into_any_element();
     let phone_row = match info.phone.clone() {
@@ -123,10 +133,9 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     s.reveal_phone = !s.reveal_phone;
                 }
             }, cx);
-            controls::control_item(crate::t!("settings.account.phone"), None, Some(trailing(v, secondary("edit-ph", crate::t!("common.edit")))))
-                .into_any_element()
+            controls::control_item(crate::t!("settings.account.phone"), None, Some(trailing(v, edit_ph))).into_any_element()
         }
-        None => field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(secondary("edit-ph", crate::t!("common.add")).into_any_element())),
+        None => field_row(crate::t!("settings.account.phone"), crate::t!("settings.account.no_phone"), Some(edit_ph.into_any_element())),
     };
     let link_row = |id: &'static str, title: SharedString, v: Option<SharedString>, to: super::nested::Nested| {
         controls::control_item(title, None, Some(acct::value_chevron(v)))
@@ -140,14 +149,14 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let q = query(app, cx);
     let t = |k: &str| crate::t!(k);
     let info_rows = vec![
-        (t("settings.account.username"), field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element()))),
+        (t("settings.account.username"), field_row(crate::t!("settings.account.username"), me.name.clone(), Some(edit_un.into_any_element()))),
         (t("settings.account.email"), email_row),
         (t("settings.account.phone"), phone_row),
     ];
     let security_rows = vec![
         (
             t("settings.account.password"),
-            controls::control_item(crate::t!("settings.account.password"), None, Some(secondary("change-pw", crate::t!("common.edit")).into_any_element())).into_any_element(),
+            controls::control_item(crate::t!("settings.account.password"), None, Some(change_pw.into_any_element())).into_any_element(),
         ),
         (
             t("settings.account.mfa"),

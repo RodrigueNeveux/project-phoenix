@@ -338,6 +338,9 @@ pub trait Backend: Send + Sync + 'static {
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         Box::pin(async { Ok(None) })
     }
+    fn guarded_write(&self, w: phoenix_api::rest::account::GuardedWrite) -> BoxFuture<()> {
+        Box::pin(async move { Err(BackendError(w.refusal().to_string())) })
+    }
     fn auth_sessions(&self) -> BoxFuture<Option<Vec<crate::ui::settings::sessions::Session>>> {
         Box::pin(async { Ok(None) })
     }
