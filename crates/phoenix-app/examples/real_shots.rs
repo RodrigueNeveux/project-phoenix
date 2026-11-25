@@ -620,6 +620,7 @@ fn main() -> anyhow::Result<()> {
     .collect();
     let in_voice = env_or_cdp("PHX_IN_VOICE", "(!!document.querySelector('[class*=rtcConnectionStatus_]'))+''").as_deref()
         == Some("true");
+    let show_members = env_or_cdp("PHX_MEMBERS", "(!!document.querySelector('[class*=membersWrap_]'))+''").as_deref() != Some("false");
     let wait: u64 = std::env::var("PHX_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
     println!("target guild={guild:?} channel={channel:?} size={w}x{h} theme={theme:?} compact={compact} density={density:?} font={font_px} mute={self_mute} deaf={self_deaf}");
 
@@ -716,6 +717,7 @@ fn main() -> anyhow::Result<()> {
             app.deafened = self_deaf;
             app.nav.expanded_folders.clear();
             app.nav.expanded_folders.extend(open_folders.iter().copied());
+            app.show_members = show_members;
             if in_voice {
                 app.voice_channel = app
                     .channels

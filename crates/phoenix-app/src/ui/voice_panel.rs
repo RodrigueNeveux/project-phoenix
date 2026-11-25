@@ -651,15 +651,19 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .flex()
                 .items_center()
                 .child(
-                    div()
-                        .min_w_0()
-                        .text_size(z(14.))
-                        .line_height(z(18.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(name_color)
-                        .group_hover("voice-user-row", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
-                        .text_ellipsis()
-                        .child(crate::ui::emoji_text::label(crate::ui::sidebar::voice_user_name(app, user), 14.)),
+                    crate::fonts::styled_name(
+                        div()
+                            .min_w_0()
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(name_color)
+                            .group_hover("voice-user-row", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                            .text_ellipsis(),
+                        u,
+                        false,
+                    )
+                    .child(crate::ui::emoji_text::label(crate::ui::sidebar::voice_user_name(app, user), 14.)),
                 )
                 .when_some(tag, |d, t| d.child(server_tag(&t, 12.))),
         )
@@ -669,6 +673,14 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                 .flex_none()
                 .items_center()
                 .gap(z(4.))
+                .when(f.video, |d| d.child(asset_icon(VIDEO, 16., state)))
+                .when(local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
+                .when(f.server_mute && !local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
+                .when((f.self_mute || f.self_deaf) && !f.server_mute && !local_muted, |d| {
+                    d.child(icon(Icon::MicOff, 16., state))
+                })
+                .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
+                .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state)))
                 .when(f.stream, |d| {
                     d.child(
                         div()
@@ -684,15 +696,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
                             .text_color(gpui::white())
                             .child(crate::t!("voice.live")),
                     )
-                })
-                .when(f.video, |d| d.child(asset_icon(VIDEO, 16., state)))
-                .when(local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
-                .when(f.server_mute && !local_muted, |d| d.child(icon(Icon::MicOff, 16., red)))
-                .when((f.self_mute || f.self_deaf) && !f.server_mute && !local_muted, |d| {
-                    d.child(icon(Icon::MicOff, 16., state))
-                })
-                .when(f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., red)))
-                .when(f.self_deaf && !f.server_deaf, |d| d.child(icon(Icon::HeadphonesOff, 16., state))),
+                }),
         )
         .child(
             div()

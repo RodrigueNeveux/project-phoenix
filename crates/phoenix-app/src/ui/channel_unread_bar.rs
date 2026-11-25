@@ -92,13 +92,16 @@ fn bar_el(app: &PhoenixApp, ix: usize, mode: Mode, top: bool) -> gpui::AnyElemen
         .left_0()
         .right_0()
         .p(z(8.))
+        .flex()
+        .justify_center()
         .when(top, |d| d.top_0())
         .when(!top, |d| d.bottom_0())
         .child(
             div()
                 .id(if top { "channels-unread-top" } else { "channels-unread-bottom" })
-                .h(z(24.))
-                .rounded(z(12.))
+                .px(z(8.))
+                .py(z(4.))
+                .rounded(z(20.))
                 .flex()
                 .items_center()
                 .justify_center()
@@ -114,8 +117,8 @@ fn bar_el(app: &PhoenixApp, ix: usize, mode: Mode, top: bool) -> gpui::AnyElemen
                         d.bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST))).border_color(c(tok(idx::BORDER_NORMAL))).shadow(vec![
                             gpui::BoxShadow {
                                 color: c(tok(idx::OPACITY_BLACK_24)),
-                                offset: gpui::point(px(0.), z(2.)),
-                                blur_radius: z(6.),
+                                offset: gpui::point(px(0.), z(12.)),
+                                blur_radius: z(24.),
                                 spread_radius: px(0.),
                                 inset: false,
                             },
