@@ -9,6 +9,7 @@ Progress updates for Phoenix are posted on the project's Discord server, *Discor
 | `📢・annonces` | `1574895965171617982` | One post per milestone: what is new, what comes next, the "not final" warning, up to 4 README screenshots |
 | `📸・captures` | `1574895971513532477` | One gallery post per milestone, up to 10 README screenshots with a one-line caption |
 | `⚙️・avancés` | `1574898034859581631` | The single tracking message (Done / In progress / Next), edited in place and pinned |
+| `📋・changelogs` | `1575141380785836133` | Changelogs: everything merged since the last release, grouped by area, with real-account renders; several messages of at most 10 images when needed. Says plainly that the changes ship with the next beta, without a date |
 
 The other channels (rules, roles, discussion, feedback, bugs, support, team, logs) are never written to.
 
@@ -19,12 +20,13 @@ The other channels (rules, roles, discussion, feedback, bugs, support, team, log
 ## Rules
 
 - At most one post per channel per milestone. No `@everyone`, no `@here`, no mentions, no replies to members on the owner's behalf, no moderation and no server settings.
-- Images come only from the screenshots already reviewed for the README (`docs/screenshots/<date>/`), with the same privacy rules: no profiles, no account pages, third-party names blurred.
+- Images come from the screenshots already reviewed for the README (`docs/screenshots/<date>/`), or, for changelogs, from recent real-account renders copied into a local `reviewed-screenshots/` folder (never committed) after a privacy pass with the README rules: no email or phone, no account page, no DMs, no server other than Aperture Sciences, no third-party profile or stream, third-party names or awkward text blurred.
+- Releases are made by the owner only. A changelog never promises a date.
 - Every post says that the builds and screenshots are not final versions.
 
 ## Posting
 
-Posts go through `crates/phoenix-app/examples/community_post.rs`, which uses the real Phoenix REST client with the token from the keyring. It refuses anything but this guild and the three channels above (checked by id and by name), any text over 2000 characters or containing `@everyone`, `@here` or a mention, any image outside `docs/screenshots/<date>/`, and edits or pins of messages the account did not write. Mentions are disabled with `allowed_mentions`.
+Posts go through `crates/phoenix-app/examples/community_post.rs`, which uses the real Phoenix REST client with the token from the keyring. It refuses anything but this guild and the four channels above (checked by id and by name), any text over 2000 characters or containing `@everyone`, `@here` or a mention, any image outside `docs/screenshots/` or a local `reviewed-screenshots/` folder, and edits or pins of messages the account did not write. Mentions are disabled with `allowed_mentions`.
 
 ```sh
 cargo build -p phoenix-app --example community_post

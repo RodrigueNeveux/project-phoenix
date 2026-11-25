@@ -12,8 +12,9 @@ const CHANNELS: &[(&str, u64, &str)] = &[
     ("annonces", 1574895965171617982, "📢・annonces"),
     ("captures", 1574895971513532477, "📸・captures"),
     ("avances", 1574898034859581631, "⚙️・avancés"),
+    ("changelogs", 1575141380785836133, "📋・changelogs"),
 ];
-const USAGE: &str = "usage: community_post check|send|edit|pin <annonces|captures|avances> [<text file> [images...] | <message id> [<text file>]]";
+const USAGE: &str = "usage: community_post check|send|edit|pin <annonces|captures|avances|changelogs> [<text file> [images...] | <message id> [<text file>]]";
 
 fn channel(key: &str) -> anyhow::Result<(u64, &'static str)> {
     CHANNELS
@@ -34,8 +35,8 @@ fn text(path: &str) -> anyhow::Result<String> {
 
 fn image(path: &str) -> anyhow::Result<FileUpload> {
     anyhow::ensure!(
-        path.contains("docs/screenshots/2026-11-25/") && path.ends_with(".png"),
-        "refusing: {path} is not a README screenshot"
+        (path.contains("docs/screenshots/") || path.contains("/reviewed-screenshots/")) && path.ends_with(".png"),
+        "refusing: {path} is not a reviewed screenshot"
     );
     Ok(FileUpload {
         filename: std::path::Path::new(path).file_name().unwrap_or_default().to_string_lossy().into_owned(),
