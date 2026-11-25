@@ -921,7 +921,13 @@ fn empty_state(text: SharedString, error: bool) -> gpui::Div {
     )
 }
 
+type GoPage = std::rc::Rc<dyn Fn(&mut PhoenixApp, u32, &mut Context<PhoenixApp>)>;
+
 fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    pager_with(cur, pages, std::rc::Rc::new(go_page), cx)
+}
+
+pub(crate) fn pager_with(cur: u32, pages: u32, go: GoPage, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let caret = |next: bool| {
         let g = named("chevron-right", 16., tk(idx::TEXT_STRONG));
         if next { g } else { g.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))) }
@@ -949,7 +955,8 @@ fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let mut nav = div().flex().items_center().gap(z(8.));
     let mut prev = end("search-prev", crate::t!("search.prev_page"), false, cur > 1);
     if cur > 1 {
-        prev = prev.on_click(cx.listener(move |a, _, _, cx| go_page(a, cur - 1, cx)));
+        let go = go.clone();
+        prev = prev.on_click(cx.listener(move |a, _, _, cx| go(a, cur - 1, cx)));
     }
     nav = nav.child(prev);
     for (k, item) in page_items(cur, pages).into_iter().enumerate() {
@@ -979,14 +986,17 @@ fn pager(cur: u32, pages: u32, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                     .line_height(z(16.))
                     .font_weight(FontWeight::SEMIBOLD)
                     .when(on, |d| d.bg(tk(idx::BRAND_500)).text_color(tk(idx::WHITE)))
-                    .when(!on, |d| d.text_color(tk(idx::TEXT_STRONG)).cursor_pointer().hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE))).on_click(cx.listener(move |a, _, _, cx| go_page(a, p, cx))))
+                    .when(!on, |d| {
+                        let go = go.clone();
+                        d.text_color(tk(idx::TEXT_STRONG)).cursor_pointer().hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE))).on_click(cx.listener(move |a, _, _, cx| go(a, p, cx)))
+                    })
                     .child(p.to_string())
             }
         });
     }
     let mut next = end("search-next", crate::t!("common.next"), true, cur < pages);
     if cur < pages {
-        next = next.on_click(cx.listener(move |a, _, _, cx| go_page(a, cur + 1, cx)));
+        next = next.on_click(cx.listener(move |a, _, _, cx| go(a, cur + 1, cx)));
     }
     nav = nav.child(next);
     div().flex_none().h(z(56.)).px(z(16.)).flex().items_center().justify_center().child(nav)

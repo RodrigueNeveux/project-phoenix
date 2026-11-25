@@ -107,7 +107,7 @@ fn by_path(js: &str, prefix: &str) -> Option<String> {
     let at = js.find(&format!("d:\"{prefix}"))?;
     let start = at.saturating_sub(600);
     let start = (start..at).find(|i| js.is_char_boundary(*i))?;
-    let open = start + js[start..at].rfind("=function(")?;
+    let open = start + ["=function(", ":function("].iter().filter_map(|n| js[start..at].rfind(n)).max()?;
     let open = open + js[open..].find('{')?;
     let close = close_brace(js.as_bytes(), open)?;
     if close < at {
@@ -210,5 +210,12 @@ mod tests {
         let js = r#"let o=function(e){let{width:t=16,color:r="currentColor"}=e;return(0,i.jsx)("svg",{width:t,viewBox:"0 0 16 16",children:(0,i.jsx)("path",{fill:r,fillRule:"evenodd",d:"M5.5 0.4C6 0 8 1z"})})};"#;
         let s = icon_svg(js, "path:M5.5 0.4").unwrap();
         assert!(s.contains(r#"viewBox="0 0 16 16""#) && s.contains(r#"d="M5.5 0.4C6 0 8 1z""#), "{s}");
+    }
+
+    #[test]
+    fn finds_an_exported_module_component_by_its_path() {
+        let js = r#"881548(e,t,n){n.d(t,{},{A:function(e){let{width:t=16,height:n=16,color:a="currentColor",foreground:i,...s}=e;return(0,l.jsxs)("svg",{width:t,height:n,viewBox:"0 0 16 16",fill:"none",children:[(0,l.jsx)("path",{d:"M8 6.66659C9 6 8 5z",className:i??void 0,fill:a}),(0,l.jsx)("path",{fillRule:"evenodd",clipRule:"evenodd",d:"M11 11.5z",fill:a})]})}})}"#;
+        let s = icon_svg(js, "path:M8 6.66659C").unwrap();
+        assert!(s.contains(r#"viewBox="0 0 16 16""#) && s.contains(r#"d="M8 6.66659C9 6 8 5z""#) && s.contains(r#"fill-rule="evenodd" clip-rule="evenodd" d="M11 11.5z""#), "{s}");
     }
 }

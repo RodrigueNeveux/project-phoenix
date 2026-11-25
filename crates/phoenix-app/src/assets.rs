@@ -274,7 +274,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/settings/vr-headset.svg" => s!(r#"<rect x="2" y="7" width="20" height="11" rx="3"/><path d="M10 18l2-3 2 3"/>"#),
         "icons/settings/laptop-phone.svg" => s!(r#"<rect x="3" y="4" width="13" height="10" rx="2"/><path d="M2 18h12M17 9h4v11h-4z"/>"#),
         "icons/settings/circle-error.svg" => s!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3.5v.5"/>"#),
-        "icons/settings/shield-user.svg" => s!(r#"<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16a4 4 0 0 1 8 0"/>"#),
+        "icons/settings/shield-user.svg" | "icons/mod/shield-user.svg" => s!(r#"<path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5z"/><circle cx="12" cy="10" r="2.5"/><path d="M8 16a4 4 0 0 1 8 0"/>"#),
         "icons/settings/slash.svg" => s!(r#"<path d="M16 4 8 20"/>"#),
         "icons/settings/chevron-down.svg" => s!(r#"<path d="m5 9 7 7 7-7"/>"#),
         "icons/settings/eye.svg" => s!(r#"<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>"#),

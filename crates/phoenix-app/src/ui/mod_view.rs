@@ -12,6 +12,13 @@ use crate::{
 };
 
 pub const WIDTH: f32 = 480.;
+pub const AREA_W: f32 = WIDTH - 8. - 16.;
+pub const SLIDE_GAP: f32 = 12.;
+pub const HISTORY_PAGE: u32 = 25;
+pub const SPRING_TENSION: f32 = 170.;
+pub const SPRING_FRICTION: f32 = 26.;
+const SPRING_PRECISION: f32 = 0.001;
+const SPRING_MAX_SECS: f32 = 1.5;
 pub const MEDIA_EXTENSIONS: [&str; 12] = ["png", "jpg", "webp", "mov", "mp4", "qt", "gif", "mp3", "wav", "flac", "ogg", "opus"];
 
 pub const ADMINISTRATOR: u32 = 3;
@@ -76,6 +83,8 @@ pub struct Data {
     pub counts: [Option<u32>; 3],
     pub recent: [Option<Vec<Message>>; 3],
     pub history_tab: Tab,
+    pub history_page: u32,
+    pub history_page_results: Option<Option<crate::ui::search::SearchPage>>,
     pub audit: Option<Result<Vec<Value>, ()>>,
     pub audit_users: Value,
     pub join: Option<JoinInfo>,
@@ -88,7 +97,36 @@ pub struct ModView {
     pub data: Data,
     pub refreshing: bool,
     pub perm_query: Option<gpui::Entity<gpui_component::input::InputState>>,
+    pub slide: Option<Slide>,
     seq: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Slide {
+    pub from: Panel,
+    pub forwards: bool,
+    pub start: std::time::Instant,
+}
+
+pub fn spring(t: f32) -> f32 {
+    let w0 = SPRING_TENSION.sqrt();
+    let zeta = SPRING_FRICTION / (2. * SPRING_TENSION.sqrt());
+    if zeta < 1. {
+        let wd = w0 * (1. - zeta * zeta).sqrt();
+        (-zeta * w0 * t).exp() * ((wd * t).cos() + (zeta * w0 / wd) * (wd * t).sin())
+    } else {
+        (-w0 * t).exp() * (1. + w0 * t)
+    }
+}
+
+pub fn spring_done(t: f32) -> bool {
+    let v = (spring(t + 0.001) - spring(t)) / 0.001;
+    t >= SPRING_MAX_SECS || (t > 0. && spring(t).abs() < SPRING_PRECISION && v.abs() < SPRING_PRECISION * 10.)
+}
+
+pub fn slide_offsets(x: f32, forwards: bool) -> (f32, f32) {
+    let d = AREA_W + SLIDE_GAP;
+    if forwards { (x * d, -(1. - x) * d) } else { (-x * d, (1. - x) * d) }
 }
 
 thread_local! {
@@ -126,13 +164,18 @@ pub fn escape() -> bool {
 }
 
 pub fn navigate(p: Panel) {
-    with(|m| m.panel = p);
+    with(|m| {
+        if m.panel != p {
+            m.slide = Some(Slide { from: m.panel, forwards: p != Panel::Info, start: std::time::Instant::now() });
+            m.panel = p;
+        }
+    });
 }
 
 pub fn open(app: &mut PhoenixApp, guild: Id, user: Id, cx: &mut Context<PhoenixApp>) {
     app.people.close_overlays();
     let seq = VIEW.with(|v| v.borrow().as_ref().map_or(0, |m| m.seq) + 1);
-    VIEW.with(|v| *v.borrow_mut() = Some(ModView { guild, user, panel: Panel::Info, data: Data::default(), refreshing: false, perm_query: None, seq }));
+    VIEW.with(|v| *v.borrow_mut() = Some(ModView { guild, user, panel: Panel::Info, data: Data::default(), refreshing: false, perm_query: None, slide: None, seq }));
     load(app, guild, user, seq, cx);
     cx.notify();
 }
@@ -484,12 +527,14 @@ fn row(r: Row, last: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .hover(|s| s.bg(tk(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 .child(icon("mod/chevron-large-right", 16., tk(idx::TEXT_MUTED)).group_hover(group, |s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER))))
                 .on_click(cx.listener(move |_, _, _, cx| {
-                    with(|m| {
-                        if let Some(t) = tab {
+                    if let Some(t) = tab {
+                        with(|m| {
                             m.data.history_tab = t;
-                        }
-                        m.panel = p;
-                    });
+                            m.data.history_page = 0;
+                            m.data.history_page_results = None;
+                        });
+                    }
+                    navigate(p);
                     cx.notify();
                 }))
         })
@@ -567,7 +612,7 @@ fn header_card(app: &PhoenixApp, x: &Ctx, cx: &mut Context<PhoenixApp>) -> Div {
         .map(SharedString::from)
         .or_else(|| u.map(|u| u.display_name.clone()))
         .unwrap_or_else(|| crate::t!("common.unknown_user"));
-    let tag: SharedString = u.map(|u| u.name.clone()).unwrap_or_default();
+    let username: SharedString = u.map(|u| u.name.clone()).unwrap_or_default();
     let top = div()
         .flex()
         .items_center()
@@ -587,8 +632,16 @@ fn header_card(app: &PhoenixApp, x: &Ctx, cx: &mut Context<PhoenixApp>) -> Div {
                         .flex_col()
                         .justify_center()
                         .min_w_0()
-                        .child(text(name, 20., 24., FontWeight::MEDIUM, idx::TEXT_STRONG).truncate())
-                        .child(text(tag, 16., 20., FontWeight::MEDIUM, idx::TEXT_DEFAULT).truncate()),
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(z(8.))
+                                .min_w_0()
+                                .child(text(name, 20., 24., FontWeight::MEDIUM, idx::TEXT_STRONG).min_w_0().truncate())
+                                .when_some(u.and_then(|u| u.tag.clone()), |d, t| d.child(clan_tag(&t))),
+                        )
+                        .child(text(username, 16., 20., FontWeight::MEDIUM, idx::TEXT_DEFAULT).truncate()),
                 ),
         )
         .child(
@@ -637,6 +690,24 @@ fn header_card(app: &PhoenixApp, x: &Ctx, cx: &mut Context<PhoenixApp>) -> Div {
         .shadow(shadow(false, true))
         .child(top)
         .child(div().mt(z(1.)).flex().items_center().justify_between().gap(z(1.)).children(actions))
+}
+
+pub fn clan_tag(tag: &(SharedString, Option<SharedString>)) -> Stateful<Div> {
+    div()
+        .id("modview-clan-tag")
+        .flex_none()
+        .mt(z(-2.))
+        .p(z(4.))
+        .rounded(z(4.))
+        .bg(tk(idx::BACKGROUND_MOD_STRONG))
+        .flex()
+        .items_center()
+        .text_size(z(16.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(tk(idx::TEXT_DEFAULT))
+        .when_some(tag.1.clone(), |d, url| d.child(gpui::img(url).size(z(16.)).mr(z(2.)).flex_none()))
+        .child(div().max_w(z(70.)).overflow_hidden().whitespace_nowrap().child(tag.0.clone()))
 }
 
 fn action(
@@ -943,7 +1014,7 @@ fn info_panel(app: &PhoenixApp, m: &ModView, x: &Ctx, cx: &mut Context<PhoenixAp
         .flex()
         .items_center()
         .gap(z(8.))
-        .child(icon("settings/shield-user", 16., tk(idx::TEXT_STRONG)))
+        .child(icon("mod/shield-user", 16., tk(idx::TEXT_STRONG)))
         .child(text(crate::t!("modview.title"), 16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG));
     let body = div()
         .flex()
@@ -1124,15 +1195,62 @@ fn audit_entry(app: &PhoenixApp, m: &ModView, e: &Value) -> AnyElement {
         .into_any_element()
 }
 
-fn history_panel(app: &PhoenixApp, m: &ModView, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let i = match m.data.history_tab {
+fn tab_index(t: Tab) -> usize {
+    match t {
         Tab::Messages => 0,
         Tab::Links => 1,
         Tab::Media => 2,
+    }
+}
+
+pub fn history_pages(total: u32) -> u32 {
+    total.div_ceil(HISTORY_PAGE).max(1)
+}
+
+pub fn go_history_page(app: &mut PhoenixApp, page: u32, cx: &mut Context<PhoenixApp>) {
+    let Some((guild, user, tab, seq)) = with(|m| {
+        m.data.history_page = page;
+        m.data.history_page_results = if page == 0 { None } else { Some(None) };
+        (m.guild, m.user, m.data.history_tab, m.seq)
+    }) else {
+        return;
     };
-    let body = match &m.data.recent[i] {
+    crate::ui::chat::scrollbar::handle("modview-history-scroll").set_offset(gpui::point(gpui::px(0.), gpui::px(0.)));
+    cx.notify();
+    if page == 0 {
+        return;
+    }
+    let mut req = search_request(guild, user, tab);
+    req.offset = page * HISTORY_PAGE;
+    let fut = app.backend.search_messages(req);
+    cx.spawn(async move |this, cx| {
+        let r = fut.await;
+        let _ = this.update(cx, |_, cx| {
+            update(seq, |d| {
+                if d.history_page == page && d.history_tab == tab {
+                    d.history_page_results = Some(Some(r.unwrap_or_default()));
+                }
+            });
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
+fn history_panel(app: &PhoenixApp, m: &ModView, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let i = tab_index(m.data.history_tab);
+    let total = m.data.counts[i].unwrap_or(0);
+    let page = m.data.history_page;
+    let list = if page == 0 { m.data.recent[i].as_ref() } else { m.data.history_page_results.as_ref().and_then(|r| r.as_ref()).map(|p| &p.messages) };
+    let body = match list {
         None => div().p(z(16.)).child(spinner()),
-        Some(list) => div().flex().flex_col().gap(z(16.)).mt(z(1.)).px(z(16.)).py(z(12.)).child(crate::ui::search::grouped_results(app, list, cx)),
+        Some(list) => {
+            let pages = history_pages(total);
+            let pager = (pages > 1).then(|| {
+                crate::ui::search::pager_with(page + 1, pages, std::rc::Rc::new(|a: &mut PhoenixApp, p: u32, cx: &mut Context<PhoenixApp>| go_history_page(a, p.saturating_sub(1), cx)), cx)
+            });
+            div().flex().flex_col().gap(z(16.)).mt(z(1.)).px(z(16.)).py(z(12.)).child(crate::ui::search::grouped_results(app, list, cx)).children(pager)
+        }
     };
     panel_frame(vec![panel_header(back_title(cx), None, true, cx).into_any_element(), scroller("modview-history-scroll", body)])
 }
@@ -1166,13 +1284,35 @@ pub fn render(app: &PhoenixApp, window: &mut gpui::Window, cx: &mut Context<Phoe
         let inner = if loading {
             div().flex_1().flex().items_center().justify_center().child(spinner())
         } else {
-            let p = match m.panel {
+            let panel = |p: Panel, cx: &mut Context<PhoenixApp>| match p {
                 Panel::Info => info_panel(app, m, &x, cx),
                 Panel::Permissions => permissions_panel(m, &x, cx),
                 Panel::AuditLog => audit_panel(app, m, cx),
                 Panel::MessageHistory => history_panel(app, m, cx),
             };
-            div().flex_1().min_h_0().relative().flex().flex_col().gap(z(8.)).p(z(8.)).text_color(tk(idx::TEXT_DEFAULT)).child(header_card(app, &x, cx)).child(div().flex_1().min_h_0().flex().flex_col().child(p))
+            let elapsed = m.slide.map(|s| s.start.elapsed().as_secs_f32());
+            let area = match (m.slide, elapsed) {
+                (Some(s), Some(t)) if !spring_done(t) && s.from != m.panel => {
+                    window.request_animation_frame();
+                    let x = spring(t);
+                    let reduced = crate::ui::settings::effects::reduced_motion();
+                    let (enter, leave) = if reduced { (0., 0.) } else { slide_offsets(x, s.forwards) };
+                    let layer = |child: AnyElement, left: f32, opacity: f32| {
+                        div().absolute().top_0().bottom_0().left(z(left)).w(z(AREA_W)).flex().flex_col().opacity(opacity).child(child)
+                    };
+                    let old = panel(s.from, cx);
+                    let new = panel(m.panel, cx);
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .relative()
+                        .overflow_hidden()
+                        .child(layer(old, leave, if reduced { x.clamp(0., 1.) } else { 1. }))
+                        .child(layer(new, enter, if reduced { (1. - x.abs()).clamp(0., 1.) } else { 1. }))
+                }
+                _ => div().flex_1().min_h_0().flex().flex_col().child(panel(m.panel, cx)),
+            };
+            div().flex_1().min_h_0().relative().flex().flex_col().gap(z(8.)).p(z(8.)).text_color(tk(idx::TEXT_DEFAULT)).child(header_card(app, &x, cx)).child(area)
         };
         Some(
             div()
@@ -1243,6 +1383,24 @@ mod tests {
         assert_eq!(rules_state(&gate, &m), Some(false));
         assert_eq!(rules_state(&gate, &MemberInfo { flags: 2, ..m.clone() }), Some(true));
         assert_eq!(rules_state(&gate, &MemberInfo { pending: Some(false), ..m }), Some(true));
+    }
+
+    #[test]
+    fn panel_slide_follows_the_default_spring() {
+        assert!((spring(0.) - 1.).abs() < 1e-6);
+        assert!(spring(0.1) > 0. && spring(0.1) < 1.);
+        assert!(spring(0.2) < spring(0.1));
+        assert!(!spring_done(0.2));
+        assert!(spring_done(0.9));
+        assert!(spring_done(SPRING_MAX_SECS));
+        let d = AREA_W + SLIDE_GAP;
+        assert_eq!(slide_offsets(1., true), (d, 0.));
+        assert_eq!(slide_offsets(0., true), (0., -d));
+        assert_eq!(slide_offsets(1., false), (-d, 0.));
+        assert_eq!(slide_offsets(0., false), (0., d));
+        assert_eq!(history_pages(0), 1);
+        assert_eq!(history_pages(25), 1);
+        assert_eq!(history_pages(26), 2);
     }
 
     #[test]
