@@ -395,6 +395,7 @@ pub(crate) fn name_block_with(i: &Info, big: bool, trailing: Option<AnyElement>,
                 .gap(z(4.))
                 .child(
                     crate::fonts::styled_name(div(), i.user.as_deref(), true)
+                        .id(("profile-name-text", i.user.as_deref().map_or(0, |u| u.id.0)))
                         .text_size(z(if big { 24. } else { 20. }))
                         .line_height(z(if big { 32. } else { 24. }))
                         .font_weight(FontWeight::SEMIBOLD)
