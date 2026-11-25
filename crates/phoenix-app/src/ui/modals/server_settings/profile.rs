@@ -92,7 +92,7 @@ fn members_play(app: &PhoenixApp, s: &State, cx: &mut Cx) -> Option<Vec<Value>> 
     let snow: Vec<phoenix_api::models::Snowflake> = ids.iter().filter_map(|i| i.parse().ok()).map(phoenix_api::models::Snowflake).collect();
     let apps = crate::ui::server_pages::fetch(app, s.guild, ServerCall::PublicApps { ids: snow }, cx)?;
     let list = apps.as_array().cloned().unwrap_or_default();
-    Some(ids.iter().filter_map(|id| list.iter().find(|a| kit::s(a, "id") == id).cloned()).collect())
+    Some(ids.iter().filter_map(|id| list.iter().find(|a| kit::s(a, "id") == *id).cloned()).collect())
 }
 
 pub fn games(s: &State) -> Vec<Value> {
