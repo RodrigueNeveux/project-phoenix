@@ -157,7 +157,7 @@ pub fn onboarding(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> 
     let Some(ob) = ob else { return page().child(super::loading()).into_any_element() };
     let wizard = super::flag(guild, "onboarding-wizard").unwrap_or(false);
     if wizard {
-        return onboarding_wizard(app, guild, &ob, cx);
+        return super::onboarding::wizard(app, guild, &ob, cx);
     }
     let enabled = ob.get("enabled").and_then(Value::as_bool).unwrap_or(false);
     let mut p = page()
@@ -195,59 +195,6 @@ pub fn onboarding(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> 
             .child(div().flex_1().min_w_0().flex().flex_col().gap(z(12.)).child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.ob_defaults_title"))).child(text(14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.ob_defaults_desc"))).child(text(12., 16., FontWeight::NORMAL, idx::TEXT_MUTED, crate::t!("gs2.ob_n_defaults", n = defaults)))),
     )
     .into_any_element()
-}
-
-pub const STEPS: [&str; 5] = ["gs2.ob_step1", "gs2.ob_step2", "gs2.ob_step3", "gs2.ob_step4", "gs2.ob_step5"];
-
-fn onboarding_wizard(app: &PhoenixApp, guild: Id, ob: &Value, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let step = super::with(|s| s.text.get(&(guild, "ob-step".to_owned())).and_then(|v| v.parse::<usize>().ok())).unwrap_or(0);
-    let mut bar = div().flex().gap(z(8.));
-    for (i, k) in STEPS.iter().enumerate() {
-        let on = i <= step;
-        bar = bar.child(
-            div()
-                .id(("gs2-ob-step", i))
-                .flex_1()
-                .h(z(44.))
-                .flex()
-                .flex_col()
-                .gap(z(8.))
-                .cursor_pointer()
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    if i <= step {
-                        super::with(|s| {
-                            s.text.insert((guild, "ob-step".into()), i.to_string());
-                        });
-                        cx.notify();
-                    }
-                }))
-                .child(div().h(z(4.)).rounded(z(2.)).bg(t(if on { idx::BRAND_500 } else { idx::BACKGROUND_MOD_STRONG })))
-                .child(text(12., 16., FontWeight::MEDIUM, if i == step { idx::TEXT_BRAND } else { idx::TEXT_MUTED }, crate::t!(k))),
-        );
-    }
-    let body = match step {
-        0 => super::safety::render(app, guild, cx),
-        1 => {
-            let mut d = div().flex().flex_col().gap(z(8.)).child(title(crate::t!("gs2.ob_step2")));
-            for ch in ob.get("default_channel_ids").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
-                let id = ch.parse().ok().map(Id);
-                d = d.child(div().h(z(48.)).px(z(16.)).rounded(z(8.)).bg(t(idx::CARD_BACKGROUND_DEFAULT)).flex().items_center().gap(z(8.)).child(icon("hash", 20., idx::ICON_SUBTLE)).child(text(16., 20., FontWeight::MEDIUM, idx::TEXT_STRONG, super::channel_label(app, id))).child(div().flex_1()).child(crate::ui::community::checkbox(true)));
-            }
-            d.into_any_element()
-        }
-        _ => {
-            let mut d = div().flex().flex_col().gap(z(16.)).child(title(crate::t!(STEPS[step])));
-            for pr in ob.get("prompts").and_then(Value::as_array).into_iter().flatten() {
-                let mut opts = div().flex().flex_wrap().gap(z(8.));
-                for o in pr.get("options").and_then(Value::as_array).into_iter().flatten() {
-                    opts = opts.child(div().px(z(16.)).py(z(12.)).rounded(z(8.)).bg(t(idx::BACKGROUND_MOD_SUBTLE)).child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG, str_of(o, "title").to_owned())));
-                }
-                d = d.child(div().p(z(16.)).rounded(z(8.)).bg(t(idx::CARD_BACKGROUND_DEFAULT)).flex().flex_col().gap(z(12.)).child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, str_of(pr, "title").to_owned())).child(opts));
-            }
-            d.into_any_element()
-        }
-    };
-    page().child(bar).child(div().mt(z(32.)).child(body)).into_any_element()
 }
 
 #[cfg(test)]

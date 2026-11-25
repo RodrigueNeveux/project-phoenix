@@ -57,19 +57,15 @@ pub fn counts(guild: &Value, rules: &Value) -> Counts {
     }
 }
 
-fn badge(name: &'static str, from: u32, to: u32) -> AnyElement {
-    let a = crate::theme::c(from);
-    let b = crate::theme::c(to);
-    div()
-        .size(z(40.))
-        .flex_none()
-        .rounded_full()
-        .bg(gpui::linear_gradient(135., gpui::linear_color_stop(a, 0.), gpui::linear_color_stop(b, 1.)))
-        .flex()
-        .items_center()
-        .justify_center()
-        .child(gpui::svg().path(crate::icons::path(name)).size(z(20.)).text_color(gpui::white()))
-        .into_any_element()
+pub const ART: [&str; 4] = [
+    "https://discord.com/assets/22060f02ea963ef3.svg",
+    "https://discord.com/assets/d253b51d9c2ac233.svg",
+    "https://discord.com/assets/afce11491007f19a.svg",
+    "https://discord.com/assets/b5d15eff2a0074e3.svg",
+];
+
+fn badge(url: &'static str) -> AnyElement {
+    div().size(z(40.)).flex_none().rounded_full().overflow_hidden().child(gpui::img(SharedString::from(url)).size(z(40.))).into_any_element()
 }
 
 pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -90,10 +86,10 @@ fn overview(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyEle
     };
     let n = counts(&g, &rules);
     let steps: [(&'static str, (usize, usize), Sub, AnyElement); 4] = [
-        ("gs2.raid_title", n.raid, Sub::RaidCaptcha, badge("shield-lock", 0xFFC24A, 0xF59C1A)),
-        ("gs2.dm_title", n.dm, Sub::DmSpam, badge("chat", 0x6BE3A6, 0x3AB6D9)),
-        ("gs2.automod_title", n.automod, Sub::Automod, badge("moderation", 0x5865F2, 0xEB459E)),
-        ("gs2.perms_title", n.perms, Sub::Permissions, badge("user-check", 0xF77FA4, 0xE8365D)),
+        ("gs2.raid_title", n.raid, Sub::RaidCaptcha, badge(ART[0])),
+        ("gs2.dm_title", n.dm, Sub::DmSpam, badge(ART[1])),
+        ("gs2.automod_title", n.automod, Sub::Automod, badge(ART[2])),
+        ("gs2.perms_title", n.perms, Sub::Permissions, badge(ART[3])),
     ];
     let mut list = card().mt(z(32.)).flex().flex_col();
     for (i, (key, (on, of), target, art)) in steps.into_iter().enumerate() {

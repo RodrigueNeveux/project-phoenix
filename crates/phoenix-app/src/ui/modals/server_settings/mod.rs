@@ -505,7 +505,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         Some(e) => (e, false),
         None => page(app, s, cx),
     };
-    let notice = s.dirty(cx).then(|| settings_layout::unsaved_bar(Rc::new(reset), Rc::new(save), cx));
+    let notice = if s.dirty(cx) { Some(settings_layout::unsaved_bar(Rc::new(reset), Rc::new(save), cx)) } else { crate::ui::server_pages::notice(app, s.guild, s.key(), cx) };
     let shell = if s.role.is_some() {
         settings_layout::overlay_fixed("server-settings", side, s.section, pick_fn, content, notice, cx)
     } else if wide {

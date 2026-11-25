@@ -32,6 +32,12 @@ pub fn reply(c: &ServerCall) -> Value {
         S::Templates { .. } => json!([]),
         S::Onboarding { guild } => json!({ "guild_id": guild, "enabled": false, "mode": 1, "default_channel_ids": ["10"],
             "prompts": [{ "id": "1", "title": "Que veux-tu faire ?", "options": [{ "id": "2", "title": "Discuter" }, { "id": "3", "title": "Coder" }] }] }),
+        S::Channels { .. } => json!([
+            { "id": "10", "type": 0, "name": "général", "position": 0 },
+            { "id": "11", "type": 0, "name": "règles", "position": 1, "permission_overwrites": [{ "id": "1", "type": 0, "allow": "0", "deny": "2048" }] },
+            { "id": "12", "type": 2, "name": "Vocal", "position": 2 }
+        ]),
+        S::NewMemberWelcome { .. } => json!({ "enabled": false, "welcome_message": { "author_ids": [], "message": "" }, "new_member_actions": [], "resource_channels": [{ "channel_id": "11", "title": "", "description": "" }] }),
         S::Analytics { kind, .. } => match kind {
             AnalyticsKind::Engagement => json!([{ "visitors": 120, "communicators": 30 }, { "visitors": 100, "communicators": 30 }]),
             AnalyticsKind::Growth => json!([{ "new_members": 8 }, { "new_members": 10 }]),

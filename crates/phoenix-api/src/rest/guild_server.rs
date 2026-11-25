@@ -29,6 +29,8 @@ pub enum ServerCall {
     Onboarding { guild: Snowflake },
     SetOnboarding { guild: Snowflake, onboarding: Value },
     WelcomeScreen { guild: Snowflake },
+    Channels { guild: Snowflake },
+    NewMemberWelcome { guild: Snowflake },
     PremiumSubscriptions { guild: Snowflake },
     Analytics { guild: Snowflake, kind: AnalyticsKind, start: String, end: String },
     DiscoveryMetadata { guild: Snowflake },
@@ -235,6 +237,8 @@ pub fn build(call: &ServerCall) -> ApiReq {
         S::Onboarding { guild } => req(Method::GET, format!("/guilds/{guild}/onboarding"), None),
         S::SetOnboarding { guild, onboarding } => req(Method::PUT, format!("/guilds/{guild}/onboarding"), Some(onboarding.clone())),
         S::WelcomeScreen { guild } => req(Method::GET, format!("/guilds/{guild}/welcome-screen"), None),
+        S::Channels { guild } => req(Method::GET, format!("/guilds/{guild}/channels"), None),
+        S::NewMemberWelcome { guild } => req(Method::GET, format!("/guilds/{guild}/new-member-welcome"), None),
         S::PremiumSubscriptions { guild } => req(Method::GET, format!("/guilds/{guild}/premium/subscriptions"), None),
         S::Analytics { guild, kind, start, end } => {
             let path = match kind {
@@ -343,6 +347,8 @@ mod tests {
             (ServerCall::VanityUrl { guild: G }, "/guilds/1/vanity-url"),
             (ServerCall::Templates { guild: G }, "/guilds/1/templates"),
             (ServerCall::Onboarding { guild: G }, "/guilds/1/onboarding"),
+            (ServerCall::Channels { guild: G }, "/guilds/1/channels"),
+            (ServerCall::NewMemberWelcome { guild: G }, "/guilds/1/new-member-welcome"),
             (ServerCall::DiscoveryMetadata { guild: G }, "/guilds/1/discovery-metadata"),
             (ServerCall::DiscoveryCategories { locale: "fr".into() }, "/discovery/categories?locale=fr&primary_only=false"),
             (ServerCall::PremiumSubscriptions { guild: G }, "/guilds/1/premium/subscriptions"),

@@ -98,6 +98,10 @@ impl GuardedWrite {
         write(Method::POST, format!("/channels/{channel}/messages/{message}/threads"), Some(json!({ "name": name })))
     }
 
+    pub fn put_onboarding(guild: u64, body: Value) -> Self {
+        write(Method::PUT, format!("/guilds/{guild}/onboarding"), Some(body))
+    }
+
     pub fn refusal(&self) -> Error {
         Error::WriteBlocked { method: self.method.to_string(), path: self.path.clone() }
     }
@@ -132,6 +136,7 @@ mod tests {
             GuardedWrite::wishlist_add_sku("2"),
             GuardedWrite::crosspost(3, 4),
             GuardedWrite::thread_from_message(3, 4, "t"),
+            GuardedWrite::put_onboarding(5, json!({ "default_channel_ids": ["6"] })),
         ]
     }
 
@@ -149,6 +154,8 @@ mod tests {
         assert_eq!((rm.method, rm.body), (Method::DELETE, Some(json!({ "password": "pw", "change_phone_reason": "user_settings_update" }))));
         assert_eq!(GuardedWrite::wishlist_visibility("9", false).body, Some(json!({ "visibility": 0 })));
         assert_eq!(GuardedWrite::crosspost(3, 4).path, "/channels/3/messages/4/crosspost");
+        let ob = GuardedWrite::put_onboarding(5, json!({ "prompts": [] }));
+        assert_eq!((ob.method, ob.path.as_str(), ob.body), (Method::PUT, "/guilds/5/onboarding", Some(json!({ "prompts": [] }))));
     }
 
     #[tokio::test]

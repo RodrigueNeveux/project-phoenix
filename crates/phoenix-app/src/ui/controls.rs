@@ -362,7 +362,8 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Bt
         .font_weight(FontWeight::MEDIUM)
         .text_color(c(tok(fg)))
         .whitespace_nowrap()
-        .child(label.into())
+        .max_w_full()
+        .child(div().min_w_0().truncate().child(label.into()))
 }
 
 pub fn button_icon(id: impl Into<ElementId>, icon: &'static str, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {

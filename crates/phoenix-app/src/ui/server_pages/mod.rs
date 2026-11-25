@@ -5,6 +5,7 @@ pub mod community;
 pub mod delete;
 pub mod integrations;
 pub mod mock;
+pub mod onboarding;
 pub mod presence;
 pub mod safety;
 pub mod tag;
@@ -245,6 +246,14 @@ pub fn open_sub(guild: Id, s: &str) {
             open_modal(guild, "verification");
         }
         "wizard" => set_flag(guild, "onboarding-wizard", true),
+        w if w.starts_with("wizard:") => {
+            set_flag(guild, "onboarding-wizard", true);
+            let mut parts = w.split(':').skip(1);
+            onboarding::set_step(guild, parts.next().and_then(|n| n.parse::<usize>().ok()).unwrap_or(1).saturating_sub(1));
+            if parts.next() != Some("tip") {
+                onboarding::dismiss_tips(guild);
+            }
+        }
         _ => {
             if let Some((section, sub)) = parse_sub(s) {
                 set_sub(guild, section, sub);
@@ -322,6 +331,13 @@ pub fn content(app: &PhoenixApp, guild: Id, key: &str, cx: &mut Context<PhoenixA
         _ => return None,
     };
     Some(page)
+}
+
+pub fn notice(app: &PhoenixApp, guild: Id, key: &str, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    match key {
+        "menu.gs.onboarding" => onboarding::notice(app, guild, cx),
+        _ => None,
+    }
 }
 
 pub fn modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
