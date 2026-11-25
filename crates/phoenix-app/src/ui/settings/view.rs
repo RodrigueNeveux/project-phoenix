@@ -1051,6 +1051,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
                     .child(card.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())),
             )
             .when(confirm, |d| d.child(logout_modal(cx)))
+            .children(super::authorized_apps::confirm_modal(cx))
             .when_some(hwaccel, |d, on| d.child(hwaccel_modal(on, cx)))
             .into_any_element(),
     )

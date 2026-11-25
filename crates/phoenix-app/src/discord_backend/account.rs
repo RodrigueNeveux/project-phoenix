@@ -236,6 +236,14 @@ impl DiscordBackend {
         })
     }
 
+    pub(super) fn deauthorize_app_impl(&self, token_id: u64) -> BoxFuture<()> {
+        self.with_session(move |_, s| async move {
+            let (_, path) = crate::ui::settings::authorized_apps::deauth_request(token_id);
+            s.rest.request_json(reqwest::Method::DELETE, &path, None).await.map_err(api_err)?;
+            Ok(())
+        })
+    }
+
     pub(super) fn account_standing_impl(&self) -> BoxFuture<Option<u64>> {
         self.with_session(move |_, s| async move {
             let v = s.rest.request_json(reqwest::Method::GET, "/safety-hub/@me", None).await.map_err(api_err)?;

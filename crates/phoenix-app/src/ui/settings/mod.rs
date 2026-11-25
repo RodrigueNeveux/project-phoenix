@@ -396,6 +396,10 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
         cx.notify();
         return true;
     }
+    if authorized_apps::close_confirm() {
+        cx.notify();
+        return true;
+    }
     if s.confirm_hwaccel.is_some() {
         s.confirm_hwaccel = None;
     } else if s.confirm_logout {

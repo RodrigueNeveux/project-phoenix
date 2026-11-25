@@ -359,7 +359,7 @@ fn standing(app: &PhoenixApp) -> Div {
         .child(sizer)
         .child(div().absolute().top(z(12.)).left_0().w_full().h(z(4.)).bg(c(tok(idx::BACKGROUND_MOD_STRONG))))
         .children(Standing::ALL.iter().enumerate().map(|(i, s)| option(i, *s).absolute().top_0().left(relative(lefts[i]))));
-    div().flex().flex_col().child(
+    div().flex().flex_col().pt(z(11.)).pb(z(10.)).child(
         div()
             .pt(z(8.))
             .mb(z(32.))

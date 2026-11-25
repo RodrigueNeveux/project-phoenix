@@ -1164,6 +1164,9 @@ impl Backend for DiscordBackend {
     fn subscriptions(&self) -> BoxFuture<Option<crate::ui::settings::subscriptions::Subs>> {
         self.subscriptions_impl()
     }
+    fn deauthorize_app(&self, token_id: u64) -> BoxFuture<()> {
+        self.deauthorize_app_impl(token_id)
+    }
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         self.account_standing_impl()
     }

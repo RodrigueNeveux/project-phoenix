@@ -3607,3 +3607,5 @@ settings.standing.limited_d: "Tu risques de perdre l'accès à certaines parties
 settings.standing.very_limited_d: "Tu ne peux pas utiliser certaines parties de Discord. Tu risques une suspension si tu enfreins de nouveau les règles."
 settings.standing.at_risk_d: "Tu as enfreint les règles de Discord. Tu seras suspendu de façon permanente si tu les enfreins à nouveau."
 settings.standing.suspended_d: "En raison de graves violations de la politique, ton compte est suspendu de manière permanente. Tu ne peux plus utiliser Discord."
+sp.auth.deauth_title: "Retirer l'autorisation à l'application"
+sp.auth.deauth_body: "Cette action supprimera le lien entre ton compte Discord et {name}"

@@ -326,6 +326,9 @@ pub trait Backend: Send + Sync + 'static {
     fn subscriptions(&self) -> BoxFuture<Option<crate::ui::settings::subscriptions::Subs>> {
         Box::pin(async { Ok(None) })
     }
+    fn deauthorize_app(&self, _token_id: u64) -> BoxFuture<()> {
+        Box::pin(async { Err(BackendError("read-only backend".into())) })
+    }
     fn account_standing(&self) -> BoxFuture<Option<u64>> {
         Box::pin(async { Ok(None) })
     }

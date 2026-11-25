@@ -21,6 +21,47 @@ pub struct AuthorizedApp {
 }
 
 static APPS: RwLock<Option<Vec<AuthorizedApp>>> = RwLock::new(None);
+static CONFIRM: RwLock<Option<(u64, String)>> = RwLock::new(None);
+
+pub fn deauth_request(token_id: u64) -> (&'static str, String) {
+    ("DELETE", format!("/oauth2/tokens/{token_id}"))
+}
+
+fn deauthorize(app: &PhoenixApp, token_id: u64, cx: &mut Context<PhoenixApp>) {
+    let fut = app.backend.deauthorize_app(token_id);
+    cx.spawn(async move |this, cx| {
+        if fut.await.is_ok() {
+            if let Some(l) = APPS.write().as_mut() {
+                l.retain(|a| a.token_id != token_id);
+            }
+            let _ = this.update(cx, |_, cx| cx.notify());
+        }
+    })
+    .detach();
+}
+
+pub fn confirm_modal(cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    let (token, name) = CONFIRM.read().clone()?;
+    let (e1, e2) = (cx.entity(), cx.entity());
+    Some(crate::ui::modal::confirm(crate::ui::modal::Confirm {
+        title: crate::t!("sp.auth.deauth_title"),
+        body: vec![crate::t!("sp.auth.deauth_body", name = name).into_any_element()],
+        confirm_label: crate::t!("sp.auth.deauth"),
+        danger: true,
+        on_confirm: std::rc::Rc::new(move |_, cx| {
+            *CONFIRM.write() = None;
+            e1.update(cx, |a, cx| deauthorize(a, token, cx));
+        }),
+        on_cancel: std::rc::Rc::new(move |_, cx| {
+            *CONFIRM.write() = None;
+            e2.update(cx, |_, cx| cx.notify());
+        }),
+    }))
+}
+
+pub fn close_confirm() -> bool {
+    CONFIRM.write().take().is_some()
+}
 
 pub fn get() -> Option<Vec<AuthorizedApp>> {
     APPS.read().clone()
@@ -105,7 +146,7 @@ fn small(t: impl Into<SharedString>, col: usize) -> gpui::Div {
     div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(col))).child(t.into())
 }
 
-pub fn render(_: &PhoenixApp, _: &mut Context<PhoenixApp>) -> AnyElement {
+pub fn render(_: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let Some(apps) = get() else {
         return small(crate::t!("sp.cn.none"), idx::TEXT_SUBTLE).into_any_element();
     };
@@ -206,7 +247,14 @@ pub fn render(_: &PhoenixApp, _: &mut Context<PhoenixApp>) -> AnyElement {
                     .child(
                         div().flex().justify_end().child(
                             controls::button_sm(gpui::ElementId::Name(format!("deauth-{}", a.token_id).into()), crate::t!("sp.auth.deauth"), BtnKind::Secondary)
-                                .text_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT))),
+                                .text_color(c(tok(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT)))
+                                .on_click({
+                                    let (token, name) = (a.token_id, a.name.clone());
+                                    cx.listener(move |_, _, _, cx| {
+                                        *CONFIRM.write() = Some((token, name.clone()));
+                                        cx.notify();
+                                    })
+                                }),
                         ),
                     ),
             )
@@ -217,6 +265,11 @@ pub fn render(_: &PhoenixApp, _: &mut Context<PhoenixApp>) -> AnyElement {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn deauthorize_deletes_the_token() {
+        assert_eq!(super::deauth_request(42), ("DELETE", "/oauth2/tokens/42".to_owned()));
+    }
+
     #[test]
     fn parses_tokens() {
         let v = serde_json::json!([{"id": "1300000000000000000", "scopes": ["identify", "guilds"], "application": {"id": "5", "name": "Bot", "icon": null, "description": "d", "privacy_policy_url": "https://x"}}]);
