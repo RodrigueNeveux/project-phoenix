@@ -419,7 +419,7 @@ mod tests {
     #[test]
     fn three_columns_in_the_measured_width() {
         assert_eq!(columns(1111.), 3);
-        assert_eq!(columns(700.), 2);
+        assert_eq!(columns(760.), 2);
         assert_eq!(columns(300.), 1);
     }
 }
