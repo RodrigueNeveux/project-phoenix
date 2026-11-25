@@ -1218,6 +1218,16 @@ fn main() -> anyhow::Result<()> {
                     phoenix_app::ui::status_picker::debug_open_accounts_submenu(arg == "accounts");
                 }
                 "accounts" => app.open_switch_accounts(cx),
+                "ignore" => {
+                    let target = arg.parse::<u64>().ok().map(phoenix_app::model::Id).or_else(|| {
+                        let ch = app.selected_channel?;
+                        let me = app.me.id;
+                        app.messages.get(&ch)?.msgs.iter().rev().map(|m| m.author).find(|a| *a != me)
+                    });
+                    if let Some(u) = target {
+                        phoenix_app::actions::open_modal(phoenix_app::ui::modals::Modal::Ignore(u), None);
+                    }
+                }
                 "leave" => {
                     if let Some(g) = app.selected_guild {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::LeaveGuild(g), cx);

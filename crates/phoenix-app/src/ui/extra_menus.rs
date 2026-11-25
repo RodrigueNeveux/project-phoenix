@@ -126,7 +126,7 @@ pub fn profile_items(app: &PhoenixApp, e: &Ent, user: Id, guild: Option<Id>) -> 
     if !me {
         items.push(MenuItem::Separator);
         let ign = if crate::actions::user::is_ignored(user) { "menu.unignore" } else { "menu.ignore" };
-        items.push(act(e, crate::t!(ign), move |a, _, cx| a.toggle_ignore(user, cx)));
+        items.push(act(e, crate::t!(ign), move |a, _, cx| a.request_ignore(user, cx)));
         let blocked = app.nav.relationship(user).is_some_and(|r| r.kind == RelationshipKind::Blocked);
         if blocked {
             items.push(act(e, crate::t!("friends.unblock"), move |a, _, cx| a.relationship_action(user, RelAction::Remove, cx)));

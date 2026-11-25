@@ -441,7 +441,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                             items.push(act(&e, crate::t!("menu.remove_friend"), move |a, _, cx| a.confirm_remove_friend(u, cx)));
                         }
                         let ign = if crate::actions::user::is_ignored(u) { "menu.unignore" } else { "menu.ignore" };
-                        items.push(act(&e, crate::t!(ign), move |a, _, cx| a.toggle_ignore(u, cx)));
+                        items.push(act(&e, crate::t!(ign), move |a, _, cx| a.request_ignore(u, cx)));
                         let eb = e.clone();
                         items.push(MenuItem::danger(crate::t!("menu.block"), None, move |_, _, cx: &mut App| eb.update(cx, |a, cx| a.confirm_block(u, cx))));
                     }

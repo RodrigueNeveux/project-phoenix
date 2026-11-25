@@ -108,7 +108,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
         }
         let ign = if crate::actions::user::is_ignored(u) { "menu.unignore" } else { "menu.ignore" };
-        items.push(act(crate::t!(ign), Rc::new(move |a, _, _, cx| a.toggle_ignore(u, cx))));
+        items.push(act(crate::t!(ign), Rc::new(move |a, _, _, cx| a.request_ignore(u, cx))));
         items.push(MenuItem::danger(crate::t!("menu.block"), None, {
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_block(u, cx))

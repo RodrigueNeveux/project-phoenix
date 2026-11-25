@@ -7,6 +7,7 @@ pub mod create_channel;
 pub mod forward;
 pub mod gdm;
 pub mod go_live;
+pub mod ignore;
 pub mod guild_notify;
 pub mod leave_link;
 pub mod member;
@@ -104,6 +105,7 @@ pub enum Modal {
     FolderSettings(gdm::Folder),
     Schedule(crate::ui::chat::scheduled::Picker),
     SwitchAccounts,
+    Ignore(crate::model::Id),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -213,6 +215,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::FolderSettings(f) => gdm::render_folder(f, cx),
             Modal::Schedule(p) => crate::ui::chat::scheduled::render(p, cx),
             Modal::SwitchAccounts => accounts::render(app, cx),
+            Modal::Ignore(u) => ignore::render(app, *u, cx),
         })
     })
 }
