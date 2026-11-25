@@ -15,7 +15,7 @@ CDNs. ✅ = matches the measurement, ⚠ = implemented but not compared live, �
 | Names, channel names, role group headers | Text in `"gg sans","Noto Sans",…`; Chromium draws the emoji with the system colour font (`fc-match emoji`) | `ui::emoji_text::label` (Noto Color Emoji fallback) | ✅ (unchanged) |
 | Custom status and activity line (member list, user panel) | `customStatusContent_` and the activity text hold `img.emoji` 14px Twemoji, not font glyphs | `emoji_text::status_label`: Unicode and custom emoji as images at 14px | ✅ member list (live DOM), ⚠ user panel (no emoji in the account's own status) |
 | Profile status bubble | CSS (`rmCN9_`): `.statusEmoji_rmCN9_:not(:has(~.statusText_rmCN9_))` 32×32px (emoji-only); `.statusEmoji_rmCN9_:has(~.statusText_rmCN9_)` 16×16px, `margin-inline-end: 4px` (emoji + text) | `emoji_text::status_wrapped`: 32px for emoji-only, 16px + 4px right margin when paired with text (was 19.25px = 1.375em) | ✅ (CSS verified) |
-| Picker data | Emoji 16.0 | `ui/pickers/emoji_data.rs` regenerated with entries ≤ E16.0 (1906 entries, was ≤ E15.1) | ✅ coverage; shortcodes are still CLDR names, not the client's (`:grinning:`) ⚠ |
+| Picker data | Emoji 16.0, client database `vnd-emoji.*.js` module 13474 (`emojis`, `emojisByCategory` ranges, `names`, `hasDiversity`): 1932 picker entries | `ui/pickers/emoji_data.rs` generated from that module by `scripts/emoji/gen_emoji_data.mjs <vnd-emoji.js> <out>`: same order and categories, `names[0]` is the shortcode (`:grinning:`, `:thumbsup:`), the other names are aliases, tone support = `hasDiversity` | ✅ |
 
 ## Animation
 

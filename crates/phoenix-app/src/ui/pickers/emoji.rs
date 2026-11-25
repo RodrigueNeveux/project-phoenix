@@ -20,8 +20,7 @@ pub fn glyph(ix: usize) -> &'static str {
 }
 
 pub fn shortcode(ix: usize) -> &'static str {
-    let e = &EMOJI[ix];
-    e.2.split(' ').find(|a| !a.is_empty()).unwrap_or(e.1)
+    EMOJI[ix].1
 }
 
 pub fn supports_tone(ix: usize) -> bool {
@@ -95,9 +94,11 @@ mod tests {
 
     #[test]
     fn table_is_sane() {
-        assert!(EMOJI.len() > 1500);
+        assert_eq!(EMOJI.len(), 1932);
         assert_eq!(glyph(0), "😀");
         assert_eq!(shortcode(0), "grinning");
+        assert_eq!(index_of("👍").map(shortcode), Some("thumbsup"));
+        assert_eq!(by_shortcode(":+1:").map(glyph), Some("👍"));
         assert!(EMOJI.iter().all(|e| (e.3 as usize) < CATEGORIES.len()));
         for icon in CATEGORY_ICON {
             assert!(index_of(icon).is_some(), "{icon}");
