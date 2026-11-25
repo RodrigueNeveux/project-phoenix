@@ -409,18 +409,22 @@ fn shapes(items_: &[Value], f: f64, tint: Option<&str>, inherited: &[Trim], out:
                         r#"<g fill="none" stroke="{c}" stroke-opacity="{op:.3}" stroke-width="{w:.2}" stroke-linecap="{lc}" stroke-linejoin="{lj}" stroke-miterlimit="{ml}">"#
                     );
                 }
-                for g in &geo {
-                    let extra = if kind == "st" {
-                        match dash(g) {
-                            Some(x) => x,
-                            None => continue,
+                if kind == "fl" {
+                    let mut merged: Vec<(M, String)> = Vec::new();
+                    for g in geo.iter().filter(|g| g.trims.is_empty() || visible(&g.trims).is_some()) {
+                        match merged.iter_mut().find(|(m, _)| *m == g.m) {
+                            Some((_, d)) => d.push_str(&g.d),
+                            None => merged.push((g.m, g.d.clone())),
                         }
-                    } else if !g.trims.is_empty() && visible(&g.trims).is_none() {
-                        continue;
-                    } else {
-                        String::new()
-                    };
-                    let _ = write!(out, r#"<path d="{}" transform="{}"{extra}/>"#, g.d, mstr(&g.m));
+                    }
+                    for (m, d) in &merged {
+                        let _ = write!(out, r#"<path d="{d}" transform="{}"/>"#, mstr(m));
+                    }
+                } else {
+                    for g in &geo {
+                        let Some(extra) = dash(g) else { continue };
+                        let _ = write!(out, r#"<path d="{}" transform="{}"{extra}/>"#, g.d, mstr(&g.m));
+                    }
                 }
                 out.push_str("</g>");
             }
@@ -746,6 +750,25 @@ mod tests {
         assert!(full.contains(r##"stroke="#3366e6""##), "{full}");
         let faded = frame_svg_tinted(&root, 10., 24, Some(("#000000", 0.5)));
         assert!(faded.contains(r#"<g opacity="0.500">"#), "{faded}");
+    }
+
+    #[test]
+    fn fills_merge_the_paths_of_a_group_so_holes_cut_through() {
+        let sh = |r: f64, cw: bool| {
+            let v = if cw { serde_json::json!([[0, -r], [r, 0], [0, r], [-r, 0]]) } else { serde_json::json!([[0, -r], [-r, 0], [0, r], [r, 0]]) };
+            serde_json::json!({"ty": "sh", "ks": {"a": 0, "k": {"c": true, "v": v, "i": [[0, 0], [0, 0], [0, 0], [0, 0]], "o": [[0, 0], [0, 0], [0, 0], [0, 0]]}}})
+        };
+        let root = serde_json::json!({
+            "fr": 60, "ip": 0, "op": 60, "w": 24, "h": 24,
+            "layers": [{"ty": 4, "ind": 1, "ip": 0, "op": 60, "ks": {}, "shapes": [{"ty": "gr", "it": [
+                sh(4., false), sh(10., true),
+                {"ty": "fl", "c": {"a": 0, "k": [1, 1, 1, 1]}, "o": {"a": 0, "k": 100}, "r": 1},
+                {"ty": "tr"}
+            ]}]}]
+        });
+        let svg = frame_svg(&root, 0., 24);
+        assert_eq!(svg.matches("<path ").count(), 1, "{svg}");
+        assert_eq!(svg.matches('M').count(), 2, "{svg}");
     }
 
     #[test]
