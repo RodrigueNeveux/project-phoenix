@@ -479,7 +479,7 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
     Ok(match req {
         NavRequest::FetchInvite(code) => {
             let v = call(Method::GET, format!("/invites/{}?with_counts=true&with_expiration=true", enc(&code)), None).await?;
-            NavReply::Invite(invite_preview(&v))
+            NavReply::Invite(Box::new(invite_preview(&v)))
         }
         NavRequest::FetchInviteEvent(code, event) => {
             let v = call(
@@ -488,7 +488,7 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
                 None,
             )
             .await?;
-            NavReply::Invite(invite_preview(&v))
+            NavReply::Invite(Box::new(invite_preview(&v)))
         }
         NavRequest::TopEmojis(g) => {
             let v = call(Method::GET, format!("/guilds/{}/top-emojis", sf(g)), None).await?;

@@ -127,7 +127,7 @@ pub enum NavRequest {
 #[derive(Clone, Debug)]
 pub enum NavReply {
     Done,
-    Invite(InvitePreview),
+    Invite(Box<InvitePreview>),
     Ids(Vec<Id>),
     Text(SharedString),
     Channel(Channel),

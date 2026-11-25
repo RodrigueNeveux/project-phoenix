@@ -43,7 +43,7 @@ impl PhoenixApp {
                 return;
             }
             this.nav.invite_preview = Some(match res {
-                Ok(NavReply::Invite(p)) => Ok(p),
+                Ok(NavReply::Invite(p)) => Ok(*p),
                 Ok(_) => Err(crate::t!("invite.invalid")),
                 Err(_) => Err(crate::t!("invite.invalid")),
             });

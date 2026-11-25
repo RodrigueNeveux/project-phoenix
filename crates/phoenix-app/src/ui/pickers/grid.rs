@@ -137,7 +137,7 @@ const NEWLY_ADDED_MAX: usize = 3;
 pub fn top_section(top_ids: &[crate::model::Id], guild_emojis: &[GuildEmoji], all: &[&GuildEmoji], now_ms: i64) -> (Vec<PickItem>, usize) {
     let cutoff = ((now_ms - NEWLY_ADDED_DAYS * 86_400_000 - 1_420_070_400_000).max(0) as u64) << 22;
     let mut newly: Vec<GuildEmoji> = guild_emojis.iter().filter(|e| e.id.0 >= cutoff).cloned().collect();
-    newly.sort_by(|a, b| b.id.cmp(&a.id));
+    newly.sort_by_key(|e| std::cmp::Reverse(e.id));
     newly.truncate(NEWLY_ADDED_MAX);
     let mut top: Vec<PickItem> = top_ids
         .iter()

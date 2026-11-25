@@ -157,7 +157,7 @@ fn ensure(app: &PhoenixApp, link: &InviteLink, cx: &App) -> State {
     let key = link.clone();
     cx.spawn(async move |cx| {
         let st = match fut.await {
-            Ok(NavReply::Invite(p)) => State::Ready(Rc::new(p)),
+            Ok(NavReply::Invite(p)) => State::Ready(Rc::new(*p)),
             Ok(_) => State::Invalid,
             Err(e) if e.0.starts_with("HTTP 4") && !e.0.starts_with("HTTP 429") => State::Invalid,
             Err(_) => State::Failed(Instant::now()),
