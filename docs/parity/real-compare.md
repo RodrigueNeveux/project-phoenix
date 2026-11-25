@@ -386,3 +386,51 @@ user panel visible beside the settings layer.
 | ✅ (wt/sweep3-fixes) **Small** — search result cards ~5 px taller (messages 3 px scroll anchor rounding still open) | adjusted card vertical padding (`pt(6.)`, `pb(5.)`) and avatar top offset | `ui/search.rs` `result_card` |
 | **Small** — Discover hero title wraps after "SUR" (client after "COMMUNAUTÉ") and the radial gradient | ABC Ginto Nord missing (known) | `ui/discovery.rs` |
 | — Member list group counts, rail unread DMs, inbox contents | timing between the client capture and the render, not product gaps | — |
+
+## Sweep 4 QA (2026-11-25, wt/sweep4-qa): pre-beta.2 pass
+
+Client captures 15:45–15:51 at 1536×840, dpr 1.5 (sweep4.mjs), rendered with int-bin
+ac72344d. The renders were made ~20 min after the captures (the client was restarted in the
+meantime and CDP was down), so messages, member lists and presences count as timing.
+
+| View | Title bar | Rail | Channels | Header | Messages | Composer | Members | User panel | Panel | Overall |
+|---|---|---|---|---|---|---|---|---|---|---|
+| #général | 1.5 | 3.2 | 3.0 | 2.4 | 17.8 | 3.6 | 25.0 | 6.9 | — | **13.1** |
+| inbox (for you) | — | 3.1 | 3.0 | 3.1 | 20.3 | 3.6 | 24.0 | 6.9 | inbox 7.7 | **14.2** |
+| search "merci" | — | 3.1 | 3.0 | 2.5 | 19.8 | 5.1 | — | 6.9 | results 15.9 | **13.3** |
+| settings Appearance | — | 14.4 | 11.2 | — | 5.3 | 10.4 | — | 16.6 | nav 15.5 / content 4.5 | **6.4** |
+| settings Voice & Video | — | 14.4 | 10.8 | — | 4.2 | — | — | — | nav 15.0 / content 3.3 | **5.5** |
+| Discover | — | 3.0 | — | 7.9 | 9.3 | 38.5 (cards) | — | 6.6 | — | **8.7** |
+
+### Fixed by wt/sweep4-qa
+
+| Gap (visibility) | Client reference | Fix |
+|---|---|---|
+| **High** — Discover cards "0 membre" (client "4 625 124 membres"); search header "Pas de résultat" above 4 088 results | `ABMKx3` / `ZGVL3g` are ICU plurals (`[6,"members",{one,other}]`); Phoenix passed the pre-grouped string "4 625 124", which the plural node parsed as 0 | `i18n/messages.rs` `ungrouped` strips space / nbsp / narrow nbsp before parsing (plural and number nodes) |
+| **Medium** — limited theme pill fixed at "90 JOUR(S) RESTANT(S)" (client 88) | module 211824: `Fg = 2026-12-13T18:00Z` (everyone), `zv = 2027-02-20T18:00Z` (`client_theme` perk, premium TIER_2), picked by module 189916 `E`; pill = module 366999 `SHORT_TIME_LEFT` (`/wnvqA`, `Jsq0XN`, `SBd+Bs`), rounding `d()` (days + 1 when hours are left, hours + 1 past 45 min, > 11 h → 1 day) | `settings/pages.rs` `limited_time_left` + keys `sp.ap.limited_left{,_h,_m}` |
+| **Medium** — default theme swatches: Ash and Dark colours wrong (Ash #2b2b30, Dark #313338, Onyx #0c0c0e), selection ring 2 px `#8ca0fd` | `.ashIcon_IhyaN_` primary-600, `.darkIcon_` plum-20, `.onyxIcon_` black, `.lightIcon_` white; `.defaultThemeSelection_` inset 1 px interactive-text-default; `.selectionCircle_` 2 px outside, inset 4 px brand-500; `.checkmark_` brand-500 | `settings/mod.rs` `AppTheme::swatch`, `settings/view.rs` `theme_card`, sync button border |
+| **Small** — "Thèmes de couleur" without the Nitro icon, 30 px too close to the limited swatch | live capture | `settings/pages.rs` `nitro_themes` |
+| **Small** — mic test meter: 8 px wide grey blocks on a 12 px pitch, 16 px tall | module 782600 `C`: 8 px pattern, pill 4 × (h − 4) inset 2 px with round ends, frame `background-base-low` (`.notches_0EQxEk.gray_`), pills `--gradient-progress-pill-background`, lit part yellow-260 → green-360, size sm = 20 px, width rounded to whole cells | `settings/voice.rs` `meter` (canvas) |
+| **Small** — search results cards 8 px wider than the client, no scrollbar | the results list is a thin scroller (`::-webkit-scrollbar{width:8px}`): the track takes layout width when it overflows | `search.rs` gutter + `thin_scrollbar_div`, back to top on page change |
+| test — `/proc` scan test used `std::os::unix::fs::symlink` without a guard (CI builds `--all-targets` on Windows) | — | `streamer.rs` test behind `#[cfg(unix)]` |
+
+### Still open
+
+| Gap | Probable cause | Where |
+|---|---|---|
+| Settings sidebar not scrolled to the open page (client scrolls Apparence / Voix & Vidéo into view) | to check: client scrollIntoView of the selected tab vs the sweep driver's click | `ui/settings/view.rs` sidebar |
+| Search group headers: client draws channel-name emoji as Twemoji images (blue 💬), Phoenix as a text glyph | emoji in channel names inside search results | `ui/search.rs` `channel_group_header` |
+| Speaker device / volume in Voice settings | local client settings (device "Logitech G PRO X", output volume), not synced | — |
+
+### Cross-platform review (static, no Windows/macOS target installed)
+
+Checked every `cfg` path added since v0.1.0-beta.1: `tray` (Linux module + stub), `tray/activation`
+(Wayland, Linux-only deps), `notifications/dbus` (zbus Linux-only, `notify-rust` elsewhere:
+`appname`/`icon`/`show` exist on Windows and macOS in 4.19), `updater` (per-OS asset, open command,
+AppImage swap under `cfg(unix)`), `voice/call` (portal / hotkey fields and arms Linux-only),
+`phoenix-voice` (`screencast`, `hotkey` Linux-only, PipeWire input under `cfg(unix)`),
+`snapshot` / `msg_cache` (`mode()` under `cfg(unix)`), `streamer` (scan only on Linux), the
+vendored `gpui-pre` rich text (no new platform trait method), `gpui-base` (pinned git rev on
+origin). Runtime-only differences, no build break: `snapshot::other_owner` checks `/proc/<pid>`
+(always "not running" on Windows/macOS), `fonts/fallback` and `tts` call Linux tools and fail
+quietly, `diagnostics` reads `/proc`.
