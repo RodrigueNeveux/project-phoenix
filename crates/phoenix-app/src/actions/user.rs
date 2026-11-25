@@ -150,8 +150,8 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
     let f = crate::ui::voice_panel::flags(user);
     if f.stream && user != app.me.id {
         out.watch = Some(item(e, crate::t!("voice.watch_stream"), move |a, cx| {
-            a.select_channel(vc.0, cx);
-            a.parity_toast(crate::t!("voice.watch_unsupported"), cx);
+            let key = crate::voice::stream::key(vc.1.map(|g| g.0), vc.0.0, user.0);
+            crate::ui::voice_row::watch_from_sidebar(a, key, cx);
         }));
     }
     let Some(g) = g else { return out };

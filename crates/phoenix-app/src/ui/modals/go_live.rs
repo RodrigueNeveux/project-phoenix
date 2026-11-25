@@ -329,8 +329,5 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
             });
             crate::ui::context_menu::render_anchored_at(point(b.right(), b.top() - z(8.)), gpui::Anchor::BottomRight, settings_items(app, entity.clone()), dismiss, 30)
         });
-    div()
-        .child(crate::ui::modal::frame("golive-backdrop", close, card))
-        .children(menu)
-        .into_any_element()
+    crate::ui::modal::frame("golive-backdrop", close, card.children(menu))
 }

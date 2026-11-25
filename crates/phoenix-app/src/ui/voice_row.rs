@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use gpui::{AnyElement, Bounds, InteractiveElement, IntoElement, ParentElement, Pixels, Point, StatefulInteractiveElement, Styled, div, point, px, svg};
+use gpui::{AnyElement, Bounds, FluentBuilder, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement, Styled, div, point, px, svg};
 
 use crate::theme::{c, generated::idx, tok, z};
 
@@ -320,31 +320,104 @@ pub fn set_stream_hover(user: Id, hovered: bool) -> bool {
     })
 }
 
-pub fn stream_preview(app: &crate::app::PhoenixApp, user: Id) -> Option<AnyElement> {
+thread_local! {
+    static PREVIEWS: RefCell<HashMap<String, (Option<SharedString>, std::time::Instant)>> = RefCell::new(HashMap::new());
+}
+
+pub const PREVIEW_TTL: std::time::Duration = std::time::Duration::from_secs(120);
+
+pub fn fetch_preview(app: &crate::app::PhoenixApp, key: String, cx: &mut gpui::App) {
+    let fresh = PREVIEWS.with(|p| p.borrow().get(&key).is_some_and(|(_, at)| at.elapsed() < PREVIEW_TTL));
+    if fresh {
+        return;
+    }
+    PREVIEWS.with(|p| p.borrow_mut().insert(key.clone(), (None, std::time::Instant::now())));
+    let fut = app.backend.stream_preview(key.clone());
+    cx.spawn(async move |cx| {
+        let url = fut.await.ok().flatten().map(SharedString::from);
+        cx.update(|cx| {
+            PREVIEWS.with(|p| p.borrow_mut().insert(key, (url, std::time::Instant::now())));
+            cx.refresh_windows();
+        });
+    })
+    .detach();
+}
+
+fn preview_url(key: &str) -> Option<SharedString> {
+    PREVIEWS.with(|p| p.borrow().get(key).and_then(|(u, _)| u.clone()))
+}
+
+pub fn stream_preview(app: &crate::app::PhoenixApp, user: Id, entity: gpui::Entity<crate::app::PhoenixApp>) -> Option<AnyElement> {
     use gpui::{AnimationExt, FontWeight};
     if STREAM_HOVER.with(|h| h.get()) != Some(user.0) || !crate::ui::voice_panel::flags(user).stream {
         return None;
     }
     let b = ROWS.with(|r| r.borrow().get(&user.0).copied())?;
-    let name = crate::ui::sidebar::voice_user_name(app, user);
+    let key = crate::ui::call_view::stream_key_in(app, user)?;
+    let url = preview_url(&key);
+    let badge = div()
+        .h(z(16.))
+        .px(z(8.))
+        .rounded_full()
+        .bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
+        .flex()
+        .items_center()
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(tok(idx::WHITE)))
+        .child(crate::t!("voice.live"));
+    let watch_key = key.clone();
     let card = div()
         .id(("stream-preview", user.0))
         .occlude()
-        .w(z(252.))
-        .rounded(z(8.))
-        .overflow_hidden()
+        .w(z(280.))
+        .pt(z(16.))
+        .pr(z(8.))
+        .pb(z(16.))
+        .pl(z(16.))
+        .rounded(z(12.))
         .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
-        .border_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
-        .shadow_lg()
+        .shadow(crate::ui::inbox::popout_shadow())
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .w(z(248.))
+                .mb(z(10.))
+                .flex()
+                .justify_between()
+                .items_center()
+                .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("voice.streaming")))
+                .child(badge),
+        )
         .child(
             div()
                 .id(("stream-preview-img", user.0))
                 .group("stream-preview-img")
                 .relative()
-                .w_full()
+                .w(z(248.))
                 .h(z(142.))
-                .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+                .rounded(z(8.))
+                .overflow_hidden()
+                .bg(c(tok(idx::BACKGROUND_SECONDARY_ALT)))
+                .shadow(crate::ui::inbox::popout_shadow())
+                .map(|d| match url {
+                    Some(u) => d.child(gpui::img(u).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover)),
+                    None => d.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_center()
+                            .text_size(z(14.))
+                            .line_height(z(18.))
+                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .child(crate::t!("voice.stream_just_started")),
+                    ),
+                })
                 .child(
                     div()
                         .absolute()
@@ -364,43 +437,55 @@ pub fn stream_preview(app: &crate::app::PhoenixApp, user: Id) -> Option<AnyEleme
                 ),
         )
         .child(
-            div()
-                .p(z(10.))
-                .flex()
-                .items_center()
-                .child(
-                    div()
-                        .mr(z(8.))
-                        .h(z(16.))
-                        .px(z(6.))
-                        .rounded_full()
-                        .bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
-                        .flex()
-                        .items_center()
-                        .text_size(z(12.))
-                        .line_height(z(16.))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(c(tok(idx::WHITE)))
-                        .child(crate::t!("voice.live")),
-                )
-                .child(
-                    div()
-                        .min_w_0()
-                        .text_ellipsis()
-                        .text_size(z(14.))
-                        .line_height(z(18.))
-                        .text_color(c(tok(idx::TEXT_DEFAULT)))
-                        .child(name),
-                ),
+            div().pt(z(10.)).child(
+                div()
+                    .id(("stream-preview-watch", user.0))
+                    .w(z(248.))
+                    .h(z(32.))
+                    .px(z(12.))
+                    .rounded(z(8.))
+                    .border_1()
+                    .border_color(c(tok(idx::CONTROL_CONNECTED_BORDER_DEFAULT)))
+                    .bg(c(tok(idx::CONTROL_CONNECTED_BACKGROUND_DEFAULT)))
+                    .hover(|s| s.bg(c(tok(idx::CONTROL_CONNECTED_BACKGROUND_HOVER))))
+                    .cursor_pointer()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .gap(z(4.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(tok(idx::CONTROL_CONNECTED_TEXT_DEFAULT)))
+                    .child(svg().path(crate::icons::path("voice/screen")).size(z(16.)).text_color(c(tok(idx::CONTROL_CONNECTED_TEXT_DEFAULT))))
+                    .child(crate::t!("voice.watch_stream"))
+                    .on_click(move |_, _, cx| {
+                        let k = watch_key.clone();
+                        entity.update(cx, |a, cx| watch_from_sidebar(a, k, cx));
+                    }),
+            ),
         )
         .with_animation(
             ("stream-preview-in", user.0),
             gpui::Animation::new(std::time::Duration::from_millis(150)),
-            |d, t| d.opacity(t).ml(z(8. * (1. - t))),
+            |d, t| d.opacity(t).ml(z(10. * t)),
         );
     Some(
-        gpui::deferred(gpui::anchored().position(point(b.right() + px(8.), b.top())).child(card))
+        gpui::deferred(gpui::anchored().position(point(b.right() + z(17.), b.top() - z(12.))).child(card))
             .with_priority(1)
             .into_any_element(),
     )
+}
+
+pub fn watch_from_sidebar(app: &mut crate::app::PhoenixApp, key: String, cx: &mut gpui::Context<crate::app::PhoenixApp>) {
+    let Some(k) = crate::voice::stream::parse_key(&key) else { return };
+    set_stream_hover(Id(k.owner), false);
+    crate::ui::call_view::set_focus(crate::ui::call_view::Focus::Tile(Id(k.owner), true));
+    if app.voice_channel != Some(Id(k.channel)) {
+        drop(app.backend.voice_control(crate::voice::VoiceControl::WatchAfterJoin(key)));
+        app.join_voice(Some(Id(k.channel)), cx);
+    } else {
+        drop(app.backend.voice_control(crate::voice::VoiceControl::WatchStream(key)));
+    }
+    cx.notify();
 }

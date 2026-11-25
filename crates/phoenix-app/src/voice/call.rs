@@ -76,6 +76,7 @@ struct State {
     emit: Option<Emit>,
     own: Option<OwnStream>,
     watches: std::collections::HashMap<String, Watch>,
+    pending_watch: Option<String>,
     stream_generation: u64,
     #[cfg(target_os = "linux")]
     ptt_portal: Option<phoenix_voice::hotkey::GlobalPtt>,
@@ -416,6 +417,12 @@ impl VoiceManager {
                 }
                 let e = match ev {
                     VoiceEvent::Connected { mode, .. } => {
+                        {
+                            let mut st = manager().state.lock();
+                            if let Some(k) = st.pending_watch.take() {
+                                start_watch(&mut st, k);
+                            }
+                        }
                         ui(&emit, VoiceUiEvent::Server { endpoint: endpoint.clone(), mode });
                         VoiceUiEvent::Status(VoiceStatus::Connected)
                     }
@@ -504,6 +511,7 @@ impl VoiceManager {
             VoiceControl::StartStream { source, resolution, fps, sound } => start_own_stream(&mut st, source, resolution, fps, sound),
             VoiceControl::StopStream => stop_own_stream(&mut st, None),
             VoiceControl::WatchStream(key) => start_watch(&mut st, key),
+            VoiceControl::WatchAfterJoin(key) => st.pending_watch = Some(key),
             VoiceControl::StopWatching(key) => stop_watch(&mut st, &key),
             VoiceControl::SetStreamVolume(u, v) => self.control.set_user_volume(u.0 | STREAM_AUDIO_BIT, v),
             VoiceControl::SetPttKey(k) => {
@@ -867,6 +875,9 @@ pub fn preview_uploaded(key: &str, ok: bool) {
 fn start_watch(st: &mut State, key: String) {
     let Some(k) = super::stream::parse_key(&key) else { return };
     if st.watches.contains_key(&key) {
+        return;
+    }
+    if st.target.is_some_and(|t| t.channel != k.channel) {
         return;
     }
     let Some(gw) = st.gw.clone() else {

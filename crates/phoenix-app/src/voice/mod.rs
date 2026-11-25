@@ -70,6 +70,7 @@ pub enum VoiceControl {
     StartStream { source: StreamSource, resolution: u32, fps: u32, sound: bool },
     StopStream,
     WatchStream(String),
+    WatchAfterJoin(String),
     StopWatching(String),
     SetStreamVolume(Id, f32),
 }

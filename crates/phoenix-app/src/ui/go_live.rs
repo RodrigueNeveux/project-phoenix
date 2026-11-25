@@ -23,6 +23,7 @@ pub fn perks(app: &PhoenixApp) -> Perks {
         .voice_channel
         .and_then(|c| app.channels.get(&c))
         .and_then(|c| c.guild)
+        .or(app.selected_guild)
         .and_then(|g| app.guilds.iter().find(|x| x.id == g))
         .map_or(0, |g| g.boost_tier);
     Perks { nitro: app.backend.premium_tier2(), guild_tier }

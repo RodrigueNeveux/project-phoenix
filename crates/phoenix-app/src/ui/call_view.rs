@@ -642,6 +642,11 @@ pub fn stream_image(owner: Id, own: bool) -> Option<std::sync::Arc<gpui::RenderI
     Some(img)
 }
 
+pub fn stream_key_in(app: &PhoenixApp, owner: Id) -> Option<String> {
+    let (id, ch) = app.channels.iter().find(|(_, c)| c.voice_users.contains(&owner))?;
+    Some(crate::voice::stream::key(ch.guild.map(|g| g.0), id.0, owner.0))
+}
+
 pub fn stream_key(app: &PhoenixApp, owner: Id) -> Option<String> {
     let ch = app.voice_channel?;
     let guild = app.channels.get(&ch).and_then(|c| c.guild);

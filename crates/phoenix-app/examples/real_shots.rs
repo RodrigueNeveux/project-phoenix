@@ -169,7 +169,7 @@ impl Backend for ReadOnly {
             V::SetPttKey(_) => return Box::pin(async { Ok(()) }),
             V::SetCameraDevice(_) => V::SetCameraDevice(Some(phoenix_voice::media::camera::TEST_PATTERN.into())),
             V::StartStream { resolution, fps, sound, .. } => V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps, sound },
-            V::WatchStream(k) if !k.contains(&format!(":{VOICE_TEST_CHANNEL}:")) => return Box::pin(async { Ok(()) }),
+            V::WatchStream(k) | V::WatchAfterJoin(k) if !k.contains(&format!(":{VOICE_TEST_CHANNEL}:")) => return Box::pin(async { Ok(()) }),
             c => c,
         };
         self.0.voice_control(control)
@@ -179,6 +179,9 @@ impl Backend for ReadOnly {
             return denied();
         }
         self.0.send_soundboard_sound(channel, sound)
+    }
+    fn premium_tier2(&self) -> bool {
+        self.0.premium_tier2()
     }
     fn upload_stream_preview(&self, key: String, thumbnail: String) -> BoxFuture<()> {
         if std::env::var_os("PHX_VOICE").is_none() || !key.starts_with(&format!("guild:1369382919948210248:{VOICE_TEST_CHANNEL}:")) {
