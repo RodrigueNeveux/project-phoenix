@@ -68,7 +68,7 @@ pub enum AppEvent {
     PresenceUpdate { user: Id, presence: Presence },
     GuildMembers { guild: Id, members: Vec<Member> },
     ChannelUnread { channel: Id, unread: bool, mentions: u32 },
-    VoiceStateUpdate { channel: Option<Id>, user: Id },
+    VoiceStateUpdate { channel: Option<Id>, user: Id, own: bool },
     VoiceFlags { user: Id, flags: crate::model::VoiceFlags },
     Voice(crate::voice::VoiceUiEvent),
     Users(Vec<User>),

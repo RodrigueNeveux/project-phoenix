@@ -772,7 +772,7 @@ impl Backend for MockBackend {
     }
 
     fn join_voice(&self, channel: Option<Id>) -> BoxFuture<()> {
-        self.emit_later(Duration::from_millis(50), move || AppEvent::VoiceStateUpdate { channel, user: ME });
+        self.emit_later(Duration::from_millis(50), move || AppEvent::VoiceStateUpdate { channel, user: ME, own: true });
         if channel.is_some() {
             self.emit_later(Duration::from_millis(60), || {
                 AppEvent::Voice(crate::voice::VoiceUiEvent::Status(crate::voice::VoiceStatus::Connected))

@@ -280,7 +280,7 @@ mod tests {
                 app.apply_ready(first, cx);
                 let vc = app.channels.values().find(|c| c.kind == crate::model::ChannelKind::Voice && c.guild.is_some()).map(|c| c.id).unwrap();
                 let user = crate::model::Id(4242);
-                app.handle_event(AppEvent::VoiceStateUpdate { channel: Some(vc), user }, cx);
+                app.handle_event(AppEvent::VoiceStateUpdate { channel: Some(vc), user, own: false }, cx);
                 let flags = crate::model::VoiceFlags { self_mute: true, self_deaf: true, ..Default::default() };
                 app.handle_event(AppEvent::VoiceFlags { user, flags }, cx);
                 let mut live = ready();
@@ -291,7 +291,7 @@ mod tests {
                 assert!(app.channels[&vc].voice_users.contains(&user), "voice row lost by the ReadyData after READY_SUPPLEMENTAL");
                 let f = crate::ui::voice_panel::flags(user);
                 assert!(f.self_mute && f.self_deaf);
-                app.handle_event(AppEvent::VoiceStateUpdate { channel: None, user }, cx);
+                app.handle_event(AppEvent::VoiceStateUpdate { channel: None, user, own: false }, cx);
                 assert!(!app.channels[&vc].voice_users.contains(&user));
             })
             .unwrap();

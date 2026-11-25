@@ -102,6 +102,7 @@ pub struct PhoenixApp {
     pub roles: HashMap<Id, Vec<Role>>,
     pub members: HashMap<Id, Vec<Member>>,
     pub pending_voice: HashMap<Id, Id>,
+    pub pending_own_voice: Option<Id>,
     pub presences: HashMap<Id, Presence>,
     pub messages: HashMap<Id, ChannelMessages>,
 
@@ -363,6 +364,7 @@ impl PhoenixApp {
             roles: HashMap::new(),
             members: HashMap::new(),
             pending_voice: HashMap::new(),
+            pending_own_voice: None,
             presences: HashMap::new(),
             messages: HashMap::new(),
             selected_guild: None,
@@ -498,6 +500,7 @@ impl PhoenixApp {
             .filter(|c| c.guild.is_some() && !c.voice_users.is_empty())
             .map(|c| (c.id, c.voice_users.clone()))
             .collect();
+        let in_call = self.voice_channel;
         self.clear_session();
         if let Some(a) = mine {
             self.people.custom_status = a.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom).and_then(|x| x.state.clone());
@@ -536,10 +539,7 @@ impl PhoenixApp {
         for list in self.guild_channels.values_mut() {
             list.sort_by_key(|id| self.channels[id].position);
         }
-        let me = self.me.id;
-        self.voice_channel = self.pending_voice.get(&me).copied().or_else(|| {
-            self.channels.values().find(|c| c.guild.is_some() && c.voice_users.contains(&me)).map(|c| c.id)
-        });
+        self.voice_channel = self.pending_own_voice.take().or(in_call);
         for ch in r.dm_channels {
             self.dms.push(ch.id);
             self.channels.insert(ch.id, ch);
@@ -897,7 +897,7 @@ impl PhoenixApp {
                 self.rebuild_sidebar();
             }
             AppEvent::VoiceFlags { user, flags } => crate::ui::voice_panel::set_flags(user, flags),
-            AppEvent::VoiceStateUpdate { channel, user } => {
+            AppEvent::VoiceStateUpdate { channel, user, own } => {
                 let dm = channel.filter(|c| self.channels.get(c).is_some_and(|x| x.guild.is_none()));
                 crate::commands::state::call_voice_state(&mut self.parity.call_users, dm, user);
                 for ch in self.channels.values_mut().filter(|c| c.guild.is_some()) {
@@ -909,8 +909,9 @@ impl PhoenixApp {
                 } else if let Some(c) = channel {
                     self.pending_voice.insert(user, c);
                 }
-                if user == self.me.id {
+                if user == self.me.id && own {
                     self.voice_channel = channel;
+                    self.pending_own_voice = channel.filter(|c| !self.channels.contains_key(c));
                 }
                 self.rebuild_sidebar();
             }

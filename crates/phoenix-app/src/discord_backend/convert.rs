@@ -1209,7 +1209,7 @@ impl Adapter {
                 for g in &r.guilds {
                     for v in &g.voice_states {
                         if v.channel_id.is_some() {
-                            out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id) });
+                            out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id), own: false });
                             out.push(AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) });
                         }
                     }
@@ -1335,7 +1335,8 @@ impl Adapter {
                 if let Some(u) = v.member.as_ref().and_then(|m| m.user.as_ref()) {
                     out.push(AppEvent::Users(vec![user(u)]));
                 }
-                out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id) });
+                let own = v.user_id.0 == self.me.0 && !v.session_id.is_empty() && v.session_id == crate::commands::session_id();
+                out.push(AppEvent::VoiceStateUpdate { channel: v.channel_id.map(id), user: id(v.user_id), own });
                 out.push(AppEvent::VoiceFlags { user: id(v.user_id), flags: voice_flags(v) });
             }
             GatewayEvent::Unknown { name, data } if name == "SESSIONS_REPLACE" => {
