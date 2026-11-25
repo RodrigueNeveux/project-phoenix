@@ -17,6 +17,7 @@ pub const TEST_PATTERN: &str = "phoenix-test-pattern";
 pub enum Input {
     TestPattern,
     Device(String),
+    #[cfg(unix)]
     PipeWire { fd: std::os::fd::OwnedFd, node: u32 },
 }
 
@@ -25,6 +26,7 @@ impl PartialEq for Input {
         match (self, other) {
             (Self::TestPattern, Self::TestPattern) => true,
             (Self::Device(a), Self::Device(b)) => a == b,
+            #[cfg(unix)]
             (Self::PipeWire { node: a, .. }, Self::PipeWire { node: b, .. }) => a == b,
             _ => false,
         }
@@ -69,6 +71,7 @@ impl DeviceReader {
         Ok(Self { child, stdout })
     }
 
+    #[cfg(unix)]
     fn pipewire(fd: std::os::fd::OwnedFd, node: u32, width: u32, height: u32, fps: u32) -> Result<Self> {
         let caps = format!("video/x-raw,format=RGBA,width={width},height={height},framerate={fps}/1,pixel-aspect-ratio=1/1");
         let mut child = Command::new("gst-launch-1.0")
@@ -129,6 +132,7 @@ impl Camera {
                 let live = !matches!(input, Input::TestPattern);
                 let mut device = match input {
                     Input::Device(d) => DeviceReader::open(&d, width, height, fps).ok(),
+                    #[cfg(unix)]
                     Input::PipeWire { fd, node } => DeviceReader::pipewire(fd, node, width, height, fps).ok(),
                     Input::TestPattern => None,
                 };

@@ -625,11 +625,14 @@ fn start_own_stream(st: &mut State, source: super::StreamSource, resolution: u32
                 }
                 match r {
                     Ok(p) => {
+                        #[cfg(unix)]
                         if let Some(o) = st.own.as_mut() {
                             o.input = Some(phoenix_voice::media::camera::Input::PipeWire { fd: p.fd, node: p.node });
                             o.size = p.size;
                             o.portal = Some(p.session);
                         }
+                        #[cfg(not(unix))]
+                        let _ = p;
                         send_stream_create(&st);
                     }
                     Err(e) => {
