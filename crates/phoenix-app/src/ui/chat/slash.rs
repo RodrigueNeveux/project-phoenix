@@ -548,7 +548,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .child(SharedString::from(format!("/{}", cmd.name))),
     );
     let mut desc: Option<String> = None;
-    for o in cmd.options() {
+    for (i, o) in cmd.options().iter().enumerate() {
         let n = slash::name(o);
         let kind = slash::kind(o);
         let req = slash::required(o);
@@ -561,7 +561,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         let on = n.to_owned();
         chips = chips.child(
             div()
-                .id(("slash-opt", SharedString::from(on.clone())))
+                .id(("slash-opt", i))
                 .cursor_pointer()
                 .rounded(z(4.))
                 .border_1()
