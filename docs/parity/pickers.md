@@ -83,7 +83,7 @@ with the bar's clear button (route and bar text checked unchanged). No non-GET r
 | element | source | property | value | our code | status |
 |---|---|---|---|---|---|
 | sizes | compare 1536×788 and 1280×720 @1.25 (client emulated in DIP: w×1.25, dsf 1, its page zoom is 125%) | — | header, groups, cards and pager line up | — | ✅ |
-| panel | searchResultsWrap_ | box | 419 wide under the header, black in Onyx (all base tokens are black there) | search.rs results_panel (--background-base-lower, 1px --border-subtle left) | ⚠ token not separable in Onyx |
+| panel | searchResultsWrap_ | box | 419 wide under the header, black in Onyx (all base tokens are black there) | search.rs results_panel: `.searchResultsWrap_QHVbp3{background:var(--background-gradient-lowest, var(--background-base-lowest)); border-inline-start:1px solid var(--app-frame-border); width:418px}` → `--background-base-lowest`, 1px `--app-frame-border` left (was base-lower / border-subtle) | ✅ from the CSS |
 | header | searchHeader_ | layout | 48px, padding 8 16; total body-md/medium --text-strong ("4 083 résultats", "Pas de résultat") | results_panel, group_digits | ✅ |
 | header buttons | button_ sm secondary hasText | style | 32px, radius 8, 1px border, --background-mod-subtle, padding 3 11, 16px glyph + 14/18 medium, gap 8: "Filtres" (opens the modal), "Trier" | sm_secondary | ✅ |
 | sort menu | menu_ flexible_ | box / rows | 144 wide under "Trier", right-aligned, 1px --border-subtle, radius 8; 36px radio rows (padding 8): Plus récents / Date / Pertinence | sort_popover, SortOrder → `sort_by=timestamp|relevance` | ✅ |

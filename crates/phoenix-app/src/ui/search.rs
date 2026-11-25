@@ -776,9 +776,9 @@ fn results_panel(
         .right_0()
         .bottom_0()
         .w(px(WIDTH))
-        .bg(tk(idx::BACKGROUND_BASE_LOWER))
+        .bg(tk(idx::BACKGROUND_BASE_LOWEST))
         .border_l_1()
-        .border_color(tk(idx::BORDER_SUBTLE))
+        .border_color(tk(idx::APP_FRAME_BORDER))
         .occlude()
         .on_mouse_down(gpui::MouseButton::Left, cx.listener(|_, _, _, cx| {
             close_sort_menu(cx);
