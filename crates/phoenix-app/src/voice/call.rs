@@ -318,7 +318,7 @@ impl VoiceManager {
                 if st.own.as_ref().and_then(|o| o.key.as_deref()) == Some(sd.stream_key.as_str()) {
                     stop_own_stream(&mut st, sd.reason.clone());
                 } else if st.watches.contains_key(&sd.stream_key) {
-                    stop_watch(&mut st, &sd.stream_key);
+                    end_watch(&mut st, &sd.stream_key, false);
                 }
                 return;
             }
@@ -900,8 +900,12 @@ fn start_watch(st: &mut State, key: String) {
 }
 
 fn stop_watch(st: &mut State, key: &str) {
+    end_watch(st, key, true);
+}
+
+fn end_watch(st: &mut State, key: &str, tell_server: bool) {
     let Some(w) = st.watches.remove(key) else { return };
-    if let Some(gw) = st.gw.as_ref() {
+    if tell_server && let Some(gw) = st.gw.as_ref() {
         let _ = gw.stream_delete(key);
     }
     if let Some(c) = w.conn {

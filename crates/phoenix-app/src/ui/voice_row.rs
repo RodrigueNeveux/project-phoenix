@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use gpui::{AnyElement, Bounds, FluentBuilder, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement, Styled, div, point, px, svg};
+use gpui::prelude::{FluentBuilder as _, StyledImage as _};
+use gpui::{AnyElement, Bounds, InteractiveElement, IntoElement, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement, Styled, div, point, px, svg};
 
 use crate::theme::{c, generated::idx, tok, z};
 
