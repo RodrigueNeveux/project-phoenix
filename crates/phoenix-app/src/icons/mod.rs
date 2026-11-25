@@ -113,11 +113,13 @@ pub fn refresh(dir: &Path) -> bool {
     true
 }
 
+type Found = ((usize, usize), String);
+
 fn extract_all(entries: &[(String, PathBuf)]) -> HashMap<&'static str, String> {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    let found: Mutex<HashMap<&'static str, ((usize, usize), String)>> = Mutex::new(HashMap::new());
+    let found: Mutex<HashMap<&'static str, Found>> = Mutex::new(HashMap::new());
     let next = AtomicUsize::new(0);
     let workers = std::thread::available_parallelism().map_or(2, |n| n.get()).clamp(1, 4);
     std::thread::scope(|sc| {
