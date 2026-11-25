@@ -137,51 +137,72 @@ fn my_account(app: &PhoenixApp, cx: &mut Cx) -> Div {
             .into_any_element()
     };
     let devices = acct::sessions().map(|n| crate::t!("settings.account.devices_n", n = n));
-    div()
-        .child(category(
-            crate::t!("settings.account.info"),
-            vec![
-                field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element())),
-                email_row,
-                phone_row,
-            ],
-        ))
-        .child(divider())
-        .child(category(
-            crate::t!("settings.account.security"),
-            vec![
-                controls::control_item(
-                    crate::t!("settings.account.password"),
-                    None,
-                    Some(secondary("change-pw", crate::t!("common.edit")).into_any_element()),
-                )
-                .into_any_element(),
-                link_row(
-                    "acct-mfa",
-                    crate::t!("settings.account.mfa"),
-                    Some(if info.mfa { crate::t!("settings.account.mfa_on") } else { crate::t!("settings.account.mfa_off") }),
-                    super::nested::Nested::Mfa,
-                ),
-                link_row("acct-devices", crate::t!("settings.account.devices"), devices, super::nested::Nested::Devices),
-            ],
-        ))
-        .child(divider())
-        .child(category(crate::t!("settings.account.status"), acct::standing_rows(&info, cx)))
-        .child(divider())
-        .child(category(
-            crate::t!("settings.account.family"),
-            vec![controls::control_item(
-                crate::t!("settings.account.family_setup"),
-                Some(crate::t!("settings.account.family_d")),
-                Some(acct::value_chevron(None)),
-            )
+    let q = query(app, cx);
+    let t = |k: &str| crate::t!(k);
+    let info_rows = vec![
+        (t("settings.account.username"), field_row(crate::t!("settings.account.username"), me.name.clone(), Some(secondary("edit-un", crate::t!("common.edit")).into_any_element()))),
+        (t("settings.account.email"), email_row),
+        (t("settings.account.phone"), phone_row),
+    ];
+    let security_rows = vec![
+        (
+            t("settings.account.password"),
+            controls::control_item(crate::t!("settings.account.password"), None, Some(secondary("change-pw", crate::t!("common.edit")).into_any_element())).into_any_element(),
+        ),
+        (
+            t("settings.account.mfa"),
+            link_row(
+                "acct-mfa",
+                crate::t!("settings.account.mfa"),
+                Some(if info.mfa { crate::t!("settings.account.mfa_on") } else { crate::t!("settings.account.mfa_off") }),
+                super::nested::Nested::Mfa,
+            ),
+        ),
+        (t("settings.account.devices"), link_row("acct-devices", crate::t!("settings.account.devices"), devices, super::nested::Nested::Devices)),
+    ];
+    let mut standing_labels = Vec::new();
+    if info.adult.is_some() {
+        standing_labels.push(t("settings.account.age_group"));
+    }
+    standing_labels.push(t("settings.account.status"));
+    let standing_rows = standing_labels.into_iter().zip(acct::standing_rows(&info, cx)).collect();
+    let family_rows = vec![(
+        t("settings.account.family_setup"),
+        controls::control_item(crate::t!("settings.account.family_setup"), Some(crate::t!("settings.account.family_d")), Some(acct::value_chevron(None)))
             .id("acct-family")
             .cursor_pointer()
             .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
-            .into_any_element()],
-        ))
-        .child(divider())
-        .child(div().flex().flex_col().gap(z(10.)).children(acct::removal_rows()))
+            .into_any_element(),
+    )];
+    let removal: Vec<(SharedString, AnyElement)> = [t("settings.account.disable"), t("settings.account.close")].into_iter().zip(acct::removal_rows()).collect();
+    let sections: Vec<Div> = [
+        filtered(&q, Some(crate::t!("settings.account.info")), info_rows),
+        filtered(&q, Some(crate::t!("settings.account.security")), security_rows),
+        filtered(&q, Some(crate::t!("settings.account.status")), standing_rows),
+        filtered(&q, Some(crate::t!("settings.account.family")), family_rows),
+        filtered(&q, None, removal),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let last = sections.len().saturating_sub(1);
+    div().children(sections.into_iter().enumerate().map(|(i, d)| if i < last { d.child(divider()) } else { d }))
+}
+
+pub(super) fn query(app: &PhoenixApp, cx: &Cx) -> String {
+    app.settings.as_ref().and_then(|s| s.search.as_ref()).map(|i| i.read(cx).value().trim().to_lowercase()).unwrap_or_default()
+}
+
+fn filtered(q: &str, title: Option<SharedString>, rows: Vec<(SharedString, AnyElement)>) -> Option<Div> {
+    let whole = q.is_empty() || title.as_ref().is_some_and(|t| t.to_lowercase().contains(q));
+    let kept: Vec<AnyElement> = rows.into_iter().filter(|(t, _)| whole || t.to_lowercase().contains(q)).map(|(_, r)| r).collect();
+    if kept.is_empty() {
+        return None;
+    }
+    Some(match title {
+        Some(t) => category(t, kept),
+        None => div().flex().flex_col().gap(z(10.)).children(kept),
+    })
 }
 
 pub(super) fn profiles(app: &PhoenixApp) -> Div {
@@ -656,7 +677,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
                         .child(gpui::svg().path(crate::icons::path("pen")).size(z(12.)).flex_none().text_color(c(tok(idx::TEXT_MUTED)))),
                 ),
         );
-    let query = app.settings.as_ref().and_then(|s| s.search.as_ref()).map(|i| i.read(cx).value().trim().to_lowercase()).unwrap_or_default();
+    let query = query(app, cx);
     let field: AnyElement = match app.settings.as_ref().and_then(|s| s.search.clone()) {
         Some(input) => div()
             .flex_1()

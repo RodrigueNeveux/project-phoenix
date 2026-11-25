@@ -611,11 +611,42 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
 }
 
 pub fn render(app: &PhoenixApp, blocks: &'static [B], cx: &mut Cx) -> Div {
+    let q = super::view::query(app, cx);
     let mut out = Vec::new();
-    for b in blocks {
+    for b in filter(blocks, &q) {
         render_block(app, b, &mut out, cx);
     }
     div().flex().flex_col().gap(z(10.)).children(out)
+}
+
+static DIVIDER: B = B::Divider;
+
+fn block_matches(b: &'static B, q: &str) -> bool {
+    let mut keys = Vec::new();
+    push_texts(std::slice::from_ref(b), &mut keys);
+    keys.iter().filter(|k| !k.is_empty()).any(|k| tr(k).to_lowercase().contains(q))
+}
+
+pub(super) fn filter(blocks: &'static [B], q: &str) -> Vec<&'static B> {
+    if q.is_empty() {
+        return blocks.iter().collect();
+    }
+    let mut out: Vec<&'static B> = Vec::new();
+    for section in blocks.split(|b| matches!(b, B::Divider)) {
+        let whole = section.iter().any(|b| matches!(b, B::Title(_)) && block_matches(b, q));
+        let kept: Vec<&'static B> = section
+            .iter()
+            .filter(|b| whole || matches!(b, B::Title(_)) || (!matches!(b, B::Lead(_)) && block_matches(b, q)))
+            .collect();
+        if kept.iter().all(|b| matches!(b, B::Title(_))) {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(&DIVIDER);
+        }
+        out.extend(kept);
+    }
+    out
 }
 
 fn push_texts(blocks: &'static [B], out: &mut Vec<&'static str>) {
@@ -2070,3 +2101,48 @@ fn app_icon_tile(i: usize, url: String) -> gpui::Stateful<Div> {
         }])
         .child(gpui::img(SharedString::from(url)).size_full().rounded(z(8.)))
 }
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    static SAMPLE: &[B] = &[
+        B::Title("settings.account.security"),
+        B::Lead("settings.account.family_d"),
+        B::Action("settings.account.password", "", "", false),
+        B::Action("settings.account.devices", "", "", false),
+        B::Divider,
+        B::Title("settings.account.family"),
+        B::Action("settings.account.family_setup", "", "", false),
+    ];
+
+    fn titles(v: &[&B]) -> Vec<String> {
+        v.iter()
+            .map(|b| match b {
+                B::Title(t) | B::Lead(t) => (*t).to_owned(),
+                B::Action(t, ..) => (*t).to_owned(),
+                B::Divider => "-".to_owned(),
+                _ => "?".to_owned(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn empty_query_keeps_everything() {
+        assert_eq!(filter(SAMPLE, "").len(), SAMPLE.len());
+    }
+
+    #[test]
+    fn query_keeps_matching_rows_under_their_title() {
+        let q = tr("settings.account.devices").to_lowercase();
+        assert_eq!(titles(&filter(SAMPLE, &q)), ["settings.account.security", "settings.account.devices"]);
+    }
+
+    #[test]
+    fn matching_title_keeps_its_whole_section() {
+        let q = tr("settings.account.family").to_lowercase();
+        let got = titles(&filter(SAMPLE, &q));
+        assert!(got.ends_with(&["settings.account.family".to_owned(), "settings.account.family_setup".to_owned()]));
+    }
+}
+
