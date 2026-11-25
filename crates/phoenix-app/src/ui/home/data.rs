@@ -124,6 +124,7 @@ pub enum NavRequest {
     FetchInviteEvent(String, Id),
     TopEmojis(Id),
     AcceptInvite(String),
+    CreateGuild { name: String, icon: Option<String>, template: Option<String>, community: Option<bool> },
     CreateInvite(Id),
     LeaveGuild(Id),
     Relationship { user: Id, action: RelAction },

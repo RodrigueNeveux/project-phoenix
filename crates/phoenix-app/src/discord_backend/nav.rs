@@ -534,6 +534,16 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
             call(Method::POST, format!("/invites/{}", enc(&code)), Some(json!({}))).await?;
             NavReply::Done
         }
+        NavRequest::CreateGuild { name, icon, template, community } => {
+            let body = crate::ui::add_server::create_guild_body(
+                &name,
+                icon.as_deref(),
+                template.as_deref(),
+                community,
+            );
+            call(Method::POST, "/guilds".into(), Some(body)).await?;
+            NavReply::Done
+        }
         NavRequest::CreateInvite(ch) => {
             let v = call(
                 Method::POST,

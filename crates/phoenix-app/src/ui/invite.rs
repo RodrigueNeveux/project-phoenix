@@ -3,7 +3,6 @@ use gpui::{
     AnyElement, Context, FontWeight, ImageSource, IntoElement, ParentElement, SharedString, Styled, Window, div,
     img, prelude::*, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
 
 use crate::{
     app::PhoenixApp,
@@ -14,19 +13,10 @@ use crate::{
 
 impl PhoenixApp {
     pub fn open_join_server(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("https://discord.gg/hTKzmak"));
-        let sub = cx.subscribe_in(&input, window, |this: &mut PhoenixApp, _, ev: &InputEvent, _w, cx| match ev {
-            InputEvent::Change => this.preview_invite(cx),
-            InputEvent::PressEnter { .. } => this.join_invite(cx),
-            _ => {}
-        });
-        input.update(cx, |s, cx| s.focus(window, cx));
-        self.show_overlay(Overlay::JoinServer, cx);
-        self.nav.subs = vec![sub];
-        self.nav.invite_input = Some(input);
+        self.open_add_server(window, cx);
     }
 
-    fn preview_invite(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn preview_invite(&mut self, cx: &mut Context<Self>) {
         let Some(input) = &self.nav.invite_input else { return };
         let code = invite_code(&input.read(cx).value());
         if code == self.nav.invite_code {
@@ -116,7 +106,7 @@ impl PhoenixApp {
     }
 }
 
-fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> AnyElement {
+pub(crate) fn modal(id: &'static str, cx: &mut Context<PhoenixApp>, inner: gpui::Div) -> AnyElement {
     div()
         .id(id)
         .absolute()
@@ -207,7 +197,7 @@ pub fn guild_icon(icon: Option<&ImageRef>, name: &str, size: f32) -> AnyElement 
     }
 }
 
-fn preview_card(p: &InvitePreview) -> gpui::Div {
+pub(crate) fn preview_card(p: &InvitePreview) -> gpui::Div {
     let dot = |col: u32| div().size(z(8.)).rounded_full().bg(c(col));
     div()
         .mt(z(12.))
@@ -257,70 +247,9 @@ fn preview_card(p: &InvitePreview) -> gpui::Div {
         )
 }
 
-pub fn render(app: &PhoenixApp, ov: &Overlay, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub fn render(app: &PhoenixApp, ov: &Overlay, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     match ov {
-        Overlay::JoinServer => {
-            let preview = app.nav.invite_preview.clone();
-            let busy = app.nav.busy;
-            let mut body = div()
-                .p(z(16.))
-                .flex()
-                .flex_col()
-                .child(title(crate::t!("invite.join_title")))
-                .child(
-                    div()
-                        .mt(z(8.))
-                        .text_size(z(14.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .text_center()
-                        .child(crate::t!("invite.join_sub")),
-                )
-                .child(
-                    div()
-                        .mt(z(16.))
-                        .text_size(z(12.))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(crate::t!("invite.link")),
-                )
-                .child(
-                    div()
-                        .mt(z(8.))
-                        .h(z(40.))
-                        .px(z(10.))
-                        .rounded(z(4.))
-                        .bg(c(Palette::BG_TERTIARY))
-                        .flex()
-                        .items_center()
-                        .text_size(z(16.))
-                        .when_some(app.nav.invite_input.clone(), |d, i| {
-                            d.child(Input::new(&i).appearance(false).bordered(false))
-                        }),
-                );
-            body = match preview {
-                Some(Ok(p)) => body.child(preview_card(&p)),
-                Some(Err(e)) => body.child(div().mt(z(8.)).text_size(z(12.)).text_color(c(Palette::RED)).child(e)),
-                None => body.child(
-                    div()
-                        .mt(z(12.))
-                        .text_size(z(12.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(crate::t!("invite.examples")),
-                ),
-            };
-            let inner = div().flex().flex_col().child(body).child(
-                footer()
-                    .child(
-                        button("join-back", crate::t!("common.back"), Palette::BG_SECONDARY)
-                            .on_click(cx.listener(|a, _, _, cx| a.close_overlay(cx))),
-                    )
-                    .child(
-                        button("join-go", if busy { crate::t!("invite.joining") } else { crate::t!("invite.join") }, Palette::BLURPLE)
-                            .on_click(cx.listener(|a, _, _, cx| a.join_invite(cx))),
-                    ),
-            );
-            modal("join-modal", cx, inner)
-        }
+        Overlay::JoinServer => crate::ui::add_server::render_modal(app, window, cx),
         Overlay::InviteLink { guild, link } => {
             let name = app.guilds.iter().find(|g| g.id == *guild).map(|g| g.name.clone()).unwrap_or_default();
             let link = link.clone();

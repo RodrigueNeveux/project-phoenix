@@ -24,6 +24,86 @@ pub fn upload_icons() -> Option<&'static UploadArt> {
 
 pub(super) fn init(dir: &Path) {
     let _ = UPLOAD_ICONS.set(upload(&dir.join("art")));
+    let _ = GUILD_UPLOAD.set(guild_upload(&dir.join("art")));
+}
+
+pub struct GuildUpload {
+    pub ring: PathBuf,
+    pub plus: PathBuf,
+}
+
+static GUILD_UPLOAD: OnceLock<Option<GuildUpload>> = OnceLock::new();
+
+pub fn guild_upload() -> Option<&'static GuildUpload> {
+    GUILD_UPLOAD.get().and_then(|o| o.as_ref())
+}
+
+const GUILD_UPLOAD_MARK: &str = "viewBox:\"0 0 80 80\",fill:\"none\",\"aria-hidden\":\"true\",children:[(0,";
+
+fn guild_upload(out: &Path) -> Option<GuildUpload> {
+    let art = GuildUpload { ring: out.join("guild-upload-ring.svg"), plus: out.join("guild-upload-plus.svg") };
+    if art.ring.is_file() && art.plus.is_file() {
+        return Some(art);
+    }
+    let caches = super::discord_caches();
+    let js = caches.iter().flat_map(|c| cache::asset_entries(c, ".js")).find_map(|(_, p)| {
+        let body = cache::read_body(&p)?;
+        (body.contains(GUILD_UPLOAD_MARK) && body.contains("M54.8694")).then_some(body)
+    })?;
+    let (ring, plus) = upload_svgs(&js)?;
+    std::fs::create_dir_all(out).ok()?;
+    std::fs::write(&art.ring, ring).ok()?;
+    std::fs::write(&art.plus, plus).ok()?;
+    Some(art)
+}
+
+fn jsx_attrs(src: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut rest = src;
+    while let Some(colon) = rest.find(":\"") {
+        let key = rest[..colon].trim_start_matches(',').trim_matches('"').to_owned();
+        let after = &rest[colon + 2..];
+        let Some(end) = after.find('"') else { break };
+        let name = match key.as_str() {
+            "fillRule" => "fill-rule".to_owned(),
+            "clipRule" => "clip-rule".to_owned(),
+            k => k.to_owned(),
+        };
+        out.push((name, after[..end].to_owned()));
+        rest = &after[end + 1..];
+    }
+    out
+}
+
+fn upload_svgs(js: &str) -> Option<(String, String)> {
+    let start = js.find(GUILD_UPLOAD_MARK)? + GUILD_UPLOAD_MARK.len();
+    let body = &js[start..];
+    let body = &body[..body.find("]})")?];
+    let (mut ring, mut plus) = (String::new(), String::new());
+    for el in body.split("(0,").skip(1).chain(std::iter::once(body.split("(0,").next().unwrap_or_default())) {
+        let Some(tag_start) = el.find("(\"") else { continue };
+        let tail = &el[tag_start + 2..];
+        let Some(tag_end) = tail.find('"') else { continue };
+        let tag = &tail[..tag_end];
+        if tag != "path" && tag != "circle" {
+            continue;
+        }
+        let Some(open) = tail.find('{') else { continue };
+        let Some(close) = tail.rfind('}') else { continue };
+        let attrs = jsx_attrs(&tail[open + 1..close]);
+        let fill = attrs.iter().find(|(k, _)| k == "fill").map(|(_, v)| v.as_str()).unwrap_or("currentColor");
+        let el: String = attrs.iter().filter(|(k, _)| k != "fill").map(|(k, v)| format!(" {k}=\"{v}\"")).collect();
+        match (tag, fill) {
+            ("path", "currentColor") => ring.push_str(&format!("<path{el} fill=\"#fff\"/>")),
+            ("path", "white") => plus.push_str(&format!("<path{el} fill=\"#fff\"/>")),
+            _ => {}
+        }
+    }
+    if ring.is_empty() || plus.is_empty() {
+        return None;
+    }
+    let wrap = |inner: &str| format!("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\" viewBox=\"0 0 80 80\" fill=\"none\">{inner}</svg>");
+    Some((wrap(&ring), wrap(&plus)))
 }
 
 fn upload(out: &Path) -> Option<UploadArt> {
@@ -109,6 +189,18 @@ mod tests {
         assert_eq!(hash, "TLg-1o");
         assert_eq!(art_url(css, &format!(".document_{hash}")).as_deref(), Some("ab12.svg"));
         assert_eq!(art_url(css, ".code_TLg-1o"), None);
+    }
+
+    #[test]
+    fn splits_the_guild_upload_art() {
+        let js = format!(
+            "x({{{GUILD_UPLOAD_MARK}C.jsx)(\"path\",{{fillRule:\"evenodd\",clipRule:\"evenodd\",d:\"M54.8694 2Z\",fill:\"currentColor\"}}),(0,C.jsx)(\"circle\",{{cx:\"68\",cy:\"12\",r:\"12\",fill:\"#5865f2\"}}),(0,C.jsx)(\"path\",{{d:\"M68 6Z\",fill:\"white\"}})]}})"
+        );
+        let (ring, plus) = upload_svgs(&js).unwrap();
+        assert!(ring.contains("<path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M54.8694 2Z\" fill=\"#fff\"/>"), "{ring}");
+        assert!(!ring.contains("circle") && !ring.contains("M68 6Z"), "{ring}");
+        assert!(plus.contains("d=\"M68 6Z\""), "{plus}");
+        assert!(plus.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\""));
     }
 
     #[test]
