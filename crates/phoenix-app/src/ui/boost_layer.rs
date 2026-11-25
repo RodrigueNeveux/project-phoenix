@@ -212,9 +212,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .gap(z(12.))
         .child(icon)
         .child(div().flex().flex_col().items_center().gap(z(4.)).child(text(20., 24., FontWeight::SEMIBOLD, white, g.name.clone())).child(count));
-    let boost_btn = crate::ui::controls::button("boost-layer-cta", crate::t!("boost.cta"), crate::ui::controls::BtnKind::Expressive)
-        .gap(z(8.))
-        .child(gem(16., tk(idx::CONTROL_EXPRESSIVE_ICON_DEFAULT)))
+    let boost_btn = crate::ui::controls::button_icon("boost-layer-cta", "boost", crate::t!("boost.cta"), crate::ui::controls::BtnKind::Expressive)
         .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("boost.cta"), cx)));
     let nitro_btn = crate::ui::controls::button("boost-layer-nitro", crate::t!("boost.get_nitro"), crate::ui::controls::BtnKind::Secondary)
         .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("boost.get_nitro"), cx)));

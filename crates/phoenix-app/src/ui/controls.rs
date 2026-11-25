@@ -371,6 +371,7 @@ pub fn button_icon(id: impl Into<ElementId>, icon: &'static str, label: impl Int
         BtnKind::Primary => idx::CONTROL_PRIMARY_TEXT_DEFAULT,
         BtnKind::Critical => idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT,
         BtnKind::Active => idx::CONTROL_CONNECTED_TEXT_DEFAULT,
+        BtnKind::Expressive => idx::CONTROL_EXPRESSIVE_TEXT_DEFAULT,
     };
     let label: SharedString = label.into();
     let b = button(id, SharedString::default(), kind);
