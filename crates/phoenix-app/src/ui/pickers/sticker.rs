@@ -144,7 +144,16 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     if sections.is_empty() {
         return empty_state(if p.stickers.loading { crate::t!("picker.loading_stickers") } else { crate::t!("picker.no_stickers") });
     }
-    let inspected = p.stickers.inspected.clone().or_else(|| sections.first().and_then(|s| s.2.first().map(|d| (d.clone(), s.0.clone()))));
+    let origin = |id: crate::model::Id| sections.iter().skip(usize::from(has_frequent)).find(|s| s.2.iter().any(|d| d.id == id)).map(|s| s.0.clone());
+    let inspected = p
+        .stickers
+        .inspected
+        .clone()
+        .or_else(|| sections.first().and_then(|s| s.2.first().map(|d| (d.clone(), s.0.clone()))))
+        .map(|(d, from)| {
+            let from = origin(d.id).unwrap_or(from);
+            (d, from)
+        });
     let insp_id = inspected.as_ref().map(|(d, _)| d.id);
 
     let scroll = crate::ui::chat::scrollbar::handle("sticker-scroll");
