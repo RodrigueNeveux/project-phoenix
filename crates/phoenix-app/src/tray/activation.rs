@@ -3,7 +3,7 @@ use std::mem::ManuallyDrop;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use raw_window_handle::{HasDisplayHandle as _, HasWindowHandle as _, RawDisplayHandle, RawWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use wayland_client::backend::{Backend, ObjectId};
 use wayland_client::globals::{GlobalList, GlobalListContents, registry_queue_init};
 use wayland_client::protocol::{wl_registry, wl_surface::WlSurface};
@@ -68,7 +68,7 @@ fn guest(display: *mut std::ffi::c_void) -> Option<(Connection, XdgActivationV1)
 }
 
 pub fn activate(window: &gpui::Window, token: &str) -> bool {
-    let (Ok(d), Ok(w)) = (window.display_handle(), window.window_handle()) else { return false };
+    let (Ok(d), Ok(w)) = (HasDisplayHandle::display_handle(window), HasWindowHandle::window_handle(window)) else { return false };
     let (RawDisplayHandle::Wayland(d), RawWindowHandle::Wayland(w)) = (d.as_raw(), w.as_raw()) else { return false };
     let Some((conn, activation)) = guest(d.display.as_ptr()) else { return false };
     // SAFETY: the pointer is the window's live `wl_surface` proxy, used only for this request while the window exists.
