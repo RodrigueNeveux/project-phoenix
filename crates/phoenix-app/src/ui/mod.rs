@@ -76,6 +76,7 @@ pub mod discovery;
 pub mod quests_page;
 pub mod shop_page;
 pub mod emoji_text;
+pub mod file_pick;
 pub mod shake;
 
 use crate::theme::z;

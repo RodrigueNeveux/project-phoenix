@@ -482,7 +482,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         .into_any_element()
 }
 
-fn sub_frame(id: &'static str, width: f32, title: SharedString, body: AnyElement, footer: AnyElement, close: crate::ui::modal::Action) -> AnyElement {
+pub(super) fn sub_frame(id: &'static str, width: f32, title: SharedString, body: AnyElement, footer: AnyElement, close: crate::ui::modal::Action) -> AnyElement {
     let c2 = close.clone();
     let card = div()
         .relative()
@@ -693,6 +693,10 @@ pub fn add_members_modal(app: &PhoenixApp, s: &State, am: &AddMembers, cx: &mut 
     picker_frame("cs-add-members", crate::t!("cs.add_members"), body, footer, close)
 }
 
+pub fn bold_range(body: &str, name: &str) -> Option<std::ops::Range<usize>> {
+    body.find(name).filter(|_| !name.is_empty()).map(|i| i..i + name.len())
+}
+
 pub fn delete_modal(s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let e = cx.entity();
     let close: crate::ui::modal::Action = Rc::new(move |_, cx| {
@@ -704,7 +708,11 @@ pub fn delete_modal(s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let body = div()
         .px(z(24.))
         .pt(z(8.))
-        .child(text(crate::t!(if cat { "admin.delete_category_body" } else { "admin.delete_channel_body" }, name = s.name0.clone()), 16., 20., idx::TEXT_DEFAULT))
+        .child({
+            let body = crate::t!(if cat { "admin.delete_category_body" } else { "admin.delete_channel_body" }, name = s.name0.clone());
+            let strong = if cat { s.name0.clone() } else { format!("#{}", s.name0) };
+            div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(gpui::StyledText::new(body.clone()).with_highlights(bold_range(&body, &strong).map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() }))))
+        })
         .into_any_element();
     let c2 = close.clone();
     let footer = div()
@@ -723,6 +731,14 @@ pub fn delete_modal(s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_delete_body_bolds_the_channel_name_with_its_hash() {
+        let body = "Es-tu sûr de vouloir supprimer #〢💬・phoenix ? Cette action est irréversible.";
+        let r = bold_range(body, "#〢💬・phoenix").unwrap();
+        assert_eq!(&body[r], "#〢💬・phoenix");
+        assert_eq!(bold_range(body, ""), None);
+    }
 
     #[test]
     fn every_kind_has_the_general_section_first() {

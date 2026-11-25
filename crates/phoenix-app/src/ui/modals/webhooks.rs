@@ -224,8 +224,12 @@ fn expanded(app: &PhoenixApp, s: &State, w: &Value, name: Option<&Entity<InputSt
                 .flex()
                 .flex_col()
                 .items_center()
-                .child(webhook_avatar(w, 100.))
-                .child(text(crate::t!("cs.min_size"), 10., 10., idx::TEXT_MUTED).mt(z(10.))),
+                .child(avatar_uploader(w, s.webhook_avatar.as_deref(), cx))
+                .child({
+                    let t = crate::t!("cs.min_size");
+                    let r = t.find("128").map(|i| i..t.len());
+                    div().mt(z(10.)).text_size(z(10.)).line_height(z(10.)).text_color(c(tok(idx::TEXT_MUTED))).child(gpui::StyledText::new(t.clone()).with_highlights(r.map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::BOLD), ..Default::default() }))))
+                }),
         )
         .child(
             div()
@@ -311,35 +315,108 @@ pub fn followed_page(_app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>)
 
 pub fn webhook_dirty(s: &State, cx: &gpui::App) -> Option<(u64, String)> {
     let id: u64 = s.open_webhook.as_deref()?.parse().ok()?;
-    let input = s.webhook_name.as_ref()?;
-    let now = input.read(cx).value().to_string();
     let orig = s.webhooks.iter().flatten().find(|w| webhook_id(w) == Some(id))?.get("name")?.as_str()?.to_owned();
-    (now.trim() != orig && !now.trim().is_empty()).then(|| (id, now.trim().to_owned()))
+    let now = s.webhook_name.as_ref().map(|i| i.read(cx).value().trim().to_owned()).filter(|n| !n.is_empty()).unwrap_or_else(|| orig.clone());
+    (now != orig || s.webhook_avatar.is_some()).then_some((id, now))
+}
+
+pub fn webhook_body(name: &str, avatar: Option<String>) -> Value {
+    let mut b = json!({ "name": name });
+    if let Some(a) = avatar {
+        b["avatar"] = json!(a);
+    }
+    b
+}
+
+pub fn pick_webhook_avatar(cx: &mut Context<PhoenixApp>) {
+    crate::ui::file_pick::pick(&crate::ui::file_pick::IMAGES, cx, |_, path, _| with_state(|s| s.webhook_avatar = Some(path)));
 }
 
 pub fn save_webhook(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let mut out = None;
     with_state(|s| {
         if let Some((id, name)) = webhook_dirty(s, cx) {
+            let avatar = s.webhook_avatar.as_deref().and_then(crate::ui::file_pick::data_uri);
             if let Some(w) = s.webhooks.iter_mut().flatten().find(|w| webhook_id(w) == Some(id)) {
                 w["name"] = json!(name);
             }
-            out = Some((id, name));
+            out = Some((id, webhook_body(&name, avatar)));
         }
     });
-    if let Some((id, name)) = out {
-        a.admin_toast(AdminCall::EditWebhook { webhook: phoenix_api::models::Snowflake(id), body: json!({ "name": name }) }, None, cx);
+    if let Some((id, body)) = out {
+        a.admin_toast(AdminCall::EditWebhook { webhook: phoenix_api::models::Snowflake(id), body }, None, cx);
     }
 }
 
+fn avatar_uploader(w: &Value, local: Option<&std::path::Path>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let id = webhook_id(w).unwrap_or(0);
+    let src: gpui::ImageSource = match (local, w.get("avatar").and_then(Value::as_str)) {
+        (Some(p), _) => p.to_path_buf().into(),
+        (None, Some(h)) => SharedString::from(format!("https://cdn.discordapp.com/avatars/{id}/{h}.png?size=128")).into(),
+        (None, None) => SharedString::from("https://discord.com/assets/2ccd8ae8b2379360.png").into(),
+    };
+    div()
+        .id("cs-hook-avatar")
+        .relative()
+        .w(z(111.))
+        .h(z(102.))
+        .cursor_pointer()
+        .group("cs-hook-avatar")
+        .on_click(cx.listener(|_, _, _, cx| pick_webhook_avatar(cx)))
+        .child(
+            div()
+                .absolute()
+                .left(z(5.))
+                .top_0()
+                .size(z(100.))
+                .rounded(z(12.))
+                .overflow_hidden()
+                .child(gpui::img(src).size(z(100.)).object_fit(gpui::ObjectFit::Cover))
+                .child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .invisible()
+                        .group_hover("cs-hook-avatar", |d| d.visible())
+                        .bg(c(tok(idx::OPACITY_BLACK_76)))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_center()
+                        .child(text(crate::t!("cs.change_avatar"), 12., 12., idx::WHITE)),
+                ),
+        )
+        .child(
+            div()
+                .absolute()
+                .left(z(83.))
+                .top_0()
+                .size(z(28.))
+                .rounded_full()
+                .bg(gpui::white())
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(gpui::img(SharedString::from("https://discord.com/assets/6ca913b246a05ffc.svg")).size(z(28.))),
+        )
+        .into_any_element()
+}
+
 pub fn invites(s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let guild = s.guild;
     let (a, l, b) = split3(crate::t!("cs.invites_desc"));
     let mut d = div()
         .flex()
         .flex_col()
         .mt(z(-4.))
         .child(link_text(a, l, b).mb(z(16.)))
-        .child(div().flex().child(button_sm("cs-pause-invites", crate::t!("cs.pause_invites"), BtnKind::Critical)))
+        .child(div().flex().child(button_sm("cs-pause-invites", crate::t!("cs.pause_invites"), BtnKind::Critical).on_click(cx.listener(move |a, _, _, cx| {
+            if let Some(g) = guild {
+                let sec = a.security_state(g);
+                with_state(|s| s.security = Some(sec));
+            }
+            cx.notify();
+        }))))
         .child(divider(24.));
     let Some(list) = s.invites.as_deref() else {
         return d.child(text(crate::t!("common.loading"), 14., 18., idx::TEXT_SUBTLE)).into_any_element();
@@ -397,5 +474,12 @@ mod tests {
         assert_eq!((a.as_ref(), l.as_ref(), b.as_ref()), ("x ", "y", " z"));
         let w = serde_json::json!({ "id": "12", "name": "n" });
         assert_eq!(super::webhook_id(&w), Some(12));
+    }
+
+    #[test]
+    fn webhook_patch_carries_the_avatar_as_a_data_uri() {
+        assert_eq!(super::webhook_body("Hook", None), serde_json::json!({ "name": "Hook" }));
+        let b = super::webhook_body("Hook", Some(crate::ui::file_pick::encode(b"abc", "image/png")));
+        assert_eq!(b["avatar"], "data:image/png;base64,YWJj");
     }
 }

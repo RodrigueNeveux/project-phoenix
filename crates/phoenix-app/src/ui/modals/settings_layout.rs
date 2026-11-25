@@ -179,12 +179,11 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
             SideItem::Item { label, index, danger, icon, external } => side_item(n, label, index, danger, icon, external, index == selected, pick.clone(), cx),
         });
     }
+    let narrow = is_narrow(crate::ui::title_bar::viewport_w_css());
     let column = |body: Option<AnyElement>| {
         div()
-            .flex_grow(1.)
-            .flex_shrink(1.)
-            .min_w(z(460.))
-            .when(!wide, |d| d.max_w(z(740.)))
+            .when(!narrow, |d| d.flex_grow(1.).flex_shrink(1.).min_w(z(460.)).when(!wide, |d| d.max_w(z(740.))))
+            .when(narrow, |d| d.flex_none().w_full())
             .when_some(body, |d, b| if wide { d.child(b) } else { d.pt(z(60.)).px(z(40.)).pb(z(80.)).child(b) })
     };
     let body = div()
@@ -201,23 +200,28 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
         .items_start()
         .overflow_y_scroll()
         .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 1))
+        .when(narrow, |d| d.pr(z(16.)))
         .child(column(Some(body)))
-        .child(div().flex_none().w(z(36.)).mr(z(21.)));
-    let tools = div()
-        .absolute()
-        .top_0()
-        .left_0()
-        .size_full()
-        .flex()
-        .items_start()
-        .child(column(None))
-        .child(div().flex_none().w(z(36.)).mr(z(21.)).pt(z(60.)).child(close_tools(cx)));
+        .when(!narrow, |d| d.child(div().flex_none().w(z(36.)).mr(z(21.))));
+    let tools = if narrow {
+        div().absolute().top_0().right(z(16.)).w(z(36.)).pt(z(60.)).child(close_tools(cx))
+    } else {
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .flex()
+            .items_start()
+            .child(column(None))
+            .child(div().flex_none().w(z(36.)).mr(z(21.)).pt(z(60.)).child(close_tools(cx)))
+    };
     let content_region = div()
         .id(SharedString::from(format!("{id}-main")))
         .relative()
         .flex_grow(1.)
         .flex_shrink(1.)
-        .flex_basis(z(800.))
+        .flex_basis(if narrow { gpui::Length::from(gpui::relative(0.7)) } else { gpui::Length::from(z(800.)) })
         .min_w_0()
         .h_full()
         .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
@@ -227,8 +231,8 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
         .children(notice.map(|n| div().absolute().bottom_0().left_0().right(z(71.)).max_w(z(740.)).px(z(20.)).pb(z(20.)).child(n)));
     let sidebar_region = crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
         .flex_grow(1.)
-        .flex_shrink_0()
-        .flex_basis(z(264.))
+        .when(!narrow, |d| d.flex_shrink_0().flex_basis(z(264.)))
+        .when(narrow, |d| d.flex_shrink(1.).flex_basis(gpui::relative(0.3)).min_w_0())
         .h_full()
         .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
         .child(
@@ -241,7 +245,7 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
                 .pr(z(8.))
                 .overflow_y_scroll()
                 .track_scroll(&crate::ui::chat::scrollbar::handle_n(id, 2))
-                .child(div().flex_none().w(z(264.)).py(z(60.)).pl(z(20.)).pr(z(6.)).flex().child(side)),
+                .child(div().flex_none().when(narrow, |d| d.w_full()).when(!narrow, |d| d.w(z(264.))).py(z(60.)).pl(z(20.)).pr(z(6.)).flex().child(side)),
         )
         .children(crate::ui::chat::scrollbar::bar_for_n(id, 2, crate::ui::chat::scrollbar::Bar::ThinFade));
     deferred(
@@ -260,6 +264,10 @@ fn overlay_ex(id: &'static str, side_items: Vec<SideItem>, selected: usize, pick
     )
     .with_priority(20)
     .into_any_element()
+}
+
+pub fn is_narrow(viewport_css: f32) -> bool {
+    viewport_css > 0. && viewport_css < 780.
 }
 
 pub type Act = Rc<dyn Fn(&mut PhoenixApp, &mut Window, &mut Context<PhoenixApp>)>;
@@ -362,4 +370,16 @@ pub fn link_btn(id: impl Into<gpui::ElementId>, t: SharedString, danger: bool) -
         .text_color(c(tok(if danger { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_LINK })))
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
         .child(t)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_split_layout_starts_below_780_css_px() {
+        assert!(super::is_narrow(779.));
+        assert!(super::is_narrow(640.));
+        assert!(!super::is_narrow(780.));
+        assert!(!super::is_narrow(1280.));
+        assert!(!super::is_narrow(0.));
+    }
 }

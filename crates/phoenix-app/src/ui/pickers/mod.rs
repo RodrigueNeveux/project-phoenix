@@ -34,6 +34,15 @@ pub enum EmojiTarget {
     Composer,
     Reaction { channel: Id, message: Id },
     Status,
+    Field(Field),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Field {
+    ChannelName,
+    ChannelTopic,
+    ForumReaction,
+    TagEmoji,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -225,7 +234,7 @@ fn switch_tab(app: &mut PhoenixApp, tab: Tab, window: &mut Window, cx: &mut Cont
 pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) {
     app.chat.emoji_target = None;
     if let Some(op) = cx.global_mut::<Pickers>().open.take() {
-        if op.target != EmojiTarget::Status {
+        if !matches!(op.target, EmojiTarget::Status | EmojiTarget::Field(_)) {
             app.composer.update(cx, |s, cx| s.focus(window, cx));
         }
         cx.notify();
@@ -409,6 +418,14 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
                 close(app, window, cx);
             }
         }
+        EmojiTarget::Field(f) => {
+            let (text, custom) = match &item {
+                PickItem::Unicode(ix) => (emoji::toned(*ix, tone), None),
+                PickItem::Custom(e) => (e.token(), Some((e.id, e.name.to_string(), e.animated))),
+            };
+            crate::ui::modals::channel_settings::pick_field_emoji(f, text, custom, window, cx);
+            close(app, window, cx);
+        }
         EmojiTarget::Reaction { channel, message } => {
             let (emoji, id) = match &item {
                 PickItem::Unicode(ix) => (emoji::toned(*ix, tone), None),
@@ -460,10 +477,11 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
     if let Some(el) = ui::search::render(app, window, cx) {
         out.push(el);
     }
-    if open_tab(cx).is_some_and(|(_, t)| t != EmojiTarget::Status)
+    if let Some((_, t)) = open_tab(cx)
+        && t != EmojiTarget::Status
         && let Some(el) = render_picker(app, window, cx)
     {
-        out.push(el);
+        out.push(if matches!(t, EmojiTarget::Field(_)) { gpui::deferred(el).with_priority(30).into_any_element() } else { el });
     }
     if let Some(el) = soundboard::render(app, window, cx) {
         out.push(el);

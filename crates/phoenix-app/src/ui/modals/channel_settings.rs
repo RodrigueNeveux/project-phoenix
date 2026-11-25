@@ -232,6 +232,115 @@ pub fn thread_edit(name0: &str, name: &str, slow0: u32, slow: u32, t: &ThreadFie
     }
 }
 
+pub struct TagDraft {
+    pub index: Option<usize>,
+    pub name0: String,
+    pub name: Option<Entity<InputState>>,
+    pub emoji: Option<Value>,
+    pub moderated: bool,
+}
+
+impl TagDraft {
+    pub fn new() -> Self {
+        Self { index: None, name0: String::new(), name: None, emoji: None, moderated: false }
+    }
+
+    pub fn edit(index: usize, tag: &Value) -> Self {
+        let emoji = emoji_value(tag.get("emoji_id").and_then(Value::as_str), tag.get("emoji_name").and_then(Value::as_str));
+        Self {
+            index: Some(index),
+            name0: tag.get("name").and_then(Value::as_str).unwrap_or_default().to_owned(),
+            name: None,
+            emoji,
+            moderated: tag.get("moderated").and_then(Value::as_bool).unwrap_or(false),
+        }
+    }
+}
+
+impl Default for TagDraft {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub const TAG_MAX: usize = 20;
+
+pub fn emoji_value(id: Option<&str>, name: Option<&str>) -> Option<Value> {
+    match (id.filter(|i| !i.is_empty() && *i != "0"), name.filter(|n| !n.is_empty())) {
+        (None, None) => None,
+        (id, name) => Some(json!({ "emoji_id": id, "emoji_name": if id.is_some() { None } else { name } })),
+    }
+}
+
+pub fn tag_json(prev: Option<&Value>, name: &str, emoji: Option<&Value>, moderated: bool) -> Value {
+    let name: String = name.trim().chars().take(TAG_MAX).collect();
+    let mut t = json!({
+        "name": name,
+        "emoji_id": emoji.and_then(|e| e.get("emoji_id")).cloned().unwrap_or(Value::Null),
+        "emoji_name": emoji.and_then(|e| e.get("emoji_name")).cloned().unwrap_or(Value::Null),
+        "moderated": moderated,
+    });
+    if let Some(id) = prev.and_then(|p| p.get("id")).filter(|i| !i.is_null()) {
+        t["id"] = id.clone();
+    }
+    t
+}
+
+pub fn forum_extras(b: &mut Value, tags0: &[Value], tags: &[Value], r0: &Option<Value>, r: &Option<Value>) {
+    if tags != tags0 {
+        b["available_tags"] = json!(tags);
+    }
+    if r != r0 {
+        b["default_reaction_emoji"] = r.clone().unwrap_or(Value::Null);
+    }
+}
+
+pub fn insert_at(text: &str, range: std::ops::Range<usize>, ins: &str) -> (String, std::ops::Range<usize>) {
+    let (a, b) = (range.start.min(text.len()), range.end.min(text.len()));
+    let (a, b) = (a.min(b), a.max(b));
+    let a = (0..=a).rev().find(|i| text.is_char_boundary(*i)).unwrap_or(0);
+    let b = (b..=text.len()).find(|i| text.is_char_boundary(*i)).unwrap_or(text.len());
+    let out = format!("{}{ins}{}", &text[..a], &text[b..]);
+    let at = a + ins.len();
+    (out, at..at)
+}
+
+pub fn pick_field_emoji(f: crate::ui::pickers::Field, text: String, custom: Option<(Id, String, bool)>, window: &mut Window, cx: &mut gpui::App) {
+    use crate::ui::pickers::Field;
+    let emoji = match &custom {
+        Some((id, _, _)) => json!({ "emoji_id": id.0.to_string(), "emoji_name": Value::Null }),
+        None => json!({ "emoji_id": Value::Null, "emoji_name": text.clone() }),
+    };
+    let mut name_input = None;
+    let mut topic_input = None;
+    with_state(|s| match f {
+        Field::ChannelName => name_input = s.name.clone().filter(|_| custom.is_none()),
+        Field::ChannelTopic => topic_input = s.topic.clone(),
+        Field::ForumReaction => s.default_reaction = Some(emoji.clone()),
+        Field::TagEmoji => {
+            if let Some(t) = s.tag_edit.as_mut() {
+                t.emoji = Some(emoji.clone());
+            }
+        }
+    });
+    if let Some(i) = name_input {
+        i.update(cx, |st, cx| {
+            let (t, r) = insert_at(&st.value(), st.selected_range(), &text);
+            st.set_value(t, window, cx);
+            st.set_selected_range(r, cx);
+            st.focus(window, cx);
+        });
+    }
+    if let Some(i) = topic_input {
+        i.update(cx, |st, cx| {
+            let (t, r) = insert_at(&st.value(), st.selected_range(), &text);
+            st.set_value(t, window, cx);
+            st.set_selected_range(r, cx);
+            st.focus(window, cx);
+        });
+    }
+}
+
 pub struct State {
     pub channel: Id,
     pub guild: Option<Id>,
@@ -242,8 +351,11 @@ pub struct State {
     pub topic0: String,
     pub v0: Values,
     pub v: Values,
+    pub tags0: Vec<Value>,
     pub tags: Vec<Value>,
+    pub default_reaction0: Option<Value>,
     pub default_reaction: Option<Value>,
+    pub tag_edit: Option<TagDraft>,
     pub name: Option<Entity<InputState>>,
     pub topic: Option<Entity<TextareaState>>,
     pub perm_search: Option<Entity<InputState>>,
@@ -257,6 +369,7 @@ pub struct State {
     pub webhooks: Option<Vec<Value>>,
     pub open_webhook: Option<String>,
     pub webhook_name: Option<Entity<InputState>>,
+    pub webhook_avatar: Option<std::path::PathBuf>,
     pub thread: Option<ThreadFields>,
     pub slow0: u32,
     pub slow: u32,
@@ -264,6 +377,7 @@ pub struct State {
     pub advanced_open: bool,
     pub add_members: Option<super::channel_perms::AddMembers>,
     pub confirm_delete: bool,
+    pub security: Option<super::privacy::Security>,
 }
 
 impl State {
@@ -288,8 +402,11 @@ impl State {
             topic0: topic,
             v0: v.clone(),
             v,
+            tags0: Vec::new(),
             tags: Vec::new(),
+            default_reaction0: None,
             default_reaction: None,
+            tag_edit: None,
             name: None,
             topic: None,
             perm_search: None,
@@ -303,6 +420,7 @@ impl State {
             webhooks: None,
             open_webhook: None,
             webhook_name: None,
+            webhook_avatar: None,
             thread: None,
             slow0: 0,
             slow: 0,
@@ -310,6 +428,7 @@ impl State {
             advanced_open: true,
             add_members: None,
             confirm_delete: false,
+            security: None,
         }
     }
 
@@ -341,8 +460,10 @@ impl State {
         if let Some(t) = v.get("topic").and_then(Value::as_str) {
             self.topic0 = t.to_owned();
         }
-        self.tags = v.get("available_tags").and_then(Value::as_array).cloned().unwrap_or_default();
-        self.default_reaction = v.get("default_reaction_emoji").filter(|x| !x.is_null()).cloned();
+        self.tags0 = v.get("available_tags").and_then(Value::as_array).cloned().unwrap_or_default();
+        self.tags = self.tags0.clone();
+        self.default_reaction0 = v.get("default_reaction_emoji").filter(|x| !x.is_null()).cloned();
+        self.default_reaction = self.default_reaction0.clone();
         self.loaded = true;
     }
 
@@ -356,7 +477,11 @@ impl State {
 
     pub fn overview_dirty(&self, cx: &gpui::App) -> bool {
         let name = self.name_value(cx);
-        (name.trim() != self.name0 && !name.trim().is_empty()) || self.topic_value(cx) != self.topic0 || self.v != self.v0
+        (name.trim() != self.name0 && !name.trim().is_empty()) || self.topic_value(cx) != self.topic0 || self.v != self.v0 || self.forum_dirty()
+    }
+
+    pub fn forum_dirty(&self) -> bool {
+        self.tags != self.tags0 || self.default_reaction != self.default_reaction0
     }
 
     pub fn overwrites_dirty(&self) -> bool {
@@ -414,6 +539,12 @@ pub fn prepare(s: &mut State, mk: &mut dyn FnMut(SharedString, &str, bool) -> En
         && let Some(name) = s.webhooks.iter().flatten().find(|w| super::webhooks::webhook_id(w) == Some(id)).and_then(|w| w.get("name")?.as_str().map(str::to_owned))
     {
         s.webhook_name = Some(mk(SharedString::default(), &name, false));
+    }
+    if let Some(t) = s.tag_edit.as_mut()
+        && t.name.is_none()
+    {
+        let init = t.name0.clone();
+        t.name = Some(mk(crate::t!("cs.tag_name_ph"), &init, true));
     }
     if let Some(a) = s.add_members.as_mut()
         && a.search.is_none()
@@ -680,12 +811,18 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
     };
     let hook_notice = super::webhooks::webhook_dirty(s, cx).map(|_| {
         let reset: Act = Rc::new(|_, _, cx| {
-            with_state(|s| s.webhook_name = None);
+            with_state(|s| {
+                s.webhook_name = None;
+                s.webhook_avatar = None;
+            });
             cx.notify();
         });
         let save: Act = Rc::new(|a, _, cx| {
             super::webhooks::save_webhook(a, cx);
-            with_state(|s| s.webhook_name = None);
+            with_state(|s| {
+                s.webhook_name = None;
+                s.webhook_avatar = None;
+            });
         });
         unsaved_bar(reset, save, cx)
     });
@@ -695,6 +832,8 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
             let mut area = None;
             with_state(|s| {
                 s.v = s.v0.clone();
+                s.tags = s.tags0.clone();
+                s.default_reaction = s.default_reaction0.clone();
                 s.overwrites = s.overwrites0.clone();
                 inputs = s.name.clone().map(|i| (i, s.name0.clone())).into_iter().collect();
                 area = s.topic.clone().map(|i| (i, s.topic0.clone()));
@@ -710,9 +849,18 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         unsaved_bar(reset, save, cx)
     });
     let notice = notice.or(hook_notice);
-    let extra = match (&s.add_members, s.confirm_delete) {
-        (Some(am), _) => Some(super::channel_perms::add_members_modal(app, s, am, cx)),
-        (None, true) => Some(super::channel_perms::delete_modal(s, cx)),
+    let extra = match (&s.add_members, s.confirm_delete, &s.security) {
+        (Some(am), _, _) => Some(super::channel_perms::add_members_modal(app, s, am, cx)),
+        (None, true, _) => Some(super::channel_perms::delete_modal(s, cx)),
+        (None, false, _) if s.tag_edit.is_some() => s.tag_edit.as_ref().map(|t| super::channel_overview::tag_modal(s, t, cx)),
+        (None, false, Some(sec)) => {
+            let e = cx.entity();
+            let close: crate::ui::modal::Action = Rc::new(move |_, cx| {
+                with_state(|s| s.security = None);
+                e.update(cx, |_, cx| cx.notify());
+            });
+            Some(super::privacy::render_security_with(sec, close, false, cx))
+        }
         _ => None,
     };
     overlay_with("channel-settings", items, selected, pick, title, content, notice, extra, cx)
@@ -725,7 +873,10 @@ pub fn save(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
             let (name, topic) = (s.name_value(cx), s.topic_value(cx));
             let overview = s.overview_dirty(cx).then(|| {
                 let name = if name.trim().is_empty() { s.name0.clone() } else { crate::actions::admin::channel_name(s.kind, &name) };
-                let body = patch_body(&name, &topic, &s.v0, &s.v);
+                let mut body = patch_body(&name, &topic, &s.v0, &s.v);
+                forum_extras(&mut body, &s.tags0, &s.tags, &s.default_reaction0, &s.default_reaction);
+                s.tags0 = s.tags.clone();
+                s.default_reaction0 = s.default_reaction.clone();
                 s.name0 = name.clone();
                 s.topic0 = topic.clone();
                 s.v0 = s.v.clone();
@@ -800,6 +951,34 @@ mod tests {
         assert!(same_overwrites(&a, &b));
         b[0].allow = 0;
         assert!(!same_overwrites(&a, &b));
+    }
+
+    #[test]
+    fn forum_tags_and_reaction_go_in_the_patch_only_when_changed() {
+        let tags0 = vec![json!({"id": "5", "name": "Bug", "emoji_id": null, "emoji_name": null, "moderated": false})];
+        let mut b = json!({});
+        forum_extras(&mut b, &tags0, &tags0, &None, &None);
+        assert_eq!(b, json!({}));
+        let mut tags = tags0.clone();
+        tags[0] = tag_json(Some(&tags0[0]), "  Bug fixé et validé, très long  ", emoji_value(None, Some("✅")).as_ref(), true);
+        tags.push(tag_json(None, "New", None, false));
+        let r = emoji_value(Some("1424806138028888325"), Some("ignored"));
+        forum_extras(&mut b, &tags0, &tags, &None, &r);
+        assert_eq!(b["available_tags"][0], json!({"id": "5", "name": "Bug fixé et validé, t", "emoji_id": null, "emoji_name": "✅", "moderated": true}));
+        assert_eq!(b["available_tags"][1].get("id"), None);
+        assert_eq!(b["default_reaction_emoji"], json!({"emoji_id": "1424806138028888325", "emoji_name": null}));
+        let mut c = json!({});
+        forum_extras(&mut c, &tags0, &tags0, &r, &None);
+        assert_eq!(c["default_reaction_emoji"], Value::Null);
+        assert_eq!(emoji_value(Some("0"), None), None);
+    }
+
+    #[test]
+    fn emoji_insertion_keeps_the_cursor_after_the_emoji() {
+        assert_eq!(insert_at("ab", 1..1, "✅"), ("a✅b".into(), 4..4));
+        assert_eq!(insert_at("abc", 1..2, "x"), ("axc".into(), 2..2));
+        assert_eq!(insert_at("é", 1..1, "x").0, "xé");
+        assert_eq!(insert_at("", 5..5, "x"), ("x".into(), 1..1));
     }
 
     #[test]

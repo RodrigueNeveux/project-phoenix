@@ -265,7 +265,7 @@ pub fn info_notice(t: impl Into<SharedString>) -> AnyElement {
         .into_any_element()
 }
 
-pub fn format_toolbar(id: &'static str, extra: bool, on_wrap: OnWrap) -> AnyElement {
+pub fn format_toolbar(id: &'static str, extra: bool, on_wrap: OnWrap, trailing: Option<AnyElement>) -> AnyElement {
     let mut tools: Vec<(&'static str, &'static str)> = vec![("settings/bold", "**"), ("settings/italic", "*"), ("settings/underline", "__"), ("settings/strike", "~~")];
     if extra {
         tools.push(("settings/quote", "> "));
@@ -301,7 +301,7 @@ pub fn format_toolbar(id: &'static str, extra: bool, on_wrap: OnWrap) -> AnyElem
             .on_click(move |_, win, cx| w("||", win, cx))
             .child(gpui::svg().path(crate::icons::path("settings/eye")).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
     );
-    div().h(z(32.)).mb(z(-4.)).rounded_t(z(4.)).bg(c(tok(idx::BACKGROUND_MOD_NORMAL))).flex().justify_between().child(row).into_any_element()
+    div().h(z(32.)).mb(z(-4.)).rounded_t(z(4.)).bg(c(tok(idx::BACKGROUND_MOD_NORMAL))).flex().justify_between().child(row).children(trailing).into_any_element()
 }
 
 pub fn wrap_selection(text: &str, range: std::ops::Range<usize>, mark: &str) -> (String, std::ops::Range<usize>) {

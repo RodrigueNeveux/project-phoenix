@@ -248,15 +248,7 @@ fn reset(app: &mut PhoenixApp, cx: &mut Cx) {
 }
 
 fn data_uri(path: &std::path::Path) -> Option<String> {
-    use base64::Engine;
-    let bytes = std::fs::read(path).ok()?;
-    let mime = match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
-        Some("png") => "image/png",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        _ => "image/jpeg",
-    };
-    Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+    crate::ui::file_pick::data_uri(path)
 }
 
 fn save(app: &mut PhoenixApp, cx: &mut Cx) {

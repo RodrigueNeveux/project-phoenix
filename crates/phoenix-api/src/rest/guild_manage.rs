@@ -115,7 +115,7 @@ pub enum AdminCall {
     Bans { guild: Snowflake },
     Unban { guild: Snowflake, user: Snowflake },
     AuditLog { guild: Snowflake, before: Option<Snowflake>, limit: u32 },
-    IncidentActions { guild: Snowflake, invites_until: Option<u64>, dms_until: Option<u64> },
+    IncidentActions { guild: Snowflake, invites_until: Option<u64>, dms_until: Option<u64>, lockdown_hours: Option<u32> },
     UserSettings,
     PatchUserSettings { patch: Value },
     EditGroupDm { channel: Snowflake, name: Option<String>, icon: Option<Option<String>> },
@@ -342,12 +342,13 @@ pub fn build(call: &AdminCall) -> ApiReq {
             }
             req(Method::GET, p, None)
         }
-        C::IncidentActions { guild, invites_until, dms_until } => req(
+        C::IncidentActions { guild, invites_until, dms_until, lockdown_hours } => req(
             Method::PUT,
             format!("/guilds/{guild}/incident-actions"),
             Some(json!({
                 "invites_disabled_until": invites_until.map(rfc3339),
                 "dms_disabled_until": dms_until.map(rfc3339),
+                "lockdown_duration_hours": lockdown_hours,
             })),
         ),
         C::UserSettings => req(Method::GET, "/users/@me/settings".into(), None),
@@ -616,8 +617,10 @@ mod tests {
 
     #[test]
     fn incidents_and_privacy() {
-        let b = build(&AdminCall::IncidentActions { guild: G, invites_until: Some(3600), dms_until: None }).body.unwrap();
-        assert_eq!(b, json!({"invites_disabled_until": "1970-01-01T01:00:00Z", "dms_disabled_until": null}));
+        let b = build(&AdminCall::IncidentActions { guild: G, invites_until: Some(3600), dms_until: None, lockdown_hours: Some(1) }).body.unwrap();
+        assert_eq!(b, json!({"invites_disabled_until": "1970-01-01T01:00:00Z", "dms_disabled_until": null, "lockdown_duration_hours": 1}));
+        let b = build(&AdminCall::IncidentActions { guild: G, invites_until: None, dms_until: None, lockdown_hours: None }).body.unwrap();
+        assert_eq!(b, json!({"invites_disabled_until": null, "dms_disabled_until": null, "lockdown_duration_hours": null}));
         let cur = json!(["1", "8"]);
         assert_eq!(toggle_list(&cur, G, false), json!(["8"]));
         assert_eq!(toggle_list(&json!(null), G, true), json!(["1"]));

@@ -278,8 +278,13 @@ impl PhoenixApp {
         self.admin_toast(AdminCall::PatchUserSettings { patch: json!({ key: list }) }, None, cx);
     }
 
+    pub fn security_state(&self, guild: Id) -> privacy::Security {
+        let locked = self.backend.guild_features(guild).iter().any(|f| f == "INVITES_DISABLED");
+        privacy::Security::with_state(guild, locked, false, None, false)
+    }
+
     pub fn open_security_actions(&mut self, guild: Id, cx: &mut Context<Self>) {
-        open_modal(Modal::Security(privacy::Security::new(guild)), None);
+        open_modal(Modal::Security(self.security_state(guild)), None);
         cx.notify();
     }
 }
