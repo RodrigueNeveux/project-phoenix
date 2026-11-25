@@ -168,7 +168,7 @@ pickers and menus had their turn; Enter / Space click through GPUI's keyboard cl
 |---|---|---|---|
 | composer text area | the 830x57 input box, radius 8 | `ui/chat/composer.rs` `focus_ring::tab_focused` + `ring_box(8., 0., 0.)` (4px `#00b0f4` ring on Tab focus) | ✅ |
 | composer buttons (gift, GIF, sticker) | 32x24, 4px inside the 32px button vertically, radius 8 (gift 4) | `states::composer_button_ext` `ring_inset(0, 4)` | ✅ |
-| emoji / apps buttons | 40x24 (4px wider than the button on each side) | emoji: same helper with `dx -4`; apps: own button, no ring yet | ✅ emoji / ❌ apps |
+| emoji / apps buttons | 40x24 (4px wider than the button on each side) | emoji: same helper with `dx -4`; apps: `focus_ring::ring_inset(…, 8, -4, 4)` on its own button | ✅ |
 | member rows | 244x36, 4px inside the 252x44 row, radius 8 | `members.rs` `ring_inset(4, 3)` | ✅ |
 | channel rows | `3d994642c869c81b.js` `FocusRing` `offset: { top: 2, bottom: 2, right: 4 }` on `link_TNyK-N` (radius 8) | `sidebar.rs` chrow `ring_inset_edges(0, 2, 4, 2)` | ✅ |
 | rail tiles | 40px tile bounds, radius 12 | `server_bar.rs` `row`, around the 40px tile, radius 12 | ✅ |

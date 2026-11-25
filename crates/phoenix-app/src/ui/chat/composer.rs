@@ -447,7 +447,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     .child(crate::ui::states::composer_button_ext("emoji", Icon::Emoji, 18., true).on_click(cx.listener(
                                         |a, _, _, cx| a.open_emoji_picker(EmojiTarget::Composer, cx),
                                     )))
-                                    .child(
+                                    .child(crate::ui::focus_ring::ring_inset(
                                         div()
                                             .id("apps")
                                             .relative()
@@ -471,7 +471,11 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                             )
                                             .child(super::app_launcher::anchor_probe())
                                             .on_click(cx.listener(|a, _, w, cx| super::app_launcher::toggle(a, w, cx))),
-                                    )
+                                        crate::ui::states::key(("composer-btn", "apps")),
+                                        8.,
+                                        -4.,
+                                        4.,
+                                    ))
                                     .when(show_send_button, |d| {
                                         d.child(div().w(z(1.)).h(fz(22.)).bg(super::tk(idx::BORDER_NORMAL)))
                                             .child(
