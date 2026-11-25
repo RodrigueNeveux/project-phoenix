@@ -1,6 +1,7 @@
 pub mod channel_settings;
 pub mod create_channel;
 pub mod forward;
+pub mod gdm;
 pub mod go_live;
 pub mod guild_notify;
 pub mod leave_link;
@@ -92,6 +93,9 @@ pub enum Modal {
     CreatePoll(poll_create::State),
     GoLive(go_live::State),
     LeaveLink(leave_link::State),
+    EditGroup(gdm::EditGroup),
+    GroupInvites(gdm::Invites),
+    FolderSettings(gdm::Folder),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -161,6 +165,7 @@ pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
         Some(Modal::ChannelSettings(s)) => channel_settings::prepare(s, &mut mk),
         Some(Modal::CreatePoll(s)) => poll_create::prepare(s, &mut mk),
         Some(Modal::Report(r)) => r.viewport = Some(vp),
+        Some(m @ (Modal::EditGroup(_) | Modal::FolderSettings(_))) => gdm::prepare(m, &mut mk),
         Some(Modal::GoLive(g)) => g.viewport = Some(vp),
         _ => {}
     });
@@ -184,6 +189,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::CreatePoll(s) => poll_create::render(app, s, cx),
             Modal::GoLive(s) => go_live::render(app, s, cx),
             Modal::LeaveLink(s) => leave_link::render(s, cx),
+            Modal::EditGroup(g) => gdm::render_edit_group(g, cx),
+            Modal::GroupInvites(s) => gdm::render_invites(s, cx),
+            Modal::FolderSettings(f) => gdm::render_folder(f, cx),
         })
     })
 }

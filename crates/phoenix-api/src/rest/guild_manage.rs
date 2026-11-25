@@ -98,6 +98,7 @@ pub enum AdminCall {
     IncidentActions { guild: Snowflake, invites_until: Option<u64>, dms_until: Option<u64> },
     UserSettings,
     PatchUserSettings { patch: Value },
+    EditGroupDm { channel: Snowflake, name: Option<String>, icon: Option<Option<String>> },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -183,6 +184,16 @@ pub fn build(call: &AdminCall) -> ApiReq {
         ),
         C::DeleteOverwrite { channel, target } => req(Method::DELETE, format!("/channels/{channel}/permissions/{target}"), None),
         C::ChannelInvites { channel } => req(Method::GET, format!("/channels/{channel}/invites"), None),
+        C::EditGroupDm { channel, name, icon } => {
+            let mut b = json!({});
+            if let Some(n) = name {
+                b["name"] = json!(n);
+            }
+            if let Some(i) = icon {
+                b["icon"] = json!(i);
+            }
+            req(Method::PATCH, format!("/channels/{channel}"), Some(b))
+        }
         C::GuildInvites { guild } => req(Method::GET, format!("/guilds/{guild}/invites"), None),
         C::DeleteInvite { code } => req(Method::DELETE, format!("/invites/{code}"), None),
         C::Integrations { guild } => req(Method::GET, format!("/guilds/{guild}/integrations"), None),
@@ -320,6 +331,19 @@ mod tests {
 
     const G: Snowflake = Snowflake(1);
     const C: Snowflake = Snowflake(2);
+
+    #[test]
+    fn group_dm_edit_sends_only_what_changed() {
+        let r = build(&AdminCall::EditGroupDm { channel: C, name: Some("Squad".into()), icon: None });
+        assert_eq!((r.method, r.path.as_str()), (Method::PATCH, "/channels/2"));
+        assert_eq!(r.body.unwrap(), json!({"name": "Squad"}));
+        let r = build(&AdminCall::EditGroupDm { channel: C, name: None, icon: Some(None) });
+        assert_eq!(r.body.unwrap(), json!({"icon": null}));
+        let r = build(&AdminCall::EditGroupDm { channel: C, name: Some(String::new()), icon: Some(Some("data:image/png;base64,AA==".into())) });
+        assert_eq!(r.body.unwrap(), json!({"name": "", "icon": "data:image/png;base64,AA=="}));
+        let r = build(&AdminCall::DeleteInvite { code: "abc".into() });
+        assert_eq!((r.method, r.path.as_str(), r.body), (Method::DELETE, "/invites/abc", None));
+    }
 
     #[test]
     fn create_private_voice() {

@@ -205,6 +205,9 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
         .get(&ch)
         .is_some_and(|c| c.guild.is_some() && matches!(c.kind, crate::model::ChannelKind::Text | crate::model::ChannelKind::Announcement));
     let mut items = vec![MenuItem::action(crate::t!("attach.upload"), Some(crate::icons::path("attach/file-up")), act(|a, _, _, cx| a.prompt_attach(cx)))];
+    if !app.composer.read(cx).value().trim().is_empty() {
+        items.push(MenuItem::action(crate::t!("attach.text_file"), Some(crate::icons::path("attach/file-up")), act(|a, _, w, cx| a.upload_text_as_file(w, cx))));
+    }
     if thread_ok {
         items.push(MenuItem::action(crate::t!("attach.thread"), Some(crate::icons::path("attach/thread-plus")), act(|a, ch, w, cx| a.open_create_thread(ch, w, cx))));
     }
@@ -405,6 +408,11 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                         div().mx(z(-4.)).child(
                                             gpui_component::input::Textarea::new(&app.composer)
                                                 .token(super::rich_input::render_token)
+                                                .context_menu(|_, w, _| {
+                                                    let pos = w.mouse_position();
+                                                    crate::ui::extra_menus::open(crate::ui::extra_menus::Target::Textarea, pos, w);
+                                                    gpui_component::native_menu::NativeMenu::new()
+                                                })
                                                 .on_paste({
                                                     let this = cx.entity().downgrade();
                                                     move |item, _, cx| this.update(cx, |a, cx| a.paste_clipboard(item, cx)).unwrap_or(false)

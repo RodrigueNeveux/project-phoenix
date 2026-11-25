@@ -429,7 +429,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                     round_button(("fr-more", user.0), "more-vertical", hover, crate::t!("header.more"))
                         .on_click(move |ev, window, cx| {
                             cx.stop_propagation();
-                            crate::ui::user_menu::open(user, None, ev.position(), window);
+                            crate::ui::extra_menus::open(crate::ui::extra_menus::Target::FriendRow(user), ev.position(), window);
                         })
                 });
         }

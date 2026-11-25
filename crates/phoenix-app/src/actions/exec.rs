@@ -27,10 +27,26 @@ pub fn event_place(p: &EventPlace) -> guild_admin::EventPlace {
     }
 }
 
+pub fn folder_protos(folders: &[crate::ui::home::data::GuildFolder]) -> Vec<phoenix_api::rest::settings::FolderProto> {
+    folders
+        .iter()
+        .map(|f| phoenix_api::rest::settings::FolderProto {
+            guilds: f.guilds.iter().map(|g| g.0).collect(),
+            id: f.id,
+            name: f.name.as_ref().map(|n| n.to_string()).filter(|n| !n.is_empty()),
+            color: f.color.map(u64::from),
+        })
+        .collect()
+}
+
 pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> Result<ActionReply, BackendError> {
     use ActionRequest as R;
     Ok(match req {
         R::Admin(c) => ActionReply::Json(rest.admin(&c).await.map_err(e)?),
+        R::SaveFolders(folders) => {
+            rest.save_guild_folders(&folder_protos(&folders)).await.map_err(e)?;
+            ActionReply::Done
+        }
         R::Forward { from, msg, guild, to, comment } => {
             for ch in to {
                 rest.forward_message(sf(ch), sf(from), sf(msg), guild.map(sf)).await.map_err(e)?;

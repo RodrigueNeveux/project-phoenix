@@ -305,6 +305,85 @@ pub(crate) fn field_bytes(tag: u32, data: &[u8], out: &mut Vec<u8>) {
     out.extend_from_slice(data);
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FolderProto {
+    pub guilds: Vec<u64>,
+    pub id: Option<u64>,
+    pub name: Option<String>,
+    pub color: Option<u64>,
+}
+
+fn encode_folder(f: &FolderProto) -> Vec<u8> {
+    let mut o = Vec::new();
+    let ids: Vec<u8> = f.guilds.iter().flat_map(|g| g.to_le_bytes()).collect();
+    field_bytes(1, &ids, &mut o);
+    if let Some(id) = f.id {
+        let mut w = Vec::new();
+        field_varint(1, id, &mut w);
+        field_bytes(2, &w, &mut o);
+    }
+    if let Some(n) = f.name.as_deref().filter(|n| !n.is_empty()) {
+        let mut w = Vec::new();
+        field_bytes(1, n.as_bytes(), &mut w);
+        field_bytes(3, &w, &mut o);
+    }
+    if let Some(c) = f.color {
+        let mut w = Vec::new();
+        field_varint(1, c, &mut w);
+        field_bytes(4, &w, &mut o);
+    }
+    o
+}
+
+fn reencode(tag: u32, wt: u8, v: u64, d: &[u8], out: &mut Vec<u8>) {
+    match wt {
+        0 => field_varint(tag, v, out),
+        1 => {
+            varint(((tag as u64) << 3) | 1, out);
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        5 => {
+            varint(((tag as u64) << 3) | 5, out);
+            out.extend_from_slice(&(v as u32).to_le_bytes());
+        }
+        _ => field_bytes(tag, d, out),
+    }
+}
+
+pub fn with_guild_folders(raw: &[u8], folders: &[FolderProto]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut kept = Vec::new();
+    for (tag, wt, v, d) in fields(raw) {
+        if tag == 14 && wt == 2 {
+            for (t, w, x, dd) in fields(d) {
+                if t != 1 {
+                    reencode(t, w, x, dd, &mut kept);
+                }
+            }
+            continue;
+        }
+        reencode(tag, wt, v, d, &mut out);
+    }
+    let mut gf = Vec::new();
+    for f in folders {
+        field_bytes(1, &encode_folder(f), &mut gf);
+    }
+    gf.extend(kept);
+    field_bytes(14, &gf, &mut out);
+    out
+}
+
+impl RestClient {
+    pub async fn save_guild_folders(&self, folders: &[FolderProto]) -> Result<Vec<u8>> {
+        let raw = self.get_settings_proto_raw().await?;
+        let next = with_guild_folders(&raw, folders);
+        let b: ProtoBody = self
+            .call(Method::PATCH, "/users/@me/settings-proto/1", Body::Json(json!({ "settings": STANDARD.encode(next) })))
+            .await?;
+        STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("settings base64: {e}")))
+    }
+}
+
 impl SettingChange {
     pub fn encode(&self) -> Vec<u8> {
         let mut inner = Vec::new();
@@ -459,6 +538,35 @@ pub fn from_json(v: &Value) -> PreloadedUserSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn folder_save_replaces_only_the_folder_list() {
+        let mut raw = Vec::new();
+        let mut appearance = Vec::new();
+        field_varint(1, 2, &mut appearance);
+        field_bytes(13, &appearance, &mut raw);
+        let old = FolderProto { guilds: vec![1, 2], id: Some(7), name: Some("Old".into()), color: None };
+        let mut gf = Vec::new();
+        field_bytes(1, &encode_folder(&old), &mut gf);
+        let positions: Vec<u8> = [2u64, 1].iter().flat_map(|g| g.to_le_bytes()).collect();
+        field_bytes(2, &positions, &mut gf);
+        field_bytes(14, &gf, &mut raw);
+        let new = FolderProto { guilds: vec![1, 2], id: Some(7), name: Some("Jeux".into()), color: Some(0x5865F2) };
+        let next = with_guild_folders(&raw, &[new.clone(), FolderProto { guilds: vec![3], ..Default::default() }]);
+        let top = fields(&next);
+        assert_eq!(top.iter().filter(|f| f.0 == 14).count(), 1);
+        assert!(top.iter().any(|f| f.0 == 13 && f.3 == appearance.as_slice()));
+        let folders = top.iter().find(|f| f.0 == 14).map(|f| fields(f.3)).unwrap();
+        let list: Vec<&[u8]> = folders.iter().filter(|f| f.0 == 1).map(|f| f.3).collect();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0], encode_folder(&new).as_slice());
+        assert!(folders.iter().any(|f| f.0 == 2 && f.3 == positions.as_slice()));
+        let one = fields(list[0]);
+        assert_eq!(one[0].3, [1u64.to_le_bytes(), 2u64.to_le_bytes()].concat().as_slice());
+        assert_eq!(proto_read(list[0], &[3], true, true), Some(ProtoValue::Str("Jeux".into())));
+        assert_eq!(proto_read(list[0], &[4], true, false), Some(ProtoValue::Int(0x5865F2)));
+        assert!(proto_read(list[1], &[3], true, true).is_none());
+    }
 
     #[test]
     fn roundtrip_and_unknown_fields() {

@@ -34,6 +34,7 @@ pub mod image_viewer;
 pub mod login;
 pub mod settings;
 pub mod easter;
+pub mod extra_menus;
 pub mod members;
 pub mod activity_traits;
 pub mod nameplate;

@@ -103,7 +103,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             }
         }
         if friend {
-            items.push(act(crate::t!("menu.remove_friend"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Remove, cx))));
+            items.push(act(crate::t!("menu.remove_friend"), Rc::new(move |a, _, _, cx| a.confirm_remove_friend(u, cx))));
         } else if rel.is_none() && !bot {
             items.push(act(crate::t!("friends.add"), Rc::new(move |a, _, _, cx| a.relationship_action(u, RelAction::Accept, cx))));
         }
@@ -111,7 +111,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         items.push(act(crate::t!(ign), Rc::new(move |a, _, _, cx| a.toggle_ignore(u, cx))));
         items.push(MenuItem::danger(crate::t!("menu.block"), None, {
             let e = e.clone();
-            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.relationship_action(u, RelAction::Block, cx))
+            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_block(u, cx))
         }));
     }
     if let Some(gid) = g.filter(|gid| crate::ui::inbox::has_perm(app.backend.guild_permissions(*gid), MANAGE_ROLES)) {

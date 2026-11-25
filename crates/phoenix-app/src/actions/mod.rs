@@ -47,6 +47,7 @@ pub enum ActionRequest {
     MoveChannels { guild: Id, entries: Vec<(Id, i32, Option<Option<Id>>)> },
     CreateEvent { guild: Id, name: String, description: String, start_unix: u64, end_unix: Option<u64>, place: EventPlace },
     Admin(phoenix_api::rest::guild_manage::AdminCall),
+    SaveFolders(Vec<crate::ui::home::data::GuildFolder>),
 }
 
 #[derive(Clone, Debug)]

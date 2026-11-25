@@ -88,6 +88,7 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
     let widget_menu = crate::ui::profile_board::menu();
     out.extend(crate::ui::nav_menus::render(app, cx));
     out.extend(crate::ui::thread_menu::render(app, cx));
+    out.extend(crate::ui::extra_menus::render(app, cx));
     if !app.people.any_overlay() {
         return out;
     }
@@ -703,7 +704,7 @@ pub(crate) fn banner_buttons(app: &PhoenixApp, uid: Id, guild: Option<Id>, end: 
         _ => None,
     };
     let more = banner_button(("profile-more", uid.0), "chat/more").on_click(cx.listener(move |_, ev: &gpui::ClickEvent, w, cx| {
-        crate::ui::user_menu::open(uid, guild, ev.position(), w);
+        crate::ui::extra_menus::open(crate::ui::extra_menus::Target::ProfileOverflow { user: uid, guild }, ev.position(), w);
         cx.notify();
     }));
     let mod_view = (uid != app.me.id && mod_view_allowed(app, guild)).then(|| {

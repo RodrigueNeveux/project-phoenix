@@ -230,6 +230,13 @@ impl MenuItem {
         self
     }
 
+    pub fn with_shortcut(mut self, keys: &str) -> Self {
+        if let Self::Action { icon, .. } = &mut self {
+            *icon = Some(format!("{KBD}{keys}").into());
+        }
+        self
+    }
+
     pub fn submenu(label: impl Into<SharedString>, items: Vec<MenuItem>) -> Self {
         Self::Submenu { label: label.into(), items, icon: None, subtext: None }
     }
@@ -244,6 +251,7 @@ const MENU_MIN_W: f32 = 188.;
 const MENU_MAX_W: f32 = 320.;
 const VIEWPORT_PAD: f32 = 12.;
 pub const EMOJI_ICON: &str = "emoji:";
+pub const KBD: &str = "kbd:";
 const SUB_OVERLAP: f32 = 4.;
 const CHEVRON: &str = "chevron-right";
 const CHECK: &str = "check";
@@ -259,7 +267,7 @@ fn row_h(item: &MenuItem) -> f32 {
         MenuItem::Custom(_) => 60.,
         MenuItem::Action { icon, subtext, .. } => {
             let text: f32 = 18. + if subtext.is_some() { 18. } else { 0. };
-            16. + text.max(if icon.is_some() { 20. } else { 0. })
+            16. + text.max(if icon.as_ref().is_some_and(|n| !n.starts_with(KBD)) { 20. } else { 0. })
         }
         MenuItem::Submenu { subtext: Some(_), .. } | MenuItem::Check { subtext: Some(_), .. } => 52.,
         MenuItem::Submenu { .. } | MenuItem::Check { .. } => 36.,
@@ -444,6 +452,8 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                 } else {
                     c(tok(idx::INTERACTIVE_TEXT_DEFAULT))
                 };
+                let shortcut = icon.as_ref().and_then(|n| n.strip_prefix(KBD)).map(|k| SharedString::from(k.to_owned()));
+                let icon = icon.filter(|n| !n.starts_with(KBD));
                 row(("menu-item", ix), lit, danger)
                     .on_hover(move |h, w, _| {
                         if *h {
@@ -476,6 +486,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                             )
                         }),
                     )
+                    .when_some(shortcut, |d, k| d.child(div().flex_none().ml(z(8.)).max_h(z(18.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))).child(k)))
                     .on_click(move |ev, w, cx| {
                         on_click(ev, w, cx);
                         dismiss(w, cx);

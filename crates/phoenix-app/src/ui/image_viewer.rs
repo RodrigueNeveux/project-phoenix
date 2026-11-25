@@ -90,7 +90,10 @@ pub fn render(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
             cx.stop_propagation();
             cx.open_url(&original);
         }))
-        .child(action("viewer-more", "more-horizontal"));
+        .child(action("viewer-more", "more-horizontal").on_click(|ev, w, cx| {
+            cx.stop_propagation();
+            crate::ui::extra_menus::open(crate::ui::extra_menus::Target::Viewer, ev.position(), w);
+        }));
 
     let close = div()
         .id("viewer-close")

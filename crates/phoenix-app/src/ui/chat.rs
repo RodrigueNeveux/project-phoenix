@@ -697,7 +697,7 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                         )
                         .child(
                             button_icon("gdm-intro-edit", "pen", crate::t!("menu.edit_group"), BtnKind::Secondary)
-                                .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("Edit Group", cx))),
+                                .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.open_edit_group(ch, cx))),
                         ),
                 )
             });
@@ -793,13 +793,18 @@ fn dm_intro_actions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, uid: Id) -> g
         div()
             .flex()
             .gap(z(8.))
-            .child(button_sm("dm-intro-friend", friend_label.clone(), BtnKind::Secondary).on_click(move |_, _, cx| {
-                let l = friend_label.clone();
-                e1.update(cx, |a, cx| a.stub(&l, cx))
+            .child(button_sm("dm-intro-friend", friend_label, BtnKind::Secondary).on_click(move |_, _, cx| {
+                e1.update(cx, |a, cx| {
+                    if is_friend {
+                        a.confirm_remove_friend(uid, cx)
+                    } else {
+                        a.relationship_action(uid, crate::ui::home::data::RelAction::Accept, cx)
+                    }
+                })
             }))
             .child(
                 button_sm("dm-intro-block", crate::t!("menu.block"), BtnKind::Secondary)
-                    .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.stub("Block", cx))),
+                    .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.confirm_block(uid, cx))),
             ),
     )
 }

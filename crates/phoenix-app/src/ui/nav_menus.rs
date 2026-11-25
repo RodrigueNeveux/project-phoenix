@@ -376,8 +376,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 items.push(crate::actions::channel::favorite_item(app, &e, id));
                 items.push(MenuItem::Separator);
                 if is_group {
-                    items.push(stub(&e, "menu.invites"));
-                    items.push(stub(&e, "menu.edit_group"));
+                    if app.nav.extras.get(&id).and_then(|x| x.owner) == Some(app.me.id) {
+                        items.push(act(&e, crate::t!("menu.invites"), move |a, _, cx| a.open_group_invites(id, cx)));
+                    }
+                    items.push(act(&e, crate::t!("menu.edit_group"), move |a, _, cx| a.open_edit_group(id, cx)));
                     items.push(MenuItem::Separator);
                     items.push(mute_item(&e, crate::t!("menu.mute_conversation"), crate::t!("menu.unmute_conversation"), muted, None, Some(id)));
                     items.push(MenuItem::Separator);
@@ -409,20 +411,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                         if !invites.is_empty() {
                             items.push(MenuItem::submenu(crate::t!("menu.invite_to_server"), invites));
                         }
-                        let rel = |action: fn() -> crate::ui::home::data::RelAction| {
-                            move |a: &mut PhoenixApp, _: &mut Window, cx: &mut Context<PhoenixApp>| {
-                                a.nav_request(NavRequest::Relationship { user: u, action: action() }, cx, |_, _, _| {});
-                                cx.notify();
-                            }
-                        };
-                        if app.nav.relationship(u).is_some() {
-                            items.push(act(&e, crate::t!("menu.remove_friend"), rel(|| crate::ui::home::data::RelAction::Remove)));
+                        if app.nav.relationship(u).is_some_and(|r| r.kind == crate::ui::home::data::RelationshipKind::Friend) {
+                            items.push(act(&e, crate::t!("menu.remove_friend"), move |a, _, cx| a.confirm_remove_friend(u, cx)));
                         }
                         let ign = if crate::actions::user::is_ignored(u) { "menu.unignore" } else { "menu.ignore" };
                         items.push(act(&e, crate::t!(ign), move |a, _, cx| a.toggle_ignore(u, cx)));
-                        let block = rel(|| crate::ui::home::data::RelAction::Block);
                         let eb = e.clone();
-                        items.push(MenuItem::danger(crate::t!("menu.block"), None, move |_, w, cx: &mut App| eb.update(cx, |a, cx| block(a, w, cx))));
+                        items.push(MenuItem::danger(crate::t!("menu.block"), None, move |_, _, cx: &mut App| eb.update(cx, |a, cx| a.confirm_block(u, cx))));
                     }
                     items.push(MenuItem::Separator);
                     let who = format!("@{}", ch.name);
@@ -538,7 +533,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(MenuItem::Separator);
             items.push(move_to(&e, true));
             items.push(MenuItem::Separator);
-            items.push(stub(&e, "menu.folder_settings"));
+            items.push(act(&e, crate::t!("menu.folder_settings"), move |a, _, cx| a.open_folder_settings(f, cx)));
             items.push(act(&e, crate::t!("menu.close_all_folders"), |a, _, cx| {
                 a.nav.expanded_folders.clear();
                 a.save_nav_prefs();

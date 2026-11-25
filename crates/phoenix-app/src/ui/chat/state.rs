@@ -702,6 +702,17 @@ impl PhoenixApp {
         self.selected_channel.map_or(20 << 20, |ch| self.backend.max_upload_size(ch))
     }
 
+    pub fn upload_text_as_file(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        let text = self.composer.read(cx).value().to_string();
+        if text.trim().is_empty() {
+            return;
+        }
+        if self.push_upload("message.txt".into(), text.into_bytes()) {
+            self.composer.update(cx, |s, cx| s.set_value("", window, cx));
+        }
+        cx.notify();
+    }
+
     pub fn push_upload(&mut self, name: String, bytes: Vec<u8>) -> bool {
         let limit = self.upload_limit();
         if self.chat.uploads.len() >= MAX_FILES {
