@@ -133,7 +133,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         );
     }
     let mut items = vec![MenuItem::Custom(strip.into_any_element())];
-    let mut frequent: Vec<MenuItem> = crate::ui::pickers::grid::build(app, "", cx)
+    let mut frequent: Vec<MenuItem> = crate::ui::pickers::grid::build(app, "", true, cx)
         .items
         .into_iter()
         .take(12)

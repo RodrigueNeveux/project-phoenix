@@ -33,6 +33,7 @@ impl PickItem {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SectionIcon {
+    Top,
     Frequent,
     Guild(ImageRef, SharedString),
     Category(usize),
@@ -59,6 +60,7 @@ pub struct Grid {
     pub guild_names: Vec<(crate::model::Id, SharedString)>,
     pub premium: bool,
     pub current_guild: Option<crate::model::Id>,
+    pub top: std::ops::Range<usize>,
 }
 
 impl Grid {
@@ -128,7 +130,27 @@ impl Grid {
     }
 }
 
-pub fn build(app: &PhoenixApp, query: &str, cx: &App) -> Grid {
+const TOP_ROW: usize = 9;
+const NEWLY_ADDED_DAYS: i64 = 60;
+const NEWLY_ADDED_MAX: usize = 3;
+
+pub fn top_section(top_ids: &[crate::model::Id], guild_emojis: &[GuildEmoji], all: &[&GuildEmoji], now_ms: i64) -> (Vec<PickItem>, usize) {
+    let cutoff = ((now_ms - NEWLY_ADDED_DAYS * 86_400_000 - 1_420_070_400_000).max(0) as u64) << 22;
+    let mut newly: Vec<GuildEmoji> = guild_emojis.iter().filter(|e| e.id.0 >= cutoff).cloned().collect();
+    newly.sort_by(|a, b| b.id.cmp(&a.id));
+    newly.truncate(NEWLY_ADDED_MAX);
+    let mut top: Vec<PickItem> = top_ids
+        .iter()
+        .filter(|id| !newly.iter().any(|n| n.id == **id))
+        .filter_map(|id| all.iter().find(|e| e.id == *id).map(|e| PickItem::Custom((*e).clone())))
+        .collect();
+    top.truncate(TOP_ROW.saturating_sub(newly.len()));
+    let n_top = top.len();
+    top.extend(newly.into_iter().map(PickItem::Custom));
+    (top, n_top)
+}
+
+pub fn build(app: &PhoenixApp, query: &str, reaction: bool, cx: &App) -> Grid {
     let mut guilds: Vec<&Guild> = app.guilds.iter().collect();
     if let Some(sel) = app.selected_guild {
         guilds.sort_by_key(|g| g.id != sel);
@@ -147,6 +169,20 @@ pub fn build(app: &PhoenixApp, query: &str, cx: &App) -> Grid {
     let q = query.trim().trim_matches(':').to_lowercase();
     if q.is_empty() {
         let now = chrono::Utc::now().timestamp();
+        if !reaction
+            && let Some(g) = app.selected_guild
+            && let Some(ids) = cx.try_global::<Pickers>().and_then(|p| p.top_emojis.get(&g)).map(|(_, ids)| ids.clone())
+        {
+            let own: &[GuildEmoji] = customs.iter().find(|(gg, _)| gg.id == g).map(|(_, es)| es.as_slice()).unwrap_or(&[]);
+            let all: Vec<&GuildEmoji> = customs.iter().flat_map(|(_, es)| es.iter()).collect();
+            let (items, n_top) = top_section(&ids, own, &all, chrono::Utc::now().timestamp_millis());
+            if !items.is_empty() {
+                let name = app.guilds.iter().find(|x| x.id == g).map(|x| x.name.clone()).unwrap_or_default();
+                let start = grid.items.len();
+                grid.top = start..start + n_top;
+                grid.push_section(crate::t!("picker.top_guild", g = name), SectionIcon::Top, items, true);
+            }
+        }
         let mut freq: Vec<PickItem> = Vec::new();
         if let Some(f) = cx.try_global::<Pickers>().and_then(|p| p.frecency.as_ref()) {
             for key in &f.emojis {
@@ -214,6 +250,7 @@ pub fn item_element_hover(item: &PickItem, tone: u8, size: f32) -> AnyElement {
 fn section_icon(icon: &SectionIcon) -> Option<AnyElement> {
     let fg = tk(idx::TEXT_DEFAULT);
     match icon {
+        SectionIcon::Top => Some(gpui::svg().path(crate::icons::path("picker/trophy")).size(px(16.)).flex_none().text_color(fg).into_any_element()),
         SectionIcon::Frequent => Some(gpui::svg().path(crate::icons::path("picker/clock")).size(px(16.)).flex_none().text_color(fg).into_any_element()),
         SectionIcon::Guild(ImageRef::Url(u), _) => Some(img(u.clone()).size(px(16.)).rounded(px(4.)).flex_none().into_any_element()),
         SectionIcon::Guild(..) => None,
@@ -454,7 +491,9 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     let tone = p.prefs.tone;
     let list_state = op.list.clone();
     let active = op.grid.section_at_row(op.list.logical_scroll_top().item_ix);
-    let preview = op.hovered.or(Some(op.selected)).and_then(|i| op.grid.items.get(i).cloned());
+    let preview_ix = op.hovered.or(Some(op.selected));
+    let preview = preview_ix.and_then(|i| op.grid.items.get(i).cloned());
+    let popular = preview_ix.is_some_and(|i| op.grid.top.contains(&i));
     let preview_from: Option<SharedString> = match &preview {
         Some(PickItem::Custom(e)) => op.grid.guild_names.iter().find(|(g, _)| *g == e.guild).map(|(_, n)| n.clone()),
         _ => None,
@@ -485,6 +524,14 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
             let is_active = si == active;
             let next_is_guild = matches!(op.grid.sections.get(si + 1).map(|s| &s.icon), Some(SectionIcon::Guild(..)));
             let (guild, content): (bool, AnyElement) = match &s.icon {
+                SectionIcon::Top => (
+                    false,
+                    gpui::svg()
+                        .path(crate::icons::path("picker/trophy"))
+                        .size(px(24.))
+                        .text_color(tk(if is_active { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT }))
+                        .into_any_element(),
+                ),
                 SectionIcon::Frequent => (
                     false,
                     gpui::svg()
@@ -548,7 +595,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
             Some(item_element(&item, tone, 28.)),
             Some(SharedString::from(format!(":{}:", item.name()))),
             preview_from,
-            None,
+            popular.then(|| popular_badge().into_any_element()),
         ),
         None => inspector(None, None, None, None),
     };
@@ -568,6 +615,31 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                 .child(footer),
         )
         .into_any_element()
+}
+
+fn popular_badge() -> gpui::Div {
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .px(px(8.))
+        .py(px(4.))
+        .rounded(px(4.))
+        .bg(gpui::linear_gradient(
+            268.26,
+            gpui::linear_color_stop(gpui::rgb(0xbf5151), 0.),
+            gpui::linear_color_stop(gpui::rgb(0xda7e40), 1.),
+        ))
+        .child(gpui::svg().path(crate::icons::path("picker/fire")).size(px(14.)).flex_none().text_color(gpui::white()))
+        .child(
+            div()
+                .text_size(px(14.))
+                .line_height(px(18.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(gpui::white())
+                .child(crate::t!("picker.popular").to_uppercase()),
+        )
 }
 
 pub fn tone_button(cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -657,5 +729,28 @@ mod tests {
         assert_eq!(g.vertical(12, false), 10);
         assert_eq!(g.vertical(0, false), 0);
         assert_eq!(g.section_at_row(3), 1);
+    }
+
+    fn ge(id: u64) -> GuildEmoji {
+        GuildEmoji { id: crate::model::Id(id), name: "e".into(), animated: false, guild: crate::model::Id(1), available: true }
+    }
+
+    #[test]
+    fn top_section_mixes_top_and_newly_added_like_the_client() {
+        let now_ms = 1_764_000_000_000i64;
+        let snow = |ms: i64| ((ms - 1_420_070_400_000) as u64) << 22;
+        let old: Vec<GuildEmoji> = (1..=12).map(|i| ge(snow(now_ms - 400 * 86_400_000) + i)).collect();
+        let fresh = ge(snow(now_ms - 86_400_000));
+        let mut own = old.clone();
+        own.push(fresh.clone());
+        let all: Vec<&GuildEmoji> = own.iter().collect();
+        let ids: Vec<crate::model::Id> = old.iter().rev().map(|e| e.id).collect();
+        let (items, n_top) = top_section(&ids, &own, &all, now_ms);
+        assert_eq!(items.len(), 9);
+        assert_eq!(n_top, 8);
+        assert_eq!(items[0], PickItem::Custom(old[11].clone()));
+        assert_eq!(items[8], PickItem::Custom(fresh));
+        let (none, _) = top_section(&[], &old, &all, now_ms);
+        assert!(none.is_empty());
     }
 }

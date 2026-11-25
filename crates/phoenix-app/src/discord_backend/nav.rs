@@ -12,7 +12,7 @@ use crate::{
     backend::{AppEvent, BackendError},
     model::{self, Id, ImageRef},
     ui::home::data::{
-        ChannelExtra, GuildFolder, InvitePreview, NavEvent, NavReply, NavRequest, RelAction, Relationship,
+        ChannelExtra, GuildFolder, InviteKind, InvitePreview, NavEvent, NavReply, NavRequest, RelAction, Relationship,
         RelationshipKind,
     },
 };
@@ -393,7 +393,37 @@ fn invite_preview(v: &Value) -> InvitePreview {
         (Some(gid), Some(h)) => Some(ImageRef::Url(format!("{}/icons/{gid}/{h}.png?size=128", api::CDN_BASE).into())),
         _ => None,
     };
-    let inviter = v.get("inviter").map(|u| s(u.get("global_name")).or_else(|| s(u.get("username"))).unwrap_or_default());
+    let splash = match (gid, s(g.and_then(|g| g.get("splash")))) {
+        (Some(gid), Some(h)) => Some(format!("{}/splashes/{gid}/{h}.jpg?size=512", api::CDN_BASE).into()),
+        _ => None,
+    };
+    let u = v.get("inviter");
+    let inviter = u.map(|u| s(u.get("global_name")).or_else(|| s(u.get("username"))).unwrap_or_default());
+    let inviter_id = u.and_then(|u| u.get("id")).and_then(snowflake);
+    let inviter_avatar = match (inviter_id, s(u.and_then(|u| u.get("avatar")))) {
+        (Some(uid), Some(h)) => Some(ImageRef::Url(format!("{}/avatars/{uid}/{h}.png?size=128", api::CDN_BASE).into())),
+        _ => None,
+    };
+    let ch = v.get("channel");
+    let channel_id = ch.and_then(|c| c.get("id")).and_then(snowflake);
+    let channel_type = ch.and_then(|c| c.get("type")).and_then(Value::as_u64).map(|t| t as u8);
+    let channel_icon = match (channel_id, s(ch.and_then(|c| c.get("icon")))) {
+        (Some(cid), Some(h)) => Some(ImageRef::Url(format!("{}/channel-icons/{cid}/{h}.png?size=128", api::CDN_BASE).into())),
+        _ => None,
+    };
+    let kind = match v.get("type").and_then(Value::as_u64) {
+        Some(1) => InviteKind::GroupDm,
+        Some(2) => InviteKind::Friend,
+        Some(_) => InviteKind::Guild,
+        None if channel_type == Some(3) => InviteKind::GroupDm,
+        None if g.is_none() && u.is_some() => InviteKind::Friend,
+        None => InviteKind::Guild,
+    };
+    let recipients = ch
+        .and_then(|c| c.get("recipients"))
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(|r| s(r.get("global_name")).or_else(|| s(r.get("username")))).map(Into::into).collect())
+        .unwrap_or_default();
     InvitePreview {
         code: s(v.get("code")).unwrap_or_default().into(),
         guild: gid.map(Id),
@@ -406,7 +436,35 @@ fn invite_preview(v: &Value) -> InvitePreview {
         inviter: inviter.filter(|i| !i.is_empty()).map(Into::into),
         online: v.get("approximate_presence_count").and_then(Value::as_u64).unwrap_or(0) as u32,
         members: v.get("approximate_member_count").and_then(Value::as_u64).unwrap_or(0) as u32,
+        kind,
+        channel_id: channel_id.map(Id),
+        channel_type,
+        features: g
+            .and_then(|g| g.get("features"))
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(|f| f.as_str().map(str::to_owned)).collect())
+            .unwrap_or_default(),
+        profile: v.get("profile").filter(|p| p.is_object()).map(crate::commands::guide::parse_profile),
+        splash,
+        inviter_id: inviter_id.map(Id),
+        inviter_username: s(u.and_then(|u| u.get("username"))).map(Into::into),
+        inviter_avatar,
+        channel_icon,
+        recipients,
+        event_name: s(v.get("guild_scheduled_event").and_then(|e| e.get("name"))).map(Into::into),
     }
+}
+
+fn top_emoji_ids(v: &Value) -> Vec<Id> {
+    let mut items: Vec<(u64, u64)> = v
+        .get("items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|it| Some((it.get("emoji_rank").and_then(Value::as_u64).unwrap_or(u64::MAX), it.get("emoji_id").and_then(snowflake)?)))
+        .collect();
+    items.sort_by_key(|(rank, _)| *rank);
+    items.into_iter().map(|(_, id)| Id(id)).collect()
 }
 
 fn enc(code: &str) -> String {
@@ -422,6 +480,19 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
         NavRequest::FetchInvite(code) => {
             let v = call(Method::GET, format!("/invites/{}?with_counts=true&with_expiration=true", enc(&code)), None).await?;
             NavReply::Invite(invite_preview(&v))
+        }
+        NavRequest::FetchInviteEvent(code, event) => {
+            let v = call(
+                Method::GET,
+                format!("/invites/{}?with_counts=true&with_expiration=true&guild_scheduled_event_id={}", enc(&code), sf(event)),
+                None,
+            )
+            .await?;
+            NavReply::Invite(invite_preview(&v))
+        }
+        NavRequest::TopEmojis(g) => {
+            let v = call(Method::GET, format!("/guilds/{}/top-emojis", sf(g)), None).await?;
+            NavReply::Ids(top_emoji_ids(&v))
         }
         NavRequest::AcceptInvite(code) => {
             call(Method::POST, format!("/invites/{}", enc(&code)), Some(json!({}))).await?;
@@ -575,5 +646,31 @@ mod tests {
         assert_eq!(p.guild, Some(Id(5)));
         assert_eq!(p.members, 10);
         assert_eq!(p.inviter.as_deref(), Some("u"));
+        assert_eq!(p.kind, InviteKind::Guild);
+        assert!(p.profile.is_none());
+    }
+
+    #[test]
+    fn invite_kinds_and_profile() {
+        let gdm = invite_preview(&json!({"code":"a","type":1,"channel":{"id":"9","type":3,"name":null,"recipients":[{"username":"x"},{"username":"y"}]},"inviter":{"id":"2","username":"x"}}));
+        assert_eq!(gdm.kind, InviteKind::GroupDm);
+        assert_eq!(gdm.recipients.len(), 2);
+        let friend = invite_preview(&json!({"code":"b","type":2,"inviter":{"id":"3","username":"z","avatar":"h"}}));
+        assert_eq!(friend.kind, InviteKind::Friend);
+        assert_eq!(friend.inviter_id, Some(Id(3)));
+        assert!(friend.inviter_avatar.is_some());
+        let g = invite_preview(&json!({"code":"c","type":0,"guild":{"id":"7","name":"G","features":["HUB"]},"channel":{"id":"8","type":2,"name":"v"},
+            "profile":{"id":"7","name":"G","member_count":12,"online_count":1,"tag":"GLAD","traits":[]},
+            "guild_scheduled_event":{"id":"5","name":"Soirée"}}));
+        assert_eq!(g.channel_type, Some(2));
+        assert_eq!(g.features, vec!["HUB".to_owned()]);
+        assert_eq!(g.profile.as_ref().map(|p| p.member_count), Some(12));
+        assert_eq!(g.event_name.as_deref(), Some("Soirée"));
+    }
+
+    #[test]
+    fn top_emojis_sorted_by_rank() {
+        let v = json!({"items":[{"emoji_id":"30","emoji_rank":3},{"emoji_id":"10","emoji_rank":1},{"emoji_id":"20","emoji_rank":2}]});
+        assert_eq!(top_emoji_ids(&v), vec![Id(10), Id(20), Id(30)]);
     }
 }

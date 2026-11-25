@@ -47,7 +47,7 @@ pub struct ChannelExtra {
     pub can_manage_threads: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct InvitePreview {
     pub code: SharedString,
     pub guild: Option<Id>,
@@ -57,6 +57,26 @@ pub struct InvitePreview {
     pub inviter: Option<SharedString>,
     pub online: u32,
     pub members: u32,
+    pub kind: InviteKind,
+    pub channel_id: Option<Id>,
+    pub channel_type: Option<u8>,
+    pub features: Vec<String>,
+    pub profile: Option<crate::commands::guide::GuildProfile>,
+    pub splash: Option<SharedString>,
+    pub inviter_id: Option<Id>,
+    pub inviter_username: Option<SharedString>,
+    pub inviter_avatar: Option<ImageRef>,
+    pub channel_icon: Option<ImageRef>,
+    pub recipients: Vec<SharedString>,
+    pub event_name: Option<SharedString>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InviteKind {
+    #[default]
+    Guild,
+    GroupDm,
+    Friend,
 }
 
 #[derive(Debug)]
@@ -89,6 +109,8 @@ pub enum RelAction {
 #[derive(Clone, Debug)]
 pub enum NavRequest {
     FetchInvite(String),
+    FetchInviteEvent(String, Id),
+    TopEmojis(Id),
     AcceptInvite(String),
     CreateInvite(Id),
     LeaveGuild(Id),
@@ -106,6 +128,7 @@ pub enum NavRequest {
 pub enum NavReply {
     Done,
     Invite(InvitePreview),
+    Ids(Vec<Id>),
     Text(SharedString),
     Channel(Channel),
 }

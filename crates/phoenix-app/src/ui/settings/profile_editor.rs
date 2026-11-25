@@ -1066,7 +1066,7 @@ fn luminance(rgb: u32) -> f32 {
     0.2126 * ch(16) + 0.7152 * ch(8) + 0.0722 * ch(0)
 }
 
-fn lab_shift(rgb: u32, d: f32) -> u32 {
+pub(crate) fn lab_shift(rgb: u32, d: f32) -> u32 {
     let ch = |s: u32| lin(((rgb >> s) & 0xff) as f32 / 255.);
     let (r, g, b) = (ch(16), ch(8), ch(0));
     let x = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047;

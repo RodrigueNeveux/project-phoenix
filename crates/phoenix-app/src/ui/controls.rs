@@ -278,6 +278,7 @@ pub enum BtnKind {
     Secondary,
     Primary,
     Critical,
+    Active,
 }
 
 pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: BtnKind) -> gpui::Stateful<Div> {
@@ -304,6 +305,17 @@ pub fn button(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Bt
             CONTROL_PRIMARY_BACKGROUND_ACTIVE,
             CONTROL_PRIMARY_TEXT_ACTIVE,
             CONTROL_PRIMARY_BORDER_ACTIVE,
+        ],
+        BtnKind::Active => [
+            CONTROL_CONNECTED_BACKGROUND_DEFAULT,
+            CONTROL_CONNECTED_TEXT_DEFAULT,
+            CONTROL_CONNECTED_BORDER_DEFAULT,
+            CONTROL_CONNECTED_BACKGROUND_HOVER,
+            CONTROL_CONNECTED_TEXT_HOVER,
+            CONTROL_CONNECTED_BORDER_HOVER,
+            CONTROL_CONNECTED_BACKGROUND_ACTIVE,
+            CONTROL_CONNECTED_TEXT_ACTIVE,
+            CONTROL_CONNECTED_BORDER_ACTIVE,
         ],
         BtnKind::Critical => [
             CONTROL_CRITICAL_PRIMARY_BACKGROUND_DEFAULT,
@@ -346,6 +358,7 @@ pub fn button_icon(id: impl Into<ElementId>, icon: &'static str, label: impl Int
         BtnKind::Secondary => idx::CONTROL_SECONDARY_TEXT_DEFAULT,
         BtnKind::Primary => idx::CONTROL_PRIMARY_TEXT_DEFAULT,
         BtnKind::Critical => idx::CONTROL_CRITICAL_PRIMARY_TEXT_DEFAULT,
+        BtnKind::Active => idx::CONTROL_CONNECTED_TEXT_DEFAULT,
     };
     let label: SharedString = label.into();
     let b = button(id, SharedString::default(), kind);

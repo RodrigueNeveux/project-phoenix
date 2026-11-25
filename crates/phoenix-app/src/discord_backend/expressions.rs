@@ -108,10 +108,11 @@ fn tenor_still(src: &str) -> String {
 }
 
 pub(super) async fn frecency(s: Arc<Session>) -> Result<crate::ui::pickers::types::Frecency, BackendError> {
-    let f = s.rest.get_frecency_settings().await.map_err(api_err)?;
+    let (f, order) = s.rest.get_frecency_settings_ordered().await.map_err(api_err)?;
+    let now = chrono::Utc::now().timestamp_millis();
     Ok(crate::ui::pickers::types::Frecency {
-        emojis: f.emojis_ranked().into_iter().map(Into::into).collect(),
-        stickers: f.stickers_ranked().into_iter().map(Id).collect(),
+        emojis: f.emojis_ranked_at(&order, now).into_iter().map(Into::into).collect(),
+        stickers: f.stickers_ranked_at(&order, now).into_iter().map(Id).collect(),
         favorite_gifs: f
             .favorite_gifs()
             .into_iter()

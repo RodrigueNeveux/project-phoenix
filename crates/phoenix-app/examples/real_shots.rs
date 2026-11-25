@@ -202,6 +202,13 @@ impl Backend for ReadOnly {
     fn top_soundboard_sounds(&self, guild: Id) -> BoxFuture<Vec<Id>> {
         self.0.top_soundboard_sounds(guild)
     }
+    fn nav(&self, req: phoenix_app::ui::home::data::NavRequest) -> BoxFuture<phoenix_app::ui::home::data::NavReply> {
+        use phoenix_app::ui::home::data::NavRequest as R;
+        match req {
+            R::FetchInvite(_) | R::FetchInviteEvent(..) | R::TopEmojis(_) => self.0.nav(req),
+            _ => denied(),
+        }
+    }
     fn set_reaction(&self, _: Id, _: Id, _: Reaction, _: bool) -> BoxFuture<()> {
         denied()
     }

@@ -45,6 +45,7 @@ pub struct GuildProfile {
     pub badge_hash: Option<String>,
     pub traits: Vec<GuideTrait>,
     pub custom_banner_hash: Option<String>,
+    pub brand_color_primary: Option<String>,
     pub premium_tier: u8,
     pub premium_subscription_count: u32,
     pub features: Vec<String>,
@@ -141,6 +142,7 @@ pub fn parse_profile(v: &Value) -> GuildProfile {
         badge_hash: opt("badge_hash"),
         traits: traits.into_iter().map(|(_, t)| t).collect(),
         custom_banner_hash: opt("custom_banner_hash"),
+        brand_color_primary: opt("brand_color_primary"),
         premium_tier: n("premium_tier") as u8,
         premium_subscription_count: n("premium_subscription_count") as u32,
         features: v

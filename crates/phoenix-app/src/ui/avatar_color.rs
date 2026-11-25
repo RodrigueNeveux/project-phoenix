@@ -9,7 +9,7 @@ thread_local! {
 }
 
 fn sample_url(avatar: &str) -> Option<String> {
-    if !avatar.contains("/avatars/") && !avatar.contains("/guilds/") {
+    if !avatar.contains("/avatars/") && !avatar.contains("/guilds/") && !avatar.contains("/icons/") {
         return None;
     }
     let (base, _) = avatar.split_once('?').unwrap_or((avatar, ""));

@@ -134,7 +134,7 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
             .stickers
             .iter()
             .filter_map(|id| sections.iter().flat_map(|s| s.2.iter()).find(|d| d.id == *id).cloned())
-            .take(16)
+            .take(20)
             .collect();
         if !freq.is_empty() {
             sections.insert(0, (crate::t!("picker.frequent"), None, freq, false));

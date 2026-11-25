@@ -144,6 +144,150 @@ impl FrecencyUserSettings {
     }
 }
 
+pub const DAY_MS: i64 = 86_400_000;
+const MAX_SAMPLES: usize = 10;
+const DEFAULT_EMOJIS: [&str; 10] = ["thumbsup", "eyes", "laughing", "watermelon", "fork_and_knife", "yum", "weary", "tired_face", "poop", "100"];
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FrecencyOrder {
+    pub emojis: Vec<String>,
+    pub stickers: Vec<u64>,
+}
+
+fn varint(b: &[u8], i: &mut usize) -> Option<u64> {
+    let mut v = 0u64;
+    for shift in (0..64).step_by(7) {
+        let byte = *b.get(*i)?;
+        *i += 1;
+        v |= u64::from(byte & 0x7f) << shift;
+        if byte & 0x80 == 0 {
+            return Some(v);
+        }
+    }
+    None
+}
+
+fn wire_fields(b: &[u8]) -> Vec<(u64, u8, &[u8])> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        let Some(tag) = varint(b, &mut i) else { break };
+        let wt = (tag & 7) as u8;
+        let start = i;
+        let len = match wt {
+            0 => {
+                if varint(b, &mut i).is_none() {
+                    break;
+                }
+                0
+            }
+            1 => 8,
+            5 => 4,
+            2 => match varint(b, &mut i) {
+                Some(n) => n as usize,
+                None => break,
+            },
+            _ => break,
+        };
+        let from = if wt == 0 { start } else { i };
+        let to = if wt == 0 { i } else { i.saturating_add(len) };
+        let Some(slice) = b.get(from..to) else { break };
+        out.push((tag >> 3, wt, slice));
+        i = to;
+    }
+    out
+}
+
+fn map_keys(b: &[u8], top: u64) -> Vec<&[u8]> {
+    wire_fields(b)
+        .into_iter()
+        .filter(|(f, wt, _)| *f == top && *wt == 2)
+        .flat_map(|(_, _, m)| wire_fields(m))
+        .filter(|(f, wt, _)| *f == 1 && *wt == 2)
+        .filter_map(|(_, _, entry)| wire_fields(entry).into_iter().find(|(f, _, _)| *f == 1).map(|(_, _, k)| k))
+        .collect()
+}
+
+pub fn wire_order(bytes: &[u8]) -> FrecencyOrder {
+    FrecencyOrder {
+        emojis: map_keys(bytes, 6).into_iter().filter_map(|k| std::str::from_utf8(k).ok().map(str::to_owned)).collect(),
+        stickers: map_keys(bytes, 4).into_iter().filter_map(|k| k.try_into().ok().map(u64::from_le_bytes)).collect(),
+    }
+}
+
+fn is_array_index(k: &str) -> bool {
+    !k.is_empty() && (k == "0" || !k.starts_with('0')) && k.bytes().all(|c| c.is_ascii_digit()) && k.parse::<u64>().is_ok_and(|n| n < u64::from(u32::MAX))
+}
+
+pub fn js_key_order(keys: &[String]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let unique: Vec<String> = keys.iter().filter(|k| seen.insert(k.as_str())).cloned().collect();
+    let (mut ints, rest): (Vec<String>, Vec<String>) = unique.into_iter().partition(|k| is_array_index(k));
+    ints.sort_by_key(|k| k.parse::<u64>().unwrap_or(0));
+    ints.extend(rest);
+    ints
+}
+
+fn weight(days: i64) -> f64 {
+    match days {
+        ..=3 => 100.,
+        4..=15 => 70.,
+        16..=30 => 50.,
+        31..=45 => 30.,
+        46..=80 => 10.,
+        _ => 1.,
+    }
+}
+
+pub fn client_frecency(it: &FrecencyItem, now_ms: i64) -> Option<i64> {
+    let uses: Vec<i64> = it.recent_uses.iter().map(|&t| t as i64).filter(|t| *t > 0).collect();
+    if uses.is_empty() {
+        return None;
+    }
+    let score: f64 = uses.iter().take(MAX_SAMPLES).map(|&t| weight((now_ms - t) / DAY_MS)).sum();
+    Some((f64::from(it.total_uses) * (score / uses.len() as f64)).ceil() as i64)
+}
+
+pub fn rank_like_client<'a>(order: &[String], item: impl Fn(&str) -> Option<&'a FrecencyItem>, now_ms: i64) -> Vec<String> {
+    let mut scored: Vec<(String, i64)> =
+        js_key_order(order).into_iter().filter_map(|k| item(&k).and_then(|it| client_frecency(it, now_ms)).map(|f| (k, f))).collect();
+    scored.sort_by_key(|(_, f)| std::cmp::Reverse(*f));
+    scored.into_iter().map(|(k, _)| k).collect()
+}
+
+impl FrecencyUserSettings {
+    pub fn decode_base64_ordered(s: &str) -> Result<(Self, FrecencyOrder)> {
+        let bytes = STANDARD.decode(s.trim()).map_err(|e| Error::Protocol(format!("frecency base64: {e}")))?;
+        let settings = <Self as prost::Message>::decode(bytes.as_slice()).map_err(|e| Error::Protocol(format!("frecency proto: {e}")))?;
+        Ok((settings, wire_order(&bytes)))
+    }
+
+    pub fn emojis_ranked_at(&self, order: &FrecencyOrder, now_ms: i64) -> Vec<String> {
+        let map = self.emoji_frecency.as_ref().map(|e| &e.emojis);
+        if map.is_none_or(|m| m.is_empty()) {
+            let seeded: Vec<String> = DEFAULT_EMOJIS.iter().map(|s| (*s).to_owned()).collect();
+            return js_key_order(&seeded);
+        }
+        let mut keys = order.emojis.clone();
+        if let Some(m) = map {
+            let mut extra: Vec<&String> = m.keys().filter(|k| !keys.contains(k)).collect();
+            extra.sort();
+            keys.extend(extra.into_iter().cloned());
+        }
+        rank_like_client(&keys, |k| map.and_then(|m| m.get(k)), now_ms)
+    }
+
+    pub fn stickers_ranked_at(&self, order: &FrecencyOrder, now_ms: i64) -> Vec<u64> {
+        let Some(map) = self.sticker_frecency.as_ref().map(|s| &s.stickers) else { return Vec::new() };
+        let mut ids = order.stickers.clone();
+        let mut extra: Vec<u64> = map.keys().copied().filter(|k| !ids.contains(k)).collect();
+        extra.sort_unstable();
+        ids.extend(extra);
+        let keys: Vec<String> = ids.iter().map(u64::to_string).collect();
+        rank_like_client(&keys, |k| k.parse::<u64>().ok().and_then(|id| map.get(&id)), now_ms).into_iter().filter_map(|k| k.parse().ok()).collect()
+    }
+}
+
 #[derive(Deserialize)]
 struct ProtoBody {
     settings: String,
@@ -153,6 +297,11 @@ impl RestClient {
     pub async fn get_frecency_settings(&self) -> Result<FrecencyUserSettings> {
         let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/2", Body::None).await?;
         FrecencyUserSettings::decode_base64(&b.settings)
+    }
+
+    pub async fn get_frecency_settings_ordered(&self) -> Result<(FrecencyUserSettings, FrecencyOrder)> {
+        let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/2", Body::None).await?;
+        FrecencyUserSettings::decode_base64_ordered(&b.settings)
     }
 }
 
@@ -190,5 +339,63 @@ mod tests {
         assert_eq!(d.applications_ranked(), vec![200, 100]);
         assert_eq!(d.favorite_sounds(), vec![7, 8]);
         assert_eq!(d.played_sounds_ranked(), vec![1568753632852054267, 3]);
+    }
+
+    fn uses(total: u32, recent: &[i64]) -> FrecencyItem {
+        FrecencyItem { total_uses: total, recent_uses: recent.iter().map(|&t| t as u64).collect(), frecency: 0, score: 0 }
+    }
+
+    #[test]
+    fn client_weights_by_age() {
+        let now = 1_000 * DAY_MS;
+        assert_eq!(client_frecency(&uses(4, &[now - DAY_MS, now - 2 * DAY_MS]), now), Some(400));
+        assert_eq!(client_frecency(&uses(3, &[now - 10 * DAY_MS, now - 20 * DAY_MS, now - 100 * DAY_MS]), now), Some(121));
+        assert_eq!(client_frecency(&uses(5, &[]), now), None);
+        assert_eq!(client_frecency(&uses(1, &[now - 3 * DAY_MS - 1]), now), Some(100));
+        assert_eq!(client_frecency(&uses(1, &[now - 4 * DAY_MS]), now), Some(70));
+        let twelve: Vec<i64> = (0..12).map(|i| now - (i + 1) * DAY_MS).collect();
+        assert_eq!(client_frecency(&uses(12, &twelve), now), Some(790));
+    }
+
+    #[test]
+    fn js_object_key_order() {
+        let keys: Vec<String> = ["heart", "100", "1234567890123", "8", "heart", "joy"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(js_key_order(&keys), vec!["8", "100", "heart", "1234567890123", "joy"]);
+    }
+
+    #[test]
+    fn ranks_like_the_client_and_keeps_wire_order_on_ties() {
+        let now = 500 * DAY_MS;
+        let mut emojis = HashMap::new();
+        emojis.insert("white_check_mark".to_string(), uses(2, &[now - DAY_MS]));
+        emojis.insert("heart".to_string(), uses(9, &[now - 90 * DAY_MS]));
+        emojis.insert("wave".to_string(), uses(2, &[now - DAY_MS]));
+        let s = FrecencyUserSettings { emoji_frecency: Some(EmojiFrecency { emojis }), ..Default::default() };
+        let b64 = STANDARD.encode(prost::Message::encode_to_vec(&s));
+        let (d, order) = FrecencyUserSettings::decode_base64_ordered(&b64).unwrap();
+        assert_eq!(order.emojis.len(), 3);
+        let ranked = d.emojis_ranked_at(&order, now);
+        assert_eq!(ranked.last().map(String::as_str), Some("heart"));
+        let first_two: Vec<&String> = order.emojis.iter().filter(|k| *k != "heart").collect();
+        assert_eq!(ranked[..2].iter().collect::<Vec<_>>(), first_two);
+    }
+
+    #[test]
+    fn wire_order_reads_sticker_keys() {
+        let mut stickers = HashMap::new();
+        stickers.insert(749054660769218631u64, uses(1, &[DAY_MS]));
+        let s = FrecencyUserSettings { sticker_frecency: Some(StickerFrecency { stickers }), ..Default::default() };
+        let bytes = prost::Message::encode_to_vec(&s);
+        assert_eq!(wire_order(&bytes).stickers, vec![749054660769218631]);
+        assert!(wire_order(&[0xff]).emojis.is_empty());
+    }
+
+    #[test]
+    fn empty_emoji_frecency_seeds_the_client_defaults() {
+        let d = FrecencyUserSettings::default();
+        let r = d.emojis_ranked_at(&FrecencyOrder::default(), 0);
+        assert_eq!(r[0], "100");
+        assert_eq!(r[1], "thumbsup");
+        assert_eq!(r.len(), 10);
     }
 }

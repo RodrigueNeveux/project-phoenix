@@ -82,6 +82,8 @@ pub struct Pickers {
     pub soundboard: soundboard::SoundboardState,
     pub frecency: Option<types::Frecency>,
     pub frecency_loading: bool,
+    pub top_emojis: std::collections::HashMap<Id, (std::time::Instant, Vec<Id>)>,
+    pub top_loading: std::collections::HashSet<Id>,
 }
 
 impl gpui::Global for Pickers {}
@@ -97,6 +99,8 @@ pub fn install(composer: &Entity<gpui_component::input::TextareaState>, window: 
         soundboard: soundboard::SoundboardState::default(),
         frecency: None,
         frecency_loading: false,
+        top_emojis: Default::default(),
+        top_loading: Default::default(),
     });
     let keys = cx.intercept_keystrokes(move |ev, window, cx| {
         let Some(app) = weak.upgrade() else { return };
@@ -175,7 +179,7 @@ pub fn open(app: &mut PhoenixApp, tab: Tab, target: EmojiTarget, window: &mut Wi
     });
     input.update(cx, |s, cx| s.focus(window, cx));
     let anchor = matches!(target, EmojiTarget::Reaction { .. }).then(|| window.mouse_position());
-    let grid = grid::build(app, "", cx);
+    let grid = grid::build(app, "", matches!(target, EmojiTarget::Reaction { .. }), cx);
     let list = ListState::new(grid.rows.len(), gpui::ListAlignment::Top, px(400.));
     cx.global_mut::<Pickers>().open = Some(OpenPicker {
         tab,
@@ -230,11 +234,11 @@ fn query(cx: &App) -> String {
 }
 
 fn on_query(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
-    let Some((tab, _)) = open_tab(cx) else { return };
+    let Some((tab, target)) = open_tab(cx) else { return };
     let q = query(cx);
     match tab {
         Tab::Emoji => {
-            let grid = grid::build(app, &q, cx);
+            let grid = grid::build(app, &q, matches!(target, EmojiTarget::Reaction { .. }), cx);
             if let Some(op) = cx.global_mut::<Pickers>().open.as_mut() {
                 op.list.reset(grid.rows.len());
                 op.grid = grid;
@@ -270,8 +274,36 @@ pub fn load_frecency(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     .detach();
 }
 
+const TOP_EMOJIS_TTL: Duration = Duration::from_secs(24 * 3600);
+
+pub fn load_top_emojis(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let Some(g) = app.selected_guild else { return };
+    let p = cx.global_mut::<Pickers>();
+    if p.top_loading.contains(&g) || p.top_emojis.get(&g).is_some_and(|(at, _)| at.elapsed() < TOP_EMOJIS_TTL) {
+        return;
+    }
+    p.top_loading.insert(g);
+    let fut = app.backend.nav(crate::ui::home::data::NavRequest::TopEmojis(g));
+    cx.spawn(async move |this, cx| {
+        let res = fut.await;
+        let _ = this.update(cx, |app, cx| {
+            let p = cx.global_mut::<Pickers>();
+            p.top_loading.remove(&g);
+            if let Ok(crate::ui::home::data::NavReply::Ids(ids)) = res {
+                p.top_emojis.insert(g, (std::time::Instant::now(), ids));
+                if matches!(open_tab(cx), Some((Tab::Emoji, _))) && query(cx).is_empty() {
+                    on_query(app, cx);
+                }
+            }
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
 fn ensure_tab_data(app: &mut PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) {
     load_frecency(app, cx);
+    load_top_emojis(app, cx);
     match tab {
         Tab::Gif => gif::load_home(app, cx),
         Tab::Sticker => sticker::load_packs(app, cx),
