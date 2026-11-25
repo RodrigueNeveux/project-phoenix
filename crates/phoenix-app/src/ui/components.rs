@@ -486,8 +486,8 @@ fn button(app: &PhoenixApp, k: &Ctx, b: &api::Button, ix: usize) -> AnyElement {
         return el.into_any_element();
     }
     let k = k.clone();
-    el.on_click(move |_, _, cx: &mut App| match &action {
-        ButtonAction::Open(u) => cx.open_url(u),
+    el.on_click(move |_, w, cx: &mut App| match &action {
+        ButtonAction::Open(u) => k.entity.clone().update(cx, |a, cx| crate::ui::modals::leave_link::click(a, "", u, w, cx)),
         ButtonAction::Interact(id) => {
             let (k, id) = (k.clone(), id.clone());
             k.entity.clone().update(cx, |a, cx| a.send_component(&k, id, 2, None, cx));

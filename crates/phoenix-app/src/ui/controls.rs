@@ -196,6 +196,11 @@ pub fn radio_indicator(selected: bool) -> Div {
 }
 
 pub fn checkbox_option(id: impl Into<ElementId>, label: impl Into<SharedString>, selected: bool) -> gpui::Stateful<Div> {
+    let label: SharedString = label.into();
+    checkbox_option_el(id, label.into_any_element(), selected)
+}
+
+pub fn checkbox_option_el(id: impl Into<ElementId>, label: gpui::AnyElement, selected: bool) -> gpui::Stateful<Div> {
     let (bg, border, hbg, hborder) = if selected {
         (
             idx::CHECKBOX_BACKGROUND_SELECTED_DEFAULT,
@@ -235,7 +240,7 @@ pub fn checkbox_option(id: impl Into<ElementId>, label: impl Into<SharedString>,
                 .text_size(z(16.))
                 .line_height(z(20.))
                 .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .child(label.into()),
+                .child(label),
         )
 }
 

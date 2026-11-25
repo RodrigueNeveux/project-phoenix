@@ -3,6 +3,7 @@ pub mod create_channel;
 pub mod forward;
 pub mod go_live;
 pub mod guild_notify;
+pub mod leave_link;
 pub mod member;
 pub mod poll_create;
 pub mod privacy;
@@ -90,6 +91,7 @@ pub enum Modal {
     GuildNotify(guild_notify::State),
     CreatePoll(poll_create::State),
     GoLive(go_live::State),
+    LeaveLink(leave_link::State),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -181,6 +183,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::GuildNotify(s) => guild_notify::render(app, s, cx),
             Modal::CreatePoll(s) => poll_create::render(app, s, cx),
             Modal::GoLive(s) => go_live::render(app, s, cx),
+            Modal::LeaveLink(s) => leave_link::render(s, cx),
         })
     })
 }

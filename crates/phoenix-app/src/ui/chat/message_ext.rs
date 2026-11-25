@@ -607,6 +607,7 @@ pub fn rich_with_emoji_scaled(
         }
         let sd = *seg as u64;
         let seg_runs = super::mention::hovered_runs(msg, bi, sd, &ranges, &targets, &seg_runs).unwrap_or(seg_runs);
+        let shown: Vec<String> = ranges.iter().map(|r| text.get(r.clone()).unwrap_or_default().to_owned()).collect();
         let styled = gpui::StyledText::new(text).with_runs(seg_runs);
         let e = entity.clone();
         let (hr, ht) = (ranges.clone(), targets.clone());
@@ -616,7 +617,7 @@ pub fn rich_with_emoji_scaled(
                 .on_click(
                 ranges,
                 move |ix, w, cx| match &targets[ix] {
-                    crate::richtext::ClickTarget::Link(url) => cx.open_url(url),
+                    crate::richtext::ClickTarget::Link(url) => e.update(cx, |a, cx| crate::ui::modals::leave_link::click(a, &shown[ix], url, w, cx)),
                     crate::richtext::ClickTarget::Spoiler(sp) => {
                         let sp = *sp;
                         e.update(cx, |a, cx| a.reveal_spoiler(msg, sp, cx));

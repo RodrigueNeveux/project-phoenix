@@ -1481,6 +1481,7 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: O
         };
     }
     let targets = t.click_targets.clone();
+    let shown: Vec<String> = t.click_ranges.iter().map(|r| t.text.get(r.clone()).unwrap_or_default().to_owned()).collect();
     let e = entity.clone();
     div()
         .line_height(lh)
@@ -1499,7 +1500,7 @@ fn rich(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited: O
                 .on_click(
                 t.click_ranges.clone(),
                 move |ix, w, cx| match &targets[ix] {
-                    ClickTarget::Link(url) => cx.open_url(url),
+                    ClickTarget::Link(url) => e.update(cx, |a, cx| crate::ui::modals::leave_link::click(a, &shown[ix], url, w, cx)),
                     ClickTarget::Spoiler(sp) => {
                         let sp = *sp;
                         e.update(cx, |a, cx| a.reveal_spoiler(msg, sp, cx));

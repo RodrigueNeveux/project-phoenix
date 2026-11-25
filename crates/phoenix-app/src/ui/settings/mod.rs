@@ -148,6 +148,8 @@ pub struct LocalPrefs {
     pub saturation: u32,
     pub minimize_to_tray: bool,
     pub ui: std::collections::BTreeMap<String, u64>,
+    pub trusted_domains: std::collections::BTreeSet<String>,
+    pub trusted_protocols: std::collections::BTreeSet<String>,
 }
 
 impl Default for LocalPrefs {
@@ -162,6 +164,8 @@ impl Default for LocalPrefs {
             saturation: 100,
             minimize_to_tray: true,
             ui: Default::default(),
+            trusted_domains: Default::default(),
+            trusted_protocols: Default::default(),
         }
     }
 }
@@ -204,6 +208,8 @@ impl LocalPrefs {
                 .and_then(Value::as_object)
                 .map(|o| o.iter().filter_map(|(k, v)| Some((k.clone(), v.as_u64()?))).collect())
                 .unwrap_or_default(),
+            trusted_domains: strings(v, "trusted_domains"),
+            trusted_protocols: strings(v, "trusted_protocols"),
         }
     }
     pub fn to_json(&self) -> Value {
@@ -217,6 +223,8 @@ impl LocalPrefs {
             "saturation": self.saturation,
             "minimize_to_tray": self.minimize_to_tray,
             "ui": self.ui,
+            "trusted_domains": self.trusted_domains,
+            "trusted_protocols": self.trusted_protocols,
         })
     }
     pub fn load() -> Self {
@@ -235,6 +243,10 @@ impl LocalPrefs {
         let Some(p) = config_path() else { return };
         write_prefs(&p, &serde_json::to_vec_pretty(&self.to_json()).unwrap_or_default());
     }
+}
+
+fn strings(v: &Value, key: &str) -> std::collections::BTreeSet<String> {
+    v.get(key).and_then(Value::as_array).map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_owned)).collect()).unwrap_or_default()
 }
 
 fn write_prefs(p: &std::path::Path, data: &[u8]) {
