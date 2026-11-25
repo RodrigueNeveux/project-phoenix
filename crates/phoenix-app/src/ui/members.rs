@@ -863,7 +863,7 @@ struct SubText {
     count: usize,
 }
 
-fn activity_text(a: &crate::presence::Activity) -> Option<SharedString> {
+pub(crate) fn activity_text(a: &crate::presence::Activity) -> Option<SharedString> {
     use crate::presence::ActivityKind as K;
     let nz = |v: &Option<SharedString>| v.clone().filter(|t| !t.is_empty());
     let name = Some(a.name.clone()).filter(|t| !t.is_empty());
@@ -883,7 +883,7 @@ fn activity_text(a: &crate::presence::Activity) -> Option<SharedString> {
     m
 }
 
-fn activity_icon(a: &crate::presence::Activity) -> Option<&'static str> {
+pub(crate) fn activity_icon(a: &crate::presence::Activity) -> Option<&'static str> {
     use crate::presence::ActivityKind as K;
     match a.kind {
         K::Playing | K::Competing => Some("game-controller"),

@@ -399,6 +399,7 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         }),
     };
     let pending = matches!(r.kind, RelationshipKind::Incoming | RelationshipKind::Outgoing);
+    let sub = friend_activity(app, user, r.kind).unwrap_or_else(|| sub.into_any_element());
     let mut actions = div().flex().gap(z(10.)).when(pending, |d| d.ml(z(8.)));
     let act = |action: RelAction| {
         cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
@@ -515,6 +516,45 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
                 ),
         )
         .child(actions)
+}
+
+fn friend_activity(app: &PhoenixApp, user: Id, kind: RelationshipKind) -> Option<gpui::AnyElement> {
+    use crate::presence::ActivityKind as K;
+    if kind != RelationshipKind::Friend || app.presence_of(user) == Presence::Offline {
+        return None;
+    }
+    let acts = app.people.activities.get(&user)?;
+    let main = acts.iter().find(|a| a.kind != K::Custom);
+    let custom = acts
+        .iter()
+        .find(|a| a.kind == K::Custom)
+        .map(|a| (a.emoji.clone(), a.state.clone().filter(|t| !t.trim().is_empty())))
+        .filter(|(e, t)| e.is_some() || t.is_some());
+    if main.is_none() && custom.is_none() {
+        return None;
+    }
+    let label = |t: SharedString| div().min_w_0().text_ellipsis().whitespace_nowrap().overflow_hidden().child(crate::ui::emoji_text::status_label(t, 16. * crate::theme::zoom() / 1.375));
+    let mut row = div().min_w_0().flex().items_center().gap(z(4.)).overflow_hidden();
+    if let Some(a) = main {
+        if let Some(icon) = crate::ui::members::activity_icon(a) {
+            row = row.child(gpui::svg().path(crate::icons::path(icon)).size(z(14.)).flex_none().text_color(c(tok(idx::STATUS_ONLINE))));
+        }
+        if let Some(t) = crate::ui::members::activity_text(a) {
+            row = row.child(label(t));
+        }
+    }
+    if let Some((emoji, state)) = custom {
+        if main.is_some() {
+            row = row.child(div().flex_none().child("•"));
+        }
+        if let Some(e) = emoji {
+            row = row.child(div().flex_none().child(crate::ui::emoji_text::status_label(e, 16. * crate::theme::zoom() / 1.375)));
+        }
+        if let Some(t) = state {
+            row = row.child(label(t));
+        }
+    }
+    Some(row.into_any_element())
 }
 
 fn add_friend(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
