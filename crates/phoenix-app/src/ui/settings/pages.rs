@@ -761,18 +761,18 @@ fn content_filters(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
         .gap(z(4.))
         .child(title_text(tr("sp.cs.sensitive")))
         .child(super::account::linked_desc(format!("{} [{}]", tr("sp.cs.sensitive_d"), tr("sp.learn_more")).into()));
-    let tabs = div().w(z(226.)).flex_none().pt(z(12.)).flex().flex_col().gap(z(16.)).children(TABS.iter().enumerate().map(|(i, (t, _))| {
+    let tabs = div().w(z(226.)).flex_none().pt(z(12.)).flex().flex_col().gap(z(20.)).children(TABS.iter().enumerate().map(|(i, (t, _))| {
         let on = i == tab;
         div()
             .id(eid(format!("cf-tab-{i}")))
             .h(z(40.))
-            .px(z(16.))
+            .px(z(10.))
             .flex()
             .items_center()
             .cursor_pointer()
             .text_size(z(16.))
             .line_height(z(20.))
-            .when(on, |d| d.border_l_2().border_color(c(tok(idx::TEXT_BRAND))).text_color(c(tok(idx::TEXT_BRAND))))
+            .when(on, |d| d.ml(z(-1.)).border_l_2().border_color(c(tok(idx::TEXT_BRAND))).text_color(c(tok(idx::TEXT_BRAND))))
             .when(!on, |d| {
                 d.border_l_1()
                     .border_color(c(tok(idx::BORDER_SUBTLE)))
