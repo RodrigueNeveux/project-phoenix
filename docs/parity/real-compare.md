@@ -611,3 +611,30 @@ No CDP pass changed the client's route: it stayed on a text channel of the proje
 | Hover roll slide | `hoverRoll_Dq3ch1`: `.default` to `translate3d(0,-107%,0)` and opacity 0, `.hovered` from `+107%`, `transition: all .22s ease` | `states::hover_roll` (cubic-bezier .25,.1,.25,1, 220 ms), driven by the avatar group hover | ✅ |
 
 Checked after the merge (int-bin 506ce3a7, `real_shots` at dpr 1.25): the DM list shows « oopi » where it showed « Initial »; the group DM row now lists the same three names as the client capture, so the 20:55 order difference was data, not code (nicknames inside unnamed group names stay ❌). The unread bar probe on the project server listed no unread candidate, so the #bienvenue case could not be replayed; run `RUST_LOG=phoenix::unread_bar=debug real_shots` on a guild with unreads to confirm the only-mentions cause. The Friends / DM score was not redone: the client had left `/channels/@me` and the user was using it.
+
+## User settings, every page (25/11 21:30–22:40, client 1536×788 CSS at 1.5×, onyx/midnight, FR)
+
+Client shots taken in the live settings overlay (non-GET requests blocked), Phoenix from `real_shots PHX_OPEN=settings:<page>` at the same size and scale (`int-bin` d68f10c9 before, 8f8ad040 / 067ea9ff / 3a1a1fb3 after). Region `settings content` = `contentBody_3Rvb29`, top of each page. Details in settings.md, « Live pass on every user settings page ».
+
+| page | before | after |
+|---|---|---|
+| Compte | 1.3 % | 1.3 % |
+| Données et confidentialité | 8.9 % | 5.2 % |
+| Permissions de messagerie | 6.2 % | 3.6 % |
+| Notifications | 4.3 % | 2.5 % |
+| Nitro | 4.8 % | 4.8 % |
+| Boost de serveur | 8.2 % | 4.4 % |
+| Abonnements | 7.6 % | 3.6 % |
+| Inventaire des cadeaux | 10.2 % | 5.4 % |
+| Facturation | 2.2 % | 3.8 % |
+| Voix & Vidéo | 3.0 % | 3.0 % |
+| Apparence | 3.7 % | 3.7 % |
+| Accessibilité | 5.0 % | 4.9 % |
+| Système | 4.8 % | 4.1 % |
+| Langue et heure | 1.0 % | 1.0 % |
+| Jeux enregistrés | 3.9 % | 3.9 % |
+| Confidentialité des activités | 5.0 % | 3.7 % |
+| Applications connectées | 9.1 % | 8.0 % |
+| Développeur | 1.2 % | 1.2 % |
+
+Header 0.6–1.9 % on every page. Sidebar 3–6 % when the active page is near the top; 12–14 % for the lower pages only because Phoenix scrolls the nav to the active item while the client shot was taken with the nav reset to the top. Facturation went up because the « after » render loaded the real payment rows that the « before » render did not have. What is left: gg sans vs Noto Sans wrapping, the Nitro rewards offer card on Connected apps (dynamic offer, not reproduced), the gift card Lottie art, the Notifications select width (client grid `auto auto`).
