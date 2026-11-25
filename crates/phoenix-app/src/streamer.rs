@@ -188,6 +188,7 @@ mod tests {
         assert!(!is_streamer_tool(""));
     }
 
+    #[cfg(unix)]
     #[test]
     fn scan_counts_matching_processes() {
         let root = std::env::temp_dir().join(format!("phoenix-proc-{}", std::process::id()));
