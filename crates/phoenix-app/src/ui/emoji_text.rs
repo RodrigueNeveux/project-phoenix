@@ -117,4 +117,78 @@ mod tests {
         assert!(super::emoji_presentation("❓") && super::emoji_presentation("ℹ\u{FE0F}") && super::emoji_presentation("🌸"));
         assert!(!super::emoji_presentation("☲") && !super::emoji_presentation("♡"));
     }
+
+    fn shaped(text: &str, ends: &[(&str, f32)]) -> gpui::LineLayout {
+        use unicode_segmentation::UnicodeSegmentation;
+        let mut glyphs = Vec::new();
+        let mut x = 0.;
+        for (ix, g) in text.grapheme_indices(true) {
+            for (offset, _) in g.char_indices() {
+                glyphs.push(gpui::ShapedGlyph {
+                    id: gpui::GlyphId(0),
+                    position: gpui::point(gpui::px(x), gpui::px(0.)),
+                    index: ix + offset,
+                    is_emoji: super::emoji_presentation(g),
+                });
+            }
+            let prefix = &text[..ix + g.len()];
+            x = ends.iter().find(|(p, _)| *p == prefix).map_or(x + 1., |(_, end)| *end);
+        }
+        gpui::LineLayout {
+            font_size: gpui::px(14.),
+            width: gpui::px(x),
+            ascent: gpui::px(11.),
+            descent: gpui::px(3.),
+            runs: vec![gpui::ShapedRun { font_id: gpui::FontId(0), glyphs }],
+            len: text.len(),
+        }
+    }
+
+    fn ellipsize(text: &str, ends: &[(&str, f32)], room_before_ellipsis: f32) -> String {
+        let cx = gpui::TestAppContext::single();
+        let font = gpui::font("Zed Plex Sans");
+        let size = gpui::px(14.);
+        let system = cx.text_system().clone();
+        let ellipsis = f32::from(system.layout_width(system.resolve_font(&font), size, '\u{2026}'));
+        let ellipsis = (ellipsis * 96.).ceil() / 96.;
+        let runs = vec![gpui::TextRun {
+            len: text.len(),
+            font: font.clone(),
+            color: gpui::black(),
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        }];
+        let mut wrapper = system.line_wrapper(font, size);
+        let width = gpui::px(room_before_ellipsis + ellipsis);
+        let (cut, _) = wrapper.truncate_line_end_shaped(text.to_owned().into(), &shaped(text, ends), width, "\u{2026}", &runs, 1.5);
+        cut.to_string()
+    }
+
+    #[test]
+    fn ellipsis_keeps_the_last_glyph_after_an_emoji() {
+        let group = "\u{1f4bb} \u{2500} \u{2632}\u{2632} Responsable du D\u{e9}veloppement \u{2632}\u{2632}";
+        let dev = "\u{1f4bb} \u{2500} \u{2632}\u{2632} Responsable du D\u{e9}v";
+        let de = "\u{1f4bb} \u{2500} \u{2632}\u{2632} Responsable du D\u{e9}";
+        let ends = [(de, 174.315), (dev, 180.811), ("\u{1f4bb} \u{2500} \u{2632}\u{2632} Responsable du D\u{e9}ve", 188.007)];
+        assert_eq!(ellipsize(group, &ends, 180.886), format!("{dev}\u{2026}"));
+        assert_eq!(ellipsize(group, &ends, 180.5), format!("{de}\u{2026}"));
+
+        let placeholder = "Envoyer un message dans #\u{3022}\u{1f36f}\u{30fb}honeypot";
+        let ends = [
+            ("Envoyer un message dans #\u{3022}\u{1f36f}\u{30fb}hone", 271.794),
+            ("Envoyer un message dans #\u{3022}\u{1f36f}\u{30fb}honey", 279.314),
+            ("Envoyer un message dans #\u{3022}\u{1f36f}\u{30fb}honeyp", 288.194),
+        ];
+        assert_eq!(ellipsize(placeholder, &ends, 279.427), "Envoyer un message dans #\u{3022}\u{1f36f}\u{30fb}honey\u{2026}");
+    }
+
+    #[test]
+    fn ellipsis_drops_a_whole_emoji_sequence() {
+        let text = "ab\u{1f469}\u{200d}\u{1f680}cd";
+        let ends = [("a", 8.), ("ab", 16.), ("ab\u{1f469}\u{200d}\u{1f680}", 36.), ("ab\u{1f469}\u{200d}\u{1f680}c", 44.)];
+        assert_eq!(ellipsize(text, &ends, 35.9), "ab\u{2026}");
+        assert_eq!(ellipsize(text, &ends, 36.01), "ab\u{1f469}\u{200d}\u{1f680}\u{2026}");
+        assert_eq!(ellipsize(text, &ends, 0.), "a\u{2026}");
+    }
 }
