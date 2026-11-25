@@ -188,13 +188,15 @@ pub fn render(
     }
     links(content)
         .into_iter()
-        .map(|l| {
+        .enumerate()
+        .map(|(i, l)| {
             let own = author == app.me.id;
-            match ensure(app, &l, cx) {
+            let el = match ensure(app, &l, cx) {
                 State::Resolving | State::Failed(_) => resolving(),
                 State::Invalid => invalid(own),
                 State::Ready(p) => card(app, entity, &p, own),
-            }
+            };
+            if i == 0 { el } else { div().mt(z(2.)).child(el).into_any_element() }
         })
         .collect()
 }
