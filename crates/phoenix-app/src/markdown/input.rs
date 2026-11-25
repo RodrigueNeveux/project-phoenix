@@ -36,35 +36,107 @@ impl Out {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodeBlock {
+    pub open: usize,
+    pub close: Option<usize>,
+    pub lang: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Blocks {
+    pub code_lines: Vec<(Range<usize>, Option<String>)>,
+    pub code: Vec<(Range<usize>, Option<String>)>,
+    pub quotes: Vec<Range<usize>>,
+}
+
 pub fn spans(text: &str) -> Vec<(Range<usize>, u16)> {
+    scan(text).0
+}
+
+fn scan(text: &str) -> (Vec<(Range<usize>, u16)>, Vec<CodeBlock>) {
     let mut out = Out { spans: Vec::new() };
+    let mut code = Vec::new();
     let mut i = 0;
     while i < text.len() {
         let rest = &text[i..];
-        if let Some(after) = rest.strip_prefix("```")
-            && let Some(end) = after.find("```")
-        {
+        if let Some(after) = rest.strip_prefix("```") {
+            let end = after.find("```");
             out.push(i..i + 3, FENCE);
             let body_start = i + 3;
-            let body = &after[..end];
+            let body = &after[..end.unwrap_or(after.len())];
+            let mut lang = None;
             if let Some(nl) = body.find('\n') {
-                let lang = &body[..nl];
-                if !lang.is_empty() && lang.bytes().all(|b| b.is_ascii_alphanumeric() || b"_+-.#".contains(&b)) {
+                let l = &body[..nl];
+                if !l.is_empty() && l.bytes().all(|b| b.is_ascii_alphanumeric() || b"_+-.#".contains(&b)) {
                     out.push(body_start..body_start + nl, LANG);
+                    lang = Some(l.to_ascii_lowercase());
                 }
             }
-            let close = body_start + end;
-            out.push(close..close + 3, FENCE);
-            i = close + 3;
+            let close = end.map(|e| body_start + e);
+            code.push(CodeBlock { open: i, close, lang });
+            match close {
+                Some(close) => {
+                    out.push(close..close + 3, FENCE);
+                    i = close + 3;
+                }
+                None => break,
+            }
             continue;
         }
         let line_end = rest.find('\n').map_or(text.len(), |n| i + n);
-        let next_fence = rest.find("```").map(|n| i + n).filter(|&f| f < line_end && text[f + 3..].contains("```"));
+        let next_fence = rest.find("```").map(|n| i + n).filter(|&f| f < line_end);
         let stop = next_fence.unwrap_or(line_end);
         line(text, i, stop, &mut out);
         i = if next_fence.is_some() { stop } else { line_end + 1 };
     }
-    out.spans
+    (out.spans, code)
+}
+
+fn line_ranges(text: &str) -> Vec<Range<usize>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    for (i, b) in text.bytes().enumerate() {
+        if b == b'\n' {
+            out.push(start..i);
+            start = i + 1;
+        }
+    }
+    out.push(start..text.len());
+    out
+}
+
+pub fn blocks(text: &str) -> Blocks {
+    let lines = line_ranges(text);
+    let line_of = |at: usize| lines.partition_point(|l| l.end < at);
+    let mut in_code = vec![false; lines.len()];
+    let mut out = Blocks::default();
+    for block in scan(text).1 {
+        let open = line_of(block.open);
+        let close = block.close.map(line_of);
+        if close == Some(open) {
+            continue;
+        }
+        let last = close.unwrap_or(lines.len());
+        if open + 1 < last {
+            let range = lines[open + 1].start..lines[last - 1].end;
+            out.code.push((range, block.lang.clone()));
+        }
+        for (ix, line) in lines.iter().enumerate().take(last).skip(open + 1) {
+            in_code[ix] = true;
+            out.code_lines.push((line.clone(), block.lang.clone()));
+        }
+        in_code[open] = true;
+        if let Some(c) = close {
+            in_code[c] = true;
+        }
+    }
+    for (ix, line) in lines.iter().enumerate() {
+        if !in_code[ix] && text[line.clone()].starts_with("> ") {
+            out.quotes.push(line.clone());
+        }
+    }
+    out
 }
 
 fn line(text: &str, start: usize, end: usize, out: &mut Out) {
@@ -295,7 +367,29 @@ mod tests {
         assert!(s.contains(&(5..9, LANG)));
         assert_eq!(at(t, "a**"), 0);
         assert_eq!(at(t, "y"), BOLD);
-        assert_eq!(at("```\n**a**", "a"), BOLD);
+        assert_eq!(at("```\n**a**", "a"), 0);
+        assert!(spans("```\n**a**").contains(&(0..3, FENCE)));
+    }
+
+    #[test]
+    fn blocks_find_code_lines_and_quotes() {
+        let t = "> quoted\n```rust\nlet a = 1;\n> no\n```\n> yes\n>no";
+        let b = blocks(t);
+        let lines: Vec<&str> = b.code_lines.iter().map(|(r, _)| &t[r.clone()]).collect();
+        assert_eq!(lines, vec!["let a = 1;", "> no"]);
+        assert!(b.code_lines.iter().all(|(_, l)| l.as_deref() == Some("rust")));
+        let quotes: Vec<&str> = b.quotes.iter().map(|r| &t[r.clone()]).collect();
+        assert_eq!(quotes, vec!["> quoted", "> yes"]);
+        assert_eq!(b.code.len(), 1);
+        assert_eq!(&t[b.code[0].0.clone()], "let a = 1;\n> no");
+    }
+
+    #[test]
+    fn an_unclosed_fence_runs_to_the_end_like_the_client() {
+        let b = blocks("a\n```\nb\nc");
+        let lines: Vec<usize> = b.code_lines.iter().map(|(r, _)| r.start).collect();
+        assert_eq!(lines, vec![6, 8]);
+        assert!(blocks("x ```y``` z").code_lines.is_empty());
     }
 
     #[test]

@@ -268,7 +268,68 @@ rasterizing it calls swash's `embolden(ppem / 48)` (swash's port of `FT_Outline_
 halve the strength as FreeType does). Shaping and advances are untouched. Search
 `PHOENIX PATCH (synthetic bold)`. Test `synthetic_bold_follows_chromium`.
 
-Rev: `0c04d8e7` on `gpui-baseline2` (patches 4 to 11). Before: `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug). Previous: `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+## 12. Rich lines (`src/text_system/rich.rs`, `src/text_system.rs`, `src/text_system/line.rs`)
+
+**Problem.** The composer's Markdown preview needs what the client's Slate leaves get from CSS
+(chunk 358931 and 44141, see `docs/parity/composer.md`): inline code in `--font-code` at 85 % inside
+a 1px bordered, rounded box, spoilers with `padding: 0 .2em` and rounded corners, subtext at 13px.
+A `TextRun` has one font size per line, and `HighlightStyle` cannot change the size, draw a border
+or add space. `TextRun`, `ShapedRun` and `LineLayout` are built with struct literals in gpui-base,
+so new fields on them would break that crate.
+
+**Patch.** A parallel description instead of new run fields:
+- `RichText { sizes, boxes, hidden }`, `TextBox { range, background, border_color, border_width,
+  corner_radius, padding, clone_edges, open_start, open_end }` (builders `TextBox::new(r).background(..)`…).
+  `RichText::slice` cuts it for one wrapped row: a box cut by the row edge loses its padding,
+  border and corners on that side (`box-decoration-break: slice`) unless `clone_edges` is set
+  (`clone`, the spoiler's `spoilerMarkdownContent_`).
+- `WindowTextSystem::shape_line_rich(text, font_size, runs, &rich, force_width)`: each range with
+  its own size is shaped as a separate segment through `layout_line` (so each segment stays in the
+  frame cache) and the segments are joined into one `LineLayout`. A box inserts
+  `padding + border` before its first glyph and after its last one; a hidden range drops its glyphs
+  and its width. `x_for_index`, `index_for_x` and `closest_index_for_x` then work unchanged, so the
+  caret, the selection and IME bounds follow the drawn text. `layout_line_rich` returns the same
+  width for wrapping. An empty `RichText` is the old `shape_line`.
+- `ShapedLine` keeps a private `rich` (`run_sizes` and the box geometry). `paint_line` rasterizes
+  each run at its own size; the baseline stays the strut of the primary font at the line's size,
+  like an inline box in Chromium. `ShapedLine::paint_background` paints each box as one quad
+  (background, border on the closed sides, `corner_radius` on the closed corners). Its height is
+  the content area of the box's font at its size (ascent + descent) plus the border, around the
+  baseline, like an inline element's background in CSS.
+
+Tests in `rich.rs`: `sizes_lay_out_each_segment_at_its_own_size`,
+`boxes_add_their_padding_and_border_to_the_advance`, `adjacent_boxes_do_not_overlap`,
+`slicing_opens_cut_edges_unless_cloned`, `hidden_text_takes_no_space`,
+`empty_rich_text_is_the_plain_shape`, `boxes_paint_one_rounded_bordered_quad`.
+
+## 13. gpui-base: rich textarea (`vendor/gpui-base`)
+
+`vendor/gpui-base` is the crates.io `gpui-base` 0.10.0 source (the engine behind gpui-component's
+`Input`/`Textarea`), without tests, benches, dev-dependencies and lockfile, patched through the same
+git rev as `gpui-pre` (`[patch.crates-io]`). It is not a member of `vendor/Cargo.toml` (excluded), so
+the vendored test run stays on gpui-pre and gpui-pre-wgpu. gpui-component does not re-export the new
+types: Phoenix depends on `gpui-base` directly.
+
+- `RichSpan { range, font_family, font_size, text_box, hidden }` and
+  `LineStyle { range, bar: LineBar { color, width, radius }, indent, end_inset, font_family, font_size }`
+  (`input/base/rich_text.rs`), set with `TextareaState::set_rich_decorations(spans, lines, cx)` and
+  read back with `rich_decorations().spans()/.lines()`. Ranges follow edits like the text decorations
+  and are dropped when the text is replaced.
+- Layout (`base/element.rs` `layout_lines`, `layout_token_lines`): a line with rich content is shaped
+  with `shape_line_rich` per wrapped row, its runs get the spans' and the line's font family, the line
+  font size replaces the field's. A line style's `indent` becomes `LineLayout::lead`, added to every
+  row by `line_indent` (caret, selection, hit testing and paint all go through it). The bar is painted
+  under the row(s) in `paint_background`; consecutive barred lines square their shared corners (the
+  client's `slateBlockquoteContainer_:has(+…)` rules). Token lines now also paint backgrounds.
+- Wrapping (`display_map/text_wrapper.rs`): the wrapper keeps a copy of the rich decorations (with the
+  weights and styles of the text decorations, so bold text wraps at its real width) and measures a
+  rich line with `layout_line_rich` at `wrap_width − indent − end_inset`. `set_rich` rewraps only the
+  rows whose own view (`RichDecorations::line_view`) changed, so typing does not rewrap the field.
+  Lines with inline tokens keep the token wrapper (plain widths).
+
+Tests: the app tests below drive it (gpui-base's own tests are not in the vendored test workspace).
+
+Rev: `5e340a80` on `gpui-richtext` (patches 4 to 13). Before: `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## Running the vendored tests
 

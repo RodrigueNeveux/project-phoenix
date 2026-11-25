@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["gpui-pre", "gpui-pre-wgpu"]
+exclude = ["gpui-base"]
 
 [patch.crates-io]
 gpui-pre = { path = "gpui-pre" }

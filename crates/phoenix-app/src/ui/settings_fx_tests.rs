@@ -107,6 +107,42 @@ fn composer_markdown_is_styled_while_typing(cx: &mut TestAppContext) {
     assert!(ranges(&mut h).is_empty());
 }
 
+fn caret_after(h: &mut Harness, text: &str, preview: bool) -> f32 {
+    h.act(|a, w, cx| {
+        a.prefs.synced.proto.insert("md-preview", preview as u64);
+        a.prefs.synced.proto.insert("legacy-input", 0);
+        a.composer.update(cx, |s, cx| {
+            s.set_value(text.to_string(), w, cx);
+            s.focus(w, cx);
+        });
+        crate::ui::chat::rich_input::sync(a, cx);
+        w.refresh();
+    });
+    h.act(|_, w, _| w.refresh());
+    h.act(|a, _, cx| f32::from(a.composer.read(cx).cursor_bounds().left()))
+}
+
+#[gpui::test]
+fn composer_quote_hides_its_marker_and_indents_the_caret(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let plain = caret_after(&mut h, "ab", true);
+    let quoted = caret_after(&mut h, "> ab", true);
+    assert!((quoted - plain - 16.).abs() < 0.5, "plain {plain} quoted {quoted}");
+    let lines = h.act(|a, _, cx| a.composer.read(cx).rich_decorations().lines().len());
+    assert_eq!(lines, 1);
+}
+
+#[gpui::test]
+fn composer_inline_code_is_drawn_smaller_with_its_border(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let start = caret_after(&mut h, "", true);
+    let off = caret_after(&mut h, "`abcdefgh`", false) - start;
+    let on = caret_after(&mut h, "`abcdefgh`", true) - start;
+    assert!(on < off && on > off * 0.85, "off {off} on {on}");
+    let state = h.act(|a, _, cx| crate::ui::chat::rich_input::needs_sync(a, cx));
+    assert!(!state);
+}
+
 #[gpui::test]
 fn composer_tokens_follow_the_preview_setting(cx: &mut TestAppContext) {
     let mut h = setup(cx);

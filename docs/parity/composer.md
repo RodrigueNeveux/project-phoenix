@@ -109,14 +109,23 @@ on theme changes (`needs_sync` compares the styles too).
 | `**`, `*`, `_` markers | `syntaxBefore/After`: `--font-weight-semibold`, `--textbox-markdown-syntax` | SYNTAX → semibold + token colour | ✅ |
 | `__`, `~~`, `\|\|`, `\` markers | `before_u/s/spoiler`, `syntaxOverride`: weight normal; `before_u` underlined | SYNTAX \| LIGHT (+ underline for `__`, and inside an underline) | ✅; ⚠ the 1px `margin-inline` of `before_s/u/em` is not reproduced |
 | bold / italic / underline / strike | `bold_` 700, `italics_`, `underline_`, `strikethrough_` | HighlightStyle weight / italic / underline / strikethrough | ✅ |
-| inline code | `inlineCode_` + `before/after_inlineCode`: `--background-code`, 1px `--border-muted`, `--font-code` 85 %, line-height 18 | `--background-code` behind markers and content | ⚠ no border, no code font and no 85 % size: a `HighlightStyle` cannot change the font or draw a border |
-| spoiler | `spoilerContent_` revealed: `--background-mod-subtle`, radius-xs, `padding: 0 .2em` | `--background-mod-subtle` | ⚠ no radius / padding |
+| inline code | `inlineCode_` + `before/after_inlineCode`: `--background-code`, 1px `--border-muted`, radius `--radius-xs` (4px, the `border-*-radius` override the 3px), `--font-code` 85 %, padding 0 | one `TextBox` from the opening to the closing backtick (bg, 1px border, radius 4) and the markers and content in `FONT_MONO` at 13.6px (11.05 inside subtext); the border takes 1px of advance on each side like the inline borders | ✅ (gpui patch 12); ⚠ `line-height: 18px` of the code span does not change the 22px row, as in Chromium |
+| spoiler | `spoilerContent_` revealed: `--background-mod-subtle`; `spoilerMarkdownContent_` radius-xs, `box-decoration-break: clone`; `spoiler_nsjAhz` `padding: 0 .2em` | one `TextBox` per content leaf: bg, radius 4, padding 3.2px (2.6 in subtext), cloned edges on wrapped rows; `\|\|` markers outside the box | ✅ |
 | links | `fakeLink_` `--text-link` (`url`, `autolink`, `link`); link markers weight normal | bare http(s) URLs and `[label](url)` labels in `--text-link`, brackets as light syntax | ✅ colour; ⚠ `[`/`](url)` marker split not measured live |
-| subtext `-# ` | `before_subtext` 700, `subtext_` `--text-muted` 13/17.875 | muted colour, bold marker | ⚠ size stays 16px |
-| code block fences | `codeBlockSyntax` syntax colour, `codeBlockLang` `--text-feedback-positive` (lang `/^[a-z0-9_+\-.#]+$/i`), no inline markdown inside | FENCE / LANG colours, content left plain | ✅; ⚠ no hljs colours, no code font |
-| headings, lists, block quotes | `skip` in the Slate rule table (quotes get a block element with a bar) | not styled | ✅ headings/lists; ❌ quote bar |
+| subtext `-# ` | `before_subtext` 700, `subtext_` `--text-muted` 13/17.875 | muted colour, bold marker, marker and content at 13px on the 16px strut (the row stays 22px: 17.875/13 = 22/16) | ✅ |
+| code block fences | `codeBlockSyntax` syntax colour, `codeBlockLang` `--text-feedback-positive` (lang `/^[a-z0-9_+\-.#]+$/i`), no inline markdown inside | FENCE / LANG colours, content left plain | ✅ |
+| code block lines | JS: lines strictly between the opening and the closing fence line get `codeBlockState.isInCodeBlock` → `div.codeLine_` (`--font-code` 85 %, `--text-default`), hljs classes when the fence names a language on its own line (`.hljs-keyword` … `--text-code-*`, `.codeLine_ .hljs-comment` `--text-muted`); a fence without a closing one runs to the end (the parser retries with `"\n```"` appended); a single-line ` ```x``` ` gets no code lines | `markdown::input::blocks`, `LineStyle` font `FONT_MONO` 13.6px, `richtext::highlight` colours with comments in `--text-muted`, plain code in `--text-default` | ✅; ⚠ the client highlights with its own grammar (arborium/hljs), ours is the message highlighter |
+| block quotes | `blockQuote` element: `slateBlockquoteContainer_` flex, `blockquoteDivider_` 4px `--spine-default` radius 4 (squared towards a next/previous quote), `blockquote` `padding-inline: 12px 8px`; the `> ` is not in the editor text (it is added back when serialized) | `LineStyle` bar 4px radius 4, indent 16, end inset 8, `> ` hidden (zero width, kept in the text so the draft round-trips) | ✅; ⚠ the hidden `> ` still takes two caret stops (arrow keys), the client has none |
+| headings, lists | JS: `heading_marker`, `list_marker` get no attributes and there is no heading node in the Slate decorator, so `# title` stays 16px plain text in the composer | not styled | ✅ (large headings would be a divergence) |
 
 Tests: `markdown::input::tests` (bold, each style, nesting, tokens opaque, unclosed delimiters, escapes,
-links, subtext, code blocks, per-line) and `settings_fx_tests::composer_markdown_is_styled_while_typing`
-(decorations follow the preview setting). Real-account render: `real_shots` with `PHX_DRAFT='…'`
+links, subtext, code blocks, per-line, `blocks_find_code_lines_and_quotes`,
+`an_unclosed_fence_runs_to_the_end_like_the_client`), `rich_input::tests::rich_styles_follow_the_client_css`,
+`settings_fx_tests::composer_markdown_is_styled_while_typing` (decorations follow the preview setting),
+`composer_quote_hides_its_marker_and_indents_the_caret`, `composer_inline_code_is_drawn_smaller_with_its_border`.
+Engine: GPUI patches 12 and 13 (`docs/gpui-patches.md`).
+
+Typing cost (`shortcuts_shot bench`: 2219-character draft with every style, 60 keystrokes, median and p90):
+before the rich engine (main 17384941) edit+sync 0.82 / 1.0 ms with the preview off, 1.35-1.46 / 1.75 ms on;
+frame 21.6-21.9 / 24.5 ms off, 18.2-21.9 / 24.3-24.6 ms on (whole window, debug build). Real-account render: `real_shots` with `PHX_DRAFT='…'`
 (`\n` for new lines; nothing is sent, the read-only backend also drops typing).

@@ -1,6 +1,8 @@
 use std::{cell::RefCell, ops::Range};
 
 use gpui::{AnyElement, App, Context, FontStyle, FontWeight, HighlightStyle, IntoElement, ParentElement, StrikethroughStyle, Styled, UnderlineStyle, Window, div, px};
+use gpui::TextBox;
+use gpui_base::input::{LineStyle, RichSpan};
 use gpui_component::input::{InlineToken, InlineTokenContext, InputContent, TextDecoration};
 
 use crate::{
@@ -120,15 +122,9 @@ pub fn style(a: u16) -> HighlightStyle {
         if has(md::STRIKE) {
             s.strikethrough = Some(StrikethroughStyle { thickness: px(1.), color: None });
         }
-        if has(md::SPOILER) {
-            s.background_color = Some(c(tok(idx::BACKGROUND_MOD_SUBTLE)));
-        }
     }
     if has(md::UNDERLINE) {
         s.underline = Some(UnderlineStyle { thickness: px(1.), color: None, wavy: false });
-    }
-    if has(md::CODE) {
-        s.background_color = Some(c(tok(idx::BACKGROUND_CODE)));
     }
     if has(md::LINK) {
         s.color = Some(c(tok(idx::TEXT_LINK)));
@@ -148,33 +144,154 @@ pub fn style(a: u16) -> HighlightStyle {
     s
 }
 
-pub fn decorations_for(text: &str) -> Vec<TextDecoration> {
-    crate::markdown::input::spans(text).into_iter().map(|(r, a)| TextDecoration::new(r, style(a))).collect()
+pub struct Rich {
+    pub decorations: Vec<TextDecoration>,
+    pub spans: Vec<RichSpan>,
+    pub lines: Vec<LineStyle>,
 }
 
-fn wanted_decorations(app: &PhoenixApp, cx: &App) -> Vec<TextDecoration> {
-    if !enabled(app) {
-        return Vec::new();
+const CODE_SCALE: f32 = 0.85;
+const BASE_SIZE: f32 = 16.;
+const SUBTEXT_SIZE: f32 = 13.;
+const SPOILER_PADDING_EM: f32 = 0.2;
+const QUOTE_BAR: f32 = 4.;
+const QUOTE_GAP: f32 = 12.;
+const QUOTE_END: f32 = 8.;
+
+fn merged(spans: &[(Range<usize>, u16)], flag: u16) -> Vec<Range<usize>> {
+    let mut out: Vec<Range<usize>> = Vec::new();
+    for (r, a) in spans {
+        if a & flag == 0 {
+            continue;
+        }
+        match out.last_mut() {
+            Some(last) if last.end == r.start => last.end = r.end,
+            _ => out.push(r.clone()),
+        }
     }
-    decorations_for(&app.composer.read(cx).value())
+    out
+}
+
+pub fn rich_for(text: &str) -> Rich {
+    use crate::markdown::input as md;
+    use crate::theme::{generated::global::RADIUS_XS, generated::idx, tok};
+    let spans = md::spans(text);
+    let blocks = md::blocks(text);
+    let mono = crate::theme::FONT_MONO();
+    let mut decorations: Vec<TextDecoration> = spans.iter().map(|(r, a)| TextDecoration::new(r.clone(), style(*a))).collect();
+    let mut rich: Vec<RichSpan> = Vec::new();
+    let small = |a: u16| a & (md::SUBTEXT | md::SUBTEXT_MARK) != 0;
+    for (r, a) in &spans {
+        let size = if small(*a) { SUBTEXT_SIZE } else { BASE_SIZE };
+        if a & md::CODE != 0 {
+            rich.push(RichSpan::new(r.clone()).font_family(mono).font_size(px(size * CODE_SCALE)));
+        } else if small(*a) {
+            rich.push(RichSpan::new(r.clone()).font_size(px(size)));
+        }
+    }
+    for r in merged(&spans, md::CODE) {
+        let b = TextBox::new(r.clone())
+            .background(c(tok(idx::BACKGROUND_CODE)))
+            .border(px(1.), c(tok(idx::BORDER_MUTED)))
+            .corner_radius(px(RADIUS_XS));
+        rich.push(RichSpan::new(r).text_box(b));
+    }
+    for (r, a) in spans.iter().filter(|(_, a)| a & md::SPOILER != 0 && a & md::SYNTAX == 0) {
+        let size = if small(*a) { SUBTEXT_SIZE } else { BASE_SIZE };
+        let b = TextBox::new(r.clone())
+            .background(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+            .corner_radius(px(RADIUS_XS))
+            .padding(px(size * SPOILER_PADDING_EM))
+            .clone_edges(true);
+        rich.push(RichSpan::new(r.clone()).text_box(b));
+    }
+    let mut lines: Vec<LineStyle> = Vec::new();
+    for q in &blocks.quotes {
+        lines.push(
+            LineStyle::new(q.clone())
+                .bar(c(tok(idx::SPINE_DEFAULT)), px(QUOTE_BAR), px(QUOTE_BAR))
+                .indent(px(QUOTE_BAR + QUOTE_GAP))
+                .end_inset(px(QUOTE_END)),
+        );
+        rich.push(RichSpan::new(q.start..q.start + 2).hidden());
+    }
+    for (l, _) in &blocks.code_lines {
+        lines.push(LineStyle::new(l.clone()).font_family(mono).font_size(px(BASE_SIZE * CODE_SCALE)));
+    }
+    for (range, lang) in &blocks.code {
+        let code = &text[range.clone()];
+        let toks = match lang {
+            Some(lang) => crate::richtext::highlight::highlight(code, Some(lang)),
+            None => vec![(0..code.len(), crate::richtext::highlight::Tok::Plain)],
+        };
+        for (r, t) in toks {
+            let color = match t {
+                crate::richtext::highlight::Tok::Plain => tok(idx::TEXT_DEFAULT),
+                crate::richtext::highlight::Tok::Comment => tok(idx::TEXT_MUTED),
+                t => t.color(),
+            };
+            let s = HighlightStyle { color: Some(c(color)), ..Default::default() };
+            decorations.push(TextDecoration::new(range.start + r.start..range.start + r.end, s));
+        }
+    }
+    decorations.sort_by_key(|d| (d.range.start, d.range.end));
+    rich.sort_by_key(|s| (s.range.start, s.range.end));
+    lines.sort_by_key(|l| l.range.start);
+    Rich { decorations, spans: rich, lines }
+}
+
+fn fingerprint() -> [u32; 4] {
+    use crate::theme::{generated::idx, tok};
+    let h = |i: usize| {
+        let x = c(tok(i));
+        x.h.to_bits() ^ x.s.to_bits().rotate_left(8) ^ x.l.to_bits().rotate_left(16) ^ x.a.to_bits().rotate_left(24)
+    };
+    [h(idx::TEXT_DEFAULT), h(idx::TEXTBOX_MARKDOWN_SYNTAX), h(idx::BACKGROUND_CODE), h(idx::SPINE_DEFAULT)]
+}
+
+thread_local! {
+    static WANTED: RefCell<Option<(String, [u32; 4], std::rc::Rc<Rich>)>> = const { RefCell::new(None) };
+}
+
+fn wanted_rich(app: &PhoenixApp, cx: &App) -> std::rc::Rc<Rich> {
+    if !enabled(app) {
+        return std::rc::Rc::new(Rich { decorations: Vec::new(), spans: Vec::new(), lines: Vec::new() });
+    }
+    let text = app.composer.read(cx).value().to_string();
+    let print = fingerprint();
+    WANTED.with_borrow_mut(|w| {
+        if let Some((t, p, r)) = w.as_ref()
+            && *t == text
+            && *p == print
+        {
+            return r.clone();
+        }
+        let r = std::rc::Rc::new(rich_for(&text));
+        *w = Some((text, print, r.clone()));
+        r
+    })
 }
 
 pub fn sync(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let want = wanted(app, cx);
-    let decorations = wanted_decorations(app, cx);
+    let rich = wanted_rich(app, cx);
     app.composer.update(cx, |s, cx| {
         let _ = s.set_tokens(want, cx);
-        s.set_decorations(decorations, cx);
+        s.set_decorations(rich.decorations.clone(), cx);
+        s.set_rich_decorations(rich.spans.clone(), rich.lines.clone(), cx);
     });
 }
 
 pub fn needs_sync(app: &PhoenixApp, cx: &App) -> bool {
     let want = wanted(app, cx);
+    let rich = wanted_rich(app, cx);
     let state = app.composer.read(cx);
     let have = state.tokens();
     have.len() != want.tokens().len()
         || have.iter().zip(want.tokens()).any(|(a, b)| a.range() != b.range() || a.token().label() != b.token().label())
-        || state.decorations() != wanted_decorations(app, cx).as_slice()
+        || state.decorations() != rich.decorations.as_slice()
+        || state.rich_decorations().spans() != rich.spans.as_slice()
+        || state.rich_decorations().lines() != rich.lines.as_slice()
 }
 
 pub fn render_token(ctx: &InlineTokenContext, _: &mut Window, _: &mut App) -> AnyElement {
@@ -294,6 +411,38 @@ mod tests {
         assert_eq!(labels, vec!["@Alice", "#général", ":pog:"]);
         assert_eq!(c.tokens()[0].range(), 3..7);
         assert_eq!(c.text().as_ref(), "yo <@1> in <#5> <:pog:12>");
+    }
+
+    #[test]
+    fn rich_styles_follow_the_client_css() {
+        let t = "a `co` ||sp||\n-# small\n> quote\n```rust\nlet x = 1; // c\n```";
+        let r = rich_for(t);
+        let code = t.find('`').unwrap();
+        let boxed = r.spans.iter().find(|s| s.text_box.is_some() && s.range.start == code).expect("code box");
+        assert_eq!(boxed.range, code..code + 4);
+        let b = boxed.text_box.as_ref().unwrap();
+        assert_eq!(b.border_width, px(1.));
+        assert_eq!(b.corner_radius, px(4.));
+        assert!(r.spans.iter().any(|s| s.range.start == code + 1 && s.font_size == Some(px(13.6)) && s.font_family.is_some()));
+        let sp = t.find("sp|").unwrap();
+        let spoiler = r.spans.iter().find(|s| s.range.start == sp && s.text_box.is_some()).expect("spoiler box");
+        let b = spoiler.text_box.as_ref().unwrap();
+        assert!((f32::from(b.padding) - 3.2).abs() < 1e-4 && b.clone_edges && b.border_width == px(0.));
+        let small = t.find("small").unwrap();
+        assert!(r.spans.iter().any(|s| s.range.start <= small && small < s.range.end && s.font_size == Some(px(13.))));
+        let q = t.find("> quote").unwrap();
+        assert!(r.spans.iter().any(|s| s.range == (q..q + 2) && s.hidden));
+        let quote = r.lines.iter().find(|l| l.range.start == q).expect("quote line");
+        assert_eq!(quote.indent, px(16.));
+        assert_eq!(quote.end_inset, px(8.));
+        assert_eq!(quote.bar.map(|b| b.width), Some(px(4.)));
+        let l = t.find("let").unwrap();
+        let line = r.lines.iter().find(|x| x.range.start == l).expect("code line");
+        assert_eq!(line.font_size, Some(px(13.6)));
+        assert!(line.font_family.is_some());
+        let comment = t.find("// c").unwrap();
+        assert!(r.decorations.iter().any(|d| d.range.contains(&comment) && d.style.color.is_some()));
+        assert!(r.decorations.iter().all(|d| d.style.background_color.is_none()));
     }
 
     #[test]

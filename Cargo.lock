@@ -2694,8 +2694,7 @@ dependencies = [
 [[package]]
 name = "gpui-base"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f4e5aff50636223b268a687ad5788ec54fa77c8e57ca9e53d158f19e0425d95"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=5e340a809106ad7c83afcf58292e4a01689a27b6#5e340a809106ad7c83afcf58292e4a01689a27b6"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -2810,7 +2809,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre"
 version = "0.3.12"
-source = "git+https://github.com/RoxasYTB/project-phoenix?rev=0c04d8e750279d9d656e40f15f54b4e474dc8a74#0c04d8e750279d9d656e40f15f54b4e474dc8a74"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=5e340a809106ad7c83afcf58292e4a01689a27b6#5e340a809106ad7c83afcf58292e4a01689a27b6"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -3251,7 +3250,7 @@ dependencies = [
 [[package]]
 name = "gpui-pre-wgpu"
 version = "0.3.12"
-source = "git+https://github.com/RoxasYTB/project-phoenix?rev=0c04d8e750279d9d656e40f15f54b4e474dc8a74#0c04d8e750279d9d656e40f15f54b4e474dc8a74"
+source = "git+https://github.com/RoxasYTB/project-phoenix?rev=5e340a809106ad7c83afcf58292e4a01689a27b6#5e340a809106ad7c83afcf58292e4a01689a27b6"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -6154,6 +6153,7 @@ dependencies = [
  "chrono",
  "flate2",
  "futures",
+ "gpui-base",
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",
