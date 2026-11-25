@@ -139,6 +139,10 @@ jobs:
       - name: Build aarch64-apple-darwin
         run: cargo build --release --locked -p phoenix-app --bin "${BIN}" --target aarch64-apple-darwin
       - name: Build x86_64-apple-darwin
+        env:
+          CFLAGS: "-arch x86_64"
+          CXXFLAGS: "-arch x86_64"
+          LDFLAGS: "-arch x86_64"
         run: cargo build --release --locked -p phoenix-app --bin "${BIN}" --target x86_64-apple-darwin
       - name: Combine universal binary with lipo
         run: |
