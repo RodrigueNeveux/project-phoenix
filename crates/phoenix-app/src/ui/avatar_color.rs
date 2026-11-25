@@ -23,6 +23,10 @@ pub fn get(avatar: &str) -> Option<u32> {
 }
 
 pub fn ensure(avatar: &str, cx: &mut App) {
+    ensure_with(avatar, cx, |_| {});
+}
+
+pub fn ensure_with(avatar: &str, cx: &mut App, done: impl FnOnce(&mut App) + 'static) {
     let Some(url) = sample_url(avatar) else { return };
     let fresh = CACHE.with(|c| {
         let mut c = c.borrow_mut();
@@ -47,6 +51,7 @@ pub fn ensure(avatar: &str, cx: &mut App) {
         cx.update(|cx| {
             CACHE.with(|c| c.borrow_mut().insert(url, Some(rgb)));
             cx.refresh_windows();
+            done(cx);
         });
     })
     .detach();

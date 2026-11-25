@@ -141,7 +141,7 @@ pub fn links(content: &str) -> Vec<InviteLink> {
     out
 }
 
-fn ensure(app: &PhoenixApp, link: &InviteLink, cx: &App) -> State {
+fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: &App) -> State {
     let current = CACHE.with(|c| c.borrow().get(link).cloned());
     match &current {
         Some(State::Failed(t)) if t.elapsed() > Duration::from_secs(30) => {}
@@ -155,6 +155,7 @@ fn ensure(app: &PhoenixApp, link: &InviteLink, cx: &App) -> State {
     };
     let fut = app.backend.nav(req);
     let key = link.clone();
+    let entity = entity.clone();
     cx.spawn(async move |cx| {
         let st = match fut.await {
             Ok(NavReply::Invite(p)) => State::Ready(Rc::new(*p)),
@@ -166,10 +167,19 @@ fn ensure(app: &PhoenixApp, link: &InviteLink, cx: &App) -> State {
             if let State::Ready(p) = &st
                 && let Some(ImageRef::Url(u)) = &p.guild_icon
             {
-                crate::ui::avatar_color::ensure(u, cx);
+                let e = entity.clone();
+                crate::ui::avatar_color::ensure_with(u, cx, move |cx| {
+                    e.update(cx, |a, cx| {
+                        a.message_list.remeasure();
+                        cx.notify();
+                    })
+                });
             }
             CACHE.with(|c| c.borrow_mut().insert(key, st));
-            cx.refresh_windows();
+            entity.update(cx, |a, cx| {
+                a.message_list.remeasure();
+                cx.notify();
+            });
         });
     })
     .detach();
@@ -191,7 +201,7 @@ pub fn render(
         .enumerate()
         .map(|(i, l)| {
             let own = author == app.me.id;
-            let el = match ensure(app, &l, cx) {
+            let el = match ensure(app, entity, &l, cx) {
                 State::Resolving | State::Failed(_) => resolving(),
                 State::Invalid => invalid(own),
                 State::Ready(p) => card(app, entity, &p, own),
@@ -433,7 +443,7 @@ fn guild_icon(p: &InvitePreview, size: f32, radius: f32, acronym_px: f32) -> Any
             .size(z(size))
             .flex_none()
             .rounded(z(radius))
-            .bg(tk(idx::BACKGROUND_BASE_LOWER))
+            .bg(tk(idx::BACKGROUND_BASE_LOWEST))
             .flex()
             .items_center()
             .justify_center()
@@ -734,7 +744,7 @@ fn profile_card(
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(guild_icon(p, 64., 19., 22.)),
+                    .child(guild_icon(p, 64., 19., 14.)),
             ),
         )
         .child(
