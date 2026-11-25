@@ -626,7 +626,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
 
 pub fn server_tag(tag: &(SharedString, Option<SharedString>), size: f32) -> AnyElement {
     div()
-        .flex_shrink()
+        .flex_shrink(1.)
         .min_w_0()
         .overflow_hidden()
         .ml(z(4.))
