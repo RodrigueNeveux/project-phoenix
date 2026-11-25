@@ -59,6 +59,12 @@ pub struct ApplicationFrecency {
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
+pub struct ApplicationCommandFrecency {
+    #[prost(map = "string, message", tag = "1")]
+    pub application_commands: HashMap<String, FrecencyItem>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
 pub struct FavoriteSoundboardSounds {
     #[prost(fixed64, repeated, tag = "1")]
     pub sound_ids: Vec<u64>,
@@ -80,6 +86,8 @@ pub struct FrecencyUserSettings {
     pub sticker_frecency: Option<StickerFrecency>,
     #[prost(message, optional, tag = "6")]
     pub emoji_frecency: Option<EmojiFrecency>,
+    #[prost(message, optional, tag = "7")]
+    pub application_command_frecency: Option<ApplicationCommandFrecency>,
     #[prost(message, optional, tag = "8")]
     pub favorite_soundboard_sounds: Option<FavoriteSoundboardSounds>,
     #[prost(message, optional, tag = "9")]
@@ -163,6 +171,7 @@ pub struct FrecencyOrder {
     pub emojis: Vec<String>,
     pub stickers: Vec<u64>,
     pub reactions: Vec<String>,
+    pub commands: Vec<String>,
 }
 
 fn varint(b: &[u8], i: &mut usize) -> Option<u64> {
@@ -224,6 +233,7 @@ pub fn wire_order(bytes: &[u8]) -> FrecencyOrder {
         emojis: map_keys(bytes, 6).into_iter().filter_map(|k| std::str::from_utf8(k).ok().map(str::to_owned)).collect(),
         stickers: map_keys(bytes, 4).into_iter().filter_map(|k| k.try_into().ok().map(u64::from_le_bytes)).collect(),
         reactions: map_keys(bytes, 13).into_iter().filter_map(|k| std::str::from_utf8(k).ok().map(str::to_owned)).collect(),
+        commands: map_keys(bytes, 7).into_iter().filter_map(|k| std::str::from_utf8(k).ok().map(str::to_owned)).collect(),
     }
 }
 
@@ -296,6 +306,15 @@ impl FrecencyUserSettings {
             keys.extend(extra.into_iter().cloned());
         }
         rank_like_client(&keys, |k| map.and_then(|m| m.get(k)), now_ms)
+    }
+
+    pub fn commands_ranked_at(&self, order: &FrecencyOrder, now_ms: i64) -> Vec<String> {
+        let Some(map) = self.application_command_frecency.as_ref().map(|a| &a.application_commands) else { return Vec::new() };
+        let mut keys = order.commands.clone();
+        let mut extra: Vec<&String> = map.keys().filter(|k| !keys.contains(k)).collect();
+        extra.sort();
+        keys.extend(extra.into_iter().cloned());
+        rank_like_client(&keys, |k| map.get(k), now_ms)
     }
 
     pub fn favorite_emoji_keys(&self) -> Vec<String> {

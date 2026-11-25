@@ -29,9 +29,10 @@ fn ids(v: &[Id]) -> Vec<phoenix_api::models::Snowflake> {
 
 pub fn merge_commands(indexes: &[CommandIndex]) -> Vec<SlashCommand> {
     let mut out: Vec<SlashCommand> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for idx in indexes {
-        for c in idx.application_commands.iter().filter(|c| c.kind == 1) {
-            if out.iter().any(|o| o.raw.get("id") == Some(&json!(c.id))) {
+        for c in idx.application_commands.iter().filter(|c| matches!(c.kind, 1..=3)) {
+            if !seen.insert(c.id) {
                 continue;
             }
             let app = idx.applications.iter().find(|a| a.id == c.application_id);
@@ -39,17 +40,32 @@ pub fn merge_commands(indexes: &[CommandIndex]) -> Vec<SlashCommand> {
             let app_icon = app.and_then(|a| {
                 a.icon.as_ref().map(|i| format!("https://cdn.discordapp.com/app-icons/{}/{i}.png?size=64&keep_aspect_ratio=false", a.id))
             });
-            out.push(SlashCommand {
-                name: c.name.clone(),
-                description: c.description.clone(),
-                app_name,
-                app_icon,
-                raw: serde_json::to_value(c).unwrap_or(Value::Null),
-            });
+            let raw = serde_json::to_value(c).unwrap_or(Value::Null);
+            let leaves = if c.kind == 1 { slash::leaves(&raw) } else { vec![(Vec::new(), json!({}))] };
+            for (path, leaf) in leaves {
+                out.push(SlashCommand {
+                    name: slash::display_name(&raw, &path),
+                    description: if path.is_empty() { c.description.clone() } else { slash::description(&leaf).to_owned() },
+                    app_name: app_name.clone(),
+                    app_icon: app_icon.clone(),
+                    raw: raw.clone(),
+                    id: c.id.to_string(),
+                    app_id: Some(id(c.application_id)),
+                    bot_id: app.and_then(|a| a.bot_user()).map(id),
+                    kind: c.kind,
+                    path,
+                    leaf,
+                    guild_scoped: c.guild_id.is_some(),
+                });
+            }
         }
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+fn parse_command(command: &Value) -> Result<ApplicationCommand, BackendError> {
+    serde_json::from_value(command.clone()).map_err(|x| BackendError(x.to_string()))
 }
 
 fn emit_users(emit: &EventSink, msgs: &[&phoenix_api::models::Message]) {
@@ -86,10 +102,19 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
             let list: Vec<_> = [a, b].into_iter().filter_map(Result::ok).collect();
             ParityReply::Commands(merge_commands(&list))
         }
-        ParityRequest::RunCommand { guild, channel, command, args } => {
-            let c: ApplicationCommand = serde_json::from_value(command.clone()).map_err(|x| BackendError(x.to_string()))?;
-            let options = slash::build_options(&command, &args).map_err(BackendError)?;
-            rest.create_interaction(cmd::slash_body(&c, target(guild, channel), &session, options)).await.map_err(e)?;
+        ParityRequest::RunCommand { guild, channel, command, options, nonce } => {
+            let c = parse_command(&command)?;
+            rest.create_interaction(cmd::slash_body(&c, target(guild, channel), &session, options, nonce)).await.map_err(e)?;
+            ParityReply::Done
+        }
+        ParityRequest::Autocomplete { guild, channel, command, options, nonce } => {
+            let c = parse_command(&command)?;
+            rest.create_interaction(cmd::autocomplete_body(&c, target(guild, channel), &session, options, nonce)).await.map_err(e)?;
+            ParityReply::Done
+        }
+        ParityRequest::ContextCommand { guild, channel, command, target: t, nonce } => {
+            let c = parse_command(&command)?;
+            rest.create_interaction(cmd::context_body(&c, target(guild, channel), &session, sf(t), nonce)).await.map_err(e)?;
             ParityReply::Done
         }
         ParityRequest::Component { guild, channel, message, app, flags, custom_id, kind, values } => {

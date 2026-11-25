@@ -401,9 +401,54 @@ pub struct Message {
     pub poll: Option<serde_json::Value>,
     #[serde(default)]
     pub message_snapshots: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interaction_metadata: Option<InteractionMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interaction: Option<MessageInteraction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct InteractionMetadata {
+    #[serde(default)]
+    pub id: Snowflake,
+    #[serde(rename = "type", default)]
+    pub kind: u8,
+    #[serde(default)]
+    pub user: Option<User>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub command_type: Option<u8>,
+    #[serde(default)]
+    pub target_user: Option<User>,
+    #[serde(default)]
+    pub target_message_id: Option<MessageId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct MessageInteraction {
+    #[serde(default)]
+    pub id: Snowflake,
+    #[serde(rename = "type", default)]
+    pub kind: u8,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub user: Option<User>,
 }
 
 impl Message {
+    pub fn command_use(&self) -> Option<(Snowflake, &User, String, u8, Option<&User>)> {
+        if let Some(m) = &self.interaction_metadata
+            && let Some(u) = &m.user
+        {
+            let name = m.name.clone().or_else(|| self.interaction.as_ref().map(|i| i.name.clone())).unwrap_or_default();
+            return Some((m.id, u, name, m.command_type.unwrap_or(1), m.target_user.as_ref()));
+        }
+        let i = self.interaction.as_ref()?;
+        Some((i.id, i.user.as_ref()?, i.name.clone(), 1, None))
+    }
+
     pub fn is_reply(&self) -> bool {
         self.kind == MessageType::Reply && self.message_reference.is_some()
     }

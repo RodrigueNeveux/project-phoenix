@@ -21,6 +21,16 @@ pub struct CommandOption {
     pub choices: Vec<Value>,
     #[serde(default, deserialize_with = "null_default")]
     pub options: Vec<CommandOption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_value: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_value: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "null_default")]
+    pub channel_types: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -36,6 +46,8 @@ pub struct ApplicationCommand {
     pub description: String,
     #[serde(default, deserialize_with = "null_default")]
     pub options: Vec<CommandOption>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_id: Option<Snowflake>,
 }
 
 fn one() -> u8 {
@@ -48,6 +60,16 @@ pub struct CommandApplication {
     pub name: String,
     #[serde(default)]
     pub icon: Option<String>,
+    #[serde(default)]
+    pub bot_id: Option<Snowflake>,
+    #[serde(default)]
+    pub bot: Option<Value>,
+}
+
+impl CommandApplication {
+    pub fn bot_user(&self) -> Option<Snowflake> {
+        self.bot_id.or_else(|| self.bot.as_ref()?.get("id")?.as_str()?.parse::<u64>().ok().map(Snowflake))
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -92,17 +114,21 @@ pub struct InteractionTarget {
     pub channel: ChannelId,
 }
 
-fn nonce() -> String {
-    Snowflake::now().to_string()
+fn nonce() -> u64 {
+    Snowflake::now().0
 }
 
 fn base(kind: u8, app: Snowflake, t: InteractionTarget, session: &str, data: Value) -> Value {
+    base_with(kind, app, t, session, data, nonce())
+}
+
+fn base_with(kind: u8, app: Snowflake, t: InteractionTarget, session: &str, data: Value, nonce: u64) -> Value {
     let mut v = json!({
         "type": kind,
         "application_id": app,
         "channel_id": t.channel,
         "session_id": session,
-        "nonce": nonce(),
+        "nonce": nonce.to_string(),
         "data": data,
     });
     if let Some(g) = t.guild {
@@ -111,21 +137,29 @@ fn base(kind: u8, app: Snowflake, t: InteractionTarget, session: &str, data: Val
     v
 }
 
-pub fn slash_body(cmd: &ApplicationCommand, t: InteractionTarget, session: &str, options: Value) -> Value {
-    base(
-        2,
-        cmd.application_id,
-        t,
-        session,
-        json!({
-            "version": cmd.version.unwrap_or(cmd.id),
-            "id": cmd.id,
-            "name": cmd.name,
-            "type": cmd.kind,
-            "options": options,
-            "attachments": [],
-        }),
-    )
+fn command_data(cmd: &ApplicationCommand, options: Value) -> Value {
+    json!({
+        "version": cmd.version.unwrap_or(cmd.id),
+        "id": cmd.id,
+        "name": cmd.name,
+        "type": cmd.kind,
+        "options": options,
+        "attachments": [],
+    })
+}
+
+pub fn slash_body(cmd: &ApplicationCommand, t: InteractionTarget, session: &str, options: Value, nonce: u64) -> Value {
+    base_with(2, cmd.application_id, t, session, command_data(cmd, options), nonce)
+}
+
+pub fn autocomplete_body(cmd: &ApplicationCommand, t: InteractionTarget, session: &str, options: Value, nonce: u64) -> Value {
+    base_with(4, cmd.application_id, t, session, command_data(cmd, options), nonce)
+}
+
+pub fn context_body(cmd: &ApplicationCommand, t: InteractionTarget, session: &str, target: Snowflake, nonce: u64) -> Value {
+    let mut data = command_data(cmd, json!([]));
+    data["target_id"] = json!(target);
+    base_with(2, cmd.application_id, t, session, data, nonce)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -188,8 +222,12 @@ mod tests {
         assert_eq!(m.len(), 1);
         assert_eq!(m[0].options[0].kind, 3);
         let t = InteractionTarget { guild: Some(Snowflake(3)), channel: Snowflake(4) };
-        let b = slash_body(m[0], t, "sess", json!([{"type":3,"name":"text","value":"hi"}]));
+        let b = slash_body(m[0], t, "sess", json!([{"type":3,"name":"text","value":"hi"}]), 77);
         assert_eq!(b["type"], 2);
+        assert_eq!(b["nonce"], "77");
+        assert_eq!(autocomplete_body(m[0], t, "s", json!([]), 1)["type"], 4);
+        let ctx = context_body(m[0], t, "s", Snowflake(12), 2);
+        assert_eq!(ctx["data"]["target_id"], "12");
         assert_eq!(b["guild_id"], "3");
         assert_eq!(b["data"]["version"], "6");
         let c = component_body(Snowflake(9), InteractionTarget { guild: None, channel: Snowflake(4) }, "s", Snowflake(8), 0, "btn", 2, None);

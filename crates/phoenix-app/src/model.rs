@@ -287,7 +287,19 @@ pub struct Message {
     pub application_id: Option<Id>,
     pub has_mentions: bool,
     pub tts: bool,
+    pub interaction: Option<CommandUse>,
 }
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct CommandUse {
+    pub id: Id,
+    pub user: Id,
+    pub name: SharedString,
+    pub command_type: u8,
+    pub target: Option<Id>,
+}
+
+pub const FLAG_LOADING: u64 = 1 << 7;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SendState {

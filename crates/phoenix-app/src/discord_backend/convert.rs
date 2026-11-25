@@ -319,6 +319,13 @@ pub fn message(m: &api::Message) -> model::Message {
         application_id: m.application_id.map(id),
         has_mentions: !m.mentions.is_empty() || !m.mention_roles.is_empty() || m.mention_everyone,
         tts: m.tts,
+        interaction: m.command_use().map(|(iid, u, name, command_type, target)| model::CommandUse {
+            id: id(iid),
+            user: id(u.id),
+            name: name.into(),
+            command_type,
+            target: target.map(|t| id(t.id)),
+        }),
     }
 }
 
@@ -365,6 +372,9 @@ pub fn message_users(m: &api::Message, out: &mut Vec<model::User>) {
         out.push(user(&m.author));
     }
     out.extend(m.mentions.iter().map(|x| user(&x.user)));
+    if let Some((_, u, _, _, t)) = m.command_use() {
+        out.extend([u].into_iter().chain(t).filter(|u| !u.username.is_empty()).map(user));
+    }
     if let Some(r) = &m.referenced_message {
         message_users(r, out);
     }

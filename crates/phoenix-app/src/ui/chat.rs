@@ -35,6 +35,7 @@ pub mod state;
 pub mod thread_banner;
 pub mod voice_message;
 pub mod blocked;
+pub mod command_msg;
 pub mod slash;
 pub mod spoiler;
 pub mod system;
@@ -1018,6 +1019,9 @@ pub(crate) fn message(
     if let Some(t) = &msg.thread {
         content = content.child(message_ext::thread_chip(app, entity, t, false));
     }
+    if let Some(st) = command_msg::status(app, msg) {
+        content = content.child(command_msg::status_line(st)).children(command_msg::dismiss_button(entity, msg));
+    }
     if msg.flags & crate::model::FLAG_EPHEMERAL != 0 {
         content = content.child(crate::ui::chat::pending::ephemeral_footer(entity, msg));
     }
@@ -1025,7 +1029,7 @@ pub(crate) fn message(
         Some(b) => b,
         None => content,
     };
-    let content = if msg.send_state == crate::model::SendState::Sending { content.opacity(0.5) } else { content };
+    let content = if msg.send_state == crate::model::SendState::Sending && msg.interaction.is_none() { content.opacity(0.5) } else { content };
     let content = match attach::upload_progress_card(app, entity, msg) {
         Some(card) => div().flex().flex_col().min_w_0().child(content).child(card),
         None => content,
@@ -1172,6 +1176,8 @@ pub(crate) fn message(
                     }),
             )
     });
+
+    let reply = reply.or_else(|| msg.interaction.as_ref().filter(|_| msg.reply_to.is_none()).map(|cu| command_msg::header(app, entity, msg, cu, compact, cx)));
 
     let role_dot = app.author_role_dot(msg.author);
     let author_name = crate::fonts::styled_name(div(), author, false)

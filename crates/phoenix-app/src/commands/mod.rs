@@ -1,3 +1,4 @@
+pub mod builtin;
 pub mod exec;
 pub mod guide;
 pub mod slash;
@@ -31,13 +32,30 @@ pub fn session_id() -> String {
     session_slot().lock().clone()
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct SlashCommand {
     pub name: String,
     pub description: String,
     pub app_name: String,
     pub app_icon: Option<String>,
     pub raw: Value,
+    pub id: String,
+    pub app_id: Option<Id>,
+    pub bot_id: Option<Id>,
+    pub kind: u8,
+    pub path: Vec<(u64, String)>,
+    pub leaf: Value,
+    pub guild_scoped: bool,
+}
+
+impl SlashCommand {
+    pub fn options(&self) -> &[Value] {
+        slash::options(&self.leaf)
+    }
+
+    pub fn builtin(&self) -> bool {
+        self.id.starts_with('-')
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -116,7 +134,9 @@ impl ForumSettings {
 #[derive(Clone, Debug)]
 pub enum ParityRequest {
     Commands { guild: Option<Id>, channel: Id },
-    RunCommand { guild: Option<Id>, channel: Id, command: Value, args: String },
+    RunCommand { guild: Option<Id>, channel: Id, command: Value, options: Value, nonce: u64 },
+    Autocomplete { guild: Option<Id>, channel: Id, command: Value, options: Value, nonce: u64 },
+    ContextCommand { guild: Option<Id>, channel: Id, command: Value, target: Id, nonce: u64 },
     Component {
         guild: Option<Id>,
         channel: Id,

@@ -78,6 +78,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("add-to-dm", &["GroupPlusIcon", "UserPlusIcon"]),
     ("user-profile", &["UserCircleStatusIcon", "UserCircleIcon"]),
     ("apps", &["AppsIcon"]),
+    ("slash-box", &["SlashBoxIcon"]),
     ("chat/edit", &["PencilIcon"]),
     ("chat/trash", &["TrashIcon"]),
     ("chat/more", &["MoreHorizontalIcon"]),

@@ -569,6 +569,7 @@ mod tests {
             app_name: "HelperBot".into(),
             app_icon: None,
             raw: serde_json::json!({"application_id": "20"}),
+            ..Default::default()
         }];
         let r = recents(&[20, 10, 99, 20], &cols, &cmds);
         let ids: Vec<u64> = r.iter().map(|x| x.id).collect();
@@ -584,6 +585,7 @@ mod tests {
             app_name: app.into(),
             app_icon: None,
             raw: Value::Null,
+            ..Default::default()
         };
         let cmds = vec![
             cmd("superplay", "desc", "Music"),

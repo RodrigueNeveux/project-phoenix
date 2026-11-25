@@ -14,7 +14,10 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum ParityEvent {
     Modal(ModalSpec),
-    InteractionFailed,
+    InteractionCreate { nonce: u64, id: Id },
+    InteractionSuccess { nonce: u64, id: Id },
+    InteractionFailed { nonce: Option<u64> },
+    Autocomplete { nonce: u64, choices: Vec<(String, Value)> },
     PollVote { channel: Id, message: Id, user: Id, answer: u32, add: bool },
     Call { channel: Id, ringing: Vec<Id>, voice: Option<Vec<Id>> },
 }
@@ -102,7 +105,21 @@ pub fn from_gateway(ev: &GatewayEvent) -> Option<ParityEvent> {
     let GatewayEvent::Unknown { name, data } = ev else { return None };
     match name.as_str() {
         "INTERACTION_MODAL_CREATE" => ModalSpec::from_value(data).map(ParityEvent::Modal),
-        "INTERACTION_FAILURE" => Some(ParityEvent::InteractionFailed),
+        "INTERACTION_CREATE" => Some(ParityEvent::InteractionCreate { nonce: sf(data.get("nonce"))?.0, id: sf(data.get("id"))? }),
+        "INTERACTION_SUCCESS" => Some(ParityEvent::InteractionSuccess { nonce: sf(data.get("nonce"))?.0, id: sf(data.get("id"))? }),
+        "INTERACTION_FAILURE" => Some(ParityEvent::InteractionFailed { nonce: sf(data.get("nonce")).map(|n| n.0) }),
+        "APPLICATION_COMMAND_AUTOCOMPLETE_RESPONSE" => Some(ParityEvent::Autocomplete {
+            nonce: sf(data.get("nonce"))?.0,
+            choices: data
+                .get("choices")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .map(|c| (crate::commands::slash::choice_name(c).to_owned(), c.get("value").cloned().unwrap_or(Value::Null)))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }),
         "CALL_CREATE" | "CALL_UPDATE" | "CALL_DELETE" => Some(ParityEvent::Call {
             channel: sf(data.get("channel_id"))?,
             ringing: if name == "CALL_DELETE" {
@@ -318,10 +335,30 @@ pub fn on_event(app: &mut App, ev: ParityEvent, cx: &mut Context<App>) {
             app.parity.pending.clear();
             app.parity.pending_modal = Some(spec);
         }
-        ParityEvent::InteractionFailed => {
-            app.parity.pending.clear();
-            app.parity_toast(crate::t!("interaction.no_response"), cx);
+        ParityEvent::InteractionCreate { nonce, id } => {
+            if let Some(p) = crate::ui::chat::command_msg::set_interaction(nonce, id) {
+                app.refresh_message(p.channel, Id(nonce));
+            }
         }
+        ParityEvent::InteractionSuccess { nonce, id: _ } => {
+            app.parity.pending.clear();
+            if let Some(p) = crate::ui::chat::command_msg::take(nonce) {
+                app.discard_local(p.channel, Id(nonce), cx);
+            }
+        }
+        ParityEvent::InteractionFailed { nonce } => {
+            app.parity.pending.clear();
+            let cmd = nonce.and_then(|n| {
+                let app_name = crate::ui::chat::command_msg::get(n)?.app_name;
+                crate::ui::chat::command_msg::set_phase(n, crate::ui::chat::command_msg::Phase::Failed(Some(crate::t!("slash.late", app = app_name).to_string())))
+            });
+            if let Some(p) = cmd {
+                app.refresh_message(p.channel, Id(nonce.unwrap_or(0)));
+            } else if !nonce.is_some_and(|n| crate::ui::chat::slash::autocomplete_failed(n, cx)) {
+                app.parity_toast(crate::t!("interaction.no_response"), cx);
+            }
+        }
+        ParityEvent::Autocomplete { nonce, choices } => crate::ui::chat::slash::autocomplete_result(nonce, choices, cx),
         ParityEvent::PollVote { channel, message, user, answer, add } => {
             let mine = user == app.me.id;
             if !mine && store::update_poll(message, |p| p.apply_vote(answer, add, false)) {
