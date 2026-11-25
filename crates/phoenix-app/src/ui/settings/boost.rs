@@ -203,7 +203,7 @@ fn guild_cards(app: &PhoenixApp) -> Div {
                                                 .flex()
                                                 .items_center()
                                                 .gap(z(2.))
-                                                .child(icon("boost", 14., idx::GUILD_BOOSTING_PINK))
+                                                .child(icon("chat/boost", 14., idx::GUILD_BOOSTING_PINK_REFRESH))
                                                 .child(text(12., 16., FontWeight::SEMIBOLD, idx::TEXT_SUBTLE, crate::t!("sp.bo.count", n = g.boosts))),
                                         )
                                         .when(g.boost_tier > 0, |d| {
@@ -216,7 +216,7 @@ fn guild_cards(app: &PhoenixApp) -> Div {
                 .child(
                     controls::button_sm(eid(format!("boost-{}", g.id.0)), SharedString::default(), BtnKind::Secondary)
                         .gap(z(4.))
-                        .child(icon("boost", 16., idx::CONTROL_SECONDARY_TEXT_DEFAULT))
+                        .child(icon("chat/boost", 16., idx::CONTROL_SECONDARY_TEXT_DEFAULT))
                         .child(tr("sp.bo.boost_btn")),
                 ),
         );
