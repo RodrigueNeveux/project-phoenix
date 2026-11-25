@@ -31,8 +31,8 @@ Posts go through `crates/phoenix-app/examples/community_post.rs`, which uses the
 ```sh
 cargo build -p phoenix-app --example community_post
 EX=target/debug/examples/community_post
-$EX check annonces annonces.txt docs/screenshots/2026-11-25/chat-general.png
-$EX send annonces annonces.txt docs/screenshots/2026-11-25/chat-general.png
+$EX check annonces annonces.txt docs/screenshots/2026-11-25b/chat-text-channel.png
+$EX send annonces annonces.txt docs/screenshots/2026-11-25b/chat-text-channel.png
 $EX edit avances 1574898068434714644 avances.txt
 $EX pin avances 1574898068434714644
 ```
