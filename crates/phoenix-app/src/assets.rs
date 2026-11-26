@@ -338,6 +338,9 @@ impl AssetSource for Assets {
         if let Some(p) = path.strip_prefix("local/") {
             return Ok(std::fs::read(p).ok().map(Cow::Owned));
         }
+        if let Some(svg) = crate::ui::squircle::svg(path) {
+            return Ok(Some(Cow::Owned(svg.into_bytes())));
+        }
         if let Some(svg) = crate::ui::status_svg::svg(path) {
             return Ok(Some(Cow::Owned(svg.into_bytes())));
         }

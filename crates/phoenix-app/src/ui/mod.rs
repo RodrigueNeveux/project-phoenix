@@ -53,6 +53,7 @@ pub mod profile;
 pub mod tag_popout;
 pub mod dm_profile_panel;
 pub mod avatar_color;
+pub mod squircle;
 pub mod profile_bg;
 pub mod profile_note;
 pub mod profile_toolbar;

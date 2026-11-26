@@ -485,12 +485,18 @@ fn card(g: &DiscoverableGuild, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .top(z(BANNER_H - 32.))
         .size(z(56.))
         .p(z(4.))
-        .rounded(z(16.))
-        .bg(tk(idx::BACKGROUND_BASE_LOW))
-        .group_hover(group.clone(), |s| s.bg(tk(idx::BACKGROUND_SURFACE_HIGH)))
+        .child(crate::ui::squircle::shape().absolute().top_0().left_0().size_full().text_color(tk(idx::BACKGROUND_BASE_LOW)).group_hover(group.clone(), |s| s.text_color(tk(idx::BACKGROUND_SURFACE_HIGH))))
         .child(match g.icon.clone() {
-            Some(u) => img(u).size_full().rounded(z(12.)).into_any_element(),
-            None => div().size_full().rounded(z(12.)).bg(tk(idx::BACKGROUND_SURFACE_HIGH)).flex().items_center().justify_center().child(text(16., 20., FontWeight::SEMIBOLD, tk(idx::TEXT_DEFAULT), crate::model::acronym(&g.name))).into_any_element(),
+            Some(u) => crate::ui::squircle::image(u, 48.).size_full().into_any_element(),
+            None => div()
+                .relative()
+                .size_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(crate::ui::squircle::shape().absolute().top_0().left_0().size_full().text_color(tk(idx::BACKGROUND_SURFACE_HIGH)))
+                .child(text(16., 20., FontWeight::SEMIBOLD, tk(idx::TEXT_DEFAULT), crate::model::acronym(&g.name)))
+                .into_any_element(),
         });
     let dot = |col: Hsla| div().size(z(8.)).rounded_full().flex_none().bg(col);
     let count = |col: Hsla, label: SharedString| div().min_w_0().flex().items_center().gap(z(4.)).child(dot(col)).child(text(12., 16., FontWeight::NORMAL, tk(idx::TEXT_DEFAULT), label).overflow_hidden().text_ellipsis().whitespace_nowrap());
@@ -572,13 +578,14 @@ pub fn static_card(card: &StaticCard, w: f32, h: f32) -> gpui::Div {
     };
     let acronym = crate::model::acronym(&g.name);
     let inner = match g.icon.clone() {
-        Some(u) => img(u).size_full().into_any_element(),
+        Some(u) => crate::ui::squircle::image(u, 40.).size_full().into_any_element(),
         None => div()
+            .relative()
             .size_full()
-            .bg(tk(idx::BRAND_500))
             .flex()
             .items_center()
             .justify_center()
+            .child(crate::ui::squircle::shape().absolute().top_0().left_0().size_full().text_color(tk(idx::BRAND_500)))
             .child(text(acronym_size(&acronym), 18., FontWeight::NORMAL, gpui::white(), acronym))
             .into_any_element(),
     };
@@ -588,9 +595,8 @@ pub fn static_card(card: &StaticCard, w: f32, h: f32) -> gpui::Div {
         .bottom(z(-21.))
         .size(z(48.))
         .p(z(4.))
-        .rounded(z(16.))
-        .bg(tk(if light { idx::BACKGROUND_SURFACE_HIGH } else { idx::BACKGROUND_MOD_NORMAL }))
-        .child(div().size_full().rounded(z(13.)).overflow_hidden().child(inner));
+        .child(crate::ui::squircle::shape().absolute().top_0().left_0().size_full().text_color(tk(if light { idx::BACKGROUND_SURFACE_HIGH } else { idx::BACKGROUND_MOD_NORMAL })))
+        .child(div().relative().size_full().child(inner));
     let count = |dot: Hsla, label: SharedString, last: bool| div().flex().items_center().when(!last, |d| d.mr(z(16.))).child(div().size(z(8.)).mr(z(4.)).flex_none().rounded_full().bg(dot)).child(text(12., 16., FontWeight::NORMAL, tk(idx::TEXT_DEFAULT), label));
     let mut counts = div().flex().flex_none();
     if let Some(n) = card.online {

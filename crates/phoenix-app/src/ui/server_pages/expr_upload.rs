@@ -87,6 +87,7 @@ pub struct Picked {
     pub bytes: Vec<u8>,
     pub original_md5: String,
     pub preview: Option<Arc<gpui::Image>>,
+    pub lottie: Option<Arc<Vec<u8>>>,
     pub pcm: Option<Arc<Pcm>>,
     pub duration_ms: f64,
     pub peaks: Vec<f32>,
@@ -380,7 +381,8 @@ fn load_sticker(path: &Path) {
             }
             .map(|f| Arc::new(gpui::Image::from_bytes(f, out.clone())));
             u.error = None;
-            u.file = Some(Picked { name: name.clone(), mime: out_mime.to_owned(), original_md5: md5_hex(&bytes), bytes: out, preview, pcm: None, duration_ms: 0., peaks: Vec::new() });
+            let lottie = (out_mime == "application/json").then(|| Arc::new(out.clone()));
+            u.file = Some(Picked { name: name.clone(), mime: out_mime.to_owned(), original_md5: md5_hex(&bytes), bytes: out, preview, lottie, pcm: None, duration_ms: 0., peaks: Vec::new() });
         }
     });
 }
@@ -407,7 +409,7 @@ fn load_sound(path: &Path) {
         u.max_volume = mult;
         u.volume = u.volume.min(mult);
         u.trim = Trim { start_ms: 0., end_ms: total, playhead_ms: 0. };
-        u.file = Some(Picked { name, mime: mime.to_owned(), original_md5: md5_hex(&bytes), bytes, preview: None, pcm: Some(Arc::new(pcm)), duration_ms: total, peaks });
+        u.file = Some(Picked { name, mime: mime.to_owned(), original_md5: md5_hex(&bytes), bytes, preview: None, lottie: None, pcm: Some(Arc::new(pcm)), duration_ms: total, peaks });
     });
 }
 
@@ -561,9 +563,14 @@ fn close_action(cx: &mut Context<PhoenixApp>) -> crate::ui::modal::Action {
 
 fn sticker_preview(file: Option<&Picked>) -> AnyElement {
     let half = |dark: bool| {
-        let inner: AnyElement = match file.and_then(|f| f.preview.clone()) {
-            Some(img) => gpui::img(img).size(z(160.)).object_fit(gpui::ObjectFit::Contain).into_any_element(),
-            None => icon("image-plus", 32., idx::PRIMARY_400).into_any_element(),
+        let lottie = file.and_then(|f| f.lottie.clone().map(|b| (SharedString::from(format!("upload-{}", f.original_md5)), b)));
+        let inner: AnyElement = match (file.and_then(|f| f.preview.clone()), lottie) {
+            (Some(img), _) => gpui::img(img).size(z(160.)).object_fit(gpui::ObjectFit::Contain).into_any_element(),
+            (None, Some((key, bytes))) => {
+                let still = !crate::media::sticker_plays(&key);
+                crate::media::sticker_hover(key.clone(), crate::media::lottie::image_bytes(key, bytes, 320, still).size(z(160.)).object_fit(gpui::ObjectFit::Contain)).into_any_element()
+            }
+            (None, None) => icon("image-plus", 32., idx::PRIMARY_400).into_any_element(),
         };
         div().flex_1().h_full().relative().flex().items_center().justify_center().bg(t(if dark { idx::PRIMARY_600 } else { idx::WHITE })).child(inner)
     };
@@ -966,7 +973,7 @@ mod tests {
 
     #[test]
     fn writes_go_to_the_guard() {
-        let file = Picked { name: "cat.png".into(), mime: "image/png".into(), bytes: vec![1, 2], original_md5: md5_hex(b"o"), preview: None, pcm: None, duration_ms: 0., peaks: Vec::new() };
+        let file = Picked { name: "cat.png".into(), mime: "image/png".into(), bytes: vec![1, 2], original_md5: md5_hex(b"o"), preview: None, lottie: None, pcm: None, duration_ms: 0., peaks: Vec::new() };
         let w = sticker_write(Id(5), "cat hug", &Tag::Custom { id: 42, name: "cat".into(), animated: false }, "", &file);
         assert_eq!((w.method.as_str(), w.path.as_str()), ("POST", "/guilds/5/stickers"));
         let form = w.form.unwrap();

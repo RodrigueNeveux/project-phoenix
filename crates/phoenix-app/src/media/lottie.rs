@@ -705,6 +705,45 @@ fn load(url: &SharedString, px: u32, still: bool, cx: &mut App) -> Option<Result
     None
 }
 
+fn load_bytes(name: &SharedString, bytes: &Arc<Vec<u8>>, px: u32, still: bool, cx: &mut App) -> Option<Result<Arc<RenderImage>, ImageCacheError>> {
+    let key: SharedString = format!("{px}:{still}:bytes:{name}").into();
+    let s = cx.default_global::<Store>();
+    if let Some((st, used)) = s.anims.get_mut(&key) {
+        *used = Instant::now();
+        return match st {
+            State::Loading => None,
+            State::Ready(img) => Some(Ok(img.clone())),
+            State::Failed => Some(Err(ImageCacheError::Other(Arc::new(anyhow::anyhow!("lottie sticker failed"))))),
+        };
+    }
+    if s.anims.len() >= MAX_ANIMS
+        && let Some(old) = s.anims.iter().filter(|(_, (st, _))| !matches!(st, State::Loading)).min_by_key(|(_, (_, t))| *t).map(|(k, _)| k.clone())
+    {
+        s.anims.remove(&old);
+    }
+    s.anims.insert(key.clone(), (State::Loading, Instant::now()));
+    let renderer = cx.svg_renderer();
+    let bytes = bytes.clone();
+    cx.spawn(async move |cx| {
+        let img = cx.background_spawn(async move { rasterize(&bytes, &renderer, px, still) }).await;
+        cx.update(|cx| {
+            if let Some(e) = cx.default_global::<Store>().anims.get_mut(&key) {
+                e.0 = match img {
+                    Some(i) => State::Ready(Arc::new(i)),
+                    None => State::Failed,
+                };
+            }
+            cx.refresh_windows();
+        });
+    })
+    .detach();
+    None
+}
+
+pub fn image_bytes(name: SharedString, bytes: Arc<Vec<u8>>, px: u32, still: bool) -> gpui::Img {
+    gpui::img(move |_: &mut gpui::Window, cx: &mut App| load_bytes(&name, &bytes, px, still, cx))
+}
+
 pub fn image(url: SharedString, px: u32, still: bool) -> gpui::Img {
     gpui::img(move |_: &mut gpui::Window, cx: &mut App| load(&url, px, still, cx))
 }

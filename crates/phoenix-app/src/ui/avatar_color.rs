@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use futures::AsyncReadExt;
-use gpui::App;
+use gpui::{App, AppContext as _};
 
 thread_local! {
     static CACHE: RefCell<HashMap<String, Option<u32>>> = RefCell::new(HashMap::new());
