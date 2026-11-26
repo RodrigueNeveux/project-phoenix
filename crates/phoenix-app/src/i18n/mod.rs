@@ -229,6 +229,23 @@ mod tests {
     }
 
     #[test]
+    fn paragraphs_and_line_breaks_in_local_tables() {
+        let fr = t_in("fr", "gs.access.hd_retention_desc", &[]);
+        let (first, second) = fr.split_once('\n').expect("two paragraphs");
+        assert!(first.ends_with("semaine."));
+        assert!(second.starts_with("Observe ton serveur"));
+        let en = t_in("en-US", "gs.access.hd_retention_desc", &[]);
+        assert_eq!(en.lines().count(), 2);
+        assert!(!t_in("fr", "gs.eng.afk_desc", &[]).contains('\n'));
+        assert_eq!(t_in("en-US", "cs.change_avatar", &[]).as_ref(), "Change\nAvatar");
+        let glued = regex::Regex::new(r"[a-z][.?!][A-Z]").expect("regex");
+        let (en, fr) = local_tables();
+        for (k, v) in en.iter().chain(fr.iter()) {
+            assert!(!glued.is_match(v) || v.contains("://") || v.contains('`'), "glued sentences in {k}: {v}");
+        }
+    }
+
+    #[test]
     fn lookup_and_fallback() {
         assert_eq!(t_in("fr", "status.online", &[]).as_ref(), "En ligne");
         assert_eq!(t_in("fr", "chat.typing_one", &[("a", "Bob")]).as_ref(), "Bob est en train d'écrire…");

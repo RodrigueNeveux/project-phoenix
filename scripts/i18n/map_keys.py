@@ -21,8 +21,10 @@ phx_en = di.yml(os.path.join(root, "en.yml"))
 phx_fr = di.yml(os.path.join(root, "fr.yml"))
 others = [m for loc, m in msgs.items() if loc != "en-US"]
 out = di.build_map(msgs["en-US"], phx_en, phx_fr, msgs.get("fr", {}), others)
+flat = {k for k, v in di.yml(os.path.join(root, "discord.yml")).items() if "^flat" in v.split()}
 with open(os.path.join(root, "discord.yml"), "w", encoding="utf8") as f:
     for k in phx_en:
         if k in out:
-            f.write(f'{k}: "{out[k]}"\n')
+            v = out[k] + (" ^flat" if k in flat else "")
+            f.write(f'{k}: "{v}"\n')
 print(f"{len(out)} of {len(phx_en)} keys mapped")

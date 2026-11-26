@@ -10,6 +10,7 @@ const MAP_SRC: &str = include_str!("../../locales/discord.yml");
 pub struct Mapping {
     pub hash: &'static str,
     pub upper: bool,
+    pub flat: bool,
     pub args: Vec<(&'static str, &'static str)>,
 }
 
@@ -31,15 +32,18 @@ fn parse_mappings(src: &'static str) -> HashMap<&'static str, Mapping> {
         let mut parts = v.split_whitespace();
         let Some(hash) = parts.next() else { continue };
         let mut upper = false;
+        let mut flat = false;
         let mut args = Vec::new();
         for tok in parts {
             if tok == "^upper" {
                 upper = true;
+            } else if tok == "^flat" {
+                flat = true;
             } else if let Some((from, to)) = tok.split_once('=') {
                 args.push((from, to));
             }
         }
-        out.insert(k.trim(), Mapping { hash, upper, args });
+        out.insert(k.trim(), Mapping { hash, upper, flat, args });
     }
     out
 }
@@ -54,6 +58,9 @@ pub fn render(locale: &str, ast: &Value, args: &[(&str, &str)], mapping: &Mappin
         .collect();
     let mut out = String::new();
     eval_node(locale, ast, &mapped, None, &mut out);
+    if mapping.flat {
+        out = out.replace('\n', " ");
+    }
     if mapping.upper {
         out.to_uppercase()
     } else {
@@ -152,6 +159,9 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
             }
         }
         8 => {
+            if items.get(1).and_then(Value::as_str) == Some("$p") && !out.is_empty() && !out.ends_with('\n') {
+                out.push('\n');
+            }
             if let Some(children) = items.get(2) {
                 eval_node(locale, children, args, pound, out);
             }
@@ -174,7 +184,7 @@ mod tests {
                 "other": [[7], " items"]
             }, 0, "cardinal"]
         ]);
-        let m = Mapping { hash: "x", upper: false, args: vec![("n", "count")] };
+        let m = Mapping { hash: "x", upper: false, flat: false, args: vec![("n", "count")] };
         assert_eq!(render("en-US", &ast, &[("n", "0")], &m), "No items");
         assert_eq!(render("en-US", &ast, &[("n", "1")], &m), "1 item");
         assert_eq!(render("en-US", &ast, &[("n", "1234")], &m), "1,234 items");
@@ -183,8 +193,34 @@ mod tests {
         assert_eq!(render("en-US", &ast, &[("n", "1 234")], &m), "1,234 items");
 
         let hook = json!([[8, "$b", ["Hello ", [1, "name"]]]]);
-        let m2 = Mapping { hash: "y", upper: true, args: vec![] };
+        let m2 = Mapping { hash: "y", upper: true, flat: false, args: vec![] };
         assert_eq!(render("en-US", &hook, &[("name", "Bob")], &m2), "HELLO BOB");
+    }
+
+    #[test]
+    fn paragraphs_stack_on_their_own_lines() {
+        let ast = json!([
+            [8, "$p", ["Les serveurs qui obtiennent plus de 10 nouveaux membres par semaine. Au moins une semaine."]],
+            [8, "$p", ["Observe ton serveur du point de vue d'un ", [8, "$b", ["nouveau"]], " membre."]]
+        ]);
+        let m = Mapping { hash: "kMBzFj", upper: false, flat: false, args: vec![] };
+        assert_eq!(
+            render("fr", &ast, &[], &m),
+            "Les serveurs qui obtiennent plus de 10 nouveaux membres par semaine. Au moins une semaine.\nObserve ton serveur du point de vue d'un nouveau membre."
+        );
+        let one = json!([[8, "$p", ["Seul."]]]);
+        assert_eq!(render("fr", &one, &[], &m), "Seul.");
+        let after_break = json!([["Ligne\n"], [8, "$p", ["Suite"]]]);
+        assert_eq!(render("fr", &after_break, &[], &m), "Ligne\nSuite");
+    }
+
+    #[test]
+    fn line_breaks_follow_the_client_white_space() {
+        let ast = json!(["Déplace automatiquement les membres\net les rend muets."]);
+        let pre = Mapping { hash: "a", upper: false, flat: false, args: vec![] };
+        assert_eq!(render("fr", &ast, &[], &pre), "Déplace automatiquement les membres\net les rend muets.");
+        let normal = Mapping { hash: "a", upper: false, flat: true, args: vec![] };
+        assert_eq!(render("fr", &ast, &[], &normal), "Déplace automatiquement les membres et les rend muets.");
     }
 
     #[test]
@@ -193,5 +229,7 @@ mod tests {
         assert!(m.contains_key("status.online"));
         assert_eq!(m["status.online"].hash, "60kAzo");
         assert!(m["settings.appearance.theme"].upper);
+        assert!(m["gs.eng.afk_desc"].flat);
+        assert!(!m["gs.access.hd_retention_desc"].flat);
     }
 }

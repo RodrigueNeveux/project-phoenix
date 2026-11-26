@@ -111,6 +111,8 @@ def variants(nodes, plural=None):
             continue
         if t == 8:
             sub = variants(n[2], plural) if len(n) > 2 else [("", [])]
+            if n[1] == "$p":
+                sub = [("\n" + s, a) for s, a in sub]
         elif t in (5, 6):
             sub = []
             for ch in n[2].values():
