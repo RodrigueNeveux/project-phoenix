@@ -528,12 +528,16 @@ impl PhoenixApp {
             self.people.custom_status = a.iter().find(|x| x.kind == crate::presence::ActivityKind::Custom).and_then(|x| x.state.clone());
             self.people.activities.insert(r.me.id, a);
         }
+        let mine_status = known_presences.get(&r.me.id).copied();
         self.presences = known_presences;
         self.presences.extend(r.presences);
         for (u, a) in known_activities {
             self.people.activities.entry(u).or_insert(a);
         }
         self.me = r.me;
+        if let Some(p) = mine_status {
+            self.presence = p;
+        }
         self.users = r.users.into_iter().map(|u| (u.id, u)).collect();
         self.guilds = r.guilds;
         for (g, roles) in r.roles {

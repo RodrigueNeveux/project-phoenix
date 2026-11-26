@@ -546,3 +546,21 @@ fn ctrl_t_opens_the_quick_switcher_from_the_composer(cx: &mut TestAppContext) {
     h.keys("escape");
     assert!(h.read(|a| a.switcher.is_none()));
 }
+
+#[gpui::test]
+fn own_status_sent_before_ready_reaches_the_user_panel(cx: &mut TestAppContext) {
+    let probe = Arc::new(Probe { mock: MockBackend::synchronous(), acks: AtomicUsize::new(0), leaves: AtomicUsize::new(0), unreads: Mutex::new(Vec::new()) });
+    let ready = futures::executor::block_on(probe.mock.login(Credentials::Token("x".into()))).unwrap();
+    cx.update(gpui_component::init);
+    let backend: Arc<dyn Backend> = probe.clone();
+    let window = cx.add_window(|w, cx| PhoenixApp::new(backend, w, cx));
+    let me = ready.me.id;
+    let status = window
+        .update(cx, |app, _, cx| {
+            app.handle_event(crate::backend::AppEvent::PresenceUpdate { user: me, presence: crate::model::Presence::Dnd }, cx);
+            app.apply_ready(ready, cx);
+            app.presence_of(me)
+        })
+        .unwrap();
+    assert_eq!(status, crate::model::Presence::Dnd);
+}
