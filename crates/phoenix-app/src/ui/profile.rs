@@ -1127,6 +1127,23 @@ pub(crate) fn popout_shadow() -> Vec<gpui::BoxShadow> {
     ]
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ModalActions {
+    EditProfile,
+    Hidden,
+    Others,
+}
+
+pub(crate) fn modal_actions(me: bool, rel: crate::ui::home::data::RelationshipKind) -> ModalActions {
+    if me {
+        ModalActions::EditProfile
+    } else if rel == crate::ui::home::data::RelationshipKind::Blocked {
+        ModalActions::Hidden
+    } else {
+        ModalActions::Others
+    }
+}
+
 fn mutual_tab_label<N: PartialEq + Default + std::fmt::Display>(n: N, none: &str, some: &str) -> SharedString {
     if n == N::default() { crate::t!(none) } else { crate::t!(some, n = n) }
 }
@@ -1252,14 +1269,15 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             es.update(cx, |_, cx| cx.notify());
         })
     });
-    let buttons = (rel != crate::ui::home::data::RelationshipKind::Blocked).then(|| {
+    let actions = modal_actions(me, rel);
+    let edit = (actions == ModalActions::EditProfile).then(|| crate::ui::profile_toolbar::edit_profile_button(uid, guild, cx));
+    let buttons = (actions != ModalActions::Hidden).then(|| {
         use crate::ui::home::data::RelationshipKind as R;
         let send = |primary: bool| {
             let e2 = e2.clone();
             let fg = if primary { idx::CONTROL_PRIMARY_TEXT_DEFAULT } else { idx::CONTROL_SECONDARY_TEXT_DEFAULT };
             mana_button(("profile-modal-message", uid.0), "", primary, false)
-                .when(me, |d| d.opacity(0.5).cursor_default())
-                .when(!me, |d| d.on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx))))
+                .on_click(move |_, _, cx| e2.update(cx, |a, cx| a.message_user(uid, cx)))
                 .child(
                     div()
                         .flex()
@@ -1278,7 +1296,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         );
         let row = div().flex().items_center().gap(z(8.));
         if me {
-            return row.child(send(true)).child(icon_btn(("profile-modal-shop", uid.0), "shop").tooltip(crate::ui::tooltip::tip(crate::t!("ptb.shop")))).child(more);
+            return row.children(edit);
         }
         if bot || rel == R::Incoming {
             return row.child(send(true)).children(shop_look).child(more);
@@ -1743,6 +1761,17 @@ mod activity_header_tests {
             start: None,
             application_id: None,
         }
+    }
+
+    #[test]
+    fn own_profile_modal_shows_only_edit_profile() {
+        use super::{ModalActions, modal_actions};
+        use crate::ui::home::data::RelationshipKind as R;
+        assert_eq!(modal_actions(true, R::None), ModalActions::EditProfile);
+        assert_eq!(modal_actions(true, R::Friend), ModalActions::EditProfile);
+        assert_eq!(modal_actions(false, R::Friend), ModalActions::Others);
+        assert_eq!(modal_actions(false, R::None), ModalActions::Others);
+        assert_eq!(modal_actions(false, R::Blocked), ModalActions::Hidden);
     }
 
     #[test]
