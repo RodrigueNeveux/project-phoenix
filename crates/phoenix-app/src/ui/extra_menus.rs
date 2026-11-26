@@ -29,6 +29,7 @@ pub enum Target {
     WishlistMore(Option<String>),
     AnnouncementSend { channel: Id, can_thread: bool },
     ModViewRoles { user: Id, guild: Id },
+    QuestMore { quest: u64, cta: Option<(SharedString, SharedString)> },
 }
 
 pub const NITRO_SKU: &str = "521847234246082599";
@@ -150,6 +151,23 @@ pub fn close() {
 fn act(e: &Ent, label: SharedString, f: impl Fn(&mut PhoenixApp, &mut Window, &mut Context<PhoenixApp>) + 'static) -> MenuItem {
     let e = e.clone();
     MenuItem::action(label, None, move |_, w, cx: &mut App| e.update(cx, |a, cx| f(a, w, cx)))
+}
+
+pub fn quest_link(quest: u64) -> String {
+    format!("https://discord.com/quests/{quest}")
+}
+
+fn quest_items(e: &Ent, quest: u64, cta: Option<(SharedString, SharedString)>) -> Vec<MenuItem> {
+    let mut items = Vec::new();
+    if let Some((label, url)) = cta {
+        items.push(MenuItem::action(label, Some(crate::icons::path("menu/open-link")), move |_, _, cx: &mut App| cx.open_url(&url)));
+    }
+    let e = e.clone();
+    items.push(MenuItem::action(crate::t!("quests.share"), Some(crate::icons::path("chat/link")), move |_, _, cx: &mut App| {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(quest_link(quest)));
+        e.update(cx, |a, cx| a.parity_toast(crate::t!("viewer.link_copied"), cx));
+    }));
+    items
 }
 
 fn pref_check(app: &PhoenixApp, e: &Ent, label: SharedString, key: &'static str, default: bool) -> MenuItem {
@@ -407,6 +425,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Target::WishlistMore(w) => wishlist_more_items(&e, w.clone()),
         Target::AnnouncementSend { channel, can_thread } => announcement_items(*channel, *can_thread),
         Target::ModViewRoles { user, guild } => mod_view_role_items(app, &e, *user, *guild),
+        Target::QuestMore { quest, cta } => quest_items(&e, *quest, cta.clone()),
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
         close();
@@ -566,6 +585,11 @@ fn dirs_download() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quest_share_link_matches_the_client() {
+        assert_eq!(quest_link(1412491570820812933), "https://discord.com/quests/1412491570820812933");
+    }
 
     #[test]
     fn textarea_menu_follows_the_client_order() {

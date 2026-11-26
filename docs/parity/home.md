@@ -96,7 +96,8 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | tile "Accept Quest" / "Watch" | `POST /quests/{id}/enroll` with `location: 11` (QUEST_HOME_DESKTOP), refused by the guard with the blocked-write toast | `62ae5fafb88cf9ee.js` (`tL.Oy`), web bundle `QUESTS_ENROLL` | ✅ (the video modal that "Watch" opens in the client is not built) |
 | tile secondary CTA | opens `cta_config.link` | quest config | ✅ |
 | hero buttons states | `overlay-primary_F7qvhY` / `overlay-secondary_F7qvhY`: `--control-overlay-{primary,secondary}-{background,border,text}-{default,hover,active}`, 1px border | CSS (mana button) | ✅ |
-| tile "View Quest" when enrolled, ⋯ and play buttons | still a preview stub | — | ❌ |
+| tile ⋯ | menu `quests-entry`: the CTA link (`play-game`, LinkExternal icon) when the quest has one, then Share (`RDE0Sc`, copies `https://discord.com/quests/{id}` and shows "Link Copied!" `+5kSoW`) | web bundle `navId:"quests-entry"`, `Lk` / `Xm` | ⚠ Learn more, disclosure and hide rows are not drawn |
+| tile "View Quest" when enrolled, play button | still a preview stub (the video modal is not built) | — | ❌ |
 
 ## DM header buttons (wt/btn-home, 26/11)
 

@@ -449,7 +449,12 @@ fn tile(q: &Quest, premium: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .justify_end()
                         .gap(z(16.))
                         .when(matches!(q.task, Task::Video { .. }), |d| d.child(util_button("play")))
-                        .child(util_button("more-horizontal")),
+                        .child({
+                            let target = crate::ui::extra_menus::Target::QuestMore { quest: q.id, cta: q.cta.clone().zip(q.cta_link.clone()) };
+                            util_button("more-horizontal").id(("quest-more", q.id)).cursor_pointer().on_click(move |ev, w, _| {
+                                crate::ui::extra_menus::open(target.clone(), ev.position(), w);
+                            })
+                        }),
                 )
                 .child(div().flex_1())
                 .children(q.logotype.clone().map(|l| div().mb(z(4.)).h(z(34.)).w(z(121.)).flex().items_end().child(img(l).max_h(z(34.)).max_w(z(121.)).object_fit(gpui::ObjectFit::Contain))))
