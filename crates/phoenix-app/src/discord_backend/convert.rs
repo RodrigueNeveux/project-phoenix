@@ -1234,11 +1234,13 @@ impl Adapter {
                 {
                     out.push(AppEvent::Users(vec![user(&u)]));
                 }
-                self.statuses.insert(p.user.id.0, presence(&p.status));
-                crate::ui::mobile_status::note(p.user.id.0, &p.status, p.client_status.as_ref());
-                out.push(AppEvent::PresenceUpdate { user: id(p.user.id), presence: presence(&p.status) });
-                let activities = crate::presence::parse_activities(&p.activities);
-                out.push(AppEvent::Activities { user: id(p.user.id), activities });
+                if p.user.id != self.me {
+                    self.statuses.insert(p.user.id.0, presence(&p.status));
+                    crate::ui::mobile_status::note(p.user.id.0, &p.status, p.client_status.as_ref());
+                    out.push(AppEvent::PresenceUpdate { user: id(p.user.id), presence: presence(&p.status) });
+                    let activities = crate::presence::parse_activities(&p.activities);
+                    out.push(AppEvent::Activities { user: id(p.user.id), activities });
+                }
             }
             GatewayEvent::ReadySupplemental(r) => {
                 let me = self.me.0;
@@ -1248,7 +1250,7 @@ impl Adapter {
                     let guilds = mp.get("guilds").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_array).flatten();
                     for p in friends.chain(guilds) {
                         let uid = p.get("user_id").or_else(|| p.get("user").and_then(|u| u.get("id"))).and_then(snowflake_value);
-                        if let Some(u) = uid {
+                        if let Some(u) = uid.filter(|u| *u != me) {
                             let st = p.get("status").and_then(Value::as_str).unwrap_or("offline");
                             self.statuses.insert(u, presence(st));
                             crate::ui::mobile_status::note_value(u, p);
@@ -1272,7 +1274,7 @@ impl Adapter {
                 out.push(AppEvent::Users(c.members.iter().filter_map(|m| m.user.as_ref()).map(user).collect()));
                 for p in &c.presences {
                     let uid = p.get("user").and_then(|u| u.get("id")).or_else(|| p.get("user_id")).and_then(snowflake_value);
-                    if let Some(u) = uid {
+                    if let Some(u) = uid.filter(|u| *u != self.me.0) {
                         let st = presence(p.get("status").and_then(Value::as_str).unwrap_or("offline"));
                         self.statuses.insert(u, st);
                         crate::ui::mobile_status::note_value(u, p);

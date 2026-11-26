@@ -145,6 +145,19 @@ fn joined_thread_messages_make_the_guild_unread() {
 }
 
 #[test]
+fn guild_presences_never_override_my_own_status() {
+    let (cache, mut a) = setup();
+    let d = serde_json::json!([{"session_id": "all", "status": "dnd", "activities": []}]);
+    feed(&cache, &mut a, &GatewayEvent::Unknown { name: "SESSIONS_REPLACE".into(), data: d });
+    let raw = format!(r#"{{"user":{{"id":"{ME}"}},"guild_id":"300000000000000001","status":"online","activities":[]}}"#);
+    let out = feed(&cache, &mut a, &parse_dispatch("PRESENCE_UPDATE", &raw));
+    assert!(!out.iter().any(|x| matches!(x, AppEvent::PresenceUpdate { user, .. } | AppEvent::Activities { user, .. } if user.0 == ME)));
+    let raw = r#"{"user":{"id":"200000000000000003"},"guild_id":"300000000000000001","status":"idle","activities":[]}"#;
+    let out = feed(&cache, &mut a, &parse_dispatch("PRESENCE_UPDATE", raw));
+    assert!(out.iter().any(|x| matches!(x, AppEvent::PresenceUpdate { user, presence: model::Presence::Idle } if user.0 == 200000000000000003)));
+}
+
+#[test]
 fn sessions_replace_sets_my_status() {
     let (cache, mut a) = setup();
     let d = serde_json::json!([{"session_id": "abc", "status": "online"}, {"session_id": "all", "status": "dnd", "activities": [{"type": 4, "name": "Custom Status", "state": "busy"}]}]);
