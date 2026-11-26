@@ -338,20 +338,20 @@ fn install(fonts: Vec<Decoded>, cx: &mut gpui::App) -> bool {
 static EXTRACTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn ready() -> bool {
-    fallback::ready() && EXTRACTED.load(Ordering::Relaxed)
+    fallback::ready() && (EXTRACTED.load(Ordering::Relaxed) || GG_SANS.load(Ordering::Relaxed))
 }
 
 pub fn register(cx: &mut gpui::App) {
     fallback::register(cx);
-    register_faces(cx);
+    register_faces(false, cx);
 }
 
 pub fn register_deferred(cx: &mut gpui::App) {
     fallback::register_in_background(cx);
-    register_faces(cx);
+    register_faces(true, cx);
 }
 
-fn register_faces(cx: &mut gpui::App) {
+fn register_faces(threaded: bool, cx: &mut gpui::App) {
     let cached = out_dir().map(|d| load_decoded(&d)).unwrap_or_default();
     install(cached, cx);
     apply_theme_fonts(cx);
@@ -359,9 +359,17 @@ fn register_faces(cx: &mut gpui::App) {
         EXTRACTED.store(true, Ordering::Relaxed);
         return;
     }
-    let task = cx.background_executor().spawn(async move { extract_and_decode() });
+    let (tx, rx) = futures::channel::oneshot::channel();
+    let job = move || {
+        let _ = tx.send(extract_and_decode());
+    };
+    if threaded {
+        let _ = std::thread::Builder::new().name("phx-font-extract".into()).spawn(job);
+    } else {
+        cx.background_executor().spawn(async move { job() }).detach();
+    }
     cx.spawn(async move |cx| {
-        let fonts = task.await;
+        let fonts = rx.await.unwrap_or_default();
         cx.update(|cx| {
             let changed = install(fonts, cx);
             EXTRACTED.store(true, Ordering::Relaxed);
@@ -648,6 +656,7 @@ fn paint_name(
     name_paint::NameText::new(text, crate::theme::z(ls * size), fill).motion(motion).into_any_element()
 }
 
+mod built;
 pub mod fallback;
 pub mod name_paint;
 pub use fallback::ui_fallbacks;

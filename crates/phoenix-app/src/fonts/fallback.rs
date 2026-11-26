@@ -493,9 +493,12 @@ pub fn register_in_background(cx: &mut gpui::App) {
         return;
     }
     PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
-    let task = cx.background_executor().spawn(async move { prepare() });
+    let (tx, rx) = futures::channel::oneshot::channel();
+    let _ = std::thread::Builder::new().name("phx-font-fallback".into()).spawn(move || {
+        let _ = tx.send(prepare());
+    });
     cx.spawn(async move |cx| {
-        let prepared = task.await;
+        let prepared = rx.await.ok().flatten();
         cx.update(|cx| {
             match prepared {
                 Some(p) => install(p, cx),
@@ -514,19 +517,55 @@ pub fn prepare() -> Option<Prepared> {
     if std::env::var_os("PHX_NO_FONT_FALLBACK").is_some() {
         return None;
     }
-    let mut blobs: Vec<std::borrow::Cow<'static, [u8]>> = Vec::new();
+    let t0 = std::time::Instant::now();
+    let stamp = fc_cache().lock().stamp;
+    let dir = built_dir();
+    if let Some(l) = dir.as_deref().and_then(|d| super::built::load(d, stamp)) {
+        WEB_NOTO.store(l.web_noto, std::sync::atomic::Ordering::Relaxed);
+        if !l.web_noto {
+            std::thread::spawn(download_web_noto);
+        }
+        crate::perf::span("font_fallback_cached", t0);
+        return Some(Prepared { chain: l.chain, blobs: l.blobs });
+    }
+    let reads = std::cell::RefCell::new(Vec::new());
+    let (chain, blobs, have_web) = build(&reads);
+    if let Some(d) = dir {
+        let key = super::built::Key::current(stamp, reads.into_inner());
+        let items: Vec<(Option<String>, &[u8])> = blobs.iter().map(|(src, b)| (src.clone(), b.as_slice())).collect();
+        if let Err(e) = super::built::save(&d, key, &chain, have_web, &items) {
+            tracing::warn!("font fallback cache not written: {e}");
+        }
+    }
+    crate::perf::span("font_fallback_built", t0);
+    Some(Prepared { chain, blobs: blobs.into_iter().map(|(_, b)| b.into()).collect() })
+}
+
+fn built_dir() -> Option<PathBuf> {
+    Some(super::out_dir()?.join("fallback-built"))
+}
+
+type Built = (Vec<String>, Vec<(Option<String>, Vec<u8>)>, bool);
+
+fn build(reads: &std::cell::RefCell<Vec<String>>) -> Built {
+    let read = |p: &str| {
+        reads.borrow_mut().push(p.to_owned());
+        std::fs::read(p)
+    };
+    let mut blobs: Vec<(Option<String>, Vec<u8>)> = Vec::new();
     let web: Vec<Vec<u8>> = web_dir()
         .and_then(|d| {
+            reads.borrow_mut().push(d.to_string_lossy().into_owned());
             let mut files: Vec<_> = std::fs::read_dir(d).ok()?.flatten().map(|e| e.path()).collect();
             files.sort();
-            Some(files.into_iter().filter_map(|p| std::fs::read(p).ok()).collect())
+            Some(files.into_iter().filter_map(|p| read(&p.to_string_lossy()).ok()).collect())
         })
         .unwrap_or_default();
     let web_name = WEB_NOTO_NAME.to_owned();
     let mut have_web = false;
     for ttf in web {
         if let Some(r) = rename(&ttf, &web_name) {
-            blobs.push(r.into());
+            blobs.push((None, r));
             have_web = true;
         }
     }
@@ -536,7 +575,11 @@ pub fn prepare() -> Option<Prepared> {
         download_web_noto();
     }
     let stack = stack_files();
-    let entries = plan(&stack, &sorted_faces(), bold_file, bold_covers);
+    let covers = |r: &str, b: &str| {
+        reads.borrow_mut().extend([r.to_owned(), b.to_owned()]);
+        bold_covers(r, b)
+    };
+    let entries = plan(&stack, &sorted_faces(), bold_file, covers);
     let mut chain: Vec<String> = Vec::new();
     let mut after_stack = 0;
     for (i, e) in entries.iter().enumerate() {
@@ -553,7 +596,7 @@ pub fn prepare() -> Option<Prepared> {
                 if !(file.ends_with(".ttf") || file.ends_with(".otf")) {
                     break;
                 }
-                let Ok(bytes) = std::fs::read(file) else { break };
+                let Ok(bytes) = read(file) else { break };
                 if super::ttf_family(&bytes).as_deref() != Some(e.family.as_str()) {
                     break;
                 }
@@ -562,7 +605,7 @@ pub fn prepare() -> Option<Prepared> {
             }
         }
         if !renamed.is_empty() {
-            blobs.extend(renamed.into_iter().map(Into::into));
+            blobs.extend(renamed.into_iter().map(|r| (None, r)));
             chain.push(e.name());
         } else if e.style.is_none() && !chain.contains(&e.family) {
             chain.push(e.family.clone());
@@ -572,26 +615,26 @@ pub fn prepare() -> Option<Prepared> {
         after_stack = chain.len();
     }
     if let Some(file) = fc(&["emoji"], "%{file}").into_iter().next()
-        && let Ok(bytes) = std::fs::read(&file)
+        && let Ok(bytes) = read(&file)
     {
         let name = format!("{PREFIX}{EMOJI_FAMILY}");
         if let Some(only) = emoji_presentation_font(&bytes, &name) {
-            blobs.push(only.into());
+            blobs.push((None, only));
             chain.insert(after_stack, name);
         }
         let selector = format!("{PREFIX}{EMOJI_FAMILY} {SELECTOR_SUFFIX}");
         if let Some(all) = emoji_selector_font(&bytes, &selector) {
-            blobs.push(all.into());
+            blobs.push((None, all));
             chain.push(selector);
         }
-        blobs.push(bytes.into());
+        blobs.push((Some(file), bytes));
     }
     for name in preferred_script_fonts(crate::i18n::locale()) {
         let _ = fc(&[name], "%{family[0]}\n");
     }
     let _ = code_family();
     save_fc_cache();
-    Some(Prepared { chain, blobs })
+    (chain, blobs, have_web)
 }
 
 pub fn install(p: Prepared, cx: &mut gpui::App) {
