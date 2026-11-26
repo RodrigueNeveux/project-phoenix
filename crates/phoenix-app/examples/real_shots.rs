@@ -880,6 +880,10 @@ fn main() -> anyhow::Result<()> {
                 app.select_guild(None, cx);
                 app.nav.home = phoenix_app::ui::home::data::HomeView::Quests;
                 app.selected_channel = None;
+            } else if view == "nitro" {
+                app.select_guild(None, cx);
+                app.nav.home = phoenix_app::ui::home::data::HomeView::Nitro;
+                app.selected_channel = None;
             } else if let (Some(g), None) = (guild, channel) {
                 app.select_guild(Some(g), cx);
                 let first = app.guild_channels.get(&g).and_then(|l| {
@@ -1668,6 +1672,52 @@ fn main() -> anyhow::Result<()> {
                         if let Ok(ix) = sub.parse::<usize>() {
                             phoenix_app::ui::context_menu::debug_open_submenu(ix);
                         }
+                    }
+                }
+                "shoptab" => {
+                    phoenix_app::ui::shop_page::select_tab(arg.parse().unwrap_or(0));
+                    cx.notify();
+                }
+                "shopcollection" => {
+                    let sku = parse_id(&arg).map(|i| i.0).or_else(|| {
+                        phoenix_app::ui::shop_page::home_loaded()?.blocks.iter().find_map(|b| match b {
+                            phoenix_app::ui::shop_page::Block::Marketing(t) => t.first().map(|t| t.category),
+                            _ => None,
+                        })
+                    });
+                    if let Some(sku) = sku {
+                        phoenix_app::ui::shop_page::open_collection(sku);
+                    }
+                    cx.notify();
+                }
+                "shopcard" | "shopbuy" | "shopgift" => {
+                    let card = phoenix_app::ui::shop_page::home_loaded().and_then(|h| {
+                        h.blocks.iter().find_map(|b| match b {
+                            phoenix_app::ui::shop_page::Block::Hero { skus, .. } => skus.first().and_then(|s| h.cards.get(s).cloned()),
+                            _ => None,
+                        })
+                    });
+                    if let Some(k) = card {
+                        let look = phoenix_app::ui::shop_page::look_of(&k);
+                        match kind.as_str() {
+                            "shopcard" => app.open_shop_product(look, cx),
+                            k => app.open_shop_purchase(look, k == "shopgift", cx),
+                        }
+                    }
+                }
+                "questmenu" | "questwhy" => {
+                    if let Some(q) = phoenix_app::ui::quests_page::first_quest() {
+                        if kind == "questwhy" {
+                            app.open_quest_disclosure(q, cx);
+                        } else {
+                            phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::QuestMore(Box::new(q)), gpui::point(px(900.), px(300.)), window);
+                        }
+                    }
+                }
+                "addtodm" => {
+                    if let Some(c) = app.selected_channel {
+                        let w = f32::from(window.viewport_size().width) / phoenix_app::theme::zoom();
+                        app.open_add_to_dm_at(c, Some((gpui::point(px(w - 140.), px(60.)), gpui::Anchor::TopRight)), cx);
                     }
                 }
                 "shoplook" => {

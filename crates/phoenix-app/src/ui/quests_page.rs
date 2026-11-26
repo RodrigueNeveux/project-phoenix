@@ -425,6 +425,10 @@ pub fn premium_multiplier() -> Option<f64> {
     })
 }
 
+pub fn first_quest() -> Option<Quest> {
+    QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.first().cloned()))
+}
+
 pub fn quest(id: u64) -> Option<Quest> {
     QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.iter().find(|x| x.id == id).cloned()))
 }
