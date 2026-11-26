@@ -164,25 +164,108 @@ fn line(rt: &RichText) -> gpui::Div {
     row
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trailing {
+    Image,
+    Sticker,
+    Command,
+    Voice,
+}
+
+const FLAG_COMPONENTS_V2: u64 = 1 << 15;
+
+pub fn placeholder(m: &Message, blocked: bool, ignored: bool) -> (Option<&'static str>, Option<Trailing>) {
+    let empty = m.content.trim().is_empty();
+    let has_sticker = !stickers(m).is_empty() || m.attachments.iter().any(|a| matches!(a.kind, crate::model::AttachmentKind::Sticker(_)));
+    let command = m.interaction.is_some();
+    let voice = m.flags & phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE != 0;
+    let poll_result = matches!(m.kind, crate::model::MessageKind::PollResult(_));
+    let mut trailing = None;
+    let key = if blocked {
+        Some("call_toast.blocked")
+    } else if ignored {
+        Some("call_toast.ignored")
+    } else if m.kind == crate::model::MessageKind::Pin {
+        Some("call_toast.pinned")
+    } else if empty && !poll_result {
+        Some(if has_sticker {
+            "chat.reply_click_to_see_sticker"
+        } else if command {
+            "chat.reply_click_to_see_command"
+        } else if voice {
+            "chat.reply_click_to_see_voice"
+        } else if m.flags & FLAG_COMPONENTS_V2 != 0 {
+            "chat.reply_click_to_see_message"
+        } else {
+            trailing = Some(Trailing::Image);
+            "chat.reply_click_to_see"
+        })
+    } else {
+        None
+    };
+    if has_sticker {
+        trailing = Some(Trailing::Sticker);
+    } else if command {
+        trailing = Some(Trailing::Command);
+    } else if voice {
+        trailing = Some(Trailing::Voice);
+    } else if (!m.attachments.is_empty() || !m.embeds.is_empty()) && !poll_result {
+        trailing = Some(Trailing::Image);
+    }
+    (key, trailing)
+}
+
+fn trailing_icon(t: Trailing) -> AnyElement {
+    let size = 20. * crate::theme::zoom();
+    let color = d(idx::TEXT_DEFAULT);
+    let (path, w) = match t {
+        Trailing::Image => (crate::assets::Icon::Image.path(), size),
+        Trailing::Sticker => (crate::icons::path("chat/sticker-small"), size),
+        Trailing::Command => (crate::icons::path("chat/slash-box"), size),
+        Trailing::Voice => (crate::assets::Icon::Mic.path(), size * 19. / 24.),
+    };
+    div().flex_none().ml(z(4.)).child(gpui::svg().path(path).w(gpui::px(w)).h(gpui::px(size)).text_color(color)).into_any_element()
+}
+
 fn body(app: &PhoenixApp, m: &Message) -> AnyElement {
+    let (key, trailing) = placeholder(m, app.nav.is_blocked(m.author), app.nav.is_ignored(m.author));
+    let has_stickers = !stickers(m).is_empty();
+    let main = match key {
+        Some(k) if !has_stickers => div().min_w_0().truncate().child(crate::i18n::t(k, &[])).into_any_element(),
+        Some(_) => sticker_row(m),
+        None => content(app, m),
+    };
+    let size = 20. * crate::theme::zoom();
+    div()
+        .flex()
+        .items_center()
+        .min_w_0()
+        .when(m.forward.is_some() && !has_stickers, |r| {
+            r.child(div().flex_none().mr(z(4.)).child(gpui::svg().path(crate::icons::path("chat/forwarded")).size(gpui::px(size)).text_color(d(idx::TEXT_DEFAULT))))
+        })
+        .child(main)
+        .when_some(trailing.filter(|_| !has_stickers), |r, tr| r.child(trailing_icon(tr)))
+        .into_any_element()
+}
+
+fn sticker_row(m: &Message) -> AnyElement {
+    div()
+        .flex()
+        .gap(z(4.))
+        .children(stickers(m).into_iter().map(|a| {
+            let im = match a.kind {
+                crate::model::AttachmentKind::Sticker(crate::media::StickerFormat::Lottie) => crate::media::lottie::image(a.url.clone(), 128, true),
+                _ => gpui::img(a.url.clone()),
+            };
+            im.size(z(128.)).object_fit(gpui::ObjectFit::Contain).into_any_element()
+        }))
+        .into_any_element()
+}
+
+fn content(app: &PhoenixApp, m: &Message) -> AnyElement {
     let text = m.content.as_ref();
     if text.is_empty() {
-        let st = stickers(m);
-        if !st.is_empty() {
-            return div()
-                .flex()
-                .gap(z(4.))
-                .children(st.into_iter().map(|a| {
-                    let im = match a.kind {
-                        crate::model::AttachmentKind::Sticker(crate::media::StickerFormat::Lottie) => crate::media::lottie::image(a.url.clone(), 128, true),
-                        _ => gpui::img(a.url.clone()),
-                    };
-                    im.size(z(128.)).object_fit(gpui::ObjectFit::Contain).into_any_element()
-                }))
-                .into_any_element();
-        }
-        let name = m.attachments.first().map(|a| a.filename.clone()).unwrap_or_default();
-        return div().min_w_0().truncate().child(name).into_any_element();
+        return if stickers(m).is_empty() { div().into_any_element() } else { sticker_row(m) };
     }
     let blocks = crate::markdown::parse(text, &app.resolver());
     let rt = crate::richtext::rich_inline(&joined_inline(&blocks), &|_| false, d(idx::TEXT_DEFAULT));
@@ -360,6 +443,24 @@ mod tests {
         let italic = i.spans.iter().find(|s| s.style.has(Style::ITALIC)).unwrap();
         assert_eq!(&i.text[italic.range.clone()], "italique");
         assert!(i.spans.iter().any(|s| s.style.has(Style::CODE) && &i.text[s.range.clone()] == "code"));
+    }
+
+    #[test]
+    fn attachment_only_previews_use_the_client_placeholder() {
+        use crate::model::{Attachment, AttachmentKind, MessageKind};
+        let file = Attachment { filename: "a.png".into(), kind: AttachmentKind::Image, ..Default::default() };
+        let m = Message { attachments: vec![file.clone()], ..Default::default() };
+        assert_eq!(placeholder(&m, false, false), (Some("chat.reply_click_to_see"), Some(Trailing::Image)));
+        let text = Message { content: "salut".into(), ..m.clone() };
+        assert_eq!(placeholder(&text, false, false), (None, Some(Trailing::Image)));
+        assert_eq!(placeholder(&text, true, false).0, Some("call_toast.blocked"));
+        assert_eq!(placeholder(&text, false, true).0, Some("call_toast.ignored"));
+        assert_eq!(placeholder(&Message { kind: MessageKind::Pin, ..Default::default() }, false, false), (Some("call_toast.pinned"), None));
+        let voice = Message { flags: phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE, attachments: vec![file], ..Default::default() };
+        assert_eq!(placeholder(&voice, false, false), (Some("chat.reply_click_to_see_voice"), Some(Trailing::Voice)));
+        let v2 = Message { flags: FLAG_COMPONENTS_V2, ..Default::default() };
+        assert_eq!(placeholder(&v2, false, false), (Some("chat.reply_click_to_see_message"), None));
+        assert_eq!(placeholder(&Message { content: "x".into(), ..Default::default() }, false, false), (None, None));
     }
 
     #[test]

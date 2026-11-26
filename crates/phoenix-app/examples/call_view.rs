@@ -115,13 +115,19 @@ fn main() -> anyhow::Result<()> {
                 app.voice.speaking.insert(Id(3));
                 phoenix_app::ui::call_menus::open(menu);
                 if toasts {
-                    let lines = ["anyone up for a match tonight?", "brb, grabbing a coffee", "the stream looks great from here"];
+                    let lines = ["anyone up for a match tonight?", "", "the stream looks great from here"];
                     for (i, text) in lines.into_iter().enumerate() {
+                        let attachments = if text.is_empty() {
+                            vec![phoenix_app::model::Attachment { filename: "screenshot.png".into(), kind: phoenix_app::model::AttachmentKind::Image, ..Default::default() }]
+                        } else {
+                            Vec::new()
+                        };
                         let m = phoenix_app::model::Message {
                             id: Id(990_000 + i as u64),
                             channel: lounge,
                             author: Id(3 + i as u64),
                             content: text.into(),
+                            attachments,
                             timestamp: chrono::Utc::now().timestamp(),
                             ..Default::default()
                         };
