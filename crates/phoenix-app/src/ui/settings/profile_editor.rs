@@ -823,7 +823,7 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
         None => vec![div().absolute().inset_0().bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))],
     };
     let strong = if themed { white(0.96) } else { c(tok(idx::TEXT_STRONG)) };
-    let heading = if themed { white(0.88) } else { c(tok(idx::TEXT_DEFAULT)) };
+    let heading = if themed { white(0.88) } else { c(tok(idx::TEXT_SUBTLE)) };
     let name: AnyElement = match &e.name {
         Some(i) => Input::new(i).appearance(false).bordered(false).text_size(z(24.)).font_weight(FontWeight::SEMIBOLD).into_any_element(),
         None => SharedString::from(e.original.name.clone()).into_any_element(),
@@ -1162,7 +1162,7 @@ pub(super) fn gradient_button_color(primary: u32) -> u32 {
 fn tabs(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
     let themed = e.theme.is_some();
     let strong = if themed { white(0.96) } else { c(tok(idx::TEXT_STRONG)) };
-    let dim = if themed { white(0.88) } else { c(tok(idx::TEXT_DEFAULT)) };
+    let dim = if themed { white(0.88) } else { c(tok(idx::TEXT_SUBTLE)) };
     let labels = ["pe.tab.board", "pe.tab.activity", "pe.tab.wishlist"];
     let bar = div().flex().gap(z(30.)).border_b_1().border_color(c(tok(idx::BORDER_SUBTLE))).children(labels.iter().enumerate().map(|(i, k)| {
         let sel = e.tab == i;
@@ -1170,7 +1170,7 @@ fn tabs(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
             .id(SharedString::from(format!("pe-tab-{i}")))
             .pb(z(16.))
             .border_b_2()
-            .border_color(if sel { c(tok(idx::TEXT_STRONG)) } else { gpui::transparent_black() })
+            .border_color(if sel { c(tok(idx::INTERACTIVE_TEXT_ACTIVE)) } else { gpui::transparent_black() })
             .text_size(z(14.))
             .line_height(z(14.))
             .font_weight(FontWeight::SEMIBOLD)

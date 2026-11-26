@@ -223,6 +223,46 @@ pub struct Profile {
     pub effect_sku: Option<u64>,
     pub frame_sku: Option<u64>,
     pub look_skus: Vec<u64>,
+    pub discriminator: Option<SharedString>,
+    pub connections: Vec<Connection>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Connection {
+    pub kind: SharedString,
+    pub name: SharedString,
+    pub url: Option<SharedString>,
+    pub since: Option<i64>,
+}
+
+pub fn connection_url(kind: &str, id: &str, name: &str) -> Option<String> {
+    Some(match kind {
+        "steam" => format!("https://steamcommunity.com/profiles/{id}"),
+        "twitch" => format!("https://www.twitch.tv/{name}"),
+        "youtube" => format!("https://www.youtube.com/channel/{id}"),
+        "github" => format!("https://github.com/{name}"),
+        "reddit" => format!("https://www.reddit.com/u/{name}"),
+        "spotify" => format!("https://open.spotify.com/user/{id}"),
+        "twitter" => format!("https://x.com/{name}"),
+        "tiktok" => format!("https://www.tiktok.com/@{name}"),
+        "instagram" => format!("https://www.instagram.com/{name}"),
+        "bluesky" => format!("https://bsky.app/profile/{id}"),
+        "ebay" => format!("https://www.ebay.com/usr/{name}"),
+        _ => return None,
+    })
+}
+
+pub fn parse_connections(v: Option<&Value>) -> Vec<Connection> {
+    let Some(list) = v.and_then(Value::as_array) else { return Vec::new() };
+    list.iter()
+        .filter_map(|c| {
+            let kind = c.get("type")?.as_str()?;
+            let name = c.get("name").and_then(Value::as_str).unwrap_or_default();
+            let id = c.get("id").and_then(Value::as_str).unwrap_or_default();
+            let since = c.get("metadata").and_then(|m| m.get("created_at")).and_then(Value::as_str).and_then(iso_to_unix);
+            Some(Connection { kind: kind.to_owned().into(), name: name.to_owned().into(), url: connection_url(kind, id, name).map(Into::into), since })
+        })
+        .collect()
 }
 
 pub fn snowflake_time(id: u64) -> i64 {
@@ -304,6 +344,8 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
         effect_sku: fx.0,
         frame_sku: fx.1,
         look_skus: look_skus(p, fx),
+        discriminator: Some(u.discriminator.as_str()).filter(|d| !d.is_empty() && *d != "0").map(|d| d.to_owned().into()),
+        connections: parse_connections(p.extra.get("connected_accounts")),
     }
 }
 

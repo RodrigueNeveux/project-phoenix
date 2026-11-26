@@ -119,6 +119,7 @@ impl PhoenixApp {
             return;
         }
         set_modal_tab(tab);
+        crate::ui::profile_bot::set_tab(if tab == TAB_SERVERS { crate::ui::profile_bot::TAB_SERVERS } else { crate::ui::profile_bot::TAB_BIO });
         self.people.modal = Some(user);
         cx.notify();
     }
@@ -180,7 +181,22 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
                 .into_any_element(),
         );
     }
-    if let Some(u) = app.people.modal {
+    if let Some(u) = app.people.modal.filter(|u| app.users.get(u).is_some_and(|u| u.bot)) {
+        let w = px(crate::ui::profile_bot::W).min(vp.width);
+        let h = px(crate::ui::profile_bot::height(f32::from(vp.height)));
+        out.push(
+            div()
+                .id("profile-modal")
+                .absolute()
+                .left(((vp.width - w) / 2.).max(px(0.)))
+                .top(((vp.height - h) / 2.).max(px(0.)))
+                .w(w)
+                .h(h)
+                .occlude()
+                .child(crate::ui::profile_bot::card(app, u, app.selected_guild, vp, cx))
+                .into_any_element(),
+        );
+    } else if let Some(u) = app.people.modal {
         let b = modal_box(f32::from(vp.width), f32::from(vp.height), false);
         let (w, h) = (px(b.w), px(b.h));
         out.push(
@@ -333,6 +349,63 @@ pub(crate) fn member_since_section(app: &PhoenixApp, p: &Profile, guild: Option<
     div().flex().flex_col().gap(z(8.)).child(section_heading(crate::t!("profile.member_since"))).child(member_since_row(app, p, guild))
 }
 
+fn connections_section(list: &[crate::presence::Connection]) -> Option<Div> {
+    (!list.is_empty()).then(|| {
+        div().flex().flex_col().gap(z(8.)).child(section_heading(crate::t!("profile.connections"))).child(div().flex().flex_col().gap(z(16.)).children(list.iter().enumerate().map(|(n, a)| {
+            let icon = crate::ui::settings::art::connection_icon(&a.kind).map(|(u, _)| img(SharedString::from(u)).size(z(18.)).object_fit(gpui::ObjectFit::Contain));
+            let url = a.url.clone();
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(div().flex_none().size(z(24.)).rounded(z(8.)).bg(gpui::white()).flex().items_center().justify_center().children(icon))
+                .child(
+                    div()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .child(
+                            div()
+                                .id(("profile-connection", n as u64))
+                                .flex()
+                                .items_center()
+                                .gap(z(2.))
+                                .when(url.is_some(), |d| d.cursor_pointer())
+                                .on_click(move |_, _, cx| {
+                                    if let Some(u) = &url {
+                                        cx.open_url(u)
+                                    }
+                                })
+                                .child(div().truncate().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(a.name.clone()))
+                                .when(a.url.is_some(), |d| d.child(gpui::svg().path(crate::icons::path("chat/link")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_DEFAULT))))),
+                        )
+                        .children(a.since.map(|t| {
+                            div().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("profile.connection_since", date = format_date(t)))
+                        })),
+                )
+        })))
+    })
+}
+
+fn note_section(p: &Profile) -> Div {
+    let note = (!p.note.is_empty()).then(|| p.note.clone());
+    div().flex().flex_col().gap(z(4.)).child(section_heading(crate::t!("profile.note_title"))).child(
+        div()
+            .ml(z(-7.))
+            .px(z(7.))
+            .py(z(1.))
+            .rounded(z(8.))
+            .cursor_text()
+            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .map(|d| match note {
+                Some(n) => d.text_color(c(tok(idx::TEXT_DEFAULT))).child(n),
+                None => d.text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("profile.note_placeholder")),
+            }),
+    )
+}
+
 pub(crate) fn roles_section(app: &PhoenixApp, guild: Option<Id>, uid: Id, cx: &mut Context<PhoenixApp>) -> Option<Div> {
     let roles = info(app, uid, guild).roles;
     (guild.is_some() && !roles.is_empty()).then(|| {
@@ -350,7 +423,7 @@ fn section_heading(t: SharedString) -> Div {
         .text_size(z(12.))
         .line_height(z(16.))
         .font_weight(FontWeight::MEDIUM)
-        .text_color(c(tok(idx::TEXT_DEFAULT)))
+        .text_color(c(tok(idx::TEXT_SUBTLE)))
         .child(t)
 }
 
@@ -1505,6 +1578,9 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         }
     }
     pbody = pbody.children(roles_section(app, guild, uid, cx));
+    if let Some(p) = i.prof {
+        pbody = pbody.children(connections_section(&p.connections)).child(note_section(p));
+    }
 
     let profile = div()
         .id("profile-modal-card")
@@ -1550,10 +1626,11 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         let on = sel == n;
         div()
             .id(("profile-modal-tab", n as u64))
+            .group(SharedString::from(format!("profile-modal-tab-{n}")))
             .relative()
             .map(|d| if n == TAB_SERVERS { d.flex_shrink(1.).min_w_0().overflow_hidden().text_ellipsis() } else { d.flex_none() })
             .whitespace_nowrap()
-            .when(n != first, |d| d.ml(z(16.)))
+            .when(n != first, |d| d.ml(z(30.)))
             .pb(z(16.))
             .mb(z(-1.))
             .cursor_pointer()
@@ -1567,9 +1644,17 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 window.refresh();
             })
             .child(t)
-            .when(on, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(z(2.)).rounded_t(z(2.)).bg(c(tok(idx::TEXT_STRONG))))
-            })
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .right_0()
+                    .bottom_0()
+                    .h(z(2.))
+                    .rounded_t(z(2.))
+                    .when(on, |d| d.bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))))
+                    .when(!on, |d| d.group_hover(SharedString::from(format!("profile-modal-tab-{n}")), |s| s.bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))))),
+            )
     };
     let mut panel = div().flex().flex_col().pt(z(20.)).pr(z(8.)).pb(z(16.));
     let empty = |t: SharedString| div().ml(z(12.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(t);

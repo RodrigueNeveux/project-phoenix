@@ -7,6 +7,7 @@ pub mod mobile_status;
 pub mod profile_theme;
 pub mod profile_games;
 pub mod profile_board;
+pub mod profile_bot;
 pub mod profile_wishlist;
 pub mod call_popout;
 pub mod call_menus;
