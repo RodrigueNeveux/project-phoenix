@@ -394,6 +394,11 @@ fn blocked_user(cache: &Cache, user: api::Snowflake) -> bool {
     })
 }
 
+fn leaderboard_users(m: &api::Message) -> Vec<api::Snowflake> {
+    let Some(board) = m.guild_space_data.as_ref().and_then(|d| d.get("leaderboard")) else { return Vec::new() };
+    ["user_id", "secondary_user_id"].iter().filter_map(|k| snowflake(board.get(*k))).map(api::Snowflake).collect()
+}
+
 pub fn facts(cache: &Cache, me: api::Snowflake, m: &api::Message) -> MessageFacts {
     let mut chan = cache.channel(m.channel_id);
     if m.kind == api::MessageType::ThreadStarterMessage
@@ -422,7 +427,9 @@ pub fn facts(cache: &Cache, me: api::Snowflake, m: &api::Message) -> MessageFact
         suppressed: m.flags & SUPPRESS_NOTIFICATIONS != 0,
         self_mentionable: m.kind == api::MessageType::PollResult,
         spammer: m.author.public_flags.unwrap_or(0) & SPAMMER != 0,
-        blocked: blocked_user(cache, m.author.id) || m.interaction_metadata.as_ref().and_then(|i| i.user.as_ref()).is_some_and(|u| blocked_user(cache, u.id)),
+        blocked: blocked_user(cache, m.author.id)
+            || m.interaction_metadata.as_ref().and_then(|i| i.user.as_ref()).is_some_and(|u| blocked_user(cache, u.id))
+            || leaderboard_users(m).into_iter().any(|u| blocked_user(cache, u)),
         message_request: chan.as_ref().is_some_and(|c| c.is_message_request && !c.is_spam),
         thread,
         grandparent,
@@ -1130,6 +1137,11 @@ mod tests {
         let mut via_app = dm_msg(40, 2);
         via_app.interaction_metadata = serde_json::from_value(json!({"id": "1", "type": 2, "user": {"id": "9", "username": "ignored"}})).ok();
         assert!(facts(&cache, me, &via_app).blocked, "ignored interaction user");
+        let mut board = dm_msg(40, 2);
+        board.guild_space_data = Some(json!({"leaderboard": {"user_id": "3", "secondary_user_id": "8", "event": 3, "stat": 1, "value": 5}}));
+        assert!(facts(&cache, me, &board).blocked, "blocked user on a leaderboard card");
+        board.guild_space_data = Some(json!({"leaderboard": {"user_id": "3"}}));
+        assert!(!facts(&cache, me, &board).blocked);
         let p = NotifyPrefs::default();
         assert!(!show_message(&p, &facts(&cache, me, &dm_msg(41, 5)), &ctx()));
         assert!(!should_notify(&p, &facts(&cache, me, &dm_msg(41, 5))));

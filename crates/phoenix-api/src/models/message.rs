@@ -412,6 +412,8 @@ pub struct Message {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guild_space_data: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub role_subscription_data: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purchase_notification: Option<serde_json::Value>,
