@@ -1004,22 +1004,45 @@ pub fn hero_pixel(x: f32, y: f32) -> [u8; 3] {
     [px(0), px(1), px(2)]
 }
 
-thread_local! {
-    static HERO_IMG: RefCell<Option<std::sync::Arc<gpui::RenderImage>>> = const { RefCell::new(None) };
+pub const HERO_LIGHT_STOPS: [(f32, [f32; 3]); 3] = [(0., [239., 248., 255.]), (0.3028, [215., 220., 255.]), (1., [253., 253., 255.])];
+pub const HERO_LIGHT_OPACITY: f32 = 0.8;
+
+pub fn hero_pixel_light(x: f32, y: f32, under: [f32; 3]) -> [u8; 3] {
+    let dx = (x + 0.0404) / 1.2223;
+    let dy = y / 3.5184;
+    let t = (dx * dx + dy * dy).sqrt().clamp(0., 1.);
+    let (mut a, mut b) = (HERO_LIGHT_STOPS[0], HERO_LIGHT_STOPS[1]);
+    for w in HERO_LIGHT_STOPS.windows(2) {
+        if t >= w[0].0 && t <= w[1].0 {
+            (a, b) = (w[0], w[1]);
+        }
+    }
+    let f = if b.0 > a.0 { (t - a.0) / (b.0 - a.0) } else { 0. };
+    let px = |i: usize| ((a.1[i] + (b.1[i] - a.1[i]) * f) * HERO_LIGHT_OPACITY + under[i] * (1. - HERO_LIGHT_OPACITY)).round().clamp(0., 255.) as u8;
+    [px(0), px(1), px(2)]
 }
 
-fn hero_image() -> std::sync::Arc<gpui::RenderImage> {
-    if let Some(i) = HERO_IMG.with(|h| h.borrow().clone()) {
+thread_local! {
+    static HERO_IMG: RefCell<Option<(Option<u32>, std::sync::Arc<gpui::RenderImage>)>> = const { RefCell::new(None) };
+}
+
+fn hero_image(light_under: Option<[f32; 3]>) -> std::sync::Arc<gpui::RenderImage> {
+    let key = light_under.map(|u| ((u[0] as u32) << 16) | ((u[1] as u32) << 8) | (u[2] as u32));
+    if let Some(i) = HERO_IMG.with(|h| h.borrow().as_ref().filter(|(k, _)| *k == key).map(|(_, i)| i.clone())) {
         return i;
     }
     let (w, h) = (640u32, 200u32);
     let mut out = image::RgbaImage::new(w, h);
     for (x, y, p) in out.enumerate_pixels_mut() {
-        let [r, g, b] = hero_pixel((x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32);
+        let (fx, fy) = ((x as f32 + 0.5) / w as f32, (y as f32 + 0.5) / h as f32);
+        let [r, g, b] = match light_under {
+            Some(u) => hero_pixel_light(fx, fy, u),
+            None => hero_pixel(fx, fy),
+        };
         *p = image::Rgba([b, g, r, 255]);
     }
     let arc = std::sync::Arc::new(gpui::RenderImage::new(vec![image::Frame::new(out)]));
-    HERO_IMG.with(|h| *h.borrow_mut() = Some(arc.clone()));
+    HERO_IMG.with(|h| *h.borrow_mut() = Some((key, arc.clone())));
     arc
 }
 
@@ -1028,13 +1051,18 @@ fn hero(lines: &[SharedString], desc: SharedString) -> AnyElement {
     for l in lines {
         title = title.child(text(44., 44., FontWeight::BOLD, tk(idx::TEXT_STRONG), l.to_uppercase()).font_family(crate::fonts::display_family(crate::fonts::NITRO)));
     }
+    let light = crate::theme::is_light();
+    let under = light.then(|| {
+        let c = gpui::Rgba::from(tk(idx::BACKGROUND_BASE_LOWEST));
+        [c.r * 255., c.g * 255., c.b * 255.]
+    });
     div()
         .relative()
         .w_full()
         .h(z(HERO_H))
         .overflow_hidden()
-        .bg(gpui::black())
-        .child(img(gpui::ImageSource::Render(hero_image())).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Fill))
+        .when(!light, |d| d.bg(gpui::black()))
+        .child(img(gpui::ImageSource::Render(hero_image(under))).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Fill))
         .child(
             div()
                 .absolute()
@@ -1046,7 +1074,7 @@ fn hero(lines: &[SharedString], desc: SharedString) -> AnyElement {
                 .flex_col()
                 .justify_center()
                 .child(title)
-                .child(text(16., 20., FontWeight::MEDIUM, tk(idx::TEXT_MUTED), desc).mt(z(16.)).max_w(z(600.))),
+                .child(text(16., 20., FontWeight::MEDIUM, tk(if light { idx::TEXT_STRONG } else { idx::TEXT_MUTED }), desc).mt(z(16.)).max_w(z(600.))),
         )
         .into_any_element()
 }
@@ -1479,6 +1507,17 @@ mod tests {
         assert!(far.iter().all(|c| *c < 30));
         let mid = hero_pixel(0.45, 0.);
         assert!(mid[2] > mid[1] && mid[0] < 40);
+    }
+
+    #[test]
+    fn light_hero_gradient_follows_the_light_theme_css() {
+        let white = [255., 255., 255.];
+        let a = hero_pixel_light(0., 0., white);
+        assert!(a[2] == 255 && a[0] > 235);
+        let far = hero_pixel_light(1., 1., white);
+        assert!(far.iter().all(|c| *c > 245));
+        let ring = hero_pixel_light(0.33, 0., white);
+        assert!(ring[0] < 230 && ring[2] == 255);
     }
 
     #[test]
