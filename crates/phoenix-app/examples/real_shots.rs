@@ -290,6 +290,9 @@ impl Backend for ReadOnly {
     fn user_profile(&self, u: Id, g: Option<Id>) -> BoxFuture<phoenix_app::presence::Profile> {
         self.0.user_profile(u, g)
     }
+    fn guild_profile(&self, g: Id) -> BoxFuture<phoenix_app::commands::guide::GuildProfile> {
+        self.0.guild_profile(g)
+    }
     fn authorized_apps(&self) -> BoxFuture<Option<Vec<phoenix_app::ui::settings::authorized_apps::AuthorizedApp>>> {
         self.0.authorized_apps()
     }
