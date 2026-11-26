@@ -1492,7 +1492,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             mic_look,
                             true,
                             Some(std::rc::Rc::new(|_: &mut PhoenixApp, pos: gpui::Point<gpui::Pixels>, cx: &mut Context<PhoenixApp>| {
-                                crate::ui::voice_panel::toggle_audio_menu(crate::ui::voice_panel::Audio::Mic, pos);
+                                crate::ui::voice_panel::toggle_call_audio_menu(pos);
                                 cx.notify();
                             })),
                             crate::ui::voice_panel::audio_menu_open(crate::ui::voice_panel::Audio::Mic),

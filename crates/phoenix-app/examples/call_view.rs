@@ -125,7 +125,7 @@ fn main() -> anyhow::Result<()> {
                 }
                 phoenix_app::ui::call_menus::open(menu);
                 match caret.as_deref() {
-                    Some("mic") => phoenix_app::ui::voice_panel::toggle_audio_menu(phoenix_app::ui::voice_panel::Audio::Mic, gpui::point(gpui::px(560.), gpui::px(700.))),
+                    Some("mic") => phoenix_app::ui::voice_panel::toggle_call_audio_menu(gpui::point(gpui::px(560.), gpui::px(700.))),
                     Some("camera") => phoenix_app::ui::voice_panel::toggle_camera_menu(gpui::point(gpui::px(620.), gpui::px(700.))),
                     _ => {}
                 }

@@ -32,6 +32,7 @@ thread_local! {
     static USER_MENU: Cell<Option<(Id, Point<Pixels>)>> = const { Cell::new(None) };
     static POPOUT: Cell<Option<Tab>> = const { Cell::new(None) };
     static AUDIO_MENU: RefCell<Option<AudioMenu>> = const { RefCell::new(None) };
+    static AUDIO_FULL: Cell<bool> = const { Cell::new(false) };
     static CAMERA_MENU: RefCell<Option<(Point<Pixels>, Vec<String>)>> = const { RefCell::new(None) };
     static CAMERA_PICK: RefCell<Option<String>> = const { RefCell::new(None) };
     static FLAGS: RefCell<HashMap<Id, VoiceFlags>> = RefCell::new(HashMap::new());
@@ -220,6 +221,109 @@ pub fn toggle_audio_menu(kind: Audio, pos: Point<Pixels>) {
         (kind, pos, if kind == Audio::Mic { inputs } else { outputs })
     });
     AUDIO_MENU.with(|m| *m.borrow_mut() = next);
+    AUDIO_FULL.with(|f| f.set(false));
+}
+
+pub fn toggle_call_audio_menu(pos: Point<Pixels>) {
+    toggle_audio_menu(Audio::Mic, pos);
+    AUDIO_FULL.with(|f| f.set(true));
+}
+
+pub const PROFILES: [&str; 3] = ["voice.profile_iso", "voice.profile_studio", "voice.profile_custom"];
+pub const PROFILE_STUDIO: u32 = 1;
+
+fn device_submenu(kind: Audio, devices: Vec<String>) -> MenuItem {
+    let current = {
+        let p = prefs().lock();
+        if kind == Audio::Mic { p.input_device.clone() } else { p.output_device.clone() }
+    };
+    let mut list = vec![MenuItem::radio(crate::t!("voice.default"), current.is_none(), move |_, _, _| {
+        update(move |p| if kind == Audio::Mic { p.input_device = None } else { p.output_device = None }, true)
+    })];
+    for d in devices {
+        let on = current.as_deref() == Some(d.as_str());
+        let name = d.clone();
+        list.push(MenuItem::radio(d, on, move |_, _, _| {
+            let name = name.clone();
+            update(move |p| if kind == Audio::Mic { p.input_device = Some(name) } else { p.output_device = Some(name) }, true)
+        }));
+    }
+    MenuItem::Submenu {
+        label: if kind == Audio::Mic { crate::t!("voice.input_device_menu") } else { crate::t!("voice.output_device_menu") },
+        items: list,
+        icon: None,
+        subtext: Some(current.map(Into::into).unwrap_or_else(|| crate::t!("voice.default"))),
+    }
+}
+
+fn profile_submenu() -> MenuItem {
+    let now = prefs().lock().audio_profile.min(2);
+    let items = PROFILES
+        .iter()
+        .enumerate()
+        .map(|(i, k)| {
+            MenuItem::radio(crate::t!(*k), now == i as u32, move |_, _, _| {
+                update(
+                    move |p| {
+                        p.audio_profile = i as u32;
+                        if i < 2 {
+                            let on = i == 0;
+                            p.echo_cancellation = on;
+                            p.noise_suppression = on;
+                            p.agc = on;
+                        }
+                    },
+                    true,
+                )
+            })
+        })
+        .collect();
+    MenuItem::Submenu { label: crate::t!("voice.input_profile_menu"), items, icon: None, subtext: Some(crate::t!(PROFILES[now as usize])) }
+}
+
+fn volume_row(kind: Audio, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let vol_now = {
+        let p = prefs().lock();
+        if kind == Audio::Mic { p.input_volume } else { p.output_volume }
+    };
+    let max = if kind == Audio::Mic { 100 } else { 200 };
+    let frac = (vol_now as f32 / max as f32).clamp(0., 1.);
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .p(z(8.))
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(gpui::FontWeight::MEDIUM)
+                .text_color(t(idx::TEXT_STRONG))
+                .child(if kind == Audio::Mic { crate::t!("voice.input_volume_menu") } else { crate::t!("voice.output_volume_menu") }),
+        )
+        .child(div().px(z(8.)).mt(z(-4.)).child(crate::ui::settings::voice::slider(
+            if kind == Audio::Mic { "menu-input-volume" } else { "menu-output-volume" },
+            frac,
+            format!("{vol_now}%").into(),
+            Some((tok(idx::SLIDER_INDICATOR_BACKGROUND), tok(idx::SLIDER_TRACK_BACKGROUND))),
+            Rc::new(move |_, f, done, _| {
+                let v = (f * max as f32).round() as u32;
+                update(move |p| if kind == Audio::Mic { p.input_volume = v } else { p.output_volume = v }, done);
+            }),
+            cx,
+        )))
+        .pb(z(4.))
+        .into_any_element()
+}
+
+fn meter_row() -> AnyElement {
+    let level = crate::ui::settings::voice::live_level();
+    div()
+        .flex()
+        .flex_col()
+        .child(div().p(z(8.)).text_size(z(14.)).line_height(z(18.)).font_weight(gpui::FontWeight::MEDIUM).text_color(t(idx::TEXT_STRONG)).child(crate::t!("voice.input_level_menu")))
+        .child(div().px(z(8.)).pb(z(8.)).flex().child(crate::ui::settings::voice::meter_bar(level.map_or(crate::ui::settings::voice::DB_MIN, |(db, _)| db), level.is_some(), 28.)))
+        .child(gpui::canvas(|_, _, _| {}, |_, _, w, _| w.request_animation_frame()).size_0())
+        .into_any_element()
 }
 
 pub fn toggle_camera_menu(pos: Point<Pixels>) {
@@ -279,90 +383,61 @@ pub fn audio_menu_open(kind: Audio) -> bool {
     AUDIO_MENU.with(|m| m.borrow().as_ref().is_some_and(|(k, _, _)| *k == kind))
 }
 
-fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, deafened: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let e = cx.entity();
     let dismiss: context_menu::Dismiss = Rc::new(move |_: &mut Window, cx: &mut App| {
         AUDIO_MENU.with(|m| *m.borrow_mut() = None);
         e.update(cx, |_, cx| cx.notify());
     });
-    let current = {
-        let p = prefs().lock();
-        if kind == Audio::Mic { p.input_device.clone() } else { p.output_device.clone() }
-    };
-    let mut list = vec![MenuItem::radio(crate::t!("voice.default"), current.is_none(), move |_, _, _| {
-        update(move |p| if kind == Audio::Mic { p.input_device = None } else { p.output_device = None }, true)
-    })];
-    for d in devices {
-        let on = current.as_deref() == Some(d.as_str());
-        let name = d.clone();
-        list.push(MenuItem::radio(d, on, move |_, _, _| {
-            let name = name.clone();
-            update(move |p| if kind == Audio::Mic { p.input_device = Some(name) } else { p.output_device = Some(name) }, true)
-        }));
-    }
-    let device_label: SharedString = current.clone().map(Into::into).unwrap_or_else(|| crate::t!("voice.default"));
+    let full = kind == Audio::Mic && AUDIO_FULL.with(Cell::get);
     let e = cx.entity();
-    let vol_now = {
-        let p = prefs().lock();
-        if kind == Audio::Mic { p.input_volume } else { p.output_volume }
-    };
-    let max = if kind == Audio::Mic { 100 } else { 200 };
-    let frac = (vol_now as f32 / max as f32).clamp(0., 1.);
-    let volume = div()
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .p(z(8.))
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(t(idx::TEXT_STRONG))
-                .child(if kind == Audio::Mic { crate::t!("voice.input_volume_menu") } else { crate::t!("voice.output_volume_menu") }),
-        )
-        .child(div().px(z(8.)).mt(z(-4.)).child(crate::ui::settings::voice::slider(
-            if kind == Audio::Mic { "menu-input-volume" } else { "menu-output-volume" },
-            frac,
-            format!("{vol_now}%").into(),
-            Some((tok(idx::SLIDER_INDICATOR_BACKGROUND), tok(idx::SLIDER_TRACK_BACKGROUND))),
-            Rc::new(move |_, f, done, _| {
-                let v = (f * max as f32).round() as u32;
-                update(move |p| if kind == Audio::Mic { p.input_volume = v } else { p.output_volume = v }, done);
-            }),
-            cx,
-        )))
-        .pb(z(4.));
     let ptt = (kind == Audio::Mic).then(|| {
         let p = prefs().lock();
-        p.ptt_key.as_ref().map(|_| p.input_mode == crate::voice::prefs::InputMode::PushToTalk)
+        p.ptt_key.as_ref().map(|_| (p.input_mode == crate::voice::prefs::InputMode::PushToTalk, p.audio_profile == PROFILE_STUDIO))
     });
-    let mut items = vec![
-        MenuItem::Submenu {
-            label: if kind == Audio::Mic { crate::t!("voice.input_device_menu") } else { crate::t!("voice.output_device_menu") },
-            items: list,
-            icon: None,
-            subtext: Some(device_label),
-        },
-        MenuItem::Separator,
-        MenuItem::Custom(volume.into_any_element()),
-        MenuItem::Separator,
-    ];
-    if let Some(Some(on)) = ptt {
-        items.push(MenuItem::check(crate::t!("voice.ptt_menu"), on, move |_, _, _| {
-            update(move |p| p.input_mode = ptt_toggled(on), true)
+    let mut items = vec![device_submenu(kind, devices)];
+    if full {
+        items.push(profile_submenu());
+        items.push(device_submenu(Audio::Deafen, crate::voice::call::devices().1));
+    }
+    items.push(MenuItem::Separator);
+    items.push(MenuItem::Custom(volume_row(kind, cx)));
+    if full {
+        items.push(MenuItem::Custom(meter_row()));
+        items.push(MenuItem::Custom(volume_row(Audio::Deafen, cx)));
+    }
+    items.push(MenuItem::Separator);
+    if let Some(Some((on, studio))) = ptt {
+        if studio {
+            items.push(MenuItem::Disabled { label: crate::t!("voice.ptt_menu"), icon: None });
+        } else {
+            items.push(MenuItem::check(crate::t!("voice.ptt_menu"), on, move |_, _, _| {
+                update(move |p| p.input_mode = ptt_toggled(on), true)
+            }));
+        }
+    }
+    if full {
+        let d = cx.entity();
+        items.push(MenuItem::check(crate::t!("voice.deafen"), deafened, move |_, _, cx: &mut App| {
+            d.update(cx, |a, cx| {
+                a.deafened = !a.deafened;
+                crate::voice::sync_self_state(a);
+                cx.notify();
+            })
         }));
     }
-    items.extend([
-        MenuItem::action(crate::t!("voice.voice_settings"), Some(crate::icons::path("gear")), move |_, _, cx| {
-            AUDIO_MENU.with(|m| *m.borrow_mut() = None);
-            e.update(cx, |a, cx| {
-                crate::ui::settings::open(a, cx);
-                if let Some(s) = a.settings.as_mut() {
-                    s.page = crate::ui::settings::Page::VoiceVideo;
-                }
-            });
-        }),
-    ]);
+    items.push(MenuItem::action(crate::t!("voice.voice_settings"), Some(crate::icons::path("gear")), move |_, _, cx| {
+        AUDIO_MENU.with(|m| *m.borrow_mut() = None);
+        e.update(cx, |a, cx| {
+            crate::ui::settings::open(a, cx);
+            if let Some(s) = a.settings.as_mut() {
+                s.page = crate::ui::settings::Page::VoiceVideo;
+            }
+        });
+    }));
+    if full {
+        return context_menu::render_anchored(pos - gpui::point(px(0.), px(8.)), gpui::Anchor::BottomCenter, items, dismiss);
+    }
     context_menu::render(pos - gpui::point(px(0.), px(200.)), items, dismiss)
 }
 
@@ -1167,7 +1242,7 @@ fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElemen
 pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement> {
     let mut out = Vec::new();
     if let Some((kind, pos, devices)) = AUDIO_MENU.with(|m| m.borrow().clone()) {
-        out.push(audio_menu(kind, pos, devices, cx));
+        out.push(audio_menu(kind, pos, devices, app.deafened, cx));
     }
     if let Some((pos, cams)) = CAMERA_MENU.with(|m| m.borrow().clone()) {
         out.push(camera_menu(pos, cams, cx));
@@ -1202,6 +1277,14 @@ mod tests {
         assert_eq!(picked_camera(&cams, Some("B")), Some(1));
         assert_eq!(picked_camera(&cams, Some("gone")), Some(0));
         assert_eq!(picked_camera(&[], None), None);
+    }
+
+    #[test]
+    fn call_mic_menu_lists_the_client_input_profiles() {
+        use crate::i18n::t_in;
+        assert_eq!(PROFILES.map(|k| t_in("en-US", k, &[]).to_string()), ["Voice Isolation", "Studio", "Custom"]);
+        assert_eq!(t_in("fr", "voice.input_profile_menu", &[]).as_ref(), "Profil d'entrée audio");
+        assert_eq!(PROFILE_STUDIO, 1);
     }
 
     #[test]

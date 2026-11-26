@@ -27,7 +27,7 @@ pub(crate) type OnSlide = Rc<dyn Fn(&mut PhoenixApp, f32, bool, &mut Cx)>;
 const TRACK: u32 = 0x4E5058;
 const SENS_LOW: u32 = 0xF0B232;
 const SENS_HIGH: u32 = 0x23A55A;
-const DB_MIN: f32 = -100.;
+pub const DB_MIN: f32 = -100.;
 
 thread_local! {
     static BOUNDS: RefCell<HashMap<&'static str, Bounds<Pixels>>> = RefCell::new(HashMap::new());
@@ -351,8 +351,12 @@ fn button(id: &'static str, label: SharedString, bg: u32, _hover: u32) -> gpui::
 }
 
 fn meter(level_db: f32, active: bool) -> Div {
+    meter_bar(level_db, active, 28.)
+}
+
+pub fn meter_bar(level_db: f32, active: bool, height: f32) -> Div {
     let frac = if active { ((level_db - DB_MIN) / -DB_MIN).clamp(0., 1.) } else { 0. };
-    div().flex_1().h(z(28.)).child(
+    div().flex_1().h(z(height)).child(
         gpui::canvas(
             |_, _, _| {},
             move |b, _, window, _| {
@@ -383,7 +387,7 @@ fn meter(level_db: f32, active: bool) -> Div {
     )
 }
 
-fn live_level() -> Option<(f32, bool)> {
+pub fn live_level() -> Option<(f32, bool)> {
     let t = MIC_TEST.with(|m| m.borrow().as_ref().map(|t| (t.level_db(), t.gate_open())));
     t.or_else(|| {
         let c = manager().control();
