@@ -285,7 +285,7 @@ pub fn waveform(channel: &[f32], width: f32) -> (Vec<f32>, f32) {
     let max = h.iter().copied().fold(f32::MIN, f32::max);
     let norm: Vec<f32> = h.iter().map(|v| v * max.powi(-1)).collect();
     let mut sorted: Vec<(String, f32)> = h.iter().map(|v| (js_number(*v), *v)).collect();
-    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    sorted.sort_by(|(a, _), (b, _)| a.cmp(b));
     let p95 = sorted[((0.95 * h.len() as f32).floor() as usize).min(h.len() - 1)].1;
     (norm, (LOUDNESS_THRESHOLD / p95).min(1.))
 }
