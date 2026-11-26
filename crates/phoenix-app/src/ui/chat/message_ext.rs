@@ -409,7 +409,7 @@ fn burst_pill(entity: &Entity<PhoenixApp>, msg: &Message, ix: usize, r: &crate::
     let (rh, rc) = (r.clone(), r.clone());
     let accent = pal.map(|p| p.accent);
     let me_burst = r.me_burst;
-    let pill = crate::ui::states::track(div().id(("reaction-burst", ix)), fade_key)
+    let pill = div().id(("reaction-burst", ix))
         .relative()
         .py(z(2.))
         .px(z(6.))
@@ -454,7 +454,10 @@ fn burst_pill(entity: &Entity<PhoenixApp>, msg: &Message, ix: usize, r: &crate::
                 })
                 .child(SharedString::from(r.burst_count.to_string())),
         )
-        .on_hover(move |on, _, cx| {
+        .on_hover(move |on, window, cx| {
+            if crate::ui::states::set_hover(fade_key, *on) {
+                window.refresh();
+            }
             if *on && let Some(accent) = accent {
                 let rh = rh.clone();
                 e_hover.update(cx, |_, cx| burst::play(burst::Play { channel: ch, msg: id, token: &rh.emoji, emoji_id: rh.emoji_id, accent, kind: burst::Kind::Hover }, cx));
