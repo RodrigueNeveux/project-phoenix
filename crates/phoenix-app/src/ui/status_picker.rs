@@ -271,6 +271,11 @@ fn status_submenu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::State
 }
 
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let theme = app.people.profiles.get(&app.me.id).and_then(|p| p.theme);
+    crate::ui::profile_theme::scoped(theme, || render_inner(app, window, cx))
+}
+
+fn render_inner(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let me = app.me.id;
     ensure_avatar_colour(app, me, cx);
     let i = info(app, me, None);
@@ -483,7 +488,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                 .max_h(max_h - px(4.))
                 .rounded(z(6.))
                 .overflow_hidden()
-                .when(theme.is_some(), |d| d.bg(gpui::hsla(0., 0., 0., 0.6)))
+                .when_some(theme, |d, t| d.bg(crate::ui::profile_theme::overlay(t)))
                 .pb(z(4.))
                 .flex()
                 .flex_col()
