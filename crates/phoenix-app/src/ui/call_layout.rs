@@ -22,7 +22,7 @@ impl Grid {
     }
 
     pub fn last_column(&self, i: usize, n: usize) -> bool {
-        (i + 1) % self.columns == 0 || i + 1 == n
+        (i + 1).is_multiple_of(self.columns) || i + 1 == n
     }
 
     pub fn last_row(&self, i: usize) -> bool {
