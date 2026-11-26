@@ -55,11 +55,13 @@ fn bars(app: &PhoenixApp) -> (Bar, Bar) {
         let unreads_all = app.backend.unreads_all(id);
         let unread = counts_as_unread(ch.unread, ch.muted, text, unreads_all);
         let ix = r + 1;
-        let place = match (list.item_is_above_viewport(ix), list.item_is_below_viewport(ix)) {
+        let place = match (list.item_is_above_viewport(ix), list.bounds_for_item(ix)) {
             (Some(true), _) => Some(Place::Above),
-            (_, Some(true)) => Some(Place::Below),
-            (Some(false), Some(false)) => Some(Place::Visible),
-            (None, None) if laid_out => Some(Place::Below),
+            (_, Some(b)) => {
+                let vp = list.viewport_bounds();
+                Some(place_of(f32::from(b.top()), f32::from(b.bottom()), f32::from(vp.top()), f32::from(vp.bottom())))
+            }
+            (_, None) if laid_out => Some(Place::Below),
             _ => None,
         };
         tracing::debug!(
@@ -83,6 +85,16 @@ fn bars(app: &PhoenixApp) -> (Bar, Bar) {
     let out = pick(&items);
     tracing::debug!(target: "phoenix::unread_bar", top = ?out.0, bottom = ?out.1);
     out
+}
+
+fn place_of(top: f32, bottom: f32, view_top: f32, view_bottom: f32) -> Place {
+    if top < view_top {
+        Place::Above
+    } else if bottom > view_bottom {
+        Place::Below
+    } else {
+        Place::Visible
+    }
 }
 
 fn pick(items: &[Item]) -> (Bar, Bar) {
@@ -224,6 +236,15 @@ mod tests {
         assert_eq!(pick(&[above, it(5, Place::Visible, true, 0)]), (None, None));
         assert_eq!(pick(&[above, it(9, Place::Below, true, 0)]), (None, Some((9, Mode::Unread))));
         assert_eq!(pick(&[above, it(5, Place::Visible, false, 0)]), (Some((2, Mode::Unread)), None));
+    }
+
+    #[test]
+    fn partly_hidden_rows_count_as_hidden_like_the_client() {
+        assert_eq!(place_of(94., 128., 100., 700.), Place::Above);
+        assert_eq!(place_of(100., 134., 100., 700.), Place::Visible);
+        assert_eq!(place_of(680., 714., 100., 700.), Place::Below);
+        assert_eq!(place_of(666., 700., 100., 700.), Place::Visible);
+        assert_eq!(place_of(20., 54., 100., 700.), Place::Above);
     }
 
     #[test]
