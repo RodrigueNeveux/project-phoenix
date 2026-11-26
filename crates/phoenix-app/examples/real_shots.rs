@@ -2546,6 +2546,17 @@ fn main() -> anyhow::Result<()> {
             );
         }
     }
+    if std::env::var_os("PHX_SKELETON").is_some() {
+        cx.update(|cx| {
+            v.update(cx, |app, cx| {
+                if let Some(ch) = app.selected_channel {
+                    app.messages.insert(ch, phoenix_app::app::ChannelMessages { loading: true, ..Default::default() });
+                    app.message_list.reset(1);
+                }
+                cx.notify();
+            })
+        });
+    }
     let shot = shoot(&mut cx, &out);
     if voice_test {
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::SetCamera(false)))))?;

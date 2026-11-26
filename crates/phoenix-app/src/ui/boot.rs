@@ -29,6 +29,10 @@ fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed) || std::env::var_os("PHX_BOOT_SCREEN").is_some_and(|v| v != "0")
 }
 
+fn hold() -> Option<Duration> {
+    std::env::var("PHX_BOOT_HOLD_MS").ok().and_then(|v| v.parse().ok()).map(Duration::from_millis)
+}
+
 pub struct Boot {
     started: Instant,
     tip: usize,
@@ -291,7 +295,8 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, _cx: &mut Context<Phoen
         app.boot.main_since = Some(Instant::now());
     }
     let capped = app.boot.main_since.is_some_and(|t| t.elapsed() >= MAIN_CAP);
-    let ready = stable(app) || capped;
+    let held = hold().is_some_and(|h| app.boot.started.elapsed() < h);
+    let ready = (stable(app) || capped) && !held;
     let f = app.boot.frame(ready, Instant::now())?;
     window.request_animation_frame();
     let spinner = match crate::splash::spinner() {
