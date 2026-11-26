@@ -861,9 +861,36 @@ fn tile_fill(theme: Option<(u32, u32)>, dominant: Option<Hsla>) -> TileFill {
     }
 }
 
+thread_local! {
+    static GUILD_THEMES: std::cell::RefCell<std::collections::HashMap<(Id, Id), Option<(u32, u32)>>> = Default::default();
+    static GUILD_THEME_REQUESTS: std::cell::RefCell<std::collections::HashSet<(Id, Id)>> = Default::default();
+}
+
+fn guild_theme(app: &PhoenixApp, guild: Id, user: Id, cx: &mut Context<PhoenixApp>) -> Option<Option<(u32, u32)>> {
+    if let Some(t) = GUILD_THEMES.with(|m| m.borrow().get(&(guild, user)).copied()) {
+        return Some(t);
+    }
+    if GUILD_THEME_REQUESTS.with(|r| r.borrow_mut().insert((guild, user))) {
+        let fut = app.backend.user_profile(user, Some(guild));
+        cx.spawn(async move |this, cx| {
+            let Ok(p) = fut.await else { return };
+            GUILD_THEMES.with(|m| m.borrow_mut().insert((guild, user), p.theme));
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+    None
+}
+
+fn tile_theme(global: Option<(u32, u32)>, guild: Option<Option<(u32, u32)>>) -> Option<(u32, u32)> {
+    guild.unwrap_or(global)
+}
+
 fn tile_background(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>) -> gpui::Background {
     crate::ui::dm_profile_panel::ensure_profile(app, user, cx);
-    let theme = app.people.profiles.get(&user).and_then(|p| p.theme);
+    let guild = app.voice_channel.and_then(|ch| app.channels.get(&ch)).and_then(|c| c.guild);
+    let guild_theme = guild.and_then(|g| guild_theme(app, g, user, cx));
+    let theme = tile_theme(app.people.profiles.get(&user).and_then(|p| p.theme), guild_theme);
     let dominant = match app.users.get(&user).map(|u| &u.avatar) {
         Some(crate::model::ImageRef::Url(url)) => {
             crate::ui::avatar_color::ensure(url, cx);
@@ -1594,6 +1621,15 @@ fn stream_empty_preview(light: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tile_theme_uses_the_server_profile_once_loaded() {
+        use super::tile_theme;
+        assert_eq!(tile_theme(Some((1, 2)), None), Some((1, 2)));
+        assert_eq!(tile_theme(Some((1, 2)), Some(Some((3, 4)))), Some((3, 4)));
+        assert_eq!(tile_theme(None, Some(Some((3, 4)))), Some((3, 4)));
+        assert_eq!(tile_theme(Some((1, 2)), Some(None)), None);
+    }
+
     #[test]
     fn tile_background_prefers_the_profile_theme() {
         use super::{TileFill, tile_fill};
