@@ -349,7 +349,7 @@ pub fn after_resync() {
     }
 }
 
-fn ensure_loaded(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+pub(crate) fn ensure_loaded(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if REQUESTED.with(|r| r.replace(true)) {
         return;
     }

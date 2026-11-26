@@ -247,6 +247,7 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
                 .child(avatar(Some(&me), 64.))
                 .child(div().text_size(z(40.)).line_height(z(58.)).font_weight(FontWeight::BOLD).text_color(gpui::white()).child(me.display_name.clone())),
         );
+    crate::ui::quests_page::ensure_loaded(app, cx);
     let mut cards: Vec<AnyElement> = Vec::new();
     for (i, p) in perks(crate::ui::quests_page::premium_multiplier()).iter().enumerate() {
         cards.push(card(i, p, None, cx));
