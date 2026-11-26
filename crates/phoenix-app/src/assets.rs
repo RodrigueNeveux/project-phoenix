@@ -118,6 +118,8 @@ pub fn fallback_svg(path: &str) -> Option<&'static str> {
 
 fn svg_for(path: &str) -> Option<&'static str> {
     Some(match path {
+        "icons/double-chevron-right.svg" => s!(r#"<path d="m6 6 6 6-6 6M12 6l6 6-6 6"/>"#),
+        "icons/paintbrush-thin.svg" => s!(r#"<path d="m14 4 6 6-9 9a3 3 0 0 1-4.2 0L5 17.2a3 3 0 0 1 0-4.2zM3 21l3-3"/>"#),
         "icons/hash.svg" => s!(r#"<path d="M10 3 8 21M16 3l-2 18M4 8.5h17M3 15.5h17"/>"#),
         "icons/speaker.svg" => f!(r#"<path d="M11.4 3.2A1 1 0 0 1 13 4v16a1 1 0 0 1-1.6.8L6.7 17H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h3.7zM15.5 8.5a1 1 0 0 1 1.4 0 5 5 0 0 1 0 7 1 1 0 1 1-1.4-1.4 3 3 0 0 0 0-4.2 1 1 0 0 1 0-1.4zm2.8-2.8a1 1 0 0 1 1.4 0 9 9 0 0 1 0 12.6 1 1 0 1 1-1.4-1.4 7 7 0 0 0 0-9.8 1 1 0 0 1 0-1.4z"/>"#),
         "icons/megaphone.svg" => s!(r#"<path d="M3 10v4a1 1 0 0 0 1 1h3l8 5V4L7 9H4a1 1 0 0 0-1 1zM7 15l1.5 5M19 9.5a3 3 0 0 1 0 5"/>"#),
