@@ -253,10 +253,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 
     let vp = window.viewport_size();
     let side = if chat_open() { CHAT_W } else { 0. };
-    let w = f32::from(vp.width) / zoom - 72. - crate::ui::sidebar_resize::width() - side - 16.;
-    let h = f32::from(vp.height) / zoom - 32. - 33. - 8. - 80. - 8.;
-    let w = w.max(100.);
-    let h = h.max(60.);
+    let gw = (f32::from(vp.width) / zoom - 72. - crate::ui::sidebar_resize::width() - side).max(100.);
+    let gh = (f32::from(vp.height) / zoom - 32. - if crate::theme::frame_borders() { 1. } else { 0. }).max(60.);
+    let w = gw - 16.;
     let focus = match FOCUS.with(|c| c.get()) {
         Focus::Grid => None,
         Focus::Tile(u, s) => tiles.iter().position(|t| t.user == u && t.stream == s),
@@ -272,55 +271,9 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     }
 
     let tiles_el = if let Some(fi) = focus.filter(|_| tiles.len() > 1) {
-        let open = strip_open();
-        let band = if open { h - STRIP_H - 8. - 72. } else { h - 72. };
-        let fw = w.min(band.max(40.) * 16. / 9.);
-        let rest: Vec<&Tile> = tiles.iter().enumerate().filter(|(i, _)| *i != fi).map(|(_, t)| t).collect();
-        let n = rest.len().max(1) as f32;
-        let sw = ((w - 8. * (n - 1.)) / n).min(STRIP_H * 16. / 9.);
-        div()
-            .flex_1()
-            .min_h_0()
-            .px(z(8.))
-            .flex()
-            .flex_col()
-            .child(
-                div()
-                    .flex_1()
-                    .min_h_0()
-                    .pt(z(72.))
-                    .pb(z(8.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(render_tile(app, &tiles[fi], fw, fw * 9. / 16., fade, cx)),
-            )
-            .relative()
-            .when(open, |d| {
-                d.child(
-                    div()
-                        .h(z(STRIP_H))
-                        .flex_none()
-                        .flex()
-                        .justify_center()
-                        .gap(z(8.))
-                        .children(rest.into_iter().map(|tile| render_tile(app, tile, sw, STRIP_H, fade, cx))),
-                )
-            })
-            .child(strip_button(open, fade, cx))
+        focused_layer(app, &tiles, fi, gw, gh, fade, cx)
     } else {
-        let (_cols, tw) = grid(tiles.len(), w, h, 8.);
-        let th = tw * 9. / 16.;
-        div()
-            .flex_1()
-            .min_h_0()
-            .px(z(8.))
-            .flex()
-            .flex_wrap()
-            .content_center()
-            .justify_center()
-            .gap(z(8.))
-            .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th, fade, cx)))
+        grid_layer(app, &tiles, gw, gh, fade, cx)
     };
 
     let toasts = crate::ui::call_toasts::render(app, ch_id, window, cx);
@@ -335,9 +288,10 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .bg(t(idx::BLACK))
         .when(crate::theme::frame_borders(), |d| d.border_t_1().border_color(t(idx::APP_FRAME_BORDER)))
         .on_mouse_move(cx.listener(|_, _, _, cx| woke(cx)))
+        .child(tiles_el)
         .child(top_bar(app, crate::ui::dm_profile_panel::channel_name(app, ch), cx))
         .child(div().h(z(8.)))
-        .child(tiles_el)
+        .child(div().flex_1().min_h_0())
         .child(bottom_controls(app, collapse(w + 16.), cx))
         .relative()
         .children(toasts);
@@ -411,7 +365,7 @@ pub fn render_private(app: &PhoenixApp, header: gpui::Div, window: &mut Window, 
             .content_center()
             .justify_center()
             .gap(z(8.))
-            .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th, fade, cx)))
+            .children(tiles.iter().map(|tile| render_tile(app, tile, tw, th, tw, fade, cx)))
             .into_any_element()
     } else {
         let users: Vec<Id> = ch.voice_users.clone();
@@ -757,11 +711,76 @@ fn stream_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
     Some(crate::ui::context_menu::render(pos, items, dismiss))
 }
 
-fn strip_button(open: bool, fade: f32, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+fn grid_layer(app: &PhoenixApp, tiles: &[Tile], gw: f32, gh: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let n = tiles.len();
+    let g = crate::ui::call_layout::grid(n, gw, gh);
+    let (tw, th) = (g.tile_w, g.tile_h());
+    let spare = g.top - crate::ui::call_layout::GRID_PAD_Y;
+    div()
+        .id("call-grid")
+        .absolute()
+        .top_0()
+        .left_0()
+        .w(z(gw))
+        .h(z(gh))
+        .overflow_y_scroll()
+        .pt(z(g.top))
+        .pb(z(crate::ui::call_layout::GRID_PAD_Y + spare - 8.))
+        .px(z(8.))
+        .flex()
+        .flex_col()
+        .children(tiles.chunks(g.columns.max(1)).enumerate().map(|(r, row)| {
+            div().flex_none().flex().justify_center().children(row.iter().enumerate().map(|(c, tile)| {
+                let i = r * g.columns + c;
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .when(g.pad_column, |d| d.px(z(2.)))
+                    .when(!g.last_column(i, n), |d| d.mr(z(8.)))
+                    .when(!g.last_row(i), |d| d.mb(z(8.)))
+                    .child(render_tile(app, tile, tw, th, tw, fade, cx))
+            }))
+        }))
+        .into_any_element()
+}
+
+fn focused_layer(app: &PhoenixApp, tiles: &[Tile], fi: usize, gw: f32, gh: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::ui::call_layout as cl;
+    let open = strip_open();
+    let rest: Vec<&Tile> = tiles.iter().enumerate().filter(|(i, _)| *i != fi).map(|(_, t)| t).collect();
+    let f = cl::focus(gw, gh, 16. / 9., open, rest.len());
+    let strip_shown = f.strip.is_some();
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .w(z(gw))
+        .h(z(gh))
+        .child(div().absolute().left(z(f.x)).top(z(f.y)).child(render_tile(app, &tiles[fi], f.w, f.h, gw, fade, cx)))
+        .children(f.strip.map(|s| {
+            div()
+                .absolute()
+                .left(z(cl::STRIP_GAP))
+                .right(z(cl::STRIP_GAP))
+                .top(z(s.top))
+                .h(z(cl::STRIP_TILE_H))
+                .flex()
+                .justify_center()
+                .children(rest.iter().take(s.count).enumerate().map(|(i, tile)| {
+                    div()
+                        .flex_none()
+                        .when(i > 0, |d| d.ml(z(cl::STRIP_GAP)))
+                        .child(render_tile(app, tile, s.tile_w, cl::STRIP_TILE_H, s.rule_w, fade, cx))
+                }))
+        }))
+        .child(strip_button(open && strip_shown, f.action_top, fade, cx))
+        .into_any_element()
+}
+
+fn strip_button(open: bool, top: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let white = t(idx::WHITE);
-    let row = div().absolute().left_0().right_0().flex().justify_center().opacity(fade);
-    let row = if open { row.bottom(z(STRIP_H - 8. - 32.)) } else { row.bottom(z(8.)) };
-    row.child(
+    div().absolute().left_0().right_0().top(z(top)).flex().justify_center().opacity(fade).child(
         div()
             .id("call-participants")
             .w(z(60.))
@@ -791,7 +810,6 @@ fn strip_button(open: bool, fade: f32, cx: &mut Context<PhoenixApp>) -> impl Int
 
 const CHAT_W: f32 = 480.;
 
-const STRIP_H: f32 = 112.;
 
 fn top_bar(_app: &PhoenixApp, name: SharedString, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let open = chat_open();
@@ -1122,7 +1140,7 @@ pub fn stream_key(app: &PhoenixApp, owner: Id) -> Option<String> {
     Some(crate::voice::stream::key(guild.map(|g| g.0), ch.0, owner.0))
 }
 
-fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if tile.invite {
         return solo_tile(w, h);
     }
@@ -1153,21 +1171,24 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
         .overflow_hidden()
         .cursor_pointer();
 
+    let look = crate::ui::call_layout::tile_look(rule_w);
     let pill = |icon: Option<AnyElement>, label: Option<SharedString>| {
         div()
             .flex()
+            .flex_initial()
             .items_center()
             .gap(z(4.))
             .min_w_0()
+            .min_h(z(20.))
             .px(z(8.))
             .py(z(6.))
             .rounded(z(8.))
             .bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT))
             .text_color(t(idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT))
-            .text_size(z(14.))
-            .line_height(z(18.))
+            .text_size(z(look.name_size.0))
+            .line_height(z(look.name_size.1))
             .children(icon)
-            .children(label.map(|l| div().min_w_0().text_ellipsis().child(l)))
+            .children(label.map(|l| div().min_w_0().text_ellipsis().whitespace_nowrap().child(l)))
     };
     let white = t(idx::WHITE);
 
@@ -1271,14 +1292,18 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
                     .text_color(white)
                     .child(crate::t!("voice.live")),
             )
-            .child(
-                div()
-                    .absolute()
-                    .left(z(4.))
-                    .bottom(z(4.))
-                    .opacity(fade)
-                    .child(pill(Some(glyph("icons/voice/screen.svg", 16., white).into_any_element()), Some(name))),
-            )
+            .when(look.show_name, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .left(z(look.inset))
+                        .bottom(z(look.inset))
+                        .right(z(look.inset))
+                        .flex()
+                        .opacity(fade)
+                        .child(pill(Some(glyph("icons/voice/screen.svg", 16., white).into_any_element()), Some(name))),
+                )
+            })
     } else {
         let local_muted = !me && crate::voice::prefs::prefs().lock().user(tile.user).muted;
         let state_icon = voice_status_icon(f, local_muted).map(|(name, critical)| {
@@ -1292,7 +1317,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
             .justify_center()
             .map(|d| match f.video.then(|| if me { camera_image().filter(|_| !crate::ui::call_menus::self_video_hidden()) } else { remote_image(tile.user) }).flatten() {
                 Some(img) => d.bg(t(idx::BACKGROUND_BASE_LOWER)).child(gpui::img(img).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Contain)),
-                None => d.child(avatar(u, 80. * crate::theme::zoom())),
+                None => d.child(avatar(u, look.avatar * crate::theme::zoom())),
             })
             .children(crate::ui::voice_effects::overlay(tile.user, w, h))
             .when(f.video, |d| {
@@ -1310,16 +1335,18 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, fade: f32, cx: &mu
                         .child(glyph("icons/voice/camera.svg", 16., t(idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT))),
                 )
             })
-            .child(
-                div()
-                    .absolute()
-                    .left(z(4.))
-                    .bottom(z(4.))
-                    .right(z(4.))
-                    .flex()
-                    .opacity(fade)
-                    .child(pill(state_icon, Some(name))),
-            )
+            .when(look.show_name, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .left(z(look.inset))
+                        .bottom(z(look.inset))
+                        .right(z(look.inset))
+                        .flex()
+                        .opacity(fade)
+                        .child(pill(state_icon, Some(name))),
+                )
+            })
             .when(ring_alpha > 0.001, |d| {
                 d.child(
                     div()
