@@ -242,7 +242,7 @@ pub fn effect_tints(accent: (u8, u8, u8)) -> [(u8, u8, u8); 2] {
         let a = s * n.min(1. - n) / 100.;
         let ch = |t: f64| {
             let k = (t + hue / 30.) % 12.;
-            (255. * (n - a * (k - 3.).min(9. - k).min(1.).max(-1.)))
+            (255. * (n - a * (k - 3.).min(9. - k).clamp(-1., 1.)))
                 .round()
                 .clamp(0., 255.) as u8
         };

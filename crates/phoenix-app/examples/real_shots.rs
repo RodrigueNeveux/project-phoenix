@@ -1543,10 +1543,30 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
-                "reactions" | "forward" => {
+                "burstplay" => {
                     let pick = app.selected_channel.and_then(|c| {
                         let msgs = &app.messages.get(&c)?.msgs;
-                        let m = msgs.iter().rev().find(|m| !m.reactions.is_empty()).or(msgs.last())?;
+                        let m = msgs.iter().rev().find(|m| m.reactions.iter().any(|r| r.burst_count > 0))?;
+                        let r = m.reactions.iter().find(|r| r.burst_count > 0)?.clone();
+                        Some((c, m.id, r))
+                    });
+                    if let Some((c, m, r)) = pick
+                        && let Some(p) = phoenix_app::ui::burst::palette(&r.burst_colors, !phoenix_app::theme::is_light())
+                    {
+                        println!("burst play on {m:?} {}", r.emoji);
+                        let play = phoenix_app::ui::burst::Play { channel: c, msg: m, token: &r.emoji, emoji_id: r.emoji_id, accent: p.accent, kind: phoenix_app::ui::burst::Kind::Hover };
+                        phoenix_app::ui::burst::play(play, cx);
+                    }
+                }
+                "reactions" | "forward" => {
+                    let burst = arg == "burst";
+                    let pick = app.selected_channel.and_then(|c| {
+                        let msgs = &app.messages.get(&c)?.msgs;
+                        let m = msgs
+                            .iter()
+                            .rev()
+                            .find(|m| if burst { m.reactions.iter().any(|r| r.burst_count > 0) } else { !m.reactions.is_empty() })
+                            .or(msgs.last())?;
                         Some((c, m.id))
                     });
                     if let Some((c, m)) = pick {
