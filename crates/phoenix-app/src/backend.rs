@@ -451,6 +451,12 @@ pub trait Backend: Send + Sync + 'static {
     fn guild_home_header(&self, _guild: Id) -> Option<String> {
         None
     }
+    fn guild_tag(&self, _guild: Id) -> Option<(String, Option<String>)> {
+        None
+    }
+    fn guild_incidents(&self, _guild: Id) -> Option<phoenix_api::models::IncidentsData> {
+        None
+    }
     fn channel_user_limit(&self, _channel: Id) -> Option<u32> {
         None
     }

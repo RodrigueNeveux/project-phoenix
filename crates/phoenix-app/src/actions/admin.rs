@@ -283,8 +283,16 @@ impl PhoenixApp {
     }
 
     pub fn security_state(&self, guild: Id) -> privacy::Security {
-        let locked = self.backend.guild_features(guild).iter().any(|f| f == "INVITES_DISABLED");
-        privacy::Security::with_state(guild, locked, false, None, false)
+        let feature = self.backend.guild_features(guild).iter().any(|f| f == "INVITES_DISABLED");
+        let now = chrono::Utc::now();
+        let inc = self.backend.guild_incidents(guild);
+        let invites = feature || inc.as_ref().is_some_and(|i| incident_active(i.invites_disabled_until.as_deref(), now));
+        let dms = inc.as_ref().is_some_and(|i| incident_active(i.dms_disabled_until.as_deref(), now));
+        privacy::Security::with_state(guild, invites, dms, inc.and_then(|i| i.lockdown_duration_hours), false)
+    }
+
+    pub fn under_lockdown(&self, guild: Id) -> bool {
+        self.backend.guild_incidents(guild).is_some_and(|i| lockdown(&i, chrono::Utc::now()))
     }
 
     pub fn open_security_actions(&mut self, guild: Id, cx: &mut Context<Self>) {
@@ -293,9 +301,29 @@ impl PhoenixApp {
     }
 }
 
+pub fn incident_active(until: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> bool {
+    until.and_then(|u| chrono::DateTime::parse_from_rfc3339(u).ok()).is_some_and(|t| t > now)
+}
+
+pub fn lockdown(i: &phoenix_api::models::IncidentsData, now: chrono::DateTime<chrono::Utc>) -> bool {
+    incident_active(i.dms_disabled_until.as_deref(), now) || incident_active(i.invites_disabled_until.as_deref(), now)
+}
+
+pub const INCIDENT_PERMS: u64 = super::ADMINISTRATOR | super::MANAGE_GUILD | (1 << 2) | (1 << 1) | super::MODERATE_MEMBERS;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lockdown_follows_the_future_pause_dates() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-26T12:00:00+00:00").unwrap().with_timezone(&chrono::Utc);
+        let mut i = phoenix_api::models::IncidentsData { invites_disabled_until: Some("2026-01-23T19:31:24.511000+00:00".into()), ..Default::default() };
+        assert!(!lockdown(&i, now));
+        i.dms_disabled_until = Some("2026-11-26T14:00:00.000000+00:00".into());
+        assert!(lockdown(&i, now));
+        assert!(!incident_active(Some("garbage"), now) && !incident_active(None, now));
+    }
 
     #[test]
     fn names() {

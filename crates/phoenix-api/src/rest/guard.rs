@@ -259,6 +259,10 @@ impl GuardedWrite {
         write(Method::DELETE, format!("/channels/{channel}/messages/{message}/reactions/{e}/{user}"), None)
     }
 
+    pub fn set_guild_identity(guild: u64, enabled: bool) -> Self {
+        write(Method::PUT, "/users/@me/clan", Some(json!({ "identity_guild_id": guild.to_string(), "identity_enabled": enabled })))
+    }
+
     pub fn refusal(&self) -> Error {
         blocked(&self.method, self.path.clone())
     }
@@ -277,6 +281,7 @@ mod tests {
     fn every_write() -> Vec<GuardedWrite> {
         vec![
             GuardedWrite::change_password("old", "new"),
+            GuardedWrite::set_guild_identity(5, true),
             GuardedWrite::remove_user_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, 3),
             GuardedWrite::change_username("name", None, "pw"),
             GuardedWrite::change_email("a@b.c", Some("tok"), "pw"),
@@ -411,6 +416,11 @@ mod tests {
         assert_eq!(pr.body, Some(json!({ "days": 30, "compute_prune_count": false, "include_roles": ["6", "7"] })));
         let hook = GuardedWrite::create_webhook(6, "Spidey Bot");
         assert_eq!((hook.method, hook.path.as_str()), (Method::POST, "/channels/6/webhooks"));
+        let clan = GuardedWrite::set_guild_identity(5, true);
+        assert_eq!(
+            (clan.method, clan.path.as_str(), clan.body),
+            (Method::PUT, "/users/@me/clan", Some(json!({ "identity_guild_id": "5", "identity_enabled": true })))
+        );
     }
 
     #[tokio::test]

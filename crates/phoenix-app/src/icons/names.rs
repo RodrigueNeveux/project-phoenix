@@ -70,6 +70,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("nitro", &["NitroWheelIcon"]),
     ("refresh", &["RefreshIcon"]),
     ("lock", &["LockIcon"]),
+    ("lock-unlocked", &["LockUnlockedIcon"]),
     ("voice-lock", &["VoiceLockIcon"]),
     ("text-lock", &["TextLockIcon"]),
     ("forum-lock", &["ForumLockIcon"]),

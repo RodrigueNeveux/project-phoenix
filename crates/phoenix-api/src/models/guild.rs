@@ -79,6 +79,32 @@ pub struct GuildProperties {
     pub default_message_notifications: Option<u8>,
     #[serde(default)]
     pub home_header: Option<String>,
+    #[serde(default)]
+    pub profile: Option<GuildTagProfile>,
+    #[serde(default)]
+    pub incidents_data: Option<IncidentsData>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct GuildTagProfile {
+    #[serde(default)]
+    pub tag: Option<String>,
+    #[serde(default)]
+    pub badge: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct IncidentsData {
+    #[serde(default)]
+    pub invites_disabled_until: Option<String>,
+    #[serde(default)]
+    pub dms_disabled_until: Option<String>,
+    #[serde(default)]
+    pub raid_detected_at: Option<String>,
+    #[serde(default)]
+    pub dm_spam_detected_at: Option<String>,
+    #[serde(default)]
+    pub lockdown_duration_hours: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -213,4 +239,33 @@ pub struct PartialGuild {
     pub approximate_member_count: Option<u32>,
     #[serde(default)]
     pub approximate_presence_count: Option<u32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ready_guild_keeps_its_tag_profile_and_incidents() {
+        let g: Guild = serde_json::from_value(serde_json::json!({
+            "id": "5",
+            "properties": {
+                "name": "G",
+                "profile": { "tag": "GLAD", "badge": "4f56" },
+                "incidents_data": { "raid_detected_at": null, "invites_disabled_until": "2026-01-23T19:31:24.511000+00:00", "dms_disabled_until": null, "dm_spam_detected_at": null }
+            }
+        }))
+        .unwrap();
+        let p = g.properties.profile.unwrap();
+        assert_eq!((p.tag.as_deref(), p.badge.as_deref()), (Some("GLAD"), Some("4f56")));
+        let i = g.properties.incidents_data.unwrap();
+        assert_eq!(i.invites_disabled_until.as_deref(), Some("2026-01-23T19:31:24.511000+00:00"));
+        assert!(i.dms_disabled_until.is_none() && i.raid_detected_at.is_none());
+    }
+
+    #[test]
+    fn rest_guild_with_null_profile_has_no_tag() {
+        let g: Guild = serde_json::from_value(serde_json::json!({ "id": "5", "name": "G", "profile": null })).unwrap();
+        assert!(g.properties.profile.is_none() && g.properties.incidents_data.is_none());
+    }
 }

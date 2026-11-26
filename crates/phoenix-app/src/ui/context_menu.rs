@@ -488,7 +488,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     })
                 })
                 .when(!enabled, |d| d.hover(|s| s.bg(gpui::transparent_black())).active(|s| s.bg(gpui::transparent_black())))
-                .child(div().mr(z(8.)).size(z(20.)).flex_none().flex().items_center().justify_center().child(leading))
+                .child(div().mr(z(8.)).min_w(z(20.)).h(z(20.)).flex_none().flex().items_center().justify_center().child(leading))
                 .child(body)
                 .when_some(on_click, |d, f| {
                     d.on_click(move |ev, w, cx| {

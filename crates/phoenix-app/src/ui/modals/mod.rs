@@ -18,6 +18,7 @@ pub mod gift_nitro;
 pub mod go_live;
 pub mod ignore;
 pub mod guild_notify;
+pub mod guild_tag;
 pub mod leave_link;
 pub mod member;
 pub mod nickname;
@@ -114,6 +115,7 @@ pub enum Modal {
     GoLive(go_live::State),
     LeaveLink(leave_link::State),
     ReportRaid(report_raid::State),
+    GuildTagAdopt(Id),
     Follow(follow::State),
     EditGroup(gdm::EditGroup),
     GroupInvites(gdm::Invites),
@@ -261,6 +263,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::GoLive(s) => go_live::render(app, s, cx),
             Modal::LeaveLink(s) => leave_link::render(s, cx),
             Modal::ReportRaid(s) => report_raid::render(s, cx),
+            Modal::GuildTagAdopt(g) => guild_tag::render(app, *g, cx),
             Modal::StreamFeedback(s) => stream_feedback::render(s, cx),
             Modal::Follow(s) => follow::render(app, s, cx),
             Modal::EditGroup(g) => gdm::render_edit_group(g, cx),

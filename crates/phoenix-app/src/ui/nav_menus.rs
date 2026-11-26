@@ -213,6 +213,12 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
         })
         .with_icon("chat/boost"),
     );
+    if let Some((tag, badge)) = crate::ui::modals::guild_tag::tag_of(app, g) {
+        let chip = crate::ui::modals::guild_tag::chip(g, &tag, badge.as_deref(), &crate::ui::modals::guild_tag::MENU_CHIP).into_any_element();
+        let ee = e.clone();
+        let open: crate::ui::context_menu::Handler = std::rc::Rc::new(move |_, _, cx: &mut App| ee.update(cx, |a, cx| a.open_guild_tag_adopt(g, cx)));
+        items.push(MenuItem::leading(crate::t!("guild_tag.menu"), chip, None, Some(open)));
+    }
     items.push(MenuItem::Separator);
     items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)).with_icon("add-to-dm"));
     if manage_guild {
@@ -264,8 +270,10 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     })
     .with_icon("chat/eye-slash"));
     let mut danger = Vec::new();
-    if manage_guild && community {
-        danger.push(MenuItem::danger(crate::t!("menu.security_actions"), Some(crate::icons::path("lock")), {
+    if community && perms(app, g, crate::actions::admin::INCIDENT_PERMS) {
+        let locked = app.under_lockdown(g);
+        let (label, icon) = if locked { (crate::t!("menu.security_actions_edit"), "lock-unlocked") } else { (crate::t!("menu.security_actions"), "lock") };
+        danger.push(MenuItem::danger(label, Some(crate::icons::path(icon)), {
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
         }));
@@ -578,8 +586,9 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                 items.push(mv);
                 items.push(MenuItem::Separator);
             }
-            if manage_guild {
-                items.push(MenuItem::danger(crate::t!("menu.security_actions"), None, {
+            if app.guilds.iter().any(|x| x.id == g && x.community) && perms(app, g, crate::actions::admin::INCIDENT_PERMS) {
+                let label = if app.under_lockdown(g) { crate::t!("menu.security_actions_edit") } else { crate::t!("menu.security_actions") };
+                items.push(MenuItem::danger(label, None, {
                     let e = e.clone();
                     move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
                 }));

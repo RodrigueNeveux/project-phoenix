@@ -25,6 +25,111 @@ pub fn upload_icons() -> Option<&'static UploadArt> {
 pub(super) fn init(dir: &Path) {
     let _ = UPLOAD_ICONS.set(upload(&dir.join("art")));
     let _ = GUILD_UPLOAD.set(load_guild_upload(&dir.join("art")));
+    let _ = TAG_ADOPT.set(load_tag_adopt(&dir.join("art")));
+}
+
+pub const TAG_ADOPT_NAMES: [&str; 4] = ["Roka", "hongo", "Lily", "sharon"];
+
+static TAG_ADOPT: OnceLock<Option<[PathBuf; 4]>> = OnceLock::new();
+
+pub fn tag_adopt_avatars() -> Option<&'static [PathBuf; 4]> {
+    TAG_ADOPT.get().and_then(|o| o.as_ref())
+}
+
+#[derive(Debug, PartialEq)]
+enum AvatarSource<'a> {
+    Inline(&'a str),
+    Module(&'a str),
+}
+
+const DATA_PNG: &str = "data:image/png;base64,";
+
+fn avatar_source<'a>(js: &'a str, name: &str) -> Option<AvatarSource<'a>> {
+    let at = js.find(&format!("username:\"{name}\""))?;
+    let head = &js[..at];
+    let av = head.rfind("avatar:")? + "avatar:".len();
+    let value = head[av..].trim_end_matches(',');
+    if let Some(b64) = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')).and_then(|v| v.strip_prefix(DATA_PNG)) {
+        return Some(AvatarSource::Inline(b64));
+    }
+    let var = value.strip_suffix(".A")?;
+    if var.is_empty() || !var.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$') {
+        return None;
+    }
+    let mut end = at;
+    while let Some(i) = js[..end].rfind(&format!("{var}=")) {
+        end = i;
+        let before = js[..i].chars().next_back();
+        if !matches!(before, Some(',') | Some(' ')) {
+            continue;
+        }
+        let rest = &js[i + var.len() + 1..];
+        let open = rest.find('(')?;
+        if !rest[..open].chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$') {
+            continue;
+        }
+        let digits = &rest[open + 1..];
+        let close = digits.find(')')?;
+        if close > 0 && digits[..close].bytes().all(|b| b.is_ascii_digit()) {
+            return Some(AvatarSource::Module(&digits[..close]));
+        }
+    }
+    None
+}
+
+fn module_png<'a>(js: &'a str, id: &str) -> Option<&'a str> {
+    let mut from = 0;
+    while let Some(i) = js[from..].find(&format!("{id}(")).map(|i| i + from) {
+        from = i + id.len();
+        if !matches!(js[..i].chars().next_back(), Some('{') | Some(',')) {
+            continue;
+        }
+        let window = &js[i..(i + 200).min(js.len())];
+        if let Some(d) = window.find(DATA_PNG) {
+            let b64 = &js[i + d + DATA_PNG.len()..];
+            return Some(&b64[..b64.find('"')?]);
+        }
+    }
+    None
+}
+
+fn load_tag_adopt(out: &Path) -> Option<[PathBuf; 4]> {
+    use base64::Engine as _;
+    let files = TAG_ADOPT_NAMES.map(|n| out.join(format!("tag-adopt-{}.png", n.to_lowercase())));
+    if files.iter().all(|p| p.is_file()) {
+        return Some(files);
+    }
+    let entries: Vec<_> = super::discord_caches().iter().flat_map(|c| cache::asset_entries(c, ".js")).collect();
+    let marker = format!("username:\"{}\"", TAG_ADOPT_NAMES[0]);
+    let js = entries.iter().find_map(|(_, p)| cache::read_body(p).filter(|b| b.contains(&marker)))?;
+    let sources: Vec<AvatarSource> = TAG_ADOPT_NAMES.iter().map(|n| avatar_source(&js, n)).collect::<Option<_>>()?;
+    let mut pngs: Vec<Option<Vec<u8>>> = sources
+        .iter()
+        .map(|s| match s {
+            AvatarSource::Inline(b) => base64::engine::general_purpose::STANDARD.decode(b).ok(),
+            AvatarSource::Module(id) => module_png(&js, id).and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok()),
+        })
+        .collect();
+    if pngs.iter().any(Option::is_none) {
+        for (_, p) in &entries {
+            if pngs.iter().all(Option::is_some) {
+                break;
+            }
+            let Some(body) = cache::read_body(p) else { continue };
+            for (slot, src) in pngs.iter_mut().zip(&sources) {
+                if slot.is_none()
+                    && let AvatarSource::Module(id) = src
+                {
+                    *slot = module_png(&body, id).and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok());
+                }
+            }
+        }
+    }
+    std::fs::create_dir_all(out).ok()?;
+    for (f, png) in files.iter().zip(pngs) {
+        std::fs::write(f, png?).ok()?;
+    }
+    Some(files)
 }
 
 pub struct GuildUpload {
@@ -201,6 +306,16 @@ mod tests {
         assert!(!ring.contains("circle") && !ring.contains("M68 6Z"), "{ring}");
         assert!(plus.contains("d=\"M68 6Z\""), "{plus}");
         assert!(plus.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"80\" height=\"80\""));
+    }
+
+    #[test]
+    fn finds_the_tag_adopt_avatars() {
+        let js = r#"191663(h,v,A){var l=A(477900),Z=A(328006),t=A(857909),a=A(334840);function n(h){}let d=function(h){return[(0,l.jsx)(n,{avatar:Z.A,username:"Roka"}),(0,l.jsx)(n,{avatar:t.A,username:"hongo"}),(0,l.jsx)(n,{avatar:a.A,username:"Lily"}),(0,l.jsx)(n,{avatar:"data:image/png;base64,iVBOR==",username:"sharon"})]}},328006(A,B,g){g.d(B,{},{A:"data:image/png;base64,QUJD"})}"#;
+        assert_eq!(avatar_source(js, "Roka"), Some(AvatarSource::Module("328006")));
+        assert_eq!(avatar_source(js, "Lily"), Some(AvatarSource::Module("334840")));
+        assert_eq!(avatar_source(js, "sharon"), Some(AvatarSource::Inline("iVBOR==")));
+        assert_eq!(module_png(js, "328006"), Some("QUJD"));
+        assert_eq!(module_png(js, "857909"), None);
     }
 
     #[test]

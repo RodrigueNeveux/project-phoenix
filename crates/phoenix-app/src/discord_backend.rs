@@ -625,6 +625,17 @@ impl Backend for DiscordBackend {
         Some((g.properties.premium_subscription_count.unwrap_or(0), g.properties.premium_progress_bar_enabled.unwrap_or(false)))
     }
 
+    fn guild_tag(&self, guild: Id) -> Option<(String, Option<String>)> {
+        let s = self.inner.session().ok()?;
+        let p = s.cache.guild(sf(guild))?.properties.profile.clone()?;
+        Some((p.tag.filter(|t| !t.is_empty())?, p.badge))
+    }
+
+    fn guild_incidents(&self, guild: Id) -> Option<phoenix_api::models::IncidentsData> {
+        let s = self.inner.session().ok()?;
+        s.cache.guild(sf(guild))?.properties.incidents_data.clone()
+    }
+
     fn guild_home_header(&self, guild: Id) -> Option<String> {
         let s = self.inner.session().ok()?;
         s.cache.guild(sf(guild))?.properties.home_header.clone()
