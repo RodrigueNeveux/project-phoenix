@@ -385,7 +385,7 @@ pub fn name_text(text: gpui::SharedString, user: Option<&crate::model::User>, si
         [a, b, ..] => Some([*a, *b, *a]),
         _ => None,
     });
-    name_text_with(text, user, size, stops)
+    paint_name(text, user, size, stops, false)
 }
 
 pub fn role_name_text(
@@ -408,7 +408,23 @@ pub fn name_text_with(
     size: f32,
     stops: Option<[u32; 3]>,
 ) -> gpui::AnyElement {
+    paint_name(text, user, size, stops, crate::theme::is_light())
+}
+
+fn dim_gradient_stop(c: u32) -> u32 {
+    let ch = |shift: u32| ((((c >> shift) & 0xff) as f32 * 0.85).round() as u32).min(255) << shift;
+    ch(16) | ch(8) | ch(0)
+}
+
+fn paint_name(
+    text: gpui::SharedString,
+    user: Option<&crate::model::User>,
+    size: f32,
+    stops: Option<[u32; 3]>,
+    dim: bool,
+) -> gpui::AnyElement {
     use gpui::IntoElement;
+    let stops = stops.map(|s| if dim { s.map(dim_gradient_stop) } else { s });
     let ls = name_style(user)
         .filter(|s| family_for_id(s.0).is_some())
         .and_then(|s| font_for_id(s.0))
@@ -427,6 +443,13 @@ pub use fallback::ui_fallbacks;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn light_theme_role_gradient_stops_are_dimmed_like_the_client_filter() {
+        assert_eq!(dim_gradient_stop(0xffffff), 0xd9d9d9);
+        assert_eq!(dim_gradient_stop(0x369876), 0x2e8164);
+        assert_eq!(dim_gradient_stop(0), 0);
+    }
 
     #[test]
     fn parses_font_face() {
