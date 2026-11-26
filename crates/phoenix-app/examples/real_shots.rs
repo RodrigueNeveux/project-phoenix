@@ -797,14 +797,51 @@ fn main() -> anyhow::Result<()> {
     let v = view.borrow().clone().expect("view");
     if let Ok(prefix) = std::env::var("PHX_BOOT_FRAMES") {
         let every: u64 = std::env::var("PHX_BOOT_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
+        let only = std::env::var("PHX_ONLY_GUILD").ok().and_then(|v| parse_id(&v));
+        let drain = |cx: &mut HeadlessAppContext, budget: Duration| {
+            let t = std::time::Instant::now();
+            while t.elapsed() < budget && cx.background_executor.tick() {}
+        };
         let opened = std::time::Instant::now();
         let mut after = 0;
         let mut n = 0;
         while opened.elapsed() < Duration::from_secs(20) && after < 3 {
             let tick = std::time::Instant::now();
-            cx.run_until_parked();
+            if n > 0 {
+                drain(&mut cx, Duration::from_millis(every));
+            }
+            cx.update(|cx| {
+                v.update(cx, |app, cx| {
+                    if let Some(only) = only {
+                        app.guilds.retain(|g| g.id == only);
+                        app.nav.folders.clear();
+                        app.dms.clear();
+                    }
+                    let target = guild.or(only);
+                    if let Some(c) = channel {
+                        if app.selected_channel != Some(c) && app.channels.contains_key(&c) {
+                            let g = target.or_else(|| app.channels.get(&c).and_then(|ch| ch.guild));
+                            app.select_guild(g, cx);
+                            app.open_channel_chat(c, cx);
+                        }
+                    } else if let Some(g) = target
+                        && app.selected_guild != Some(g)
+                        && app.guild_channels.contains_key(&g)
+                    {
+                        app.select_guild(Some(g), cx);
+                        let first = app.guild_channels.get(&g).and_then(|l| {
+                            l.iter().copied().find(|id| app.channels.get(id).is_some_and(|c| c.kind == phoenix_app::model::ChannelKind::Text))
+                        });
+                        if let Some(c) = first {
+                            app.open_channel_chat(c, cx);
+                        }
+                    }
+                    cx.notify();
+                })
+            });
             cx.update_window(win.into(), |_, window, _| window.refresh())?;
-            cx.run_until_parked();
+            cx.simulate_frame_request(win.into());
+            drain(&mut cx, Duration::from_millis(20));
             let showing = cx.update(|cx| v.read(cx).boot.showing());
             let img = cx.capture_screenshot(win.into())?;
             let ms = opened.elapsed().as_millis();
