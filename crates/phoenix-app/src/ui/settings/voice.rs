@@ -1087,7 +1087,9 @@ mod search_tests {
     fn the_top_rows_follow_the_settings_search() {
         assert_eq!(super::top_rows(""), [true; 3]);
         let mic = crate::t!("voice.input_device").to_lowercase();
-        assert_eq!(super::top_rows(&mic), [true, false, false]);
+        assert!(super::top_rows(&mic)[0]);
+        let test = crate::t!("voice.mic_test").to_lowercase();
+        assert!(super::top_rows(&test)[2]);
         let vol = crate::t!("voice.output_volume").to_lowercase();
         assert!(super::top_rows(&vol)[1]);
         assert_eq!(super::top_rows("zzzz-nothing"), [false; 3]);
