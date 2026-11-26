@@ -1,5 +1,6 @@
 pub mod add_server;
 pub mod boot;
+pub mod guild_badge;
 pub mod join_flow;
 pub mod autocomplete;
 pub mod avatar_deco;

@@ -332,6 +332,12 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .map(|_| g.banner_color.unwrap_or(Palette::BG_SECONDARY));
             let menu_open = app.nav.guild_menu;
             let gid = g.id.0;
+            let mut features = app.backend.guild_features(g.id);
+            if g.discoverable {
+                features.push("DISCOVERABLE".into());
+            }
+            let badge_kind = crate::ui::guild_badge::kind(&features);
+            let guild_badge_el = crate::ui::guild_badge::element(badge_kind, crate::ui::guild_badge::premium(g.boosts, g.boost_tier), 18.);
             div()
                 .id("guild-banner")
                 .group("guild-banner")
@@ -410,7 +416,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                         .flex()
                                         .items_center()
                                         .gap(z(10.))
-                                        .when(g.discoverable, |d| {
+                                        .when_some(guild_badge_el, |d, b| d.child(div().w(z(20.)).flex_none().flex().justify_center().child(b)))
+                                        .when(badge_kind == crate::ui::guild_badge::Kind::Discoverable, |d| {
                                             d.child(
                                                 div().w(z(20.)).flex_none().flex().justify_center().child(
                                                     div()
