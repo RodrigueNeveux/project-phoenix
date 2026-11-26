@@ -255,7 +255,6 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let side = if chat_open() { CHAT_W } else { 0. };
     let gw = (f32::from(vp.width) / zoom - 72. - crate::ui::sidebar_resize::width() - side).max(100.);
     let gh = (f32::from(vp.height) / zoom - 32. - if crate::theme::frame_borders() { 1. } else { 0. }).max(60.);
-    let w = gw - 16.;
     let focus = match FOCUS.with(|c| c.get()) {
         Focus::Grid => None,
         Focus::Tile(u, s) => tiles.iter().position(|t| t.user == u && t.stream == s),
@@ -292,7 +291,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(top_bar(app, crate::ui::dm_profile_panel::channel_name(app, ch), cx))
         .child(div().h(z(8.)))
         .child(div().flex_1().min_h_0())
-        .child(bottom_controls(app, collapse(w + 16.), cx))
+        .child(bottom_controls(app, collapse(gw), cx))
         .relative()
         .children(toasts);
 
@@ -809,7 +808,6 @@ fn strip_button(open: bool, top: f32, fade: f32, cx: &mut Context<PhoenixApp>) -
 }
 
 const CHAT_W: f32 = 480.;
-
 
 fn top_bar(_app: &PhoenixApp, name: SharedString, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let open = chat_open();
