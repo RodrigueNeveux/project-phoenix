@@ -301,10 +301,7 @@ fn card(app: &PhoenixApp, k: &ShopCard, cx: &mut Context<PhoenixApp>) -> AnyElem
                         .line_height(z(20.))
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(tk(idx::TEXT_STRONG))
-                        .when(k.items > 0, |d| {
-                            d.child(div().flex_none().mr(z(4.)).font_weight(FontWeight::SEMIBOLD).child(SharedString::from(crate::t!("shop.items", n = k.items).trim().to_owned())))
-                        })
-                        .child(div().min_w_0().overflow_hidden().text_ellipsis().child(name)),
+                        .child(div().min_w_0().overflow_hidden().text_ellipsis().child(bundle_title(k.items, &name))),
                 )
                 .child(
                     div()
@@ -367,6 +364,21 @@ fn card(app: &PhoenixApp, k: &ShopCard, cx: &mut Context<PhoenixApp>) -> AnyElem
                 ),
         )
         .into_any_element()
+}
+
+pub fn bundle_label(items: usize, name: &str) -> (String, usize) {
+    if items == 0 {
+        return (name.to_owned(), 0);
+    }
+    let count = crate::t!("shop.items", n = items).to_string();
+    let bold = count.len();
+    (format!("{count} {name}"), bold)
+}
+
+fn bundle_title(items: usize, name: &str) -> gpui::StyledText {
+    let (text, bold) = bundle_label(items, name);
+    let highlights = if bold > 0 { vec![(0..bold, gpui::HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })] } else { Vec::new() };
+    gpui::StyledText::new(text).with_highlights(highlights)
 }
 
 pub const CARD_SIZE: f32 = 246.;
@@ -437,6 +449,14 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
 #[cfg(test)]
 mod tests {
     use super::{discount, parse};
+
+    #[test]
+    fn bundle_names_lead_with_the_bold_count() {
+        let (t, b) = super::bundle_label(0, "Lune");
+        assert_eq!((t.as_str(), b), ("Lune", 0));
+        let (t, b) = super::bundle_label(4, "Pack Lune");
+        assert!(t.ends_with(" Pack Lune") && t[..b].contains('4') && !t[..b].ends_with(' '));
+    }
 
     #[test]
     fn only_the_visible_rows_are_built() {
