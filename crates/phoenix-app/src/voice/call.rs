@@ -293,7 +293,7 @@ impl VoiceManager {
         let guild = cache.channel(Snowflake(ch)).and_then(|c| c.guild_id).map(|g| g.0);
         st.target = Some(Target { guild, channel: ch });
         gw.update_voice_state(guild.map(Snowflake), Some(Snowflake(ch)), st.muted, st.deafened).map_err(|e| e.to_string())?;
-        ui(emit, VoiceUiEvent::Status(VoiceStatus::Connecting));
+        ui(emit, VoiceUiEvent::Status(VoiceStatus::AwaitingEndpoint));
         Ok(())
     }
 
@@ -367,7 +367,7 @@ impl VoiceManager {
                     None => {
                         stop(&mut st);
                         st.server = None;
-                        ui(emit, VoiceUiEvent::Status(VoiceStatus::Reconnecting));
+                        ui(emit, VoiceUiEvent::Status(VoiceStatus::AwaitingEndpoint));
                     }
                 }
             }
@@ -406,6 +406,7 @@ impl VoiceManager {
             }),
         );
         st.running = Some(Running { conn, engine, out_tx, sink });
+        ui(emit, VoiceUiEvent::Status(VoiceStatus::Connecting));
         let generation = st.generation;
         let emit = emit.clone();
         tokio::spawn(async move {
@@ -453,8 +454,9 @@ impl VoiceManager {
                                 stop(&mut st);
                             }
                         }
+                        let status = VoiceStatus::from_disconnect(&reason);
                         ui(&emit, VoiceUiEvent::Error(reason));
-                        VoiceUiEvent::Status(VoiceStatus::Failed)
+                        VoiceUiEvent::Status(status)
                     }
                 };
                 ui(&emit, e);

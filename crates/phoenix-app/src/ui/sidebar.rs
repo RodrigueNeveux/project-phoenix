@@ -1140,9 +1140,11 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .group_hover(group.clone(), |s| s.hidden())
                 .ml(z(12.))
                 .pr(z(4.))
-                .font_family(crate::theme::FONT_MONO())
+                .whitespace_nowrap()
+                .font_features(gpui::FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)])))
                 .text_size(z(12.))
                 .line_height(z(16.))
+                .font_weight(FontWeight::NORMAL)
                 .text_color(t(idx::TEXT_FEEDBACK_POSITIVE))
                 .child(crate::voice::start_time::format(crate::voice::start_time::now_s() - st))
         });
@@ -1336,20 +1338,25 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .when(connected, |d| {
                             d.child(
                                 div()
+                                    .id(("vc-status", id.0))
+                                    .group("vc-status")
                                     .flex()
                                     .items_center()
+                                    .min_w_0()
                                     .text_size(z(12.))
                                     .line_height(z(16.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(t(idx::CHANNELS_DEFAULT))
-                                    .child(div().min_w_0().text_ellipsis().child(crate::t!("voice.set_status")))
+                                    .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
+                                    .child(div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::t!("voice.set_status")))
                                     .child(
                                         gpui::svg()
                                             .path(crate::icons::path("pen"))
                                             .ml(z(4.))
                                             .size(z(12.))
                                             .flex_none()
-                                            .text_color(t(idx::CHANNELS_DEFAULT)),
+                                            .text_color(t(idx::CHANNELS_DEFAULT))
+                                            .group_hover("vc-status", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
                                     ),
                             )
                         })

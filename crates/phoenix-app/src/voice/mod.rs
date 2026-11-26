@@ -15,10 +15,38 @@ use crate::model::Id;
 pub enum VoiceStatus {
     #[default]
     Idle,
+    AwaitingEndpoint,
     Connecting,
     Connected,
     Reconnecting,
+    NoRoute,
     Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusKind {
+    Connecting,
+    Connected,
+    Error,
+}
+
+impl VoiceStatus {
+    pub fn label(self, video: bool) -> (&'static str, StatusKind) {
+        match self {
+            VoiceStatus::Connected if video => ("voice.video_connected", StatusKind::Connected),
+            VoiceStatus::Connected => ("voice.connected", StatusKind::Connected),
+            VoiceStatus::AwaitingEndpoint => ("voice.waiting_server", StatusKind::Connecting),
+            VoiceStatus::Reconnecting => ("voice.connecting", StatusKind::Connecting),
+            VoiceStatus::Connecting => ("voice.rtc_connecting", StatusKind::Connecting),
+            VoiceStatus::NoRoute => ("voice.no_route", StatusKind::Error),
+            VoiceStatus::Failed => ("voice.rtc_disconnected", StatusKind::Error),
+            VoiceStatus::Idle => ("voice.disconnected", StatusKind::Error),
+        }
+    }
+
+    pub fn from_disconnect(reason: &str) -> Self {
+        if reason.contains("ip discovery") { VoiceStatus::NoRoute } else { VoiceStatus::Failed }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -100,7 +128,7 @@ impl VoiceUi {
         match ev {
             VoiceUiEvent::Status(s) => {
                 self.status = s;
-                if matches!(s, VoiceStatus::Idle | VoiceStatus::Failed) {
+                if matches!(s, VoiceStatus::Idle | VoiceStatus::Failed | VoiceStatus::NoRoute) {
                     self.speaking.clear();
                     self.ping_ms = None;
                     self.e2ee = false;
@@ -200,7 +228,7 @@ pub enum Quality {
 }
 
 pub fn on_join_clicked(app: &mut crate::app::PhoenixApp, channel: Option<Id>) {
-    app.voice.apply(VoiceUiEvent::Status(if channel.is_some() { VoiceStatus::Connecting } else { VoiceStatus::Idle }));
+    app.voice.apply(VoiceUiEvent::Status(if channel.is_some() { VoiceStatus::AwaitingEndpoint } else { VoiceStatus::Idle }));
     crate::sounds::watch::on_join_requested(channel);
 }
 
@@ -215,6 +243,18 @@ pub fn sync_self_state(app: &crate::app::PhoenixApp) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_labels_follow_the_client() {
+        assert_eq!(VoiceStatus::Connected.label(false), ("voice.connected", StatusKind::Connected));
+        assert_eq!(VoiceStatus::Connected.label(true), ("voice.video_connected", StatusKind::Connected));
+        assert_eq!(VoiceStatus::AwaitingEndpoint.label(false).0, "voice.waiting_server");
+        assert_eq!(VoiceStatus::Connecting.label(false), ("voice.rtc_connecting", StatusKind::Connecting));
+        assert_eq!(VoiceStatus::Idle.label(false), ("voice.disconnected", StatusKind::Error));
+        assert_eq!(VoiceStatus::from_disconnect("timed out: ip discovery"), VoiceStatus::NoRoute);
+        assert_eq!(VoiceStatus::from_disconnect("gateway closed (code Some(4006)): session"), VoiceStatus::Failed);
+        assert_eq!(VoiceStatus::Failed.label(false), ("voice.rtc_disconnected", StatusKind::Error));
+    }
 
     #[test]
     fn ui_state_follows_events() {

@@ -671,22 +671,20 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
     const OK: (usize, usize) = (idx::TEXT_FEEDBACK_POSITIVE, idx::BACKGROUND_FEEDBACK_MOD_POSITIVE);
     const WARN: (usize, usize) = (idx::TEXT_FEEDBACK_WARNING, idx::BACKGROUND_FEEDBACK_MOD_WARNING);
     const BAD: (usize, usize) = (idx::TEXT_FEEDBACK_CRITICAL, idx::BACKGROUND_FEEDBACK_MOD_CRITICAL);
-    let (title, (fg, bg)) = match v.status {
-        VoiceStatus::Connected | VoiceStatus::Idle => (
-            if flags(app.me.id).video { crate::t!("voice.video_connected") } else { crate::t!("voice.connected") },
-            match v.quality() {
-                Quality::Fair => WARN,
-                Quality::Bad => BAD,
-                _ => OK,
-            },
-        ),
-        VoiceStatus::Connecting => (crate::t!("voice.rtc_connecting"), WARN),
-        VoiceStatus::Reconnecting => (crate::t!("voice.reconnecting"), WARN),
-        VoiceStatus::Failed => (crate::t!("voice.no_route"), BAD),
+    let (key, kind) = v.status.label(flags(app.me.id).video);
+    let title = crate::t!(key);
+    let (fg, bg) = match kind {
+        crate::voice::StatusKind::Connected => match v.quality() {
+            Quality::Fair => WARN,
+            Quality::Bad => BAD,
+            _ => OK,
+        },
+        crate::voice::StatusKind::Connecting => WARN,
+        crate::voice::StatusKind::Error => BAD,
     };
     let color = t(fg);
     let ping: SharedString = match (v.ping_ms, &v.last_error) {
-        (_, Some(e)) if v.status == VoiceStatus::Failed => e.clone().into(),
+        (_, Some(e)) if matches!(v.status, VoiceStatus::Failed | VoiceStatus::NoRoute) => e.clone().into(),
         (Some(p), _) => if v.e2ee { crate::t!("voice.ping_e2ee", p = p) } else { crate::t!("voice.ping", p = p) },
         (None, _) => crate::t!("voice.waiting_server"),
     };
