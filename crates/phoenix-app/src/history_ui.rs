@@ -109,7 +109,7 @@ pub fn warm_recent(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let backend = app.backend.clone();
     cx.spawn(async move |this, cx| {
         cx.background_executor().timer(std::time::Duration::from_millis(1500)).await;
-        let ids = cx.background_spawn(async move { backend.recent_cached_channels(8) }).await;
+        let ids = cx.background_executor().spawn(async move { backend.recent_cached_channels(8) }).await;
         for id in ids {
             if this.update(cx, |a, cx| preload(a, id, cx)).is_err() {
                 return;

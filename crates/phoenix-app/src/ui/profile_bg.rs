@@ -42,7 +42,7 @@ pub fn get(banner: &str, w: f32, cx: &mut App) -> Option<(Arc<RenderImage>, f32)
             return;
         }
         let w = key.1 as f32;
-        let Some(img) = cx.background_spawn(async move { bake(&bytes, w) }).await else { return };
+        let Some(img) = cx.background_executor().spawn(async move { bake(&bytes, w) }).await else { return };
         cx.update(|cx| {
             CACHE.with(|c| c.borrow_mut().insert(key, Some(Arc::new(img))));
             cx.refresh_windows();
