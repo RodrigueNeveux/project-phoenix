@@ -322,7 +322,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
         let ent = entity.clone();
         let game: SharedString = e.game.clone().unwrap_or_default().into();
         let art = match e.icon.clone() {
-            Some(url) => gpui::img(url).size_full().into_any_element(),
+            Some(url) => gpui::img(url).size_full().rounded(z(4.)).object_fit(gpui::ObjectFit::Cover).into_any_element(),
             None => div()
                 .size_full()
                 .flex()
@@ -338,9 +338,11 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
             div()
                 .flex()
                 .items_center()
+                .min_w_0()
+                .overflow_hidden()
                 .gap(z(4.))
                 .child(gpui::svg().path(crate::icons::path(ic)).size(z(12.)).flex_none().text_color(col))
-                .child(div().text_size(z(12.)).line_height(z(16.)).text_color(col).text_ellipsis().child(t))
+                .child(div().min_w_0().text_size(z(12.)).line_height(z(16.)).text_color(col).text_ellipsis().child(t))
         };
         let badge = |ic: &'static str, t: SharedString| badge_in(ic, t, c(Palette::TEXT_MUTED));
         let entry_live = e.live && e.expires_ms.is_none_or(|x| x > now * 1000);
@@ -367,11 +369,12 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                 .p(z(8.))
                 .rounded(z(12.))
                 .border_1()
-                .border_color(c(Palette::DIVIDER))
-                .bg(c(Palette::BG_TERTIARY))
-                .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
+                .border_color(c(tok(idx::BORDER_MUTED)))
+                .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+                .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
                 .cursor_pointer()
                 .flex()
+                .items_center()
                 .gap(z(8.))
                 .on_click(move |ev, window, cx| {
                     let at = ev.position();
@@ -430,7 +433,7 @@ fn activity_section(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: Id) -> Any
                                 .flex()
                                 .gap(z(8.))
                                 .overflow_hidden()
-                                .child(time_badge)
+                                .child(time_badge.flex_none())
                                 .when(e.first_time, |d| d.child(badge("medal", crate::t!("members.new_player"))))
                                 .when(e.resurrected, |d| d.child(badge("refresh", crate::t!("members.resurrection"))))
                                 .when(e.trending, |d| d.child(badge("fire", crate::t!("members.trending"))))
