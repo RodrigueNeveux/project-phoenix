@@ -272,7 +272,7 @@ fn camera_menu(pos: Point<Pixels>, cams: Vec<String>, cx: &mut Context<PhoenixAp
             }
         });
     }));
-    context_menu::render(pos - gpui::point(px(0.), px(120.)), items, dismiss)
+    context_menu::render_anchored(pos - gpui::point(px(0.), px(12.)), gpui::Anchor::BottomLeft, items, dismiss)
 }
 
 pub fn audio_menu_open(kind: Audio) -> bool {
