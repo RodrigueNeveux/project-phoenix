@@ -1,4 +1,4 @@
-use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, img, prelude::*};
+use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, Styled, div, img, prelude::*};
 
 use crate::{
     app::PhoenixApp,
