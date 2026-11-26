@@ -543,6 +543,10 @@ fn empty_state(tab: FriendsTab, others: bool, cx: &mut Context<PhoenixApp>) -> i
 }
 
 thread_local! {
+    static DISCOVERY_ARROW_W: std::cell::Cell<f32> = const { std::cell::Cell::new(20.) };
+}
+
+thread_local! {
     static FRIENDS_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
     static ACTIVE_NOW_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
 }
@@ -944,25 +948,49 @@ fn add_friend(app: &PhoenixApp, window: &Window, cx: &mut Context<PhoenixApp>) -
         )
         .child(
             div()
-                .flex_1()
-                .min_w_0()
-                .overflow_hidden()
+                .flex_initial()
                 .text_size(z(16.))
                 .line_height(z(20.))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(c(tok(idx::TEXT_DEFAULT)))
                 .child(crate::t!("friends.explore_discovery")),
         )
-        .child(
-            gpui::svg()
-                .path(crate::icons::path("friends/discovery-arrow"))
-                .flex_none()
+        .child({
+            let w = DISCOVERY_ARROW_W.with(std::cell::Cell::get);
+            div()
+                .relative()
+                .flex_initial()
+                .flex_basis(z(20.))
+                .min_w_0()
+                .h(z(20.))
                 .ml_auto()
                 .mr(z(16.))
-                .size(z(20.))
-                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-                .group_hover("add-friend-discovery", |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))),
-        );
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    gpui::svg()
+                        .path(crate::icons::path("friends/discovery-arrow"))
+                        .flex_none()
+                        .size(gpui::px(w))
+                        .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                        .group_hover("add-friend-discovery", |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))),
+                )
+                .child(
+                    gpui::canvas(
+                        |b, window, _| {
+                            let side = f32::from(b.size.width).min(f32::from(b.size.height));
+                            if (DISCOVERY_ARROW_W.with(std::cell::Cell::get) - side).abs() > 0.1 {
+                                DISCOVERY_ARROW_W.with(|c| c.set(side));
+                                window.refresh();
+                            }
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset_0(),
+                )
+        });
     div()
         .id("add-friend-page")
         .size_full()
