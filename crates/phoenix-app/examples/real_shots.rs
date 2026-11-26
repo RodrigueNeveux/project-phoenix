@@ -1171,7 +1171,15 @@ fn main() -> anyhow::Result<()> {
                 let (x, y) = at.unwrap_or((900., 200.));
                 app.open_profile(uid, g, gpui::point(px(x + 316.), px(y + 60.)), window, cx);
                 if modal {
-                    app.open_profile_modal(uid, cx);
+                    use phoenix_app::ui::profile::{TAB_BOARD, TAB_FRIENDS, TAB_SERVERS, TAB_WISHLIST};
+                    let tab = match std::env::var("PHX_PROFILE_TAB").as_deref() {
+                        Ok("activity") => 0,
+                        Ok("wishlist") => TAB_WISHLIST,
+                        Ok("friends") => TAB_FRIENDS,
+                        Ok("servers") => TAB_SERVERS,
+                        _ => TAB_BOARD,
+                    };
+                    app.open_profile_modal_at(uid, tab, cx);
                 }
             })
         })?;

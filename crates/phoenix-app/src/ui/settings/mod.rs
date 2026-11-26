@@ -420,7 +420,9 @@ pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
         return true;
     }
     if s.page == Page::Profiles {
-        profile_editor::on_escape(s);
+        if profile_editor::on_escape(s) {
+            app.settings = None;
+        }
         cx.notify();
         return true;
     }

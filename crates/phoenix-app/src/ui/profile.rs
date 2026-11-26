@@ -17,6 +17,46 @@ const POPOUT_W: f32 = 300.;
 const POPOUT_H: f32 = 540.;
 const MODAL_W: f32 = 962.;
 const MODAL_H: f32 = 800.;
+pub(crate) const EDIT_PANEL_INNER: f32 = 240.;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ModalBox {
+    pub w: f32,
+    pub h: f32,
+    pub radius: f32,
+    pub border_block: bool,
+    pub border_inline: bool,
+    pub system_bar: f32,
+    pub panel: f32,
+}
+
+pub(crate) fn modal_box(vw: f32, vh: f32, editing: bool) -> ModalBox {
+    let tall = vh >= 785.;
+    let wide = vw >= 929.;
+    let editing = editing && vw > 928.;
+    let (w, panel) = match (editing, vw >= 1169.) {
+        (true, true) => ((MODAL_W + EDIT_PANEL_INNER).min(vw - 96.), EDIT_PANEL_INNER + 2.),
+        (true, false) => (vw, EDIT_PANEL_INNER + 1.),
+        (false, _) if wide => (MODAL_W.min(vw - 96.), 0.),
+        (false, _) => (vw, 0.),
+    };
+    let h = if tall { MODAL_H.min(vh - 96.) } else { vh }.max(550.);
+    let rounded = tall && if editing { vw >= 1169. } else { wide };
+    ModalBox { w, h, radius: if rounded { 16. } else { 0. }, border_block: tall, border_inline: wide, system_bar: if tall { 0. } else { 32. }, panel }
+}
+
+pub(crate) fn modal_profile_w(vw: f32, editing: bool) -> f32 {
+    let off = if editing && vw >= 1169. {
+        (EDIT_PANEL_INNER + 2. + 96.) * 0.455
+    } else if editing && vw > 928. {
+        (EDIT_PANEL_INNER + 1.) * 0.455
+    } else if vw >= 929. {
+        48. * 0.91
+    } else {
+        0.
+    };
+    (vw * 0.455 - off).clamp(300., 400.)
+}
 
 impl PhoenixApp {
     pub fn open_profile(
@@ -68,6 +108,16 @@ impl PhoenixApp {
     pub fn open_profile_modal_at(&mut self, user: Id, tab: u8, cx: &mut Context<Self>) {
         crate::ui::profile_toolbar::reset();
         self.people.popout = None;
+        if user == self.me.id {
+            self.people.close_overlays();
+            let tab = match tab {
+                TAB_BOARD => 0,
+                TAB_WISHLIST => 2,
+                _ => 1,
+            };
+            crate::ui::settings::profile_editor::open_modal(self, self.selected_guild, tab, cx);
+            return;
+        }
         set_modal_tab(tab);
         self.people.modal = Some(user);
         cx.notify();
@@ -131,8 +181,8 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
         );
     }
     if let Some(u) = app.people.modal {
-        let w = px(MODAL_W).min(vp.width - px(96.));
-        let h = px(MODAL_H).min(vp.height - px(96.));
+        let b = modal_box(f32::from(vp.width), f32::from(vp.height), false);
+        let (w, h) = (px(b.w), px(b.h));
         out.push(
             div()
                 .id("profile-modal")
@@ -252,6 +302,47 @@ pub(crate) fn activity_block(a: &Activity, big: bool, bot: bool) -> Option<AnyEl
             )
             .into_any_element(),
     )
+}
+
+pub(crate) fn member_since_row(app: &PhoenixApp, p: &Profile, guild: Option<Id>) -> Div {
+    div()
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .text_color(c(tok(idx::TEXT_DEFAULT)))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .child(gpui::svg().path(crate::icons::path("discord-logo")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_SUBTLE))))
+                .child(format_date(p.created)),
+        )
+        .when_some(p.joined, |d, j| {
+            let gicon = guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| {
+                crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16.)
+            });
+            d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT))))
+                .child(div().flex().items_center().gap(z(4.)).children(gicon).child(format_date(j)))
+        })
+}
+
+pub(crate) fn member_since_section(app: &PhoenixApp, p: &Profile, guild: Option<Id>) -> Div {
+    div().flex().flex_col().gap(z(8.)).child(section_heading(crate::t!("profile.member_since"))).child(member_since_row(app, p, guild))
+}
+
+pub(crate) fn roles_section(app: &PhoenixApp, guild: Option<Id>, uid: Id, cx: &mut Context<PhoenixApp>) -> Option<Div> {
+    let roles = info(app, uid, guild).roles;
+    (guild.is_some() && !roles.is_empty()).then(|| {
+        div()
+            .flex()
+            .flex_col()
+            .gap(z(4.))
+            .child(section_heading(if roles.len() == 1 { crate::t!("profile.role") } else { crate::t!("profile.roles") }))
+            .child(roles_block(app, guild, uid, roles, cx))
+    })
 }
 
 fn section_heading(t: SharedString) -> Div {
@@ -1137,6 +1228,59 @@ pub(crate) fn modal_actions(me: bool, rel: crate::ui::home::data::RelationshipKi
     }
 }
 
+thread_local! {
+    static RECENT: std::cell::RefCell<std::collections::HashMap<Id, Vec<crate::ui::settings::profile_activity::RecentGame>>> = Default::default();
+    static RECENT_REQUESTS: std::cell::RefCell<std::collections::HashSet<Id>> = Default::default();
+}
+
+fn recent_games(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> Vec<crate::ui::settings::profile_activity::RecentGame> {
+    if let Some(r) = RECENT.with(|m| m.borrow().get(&uid).cloned()) {
+        return r;
+    }
+    if RECENT_REQUESTS.with(|r| r.borrow_mut().insert(uid)) {
+        let fut = app.backend.recent_activity(uid);
+        cx.spawn(async move |this, cx| {
+            let games = fut.await.unwrap_or_default();
+            RECENT.with(|m| m.borrow_mut().insert(uid, games));
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+    Vec::new()
+}
+
+fn panel_is_empty_activity(i: &Info, offline: bool, app: &PhoenixApp, uid: Id) -> bool {
+    (offline || i.acts.is_empty()) && !app.channels.values().any(|c| c.voice_users.contains(&uid))
+}
+
+pub(crate) fn wishlist_panel(app: &PhoenixApp, uid: Id, items: &[crate::ui::profile_wishlist::WishItem], cx: &mut Context<PhoenixApp>) -> Div {
+    let empty = |t: SharedString| div().ml(z(12.)).text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED))).child(t);
+    let mut panel = div().flex().flex_col();
+    if items.is_empty() {
+        panel = panel.child(empty(crate::t!("profile.empty_wishlist")));
+    } else {
+        panel = panel
+            .child(
+                div()
+                    .h(z(32.))
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_SUBTLE))).child(crate::t!("profile.wishlist_items", n = items.len())))
+                    .child(wishlist_controls(uid == app.me.id, cx)),
+            )
+            .child(div().py(z(12.)).flex().flex_wrap().gap(z(16.)).children(items.iter().map(|it| {
+                div()
+                    .size(z(133.))
+                    .rounded(z(12.))
+                    .overflow_hidden()
+                    .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)))
+                    .children(it.image.clone().map(|u| img(u).size_full().object_fit(gpui::ObjectFit::Contain)))
+            })));
+    }
+    panel
+}
+
 fn mutual_tab_label<N: PartialEq + Default + std::fmt::Display>(n: N, none: &str, some: &str) -> SharedString {
     if n == N::default() { crate::t!(none) } else { crate::t!(some, n = n) }
 }
@@ -1223,9 +1367,10 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
     let e = cx.entity();
     let theme = i.prof.and_then(|p| p.theme);
     let card_bg = theme.map(|t| crate::ui::profile_theme::composite(t, t.0)).unwrap_or(tok(idx::BACKGROUND_SURFACE_HIGH));
-    let pw = (f32::from(vw) * 0.455 - 48. * 0.91).clamp(300., 400.);
+    let mb = modal_box(f32::from(vw), f32::from(vp.height), false);
+    let pw = modal_profile_w(f32::from(vw), false);
     let pad = if f32::from(vw) >= 1025. { 48. } else { 32. };
-    let system_bar: f32 = if f32::from(vp.height) >= 785. { 0. } else { 32. };
+    let system_bar = mb.system_bar;
     const GUTTER: f32 = 32.;
     const CARD_PAD: f32 = 32.;
     const BANNER: f32 = 140.;
@@ -1345,28 +1490,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             if !p.bio.is_empty() {
                 pbody = pbody.child(bio_block(p.bio.clone(), false));
             }
-            let since = div()
-                .flex()
-                .items_center()
-                .gap(z(8.))
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .text_color(c(tok(idx::TEXT_DEFAULT)))
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(z(4.))
-                        .child(gpui::svg().path(crate::icons::path("discord-logo")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_SUBTLE))))
-                        .child(format_date(p.created)),
-                )
-                .when_some(p.joined, |d, j| {
-                    let gicon = guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| {
-                        crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16.)
-                    });
-                    d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT))))
-                        .child(div().flex().items_center().gap(z(4.)).children(gicon).child(format_date(j)))
-                });
+            let since = member_since_row(app, p, guild);
             pbody = pbody.child(div().flex().flex_col().gap(z(8.)).child(section_heading(crate::t!("profile.member_since"))).child(since));
             if let Some(t) = app.nav.relationship(uid).filter(|r| r.kind == crate::ui::home::data::RelationshipKind::Friend).and_then(|r| r.since) {
                 pbody = pbody.child(
@@ -1380,16 +1504,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             }
         }
     }
-    if guild.is_some() && !i.roles.is_empty() {
-        pbody = pbody.child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(z(4.))
-                .child(section_heading(if i.roles.len() == 1 { crate::t!("profile.role") } else { crate::t!("profile.roles") }))
-                .child(roles_block(app, guild, uid, i.roles.clone(), cx)),
-        );
-    }
+    pbody = pbody.children(roles_section(app, guild, uid, cx));
 
     let profile = div()
         .id("profile-modal-card")
@@ -1475,29 +1590,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
             panel = panel.children(crate::ui::profile_board::ordered(&board, |w| crate::ui::settings::profile_widgets::render(w, &wcol), |w| crate::ui::profile_board::card(w, &gcol)));
         }
         TAB_WISHLIST => {
-            let items = &board.wishlist;
-            if items.is_empty() {
-                panel = panel.child(empty(crate::t!("profile.empty_wishlist")));
-            } else {
-                panel = panel
-                    .child(
-                        div()
-                            .h(z(32.))
-                            .flex()
-                            .items_center()
-                            .justify_between()
-                            .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_SUBTLE))).child(crate::t!("profile.wishlist_items", n = items.len())))
-                            .child(wishlist_controls(uid == app.me.id, cx)),
-                    )
-                    .child(div().py(z(12.)).flex().flex_wrap().gap(z(16.)).children(items.iter().map(|it| {
-                        div()
-                            .size(z(133.))
-                            .rounded(z(12.))
-                            .overflow_hidden()
-                            .bg(c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)))
-                            .children(it.image.clone().map(|u| img(u).size_full().object_fit(gpui::ObjectFit::Contain)))
-                    })));
-            }
+            panel = panel.child(wishlist_panel(app, uid, &board.wishlist, cx));
         }
         TAB_FRIENDS => {
             panel = panel.gap(z(12.));
@@ -1548,11 +1641,35 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         }
         _ => {
             panel = panel.gap(z(24.));
-            let cards: Vec<AnyElement> = i.acts.iter().filter_map(|a| activity_block(a, true, bot)).collect();
-            if cards.is_empty() {
+            let offline = matches!(i.presence, crate::model::Presence::Offline);
+            let mut cards: Vec<AnyElement> = if offline { Vec::new() } else { i.acts.iter().filter_map(|a| activity_block(a, true, bot)).collect() };
+            if !offline {
+                match crate::ui::voice_row::stream_activity_card(app, uid, e.clone(), cx) {
+                    Some(card) => cards.push(card),
+                    None => cards.extend(crate::ui::voice_row::voice_activity_card(app, uid, e.clone())),
+                }
+            }
+            let recent = recent_games(app, uid, cx);
+            if !cards.is_empty() {
+                panel = panel.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap(z(8.))
+                        .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_DEFAULT))).child(crate::t!("profile.current_activity")))
+                        .children(cards),
+                );
+            }
+            if !recent.is_empty() {
+                let col = crate::ui::settings::profile_activity::Colors {
+                    strong: c(tok(idx::TEXT_STRONG)),
+                    muted: c(tok(idx::TEXT_DEFAULT)),
+                    card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
+                    link: c(tok(idx::TEXT_LINK)),
+                };
+                panel = panel.child(crate::ui::settings::profile_activity::render(&recent, me, &col));
+            } else if panel_is_empty_activity(&i, offline, app, uid) {
                 panel = panel.child(empty(crate::t!("profile.idle_activity", name = i.display)));
-            } else {
-                panel = panel.child(div().flex().flex_col().gap(z(8.)).children(cards));
             }
         }
     }
@@ -1616,7 +1733,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .children(thumb)
         });
 
-    let mw = (f32::from(vp.width) - 96.).min(MODAL_W);
+    let mw = mb.w;
     let backdrop = i.prof.and_then(|p| p.banner.clone()).and_then(|b| crate::ui::profile_bg::get(&b, mw, cx));
     let e3 = e.clone();
     let close = div()
@@ -1647,21 +1764,22 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         .size_full()
         .flex()
         .overflow_hidden()
-        .rounded(z(16.))
-        .border_1()
+        .rounded(z(mb.radius))
+        .when(mb.border_block, |d| d.border_t_1().border_b_1())
+        .when(mb.border_inline, |d| d.border_l_1().border_r_1())
         .border_color(c(tok(idx::BORDER_NORMAL)))
         .when(theme.is_none(), |d| d.bg(c(tok(idx::BACKGROUND_BASE_LOWER))))
         .when_some(theme, |d, t| {
             use crate::ui::profile_theme::{modal_background, modal_inner};
             d.bg(modal_background(t))
-                .child(div().absolute().top_0().left_0().right_0().h(z(300.)).rounded_t(z(15.)).bg(gpui::linear_gradient(
+                .child(div().absolute().top_0().left_0().right_0().h(z(300.)).rounded_t(z((mb.radius - 1.).max(0.))).bg(gpui::linear_gradient(
                     180.,
                     gpui::linear_color_stop(modal_inner(t, 0.8), 0.),
                     gpui::linear_color_stop(modal_inner(t, 0.2), 1.),
                 )))
-                .child(div().absolute().top(z(300.)).left_0().right_0().bottom_0().rounded_b(z(15.)).bg(modal_inner(t, 0.2)))
+                .child(div().absolute().top(z(300.)).left_0().right_0().bottom_0().rounded_b(z((mb.radius - 1.).max(0.))).bg(modal_inner(t, 0.2)))
         })
-        .children(backdrop.map(|(a, h)| img(gpui::ImageSource::Render(a)).absolute().top_0().left_0().w(z(mw)).h(z(h)).rounded_t(z(15.))))
+        .children(backdrop.map(|(a, h)| img(gpui::ImageSource::Render(a)).absolute().top_0().left_0().w(z(mw)).h(z(h)).rounded_t(z((mb.radius - 1.).max(0.)))))
         .shadow_lg()
         .pt(z(pad + system_bar))
         .pl(z(pad))
@@ -1687,6 +1805,28 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         })
         .child(right)
         .child(close)
+}
+
+#[cfg(test)]
+mod modal_box_tests {
+    use super::{modal_box, modal_profile_w};
+
+    #[test]
+    fn modal_follows_the_client_media_queries() {
+        let b = modal_box(1536., 788., false);
+        assert_eq!((b.w, b.h, b.radius, b.system_bar), (962., 692., 16., 0.));
+        let b = modal_box(1280., 700., false);
+        assert_eq!((b.w, b.h, b.radius, b.system_bar, b.border_block), (962., 700., 0., 32., false));
+        let b = modal_box(900., 900., false);
+        assert_eq!((b.w, b.radius, b.border_inline), (900., 0., false));
+        let b = modal_box(1536., 788., true);
+        assert_eq!((b.w, b.h, b.panel, b.radius), (1202., 692., 242., 16.));
+        let b = modal_box(1000., 800., true);
+        assert_eq!((b.w, b.panel, b.radius), (1000., 241., 0.));
+        assert_eq!(modal_box(1536., 500., false).h, 550.);
+        assert_eq!(modal_profile_w(1536., true), 400.);
+        assert_eq!(modal_profile_w(700., false), 318.5);
+    }
 }
 
 #[cfg(test)]

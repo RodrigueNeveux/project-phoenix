@@ -60,6 +60,8 @@ const SWATCHES: [u32; 10] = [0x00A7FF, 0x00FBFF, 0x5865F2, 0xEB459E, 0xED4245, 0
 
 pub struct EditorState {
     pub scope: Option<Id>,
+    pub modal: bool,
+    pub collapsed: bool,
     pub switcher_open: bool,
     pub notice_hidden: bool,
     pub tab: usize,
@@ -89,6 +91,8 @@ impl EditorState {
     fn new(scope: Option<Id>) -> Self {
         Self {
             scope,
+            modal: false,
+            collapsed: false,
             switcher_open: false,
             notice_hidden: false,
             tab: 0,
@@ -133,17 +137,21 @@ impl EditorState {
     }
 }
 
-pub fn on_escape(s: &mut super::SettingsState) {
+pub fn on_escape(s: &mut super::SettingsState) -> bool {
     if let Some(e) = s.profile.as_mut()
         && (e.switcher_open || e.palette.is_some() || e.picker.is_some())
     {
         e.picker = None;
         e.switcher_open = false;
         e.palette = None;
-        return;
+        return false;
+    }
+    if s.profile.as_ref().is_some_and(|e| e.modal) {
+        return true;
     }
     s.profile = None;
     s.page = Page::MyAccount;
+    false
 }
 
 fn ed(app: &mut PhoenixApp) -> Option<&mut EditorState> {
@@ -215,9 +223,11 @@ fn fetch(app: &mut PhoenixApp, cx: &mut Cx) {
 fn switch_scope(app: &mut PhoenixApp, scope: Option<Id>, cx: &mut Cx) {
     let orig = original_for(app, scope, None);
     if let Some(e) = ed(app) {
-        let generation = e.generation + 1;
+        let (generation, modal, tab) = (e.generation + 1, e.modal, e.tab);
         *e = EditorState::new(scope);
         e.generation = generation;
+        e.modal = modal;
+        e.tab = tab;
         e.original = orig;
     }
     fetch(app, cx);
@@ -232,6 +242,17 @@ pub fn open_scoped(app: &mut PhoenixApp, guild: Id, cx: &mut Cx) {
     e.generation = generation;
     e.original = orig;
     s.profile = Some(e);
+    fetch(app, cx);
+    cx.notify();
+}
+
+pub fn open_modal(app: &mut PhoenixApp, guild: Option<Id>, tab: usize, cx: &mut Cx) {
+    let orig = original_for(app, guild, None);
+    let mut e = EditorState::new(guild);
+    e.modal = true;
+    e.tab = tab;
+    e.original = orig;
+    app.settings = Some(super::SettingsState { page: Page::Profiles, profile: Some(e), ..Default::default() });
     fetch(app, cx);
     cx.notify();
 }
@@ -326,8 +347,8 @@ fn ensure_inputs(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) {
         }
         let o = e.original.clone();
         let name = cx.new(|cx| InputState::new(window, cx).default_value(o.name.clone()));
-        let pronouns =
-            cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("pe.add_pronouns")).default_value(o.pronouns.clone()));
+        let hint = if e.scope.is_some() { crate::t!("pe.server_pronouns") } else { crate::t!("pe.add_pronouns") };
+        let pronouns = cx.new(|cx| InputState::new(window, cx).placeholder(hint).default_value(o.pronouns.clone()));
         let bio = cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 10).default_value(o.bio.clone()));
         let subs = vec![cx.observe(&name, |_, _, cx| cx.notify()), cx.observe(&pronouns, |_, _, cx| cx.notify()), cx.observe(&bio, |_, _, cx| cx.notify())];
         let Some(e) = ed(a) else { return };
@@ -415,7 +436,7 @@ fn scope_name(app: &PhoenixApp, scope: Option<Id>) -> SharedString {
     }
 }
 
-fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
+fn styles_panel(app: &PhoenixApp, e: &EditorState, modal: Option<crate::ui::profile::ModalBox>, cx: &mut Cx) -> Div {
     let nitro = app.backend.has_premium();
     let locked = !nitro;
     let me = &app.me;
@@ -428,6 +449,30 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
         .gap(z(4.))
         .border_b_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .when(modal.is_some(), |d| d.flex_row_reverse())
+        .when(modal.is_some(), |d| {
+            d.child(
+                div()
+                    .id("pe-hide-styles")
+                    .size(z(32.))
+                    .flex_none()
+                    .rounded(z(8.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .cursor_pointer()
+                    .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+                    .child(gpui::svg().path(crate::icons::path("double-chevron-right")).size(z(16.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT))))
+                    .tooltip(crate::ui::tooltip::tip(crate::t!("pe.hide_styles")))
+                    .on_click(cx.listener(|a, _, _, cx| {
+                        if let Some(e) = ed(a) {
+                            e.collapsed = true;
+                            e.switcher_open = false;
+                        }
+                        cx.notify();
+                    })),
+            )
+        })
         .child(
             div().py(z(4.)).child(
                 div()
@@ -592,18 +637,25 @@ fn styles_panel(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
                 .child(tile("frame", 100., 100., false).child(plus_icon(24.)).on_click(cx.listener(|a, _, _, cx| super::collectible_picker::open(a, super::collectibles::Kind::Frame, cx))))
                 .into_any_element(),
         ));
-    div()
+    let panel = match modal {
+        Some(mb) => div()
+            .w(px(mb.panel))
+            .pt(z(mb.system_bar))
+            .bg(c(tok(idx::MODAL_BACKGROUND)))
+            .rounded_l(z((mb.radius - 1.).max(0.)))
+            .when(mb.border_block, |d| d.border_t_1().border_b_1())
+            .border_l_1()
+            .border_color(c(tok(idx::BORDER_NORMAL)))
+            .child(div().absolute().top_0().bottom_0().right_0().w(px(1.)).bg(c(tok(idx::BORDER_SUBTLE)))),
+        None => div().w(z(242.)).pt(z(32.)).bg(c(tok(idx::BACKGROUND_BASE_LOWEST))).border_l_1().border_r_1().border_color(c(tok(idx::BORDER_SUBTLE))),
+    };
+    panel
         .relative()
-        .w(z(242.))
         .h_full()
         .flex_none()
         .flex()
         .flex_col()
-        .pt(z(32.))
-        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
-        .border_l_1()
-        .border_r_1()
-        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .overflow_hidden()
         .child(header)
         .child(div().id("pe-styles").flex_1().min_h_0().overflow_y_scroll().children((e.scope.is_some() && !e.notice_hidden).then(|| {
             let notice = div()
@@ -714,6 +766,27 @@ fn section(key: &str, color: gpui::Hsla, body: impl IntoElement) -> Div {
         .child(body)
 }
 
+fn bio_section(server: bool, color: gpui::Hsla, body: impl IntoElement) -> Div {
+    let label = if server { crate::t!("pe.server_bio") } else { crate::t!("pe.bio") };
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(8.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(4.))
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(color)
+                .child(label)
+                .when(server, |d| d.child(gpui::svg().path(crate::icons::path("nitro")).size(z(12.)).flex_none().text_color(color))),
+        )
+        .child(body)
+}
+
 fn inline_field(child: AnyElement) -> Div {
     div().rounded(z(8.)).px(z(7.)).ml(z(-7.)).hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))).child(child)
 }
@@ -756,7 +829,7 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
         None => SharedString::from(e.original.name.clone()).into_any_element(),
     };
     let pronouns: AnyElement = match &e.pronouns {
-        Some(i) => div().w(z(134.)).child(Input::new(i).appearance(false).bordered(false).px(z(5.)).text_size(z(14.)).line_height(z(18.))).into_any_element(),
+        Some(i) => div().w(z(if e.scope.is_some() { 201. } else { 134. })).child(Input::new(i).appearance(false).bordered(false).px(z(5.)).text_size(z(14.)).line_height(z(18.))).into_any_element(),
         None => SharedString::from(e.original.pronouns.clone()).into_any_element(),
     };
     let bio_text: SharedString = e.bio.as_ref().map(|i| i.read(cx).value().to_string()).unwrap_or_else(|| e.original.bio.clone()).into();
@@ -834,14 +907,18 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
                         .when_some(e.theme, |b, t| b.bg(hex(gradient_button_color(t.0)))),
                 )
                 .child(sec_btn("shop", "shop"))
-                .child(sec_btn("more", "more-vertical")),
+                .child(sec_btn("more", "chat/more")),
         )
-        .child(section("pe.bio", heading, inline_field(div().mt(z(-8.)).pt(z(5.)).pb(z(4.)).text_size(z(14.)).line_height(z(18.)).text_color(strong).child(bio).into_any_element())))
-        .child(section(
-            "pe.member_since",
-            heading,
-            div().text_size(z(14.)).line_height(z(18.)).text_color(strong).child(crate::presence::format_date(created)),
-        ))
+        .child(bio_section(e.scope.is_some(), heading, inline_field(div().mt(z(-8.)).pt(z(5.)).pb(z(4.)).text_size(z(14.)).line_height(z(18.)).text_color(strong).child(bio).into_any_element())))
+        .map(|d| match e.profile.as_ref() {
+            Some(p) => d.child(crate::ui::profile::member_since_section(app, p, e.scope)),
+            None => d.child(section(
+                "pe.member_since",
+                heading,
+                div().text_size(z(14.)).line_height(z(18.)).text_color(strong).child(crate::presence::format_date(created)),
+            )),
+        })
+        .children(crate::ui::profile::roles_section(app, e.scope, me.id, cx))
         .child(section(
             "pe.connections",
             heading,
@@ -917,25 +994,10 @@ fn card(app: &PhoenixApp, e: &EditorState, bio_focused: bool, cx: &mut Cx) -> Di
                         ),
                 ),
         )
-        .when_some(app.people.custom_status.clone(), |d, t| {
-            d.child(
-                div()
-                    .absolute()
-                    .left(z(172.))
-                    .top(z(132.))
-                    .max_w(z(181.))
-                    .px(z(12.))
-                    .py(z(8.))
-                    .rounded(z(16.))
-                    .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
-                    .shadow_sm()
-                    .text_size(z(14.))
-                    .line_height(z(18.))
-                    .text_color(strong)
-                    .line_clamp(2)
-                    .child(t),
-            )
-        })
+        .children(
+            crate::ui::profile_toolbar::status(app, me.id, e.scope, crate::ui::profile_toolbar::Layout::Modal, themed, app.people.custom_status.clone(), cx)
+                .map(|s| div().absolute().left(z(172.)).top(z(132.)).child(s)),
+        )
         .child(div().id("pe-card-body").flex_1().min_h_0().overflow_y_scroll().child(body))
         .children(effect);
     div()
@@ -1097,7 +1159,7 @@ pub(super) fn gradient_button_color(primary: u32) -> u32 {
     c
 }
 
-fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
+fn tabs(app: &PhoenixApp, e: &EditorState, cx: &mut Cx) -> Div {
     let themed = e.theme.is_some();
     let strong = if themed { white(0.96) } else { c(tok(idx::TEXT_STRONG)) };
     let dim = if themed { white(0.88) } else { c(tok(idx::TEXT_DEFAULT)) };
@@ -1109,9 +1171,9 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
             .pb(z(16.))
             .border_b_2()
             .border_color(if sel { c(tok(idx::TEXT_STRONG)) } else { gpui::transparent_black() })
-            .text_size(z(16.))
+            .text_size(z(14.))
             .line_height(z(14.))
-            .font_weight(FontWeight::MEDIUM)
+            .font_weight(FontWeight::SEMIBOLD)
             .text_color(if sel { strong } else { dim })
             .cursor_pointer()
             .child(crate::t!(*k))
@@ -1141,10 +1203,14 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
             }))),
         1 if !e.recent.is_empty() => super::profile_activity::render(
             &e.recent,
+            true,
             &super::profile_activity::Colors { strong, muted: dim, card: wcol.card, link: c(tok(idx::TEXT_LINK)) },
         ),
         1 => div().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("pe.no_activity")),
-        _ => div().text_size(z(14.)).text_color(c(tok(idx::TEXT_MUTED))).child(crate::t!("pe.empty_wishlist")),
+        _ => {
+            let board = crate::ui::profile_board::get(app, app.me.id, cx);
+            crate::ui::profile::wishlist_panel(app, app.me.id, &board.wishlist, cx)
+        }
     };
     div()
         .flex_1()
@@ -1274,6 +1340,118 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
         }
         None => vec![div().absolute().inset_0().bg(c(tok(idx::BACKGROUND_BASE_LOW))).child(div().size_full().bg(c(tok(idx::BACKGROUND_SCRIM)))).into_any_element()],
     };
+    if e.modal {
+        let vp = window.viewport_size();
+        let (vw, vh) = (f32::from(vp.width), f32::from(vp.height));
+        let editing = !e.collapsed && vw > 928.;
+        let mb = crate::ui::profile::modal_box(vw, vh, editing);
+        let pad = if vw >= 1025. { 48. } else { 32. };
+        let r = (mb.radius - 1.).max(0.);
+        let close = div()
+            .id("pe-close")
+            .absolute()
+            .top(z(8. + mb.system_bar))
+            .right(z(8.))
+            .size(z(32.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(c(tok(idx::CONTROL_SECONDARY_BORDER_DEFAULT)))
+            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+            .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .child(gpui::svg().path(crate::icons::path("close")).size(z(16.)).text_color(c(tok(idx::CONTROL_SECONDARY_TEXT_DEFAULT))))
+            .on_click(cx.listener(|a, _, _, cx| {
+                a.settings = None;
+                cx.notify();
+            }));
+        let right = div()
+            .relative()
+            .flex_1()
+            .min_w_0()
+            .h_full()
+            .overflow_hidden()
+            .rounded_r(z(r))
+            .when(!editing, |d| d.rounded_l(z(r)).when(mb.border_inline, |d| d.border_l_1()))
+            .when(mb.border_block, |d| d.border_t_1().border_b_1())
+            .when(mb.border_inline, |d| d.border_r_1())
+            .border_color(c(tok(idx::BORDER_NORMAL)))
+            .children(backdrop)
+            .child(
+                div()
+                    .relative()
+                    .size_full()
+                    .pt(z(pad + mb.system_bar))
+                    .pr(z(32.))
+                    .pl(z(pad))
+                    .flex()
+                    .child(card(app, e, bio_focused, cx))
+                    .child(tabs(app, e, cx)),
+            )
+            .when(dirty || e.error.is_some(), |d| d.child(unsaved_bar(e, cx)))
+            .child(close);
+        let show_styles = (!editing && vw > 928.).then(|| {
+            div()
+                .id("pe-show-styles")
+                .absolute()
+                .top(z(40.))
+                .left(z(-30.))
+                .w(z(40.))
+                .h(z(40.))
+                .pr(z(10.))
+                .rounded_l(z(8.))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_NORMAL)))
+                .bg(c(tok(idx::MODAL_BACKGROUND)))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .child(gpui::svg().path(crate::icons::path("paintbrush-thin")).size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
+                .tooltip(crate::ui::tooltip::tip(crate::t!("pe.show_styles")))
+                .on_click(cx.listener(|a, _, _, cx| {
+                    if let Some(e) = ed(a) {
+                        e.collapsed = false;
+                    }
+                    cx.notify();
+                }))
+        });
+        return div()
+            .id("profile-editor")
+            .absolute()
+            .inset_0()
+            .bg(c(tok(idx::BACKGROUND_SCRIM)))
+            .occlude()
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|a, _, _, cx| {
+                    a.settings = None;
+                    cx.notify();
+                }),
+            )
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(
+                div()
+                    .id("profile-editor-modal")
+                    .relative()
+                    .w(px(mb.w))
+                    .h(px(mb.h))
+                    .flex()
+                    .occlude()
+                    .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .shadow_lg()
+                    .children(show_styles)
+                    .when(editing, |d| d.child(styles_panel(app, e, Some(mb), cx)))
+                    .child(right)
+                    .when(e.switcher_open, |d| d.child(switcher(app, e, cx))),
+            )
+            .children(super::collectible_picker::render(app, e, cx))
+            .into_any_element();
+    }
     let right = div()
         .relative()
         .flex_1()
@@ -1290,7 +1468,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
                 .pl(z(48.))
                 .flex()
                 .child(card(app, e, bio_focused, cx))
-                .child(tabs(e, cx)),
+                .child(tabs(app, e, cx)),
         )
         .when(dirty || e.error.is_some(), |d| d.child(unsaved_bar(e, cx)));
     div()
@@ -1308,7 +1486,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> AnyElement 
                 .max_w(z(1184.))
                 .mx(z(48.))
                 .flex()
-                .child(styles_panel(app, e, cx))
+                .child(styles_panel(app, e, None, cx))
                 .child(right)
                 .child(close)
                 .when(e.switcher_open, |d| d.child(switcher(app, e, cx))),

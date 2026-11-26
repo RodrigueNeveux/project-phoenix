@@ -320,7 +320,7 @@ pub fn look_skus(p: &phoenix_api::rest::profile::UserProfile, fx: (Option<u64>, 
 }
 
 pub fn format_date(ts: i64) -> SharedString {
-    chrono::DateTime::from_timestamp(ts, 0).map(|d| crate::i18n::medium_date(d.date_naive())).unwrap_or_default().into()
+    chrono::DateTime::from_timestamp(ts, 0).map(|d| crate::i18n::medium_date(d.with_timezone(&chrono::Local).date_naive())).unwrap_or_default().into()
 }
 
 pub struct Popout {

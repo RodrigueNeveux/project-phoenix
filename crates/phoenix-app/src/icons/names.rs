@@ -252,4 +252,6 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("mod/robot", &["RobotIcon"]),
     ("settings/nitro-wordmark", &["path:M98.8266537 8.64800265L97.5788372"]),
     ("mod/chevron-large-right", &["ChevronLargeRightIcon"]),
+    ("double-chevron-right", &["DoubleChevronSmallRightIcon"]),
+    ("paintbrush-thin", &["PaintbrushThinIcon"]),
 ];

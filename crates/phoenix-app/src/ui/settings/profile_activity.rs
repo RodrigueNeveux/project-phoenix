@@ -1,4 +1,4 @@
-use gpui::{Div, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div, img};
+use gpui::{Div, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, div, img, prelude::FluentBuilder};
 use serde_json::Value;
 
 use crate::theme::z;
@@ -129,7 +129,7 @@ fn card(g: &RecentGame, now: i64, col: &Colors) -> Div {
         )
 }
 
-pub fn render(games: &[RecentGame], col: &Colors) -> Div {
+pub fn render(games: &[RecentGame], own: bool, col: &Colors) -> Div {
     let now = chrono::Utc::now().timestamp();
     div()
         .flex()
@@ -140,17 +140,19 @@ pub fn render(games: &[RecentGame], col: &Colors) -> Div {
                 .flex()
                 .flex_col()
                 .child(div().text_size(z(12.)).line_height(z(16.)).font_weight(FontWeight::MEDIUM).text_color(col.muted).child(crate::t!("pa.recent")))
-                .child(
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap_x(z(4.))
-                        .text_size(z(12.))
-                        .line_height(z(16.))
-                        .text_color(col.strong)
-                        .child(crate::t!("pa.recent_hint"))
-                        .child(div().text_color(col.link).child(crate::t!("pa.learn_more"))),
-                ),
+                .when(own, |d| {
+                    d.child(
+                        div()
+                            .flex()
+                            .flex_wrap()
+                            .gap_x(z(4.))
+                            .text_size(z(12.))
+                            .line_height(z(16.))
+                            .text_color(col.strong)
+                            .child(crate::t!("pa.recent_hint"))
+                            .child(div().text_color(col.link).child(crate::t!("pa.learn_more"))),
+                    )
+                }),
         )
         .child(div().flex().flex_col().gap(z(8.)).children(games.iter().map(|g| card(g, now, col))))
 }
