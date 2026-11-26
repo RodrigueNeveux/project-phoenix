@@ -129,8 +129,7 @@ fn overlay_icon_button(id: &'static str, icon: &'static str) -> gpui::Stateful<g
 pub fn render(app: &PhoenixApp, l: &LookSku, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let premium = app.backend.has_premium();
     let p = price(l, premium);
-    let stub = crate::t!("shop.preview_only");
-    let stub2 = stub.clone();
+    let (buy_look, gift_look) = (l.clone(), l.clone());
     let buy_label = match &p {
         Some(p) => crate::t!("shop.buy_for", price = fmt(&p.shown)),
         None => crate::t!("shop.buy"),
@@ -156,7 +155,7 @@ pub fn render(app: &PhoenixApp, l: &LookSku, cx: &mut Context<PhoenixApp>) -> An
                     crate::ui::controls::button("pdp-buy", buy_label, crate::ui::controls::BtnKind::Primary)
                         .flex_1()
                         .when(!l.shoppable, |d| d.opacity(0.5).cursor_not_allowed())
-                        .on_click(cx.listener(move |a, _, _, cx| a.stub(&stub, cx))),
+                        .when(l.shoppable, |d| d.on_click(cx.listener(move |a, _, _, cx| a.open_shop_purchase(buy_look.clone(), false, cx)))),
                 )
                 .child(
                     crate::ui::controls::button("pdp-gift", SharedString::default(), crate::ui::controls::BtnKind::Primary)
@@ -164,7 +163,7 @@ pub fn render(app: &PhoenixApp, l: &LookSku, cx: &mut Context<PhoenixApp>) -> An
                         .w(z(40.))
                         .px(z(0.))
                         .child(gpui::svg().path(crate::icons::path("gift")).size(z(20.)).text_color(gpui::white()))
-                        .on_click(cx.listener(move |a, _, _, cx| a.stub(&stub2, cx))),
+                        .on_click(cx.listener(move |a, _, _, cx| a.open_shop_purchase(gift_look.clone(), true, cx))),
                 ),
         );
     let rail = div()

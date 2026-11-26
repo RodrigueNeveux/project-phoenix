@@ -17,6 +17,10 @@ pub const STOREFRONT_SKUS: &str = "/storefront/products/skus";
 pub const SOURCE_TYPE_SHOP: u64 = 1;
 pub const SKU_FLAG_AVAILABLE: u64 = 1 << 2;
 
+pub fn shop_tab_path(tab: &str) -> String {
+    format!("{SHOP_HOME}&tab={tab}")
+}
+
 pub fn storefront_skus_path(skus: &[u64], locale: &str) -> String {
     let ids: String = skus.iter().map(|s| format!("sku_ids={s}&")).collect();
     format!("{STOREFRONT_SKUS}?{ids}locale={locale}&with_bundled_skus=true&include_google_sku_ids=false&ignore_cache=false")
@@ -101,6 +105,10 @@ impl RestClient {
         self.call(Method::GET, SHOP_HOME, Body::None).await
     }
 
+    pub async fn get_collectibles_shop_tab(&self, tab: &str) -> Result<Value> {
+        self.call(Method::GET, &shop_tab_path(tab), Body::None).await
+    }
+
     pub async fn get_recommended_collectibles(&self) -> Result<Vec<u64>> {
         let v: Value = self.call(Method::GET, RECOMMENDED_ITEMS, Body::None).await?;
         Ok(recommended_skus(&v))
@@ -129,6 +137,11 @@ mod tests {
         let v = json!({"categories": [{"products": [{"sku_id": "1"}, {"sku_id": "2"}]}, {"products": []}, {}]});
         assert_eq!(products(&v).count(), 2);
         assert_eq!(products(&json!({})).count(), 0);
+    }
+
+    #[test]
+    fn shop_tabs_reuse_the_home_query() {
+        assert_eq!(shop_tab_path("orbs"), "/collectibles-shop?include_bundles=true&variants_return_style=2&include_dynamic_blocks=true&tab=orbs");
     }
 
     #[test]

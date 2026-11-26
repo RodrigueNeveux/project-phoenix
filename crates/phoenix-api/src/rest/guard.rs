@@ -234,6 +234,14 @@ impl GuardedWrite {
         write(Method::PATCH, format!("/channels/{channel}"), Some(body))
     }
 
+    pub fn sku_purchase(sku: u64, gift: bool, amount: i64, currency: &str) -> Self {
+        write(
+            Method::POST,
+            format!("/store/skus/{sku}/purchase"),
+            Some(json!({ "gift": gift, "sku_subscription_plan_id": null, "expected_amount": amount, "expected_currency": currency, "apply_wallet_balance": false })),
+        )
+    }
+
     pub fn add_recipient(channel: u64, user: u64) -> Self {
         write(Method::PUT, format!("/channels/{channel}/recipients/{user}"), None)
     }
@@ -307,6 +315,7 @@ mod tests {
             GuardedWrite::create_role(5, "new role"),
             GuardedWrite::prune(5, 7, &[6]),
             GuardedWrite::create_webhook(6, "Captain Hook"),
+            GuardedWrite::sku_purchase(7, true, 599, "eur"),
         ]
     }
 
@@ -366,6 +375,10 @@ mod tests {
         );
         let ring = GuardedWrite::ring_call(9);
         assert_eq!((ring.method, ring.path.as_str(), ring.body), (Method::POST, "/channels/9/call/ring", Some(json!({ "recipients": null }))));
+        let buy = GuardedWrite::sku_purchase(7, false, 120, "discord_orb");
+        assert_eq!((buy.method.clone(), buy.path.as_str()), (Method::POST, "/store/skus/7/purchase"));
+        assert_eq!(buy.body.as_ref().and_then(|b| b.get("expected_currency")).and_then(Value::as_str), Some("discord_orb"));
+        assert_eq!(buy.body.as_ref().and_then(|b| b.get("gift")), Some(&json!(false)));
         let add = GuardedWrite::add_recipient(9, 2);
         assert_eq!((add.method, add.path.as_str(), add.body), (Method::PUT, "/channels/9/recipients/2", None));
         let ub = GuardedWrite::unban(5, 7);

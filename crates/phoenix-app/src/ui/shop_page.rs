@@ -19,6 +19,8 @@ pub struct ShopCard {
     pub nitro: Option<(i64, u32, String)>,
     pub sale: Option<(i64, u32, String)>,
     pub orbs: Option<u64>,
+    pub product: Value,
+    pub pdp_bg: Option<SharedString>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -30,8 +32,9 @@ pub struct Tile {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Block {
     Hero { banner: Option<SharedString>, logo: Option<SharedString>, backdrop: Option<(u32, u32)>, skus: Vec<u64> },
+    Wide { title: SharedString, body: SharedString, banner: SharedString, logo: Option<SharedString> },
     Marketing(Vec<Tile>),
-    Shelf { name: SharedString, skus: Vec<u64>, button: Option<SharedString> },
+    Shelf { name: SharedString, skus: Vec<u64>, button: Option<SharedString>, category: Option<u64> },
     Picks(Vec<u64>),
 }
 
@@ -53,6 +56,10 @@ thread_local! {
     static CAROUSEL: RefCell<std::collections::HashMap<usize, usize>> = RefCell::new(std::collections::HashMap::new());
     static REQUESTED: Cell<bool> = const { Cell::new(false) };
     static TAB: Cell<usize> = const { Cell::new(0) };
+    static ORBS_HOME: RefCell<Option<std::rc::Rc<Home>>> = const { RefCell::new(None) };
+    static ORBS_REQUESTED: Cell<bool> = const { Cell::new(false) };
+    static CATEGORIES: RefCell<std::rc::Rc<Vec<crate::ui::shop_collection::Category>>> = RefCell::new(std::rc::Rc::new(Vec::new()));
+    static COLLECTION: Cell<Option<u64>> = const { Cell::new(None) };
     static ORBS: Cell<Option<u64>> = const { Cell::new(None) };
     static BALANCE_ASKED: Cell<bool> = const { Cell::new(false) };
     static SEARCH: RefCell<Option<gpui::Entity<gpui_component::input::InputState>>> = const { RefCell::new(None) };
@@ -90,6 +97,8 @@ pub fn card_of(p: &Value) -> Option<ShopCard> {
         nitro: price(p, TIER_PREMIUM_2),
         sale: price(p, TIER_SALE),
         orbs: orb_price(p),
+        product: p.clone(),
+        pdp_bg: None,
     })
 }
 
@@ -114,11 +123,19 @@ pub fn backdrop(style: &str) -> Option<(u32, u32)> {
     }
 }
 
+fn categories(v: &Value) -> impl Iterator<Item = &Value> {
+    v.get("categories").and_then(Value::as_array).into_iter().flatten()
+}
+
 pub fn parse_home(home: &Value, catalog: &Value) -> Home {
     let mut cards = std::collections::HashMap::new();
-    for p in phoenix_api::rest::collectibles::products(catalog).chain(phoenix_api::rest::collectibles::products(home)) {
-        if let Some(k) = card_of(p) {
-            cards.insert(k.sku, k);
+    for c in categories(catalog).chain(categories(home)) {
+        let bg = url(c, "pdp_bg_url");
+        for p in c.get("products").and_then(Value::as_array).into_iter().flatten() {
+            if let Some(mut k) = card_of(p) {
+                k.pdp_bg = bg.clone();
+                cards.insert(k.sku, k);
+            }
         }
     }
     let mut blocks = Vec::new();
@@ -138,10 +155,21 @@ pub fn parse_home(home: &Value, catalog: &Value) -> Home {
                     .filter_map(|t| Some(Tile { asset: url(t, "asset_url")?, category: t.get("category_sku_id")?.as_str()?.parse().ok()? }))
                     .collect(),
             )),
+            Some(3) => {
+                if let Some(banner) = url(b, "wide_banner_url") {
+                    blocks.push(Block::Wide {
+                        title: b.get("title").and_then(Value::as_str).unwrap_or_default().to_owned().into(),
+                        body: b.get("body").and_then(Value::as_str).unwrap_or_default().to_owned().into(),
+                        banner,
+                        logo: url(b, "logo_url"),
+                    });
+                }
+            }
             Some(4) => blocks.push(Block::Shelf {
                 name: b.get("name").and_then(Value::as_str).unwrap_or_default().to_owned().into(),
                 skus: skus(b, "ranked_sku_ids"),
                 button: b.get("show_button").and_then(Value::as_bool).unwrap_or(false).then(|| url(b, "button_text")).flatten(),
+                category: b.get("category_sku_id").and_then(Value::as_str).and_then(|s| s.parse().ok()),
             }),
             Some(2) => {
                 let sorted = b.get("sorted_sku_ids").map(|s| skus(s, "recommended")).filter(|v| !v.is_empty());
@@ -153,7 +181,7 @@ pub fn parse_home(home: &Value, catalog: &Value) -> Home {
     for blk in &mut blocks {
         match blk {
             Block::Hero { skus, .. } | Block::Shelf { skus, .. } | Block::Picks(skus) => skus.retain(|s| cards.contains_key(s)),
-            Block::Marketing(_) => {}
+            Block::Marketing(_) | Block::Wide { .. } => {}
         }
     }
     Home { blocks, cards }
@@ -225,15 +253,47 @@ fn ensure_loaded(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
     cx.spawn(async move |this, cx| {
         let v = fut.await.unwrap_or(Value::Null);
         let h = home.await.unwrap_or(Value::Null);
-        let built = cx.background_executor().spawn(async move { (parse(&v), parse_home(&h, &v)) }).await;
+        let built = cx.background_executor().spawn(async move { (parse(&v), parse_home(&h, &v), crate::ui::shop_collection::parse_categories(&v)) }).await;
         CARDS.with(|c| *c.borrow_mut() = Some(built.0));
         HOME.with(|c| *c.borrow_mut() = Some(std::rc::Rc::new(built.1)));
+        CATEGORIES.with(|c| *c.borrow_mut() = std::rc::Rc::new(built.2));
         let _ = this.update(cx, |_, cx| cx.notify());
     })
     .detach();
 }
 
-fn tk(i: usize) -> gpui::Hsla {
+fn ensure_orbs(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if ORBS_REQUESTED.with(|r| r.replace(true)) {
+        return;
+    }
+    let fut = app.backend.shop_tab("orbs");
+    cx.spawn(async move |this, cx| {
+        let v = fut.await.unwrap_or(Value::Null);
+        let mut h = cx.background_executor().spawn(async move { parse_home(&v, &Value::Null) }).await;
+        let _ = this.update(cx, |_, cx| {
+            if let Some(base) = HOME.with(|x| x.borrow().clone()) {
+                for (sku, k) in &base.cards {
+                    h.cards.entry(*sku).or_insert_with(|| k.clone());
+                }
+            }
+            orbs_only(&mut h);
+            ORBS_HOME.with(|x| *x.borrow_mut() = Some(std::rc::Rc::new(h)));
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
+pub fn orbs_only(h: &mut Home) {
+    let cards = &h.cards;
+    for b in &mut h.blocks {
+        if let Block::Picks(skus) = b {
+            skus.retain(|s| cards.get(s).is_some_and(|k| k.orbs.is_some()));
+        }
+    }
+}
+
+pub(crate) fn tk(i: usize) -> gpui::Hsla {
     c(tok(i))
 }
 
@@ -264,6 +324,24 @@ pub const ORBS_TAB: usize = 2;
 
 pub fn select_tab(i: usize) {
     TAB.with(|t| t.set(i));
+    COLLECTION.with(|c| c.set(None));
+}
+
+pub fn open_collection(sku: u64) {
+    COLLECTION.with(|c| c.set(Some(sku)));
+    crate::ui::chat::scrollbar::handle("shop-scroll").set_offset(gpui::point(gpui::px(0.), gpui::px(0.)));
+}
+
+pub fn collection() -> Option<u64> {
+    COLLECTION.with(Cell::get)
+}
+
+pub fn categories_loaded() -> std::rc::Rc<Vec<crate::ui::shop_collection::Category>> {
+    CATEGORIES.with(|c| c.borrow().clone())
+}
+
+pub fn home_loaded() -> Option<std::rc::Rc<Home>> {
+    HOME.with(|h| h.borrow().clone())
 }
 
 fn header(window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
@@ -290,7 +368,7 @@ fn header(window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement
                 .text_color(tk(idx::TEXT_DEFAULT))
                 .hover(|s| s.text_color(tk(idx::TEXT_STRONG)))
                 .on_click(cx.listener(move |_, _, _, cx| {
-                    TAB.with(|t| t.set(i));
+                    select_tab(i);
                     cx.notify();
                 }))
                 .child(label)
@@ -398,7 +476,11 @@ fn price_label(shown: &Shown) -> AnyElement {
     }
 }
 
-fn card(app: &PhoenixApp, k: &ShopCard, width: f32, scope: usize, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub(crate) fn card(app: &PhoenixApp, k: &ShopCard, width: f32, scope: usize, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    card_sized(app, k, width, CARD_SIZE, scope, cx)
+}
+
+pub(crate) fn card_sized(app: &PhoenixApp, k: &ShopCard, width: f32, height: f32, scope: usize, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let premium = app.backend.has_premium();
     let shown = shown_price(k, premium, ORBS.with(Cell::get));
     let off = match &shown {
@@ -407,8 +489,7 @@ fn card(app: &PhoenixApp, k: &ShopCard, width: f32, scope: usize, cx: &mut Conte
     };
     let group: SharedString = format!("shop-card-{scope}-{}", k.sku).into();
     let name = k.name.clone();
-    let stub = crate::t!("shop.preview_only");
-    let stub2 = stub.clone();
+    let (open, buy_card, gift_card) = (k.clone(), k.clone(), k.clone());
     let buy = match &shown {
         Some(Shown::Fiat { price, .. }) => crate::t!("shop.buy_for", price = format_price(price.0, price.1, &price.2)),
         _ => crate::t!("shop.buy"),
@@ -419,7 +500,7 @@ fn card(app: &PhoenixApp, k: &ShopCard, width: f32, scope: usize, cx: &mut Conte
         .id(group.clone())
         .group(group.clone())
         .w(z(width))
-        .h(z(CARD_SIZE))
+        .h(z(height))
         .flex_none()
         .relative()
         .overflow_hidden()
@@ -429,6 +510,7 @@ fn card(app: &PhoenixApp, k: &ShopCard, width: f32, scope: usize, cx: &mut Conte
         .hover(|s| s.border_color(tk(idx::BORDER_SUBTLE)))
         .bg(tk(idx::BACKGROUND_BASE_LOW))
         .cursor_pointer()
+        .on_click(cx.listener(move |a, _, _, cx| a.open_shop_product(look_of(&open), cx)))
         .when_some(k.bundle_art.clone(), |d, (bg, fg)| {
             d.bg(gpui::black())
                 .child(img(bg.to_string()).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover))
@@ -526,18 +608,43 @@ fn card(app: &PhoenixApp, k: &ShopCard, width: f32, scope: usize, cx: &mut Conte
                                     crate::ui::controls::button(buy_id, buy, crate::ui::controls::BtnKind::Primary)
                                         .flex_1()
                                         .h(z(40.))
-                                        .on_click(cx.listener(move |a, _, _, cx| a.stub(&stub, cx))),
+                                        .on_click(cx.listener(move |a, _, _, cx| {
+                                            cx.stop_propagation();
+                                            a.open_shop_purchase(look_of(&buy_card), false, cx);
+                                        })),
                                 )
                                 .child(
                                     crate::ui::controls::button(gift_id, SharedString::default(), crate::ui::controls::BtnKind::Primary)
                                         .size(z(40.))
                                         .child(glyph("gift", 20., gpui::white()))
-                                        .on_click(cx.listener(move |a, _, _, cx| a.stub(&stub2, cx))),
+                                        .on_click(cx.listener(move |a, _, _, cx| {
+                                            cx.stop_propagation();
+                                            a.open_shop_purchase(look_of(&gift_card), true, cx);
+                                        })),
                                 ),
                         ),
                 ),
         )
         .into_any_element()
+}
+
+pub fn look_of(k: &ShopCard) -> phoenix_api::rest::collectibles::LookSku {
+    let p = &k.product;
+    let first = |p: &Value| p.get("items").and_then(Value::as_array).and_then(|i| i.first()).cloned();
+    let item = first(p)
+        .or_else(|| p.get("variants").and_then(Value::as_array).and_then(|v| v.first()).and_then(first))
+        .unwrap_or(Value::Null);
+    let kind = item.get("type").and_then(Value::as_u64).or_else(|| p.get("type").and_then(Value::as_u64)).unwrap_or(u64::MAX);
+    phoenix_api::rest::collectibles::LookSku {
+        sku: k.sku,
+        kind,
+        name: k.name.to_string(),
+        shoppable: k.base.is_some() || k.orbs.is_some(),
+        item,
+        summary: p.get("summary").and_then(Value::as_str).unwrap_or_default().trim().to_owned(),
+        background: k.pdp_bg.as_ref().map(|u| u.to_string()),
+        prices: p.get("prices").cloned().unwrap_or(Value::Null),
+    }
 }
 
 pub fn bundle_label(items: usize, name: &str) -> (String, usize) {
@@ -584,6 +691,13 @@ pub const BANNER_H: f32 = 350.;
 pub const MARKETING_H: f32 = 236.;
 pub const SECTION_HEAD: f32 = 40. + 24.;
 
+pub const WIDE_MAX_W: f32 = 1080.;
+pub const WIDE_RATIO: f32 = 358. / 2120.;
+
+pub fn wide_height(inner: f32) -> f32 {
+    (inner.min(WIDE_MAX_W) * WIDE_RATIO).round()
+}
+
 pub fn fit(inner: f32) -> usize {
     (((inner + CARD_GAP) / ROW_H).floor() as usize).max(1)
 }
@@ -596,6 +710,7 @@ pub fn block_height(b: &Block, inner: f32) -> f32 {
     match b {
         Block::Hero { .. } => HERO_H,
         Block::Marketing(_) => MARKETING_H + 2. * BLOCK_PAD,
+        Block::Wide { .. } => wide_height(inner) + 2. * BLOCK_PAD,
         Block::Shelf { .. } => 2. * BLOCK_PAD + SECTION_HEAD + CARD_SIZE,
         Block::Picks(skus) => 2. * BLOCK_PAD + SECTION_HEAD + (skus.len().div_ceil(fit(inner)) as f32 * ROW_H - CARD_GAP).max(0.),
     }
@@ -640,7 +755,7 @@ fn arrow(id: SharedString, icon: &'static str, left: bool, block: usize, len: us
         )
 }
 
-fn carousel(app: &PhoenixApp, home: &Home, block: usize, skus: &[u64], inner: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub(crate) fn carousel(app: &PhoenixApp, home: &Home, block: usize, skus: &[u64], inner: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let n = fit(inner);
     let len = skus.len();
     let first = CAROUSEL.with(|c| c.borrow().get(&block).copied().unwrap_or(0)).min(len.saturating_sub(n));
@@ -661,7 +776,7 @@ fn carousel(app: &PhoenixApp, home: &Home, block: usize, skus: &[u64], inner: f3
         .into_any_element()
 }
 
-fn heading(text: SharedString) -> impl IntoElement {
+pub(crate) fn heading(text: SharedString) -> impl IntoElement {
     div().text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(text)
 }
 
@@ -669,11 +784,11 @@ fn section_head(left: AnyElement, right: Option<AnyElement>) -> impl IntoElement
     div().h(z(40.)).mb(z(24.)).flex().items_center().justify_between().gap(z(12.)).child(left).children(right)
 }
 
-fn secondary(id: SharedString, label: SharedString) -> gpui::Stateful<gpui::Div> {
+pub(crate) fn secondary(id: SharedString, label: SharedString) -> gpui::Stateful<gpui::Div> {
     crate::ui::controls::button(id, label, crate::ui::controls::BtnKind::Secondary).h(z(40.)).px(z(16.))
 }
 
-fn hero(app: &PhoenixApp, home: &Home, block: usize, b: &Block, inner: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub(crate) fn hero(app: &PhoenixApp, home: &Home, block: usize, b: &Block, inner: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let Block::Hero { banner, logo, backdrop, skus } = b else { return div().into_any_element() };
     let (top, bottom) = backdrop.map_or((gpui::black(), gpui::black()), |(a, b)| (gpui::rgb(a).into(), gpui::rgb(b).into()));
     div()
@@ -711,7 +826,7 @@ fn hero(app: &PhoenixApp, home: &Home, block: usize, b: &Block, inner: f32, cx: 
         .into_any_element()
 }
 
-fn marketing(block: usize, tiles: &[Tile]) -> AnyElement {
+fn marketing(block: usize, tiles: &[Tile], cx: &mut Context<PhoenixApp>) -> AnyElement {
     let mut row = div().flex().gap(z(24.));
     for (i, t) in tiles.iter().enumerate() {
         row = row.child(
@@ -736,7 +851,8 @@ fn marketing(block: usize, tiles: &[Tile]) -> AnyElement {
                         .items_start()
                         .child(div().h(z(16.)))
                         .child(div().h(z(110.4)))
-                        .child(
+                        .child({
+                            let category = t.category;
                             div()
                                 .id(SharedString::from(format!("shop-tile-go-{block}-{i}")))
                                 .h(z(40.))
@@ -752,30 +868,96 @@ fn marketing(block: usize, tiles: &[Tile]) -> AnyElement {
                                 .line_height(z(20.))
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(gpui::black())
-                                .child(crate::t!("shop.take_me_there")),
-                        ),
+                                .hover(|s| s.bg(gpui::rgb(0xe8e8ea)))
+                                .on_click(cx.listener(move |_, _, _, cx| {
+                                    open_collection(category);
+                                    cx.notify();
+                                }))
+                                .child(crate::t!("shop.take_me_there"))
+                        }),
                 ),
         );
     }
     div().w_full().px(z(FEED_PAD_X)).py(z(BLOCK_PAD)).child(row).into_any_element()
 }
 
+fn wide(b: &Block, inner: f32, orbs: bool) -> AnyElement {
+    let Block::Wide { title, body, banner, logo } = b else { return div().into_any_element() };
+    let radius = if orbs { 32. } else { 16. };
+    let text = div()
+        .flex()
+        .flex_col()
+        .gap(z(4.))
+        .max_w(z(400.))
+        .child(
+            div()
+                .when(orbs, |d| d.pb(z(8.)).text_size(z(28.)).line_height(z(34.)))
+                .when(!orbs, |d| d.text_size(z(24.)).line_height(z(30.)))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_STRONG))
+                .child(title.clone()),
+        )
+        .child(
+            div()
+                .when(orbs, |d| d.text_size(z(16.)).line_height(z(20.)))
+                .when(!orbs, |d| d.text_size(z(14.)).line_height(z(18.)))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tk(idx::TEXT_MUTED))
+                .line_clamp(2)
+                .child(if orbs { crate::t!("shop.orbs_wide_body") } else { body.clone() }),
+        )
+        .children(logo.clone().filter(|_| !orbs).map(|u| div().mt(z(12.)).child(img(u.to_string()).h(z(36.)).opacity(0.9).object_fit(gpui::ObjectFit::Contain))));
+    div()
+        .w_full()
+        .px(z(FEED_PAD_X))
+        .py(z(BLOCK_PAD))
+        .flex()
+        .justify_center()
+        .child(
+            div()
+                .id("shop-wide-banner")
+                .relative()
+                .w_full()
+                .max_w(z(WIDE_MAX_W))
+                .h(z(wide_height(inner)))
+                .rounded(z(radius))
+                .border_1()
+                .border_color(tk(idx::BORDER_MUTED))
+                .overflow_hidden()
+                .bg(tk(idx::BACKGROUND_BASE_LOWEST))
+                .child(img(banner.to_string()).absolute().inset_0().size_full().object_fit(gpui::ObjectFit::Cover))
+                .child(div().absolute().top_0().bottom_0().left_0().pl(z(24.)).flex().items_center().child(text)),
+        )
+        .into_any_element()
+}
+
 fn shelf(app: &PhoenixApp, home: &Home, block: usize, b: &Block, inner: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let Block::Shelf { name, skus, button } = b else { return div().into_any_element() };
+    let Block::Shelf { name, skus, button, category } = b else { return div().into_any_element() };
+    let category = *category;
     div()
         .w_full()
         .px(z(FEED_PAD_X))
         .py(z(BLOCK_PAD))
         .child(section_head(
             heading(name.clone()).into_any_element(),
-            button.clone().map(|t| secondary(format!("shop-shelf-all-{block}").into(), t).into_any_element()),
+            button.clone().map(|t| {
+                secondary(format!("shop-shelf-all-{block}").into(), t)
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        if let Some(c) = category {
+                            open_collection(c);
+                            cx.notify();
+                        }
+                    }))
+                    .into_any_element()
+            }),
         ))
         .child(carousel(app, home, block, skus, inner, cx))
         .into_any_element()
 }
 
-fn picks_head(block: usize) -> impl IntoElement {
-    let left = div().flex().items_center().gap(z(4.)).child(heading(crate::t!("shop.find_style"))).child(glyph("info", 18., tk(idx::ICON_MUTED)));
+fn picks_head(block: usize, orbs: bool) -> impl IntoElement {
+    let title = if orbs { crate::t!("shop.orbs_picks") } else { crate::t!("shop.find_style") };
+    let left = div().flex().items_center().gap(z(4.)).child(heading(title)).child(glyph("info", 18., tk(idx::ICON_MUTED)));
     let right = div()
         .flex()
         .items_center()
@@ -814,6 +996,7 @@ struct Frame {
     inner: f32,
     offset: f32,
     view_h: f32,
+    orbs: bool,
 }
 
 fn picks(app: &PhoenixApp, home: &Home, block: usize, skus: &[u64], top: f32, f: Frame, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -837,11 +1020,11 @@ fn picks(app: &PhoenixApp, home: &Home, block: usize, skus: &[u64], top: f32, f:
     if last < rows {
         grid = grid.child(div().flex_none().h(z((rows - last) as f32 * ROW_H - CARD_GAP)));
     }
-    div().w_full().px(z(FEED_PAD_X)).py(z(BLOCK_PAD)).child(picks_head(block)).child(grid).into_any_element()
+    div().w_full().px(z(FEED_PAD_X)).py(z(BLOCK_PAD)).child(picks_head(block, f.orbs)).child(grid).into_any_element()
 }
 
 fn feed(app: &PhoenixApp, home: &Home, f: Frame, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let Frame { inner, offset, view_h } = f;
+    let Frame { inner, offset, view_h, .. } = f;
     let mut col = div().w_full().min_w_0().overflow_hidden().pr(z(FEED_GUTTER)).flex().flex_col();
     let mut top = 0.;
     for (i, b) in home.blocks.iter().enumerate() {
@@ -851,7 +1034,8 @@ fn feed(app: &PhoenixApp, home: &Home, f: Frame, cx: &mut Context<PhoenixApp>) -
         } else {
             match b {
                 Block::Hero { .. } => hero(app, home, i, b, inner, cx),
-                Block::Marketing(t) => marketing(i, t),
+                Block::Marketing(t) => marketing(i, t, cx),
+                Block::Wide { .. } => wide(b, inner, f.orbs),
                 Block::Shelf { .. } => shelf(app, home, i, b, inner, cx),
                 Block::Picks(s) => picks(app, home, i, s, top, f, cx),
             }
@@ -867,16 +1051,28 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
     let head = header(window, cx).into_any_element();
     let q = SEARCH.with(|s| s.borrow().clone()).map(|i| i.read(cx).value().to_lowercase()).unwrap_or_default();
     let cards = CARDS.with(|c| c.borrow().clone());
-    let home = HOME.with(|h| h.borrow().clone()).filter(|h| !h.blocks.is_empty() && TAB.with(Cell::get) == 0 && q.trim().is_empty());
+    let tab = TAB.with(Cell::get);
+    let coll = COLLECTION.with(Cell::get).filter(|_| q.trim().is_empty());
+    if tab == ORBS_TAB {
+        ensure_orbs(app, cx);
+    }
+    let home = match tab {
+        0 => HOME.with(|h| h.borrow().clone()),
+        ORBS_TAB => ORBS_HOME.with(|h| h.borrow().clone()),
+        _ => None,
+    }
+    .filter(|h| !h.blocks.is_empty() && q.trim().is_empty() && coll.is_none());
     let zoom = crate::theme::zoom();
     let width = f32::from(window.viewport_size().width) / zoom - crate::ui::sidebar_resize::width() - 72.;
     let handle = crate::ui::chat::scrollbar::handle("shop-scroll");
     let offset = (-f32::from(handle.offset().y) / zoom).max(0.);
     let view_h = Some(f32::from(handle.bounds().size.height) / zoom).filter(|h| *h > 0.).unwrap_or(f32::from(window.viewport_size().height) / zoom);
-    let body: AnyElement = match (home, cards) {
-        (Some(h), _) => feed(app, &h, Frame { inner: width - FEED_GUTTER - 2. * FEED_PAD_X, offset, view_h }, cx),
-        (None, None) => div().p(z(32.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")).into_any_element(),
-        (None, Some(v)) => {
+    let body: AnyElement = match (coll, home, cards) {
+        (Some(sku), _, _) => crate::ui::shop_collection::render(app, sku, width - FEED_GUTTER, cx),
+        (None, Some(h), _) => feed(app, &h, Frame { inner: width - FEED_GUTTER - 2. * FEED_PAD_X, offset, view_h, orbs: tab == ORBS_TAB }, cx),
+        (None, None, _) if tab == ORBS_TAB && q.trim().is_empty() => div().p(z(32.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")).into_any_element(),
+        (None, None, None) => div().p(z(32.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")).into_any_element(),
+        (None, None, Some(v)) => {
             let shown: Vec<&ShopCard> = v.iter().filter(|k| q.is_empty() || k.name.to_lowercase().contains(q.trim())).collect();
             let cols = grid_columns(width);
             let rows = shown.len().div_ceil(cols);
@@ -973,7 +1169,7 @@ mod tests {
             {"type": 0, "ranked_sku_ids": ["1", "9", "2"], "hero_banner_url": "b", "hero_logo_url": "l",
              "banner_display_config": {"background_style": "linear-gradient(180deg, #000000 0%, #616161 100%)"}},
             {"type": 1, "subblocks": [{"category_sku_id": "50", "asset_url": "a"}, {"category_sku_id": "51", "asset_url": "c"}]},
-            {"type": 4, "name": "Pale Reverie", "ranked_sku_ids": ["3"], "show_button": true, "button_text": "Tout voir"},
+            {"type": 4, "name": "Pale Reverie", "ranked_sku_ids": ["3"], "show_button": true, "button_text": "Tout voir", "category_sku_id": "60"},
             {"type": 2, "ranked_sku_ids": ["2"], "sorted_sku_ids": {"recommended": ["3", "1"]}},
             {"type": 99}
         ], "categories": [{"products": [prod("1"), prod("2")]}]});
@@ -982,7 +1178,7 @@ mod tests {
         assert_eq!(h.blocks.len(), 4);
         assert_eq!(h.blocks[0], Block::Hero { banner: Some("b".into()), logo: Some("l".into()), backdrop: Some((0, 0x616161)), skus: vec![1, 2] });
         assert!(matches!(&h.blocks[1], Block::Marketing(t) if t.len() == 2 && t[1].category == 51));
-        assert!(matches!(&h.blocks[2], Block::Shelf { skus, button: Some(b), .. } if skus == &vec![3] && b.as_ref() == "Tout voir"));
+        assert!(matches!(&h.blocks[2], Block::Shelf { skus, button: Some(b), category: Some(60), .. } if skus == &vec![3] && b.as_ref() == "Tout voir"));
         assert_eq!(h.blocks[3], Block::Picks(vec![3, 1]));
     }
 
@@ -994,7 +1190,7 @@ mod tests {
         assert_eq!(fit(1074.), 4);
         assert!((pick_width(1047.4, 3) - 329.13).abs() < 0.01);
         assert_eq!(block_height(&Block::Marketing(Vec::new()), 1047.4), 296.);
-        assert_eq!(block_height(&Block::Shelf { name: "".into(), skus: vec![], button: None }, 1047.4), 370.);
+        assert_eq!(block_height(&Block::Shelf { name: "".into(), skus: vec![], button: None, category: None }, 1047.4), 370.);
         assert_eq!(block_height(&Block::Picks((0..12).collect()), 1047.4), 2. * 30. + 64. + 1074.);
         assert_eq!(carousel_start(0, 11, 3, 1), 3);
         assert_eq!(carousel_start(6, 11, 3, 1), 8);
