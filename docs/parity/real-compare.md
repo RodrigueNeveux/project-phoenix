@@ -772,3 +772,27 @@ the notice wraps on three lines, the video shows the whole frame, the pinned for
 
 - The client member list shows an « Activité — n » card section on busy guilds (dump `vanilla-guild-chat-busy`); Aperture had no card in these renders, not checked.
 - A DM name with a dark to light display name gradient (Clem) starts almost black on the dark theme in the message header: fixed, see the display name style row in `chat.md` (the client lifts each colour to a minimum contrast and only shows the effect on hover in message headers).
+
+## Sweep 5 (2026-11-26, wt/sweep4): rail, channel list, member list, user panel at three sizes
+
+Live client: Project Phoenix server, `discussion` (the user moved between the call view, `discussion` and a DM during the pass, so
+each CDP read was a single read-only `Runtime.evaluate` followed by a 5 minute pause). Client 1536×840 CSS px at dpr 1.25 (zoom 125 %),
+Onyx, cozy, `enlarge-target-size`. Phoenix: int-bin 2a7e665d, `real_shots` at dpr 1.5, live copy of the client's location, scroll,
+sidebar width and folders (`compare.py`), then 1280×720, 1600×900 and 1920×1080 with the same guild and channel. The client window is
+never resized, so the three sizes are compared on the fixed width regions only (rail and channel list anchored top left, user panel
+bottom left, member list top right); the fluid chat column is covered by `responsive.md`. Renders stay in
+`/mnt/windata/project-phoenix/compare/sweep5`.
+
+Scores at the client size (`compare.py`, mismatch %): title bar 3.4, rail 34.2, channel list 5.6, header 2.6, messages 19.7 (the
+two sides were not on the same messages: the user scrolled), composer 2.2, member list 8.1.
+
+### Fixed
+
+| Zone | Gap | Client reference | Fix |
+|---|---|---|---|
+| Channel list | « Nouveaux messages non lus » pill missing when the unread channel is the first row, cut by the top edge | `isChannelVisible` (chunk `6b05ca0762af596a.js`): for the top bar a row is visible only when its top is below `scrollTop`, for the bottom bar only when its bottom is above `scrollTop + offsetHeight`; `isUnreadVisible` uses `isItemVisible(…, true)` (fully inside) | `channel_unread_bar.rs` `place_of`: a partly hidden row counts as above or below. Test `partly_hidden_rows_count_as_hidden_like_the_client` |
+| Voice panel | panel 4 px shorter than the client: connection row 32 instead of 40, ping and buttons not offset | experiment `2026-09-a11y-chassis-target-size` (module 657043, buckets 1 and 2 set `.enlarge-target-size` on `<html>`); CSS `587669.09c9393812bb8ea9.css` (`rtcConnectionStatus` height auto, label 24, `labelWrapper` mt −1 pb 1, `largeClickablePing` mt 6), `593586.d3f89ba5001fe235.css` (`container_9U6LUN` gap 10, padding-top X − 2, `connection` / `inner` height auto, `voiceButtonsContainer` pt 4). Live boxes: container 104.8 tall, ping 32 at +6, label 24 then subtext 16, buttons row at +58, separator at +104.8 | `voice_panel.rs` `panel_box` / `enlarge_targets` (bucket ≥ 1 from `GET /experiments`). Tests `enlarged_voice_panel_lands_on_the_client_boxes`, `target_size_experiment_turns_on_for_both_enabled_buckets` |
+
+The other `.enlarge-target-size` rules (category `addButton_yOdhm_` 24 px, DM header buttons, DM row close button, channel row
+`iconItem_Wx6SnQ` padding 4, `channelInfo` pe 4, `children_TNyK-N` margins) were already drawn at the enlarged size from the dumps of this
+account: same positions on both sides. They are not switched off when the experiment is off.

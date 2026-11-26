@@ -580,7 +580,17 @@ fn screen_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
         .on_click(cx.listener(|a, _, _, cx| crate::ui::go_live::toggle(a, cx)))
 }
 
-fn large_ping(color: Hsla, bg: Hsla) -> impl IntoElement {
+pub fn connection_icon(q: Quality) -> (&'static str, usize) {
+    match q {
+        Quality::Good => ("connection-fine", idx::ICON_FEEDBACK_POSITIVE),
+        Quality::Fair => ("connection-average", idx::ICON_FEEDBACK_WARNING),
+        Quality::Bad => ("connection-bad", idx::ICON_FEEDBACK_CRITICAL),
+        Quality::Unknown => ("connection-unknown", idx::INTERACTIVE_ICON_DEFAULT),
+    }
+}
+
+fn large_ping(q: Quality, bg: Hsla) -> impl IntoElement {
+    let (name, fg) = connection_icon(q);
     div()
         .size(z(32.))
         .flex_none()
@@ -591,17 +601,7 @@ fn large_ping(color: Hsla, bg: Hsla) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_center()
-        .child(signal_bars(color))
-}
-
-fn signal_bars(color: Hsla) -> impl IntoElement {
-    div()
-        .flex()
-        .items_end()
-        .gap(z(2.))
-        .h(z(14.))
-        .flex_none()
-        .children([6., 10., 14.].map(|h| div().w(z(3.)).h(z(h)).rounded(z(1.)).bg(color)))
+        .child(svg().path(crate::icons::path(name)).size(z(18.)).flex_none().text_color(t(fg)))
 }
 
 thread_local! {
@@ -724,7 +724,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             POPOUT.with(|p| p.set(if p.get().is_some() { None } else { Some(Tab::Connection) }));
                             cx.notify();
                         }))
-                        .child(div().flex_none().mt(z(bx.ping_top)).child(large_ping(color, t(bg))))
+                        .child(div().flex_none().mt(z(bx.ping_top)).child(large_ping(v.quality(), t(bg))))
                         .child(
                             div()
                                 .flex_1()
@@ -736,6 +736,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                 .child(
                                     div()
                                         .h(z(bx.label_h))
+                                        .pt(z(bx.label_h - 20.))
                                         .flex()
                                         .items_center()
                                         .gap(z(4.))
@@ -743,7 +744,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                             div()
                                                 .text_size(z(16.))
                                                 .line_height(z(20.))
-                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .font_weight(FontWeight::MEDIUM)
                                                 .text_color(color)
                                                 .text_ellipsis()
                                                 .child(title),
@@ -772,6 +773,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                         .debug_selector(|| "voice-channel-link".to_owned())
                                         .text_size(z(12.))
                                         .line_height(z(16.))
+                                        .font_weight(FontWeight::MEDIUM)
                                         .text_color(c(Palette::TEXT_MUTED))
                                         .text_ellipsis()
                                         .hover(|s| s.underline())
@@ -1330,6 +1332,14 @@ pub fn open_user_menu(user: Id, pos: Point<Pixels>, cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_icon_follows_the_client_quality_map() {
+        assert_eq!(connection_icon(Quality::Good), ("connection-fine", idx::ICON_FEEDBACK_POSITIVE));
+        assert_eq!(connection_icon(Quality::Fair), ("connection-average", idx::ICON_FEEDBACK_WARNING));
+        assert_eq!(connection_icon(Quality::Bad), ("connection-bad", idx::ICON_FEEDBACK_CRITICAL));
+        assert_eq!(connection_icon(Quality::Unknown), ("connection-unknown", idx::INTERACTIVE_ICON_DEFAULT));
+    }
 
     #[test]
     fn enlarged_voice_panel_lands_on_the_client_boxes() {
