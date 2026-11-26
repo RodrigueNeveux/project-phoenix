@@ -110,6 +110,55 @@ fn asset_icon(path: &'static str, size: f32, color: Hsla) -> gpui::Svg {
     svg().path(SharedString::new_static(path)).size(px(size)).flex_none().text_color(color)
 }
 
+thread_local! {
+    static ENLARGE: Cell<Option<bool>> = const { Cell::new(None) };
+    static ENLARGE_FETCHING: Cell<bool> = const { Cell::new(false) };
+}
+
+pub fn set_target_size_experiment(list: &[(u32, i64)]) {
+    let on = phoenix_api::rest::experiments::bucket(list, phoenix_api::rest::experiments::A11Y_TARGET_SIZE) >= 1;
+    ENLARGE.with(|e| e.set(Some(on)));
+}
+
+pub fn enlarge_targets(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
+    if let Some(on) = ENLARGE.with(Cell::get) {
+        return on;
+    }
+    if !ENLARGE_FETCHING.with(|f| f.replace(true)) {
+        let fut = app.backend.user_experiments();
+        cx.spawn(async move |this, cx| {
+            let res = fut.await;
+            let _ = this.update(cx, |_, cx| {
+                match res {
+                    Ok(list) => set_target_size_experiment(&list),
+                    Err(_) => ENLARGE.with(|e| e.set(Some(false))),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+    false
+}
+
+pub struct PanelBox {
+    pub pad_top: f32,
+    pub pad_bottom: f32,
+    pub gap: f32,
+    pub ping_top: f32,
+    pub label_h: f32,
+    pub label_top: f32,
+    pub buttons_top: f32,
+}
+
+pub fn panel_box(enlarge: bool) -> PanelBox {
+    if enlarge {
+        PanelBox { pad_top: 8., pad_bottom: 14., gap: 10., ping_top: 6., label_h: 24., label_top: -1., buttons_top: 6. }
+    } else {
+        PanelBox { pad_top: 12., pad_bottom: 12., gap: 12., ping_top: 0., label_h: 20., label_top: 0., buttons_top: 0. }
+    }
+}
+
 pub fn panel_button(id: impl Into<gpui::ElementId>, glyph: AnyElement, red: bool) -> gpui::Stateful<gpui::Div> {
     let id: gpui::ElementId = id.into();
     let key = crate::ui::states::key(("panel-btn", id.to_string(), red));
@@ -642,19 +691,23 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         (None, _) => crate::t!("voice.waiting_server"),
     };
     let noise = prefs().lock().noise_suppression;
+    let enlarge = enlarge_targets(app, cx);
+    let bx = panel_box(enlarge);
     div()
         .flex_none()
         .border_b_1()
         .border_color(c(Palette::BORDER_MUTED))
-        .p(z(12.))
+        .px(z(12.))
+        .pt(z(bx.pad_top))
+        .pb(z(bx.pad_bottom))
         .flex()
         .flex_col()
-        .gap(z(12.))
+        .gap(z(bx.gap))
         .child(
             div()
-                .h(z(32.))
+                .when(!enlarge, |d| d.h(z(32.)).items_center())
+                .when(enlarge, |d| d.items_start())
                 .flex()
-                .items_center()
                 .gap(z(4.))
                 .child(
                     div()
@@ -662,7 +715,8 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                         .flex_1()
                         .min_w_0()
                         .flex()
-                        .items_center()
+                        .when(!enlarge, |d| d.items_center())
+                        .when(enlarge, |d| d.items_start())
                         .gap(z(8.))
                         .cursor_pointer()
                         .tooltip(move |window, cx| gpui_component::tooltip::Tooltip::new(ping.clone()).build(window, cx))
@@ -670,16 +724,18 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                             POPOUT.with(|p| p.set(if p.get().is_some() { None } else { Some(Tab::Connection) }));
                             cx.notify();
                         }))
-                        .child(large_ping(color, t(bg)))
+                        .child(div().flex_none().mt(z(bx.ping_top)).child(large_ping(color, t(bg))))
                         .child(
                             div()
                                 .flex_1()
                                 .min_w_0()
+                                .mt(z(bx.label_top))
+                                .when(enlarge, |d| d.pb(z(1.)))
                                 .flex()
                                 .flex_col()
                                 .child(
                                     div()
-                                        .h(z(20.))
+                                        .h(z(bx.label_h))
                                         .flex()
                                         .items_center()
                                         .gap(z(4.))
@@ -730,6 +786,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                 .child(
                     div()
                         .flex()
+                        .mt(z(bx.buttons_top))
                         .gap(z(4.))
                         .child(
                             panel_button(
@@ -1273,6 +1330,28 @@ pub fn open_user_menu(user: Id, pos: Point<Pixels>, cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn enlarged_voice_panel_lands_on_the_client_boxes() {
+        let b = panel_box(true);
+        let ping = 1. + b.pad_top + b.ping_top;
+        let buttons = 1. + b.pad_top + 40. + b.gap;
+        let separator = buttons + 32. + b.pad_bottom;
+        assert_eq!((ping, buttons, separator), (15., 59., 105.));
+        let d = panel_box(false);
+        assert_eq!(d.pad_top + 32. + d.gap + 32. + d.pad_bottom, 100.);
+    }
+
+    #[test]
+    fn target_size_experiment_turns_on_for_both_enabled_buckets() {
+        let h = phoenix_api::rest::experiments::murmur3(phoenix_api::rest::experiments::A11Y_TARGET_SIZE);
+        for (bucket, on) in [(0, false), (1, true), (2, true)] {
+            set_target_size_experiment(&[(h, bucket)]);
+            assert_eq!(ENLARGE.with(Cell::get), Some(on));
+        }
+        set_target_size_experiment(&[]);
+        assert_eq!(ENLARGE.with(Cell::get), Some(false));
+    }
 
     #[test]
     fn camera_pick_falls_back_to_the_first_device() {

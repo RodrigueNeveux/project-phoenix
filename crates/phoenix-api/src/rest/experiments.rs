@@ -6,6 +6,7 @@ use crate::error::Result;
 
 pub const ANNOUNCEMENT_COMPOSER: &str = "2026-02-announcement-composer";
 pub const SOUNDBOARD_NEW_SOUNDS_BADGE: &str = "2026-10-soundboard-new-sounds-badge";
+pub const A11Y_TARGET_SIZE: &str = "2026-09-a11y-chassis-target-size";
 
 pub fn murmur3(key: &str) -> u32 {
     let data = key.as_bytes();
