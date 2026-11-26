@@ -31,6 +31,7 @@ pub enum Target {
     ModViewRoles { user: Id, guild: Id },
     QuestMore(Box<crate::ui::quests_page::Quest>),
     SecurityKey { id: String, name: SharedString, last: bool },
+    BoostBar(Id),
 }
 
 pub const NITRO_SKU: &str = "521847234246082599";
@@ -447,6 +448,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Target::ModViewRoles { user, guild } => mod_view_role_items(app, &e, *user, *guild),
         Target::QuestMore(q) => quest_items(&e, q),
         Target::SecurityKey { id, name, last } => security_key_items(&e, id.clone(), name.clone(), *last),
+        Target::BoostBar(g) => boost_bar_items(app, &e, *g),
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
         close();
@@ -528,6 +530,21 @@ pub fn security_key_items(e: &Ent, id: String, name: SharedString, last: bool) -
             })
         },
     ]
+}
+
+pub fn boost_bar_items(app: &PhoenixApp, e: &Ent, guild: Id) -> Vec<MenuItem> {
+    let on = app.backend.guild_boosts(guild).is_some_and(|(_, on)| on);
+    let manage = crate::actions::has(app, Some(guild), crate::actions::MANAGE_GUILD);
+    let e = e.clone();
+    vec![MenuItem::check(crate::t!("guild.boost_goal.enable"), on, move |_, _, cx: &mut App| {
+        if !manage {
+            return;
+        }
+        e.update(cx, |a, cx| {
+            let edit = phoenix_api::rest::guild_server::SafetyEdit { premium_progress_bar_enabled: Some(!on), ..Default::default() };
+            crate::ui::server_pages::write(a, phoenix_api::rest::guild_server::ServerCall::EditSafety { guild: crate::ui::server_pages::sf(guild), edit }, None, cx);
+        })
+    })]
 }
 
 pub const ACKNOWLEDGEMENTS_URL: &str = "https://discord.com/acknowledgements";

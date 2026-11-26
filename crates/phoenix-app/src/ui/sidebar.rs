@@ -1466,7 +1466,7 @@ fn boost_goal_max(features: &[String]) -> u32 {
     base + PERKS
 }
 
-fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
+fn boost_goal(guild: Id, admin: bool, count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
     if !enabled || count == 0 {
         return None;
     }
@@ -1491,6 +1491,16 @@ fn boost_goal(count: u32, enabled: bool, max: u32) -> Option<gpui::AnyElement> {
         div()
             .id("boost-goal")
             .group("boost-goal")
+            .on_click(move |_, w, _| {
+                crate::ui::boost_layer::open(guild);
+                w.refresh();
+            })
+            .when(admin, |d| {
+                d.on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {
+                    cx.stop_propagation();
+                    crate::ui::extra_menus::open(crate::ui::extra_menus::Target::BoostBar(guild), ev.position, w);
+                })
+            })
             .w_full()
             .pt(z(4.))
             .px(z(4.))
@@ -1618,7 +1628,7 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl Int
         .flex_col()
         .children(app.selected_guild.and_then(|g| {
             let (n, on) = app.backend.guild_boosts(g)?;
-            boost_goal(n, on, boost_goal_max(&app.backend.guild_features(g)))
+            boost_goal(g, crate::actions::has(app, Some(g), crate::actions::ADMINISTRATOR), n, on, boost_goal_max(&app.backend.guild_features(g)))
         }))
         .when(guide, |d| {
             let ent = entity.clone();
