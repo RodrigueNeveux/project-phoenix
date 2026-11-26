@@ -1163,6 +1163,9 @@ impl Backend for DiscordBackend {
     fn shop_storefront(&self) -> BoxFuture<serde_json::Value> {
         self.shop_storefront_impl()
     }
+    fn shop_home(&self) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move { s.rest.get_collectibles_shop_home().await.map_err(api_err) })
+    }
     fn quests(&self) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/quests/@me", None).await.map_err(api_err) })
     }

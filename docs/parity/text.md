@@ -56,3 +56,11 @@ Variants per view (✅ = Phoenix draws the same bar):
 ## French text overflow (wt/srv-safety, 2026-11-25)
 
 Client rule for buttons (`button_F7qvhY` in the live stylesheet): `width: min-content; max-width: 100%; flex-shrink: 0`, and the label is a `lineClamp1_MMUIw6` span (`min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`). A label longer than the space it gets is cut with an ellipsis on one line, it never spills out of the button. `controls::button` now does the same (`max_w_full` + a truncated label child), so `button_sm`, `button_icon` and every caller inherit it. Example: "Je connais les risques Continuer." (rwTBFs) in the e-mail scam alert used to overflow its half-width footer button.
+
+## Translation paragraphs and line breaks
+
+| case | client | our code | status |
+|---|---|---|---|
+| `$p` hooks (202 fr messages, e.g. `kMBzFj` in the Access health modal) | `intl.format` uses the React formatter, `$p` → `<p>` (web bundle module 698610), and the global reset gives `p` no margin: paragraphs stack with no gap. `intl.string` joins them with nothing (string formatter), `formatToMarkdownString` with `\n\n` | i18n/messages.rs: a `$p` after text starts on a new line; local en/fr tables carry both paragraphs | ✅ (`semaine.Observe` fixed) |
+| literal `\n` in a message | kept as a text node: a break only where the element has `white-space: pre*` (`body_6bgemo` pins empty state `pre`, `imageUploaderHint_zIVMHF` `pre`), a space in a plain `Text` | kept as a break by default; `^flat` in discord.yml joins it with a space (`gs.eng.afk_desc`, `Text` body-sm without class in 8097dc7c) | ✅ for the mapped keys checked; ⚠ `nick.warning`, `cs.vis_age_desc`, `cs.user_limit_help`, `cs.user_limit_stage_help`, `gs.eng.widget_channel_desc` keep the client's break in fr (remote AST) but not in en (local text), the white-space of their containers (Notice, Slider helper, Select description) was not traced |
+

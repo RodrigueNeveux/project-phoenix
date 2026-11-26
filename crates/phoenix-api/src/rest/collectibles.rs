@@ -5,6 +5,7 @@ use super::{Body, RestClient};
 use crate::error::Result;
 
 pub const CATEGORIES_V2: &str = "/collectibles-categories/v2?include_bundles=true&variants_return_style=2&skip_num_categories=0";
+pub const SHOP_HOME: &str = "/collectibles-shop?include_bundles=true&variants_return_style=2&include_dynamic_blocks=true";
 pub const PURCHASES: &str = "/users/@me/collectibles-purchases?variants_return_style=2";
 
 pub const COLLECTIBLES_APPLICATION_ID: &str = "1096190356233670716";
@@ -85,6 +86,10 @@ impl RestClient {
 
     pub async fn get_collectibles_categories(&self) -> Result<Value> {
         self.call(Method::GET, CATEGORIES_V2, Body::None).await
+    }
+
+    pub async fn get_collectibles_shop_home(&self) -> Result<Value> {
+        self.call(Method::GET, SHOP_HOME, Body::None).await
     }
 
     pub async fn get_recommended_collectibles(&self) -> Result<Vec<u64>> {
