@@ -6,6 +6,8 @@ use phoenix_app::{app::PhoenixApp, assets::Assets, mock::MockBackend};
 
 #[path = "common/frames_impl.rs"]
 mod frames_impl;
+#[path = "common/name_frames.rs"]
+mod name_frames;
 
 fn main() -> anyhow::Result<()> {
     if std::env::var_os("PHX_FRAMES").is_some() {
@@ -45,7 +47,8 @@ fn main() -> anyhow::Result<()> {
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
     })?;
-    if let Some(scale) = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|s| *s > 0.) {
+    let scale = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse::<f32>().ok()).filter(|s| *s > 0.);
+    if let Some(scale) = scale {
         cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
     }
     let pump = |cx: &mut HeadlessAppContext, n: usize| {
@@ -96,6 +99,22 @@ fn main() -> anyhow::Result<()> {
             v.update(cx, |app, cx| phoenix_app::ui::chat::app_launcher::toggle(app, window, cx));
         })?;
         pump(&mut cx, 4);
+    }
+    if let Some(dm) = std::env::var("PHX_DM").ok().and_then(|v| v.parse::<u64>().ok()) {
+        let v = view.borrow().clone().expect("view");
+        cx.update_window(win.into(), |_, _, cx| {
+            v.update(cx, |app, cx| {
+                app.select_guild(None, cx);
+                app.open_channel_chat(phoenix_app::model::Id(dm), cx);
+            })
+        })?;
+        pump(&mut cx, 20);
+    }
+    if let Ok(spec) = std::env::var("PHX_GRADIENT_AT") {
+        return name_frames::gradient_frames(&mut cx, win.into(), &spec, &out, scale.unwrap_or(1.));
+    }
+    if let Some(secs) = std::env::var("PHX_PRESENT_CPU").ok().and_then(|v| v.parse::<u64>().ok()) {
+        return name_frames::present_cpu(&mut cx, win.into(), secs, scale.unwrap_or(1.));
     }
     cx.update_window(win.into(), |_, window, _| window.refresh())?;
     pump(&mut cx, 2);

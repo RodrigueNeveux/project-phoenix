@@ -1241,12 +1241,15 @@ pub(crate) fn message(
             .cursor_pointer()
             .hover(|s| s.underline())
             .on_click(message_ext::open_author(entity, msg))
+            .children(role_dot.map(|(col, gradient)| {
+                let hovered = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, msg.id.0));
+                div().flex_none().mr(z(4.)).child(crate::ui::role_dot::role_dot(("msg-role-dot", id.0), col, gradient, hovered, fz(20.)))
+            }))
             .child({
                 let hovered = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, msg.id.0));
                 let motion = if hovered { crate::fonts::Motion::Loop } else { crate::fonts::Motion::Still };
                 crate::fonts::role_name_text_moving(name, author, 16., app.selected_guild.is_some(), author_role_gradient, hovered, motion)
             })
-            .children(role_dot.map(|col| div().flex_none().ml(z(4.)).size(z(8.)).rounded_full().bg(c(col))))
     });
 
     let base = div()

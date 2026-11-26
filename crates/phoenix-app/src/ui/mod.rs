@@ -69,6 +69,7 @@ pub mod states;
 pub mod hover_icon;
 pub mod status_picker;
 pub mod status_svg;
+pub mod role_dot;
 pub mod role_gradient;
 pub mod switcher;
 pub mod nav_menus;

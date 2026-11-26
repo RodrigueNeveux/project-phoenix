@@ -92,7 +92,13 @@ fn user(i: usize) -> User {
         tag: p.tag.map(|t| (t.1.into(), p.badge_url().map(Into::into))),
         tag_guild: p.tag.map(|t| Id(t.0)),
         nameplate: None,
-        name_style: (i % 5 == 1).then(|| (17, 1, Vec::new())),
+        name_style: match i {
+            2 => Some((11, 3, vec![0x691ced])),
+            3 => Some((11, 4, vec![0xf42098])),
+            4 => Some((11, 5, vec![0x0fcf86])),
+            5 => Some((11, 8, vec![0xe9a9d5, 0xa9ddf0, 0xb9a7ee, 0xb9eacb])),
+            _ => (i % 5 == 1).then(|| (17, 1, Vec::new())),
+        },
         decoration: std::env::var("PHX_MOCK_DECO").ok().map(Into::into),
     }
 }

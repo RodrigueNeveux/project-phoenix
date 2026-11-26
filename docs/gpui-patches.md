@@ -489,10 +489,69 @@ the real account) and is the same with nothing on screen. A scrolling name stays
 ~17 frames per second (about 8 ms of CPU per frame). Frames in
 `/mnt/windata/project-phoenix/compare/gradient-anim` (`PHX_GRADIENT_AT=0,375,750,1125`, private).
 
-Not done: the glow's 0.1s opacity transition (it appears and disappears at once), and the blur is
-applied to the glyph coverage, then filled with the gradient, where Chromium blurs the painted
-colours. With a 100px gradient period and a 4px blur the colour difference is under one step of
-the ramp.
+Not done: the blur is applied to the glyph coverage, then filled with the gradient, where Chromium
+blurs the painted colours. With a 100px gradient period and a 4px blur the colour difference is
+under one step of the ramp. (The glow's 0.1s opacity transition came with patch 18.)
+
+## 18. Text stroke, text shadow and keyframe animations (`src/text_system/glyph_blur.rs` `dilate_mask`, `src/text_system/text_animation.rs`, `src/scene.rs` `glyph_animations` / `glyph_sprite_now`, `src/window.rs` `with_text_stroke` / `with_text_animation` / `paint_glyph` / `paint_svg`, wgpu `write_gradient_sprites`)
+
+Branch `gpui-name-effects` (on top of `gpui-gradient-anim2`), rev `42aa62d2`.
+
+**Problem.** The NEON, TOON, POP and GUMMY display name styles draw a text stroke under the fill,
+a blurred text shadow, a second copy of the name behind or above it, and 4 s keyframe
+animations of `transform`, `background-position` and `color`. GPUI had none of these for text, and
+a `request_animation_frame` per frame would redraw the whole view (patch 17 measured +14 to 16
+points of one core). The role dot in « À côté des noms » mode is an SVG circle filled with a
+reflected gradient that SMIL scrolls, and the glow of patch 17 had no 0.1s fade.
+
+**Reference.** Client CSS `163466.71f5984e9faac7fc.css` and JS `abd83513bd56377e.js`
+(`UserNameWithEffects`), `web.b63d846b329d6470.js` module 501803 `$0` (palette), module 545442
+(role dot SVG); details and values in `docs/parity/chat.md`.
+
+**Patch.**
+- `Window::with_text_stroke(Some(width), |window| …)`: monochrome glyphs drawn inside are the glyph
+  mask dilated by `width / 2` (CSS `-webkit-text-stroke-width` with `paint-order: stroke fill`: the
+  fill covers the inner half of the stroke). `dilate_mask` takes the max of the coverage over a disc
+  of that radius in device pixels, each source pixel weighted by how much of it lies inside the
+  disc (`clamp(r + 0.5 − d, 0, 1)`), padded by `ceil(r) + 1`. With `with_text_glow` too, the dilated
+  mask is blurred: a `text-shadow` of a stroked glyph. Atlas key `BlurredGlyph(params, σ bits,
+  radius bits)`.
+- `Window::with_text_animation(Some(&TextAnimation), |window| …)`: a CSS animation of the glyphs and
+  SVG masks drawn inside, stored per sprite next to its gradient (`Scene::glyph_animations`, same
+  index, `Arc`, copied by `replay`). Tracks: `translate`, `scale` around `origin` (CSS
+  `transform-origin`), `shift` (gradient `background-position`), `tint` (fill colour), `opacity`
+  (multiplies the sprite opacity). The `CubicBezier` timing function applies to each interval
+  between two keyframes of a track, like CSS. `delay` has no backwards fill; after the last
+  iteration the last keyframe stays (`fill-mode: forwards`); `looped` = `infinite`. A glyph with an
+  animation and no gradient gets a one-stop gradient of its colour so it takes the gradient
+  pipeline.
+- `Scene::glyph_sprite_now` applies scroll and animation at `Scene::gradient_time`: the sprite gets
+  its transformation (`scale` around the origin, then `translate`), the gradient moves with the
+  translation plus `shift`, `tint` replaces the stop colours. `write_gradient_sprites` writes that
+  sprite and gradient. `Scene::scrolls_gradients` is also true while an animation runs, so `present`
+  keeps re-presenting without notifying, laying out or painting (patch 17 path).
+- `Window::paint_svg` honours `with_text_gradient` and `with_text_animation`: an SVG alpha mask is a
+  gradient sprite like a glyph (role dot).
+- `MAX_GLYPH_GRADIENT_STOPS` 8 → 12 (the TOON gradient has 10 stops); the WGSL array follows.
+- `Window::set_gradient_elapsed` also counts animation starts.
+
+Tests: `text_system::glyph_blur::tests::dilation_grows_the_glyph_by_the_radius_with_an_antialiased_edge`,
+`dilation_keeps_partial_coverage_of_the_edge_pixels`; `text_system::text_animation::tests`
+(`cubic_bezier_matches_the_css_curves`, `keyframes_ease_every_interval_and_hold_the_ends`,
+`progress_waits_for_the_delay_then_loops_or_stops_forwards`,
+`apply_scales_around_the_origin_and_moves_the_gradient_with_the_glyph`,
+`tint_replaces_the_fill_and_opacity_fades_it`); wgpu
+`headless_renderer_moves_and_tints_animated_glyphs_at_the_scene_time`,
+`gradient_sprite_record_matches_the_shader_layout` (68 floats per gradient). App:
+`fonts::name_paint::tests` (neon, toon, pop, gummy layers, glow fade, hover clock),
+`ui::role_dot::tests`, `fonts::tests::effect_palettes_follow_the_client_lightness_steps`,
+`neon_flicker_is_the_main_hue_more_saturated_at_85_lightness`, `neon_toon_pop_and_gummy_get_their_own_fills`.
+
+Differences left: the stroke is a round dilation of the antialiased mask, where Skia strokes the
+outline with miter joins, so sharp corners are slightly rounder; the TOON colour and opacity
+transitions on hover end (`transition: color/opacity 266ms`) are not played, because the effect
+switches to PLAIN at the same time. The scale of a GUMMY letter stretches its rasterised mask,
+like a CSS transform of an already painted layer.
 
 ## Running the vendored tests
 

@@ -562,6 +562,33 @@ fn contrast_adjust(fg: u32, bg: u32, ratio: f64, saturation: f64) -> u32 {
     (ch(t[0]) << 16) | (ch(t[1]) << 8) | ch(t[2])
 }
 
+fn pack_rgb(c: Rgb) -> u32 {
+    let ch = |x: f64| x.clamp(0., 255.).round() as u32;
+    (ch(c[0]) << 16) | (ch(c[1]) << 8) | ch(c[2])
+}
+
+pub fn dns_palette(main: u32) -> name_paint::Palette {
+    let rgb = split_rgb(main);
+    let [_, s, l] = rgb_to_hsl(rgb);
+    let lit = |v: f64| pack_rgb(with_hsl(rgb, 2, v));
+    name_paint::Palette {
+        main,
+        light1: lit((1.2 * l).min(1.)),
+        light2: lit((1.6 * l).min(1.)),
+        dark1: lit((0.6 * l).max(0.)),
+        dark2: lit((0.2 * l).max(0.)),
+        toon_stroke: lit((0.4 * l).max(0.12)),
+        neon_stroke: pack_rgb(with_hsl(with_hsl(rgb, 1, (1.2 * s).min(1.)), 2, (l + 0.1).min(0.6))),
+    }
+}
+
+pub fn neon_flicker(main: u32) -> u32 {
+    let [h, s, _] = rgb_to_hsl(split_rgb(main));
+    let s = s * 100.;
+    let sat = (s.min(1.) * (s * 1.1 + 10.)).clamp(0., 100.) / 100.;
+    pack_rgb(hsl_to_rgb([if h.is_nan() { 0. } else { h }, sat, 0.85]))
+}
+
 pub fn dns_fill(effect: u32, colors: &[u32], name: &str) -> Option<name_paint::NameFill> {
     use name_paint::NameFill;
     let adjusted: Vec<u32> = colors.iter().filter(|&&c| c <= 0xffffff).map(|&c| dns_color(c, effect)).collect();
@@ -576,6 +603,10 @@ pub fn dns_fill(effect: u32, colors: &[u32], name: &str) -> Option<name_paint::N
             chars: name.encode_utf16().count(),
             min: crate::theme::z(38.),
         }),
+        (3, [c, ..]) => Some(NameFill::Neon { palette: dns_palette(*c), flicker: neon_flicker(*c) }),
+        (4, [c, ..]) => Some(NameFill::Toon(dns_palette(*c))),
+        (5, [c, ..]) => Some(NameFill::Pop(dns_palette(*c))),
+        (8, _) => Some(NameFill::Gummy(adjusted.clone())),
         (_, [c, ..]) => Some(NameFill::Solid(*c)),
     }
 }
@@ -605,6 +636,42 @@ pub use fallback::ui_fallbacks;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn effect_palettes_follow_the_client_lightness_steps() {
+        let p = dns_palette(0x691ced);
+        assert_eq!(
+            [p.light1, p.light2, p.dark1, p.dark2, p.toon_stroke, p.neon_stroke],
+            [0x894df1, 0xcaaff9, 0x3e0c93, 0x150431, 0x290862, 0x7e33ff]
+        );
+        let toon = dns_palette(0xf42098);
+        assert_eq!([toon.light1, toon.light2, toon.toon_stroke], [0xf755b0, 0xfcbee1, 0x69053e]);
+        let grey = dns_palette(0x808080);
+        assert_eq!([grey.light1, grey.toon_stroke, grey.neon_stroke], [0x9a9a9a, 0x333333, 0x999999]);
+        assert_eq!(dns_palette(0x000000).toon_stroke, 0x1f1f1f);
+    }
+
+    #[test]
+    fn neon_flicker_is_the_main_hue_more_saturated_at_85_lightness() {
+        assert_eq!(neon_flicker(0x691ced), 0xcfb3ff);
+        assert_eq!(neon_flicker(0x0fcf86), 0xb3ffe2);
+        assert_eq!(neon_flicker(0x808080), 0xd9d9d9);
+    }
+
+    #[test]
+    fn neon_toon_pop_and_gummy_get_their_own_fills() {
+        use name_paint::NameFill;
+        let name = "Phoenix";
+        assert!(matches!(dns_fill(3, &[0x691ced], name), Some(NameFill::Neon { .. })));
+        let toon = dns_fill(4, &[0xf42098], name);
+        assert!(matches!(&toon, Some(NameFill::Toon(p)) if p.main == contrast_adjust(0xf42098, 0x333333, 3., 1.)));
+        assert!(matches!(dns_fill(5, &[0x0fcf86], name), Some(NameFill::Pop(_))));
+        let Some(NameFill::Gummy(colors)) = dns_fill(8, &[0xff0000, 0x00ff00, 0x0000ff], name) else {
+            panic!("gummy fill");
+        };
+        assert_eq!(colors.len(), 3);
+        assert!(matches!(dns_fill(1, &[0x123456], name), Some(NameFill::Solid(_))));
+    }
 
     #[test]
     fn light_theme_role_gradient_stops_are_dimmed_like_the_client_filter() {

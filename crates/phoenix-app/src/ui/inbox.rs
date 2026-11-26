@@ -892,8 +892,10 @@ fn cozy_message_with(app: &PhoenixApp, m: &Message, pad_y: f32, cx: &Context<Pho
                     .cursor_pointer()
                     .hover(|s| s.underline())
                     .on_click(crate::ui::chat::message_ext::open_user(&cx.entity(), m.author, m.channel))
-                    .child(crate::fonts::role_name_text(name, u, 16., guild.is_some(), role_gradient, false))
-                    .children(role_dot.map(|col| div().flex_none().ml(z(4.)).size(z(8.)).rounded_full().bg(c(col)))),
+                    .children(role_dot.map(|(col, gradient)| {
+                        div().flex_none().mr(z(4.)).child(crate::ui::role_dot::role_dot(("inbox-role-dot", m.id.0), col, gradient, false, z(20.)))
+                    }))
+                    .child(crate::fonts::role_name_text(name, u, 16., guild.is_some(), role_gradient, false)),
                 )
                 .when_some(
                     if m.author == app.me.id { app.me.tag.clone() } else { u.and_then(|u| u.tag.clone()) },

@@ -157,6 +157,11 @@ with a local 400 instead of sending (nothing leaves the machine).
 
 Offscreen render of the main window to a PNG (no on-screen window).
 `cargo run -p phoenix-app --example screenshot -- out.png [login]`
+`PHX_DM=<channel id>` opens a demo DM (901 NEON, 902 TOON, 903 POP, 904 GUMMY display name styles).
+`PHX_MOUSE=x,y` with `PHX_GRADIENT_AT=0,500,…` writes `<out>-gNNNN.png`, the frame with the
+animation clock that many ms after the first running name animation (GPUI patches 17 and 18), and
+`PHX_PRESENT_CPU=<secs>` prints the CPU while it animates (present only, full redraw) and idle,
+like `real_shots`.
 
 ## `shortcuts_shot`
 
