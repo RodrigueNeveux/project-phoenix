@@ -5,7 +5,7 @@ use gpui::{
     Rgba, Style, TextGradient, TransformationMatrix, Window, point, size,
 };
 
-use crate::theme::idx;
+use crate::theme::generated::idx;
 
 pub const DOT_SCROLL: Duration = Duration::from_secs(3);
 pub const RING_OPACITY: f32 = 0.4;
