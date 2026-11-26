@@ -136,7 +136,17 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
             .child(div().absolute().bottom(z(4.)).right(z(4.)).size(z(16.)).flex().items_center().justify_center().child(super::icon("refresh", 12., idx::TEXT_DEFAULT)))
             .on_click(cx.listener(set_colors(None, None))),
     );
-    colors.push(tile("gs2-color-custom", !reset && preset.is_none()).child(super::icon("server/dropper", 20., idx::INTERACTIVE_ICON_DEFAULT)));
+    let (cp, cs) = (pc.unwrap_or(PALETTES[0].0).to_owned(), sc.unwrap_or(PALETTES[0].1).to_owned());
+    colors.push(
+        tile("gs2-color-custom", !reset && preset.is_none())
+            .relative()
+            .child(super::icon("server/dropper", 20., idx::INTERACTIVE_ICON_DEFAULT))
+            .children(super::tag_colors::render(guild, badge, cx))
+            .on_click(cx.listener(move |_, _, _, cx| {
+                super::tag_colors::toggle(guild, &cp, &cs);
+                cx.notify();
+            })),
+    );
     let left = div()
         .w(z(332.))
         .flex_none()

@@ -10,6 +10,7 @@ pub mod onboarding;
 pub mod presence;
 pub mod safety;
 pub mod tag;
+pub mod tag_colors;
 pub mod template;
 
 use std::{cell::RefCell, collections::HashMap};
