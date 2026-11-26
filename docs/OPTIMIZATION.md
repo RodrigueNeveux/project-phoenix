@@ -56,6 +56,30 @@ Le mainteneur a fourni deux captures sur le vrai compte. Elles sont privées et 
 
    Avant de corriger, mesurer chaque point côte à côte avec le client, aux mêmes dimensions.
 
+### Animations de l'interface (inventaire du 26/11)
+
+Fait dans cette série (voir `docs/gpui-patches.md`, patches 19 et 20, et `docs/perf.md`) :
+- défilement à la molette animé comme Chromium sous Linux, partout (chat, salons, membres, paramètres, popouts) ;
+- icônes Lottie (micro, casque, paramètres, vocal, compositeur) jouées au present, sans redessin de la fenêtre ;
+- dégradés de rôle et effets de pseudo : déjà joués au present (patches 17 et 18).
+
+Reste à faire, du plus visible au moins visible :
+1. **Ouverture des popouts.** Le client anime chaque `Popout` (module 265872, `animation` par défaut `"2"` = TRANSLATE ; module 44808) avec les classes du CSS `476662.132d13bdf8dde1b6.css` / `448400.3c21419a2f308049.css` :
+   - TRANSLATE : `translate3d(0,±10px,0)` (côté `animationPosition`, sinon `position`) vers `translateZ(0)`, `transition: transform .2s ease-out`, sans fondu ;
+   - SCALE : `scale(.01)` et `opacity:0` vers `scale(1)` et `opacity:1`, `.12s ease-out`, origine opposée au côté ;
+   - FADE : `opacity .08s ease-out`, utilisé à la place des deux autres quand « Réduire les animations » est actif.
+   Phoenix ouvre ses popouts sans animation. Il n'y a pas de couche commune : chaque popout est placée par sa propre fonction (`ui/inbox.rs`, `ui/profile.rs`, `ui/pickers`, `ui/*_menu.rs`…). Il faut d'abord un conteneur de popout partagé, puis l'animation.
+2. **Menus contextuels** : animation non relevée. Elle est à mesurer en CDP sur un menu de la route ouverte, avec `data-popout-animating`, avant de rien coder.
+3. **Fondus de survol** (`states::fade_layer`, `states::roll`, pastille du rail `server_bar`, zoom des infobulles, fond des modales) : ils passent par `with_animation`, donc chaque image de 100 à 320 ms redessine toute la fenêtre. C'est fluide tant qu'une image tient dans le budget, mais c'est le même défaut que les Lottie avant le patch 20. La piste : des transitions de couleur et d'opacité de quads jouées au present, sur le modèle des patches 17, 18 et 20.
+4. **Bouton emoji du compositeur** : le ressort d'échelle (`hover_icon::emoji_button`, 800/24, ~0,6 s) redessine la fenêtre à chaque image. La piste : une échelle jouée au present sur le sprite polychrome, comme la piste `scale` des `GlyphAnimation`.
+5. **Redessins continus** tant qu'une vue est visible, chacun à 60 i/s sur toute la fenêtre :
+   - jauge du micro du menu d'entrée (`voice_panel::meter_row`) ;
+   - effet de profil (`profile_fx`, toujours, même entre deux lectures) ;
+   - vidéo des tuiles et du PiP (`call_view`, `call_popout`, `pip`) ;
+   - anneaux de parole, toasts d'appel, glissement de la vue de modération (`mod_view`).
+   La vidéo a besoin de nouvelles images. Pour l'effet de profil, il faut vérifier qu'il ne redessine que pendant une lecture.
+6. **Transitions des paramètres** : changement de page non relevé dans le client. À mesurer en CDP (superposition Paramètres, sans écriture) avant de rien coder.
+
 ### Démarrage, données et rendu
 
 Les pistes déjà chiffrées sont dans `docs/perf.md` : repli des polices hors du démarrage, allocations par frame de défilement, frames au repos, minuteries et réveils, un seul runtime et un seul client HTTP, snapshot binaire pour le RESUME, budget des médias décodés, dépendances lourdes, profil optimisé. On les traite dans cet ordre, sauf si une nouvelle mesure en change le classement.

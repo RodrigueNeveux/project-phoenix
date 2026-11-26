@@ -569,6 +569,83 @@ transitions on hover end (`transition: color/opacity 266ms`) are not played, bec
 switches to PLAIN at the same time. The scale of a GUMMY letter stretches its rasterised mask,
 like a CSS transform of an already painted layer.
 
+## 19. Smooth wheel scrolling (`src/smooth_scroll.rs`, `src/elements/div.rs` `paint_scroll_listener`, `src/elements/list.rs` `paint` / `StateInner::scroll_by`, `src/window.rs`)
+
+Branch `gpui-smooth-wheel`, rev `cbcafa33`.
+
+**Problem.** Every wheel notch moved the content by its whole distance on the next frame, so
+scrolling with a mouse wheel felt "snappy" next to the client. The client runs on Chromium,
+which animates each notch on Linux (smooth scrolling is on by default; the Electron command
+line of Discord 1.0.171 has no `--disable-smooth-scrolling`, checked in `/proc/<pid>/cmdline`).
+
+**Reference.** Chromium `cc/animation/scroll_offset_animation_curve.cc`, the curve used for
+`ScrollType::kMouseWheel` when the Windows "impulse" personality is off (the Linux default):
+`DurationBehavior::kInverseDelta`, segment duration `clamp(14 − |Δ|/60, 6, 12)` frames at
+60 Hz, that is 200 ms up to 120 px, 100 ms from 480 px, linear in between; timing
+`cubic-bezier(0.42, y1, 0.58, 1)` with `y1 = 0.42 × slope` (`EaseInOutWithInitialSlope`,
+ease-in-out from rest); a notch during an animation retargets it (`UpdateTarget`): the new
+segment starts at the current offset with the current velocity as initial slope, and its
+duration is the smaller of the segment duration and `2.5 × remaining / velocity`. A
+synthetic `Input.dispatchMouseEvent` wheel in a headless Chromium 157 scrolls in one step,
+because DevTools wheels count as precise deltas, so the curve could not be sampled there;
+the constants above come from the Chromium source.
+
+**Patch.**
+- `gpui::set_smooth_wheel_scroll(bool)` (off by default, so upstream tests keep their
+  immediate scrolling). Phoenix turns it on in `phoenix_app::init`, `PHX_INSTANT_WHEEL=1`
+  turns it off for comparisons.
+- Only `ScrollDelta::Lines` from `ScrollSource::Pointer` is animated: Wayland and X11 report
+  a wheel notch as 3 lines. Touchpads (`ScrollDelta::Pixels`) and touch pans keep moving the
+  content directly. Under X11, the XI2 smooth scrolling of a touchpad also comes as fractional
+  lines, so it is animated too.
+- The distance of a notch does not change: `3 × window.line_height()` in a div scroll
+  container (and `uniform_list`), `3 × 20 px` in a `list`.
+- `Window::smooth_wheel_scroll(key, delta, apply)` keeps one `WheelCurve` per container (`key`
+  = address of its scroll offset `Rc`, or of the `ListState`). It is stepped from a next-frame
+  callback, which the platform delivers on the compositor frame callback, so the steps follow
+  the display rate. Each step calls `apply` with the part of the delta for that frame.
+- A div container adds that part to its scroll offset and notifies its view; the offset is
+  clamped in prepaint as before.
+- A `list` scrolls by that part from its current logical scroll top (`StateInner::scroll_by`),
+  so items spliced in while the animation runs (older history, new messages) keep their anchor.
+  It goes through `StateInner::scroll`, so a `ListAlignment::Bottom` list that reaches its end
+  drops its anchor and follows the tail again, and the scroll handler (Phoenix's history
+  loading) is called on every step. A step that lands within 0.05 px of the end snaps to it,
+  so float rounding cannot leave the chat one hair above the bottom.
+
+Tests: `smooth_scroll::tests` (segment ramp, ease-in-out of one notch over 200 ms, second notch
+keeps the velocity, reversing restarts from the current offset, a notch after the end starts a
+fresh segment).
+
+## 20. Image sequences played at present time (`src/scene.rs` `ImageSequence` / `insert_sequence_sprite` / `polychrome_sprite_now`, `src/window.rs` `paint_image_sequence`, wgpu `write_instances`)
+
+Same branch and rev as patch 19.
+
+**Problem.** The Lottie hover icons (mic, headset, settings, the voice and composer buttons)
+called `request_animation_frame` from their image closure on every frame of their segment.
+That notifies the view, and Phoenix is one view, so every frame of a 40 to 70 frame segment
+laid out and painted the whole window. Any frame that took longer than the refresh interval
+was dropped, which is the stutter seen on the mic and headset buttons.
+
+**Patch.**
+- `Window::paint_image_sequence(bounds, radii, sheet, columns, count, start, fps, phase)`
+  uploads `sheet` (all the frames of a segment in a grid, one atlas tile) and paints one
+  `PolychromeSprite` whose tile is the first cell, with an `ImageSequence` next to it
+  (`Scene::sprite_sequences`, index in `pad`, copied by `replay` like the glyph gradients).
+- At present time the wgpu renderer writes each polychrome sprite through
+  `Scene::polychrome_sprite_now`, which moves the tile to the cell of
+  `floor((gradient_time − start) × fps + phase)`, held on the last frame.
+- `Scene::scrolls_gradients` is also true while a sequence has frames left, so `present` keeps
+  re-presenting through the present-only branch of patch 17: nothing is notified, laid out or
+  painted until the hover ends or something else changes.
+- `Window::set_gradient_elapsed` also counts sequence starts, so `real_shots`
+  `PHX_GRADIENT_AT` records a playing icon frame by frame at the present-time cell.
+
+Tests: `scene::image_sequence_tests` (index rounding and hold, the tile moves to the cell of
+the frame, replay keeps the sequence). App: `ui::hover_icon::tests::sheet_cells_follow_the_player_frames`
+(the cell picked at present time is the frame the player computes, at 0, 7, 16, 100, 333,
+650 and 2000 ms).
+
 ## Running the vendored tests
 
 The lib tests of both crates run from a small test-only workspace, `vendor/Cargo.toml`
