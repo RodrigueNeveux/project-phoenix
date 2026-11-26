@@ -33,6 +33,14 @@ impl CustomEmoji {
         }
         format!("https://cdn.discordapp.com/emojis/{}.webp?size={}", self.id, cdn_size(size)).into()
     }
+
+    pub fn unsized_url(&self, play: bool) -> Option<SharedString> {
+        if LOCAL_DIR.get().is_some() {
+            return None;
+        }
+        let ext = if self.animated && play { "gif" } else { "png" };
+        Some(format!("https://cdn.discordapp.com/emojis/{}.{ext}", self.id).into())
+    }
 }
 
 static LOCAL_DIR: std::sync::OnceLock<String> = std::sync::OnceLock::new();
@@ -75,14 +83,23 @@ impl RenderOnce for CustomEmojiImage {
         let Self { emoji, size, auto } = self;
         let px_size = (size * 2.) as u32;
         let fb: SharedString = format!(":{}:", emoji.name).into();
-        let fallback = move || div().text_size(px(size * 0.9)).child(fb.clone()).into_any_element();
+        let text = move || div().text_size(px(size * 0.9)).child(fb.clone()).into_any_element();
+        let retry = move |src: Option<SharedString>| {
+            let text = text.clone();
+            move || match src.clone() {
+                Some(u) => img(u).size(px(size)).flex_none().with_fallback(text.clone()).into_any_element(),
+                None => text(),
+            }
+        };
         if !emoji.animated {
+            let fallback = retry(emoji.unsized_url(false));
             return img(emoji.url(px_size)).size(px(size)).flex_none().with_fallback(fallback).into_any_element();
         }
         let key = ("phx-emoji", emoji.id as usize);
         let hovered = window.use_keyed_state(key, cx, |_, _| false);
         let play = should_play(auto, *hovered.read(cx));
         let src = if play { emoji.url(px_size) } else { emoji.static_url(px_size) };
+        let fallback = retry(emoji.unsized_url(play));
         div()
             .id(key)
             .flex_none()
@@ -245,6 +262,13 @@ mod tests {
         assert_eq!(cdn_size(44), 44);
         assert_eq!(cdn_size(1), 16);
         assert_eq!(cdn_size(200), 256);
+    }
+
+    #[test]
+    fn unsized_fallback_keeps_the_format() {
+        let e = CustomEmoji { name: "x".into(), id: 7, animated: true };
+        assert_eq!(e.unsized_url(true).as_deref(), Some("https://cdn.discordapp.com/emojis/7.gif"));
+        assert_eq!(e.unsized_url(false).as_deref(), Some("https://cdn.discordapp.com/emojis/7.png"));
     }
 
     #[test]
