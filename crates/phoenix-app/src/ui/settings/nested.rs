@@ -417,13 +417,22 @@ fn bracketed(t: &str, style: gpui::HighlightStyle) -> (String, Vec<(std::ops::Ra
 fn mfa(app: &PhoenixApp, cx: &mut Cx) -> Div {
     let info = super::account::info();
     let streamer = app.prefs.local.streamer_hides_info();
-    let add_key = controls::button_icon("mfa-add-key", "plus", crate::t!("settings.mfa.add_key"), BtnKind::Secondary);
+    let add_key = controls::button_icon("mfa-add-key", "plus", crate::t!("settings.mfa.add_key"), BtnKind::Secondary).on_click(cx.listener(|a, _, _, cx| {
+        let fut = a.backend.guarded_write(crate::actions::guard::GuardedWrite::start_webauthn_register());
+        cx.spawn(async move |this, cx| {
+            if fut.await.is_err() {
+                let _ = this.update(cx, |a, cx| a.parity_toast(crate::t!("settings.mfa.key_error"), cx));
+            }
+        })
+        .detach();
+    }));
+    let keys = security_keys(app, cx);
     let mut out = div()
         .flex()
         .flex_col()
         .child(cat_header(crate::t!("settings.mfa.keys"), Some(subtitle(crate::t!("settings.mfa.keys_d"))), Some(add_key.into_any_element())))
         .child(div().h(z(1.)))
-        .child(div().h(z(48.)))
+        .child(keys)
         .child(divider())
         .child(cat_header(crate::t!("settings.mfa.app"), Some(subtitle(crate::t!("settings.mfa.app_d"))), None))
         .child(div().h(z(1.)));
@@ -767,7 +776,74 @@ fn family_center(app: &PhoenixApp, cx: &mut Cx) -> Div {
     div().pt(z(12.)).flex().flex_col().child(family_tabs(tab, cx)).child(body)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct SecurityKey {
+    pub id: String,
+    pub name: SharedString,
+    pub last_used: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+pub fn parse_keys(v: &serde_json::Value) -> Vec<SecurityKey> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .map(|k| SecurityKey {
+            id: k.get("id").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned(),
+            name: k.get("name").and_then(serde_json::Value::as_str).unwrap_or_default().to_owned().into(),
+            last_used: k.get("last_used").and_then(serde_json::Value::as_str).and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.with_timezone(&chrono::Utc)),
+        })
+        .collect()
+}
+
+fn security_keys(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let state = KEYS.with_borrow(Clone::clone);
+    let Some(list) = state else {
+        if !KEYS_LOADING.with(std::cell::Cell::get) {
+            KEYS_LOADING.with(|l| l.set(true));
+            let fut = app.backend.webauthn_credentials();
+            cx.spawn(async move |this, cx| {
+                let keys = fut.await.map(|v| parse_keys(&v)).unwrap_or_default();
+                let _ = this.update(cx, |_, cx| {
+                    KEYS.with_borrow_mut(|k| *k = Some(keys));
+                    KEYS_LOADING.with(|l| l.set(false));
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
+        return div().h(z(48.)).into_any_element();
+    };
+    div()
+        .flex()
+        .flex_col()
+        .gap(z(8.))
+        .children(list.into_iter().map(|k| {
+            let used = k.last_used.map(|d| crate::t!("settings.mfa.key_last_used", last_used = crate::i18n::calendar(d.with_timezone(&chrono::Local), chrono::Local::now())));
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .child(div().flex().flex_col().child(text(16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, k.name.clone())).children(used.map(|u| text(14., 18., FontWeight::NORMAL, idx::TEXT_MUTED, u))))
+                .child(
+                    div()
+                        .id(SharedString::from(format!("mfa-key-{}", k.id)))
+                        .size(z(32.))
+                        .rounded(z(8.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+                        .child(gpui::svg().path(crate::icons::path("more-horizontal")).size(z(20.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
+                )
+        }))
+        .into_any_element()
+}
+
 thread_local! {
+    static KEYS: std::cell::RefCell<Option<Vec<SecurityKey>>> = const { std::cell::RefCell::new(None) };
+    static KEYS_LOADING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static SHOW_PHONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static FAMILY_TAB: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
@@ -784,6 +860,18 @@ pub fn reset() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn security_keys_parse_the_credentials_list() {
+        let v = serde_json::json!([{ "id": "1", "name": "YubiKey", "type": 1, "last_used": "2026-11-20T10:00:00+00:00" }, { "id": "2", "name": "Pixel", "last_used": null }]);
+        let k = parse_keys(&v);
+        assert_eq!(k.len(), 2);
+        assert_eq!(k[0].name.as_ref(), "YubiKey");
+        assert!(k[0].last_used.is_some() && k[1].last_used.is_none());
+        let w = crate::actions::guard::GuardedWrite::start_webauthn_register();
+        assert_eq!((w.method.as_str(), w.path.as_str()), ("POST", "/users/@me/mfa/webauthn/credentials"));
+        assert!(!crate::actions::guard::read_only_write(&w));
+    }
 
     #[test]
     fn standing_states_match_the_client_enum() {

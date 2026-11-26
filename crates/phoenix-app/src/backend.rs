@@ -387,6 +387,9 @@ pub trait Backend: Send + Sync + 'static {
     fn directory_get(&self, _path: String) -> BoxFuture<serde_json::Value> {
         Box::pin(async { Ok(serde_json::Value::Null) })
     }
+    fn webauthn_credentials(&self) -> BoxFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::json!([])) })
+    }
     fn lurk_guild(&self, _guild: Id) -> BoxFuture<()> {
         Box::pin(async { Err(BackendError("lurking is not available".into())) })
     }

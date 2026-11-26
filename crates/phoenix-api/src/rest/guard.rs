@@ -150,6 +150,10 @@ impl GuardedWrite {
         write(Method::PATCH, format!("/guilds/{guild}/discovery-metadata"), Some(body))
     }
 
+    pub fn start_webauthn_register() -> Self {
+        write(Method::POST, "/users/@me/mfa/webauthn/credentials", Some(json!({})))
+    }
+
     pub fn join_guild(guild: u64) -> Self {
         write(Method::PUT, format!("/guilds/{guild}/members/@me"), None)
     }
@@ -198,6 +202,7 @@ mod tests {
             GuardedWrite::member_verification(5, json!([]), false),
             GuardedWrite::guild_profile_visibility(5, 3),
             GuardedWrite::discovery_metadata(5, json!({ "keywords": [] })),
+            GuardedWrite::start_webauthn_register(),
         ]
     }
 
