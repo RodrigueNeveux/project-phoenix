@@ -41,6 +41,7 @@ pub enum EmojiTarget {
     GuideAnswer,
     ExprUpload,
     ProfileReact,
+    RoleIcon,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -248,6 +249,7 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         match (op.target, app.chat.edit.as_ref().map(|e| e.input.clone())) {
             (EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload, _) => {}
             (EmojiTarget::ProfileReact, _) => crate::ui::profile_toolbar::reset(),
+            (EmojiTarget::RoleIcon, _) => crate::ui::modals::server_settings::roles::icon_picker_closed(),
             (EmojiTarget::Edit, Some(edit)) => edit.update(cx, |s, cx| s.focus(window, cx)),
             _ => app.composer.update(cx, |s, cx| s.focus(window, cx)),
         }
@@ -476,6 +478,14 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
             crate::ui::server_pages::expr_upload::pick_emoji(tag);
             close(app, window, cx);
         }
+        EmojiTarget::RoleIcon => {
+            let pick = match &item {
+                PickItem::Unicode(ix) => crate::ui::modals::server_settings::roles::IconPick::Unicode(emoji::toned(*ix, tone)),
+                PickItem::Custom(e) => crate::ui::modals::server_settings::roles::IconPick::Custom(e.id.0),
+            };
+            close(app, window, cx);
+            crate::ui::modals::server_settings::roles::pick_icon_emoji(pick, cx);
+        }
         EmojiTarget::GuideTask | EmojiTarget::GuideAnswer => {
             let val = match &item {
                 PickItem::Unicode(ix) => serde_json::json!({ "name": emoji::toned(*ix, tone) }),
@@ -540,7 +550,7 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
         && t != EmojiTarget::Status
         && let Some(el) = render_picker(app, window, cx)
     {
-        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload | EmojiTarget::ProfileReact) { gpui::deferred(el).with_priority(50).into_any_element() } else { el });
+        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload | EmojiTarget::ProfileReact | EmojiTarget::RoleIcon) { gpui::deferred(el).with_priority(50).into_any_element() } else { el });
     }
     if let Some(el) = soundboard::render(app, window, cx) {
         out.push(el);
@@ -550,6 +560,20 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
 
 thread_local! {
     static STATUS_ANCHOR: std::cell::Cell<Option<gpui::Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+    static EMBED_ANCHOR: std::cell::Cell<Option<gpui::Bounds<Pixels>>> = const { std::cell::Cell::new(None) };
+}
+
+pub fn embed_anchor_probe() -> impl IntoElement {
+    gpui::canvas(
+        |b, window, _| {
+            if EMBED_ANCHOR.with(|a| a.replace(Some(b))) != Some(b) {
+                window.refresh();
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
 }
 
 pub fn status_anchor_probe() -> impl IntoElement {
@@ -586,7 +610,9 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
     let vp = window.viewport_size();
     let (vw, vh) = (f32::from(vp.width), f32::from(vp.height));
     let status_anchor = (target == EmojiTarget::Status).then(|| STATUS_ANCHOR.with(|a| a.get())).flatten();
-    let (left, top) = match (status_anchor, anchor) {
+    let embed = (target == EmojiTarget::RoleIcon).then(|| EMBED_ANCHOR.with(|a| a.get())).flatten();
+    let (left, top) = match (embed.or(status_anchor), anchor) {
+        (Some(b), _) if embed.is_some() => (f32::from(b.origin.x), f32::from(b.origin.y)),
         (Some(b), _) => status_picker_origin(b, vw, vh, ph),
         (None, Some(p)) => {
             let x = (f32::from(p.x) - PICKER_W - 8.).clamp(8., (vw - PICKER_W - 8.).max(8.));
@@ -671,6 +697,7 @@ fn render_picker(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
                         spread_radius: px(0.),
                         inset: false,
                     }])
+                    .when(embed.is_some(), |d| d.rounded(px(0.)).border_0().shadow(Vec::new()).bg(tk(idx::BACKGROUND_BASE_LOWER)))
                     .overflow_hidden()
                     .pt(px(16.))
                     .flex()

@@ -590,6 +590,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         .children(crate::ui::server_pages::modal(app, cx).map(|m| gpui::deferred(m).with_priority(25)))
         .children((s.key() == "menu.gs.access").then(|| access::modal(app, s, cx)).flatten().map(|m| gpui::deferred(m).with_priority(25)))
         .children(s.prune.as_ref().map(|p| gpui::deferred(people::prune_modal(app, s, p, cx)).with_priority(25)))
+        .children(s.role.as_ref().and_then(|e| e.icon_modal.map(|t| gpui::deferred(roles::icon_modal(e, t, cx)).with_priority(25))))
         .children(s.ban_open.and_then(|u| people::ban_modal(s, u, cx)).map(|m| gpui::deferred(m).with_priority(25)))
         .children(s.role_add.as_ref().map(|a| gpui::deferred(roles::add_members_modal(app, s, a, cx)).with_priority(25)))
         .children(s.role_remove.and_then(|u| roles::remove_member_modal(app, s, u, cx)).map(|m| gpui::deferred(m).with_priority(25)))

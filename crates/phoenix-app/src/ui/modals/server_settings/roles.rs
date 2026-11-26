@@ -101,7 +101,9 @@ pub struct Editor {
     pub mention0: bool,
     pub mention: bool,
     pub members: Option<Vec<u64>>,
-    pub icon: Option<Option<std::path::PathBuf>>,
+    pub icon: Option<IconDraft>,
+    pub icon_modal: Option<IconTab>,
+    pub icon_too_big: bool,
 }
 
 impl Editor {
@@ -127,6 +129,8 @@ impl Editor {
             mention,
             members: None,
             icon: None,
+            icon_modal: None,
+            icon_too_big: false,
         }
     }
 
@@ -159,12 +163,110 @@ impl Editor {
             hoist: (self.hoist != self.hoist0).then_some(self.hoist),
             mentionable: (self.mention != self.mention0).then_some(self.mention),
             permissions: (self.perms != self.perms0).then_some(self.perms),
-            icon: self.icon.as_ref().map(|p| p.as_ref().and_then(|p| crate::ui::file_pick::data_uri(p))),
-            unicode_emoji: self.icon.as_ref().map(|_| None),
+            icon: self.icon.as_ref().map(IconDraft::icon),
+            unicode_emoji: self.icon.as_ref().map(IconDraft::unicode),
             ..Default::default()
         };
         (e != RoleEdit::default()).then_some(e)
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IconDraft {
+    File(std::path::PathBuf),
+    Data(String),
+    Unicode(String),
+    Clear,
+}
+
+impl IconDraft {
+    pub fn icon(&self) -> Option<String> {
+        match self {
+            Self::File(p) => crate::ui::file_pick::data_uri(p),
+            Self::Data(d) => Some(d.clone()),
+            Self::Unicode(_) | Self::Clear => None,
+        }
+    }
+
+    pub fn unicode(&self) -> Option<String> {
+        match self {
+            Self::Unicode(e) => Some(e.clone()),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IconTab {
+    Upload,
+    Emoji,
+}
+
+pub enum IconPick {
+    Unicode(String),
+    Custom(u64),
+}
+
+pub const ROLE_ICON_MAX_BYTES: u64 = 256_000;
+
+pub fn icon_picker_closed() {
+    with_state(|s| {
+        if let Some(e) = s.role.as_mut()
+            && e.icon_modal == Some(IconTab::Emoji)
+        {
+            e.icon_modal = Some(IconTab::Upload);
+        }
+    });
+}
+
+fn set_icon(d: IconDraft) {
+    with_state(|s| {
+        if let Some(e) = s.role.as_mut() {
+            e.icon = Some(d);
+            e.icon_modal = None;
+            e.icon_too_big = false;
+        }
+    });
+}
+
+fn download_png(url: String) -> Option<Vec<u8>> {
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().ok()?;
+    rt.block_on(async {
+        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().ok()?;
+        let r = client.get(url).send().await.ok()?;
+        if !r.status().is_success() {
+            return None;
+        }
+        Some(r.bytes().await.ok()?.to_vec())
+    })
+}
+
+pub fn custom_emoji_png(id: u64) -> String {
+    format!("https://cdn.discordapp.com/emojis/{id}.png?size=48")
+}
+
+pub fn pick_icon_emoji(pick: IconPick, cx: &mut Cx) {
+    with_state(|s| {
+        if let Some(e) = s.role.as_mut() {
+            e.icon_modal = None;
+        }
+    });
+    match pick {
+        IconPick::Unicode(e) => set_icon(IconDraft::Unicode(e)),
+        IconPick::Custom(id) => {
+            let task = cx.background_spawn(async move { download_png(custom_emoji_png(id)) });
+            cx.spawn(async move |this, cx| {
+                if let Some(bytes) = task.await {
+                    let _ = this.update(cx, |_, cx| {
+                        set_icon(IconDraft::Data(crate::ui::file_pick::encode(&bytes, "image/png")));
+                        cx.notify();
+                    });
+                }
+            })
+            .detach();
+        }
+    }
+    cx.notify();
 }
 
 pub fn sorted_roles(s: &State) -> Vec<Value> {
@@ -227,23 +329,28 @@ fn role_icon(guild: u64, r: &Value, size: f32) -> AnyElement {
 
 pub fn has_icon(r: &Value, e: &Editor) -> bool {
     match &e.icon {
-        Some(p) => p.is_some(),
+        Some(d) => *d != IconDraft::Clear,
         None => r.get("icon").and_then(Value::as_str).is_some() || r.get("unicode_emoji").and_then(Value::as_str).is_some(),
     }
 }
 
 fn draft_icon(guild: u64, r: &Value, e: &Editor, size: f32) -> AnyElement {
-    match &e.icon {
-        Some(Some(p)) => gpui::img(p.clone()).size(z(size)).flex_none().into_any_element(),
-        Some(None) => {
-            let mut bare = r.clone();
-            if let Some(o) = bare.as_object_mut() {
-                o.remove("icon");
-                o.remove("unicode_emoji");
-            }
-            role_icon(guild, &bare, size)
+    let mut bare = r.clone();
+    let Some(d) = &e.icon else { return role_icon(guild, r, size) };
+    if let Some(o) = bare.as_object_mut() {
+        o.remove("icon");
+        o.remove("unicode_emoji");
+        if let IconDraft::Unicode(u) = d {
+            o.insert("unicode_emoji".into(), Value::String(u.clone()));
         }
-        None => role_icon(guild, r, size),
+    }
+    match d {
+        IconDraft::File(p) => gpui::img(p.clone()).size(z(size)).flex_none().into_any_element(),
+        IconDraft::Data(uri) => match crate::ui::file_pick::decode(uri) {
+            Some(img) => gpui::img(img).size(z(size)).flex_none().into_any_element(),
+            None => role_icon(guild, &bare, size),
+        },
+        IconDraft::Unicode(_) | IconDraft::Clear => role_icon(guild, &bare, size),
     }
 }
 
@@ -254,14 +361,138 @@ fn pick_role_icon(a: &mut PhoenixApp, cx: &mut Cx) {
         cx.notify();
         return;
     }
-    crate::ui::file_pick::pick(&["png", "jpg", "jpeg", "webp", "gif"], cx, |_, path, cx| {
+    with_state(|s| {
+        if let Some(e) = s.role.as_mut() {
+            e.icon_modal = Some(IconTab::Upload);
+            e.icon_too_big = false;
+        }
+    });
+    cx.notify();
+}
+
+fn browse_role_icon(cx: &mut Cx) {
+    crate::ui::file_pick::pick(&["png", "jpg", "jpeg"], cx, |_, path, cx| {
+        let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        if size > ROLE_ICON_MAX_BYTES {
+            with_state(|s| {
+                if let Some(e) = s.role.as_mut() {
+                    e.icon_too_big = true;
+                }
+            });
+        } else {
+            set_icon(IconDraft::File(path));
+        }
+        cx.notify();
+    });
+}
+
+const SPARKLES_ART: &str = "https://discord.com/assets/4c12db677c616b52.svg";
+
+pub fn icon_modal(e: &Editor, tab: IconTab, cx: &mut Cx) -> AnyElement {
+    let ent = cx.entity();
+    let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
         with_state(|s| {
             if let Some(e) = s.role.as_mut() {
-                e.icon = Some(Some(path));
+                e.icon_modal = None;
+            }
+        });
+        ent.update(cx, |_, cx| cx.notify());
+    });
+    let item = |ix: usize, label: SharedString, this: IconTab| {
+        let on = tab == this;
+        let group = if ix == 0 { "ss-role-icon-tab0" } else { "ss-role-icon-tab1" };
+        div()
+            .id(("ss-role-icon-tab", ix))
+            .group(group)
+            .relative()
+            .flex_none()
+            .when(ix > 0, |d| d.ml(z(24.)))
+            .pb(z(16.))
+            .text_size(z(16.))
+            .line_height(z(14.))
+            .font_weight(FontWeight::MEDIUM)
+            .whitespace_nowrap()
+            .text_color(c(tok(if on { idx::TEXT_STRONG } else { idx::TEXT_SUBTLE })))
+            .child(label)
+            .child(div().absolute().left_0().right_0().bottom(z(-1.)).h(z(2.)).rounded_t(z(2.)).when(on, |d| d.bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))).group_hover(group, |s| s.bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))))
+            .when(!on, |d| d.cursor_pointer().hover(|s| s.text_color(c(tok(idx::TEXT_STRONG)))))
+    };
+    let upload_tab = item(0, crate::t!("gs.role.icon_tab_upload"), IconTab::Upload).on_click(cx.listener(|_, _, _, cx| {
+        with_state(|s| {
+            if let Some(e) = s.role.as_mut() {
+                e.icon_modal = Some(IconTab::Upload);
             }
         });
         cx.notify();
-    });
+    }));
+    let emoji_tab = item(1, crate::t!("gs.role.icon_tab_emoji"), IconTab::Emoji).on_click(cx.listener(|a, _, w, cx| {
+        with_state(|s| {
+            if let Some(e) = s.role.as_mut() {
+                e.icon_modal = Some(IconTab::Emoji);
+            }
+        });
+        crate::ui::pickers::open(a, crate::ui::pickers::Tab::Emoji, crate::ui::pickers::EmojiTarget::RoleIcon, w, cx);
+    }));
+    let nav = div().flex_none().pt(z(16.)).pl(z(16.)).child(div().flex().border_b_1().border_color(c(tok(idx::BORDER_SUBTLE))).child(upload_tab).child(emoji_tab));
+    let body = match tab {
+        IconTab::Upload => div()
+            .flex_1()
+            .min_h_0()
+            .px(z(16.))
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .text_color(c(tok(idx::TEXT_DEFAULT)))
+            .child(
+                div()
+                    .relative()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(gpui::img(SPARKLES_ART).w(z(88.)).h(z(80.)))
+                    .child(
+                        div()
+                            .absolute()
+                            .p(z(8.))
+                            .rounded(z(8.))
+                            .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+                            .child(gpui::svg().path(crate::icons::path("image-plus")).size(z(40.)).text_color(c(tok(idx::TEXT_DEFAULT)))),
+                    ),
+            )
+            .child(div().pt(z(24.)).pb(z(10.)).text_size(z(16.)).line_height(z(20.)).child(crate::t!("gs.role.icon_upload_info")))
+            .child(crate::ui::controls::button("ss-role-icon-browse", crate::t!("gs.role.icon_browse"), BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| browse_role_icon(cx))))
+            .when(e.icon_too_big, |d| {
+                d.child(
+                    div()
+                        .px(z(32.))
+                        .py(z(8.))
+                        .text_center()
+                        .text_size(z(14.))
+                        .line_height(z(20.))
+                        .text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL)))
+                        .child(crate::t!("gs.role.icon_too_big")),
+                )
+            })
+            .into_any_element(),
+        IconTab::Emoji => div().relative().w(gpui::px(crate::ui::pickers::PICKER_W)).h(gpui::px(crate::ui::pickers::PICKER_H_NO_TABS)).child(crate::ui::pickers::embed_anchor_probe()).into_any_element(),
+    };
+    let width = if tab == IconTab::Emoji { None } else { Some(z(424.)) };
+    let card = div()
+        .id("ss-role-icon-modal")
+        .occlude()
+        .when_some(width, |d, w| d.w(w).h(z(47.) + gpui::px(crate::ui::pickers::PICKER_H_NO_TABS)))
+        .rounded(z(8.))
+        .overflow_hidden()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow(vec![gpui::BoxShadow { color: gpui::hsla(0., 0., 0., 0.24), offset: gpui::point(z(0.), z(12.)), blur_radius: z(24.), spread_radius: z(0.), inset: false }])
+        .flex()
+        .flex_col()
+        .child(nav)
+        .child(body);
+    crate::ui::modal::frame("ss-role-icon-backdrop", close, card)
 }
 
 fn open_editor(id: u64, everyone: bool, members_tab: bool, a: &mut PhoenixApp, cx: &mut Cx) {
@@ -891,7 +1122,7 @@ fn display(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
                             d.child(kit::critical_secondary("ss-role-icon-remove", crate::t!("gs.role.icon_remove")).h(z(40.)).px(z(16.)).on_click(cx.listener(|_, _, _, cx| {
                                 with_state(|s| {
                                     if let Some(e) = s.role.as_mut() {
-                                        e.icon = Some(None);
+                                        e.icon = Some(IconDraft::Clear);
                                     }
                                 });
                                 cx.notify();
@@ -1264,5 +1495,20 @@ mod tests {
         e.reset();
         assert!(!e.dirty());
         assert_eq!(PERMS.iter().map(|p| p.1.len()).sum::<usize>(), 51);
+        e.icon = Some(IconDraft::Unicode("🔥".into()));
+        assert!(e.dirty());
+        assert!(has_icon(&r, &e));
+        e.icon = Some(IconDraft::Clear);
+        assert!(!has_icon(&r, &e));
+    }
+
+    #[test]
+    fn role_icon_drafts_map_to_the_client_fields() {
+        let unicode = IconDraft::Unicode("🔥".into());
+        assert_eq!((unicode.icon(), unicode.unicode()), (None, Some("🔥".to_owned())));
+        let data = IconDraft::Data("data:image/png;base64,AA==".into());
+        assert_eq!((data.icon().as_deref(), data.unicode()), (Some("data:image/png;base64,AA=="), None));
+        assert_eq!((IconDraft::Clear.icon(), IconDraft::Clear.unicode()), (None, None));
+        assert_eq!(custom_emoji_png(42), "https://cdn.discordapp.com/emojis/42.png?size=48");
     }
 }
