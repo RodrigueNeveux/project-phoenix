@@ -13,7 +13,7 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | Divider | rest | `sectionDivider_u88IQl` 1px, margin 12/8 | ui/sidebar.rs `dm_top` | ✅ |
 | "Direct Messages" header | rest | #652 24px, padding 0 6 4 20, body-sm/medium `--channels-default` | ui/sidebar.rs `dm_top` | ✅ |
 | "Direct Messages" header | hover: text `--interactive-text-hover` | `privateChannelsHeaderContainer_:hover` | ui/sidebar.rs `dm_top` | ✅ (this pass) |
-| Header "More" button | hidden (opacity 0), shown on header hover | #655 `moreButton_Bce46W` | ui/sidebar.rs `dm_top` | ✅ (this pass, menu is a stub) |
+| Header "More" button | hidden (opacity 0), shown on header hover | #655 `moreButton_Bce46W` | ui/sidebar.rs `dm_top` | ✅ (menu: Clean up group DMs) |
 | Header "Create DM" button | rest `--icon-muted`, hover `--icon-subtle`, tooltip | #657 `iconWrapper_ybUK7Z clickable_` | ui/sidebar.rs `dm_top` | ✅ (this pass) |
 | DM row | rest, hover, active, selected (48px, link pl 10 / pr 0, avatar 32 + 12) | #659–#694 | ui/sidebar.rs channel row | ✅ |
 | DM row nameplate | rest / hover / selected opacity; gradient under the image; mask start = `layout_TBNqol` width − 5 (module 351952, ref `ti`), measured with `nameplate::width_probe` | #661 `container_AFi54G` | ui/nameplate.rs, ui/sidebar.rs | ✅ |
@@ -73,7 +73,7 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 |---|---|---|---|---|
 | DM header toolbar: voice call, video call, pins, add to DM, profile | rest, hover, tooltip | vanilla-dm #1101–#1109 | ui/chat.rs | ✅ |
 | Group DM intro (80px icon, 32/40 bold `--text-strong` title, margin 8 0, description with bold name) | rest | group-dm #1103–#1112 `container_w6h4R2` (margin 20) | ui/chat.rs `intro` | ✅ (this pass) |
-| Group DM intro buttons: Invite to Group DM (primary), Edit Group (secondary) | rest, hover, active | group-dm #1113–#1123 | ui/chat.rs `intro` | ✅ (this pass; Edit Group is a stub) |
+| Group DM intro buttons: Invite to Group DM (primary), Edit Group (secondary) | rest, hover, active | group-dm #1113–#1123 | ui/chat.rs `intro` | ✅ (Invite opens the add-friends picker on this group, Edit Group opens the edit modal) |
 | 1:1 DM intro (avatar, name, description) | rest | same container | ui/chat.rs `intro` | ✅ |
 | 1:1 DM intro: username line, mutual servers row (`container_nM9YUb` gap 8, dot divider), Add/Remove Friend + Block buttons (`stack_TWWX0S` gap 8, sm secondary 32px radius 8) | rest, hover | vanilla-dm-start #1135–#1156: avatar 80, `heading-xxl/semibold` 32/40, `heading-xl/medium` 24/32, `body-sm/normal` 14/18 mutuals link | ui/chat.rs `dm_intro_actions` | ✅ values match the dump; no pixel compare yet (user awake, CDP offline) |
 
@@ -96,3 +96,11 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
 | tile "Accept Quest" / "Watch" | `POST /quests/{id}/enroll` with `location: 11` (QUEST_HOME_DESKTOP), refused by the guard with the blocked-write toast | `62ae5fafb88cf9ee.js` (`tL.Oy`), web bundle `QUESTS_ENROLL` | ✅ (the video modal that "Watch" opens in the client is not built) |
 | tile secondary CTA | opens `cta_config.link` | quest config | ✅ |
 | tile "View Quest" when enrolled, ⋯ and play buttons | still a preview stub | — | ❌ |
+
+## DM header buttons (wt/btn-home, 26/11)
+
+| control | behaviour now | source | status |
+|---|---|---|---|
+| Start Voice Call / Start Video Call | the client selects the DM as voice channel then rings (`POST /channels/{id}/call/ring`, `recipients: null`) once the call exists; Phoenix sends the ring through the guard, which refuses it with the blocked-write toast, and does not join (no DM call is placed, BACKLOG decision) | web bundle `ring(e,t,n)` and `CALL_CREATE` handler | ✅ |
+| Add Friends to DM / to Group DM | opens the friend picker with the current recipients left out and counted in the limit; confirming adds the first pick with `PUT /channels/{id}/recipients/{user}` (client `addRecipients`, same call on a 1:1 DM, which returns the new group), refused by the guard | web bundle `addRecipient` / `addRecipients` | ✅ (the picker is still the centred modal, not the client's anchored popout) |
+| group DM intro "Invite Friends" | same picker on this group | — | ✅ |

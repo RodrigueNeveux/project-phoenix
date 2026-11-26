@@ -1314,7 +1314,7 @@ enum Look {
     Green,
 }
 
-type CaretClick = std::rc::Rc<dyn Fn(&mut PhoenixApp, &mut Context<PhoenixApp>)>;
+type CaretClick = std::rc::Rc<dyn Fn(&mut PhoenixApp, gpui::Point<gpui::Pixels>, &mut Context<PhoenixApp>)>;
 
 fn center_button(
     id: &'static str,
@@ -1377,7 +1377,7 @@ fn center_button_ex(
                 .cursor_pointer()
                 .child(crate::ui::icon(crate::assets::Icon::Chevron, 16. * crate::theme::zoom(), t(idx::WHITE)))
                 .id(SharedString::from(format!("{id}-caret")))
-                .when_some(on_caret, |d, f| d.on_click(cx.listener(move |a, _, _, cx| f(a, cx)))),
+                .when_some(on_caret, |d, f| d.on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| f(a, ev.position(), cx)))),
         );
     }
     wrap.into_any_element()
@@ -1393,6 +1393,14 @@ fn section() -> gpui::Div {
         .border_1()
         .border_color(t(idx::BORDER_MUTED))
         .bg(t(idx::BACKGROUND_SURFACE_HIGH))
+}
+
+fn invite(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let Some(ch) = a.voice_channel else { return };
+    match a.channels.get(&ch).and_then(|c| c.guild) {
+        Some(g) => a.open_invite_people(g, cx),
+        None => a.open_add_to_dm(ch, cx),
+    }
 }
 
 fn tray_icon(id: &'static str, icon: gpui::Svg, tip: SharedString) -> gpui::Stateful<gpui::Div> {
@@ -1438,7 +1446,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                 .flex()
                 .gap(z(24.))
                 .when(level < Collapse::NoInvite, |d| {
-                    d.child(tray_icon("call-invite", named("invite", 24., tray), crate::t!("call.invite")))
+                    d.child(tray_icon("call-invite", named("invite", 24., tray), crate::t!("call.invite")).on_click(cx.listener(|a, _, _, cx| invite(a, cx))))
                 }),
         )
         .child(
@@ -1449,11 +1457,16 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                 .gap(z(12.))
                 .child(
                     section()
-                        .child(center_button(
+                        .child(center_button_ex(
                             "call-mic",
                             anim("call-mic", crate::icons::lottie_icons::Lottie::Mute, muted, icon_color(mic_look), crate::ui::icon(mic_i, 20. * crate::theme::zoom(), icon_color(mic_look))),
                             mic_look,
                             true,
+                            Some(std::rc::Rc::new(|_: &mut PhoenixApp, pos: gpui::Point<gpui::Pixels>, cx: &mut Context<PhoenixApp>| {
+                                crate::ui::voice_panel::toggle_audio_menu(crate::ui::voice_panel::Audio::Mic, pos);
+                                cx.notify();
+                            })),
+                            crate::ui::voice_panel::audio_menu_open(crate::ui::voice_panel::Audio::Mic),
                             if muted { crate::t!("voice.unmute") } else { crate::t!("voice.mute") },
                             |a, cx| {
                                 a.mic_muted = !a.mic_muted;
@@ -1492,7 +1505,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                                     anim("call-screen", crate::icons::lottie_icons::Lottie::Stream, live, icon_color(screen_look), glyph("icons/voice/screen.svg", 20., icon_color(screen_look))),
                                     screen_look,
                                     live,
-                                    Some(std::rc::Rc::new(|_: &mut PhoenixApp, cx: &mut Context<PhoenixApp>| {
+                                    Some(std::rc::Rc::new(|_: &mut PhoenixApp, _: gpui::Point<gpui::Pixels>, cx: &mut Context<PhoenixApp>| {
                                         crate::ui::call_menus::toggle(crate::ui::call_menus::TrayMenu::Streams);
                                         cx.notify();
                                     })),

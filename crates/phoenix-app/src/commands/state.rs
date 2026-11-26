@@ -273,6 +273,8 @@ pub struct GroupDmPicker {
     pub search: Option<Entity<InputState>>,
     pub picked: Vec<Id>,
     pub sending: bool,
+    pub channel: Option<Id>,
+    pub with: Vec<Id>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

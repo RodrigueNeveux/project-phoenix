@@ -346,13 +346,26 @@ impl PhoenixApp {
     }
 
     pub fn open_group_dm_picker(&mut self, cx: &mut Context<Self>) {
-        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false });
+        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false, channel: None, with: Vec::new() });
+        cx.notify();
+    }
+
+    pub fn open_add_to_dm(&mut self, channel: Id, cx: &mut Context<Self>) {
+        let with = dm_recipients(self, channel);
+        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false, channel: Some(channel), with });
         cx.notify();
     }
 
     fn create_group_dm(&mut self, cx: &mut Context<Self>) {
         let Some(p) = self.parity.group_dm.as_mut() else { return };
         if p.picked.is_empty() || p.sending {
+            return;
+        }
+        if let Some(channel) = p.channel {
+            let first = p.picked[0];
+            self.parity.group_dm = None;
+            self.blocked_write(crate::actions::guard::GuardedWrite::add_recipient(channel.0, first.0), cx);
+            cx.notify();
             return;
         }
         if p.picked.len() == 1 {
@@ -1964,6 +1977,17 @@ fn moderation_dialog(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
 
 pub const GROUP_DM_MAX: usize = 9;
 
+pub fn dm_recipients(app: &PhoenixApp, channel: Id) -> Vec<Id> {
+    let me = app.me.id;
+    let members = app.nav.extras.get(&channel).map(|e| e.members.clone()).unwrap_or_default();
+    let list = if members.is_empty() { app.channels.get(&channel).map(|c| c.voice_users.clone()).unwrap_or_default() } else { members };
+    list.into_iter().filter(|u| *u != me).collect()
+}
+
+pub fn picker_room(picked: usize, with: usize) -> usize {
+    GROUP_DM_MAX.saturating_sub(picked + with)
+}
+
 fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let p = app.parity.group_dm.as_ref()?;
     let q = p.search.as_ref().map(|s| s.read(cx).value().to_lowercase()).unwrap_or_default();
@@ -1973,12 +1997,13 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
         .iter()
         .filter(|r| r.kind == RelationshipKind::Friend)
         .map(|r| r.user)
+        .filter(|u| !p.with.contains(u))
         .filter(|u| {
             q.is_empty()
                 || app.users.get(u).is_some_and(|u| u.name.to_lowercase().contains(&q) || u.display_name.to_lowercase().contains(&q))
         })
         .collect();
-    let left = GROUP_DM_MAX.saturating_sub(p.picked.len());
+    let left = picker_room(p.picked.len(), p.with.len());
     let mut list = div().id("gdm-list").h(z(240.)).overflow_y_scroll().flex().flex_col();
     if friends.is_empty() {
         list = list.child(div().p(z(16.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("groupdm.none")));
@@ -2009,7 +2034,7 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                     if let Some(p) = a.parity.group_dm.as_mut() {
                         if let Some(i) = p.picked.iter().position(|x| *x == u) {
                             p.picked.remove(i);
-                        } else if p.picked.len() < GROUP_DM_MAX {
+                        } else if picker_room(p.picked.len(), p.with.len()) > 0 {
                             p.picked.push(u);
                         }
                     }

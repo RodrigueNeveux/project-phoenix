@@ -544,13 +544,23 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                 .items_center()
                 .gap(z(space::xs()))
                 .when(is_dm, |d| {
-                    d.child(hdr_named("dm-call", "phone-call", ic))
-                        .child(hdr_named("dm-video", "video-call", ic))
+                    let cid = ch.map(|c| c.id);
+                    let ring = move |a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>| {
+                        if let Some(c) = cid {
+                            a.blocked_write(crate::actions::guard::GuardedWrite::ring_call(c.0), cx);
+                        }
+                    };
+                    d.child(hdr_named("dm-call", "phone-call", ic).on_click(cx.listener(move |a, _, _, cx| ring(a, cx))))
+                        .child(hdr_named("dm-video", "video-call", ic).on_click(cx.listener(move |a, _, _, cx| ring(a, cx))))
                         .child(
                             pin_button(app, if app.chat.pins.is_some() { on } else { ic })
                                 .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
                         )
-                        .child(hdr_named(if is_group_dm { "gdm-add" } else { "dm-add" }, "add-to-dm", ic))
+                        .child(hdr_named(if is_group_dm { "gdm-add" } else { "dm-add" }, "add-to-dm", ic).on_click(cx.listener(move |a, _, _, cx| {
+                            if let Some(c) = cid {
+                                a.open_add_to_dm(c, cx);
+                            }
+                        })))
                         .map(|d| {
                             if !is_group_dm && !crate::ui::title_bar::dm_profile_fits(crate::ui::title_bar::viewport_w_css()) {
                                 return d.child(
@@ -736,7 +746,7 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                         .gap(z(8.))
                         .child(
                             button_icon("gdm-intro-invite", "invite", crate::t!("header.add_to_gdm"), BtnKind::Primary)
-                                .on_click(move |_, _, cx| e1.update(cx, |a, cx| a.open_group_dm_picker(cx))),
+                                .on_click(move |_, _, cx| e1.update(cx, |a, cx| a.open_add_to_dm(ch, cx))),
                         )
                         .child(
                             button_icon("gdm-intro-edit", "pen", crate::t!("menu.edit_group"), BtnKind::Secondary)

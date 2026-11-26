@@ -191,3 +191,12 @@ Sources: chunk `9b3cd218` Channel `render`: when `shouldRenderCall()` the channe
 | voice avatar & tile badges | module 85448 (`401425` `.statusContainer_NdapwK`: bottom-right red `--red-400` circle with white icon, 24px/16px for 80px avatar, 16px/10px for 40px), `c76f31703f6181cd.js` (`eC` priority: `server_deaf` `HeadphonesDenyIcon`, `server_mute`/`local_muted` `MicrophoneDenyIcon`, `self_deaf` `HeadphonesSlashIcon`, `self_mute` `MicrophoneSlashIcon`), `status_7NOr2f` camera badge (`VideoIcon`), `liveIndicator_7NOr2f` LIVE pill | `call_view::voice_status_icon`, `voice_avatar`, `render_tile`, `voice_panel::voice_user_row`, `icons/names.rs` (`mic-deny`, `headphones-deny`) | ✅ demo `call_view grid` + `call_view dm voiceonly` |
 | video mode | `normal`: base-lowest wrapper, black container, tiles grid | same tiles as the guild call | ✅ |
 | popped out | `poppedOut_hbKzX7` 154 px | popped-out notice at 154 px | ✅ |
+
+## Tray buttons (wt/btn-home, 26/11)
+
+| control | behaviour now | source | status |
+|---|---|---|---|
+| Invite (left edge) | guild call: Invite People for the guild; DM call: add-friends picker on the call channel | — | ✅ (it had no handler) |
+| mic caret | opens the audio device menu (input device, input volume, voice settings) at the click, highlighted while open | `audio-device-context` menu in the web bundle | ⚠ the client menu also has the output device, input profile, input meter and push-to-talk rows |
+| camera caret | still inert | `video-device-context` | ❌ Phoenix has no camera device list yet |
+| activity | inert on purpose | brief: opening the shelf writes `settings-proto/1` | ➖ |

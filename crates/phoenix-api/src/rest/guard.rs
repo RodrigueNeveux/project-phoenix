@@ -179,6 +179,14 @@ impl GuardedWrite {
         write(Method::POST, format!("/quests/{quest}/enroll"), Some(json!({ "location": location, "metadata_sealed": null, "traffic_metadata_sealed": null })))
     }
 
+    pub fn ring_call(channel: u64) -> Self {
+        write(Method::POST, format!("/channels/{channel}/call/ring"), Some(json!({ "recipients": null })))
+    }
+
+    pub fn add_recipient(channel: u64, user: u64) -> Self {
+        write(Method::PUT, format!("/channels/{channel}/recipients/{user}"), None)
+    }
+
     pub fn refusal(&self) -> Error {
         blocked(&self.method, self.path.clone())
     }
@@ -230,6 +238,8 @@ mod tests {
             GuardedWrite::create_sound(5, &super::super::form::tests::sound()),
             GuardedWrite::report_raid(5),
             GuardedWrite::quest_enroll(8, 11),
+            GuardedWrite::ring_call(9),
+            GuardedWrite::add_recipient(9, 2),
         ]
     }
 
@@ -285,6 +295,10 @@ mod tests {
             (quest.method, quest.path.as_str(), quest.body),
             (Method::POST, "/quests/8/enroll", Some(json!({ "location": 11, "metadata_sealed": null, "traffic_metadata_sealed": null })))
         );
+        let ring = GuardedWrite::ring_call(9);
+        assert_eq!((ring.method, ring.path.as_str(), ring.body), (Method::POST, "/channels/9/call/ring", Some(json!({ "recipients": null }))));
+        let add = GuardedWrite::add_recipient(9, 2);
+        assert_eq!((add.method, add.path.as_str(), add.body), (Method::PUT, "/channels/9/recipients/2", None));
     }
 
     #[tokio::test]

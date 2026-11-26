@@ -204,16 +204,24 @@ pub fn audio_button(
                     Audio::Deafen => crate::t!("voice.output_options"),
                 })
                 .on_click(cx.listener(move |_, ev: &gpui::ClickEvent, _, cx| {
-                    let now = AUDIO_MENU.with(|m| m.borrow().as_ref().map(|(k, _, _)| *k));
-                    let next = (now != Some(kind)).then(|| {
-                        let (inputs, outputs) = crate::voice::call::devices();
-                        (kind, ev.position(), if kind == Audio::Mic { inputs } else { outputs })
-                    });
-                    AUDIO_MENU.with(|m| *m.borrow_mut() = next);
+                    toggle_audio_menu(kind, ev.position());
                     cx.notify();
                 })),
         )
         .into_any_element()
+}
+
+pub fn toggle_audio_menu(kind: Audio, pos: Point<Pixels>) {
+    let now = AUDIO_MENU.with(|m| m.borrow().as_ref().map(|(k, _, _)| *k));
+    let next = (now != Some(kind)).then(|| {
+        let (inputs, outputs) = crate::voice::call::devices();
+        (kind, pos, if kind == Audio::Mic { inputs } else { outputs })
+    });
+    AUDIO_MENU.with(|m| *m.borrow_mut() = next);
+}
+
+pub fn audio_menu_open(kind: Audio) -> bool {
+    AUDIO_MENU.with(|m| m.borrow().as_ref().is_some_and(|(k, _, _)| *k == kind))
 }
 
 fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, cx: &mut Context<PhoenixApp>) -> AnyElement {
