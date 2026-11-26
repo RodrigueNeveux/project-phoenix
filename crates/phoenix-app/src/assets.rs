@@ -274,6 +274,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/voice-lock.svg" => f!(r#"<path d="M10.4 4.2A1 1 0 0 1 12 5v14a1 1 0 0 1-1.6.8L6.2 16.5H3a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3.2zM16 7.5V6a2.5 2.5 0 0 1 5 0v1.5h.5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-6a.5.5 0 0 1-.5-.5V8a.5.5 0 0 1 .5-.5zm1.5 0h2V6a1 1 0 0 0-2 0z"/>"#),
         "icons/discovery-badge.svg" => f!(r#"<circle cx="12" cy="12" r="11"/>"#),
         "icons/discovery-badge-fg.svg" => f!(r#"<path d="M12 6.5 13.6 10.4 17.5 12 13.6 13.6 12 17.5 10.4 13.6 6.5 12 10.4 10.4z"/>"#),
+        "icons/lock-unlocked.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 9.6-2l-1.8.9A3 3 0 0 0 9 7v3h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1z"/>"#),
         "icons/lock.svg" | "icons/text-lock.svg" | "icons/forum-lock.svg" | "icons/announcement-lock.svg" | "icons/stage-lock.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/>"#),
         "icons/quests.svg" => s!(r#"<path d="M5 4h14v6a7 7 0 0 1-14 0zM9 21h6M12 17v4M8 9h8"/>"#),
         "icons/note.svg" => s!(r#"<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7M7 8h6M7 12h8M7 16h4M19 14v8M15 18h8"/>"#),
