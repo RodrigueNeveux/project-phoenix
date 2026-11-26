@@ -658,11 +658,15 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
             call(Method::PUT, format!("/guilds/{}/members/@me", sf(g)), Some(json!({}))).await?;
             NavReply::Done
         }
-        NavRequest::CreateInvite(ch) => {
+        NavRequest::CreateInvite(ch) | NavRequest::CreateInviteWithAge(ch, _) => {
+            let max_age = match req {
+                NavRequest::CreateInviteWithAge(_, age) => age,
+                _ => 604800,
+            };
             let v = call(
                 Method::POST,
                 format!("/channels/{}/invites", sf(ch)),
-                Some(json!({ "max_age": 604800, "max_uses": 0, "temporary": false })),
+                Some(json!({ "max_age": max_age, "max_uses": 0, "temporary": false })),
             )
             .await?;
             let code = v.get("code").and_then(Value::as_str).unwrap_or_default();

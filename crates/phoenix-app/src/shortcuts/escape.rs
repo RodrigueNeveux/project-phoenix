@@ -94,6 +94,11 @@ impl PhoenixApp {
         if ui::mod_view::escape() {
             return;
         }
+        if (ui::call_view::active(self) || ui::call_view::previewing(self)) && ui::call_view::chat_open() {
+            ui::call_view::set_chat_open(false);
+            cx.notify();
+            return;
+        }
         if ui::search::is_open(cx) {
             ui::search::close(self, window, cx);
             return;

@@ -48,6 +48,8 @@ pub enum ActionRequest {
     MoveChannels { guild: Id, entries: Vec<(Id, i32, Option<Option<Id>>)> },
     CreateEvent { guild: Id, name: String, description: String, start_unix: u64, end_unix: Option<u64>, place: EventPlace, recurrence: Option<serde_json::Value>, image: Option<String> },
     Admin(phoenix_api::rest::guild_manage::AdminCall),
+    /// An admin call retried with the authenticator code when Discord asks for two-factor.
+    AdminMfa(phoenix_api::rest::guild_manage::AdminCall, String),
     SaveFolders(Vec<crate::ui::home::data::GuildFolder>),
 }
 

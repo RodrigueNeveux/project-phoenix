@@ -40,6 +40,9 @@ pub fn frame(id: &'static str, on_cancel: Action, card: impl IntoElement) -> Any
                     div()
                         .id("modal-card")
                         .occlude()
+                        .max_h(gpui::relative(0.94))
+                        .flex()
+                        .flex_col()
                         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()),
                 )
                 .child(card),

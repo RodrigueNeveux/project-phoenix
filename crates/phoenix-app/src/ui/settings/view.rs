@@ -427,47 +427,62 @@ fn nav_item(id: impl Into<String>, icon: &str, label: impl Into<SharedString>, s
 
 fn subnav(rows: Vec<SharedString>, active: usize, cx: &mut Cx) -> Div {
     let total = rows.len();
-    let n = total as f32;
     let active = active.min(total.saturating_sub(1));
-    div()
-        .pt(z(6.))
-        .pb(z(10.))
-        .ml(z(19.))
-        .flex()
-        .gap(z(19.))
-        .child(
-            div()
-                .flex_none()
-                .w(z(2.))
-                .h(z(20. * n + 20. * (n - 1.)))
-                .rounded(z(1.))
-                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-                .child(div().mt(z(40. * active as f32)).w_full().h(z(20.)).rounded_full().bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
-        )
-        .child(div().flex_1().min_w_0().flex().flex_col().gap(z(20.)).children(rows.into_iter().enumerate().map(|(i, t)| {
-            div()
-                .id(("settings-subnav", i))
-                .cursor_pointer()
-                .text_size(z(16.))
-                .line_height(z(20.))
-                .text_color(c(tok(if i == active { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::TEXT_MUTED })))
-                .when(i != active, |d| d.hover(|s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))))
-                .on_click(cx.listener(move |a, _, _, cx| {
-                    if let Some(s) = st(a) {
-                        s.active_section = i;
-                        s.nested = None;
-                        let y = if i == 0 || total <= 1 {
-                            gpui::px(0.)
-                        } else {
-                            let frac = i as f32 / (total - 1) as f32;
-                            -(s.scroll.max_offset().y * frac)
-                        };
-                        s.scroll.set_offset(gpui::point(gpui::px(0.), y));
-                    }
-                    cx.notify();
-                }))
-                .child(t)
-        })))
+    div().pt(z(-4.)).pb(z(0.)).ml(z(19.)).flex().flex_col().children(rows.into_iter().enumerate().map(|(i, t)| {
+        let on = i == active;
+        div()
+            .id(("settings-subnav", i))
+            .flex()
+            .gap(z(19.))
+            .cursor_pointer()
+            .child(
+                div()
+                    .flex_none()
+                    .w(z(2.))
+                    .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                    .when(i == 0, |d| d.rounded_t(z(1.)))
+                    .when(i + 1 == total, |d| d.rounded_b(z(1.)))
+                    .flex()
+                    .flex_col()
+                    .py(z(10.))
+                    .child(div().flex_1().w_full().rounded_full().when(on, |d| d.bg(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))))),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .py(z(10.))
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .text_color(c(tok(if on { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::TEXT_MUTED })))
+                    .when(!on, |d| d.hover(|s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))))
+                    .child(t),
+            )
+            .on_click(cx.listener(move |a, _, _, cx| {
+                if let Some(s) = st(a) {
+                    s.active_section = i;
+                    s.nested = None;
+                    let y = if i == 0 || total <= 1 {
+                        gpui::px(0.)
+                    } else {
+                        let frac = i as f32 / (total - 1) as f32;
+                        -(s.scroll.max_offset().y * frac)
+                    };
+                    s.scroll.set_offset(gpui::point(gpui::px(0.), y));
+                }
+                cx.notify();
+            }))
+    }))
+}
+
+/// Follows the page while it scrolls, the same way a click on a sub-entry jumps to it.
+fn scrolled_section(s: &super::SettingsState, total: usize) -> usize {
+    let max = s.scroll.max_offset().y;
+    if total <= 1 || max <= gpui::px(1.) {
+        return s.active_section;
+    }
+    let frac = ((-s.scroll.offset().y) / max).clamp(0., 1.);
+    (frac * (total - 1) as f32).round() as usize
 }
 
 static DEBUG_COPIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -782,7 +797,7 @@ fn nav(app: &PhoenixApp, cx: &mut Cx) -> Div {
             if p == cur && !searching {
                 let rows = subnav_rows(p);
                 if rows.len() > 1 {
-                    let active = app.settings.as_ref().map_or(0, |s| s.nested.map_or(s.active_section, super::nested::Nested::sub_index));
+                    let active = app.settings.as_ref().map_or(0, |s| s.nested.map_or_else(|| scrolled_section(s, rows.len()), super::nested::Nested::sub_index));
                     sec = sec.child(subnav(rows, active, cx));
                 }
             }

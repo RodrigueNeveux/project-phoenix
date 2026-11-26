@@ -302,6 +302,7 @@ fn device_submenu(kind: Audio, devices: Vec<String>) -> MenuItem {
         items: list,
         icon: None,
         subtext: Some(current.map(Into::into).unwrap_or_else(|| crate::t!("voice.default"))),
+        on_click: None,
     }
 }
 
@@ -327,7 +328,7 @@ fn profile_submenu() -> MenuItem {
             })
         })
         .collect();
-    MenuItem::Submenu { label: crate::t!("voice.input_profile_menu"), items, icon: None, subtext: Some(crate::t!(PROFILES[now as usize])) }
+    MenuItem::Submenu { label: crate::t!("voice.input_profile_menu"), items, icon: None, subtext: Some(crate::t!(PROFILES[now as usize])), on_click: None }
 }
 
 fn volume_row(kind: Audio, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -777,7 +778,9 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                         .hover(|s| s.underline())
                                         .on_click(cx.listener(|a, _, _, cx| {
                                             cx.stop_propagation();
-                                            a.open_voice_channel(cx);
+                                            if let Some(id) = a.voice_channel {
+                                                a.open_voice_chat(id, cx);
+                                            }
                                         }))
                                         .child(label),
                                 ),
@@ -791,9 +794,13 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                         .child(
                             panel_button(
                                 "voice-noise",
-                                lottie_glyph(panel_key("voice-noise", false), Lottie::Krisp, noise, false, || {
-                                    asset_icon(NOISE, 20. * crate::theme::zoom(), t(idx::ICON_SUBTLE)).into_any_element()
-                                }),
+                                if noise {
+                                    asset_icon("icons/voice/noise-suppressed.svg", 20. * crate::theme::zoom(), t(idx::ICON_SUBTLE)).into_any_element()
+                                } else {
+                                    lottie_glyph(panel_key("voice-noise", false), Lottie::Krisp, false, false, || {
+                                        asset_icon(NOISE, 20. * crate::theme::zoom(), t(idx::ICON_SUBTLE)).into_any_element()
+                                    })
+                                },
                                 false,
                             )
                             .tip(if noise {

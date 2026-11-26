@@ -247,7 +247,11 @@ pub fn create_guild_body_for_locale(
     _community: Option<bool>,
     is_fr: bool,
 ) -> serde_json::Value {
-    let code = template.unwrap_or(CREATE.code);
+    let Some(code) = template else {
+        let mut body = serde_json::json!({ "name": name.trim() });
+        if let Some(icon) = icon { body["icon"] = serde_json::json!(icon); }
+        return body;
+    };
     let (channels, system_channel_id, roles) = template_spec_payload(code, is_fr);
     let mut obj = serde_json::Map::new();
     obj.insert("name".into(), serde_json::json!(name.trim()));
@@ -981,11 +985,7 @@ mod tests {
         assert_eq!(school_en["system_channel_id"], "11");
 
         let minimal = create_guild_body_for_locale("Friends", None, None, None, false);
-        assert_eq!(minimal["name"], "Friends");
-        assert_eq!(minimal["channels"], serde_json::json!([]));
-        assert_eq!(minimal["system_channel_id"], serde_json::Value::Null);
-        assert!(minimal.get("roles").is_none());
-        assert_eq!(minimal["guild_template_code"], CREATE.code);
+        assert_eq!(minimal, serde_json::json!({ "name": "Friends" }));
     }
 
     #[test]

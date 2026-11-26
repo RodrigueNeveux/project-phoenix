@@ -50,12 +50,19 @@ pub(crate) fn tk(i: usize) -> gpui::Hsla {
     c(tok(i))
 }
 
-pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>, in_voice_panel: bool) -> impl IntoElement {
     let entity = cx.entity();
     skeleton::set_window_height(f32::from(window.viewport_size().height));
+    if let Some(channel) = app.selected_channel.and_then(|id| app.channels.get(&id))
+        && channel.guild.is_none()
+        && !crate::ui::dm_profile_panel::is_group_dm(app, channel.id)
+        && let Some(&peer) = channel.voice_users.first()
+    {
+        crate::ui::dm_profile_panel::ensure_profile(app, peer, cx);
+    }
     let show_members = app.show_members && app.selected_guild.is_some();
     let show_members = show_members && app.chat.thread.is_none() && !crate::ui::thread_create::is_open(cx);
-    let show_members = show_members && !crate::ui::call_view::active(app);
+    let show_members = show_members && !in_voice_panel && !crate::ui::call_view::active(app);
     let search_results = crate::ui::search::results_shown(cx);
     let mod_view = crate::ui::mod_view::render(app, window, cx);
     let main = div()
@@ -67,17 +74,11 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .flex_col()
         .when(mod_view.is_some(), |d| d.border_r_1().border_color(c(tok(idx::BORDER_SUBTLE))).rounded_tr(z(12.)).overflow_hidden())
         .bg(c(Palette::BG_PRIMARY))
-        .on_modifiers_changed(cx.listener(|a, ev: &gpui::ModifiersChangedEvent, _, cx| {
-            if a.chat.shift_held != ev.modifiers.shift {
-                a.chat.shift_held = ev.modifiers.shift;
-                cx.notify();
-            }
-        }))
         .map(|d| {
             if crate::ui::call_view::private_split(app) {
-                d.children(crate::ui::call_view::render_private(app, header(app, cx), window, cx))
+                d.children(crate::ui::call_view::render_private(app, header(app, cx, false), window, cx))
             } else {
-                d.child(header(app, cx)).children(crate::ui::dm_call::render(app, cx))
+                d.child(header(app, cx, in_voice_panel)).children(crate::ui::dm_call::render(app, cx))
             }
         })
         .child(
@@ -358,7 +359,7 @@ fn header_search_w(pad_start: f32) -> f32 {
     if w <= 0. { 244. } else { (w - pad_start - 8. - 320.).clamp(64., 244.) }
 }
 
-fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>, in_voice_panel: bool) -> gpui::Div {
     let ch = app.selected_channel.and_then(|c| app.channels.get(&c));
     let is_dm = ch.is_some_and(|c| c.guild.is_none());
     let name = ch.map(|c| crate::ui::dm_profile_panel::channel_name(app, c)).unwrap_or_default();
@@ -659,6 +660,17 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                         .child(div().size(z(24.)).p(z(4.)).flex().items_center().child(icon(Icon::Search, 16. * crate::theme::zoom(), tk(idx::ICON_MUTED)))),
                 ),
         )
+        .when(in_voice_panel, |d| {
+            d.child(
+                hdr_named("close-voice-chat", "close", ic)
+                    .flex_none()
+                    .tip(crate::t!("call.hide_chat"))
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        crate::ui::call_view::set_chat_open(false);
+                        cx.notify();
+                    })),
+            )
+        })
 }
 
 fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
@@ -666,6 +678,11 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let Some(ch_id) = app.selected_channel else { return div().into_any_element() };
     let Some(entry) = app.messages.get(&ch_id) else { return div().into_any_element() };
     if ix == 0 {
+        if entry.reached_start && entry.msgs.is_empty()
+            && let Some(card) = new_server_welcome(app, entity, ch_id)
+        {
+            return row_wrapper().child(card).into_any_element();
+        }
         return row_wrapper().when(entry.msgs.is_empty() && !entry.reached_start, |d| d.pb(z(20.))).child(intro(app, entity, ch_id, entry.reached_start)).into_any_element();
     }
     let i = ix - 1;
@@ -685,6 +702,90 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         return row_wrapper().pb(z(20.)).child(el).into_any_element();
     }
     el
+}
+
+/// Discord's "Bienvenue sur <serveur>" checklist, shown to the owner in an empty text channel of their server.
+fn new_server_welcome(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id) -> Option<gpui::Div> {
+    let channel = app.channels.get(&ch)?;
+    if app.nav.thread_parent(ch).is_some() || !matches!(channel.kind, ChannelKind::Text | ChannelKind::Announcement) {
+        return None;
+    }
+    let guild_id = channel.guild?;
+    let guild = app.guilds.iter().find(|g| g.id == guild_id)?;
+    if guild.owner != Some(app.me.id) {
+        return None;
+    }
+    let server_has_messages = app.channels.values().any(|c| c.guild == Some(guild_id) && app.backend.channel_last_message(c.id).is_some());
+    if server_has_messages {
+        return None;
+    }
+    let step = |id: &'static str, emoji: &str, label: SharedString| {
+        div()
+            .id(id)
+            .w_full()
+            .min_h(z(56.))
+            .px(z(16.))
+            .py(z(12.))
+            .flex()
+            .items_center()
+            .gap(z(12.))
+            .rounded(z(8.))
+            .border_1()
+            .border_color(tk(idx::BORDER_SUBTLE))
+            .bg(tk(idx::BACKGROUND_BASE_LOWER))
+            .cursor_pointer()
+            .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE)))
+            .child(div().size(z(24.)).flex_none().flex().items_center().justify_center().child(crate::media::emoji::emoji_element(emoji, 22.)))
+            .child(div().flex_1().min_w_0().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).child(label))
+            .child(gpui::svg().path(crate::icons::path("chevron-right")).size(z(20.)).flex_none().text_color(tk(idx::ICON_MUTED)))
+    };
+    let (e1, e2, e3, e4) = (entity.clone(), entity.clone(), entity.clone(), entity.clone());
+    let g = guild_id;
+    let desc = crate::t!("chat.new_server_desc");
+    let guide = crate::t!("chat.new_server_guide");
+    let full: SharedString = format!("{desc} {}", crate::t!("chat.new_server_guide_sentence", guide = guide.clone())).into();
+    let link = full.find(&*guide).map(|i| i..i + guide.len());
+    let styled = StyledText::new(full.clone()).with_highlights(link.clone().map(|r| {
+        (r, gpui::HighlightStyle { color: Some(tk(idx::TEXT_LINK)), ..Default::default() })
+    }));
+    let desc_el = InteractiveText::new("nsw-guide", styled)
+        .on_click(link.into_iter().collect(), |_, _, cx| cx.open_url("https://support.discord.com/hc/fr/articles/360045138571"));
+    Some(
+        div()
+            .w_full()
+            .pt(z(32.))
+            .pb(z(16.))
+            .flex()
+            .justify_center()
+            .child(
+                div()
+                    .w_full()
+                    .max_w(z(440.))
+                    .px(z(16.))
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .child(div().text_size(z(28.)).line_height(z(34.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).text_center().child(crate::t!("chat.new_server_title")))
+                    .child(div().text_size(z(28.)).line_height(z(34.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_STRONG)).text_center().child(guild.name.clone()))
+                    .child(div().mt(z(8.)).mb(z(24.)).text_size(z(14.)).line_height(z(18.)).text_color(tk(idx::TEXT_DEFAULT)).text_center().child(desc_el))
+                    .child(div().w_full().flex().flex_col().gap(z(8.))
+                        .child(step("nsw-invite", "\u{1F4EC}", crate::t!("chat.new_server_invite")).on_click(move |_, _, cx| e1.update(cx, |a, cx| a.open_invite_people(g, cx))))
+                        .child(step("nsw-icon", "\u{1F3A8}", crate::t!("chat.new_server_icon")).on_click(move |_, w, cx| e2.update(cx, |a, cx| {
+                            a.open_server_settings(g, 0, cx);
+                            w.refresh();
+                        })))
+                        .child(step("nsw-message", "\u{1F4AC}", crate::t!("chat.new_server_message")).on_click(move |_, w, cx| e3.update(cx, |a, cx| {
+                            a.composer.update(cx, |s, cx| s.focus(w, cx));
+                        })))
+                        .child(step("nsw-app", "\u{1F3AE}", crate::t!("chat.new_server_app")).on_click(move |_, _, cx| e4.update(cx, |_, cx| {
+                            crate::ui::modals::server_settings::open_app_directory(cx);
+                        })))
+                        .child(step("nsw-boost", "\u{1F48E}", crate::t!("chat.new_server_boost")).on_click(move |_, w, _| {
+                            crate::ui::boost_layer::open(g);
+                            w.refresh();
+                        }))),
+            ),
+    )
 }
 
 fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: bool) -> gpui::Div {
@@ -796,7 +897,8 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
 
 fn dm_intro_actions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, uid: Id) -> gpui::Div {
     use crate::ui::controls::{BtnKind, button_sm};
-    let mutual: Vec<Id> = app.people.profiles.get(&uid).map(|p| p.mutual_guild_ids.clone()).unwrap_or_default();
+    let profile = app.people.profiles.get(&uid);
+    let mutual = profile.map(|p| p.mutual_guild_ids.as_slice()).unwrap_or_default();
     let is_friend = app
         .nav
         .relationship(uid)
@@ -823,10 +925,7 @@ fn dm_intro_actions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, uid: Id) -> g
                 .items_center()
                 .gap(z(8.))
                 .cursor_pointer()
-                .on_click(move |ev, window, cx| {
-                    let at = ev.position();
-                    e.update(cx, |a, cx| a.open_profile(uid, None, at, window, cx));
-                })
+                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_profile_modal_at(uid, crate::ui::profile::TAB_SERVERS, cx)))
                 .child(div().flex().children(icons))
                 .child(
                     div()
@@ -838,6 +937,9 @@ fn dm_intro_actions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, uid: Id) -> g
                 )
                 .child(div().mx(z(4.)).size(z(4.)).rounded_full().bg(tk(idx::BORDER_STRONG))),
         );
+    }
+    if mutual.is_empty() && profile.is_some() {
+        row = row.child(div().text_sm().text_color(tk(idx::TEXT_SUBTLE)).child(crate::t!("profile.tab_no_mutual_servers")));
     }
     let e1 = entity.clone();
     let e2 = entity.clone();

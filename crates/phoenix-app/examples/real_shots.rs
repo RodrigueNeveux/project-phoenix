@@ -1303,13 +1303,13 @@ fn main() -> anyhow::Result<()> {
                     phoenix_app::ui::modals::go_live::open(Some(window));
                     phoenix_app::actions::with_modal(|m| {
                         if let Some(phoenix_app::ui::modals::Modal::GoLive(s)) = m {
-                            s.kind = match arg.as_str() {
-                                "screen" | "screen-menu" => Some(phoenix_app::voice::stream::SourceKind::Screen),
-                                "window" => Some(phoenix_app::voice::stream::SourceKind::Window),
-                                _ => None,
+                            use phoenix_app::ui::modals::go_live::ShareTab;
+                            s.tab = match arg.as_str() {
+                                "screen" | "screen-menu" => ShareTab::Screens,
+                                "devices" => ShareTab::Devices,
+                                _ => ShareTab::Applications,
                             };
                             s.menu = arg.ends_with("menu");
-                            s.devices_tab = arg == "devices";
                         }
                     });
                 }
@@ -1770,7 +1770,10 @@ fn main() -> anyhow::Result<()> {
                 }
                 "invite" => {
                     if let Some(guild) = app.selected_guild {
-                        app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink { guild, link: None }, cx);
+                        app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink(phoenix_app::ui::home::data::InviteDialog {
+                            guild, channel: app.selected_channel, request: 0, link: None, copied: false, edit_link: false, expiry_days: 7,
+                            sending: Default::default(), sent: Default::default(), send_error: None,
+                        }), cx);
                     }
                 }
                 "community" => {

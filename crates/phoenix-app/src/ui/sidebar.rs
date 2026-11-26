@@ -1160,13 +1160,14 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let chat_entity = entity.clone();
     let invite_entity = entity.clone();
     let guild = ch.guild;
-    let invite_hover = (!is_dm).then(|| {
+    let hovered = app.nav.hovered_channel == Some(id);
+    let show_actions = !is_dm && guild.is_some() && (hovered || connected || (selected && !has_info && ch.mentions == 0 && !is_voice));
+    let invite_hover = show_actions.then(|| {
         div()
             .flex()
             .flex_none()
             .my(z(-4.))
             .mr(z(-4.))
-            .when(!selected || has_info, |d| d.hidden().group_hover(group.clone(), |s| s.flex()))
             .when(is_voice, |d| {
                 d.child(
                     div()
@@ -1174,7 +1175,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         .cursor_pointer()
                         .on_click(move |_, _, cx| {
                             cx.stop_propagation();
-                            chat_entity.update(cx, |a, cx| a.open_channel_chat(id, cx));
+                            chat_entity.update(cx, |a, cx| a.open_voice_chat(id, cx));
                         })
                         .tooltip(crate::ui::tooltip::tip(crate::t!("channel.open_chat")))
                         .child(action(Icon::Members, Some("chat"))),
@@ -1228,7 +1229,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         .child(
             div()
                 .id(("chrow", id.0))
-                .group(group)
+                .group(group.clone())
                 .h(z(if is_dm { 48. } else if status_line { space::channels_name_lh() + 24. } else { space::channels_name_lh() + 8. }))
                 .pl(z(10.))
                 .pr(z(if is_dm { 0. } else { 10. }))
@@ -1253,8 +1254,21 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         if *hovered {
                             e.read(cx).backend.prefetch_messages(id);
                         }
-                        if is_dm && crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(4, id.0), *hovered) {
-                            e.update(cx, |_, cx| cx.notify());
+                        if is_dm {
+                            if crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(4, id.0), *hovered) {
+                                e.update(cx, |_, cx| cx.notify());
+                            }
+                        } else {
+                            e.update(cx, |app, cx| {
+                                if *hovered {
+                                    app.nav.hovered_channel = Some(id);
+                                } else if app.nav.hovered_channel == Some(id) {
+                                    app.nav.hovered_channel = None;
+                                } else {
+                                    return;
+                                }
+                                cx.notify();
+                            });
                         }
                     }
                 })
@@ -1388,10 +1402,10 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                             )
                         }),
                 )
-                .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
-                .when(ch.mentions == 0, |d| d.children(invite_hover.map(|h| top_line(h, status_line))))
-                .children(timer.map(|t| top_line(t, status_line)))
-                .children(limit_pill)
+                .when(ch.mentions > 0 && !show_actions, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
+                .children(invite_hover.map(|h| top_line(h, status_line)))
+                .children(timer.filter(|_| !hovered).map(|t| top_line(t, status_line)))
+                .children(limit_pill.filter(|_| !hovered))
                 .children(close)
                 .map(|d| crate::ui::focus_ring::ring_inset_edges(d, crate::ui::states::key(("chrow", id.0)), ROW_RADIUS, 0., 2., 4., 2.)),
         )

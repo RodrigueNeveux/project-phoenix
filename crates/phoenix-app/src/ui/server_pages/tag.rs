@@ -92,7 +92,56 @@ fn sample_message(name: &str, msg: SharedString, tag: Option<(&str, Option<AnyEl
         )
 }
 
+fn locked_page(guild: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let sample_tag = "NOVA";
+    let badge = clan_badges::DEFAULT_BADGE;
+    let badges = div().flex().flex_wrap().gap(z(8.)).children(DISPLAY.into_iter().map(|kind| {
+        super::card().min_w(z(54.)).min_h(z(46.)).px(z(8.)).flex().items_center().justify_center()
+            .child(badge_art(kind, None, None, 24.).unwrap_or_else(|| {
+                text(11., 14., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!(clan_badges::label_key(kind))).into_any_element()
+            }))
+    }));
+    let colors = div().flex().flex_wrap().gap(z(8.)).children(PALETTES.into_iter().filter_map(|(color, _)| {
+        let [r, g, b] = super::tag_colors::hex_to_rgb(color)?;
+        Some(div().size(z(20.)).rounded_full().bg(gpui::rgb(u32::from_be_bytes([0, r, g, b]))))
+    }));
+
+    page()
+        .child(title(crate::t!("menu.gs.tag")))
+        .child(div().mt(z(12.)).child(text(14., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.tag_lead"))))
+        .child(
+            super::card()
+                .mt(z(20.)).p(z(16.)).flex().flex_col().gap(z(10.))
+                .child(div().flex().items_center().gap(z(8.))
+                    .child(super::icon("lock", 16., idx::ICON_SUBTLE))
+                    .child(label(crate::t!("gs2.tag_locked"))))
+                .child(text(14., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT, crate::t!("gs2.tag_requires_boosts")))
+                .child(div().flex().child(
+                    button("gs2-tag-boost", crate::t!("gs2.tag_view_boosts"), BtnKind::Primary)
+                        .on_click(cx.listener(move |_, _, window, cx| {
+                            crate::ui::boost_layer::open(guild);
+                            window.refresh();
+                            cx.notify();
+                        })),
+                )),
+        )
+        .child(
+            super::card().mt(z(16.)).p(z(16.)).flex().flex_col().gap(z(12.))
+                .child(label(crate::t!("gs2.tag_preview")))
+                .child(sample_message("Alex", crate::t!("gs2.tag_s3"), Some((sample_tag, badge_art(badge, None, None, 12.))), false))
+                .child(div().flex().flex_col().gap(z(8.)).opacity(0.65)
+                    .child(label(crate::t!("gs2.tag_badge")))
+                    .child(badges)
+                    .child(label(crate::t!("gs2.tag_color")))
+                    .child(colors)),
+        )
+        .into_any_element()
+}
+
 pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    if !app.backend.guild_features(guild).iter().any(|f| f == "GUILD_TAGS") {
+        return locked_page(guild, cx);
+    }
     let prof = fetch(app, guild, ServerCall::Profile { guild: sf(guild) }, cx);
     let Some(prof) = prof else { return page().child(title(crate::t!("menu.gs.tag"))).child(super::loading()).into_any_element() };
     let tag = prof.get("tag").and_then(Value::as_str).map(str::to_owned);
@@ -112,7 +161,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         match badge_art(kind, None, None, 32.) {
             Some(art) => tl = tl.child(art),
             None if sel && !hash.is_empty() => tl = tl.child(badge_img(guild, &hash, 32.)),
-            None => {}
+            None => tl = tl.child(text(12., 14., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!(clan_badges::label_key(kind)))),
         }
         badges.push(tl.on_click(cx.listener(move |a, _, _, cx| {
             write(a, ServerCall::SetProfile { guild: sf(guild), patch: ProfilePatch { badge: Some(kind), ..Default::default() } }, None, cx);
@@ -126,7 +175,14 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     };
     let mut colors = Vec::new();
     for (i, (p, s)) in PALETTES.iter().copied().enumerate() {
-        colors.push(tile(("gs2-color", i), preset == Some(i)).children(badge_art(badge, Some(p), Some(s), 32.)).on_click(cx.listener(set_colors(Some(p), Some(s)))));
+        let mut choice = tile(("gs2-color", i), preset == Some(i));
+        if let Some(art) = badge_art(badge, Some(p), Some(s), 32.) {
+            choice = choice.child(art);
+        } else if let Some([r, g, b]) = super::tag_colors::hex_to_rgb(p) {
+            let color = u32::from_be_bytes([0, r, g, b]);
+            choice = choice.child(div().size(z(24.)).rounded_full().bg(gpui::rgb(color)));
+        }
+        colors.push(choice.on_click(cx.listener(set_colors(Some(p), Some(s)))));
     }
     colors.push(
         tile("gs2-color-reset", reset)

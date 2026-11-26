@@ -277,7 +277,43 @@ pub fn grid(n: usize, w: f32, h: f32, gap: f32) -> (usize, f32) {
     best
 }
 
+pub fn previewing(app: &PhoenixApp) -> bool {
+    let Some(channel) = app.selected_channel else { return false };
+    app.voice_channel != Some(channel)
+        && SHOWN.with(|shown| shown.get()) == Some(channel)
+        && app.channels.get(&channel).is_some_and(|ch| ch.guild.is_some() && matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage))
+}
+
+fn side_chat(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    div().w(z(CHAT_W)).max_w(gpui::relative(0.46)).flex_none().min_w_0().h_full().flex().flex_col()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
+        .when(crate::theme::frame_borders(), |d| d.border_l_1().border_color(c(tok(idx::APP_FRAME_BORDER))))
+        .overflow_hidden()
+        .child(crate::ui::chat::render(app, window, cx, true))
+}
+
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if previewing(app) {
+        let id = app.selected_channel?;
+        let channel = app.channels.get(&id)?;
+        let body = div().size_full().flex().overflow_hidden()
+            .child(div().flex_1().min_w_0().h_full().flex().flex_col()
+                .bg(gpui::linear_gradient(120.,
+                    gpui::linear_color_stop(t(idx::BACKGROUND_BASE_LOWEST), 0.),
+                    gpui::linear_color_stop(t(idx::BACKGROUND_BRAND).opacity(0.42), 1.),
+                ))
+                .child(top_bar(app, channel.name.clone(), cx))
+                .child(div().flex_1().min_h_0().flex().flex_col().items_center().justify_center().gap(z(12.))
+                    .child(div().text_size(z(26.)).font_weight(FontWeight::BOLD).child(channel.name.clone()))
+                    .child(div().text_sm().child(if channel.voice_users.is_empty() {
+                        crate::t!("invite.card.voice_nobody")
+                    } else {
+                        crate::t!("call.preview_participants", n = channel.voice_users.len())
+                    }))
+                    .child(crate::ui::controls::button("join-voice-preview", crate::t!("invite.card.join_voice"), crate::ui::controls::BtnKind::Primary)
+                        .on_click(cx.listener(move |app, _, _, cx| app.select_channel(id, cx))))));
+        return Some(if chat_open() { body.child(side_chat(app, window, cx)) } else { body }.into_any_element());
+    }
     if !active(app) || private_split(app) {
         return None;
     }
@@ -349,23 +385,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(call)
         .children(stream_menu(app, cx))
         .children(crate::ui::call_menus::render(app, ch_id, cx));
-    Some(if chat_open() {
-        root.child(
-            div()
-                .w(z(CHAT_W))
-                .flex_none()
-                .min_w_0()
-                .h_full()
-                .flex()
-                .bg(c(tok(idx::BACKGROUND_BASE_LOWEST)))
-                .when(crate::theme::frame_borders(), |d| d.border_l_1().border_color(c(tok(idx::APP_FRAME_BORDER))))
-                .overflow_hidden()
-                .child(div().w(z(CHAT_W)).h_full().flex().flex_col().child(crate::ui::chat::render(app, window, cx))),
-        )
-        .into_any_element()
-    } else {
-        root.into_any_element()
-    })
+    Some(if chat_open() { root.child(side_chat(app, window, cx)) } else { root }.into_any_element())
 }
 
 pub fn render_private(app: &PhoenixApp, header: gpui::Div, window: &mut Window, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
