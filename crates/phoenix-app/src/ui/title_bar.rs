@@ -21,6 +21,9 @@ fn title(app: &PhoenixApp) -> (Icon, SharedString) {
     if app.nav.home == HomeView::Nitro {
         return (Icon::Nitro, crate::t!("settings.page.nitro"));
     }
+    if app.nav.home == HomeView::Shop {
+        return (Icon::Gift, crate::t!("dm.shop"));
+    }
     if app.nav.home == HomeView::Quests {
         return (Icon::Quests, crate::t!("dm.quests"));
     }

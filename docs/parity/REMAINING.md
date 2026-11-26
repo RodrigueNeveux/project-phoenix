@@ -71,6 +71,10 @@ Reste : l'autocomplétion de mentions dans l'éditeur de règles (seulement avec
 | settings : fondu de l'aperçu | rampes de 180 px en haut et en bas, alpha de bord sur 48 px | `8192e61e17dc8592.js` `W` |
 | settings : son, tête de lecture | transition `left` 500 ms `ease` hors lecture et hors glisser | CSS `410a6c65e50f79ef.css` `playhead_LGRor2` |
 
+| home : Boutique figée | la grille construisait toutes les cartes à chaque rendu et chaque image chargée relançait un rendu complet (real_shots bloqué 240 s) ; seules les rangées visibles sont construites, espaceurs ailleurs | `shop_page::visible_rows` |
+| home : Boutique, détails | espace après « N objets » des lots, titre de fenêtre « Boutique » | — |
+| discovery : thème clair | dégradé clair `radial-gradient(122.23% 351.84% at -4.04% 0, #eff8ff, #d7dcff 30.28%, #fdfdff)` à .8, description `text-strong` (`462887.M`) | CSS `-6JdM0` |
+
 Reste sur Découvrir : le masque `floatingSearchTabsMask_Y0eJLL` sous la recherche flottante (pas de `mask-image` dans GPUI).
 
 ## Faisable (pas encore fait)
