@@ -268,13 +268,24 @@ fn ensure_orbs(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
     }
     let fut = app.backend.shop_tab("orbs");
     cx.spawn(async move |this, cx| {
-        let v = fut.await.unwrap_or(Value::Null);
+        let v = match fut.await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!("shop orbs feed: {}", e.0);
+                Value::Null
+            }
+        };
         let mut h = cx.background_executor().spawn(async move { parse_home(&v, &Value::Null) }).await;
         let _ = this.update(cx, |_, cx| {
             if let Some(base) = HOME.with(|x| x.borrow().clone()) {
                 for (sku, k) in &base.cards {
                     h.cards.entry(*sku).or_insert_with(|| k.clone());
                 }
+            }
+            if h.blocks.is_empty() {
+                let mut skus: Vec<u64> = h.cards.keys().copied().collect();
+                skus.sort_unstable();
+                h.blocks.push(Block::Picks(skus));
             }
             orbs_only(&mut h);
             ORBS_HOME.with(|x| *x.borrow_mut() = Some(std::rc::Rc::new(h)));

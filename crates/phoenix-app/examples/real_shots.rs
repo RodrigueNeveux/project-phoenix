@@ -482,6 +482,9 @@ impl Backend for ReadOnly {
     fn shop_home(&self) -> BoxFuture<serde_json::Value> {
         self.0.shop_home()
     }
+    fn shop_tab(&self, tab: &'static str) -> BoxFuture<serde_json::Value> {
+        self.0.shop_tab(tab)
+    }
     fn load_pins(&self, c: Id) -> BoxFuture<Vec<Message>> {
         self.0.load_pins(c)
     }
