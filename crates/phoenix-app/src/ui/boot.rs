@@ -295,8 +295,8 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, _cx: &mut Context<Phoen
     let f = app.boot.frame(ready, Instant::now())?;
     window.request_animation_frame();
     let spinner = match crate::splash::spinner() {
-        Some(image) => img(image).size(px(200.)).into_any_element(),
-        None => div().size(px(200.)).into_any_element(),
+        Some(image) => img(image).size_full().into_any_element(),
+        None => div().size_full().into_any_element(),
     };
     let spin_size = 200. * f.spinner_scale;
     let segs = tip_segments(app.boot.tip);
