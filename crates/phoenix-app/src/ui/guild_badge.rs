@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
-use gpui::{AnyElement, IntoElement, ParentElement, Styled, div, prelude::*};
+use gpui::{AnyElement, IntoElement, ParentElement, Styled, div};
 
 use crate::theme::{c, generated::idx, tok, z};
 
