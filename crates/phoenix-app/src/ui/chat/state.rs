@@ -452,7 +452,7 @@ impl PhoenixApp {
             return;
         }
         self.replace_message(m, cx);
-        let r = Reaction { emoji, count: 0, me: add, emoji_id };
+        let r = Reaction { emoji, count: 0, me: add, emoji_id, ..Default::default() };
         let fut = self.backend.set_reaction(channel, msg, r, add);
         cx.spawn(async move |this, cx| {
             if let Err(e) = fut.await {
