@@ -110,7 +110,7 @@ fn grouped(n: u64) -> String {
     out
 }
 
-fn established(guild: Id) -> SharedString {
+pub(crate) fn established(guild: Id) -> SharedString {
     use chrono::Datelike;
     let ms = (guild.0 >> 22) as i64 + 1_420_070_400_000;
     let Some(d) = chrono::DateTime::from_timestamp_millis(ms) else { return SharedString::default() };
@@ -578,6 +578,15 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn established_uses_the_localised_short_month_and_year() {
+        let ms: u64 = 1_768_478_400_000;
+        let id = crate::model::Id((ms - 1_420_070_400_000) << 22);
+        let month = crate::t!("month_short.1");
+        assert_eq!(super::established(id), crate::t!("guide.established", date = format!("{month} 2026")));
+        assert_ne!(month.as_ref(), "");
+    }
+
     #[test]
     fn needs_all_three_features() {
         let f = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();

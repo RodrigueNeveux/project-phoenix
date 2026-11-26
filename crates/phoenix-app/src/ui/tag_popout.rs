@@ -52,36 +52,6 @@ fn parse_hex_color(s: &str) -> Option<u32> {
     u32::from_str_radix(hex, 16).ok()
 }
 
-fn established_date(id: Id) -> String {
-    let ms = ((id.0 >> 22) + 1_420_070_400_000) as i64;
-    let secs = ms / 1000;
-    let days = secs.div_euclid(86_400);
-    let z_days = days + 719_468;
-    let era = if z_days >= 0 { z_days } else { z_days - 146_096 } / 146_097;
-    let doe = (z_days - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = if m <= 2 { y + 1 } else { y };
-    let month = match m {
-        1 => "Jan",
-        2 => "Feb",
-        3 => "Mar",
-        4 => "Apr",
-        5 => "May",
-        6 => "Jun",
-        7 => "Jul",
-        8 => "Aug",
-        9 => "Sep",
-        10 => "Oct",
-        11 => "Nov",
-        _ => "Dec",
-    };
-    format!("{month} {year}")
-}
-
 fn acronym(name: &str) -> String {
     let mut out = String::new();
     for word in name.split_whitespace() {
@@ -391,7 +361,7 @@ fn render_profile(app: &PhoenixApp, pop: &TagPopout, p: &GuildProfile, cx: &mut 
                 .text_size(z(14.))
                 .line_height(z(18.))
                 .text_color(tk(idx::TEXT_SUBTLE))
-                .child(crate::t!("guide.established", date = established_date(gid))),
+                .child(crate::ui::guide::established(gid)),
         );
 
     let mut body = div().px(z(16.)).mb(z(16.)).w_full().flex().flex_col().gap(z(12.));
