@@ -217,11 +217,12 @@ mod tests {
         assert_eq!(key.sources.len(), 1);
         let chain = vec!["Phx Noto Sans".to_string(), "Phx Noto Color Emoji".to_string()];
         let built: &[u8] = b"built-bytes";
-        save(&d, key, &chain, true, &[(None, built), (Some(src.clone()), b"ignored")]).unwrap();
+        let items: Vec<(Option<String>, &[u8])> = vec![(None, built), (Some(src.clone()), b"ignored".as_slice())];
+        save(&d, key, &chain, true, &items).unwrap();
         let l = load(&d, 7).expect("cache hit");
         assert_eq!(l.chain, chain);
         assert!(l.web_noto);
-        assert_eq!(l.blobs.iter().map(|b| b.as_ref()).collect::<Vec<_>>(), vec![built, b"source-bytes".as_slice()]);
+        assert_eq!(l.blobs.iter().map(|b| &b[..]).collect::<Vec<_>>(), vec![built, b"source-bytes".as_slice()]);
         assert!(load(&d, 8).is_none());
         let _ = std::fs::remove_dir_all(&d);
     }
@@ -232,11 +233,11 @@ mod tests {
         let src = d.join("face.ttf");
         std::fs::write(&src, b"one").unwrap();
         let src = src.to_string_lossy().into_owned();
-        save(&d, Key::current(1, [src.clone()]), &[], false, &[(None, b"x")]).unwrap();
+        save(&d, Key::current(1, [src.clone()]), &[], false, &[(None, b"x".as_slice())]).unwrap();
         assert!(load(&d, 1).is_some());
         std::fs::write(&src, b"three").unwrap();
         assert!(load(&d, 1).is_none());
-        save(&d, Key::current(1, [src.clone()]), &[], false, &[(None, b"y")]).unwrap();
+        save(&d, Key::current(1, [src.clone()]), &[], false, &[(None, b"y".as_slice())]).unwrap();
         let builds = std::fs::read_dir(&d).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with(BUILD_PREFIX)).count();
         assert_eq!(builds, 1);
         let m = Manifest::from_json(&serde_json::from_slice(&std::fs::read(d.join(CURRENT)).unwrap()).unwrap()).unwrap();
