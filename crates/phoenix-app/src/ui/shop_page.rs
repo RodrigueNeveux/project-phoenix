@@ -369,6 +369,21 @@ fn card(app: &PhoenixApp, k: &ShopCard, cx: &mut Context<PhoenixApp>) -> AnyElem
         .into_any_element()
 }
 
+pub const CARD_SIZE: f32 = 246.;
+pub const CARD_GAP: f32 = 30.;
+pub const GRID_PAD: f32 = 32.;
+pub const ROW_H: f32 = CARD_SIZE + CARD_GAP;
+
+pub fn grid_columns(width: f32) -> usize {
+    (((width - 2. * GRID_PAD + CARD_GAP) / ROW_H).floor() as usize).max(1)
+}
+
+pub fn visible_rows(rows: usize, offset: f32, view_h: f32) -> (usize, usize) {
+    let first = (((offset - GRID_PAD) / ROW_H).floor().max(0.) as usize).saturating_sub(1).min(rows);
+    let last = ((((offset + view_h - GRID_PAD) / ROW_H).ceil().max(0.) as usize) + 1).min(rows);
+    (first, last.max(first))
+}
+
 pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     ensure_loaded(app, cx);
     let head = header(window, cx).into_any_element();
@@ -377,9 +392,28 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
     let body: AnyElement = match cards {
         None => div().p(z(32.)).text_color(tk(idx::TEXT_MUTED)).child(crate::t!("common.loading")).into_any_element(),
         Some(v) => {
-            let mut grid = div().p(z(32.)).flex().flex_wrap().gap(z(30.));
-            for k in v.iter().filter(|k| q.is_empty() || k.name.to_lowercase().contains(q.trim())) {
-                grid = grid.child(card(app, k, cx));
+            let shown: Vec<&ShopCard> = v.iter().filter(|k| q.is_empty() || k.name.to_lowercase().contains(q.trim())).collect();
+            let zoom = crate::theme::zoom();
+            let width = f32::from(window.viewport_size().width) / zoom - crate::ui::sidebar_resize::width() - 72.;
+            let cols = grid_columns(width);
+            let handle = crate::ui::chat::scrollbar::handle("shop-scroll");
+            let offset = (-f32::from(handle.offset().y) / zoom).max(0.);
+            let view_h = Some(f32::from(handle.bounds().size.height) / zoom).filter(|h| *h > 0.).unwrap_or(f32::from(window.viewport_size().height) / zoom);
+            let rows = shown.len().div_ceil(cols);
+            let (first, last) = visible_rows(rows, offset, view_h);
+            let mut grid = div().p(z(GRID_PAD)).flex().flex_col().gap(z(CARD_GAP));
+            if first > 0 {
+                grid = grid.child(div().flex_none().h(z(first as f32 * ROW_H - CARD_GAP)));
+            }
+            for r in first..last {
+                let mut row = div().flex().gap(z(CARD_GAP));
+                for k in shown.iter().skip(r * cols).take(cols) {
+                    row = row.child(card(app, k, cx));
+                }
+                grid = grid.child(row);
+            }
+            if last < rows {
+                grid = grid.child(div().flex_none().h(z((rows - last) as f32 * ROW_H - CARD_GAP)));
             }
             grid.into_any_element()
         }
@@ -403,6 +437,18 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
 #[cfg(test)]
 mod tests {
     use super::{discount, parse};
+
+    #[test]
+    fn only_the_visible_rows_are_built() {
+        use super::{grid_columns, visible_rows};
+        assert_eq!(grid_columns(1138.), 4);
+        assert_eq!(grid_columns(1137.), 3);
+        assert_eq!(grid_columns(100.), 1);
+        assert_eq!(visible_rows(200, 0., 800.), (0, 4));
+        assert_eq!(visible_rows(200, 2760., 800.), (8, 14));
+        assert_eq!(visible_rows(3, 0., 800.), (0, 3));
+        assert_eq!(visible_rows(0, 500., 800.), (0, 0));
+    }
 
     #[test]
     fn discount_rounds() {
