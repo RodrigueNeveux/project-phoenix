@@ -107,6 +107,10 @@ impl GuardedWrite {
         write(Method::DELETE, format!("/users/@me/mfa/webauthn/credentials/{credential}"), None)
     }
 
+    pub fn put_profile_widgets(widgets: Value) -> Self {
+        write(Method::PUT, "/users/@me/widgets", Some(json!({ "widgets": widgets })))
+    }
+
     pub fn add_role_members(guild: u64, role: u64, members: &[u64]) -> Self {
         let ids: Vec<String> = members.iter().map(u64::to_string).collect();
         write(Method::PATCH, format!("/guilds/{guild}/roles/{role}/members"), Some(json!({ "member_ids": ids })))
@@ -406,6 +410,9 @@ mod tests {
         let rn = GuardedWrite::rename_webauthn("9", "Clé");
         assert_eq!((rn.method, rn.path.as_str(), rn.body), (Method::PATCH, "/users/@me/mfa/webauthn/credentials/9", Some(json!({ "name": "Clé" }))));
         assert_eq!(GuardedWrite::delete_webauthn("9").method, Method::DELETE);
+        let wd = GuardedWrite::put_profile_widgets(json!([{ "data": { "type": "favorite_games", "games": [] } }]));
+        assert_eq!((wd.method, wd.path.as_str()), (Method::PUT, "/users/@me/widgets"));
+        assert_eq!(wd.body, Some(json!({ "widgets": [{ "data": { "type": "favorite_games", "games": [] } }] })));
         let add = GuardedWrite::add_role_members(5, 6, &[7, 8]);
         assert_eq!((add.method, add.path.as_str(), add.body), (Method::PATCH, "/guilds/5/roles/6/members", Some(json!({ "member_ids": ["7", "8"] }))));
         assert_eq!(GuardedWrite::set_member_roles(5, 7, &[9]).body, Some(json!({ "roles": ["9"] })));

@@ -10,6 +10,7 @@ mod gift;
 mod pages;
 pub mod subscriptions;
 pub mod synced_map;
+pub mod widget_add;
 pub mod effects;
 pub mod emoticons;
 pub(crate) mod profile_editor;
@@ -409,6 +410,10 @@ pub fn open_action(app: &mut PhoenixApp, _: &OpenSettings, _: &mut gpui::Window,
 
 pub fn on_escape(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     let Some(s) = app.settings.as_mut() else { return false };
+    if widget_add::close() {
+        cx.notify();
+        return true;
+    }
     if s.page == Page::Profiles {
         profile_editor::on_escape(s);
         cx.notify();

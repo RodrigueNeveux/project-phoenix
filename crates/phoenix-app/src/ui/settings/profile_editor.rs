@@ -1135,7 +1135,10 @@ fn tabs(e: &EditorState, cx: &mut Cx) -> Div {
             .items_center()
             .justify_between()
             .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::SEMIBOLD).text_color(dim).child(crate::t!("pe.widgets")))
-            .child(controls::button_icon("pe-add-widget", "plus", crate::t!("pe.add_widget"), BtnKind::Secondary).h(z(31.)).min_w(z(0.)).px(z(11.)).text_size(z(14.)).line_height(z(18.))),
+            .child(controls::button_icon("pe-add-widget", "plus", crate::t!("pe.add_widget"), BtnKind::Secondary).h(z(31.)).min_w(z(0.)).px(z(11.)).text_size(z(14.)).line_height(z(18.)).on_click(cx.listener(|_, _, _, cx| {
+                super::widget_add::open();
+                cx.notify();
+            }))),
         1 if !e.recent.is_empty() => super::profile_activity::render(
             &e.recent,
             &super::profile_activity::Colors { strong, muted: dim, card: wcol.card, link: c(tok(idx::TEXT_LINK)) },
