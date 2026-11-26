@@ -269,7 +269,12 @@ fn track_hover(el: gpui::Stateful<gpui::Div>, key: u64, entity: &Entity<PhoenixA
             changed
         });
         if changed {
-            e.update(cx, |_, cx| cx.notify());
+            e.update(cx, |a, cx| {
+                if *over {
+                    crate::history_ui::hover_guild(a, Id(key), cx);
+                }
+                cx.notify()
+            });
         }
     })
 }

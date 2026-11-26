@@ -1251,12 +1251,16 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     let e = e.clone();
                     move |hovered: &bool, _, cx| {
                         if *hovered {
-                            e.read(cx).backend.prefetch_messages(id);
+                            e.update(cx, |a, cx| crate::history_ui::hover_channel(a, id, cx));
                         }
                         if is_dm && crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(4, id.0), *hovered) {
                             e.update(cx, |_, cx| cx.notify());
                         }
                     }
+                })
+                .on_mouse_down(gpui::MouseButton::Left, {
+                    let e = e.clone();
+                    move |_, _, cx| e.update(cx, |a, cx| crate::history_ui::preload(a, id, cx))
                 })
                 .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_channel(id, cx)))
                 .on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {

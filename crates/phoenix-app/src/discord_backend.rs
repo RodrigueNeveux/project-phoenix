@@ -865,6 +865,14 @@ impl Backend for DiscordBackend {
         self.prefetch_impl(channel)
     }
 
+    fn has_cached_messages(&self, channel: Id) -> bool {
+        msg_cache::has_page(channel.0)
+    }
+
+    fn recent_cached_channels(&self, n: usize) -> Vec<Id> {
+        msg_cache::recent_on_disk(n).into_iter().map(Id).collect()
+    }
+
     fn restore_cached(&self) -> Option<BoxFuture<ReadyData>> {
         if !snapshot::exists() {
             return None;

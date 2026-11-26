@@ -62,6 +62,10 @@ pub fn peek(channel: u64) -> Option<Vec<api::Message>> {
     STATE.lock().pages.get(&channel).map(|p| p.msgs.clone())
 }
 
+pub fn has_page(channel: u64) -> bool {
+    STATE.lock().pages.contains_key(&channel) || file(channel).is_some_and(|f| fs::metadata(f).is_ok_and(|m| m.len() > 2))
+}
+
 pub fn has_fresh(channel: u64) -> bool {
     STATE.lock().pages.get(&channel).is_some_and(|p| p.fresh && !urls_expired(&p.msgs))
 }

@@ -1,26 +1,146 @@
-use gpui::{Context, ListOffset};
+use std::{cell::RefCell, collections::VecDeque};
+
+use gpui::{AsyncApp, Context, ListOffset, WeakEntity};
 
 use crate::{
     app::PhoenixApp,
-    model::{Id, Message},
+    model::{ChannelKind, Id, Message},
 };
 
+const PRELOAD_CAP: usize = 24;
+
+thread_local! {
+    static PRELOADED: RefCell<VecDeque<Id>> = const { RefCell::new(VecDeque::new()) };
+}
+
 pub fn on_refresh(app: &mut PhoenixApp, channel: Id, messages: Vec<Message>, cx: &mut Context<PhoenixApp>) {
-    if !app.messages.get(&channel).is_some_and(|e| e.loaded_once && !e.loading && e.msgs.len() <= 50) {
-        return;
-    }
+    let Some(e) = app.messages.get_mut(&channel).filter(|e| e.loaded_once && !e.loading && e.msgs.len() <= 50) else { return };
+    e.loading = true;
+    cx.spawn(async move |this, cx| {
+        let laid = layout(&this, cx, messages).await;
+        let _ = this.update(cx, |a, cx| {
+            let Some(e) = a.messages.get_mut(&channel) else { return };
+            if !e.loading {
+                return;
+            }
+            match laid {
+                Some((msgs, rendered)) if e.msgs.len() <= 50 => replace_page(a, channel, msgs, rendered, cx),
+                _ => e.loading = false,
+            }
+        });
+    })
+    .detach();
+}
+
+fn replace_page(app: &mut PhoenixApp, channel: Id, msgs: Vec<Message>, rendered: Vec<RenderedMessage>, cx: &mut Context<PhoenixApp>) {
     let anchor = (app.selected_channel == Some(channel) && !app.chat.at_bottom).then(|| {
         let top = app.message_list.logical_scroll_top();
         let id = top.item_ix.checked_sub(1).and_then(|i| app.messages.get(&channel)?.msgs.get(i).map(|m| m.id));
         (id, top.offset_in_item)
     });
-    app.messages.remove(&channel);
-    app.insert_history(channel, messages, false, cx);
+    insert_first_page(app, channel, msgs, rendered, cx);
     if let Some((Some(id), offset_in_item)) = anchor
         && let Some(ix) = app.messages.get(&channel).and_then(|e| e.index_of(id))
     {
         app.message_list.scroll_to(ListOffset { item_ix: ix + 1, offset_in_item });
     }
+}
+
+fn preload_off() -> bool {
+    static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *OFF.get_or_init(|| std::env::var_os("PHX_NO_PRELOAD").is_some())
+}
+
+fn preloadable(app: &PhoenixApp, id: Id) -> bool {
+    !preload_off()
+        && app.selected_channel != Some(id)
+        && app.channels.get(&id).is_some_and(|c| matches!(c.kind, ChannelKind::Text | ChannelKind::Announcement))
+        && !app.messages.get(&id).is_some_and(|e| e.loaded_once || e.loading)
+}
+
+pub fn preload(app: &mut PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
+    if !preloadable(app, id) {
+        return;
+    }
+    app.messages.entry(id).or_default().loading = true;
+    load_first_page(app, id, cx);
+    let evicted = PRELOADED.with_borrow_mut(|q| {
+        q.retain(|c| *c != id);
+        q.push_back(id);
+        if q.len() > PRELOAD_CAP { q.pop_front() } else { None }
+    });
+    if let Some(old) = evicted
+        && app.selected_channel != Some(old)
+        && !app.last_channel.values().any(|c| *c == old)
+        && app.messages.get(&old).is_some_and(|e| !e.loading && !e.detached && e.msgs.len() <= 50)
+    {
+        app.messages.remove(&old);
+    }
+}
+
+pub fn hover_channel(app: &mut PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
+    if preload_off() {
+        app.backend.prefetch_messages(id);
+        return;
+    }
+    if !preloadable(app, id) {
+        return;
+    }
+    if app.backend.has_cached_messages(id) {
+        preload(app, id, cx);
+    } else {
+        app.backend.prefetch_messages(id);
+    }
+}
+
+pub fn hover_guild(app: &mut PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) {
+    if preload_off() || app.selected_guild == Some(guild) {
+        return;
+    }
+    if let Some(id) = app.guild_target(Some(guild)) {
+        hover_channel(app, id, cx);
+    }
+}
+
+pub fn warm_recent(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if preload_off() {
+        return;
+    }
+    let backend = app.backend.clone();
+    cx.spawn(async move |this, cx| {
+        cx.background_executor().timer(std::time::Duration::from_millis(1500)).await;
+        let ids = cx.background_spawn(async move { backend.recent_cached_channels(8) }).await;
+        for id in ids {
+            if this.update(cx, |a, cx| preload(a, id, cx)).is_err() {
+                return;
+            }
+            cx.background_executor().timer(std::time::Duration::from_millis(150)).await;
+        }
+    })
+    .detach();
+}
+
+async fn layout(this: &WeakEntity<PhoenixApp>, cx: &mut AsyncApp, msgs: Vec<Message>) -> Option<(Vec<Message>, Vec<RenderedMessage>)> {
+    let (resolver, me, off, revealed) = this
+        .update(cx, |a, _| {
+            let rev: HashSet<(Id, usize)> = a.revealed.iter().filter(|(m, _)| msgs.iter().any(|x| x.id == *m)).copied().collect();
+            (page_resolver(a, &msgs), a.me.id, a.utc_offset, rev)
+        })
+        .ok()?;
+    if cfg!(test) {
+        let r = render_page(&msgs, &resolver, me, off, &revealed);
+        return Some((msgs, r));
+    }
+    let t0 = std::time::Instant::now();
+    let (tx, rx) = futures::channel::oneshot::channel();
+    let job = move || {
+        let r = render_page(&msgs, &resolver, me, off, &revealed);
+        let _ = tx.send((msgs, r));
+    };
+    std::thread::Builder::new().name("phoenix-layout".into()).spawn(job).ok()?;
+    let out = rx.await.ok()?;
+    crate::perf::span("page_layout_bg", t0);
+    Some(out)
 }
 
 use std::collections::{HashMap, HashSet};
@@ -84,10 +204,13 @@ pub fn page_resolver(app: &PhoenixApp, msgs: &[Message]) -> PageResolver {
     for m in msgs {
         mention_ids(&m.content, &mut u, &mut r, &mut c);
     }
+    let guild = msgs.first().and_then(|m| app.channels.get(&m.channel).or_else(|| app.nav.find_thread(m.channel))).and_then(|c| c.guild);
+    let members = guild.and_then(|g| Some((g, app.members.get(&g)?)));
     let mut out = PageResolver::default();
     for id in u {
-        if let Some(user) = app.users.get(&Id(id)) {
-            out.users.insert(id, user.display_name.to_string());
+        let nick = members.and_then(|(g, ms)| crate::member_index::find(ms, g, Id(id))).and_then(|m| m.nick.as_ref().map(ToString::to_string));
+        if let Some(name) = nick.or_else(|| app.users.get(&Id(id)).map(|u| u.display_name.to_string())) {
+            out.users.insert(id, name);
         }
     }
     for id in c {
@@ -177,16 +300,27 @@ pub fn render_page(
 pub fn load_first_page(app: &PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
     let fut = app.backend.load_messages(id, None, 50);
     cx.spawn(async move |this, cx| {
-        let msgs = fut.await.unwrap_or_default();
-        let Ok((resolver, me, off, revealed)) = this.update(cx, |a, _| {
-            let rev: HashSet<(Id, usize)> = a.revealed.iter().filter(|(m, _)| msgs.iter().any(|x| x.id == *m)).copied().collect();
-            (page_resolver(a, &msgs), a.me.id, a.utc_offset, rev)
-        }) else {
-            return;
-        };
-        let t0 = std::time::Instant::now();
+        let res = fut.await;
         let on_screen = this.update(cx, |a, _| a.selected_channel == Some(id)).unwrap_or(false);
-        if cfg!(test) || on_screen {
+        let msgs = match res {
+            Ok(m) => m,
+            Err(_) if !on_screen => {
+                let _ = this.update(cx, |a, _| {
+                    if let Some(e) = a.messages.get_mut(&id).filter(|e| !e.loaded_once) {
+                        e.loading = false;
+                    }
+                });
+                return;
+            }
+            Err(_) => Vec::new(),
+        };
+        if on_screen {
+            let Ok((resolver, me, off, revealed)) = this.update(cx, |a, _| {
+                let rev: HashSet<(Id, usize)> = a.revealed.iter().filter(|(m, _)| msgs.iter().any(|x| x.id == *m)).copied().collect();
+                (page_resolver(a, &msgs), a.me.id, a.utc_offset, rev)
+            }) else {
+                return;
+            };
             let rendered = render_page(&msgs, &resolver, me, off, &revealed);
             let _ = this.update(cx, |a, cx| {
                 insert_first_page(a, id, msgs, rendered, cx);
@@ -194,22 +328,66 @@ pub fn load_first_page(app: &PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
             });
             return;
         }
-        let (tx, rx) = futures::channel::oneshot::channel();
-        let job = move || {
-            let r = render_page(&msgs, &resolver, me, off, &revealed);
-            let _ = tx.send((msgs, r));
-        };
-        if std::thread::Builder::new().name("phoenix-layout".into()).spawn(job).is_err() {
-            return;
-        }
-        let Ok((msgs, rendered)) = rx.await else { return };
-        crate::perf::span("page_layout_bg", t0);
+        let Some((msgs, rendered)) = layout(&this, cx, msgs).await else { return };
         let _ = this.update(cx, |a, cx| {
             insert_first_page(a, id, msgs, rendered, cx);
             crate::commands::state::apply_read_mark(a, id);
         });
     })
     .detach();
+}
+
+pub fn load_older(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let Some(id) = app.selected_channel else { return };
+    let Some(entry) = app.messages.get_mut(&id) else { return };
+    if entry.loading || entry.reached_start || !entry.loaded_once {
+        return;
+    }
+    let before = entry.msgs.first().map(|m| m.id);
+    entry.loading = true;
+    let fut = app.backend.load_messages(id, before, 50);
+    cx.spawn(async move |this, cx| {
+        let msgs = fut.await.unwrap_or_default();
+        let laid = if msgs.is_empty() { Some((msgs, Vec::new())) } else { layout(&this, cx, msgs).await };
+        let _ = this.update(cx, |a, cx| match laid {
+            Some((msgs, rendered)) => insert_older(a, id, msgs, rendered, cx),
+            None => {
+                if let Some(e) = a.messages.get_mut(&id) {
+                    e.loading = false;
+                }
+            }
+        });
+    })
+    .detach();
+}
+
+fn insert_older(app: &mut PhoenixApp, ch: Id, page: Vec<Message>, mut rendered: Vec<RenderedMessage>, cx: &mut Context<PhoenixApp>) {
+    let Some(mut entry) = app.messages.remove(&ch) else { return };
+    entry.loading = false;
+    if page.len() < 50 {
+        entry.reached_start = true;
+    }
+    let n = page.len();
+    let mut all = page;
+    all.extend(std::mem::take(&mut entry.msgs));
+    rendered.append(&mut entry.rendered);
+    if n > 0
+        && let (Some(prev), Some(m), Some(r)) = (all.get(n - 1), all.get(n), rendered.get_mut(n))
+    {
+        r.group_start = grouping::starts_group(Some(prev), m, app.utc_offset);
+        r.day_divider = grouping::day_divider(Some(prev), m, app.utc_offset).then(|| crate::app::format_day(m.timestamp));
+    }
+    entry.msgs = all;
+    entry.rendered = rendered;
+    let len = entry.msgs.len();
+    app.messages.insert(ch, entry);
+    if app.selected_channel == Some(ch) {
+        app.message_list.splice(1..1, n);
+        if n < len {
+            app.message_list.splice(n + 1..n + 2, 1);
+        }
+    }
+    cx.notify();
 }
 
 fn insert_first_page(app: &mut PhoenixApp, ch: Id, page: Vec<Message>, rendered: Vec<RenderedMessage>, cx: &mut Context<PhoenixApp>) {
@@ -226,4 +404,44 @@ fn insert_first_page(app: &mut PhoenixApp, ch: Id, page: Vec<Message>, rendered:
         app.message_list.reset(len + 1);
     }
     cx.notify();
+}
+
+#[cfg(test)]
+mod preload_tests {
+    use std::sync::Arc;
+
+    use crate::{app::PhoenixApp, backend::Backend, mock::MockBackend, model::ChannelKind};
+
+    #[gpui::test]
+    fn hovered_channel_is_in_memory_before_the_click(cx: &mut gpui::TestAppContext) {
+        let backend = Arc::new(MockBackend::synchronous());
+        let ready = futures::executor::block_on(backend.login(crate::backend::Credentials::Token("x".into()))).unwrap();
+        cx.update(gpui_component::init);
+        let window = cx.add_window(|w, cx| PhoenixApp::new(backend.clone(), w, cx));
+        let (first, next) = window
+            .update(cx, |app, _, cx| {
+                app.apply_ready(ready, cx);
+                let g = app.guilds[0].id;
+                app.select_guild(Some(g), cx);
+                let text: Vec<_> = app.guild_channels[&g].iter().copied().filter(|c| app.channels[c].kind == ChannelKind::Text).collect();
+                app.select_channel(text[0], cx);
+                super::preload(app, text[1], cx);
+                assert!(app.messages[&text[1]].loading);
+                (text[0], text[1])
+            })
+            .unwrap();
+        cx.run_until_parked();
+        window
+            .update(cx, |app, _, cx| {
+                assert_eq!(app.selected_channel, Some(first));
+                let e = &app.messages[&next];
+                assert!(e.loaded_once && !e.loading);
+                assert_eq!(e.msgs.len(), e.rendered.len());
+                let n = e.msgs.len();
+                app.select_channel(next, cx);
+                assert_eq!(app.messages[&next].msgs.len(), n);
+                assert!(!app.messages[&next].loading);
+            })
+            .unwrap();
+    }
 }

@@ -205,6 +205,12 @@ pub trait Backend: Send + Sync + 'static {
         None
     }
     fn prefetch_messages(&self, _channel: Id) {}
+    fn has_cached_messages(&self, _channel: Id) -> bool {
+        false
+    }
+    fn recent_cached_channels(&self, _n: usize) -> Vec<Id> {
+        Vec::new()
+    }
     fn restore_session(&self) -> Option<BoxFuture<ReadyData>> {
         None
     }

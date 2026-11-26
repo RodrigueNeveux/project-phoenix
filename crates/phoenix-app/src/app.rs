@@ -311,8 +311,9 @@ impl PhoenixApp {
                 if let Ok(ready) = fut.await {
                     let _ = this.update(cx, |this, cx| {
                         if this.logging_in && this.screen == Screen::Login {
+                            let t0 = std::time::Instant::now();
                             this.apply_ready(ready, cx);
-                            crate::perf::mark("snapshot_applied");
+                            crate::perf::span("snapshot_applied", t0);
                             cx.notify();
                         }
                     });
@@ -324,6 +325,8 @@ impl PhoenixApp {
             cx.spawn(async move |this, cx| {
                 let res = fut.await;
                 let _ = this.update(cx, |this, cx| {
+                    let t0 = std::time::Instant::now();
+                    let live = res.is_ok();
                     this.logging_in = false;
                     match res {
                         Ok(ready) if this.screen == Screen::Main => {
@@ -340,7 +343,10 @@ impl PhoenixApp {
                             }
                         }
                     }
-                    crate::perf::mark("ready_applied");
+                    crate::perf::span("ready_applied", t0);
+                    if live {
+                        crate::history_ui::warm_recent(this, cx);
+                    }
                     cx.notify();
                 });
             })
@@ -588,7 +594,16 @@ impl PhoenixApp {
         self.rebuild_sidebar();
         self.rebuild_members();
         self.backend.select_guild(guild).detach_ok();
-        let target = self.last_channel.get(&guild).copied().or_else(|| match guild {
+        let target = self.guild_target(guild);
+        self.nav_home_target(guild, target.is_some());
+        if let Some(t) = target {
+            self.open_channel_chat(t, cx);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn guild_target(&self, guild: Option<Id>) -> Option<Id> {
+        self.last_channel.get(&guild).copied().or_else(|| match guild {
             Some(g) => self.guild_channels.get(&g).and_then(|l| {
                 l.iter().copied().find(|id| {
                     matches!(self.channels[id].kind, ChannelKind::Text | ChannelKind::Announcement)
@@ -599,12 +614,7 @@ impl PhoenixApp {
                 })
             }),
             None => None,
-        });
-        self.nav_home_target(guild, target.is_some());
-        if let Some(t) = target {
-            self.open_channel_chat(t, cx);
-        }
-        cx.notify();
+        })
     }
 
     fn refresh_guild_mentions(&mut self, guild: Option<Id>) {
@@ -701,21 +711,7 @@ impl PhoenixApp {
     }
 
     pub fn load_older(&mut self, cx: &mut Context<Self>) {
-        let Some(id) = self.selected_channel else { return };
-        let Some(entry) = self.messages.get_mut(&id) else { return };
-        if entry.loading || entry.reached_start || !entry.loaded_once {
-            return;
-        }
-        let before = entry.msgs.first().map(|m| m.id);
-        entry.loading = true;
-        let fut = self.backend.load_messages(id, before, 50);
-        cx.spawn(async move |this, cx| {
-            let res = fut.await;
-            let _ = this.update(cx, |this, cx| {
-                this.insert_history(id, res.unwrap_or_default(), true, cx)
-            });
-        })
-        .detach();
+        crate::history_ui::load_older(self, cx);
     }
 
     pub(crate) fn resolver(&self) -> Resolver<'_> {

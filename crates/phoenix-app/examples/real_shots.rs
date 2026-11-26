@@ -1,3 +1,6 @@
+#[path = "common/switch_bench.rs"]
+mod switch_bench;
+
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{AppContext, Entity, HeadlessAppContext, px, size};
@@ -116,6 +119,12 @@ impl Backend for ReadOnly {
     }
     fn prefetch_messages(&self, channel: Id) {
         self.0.prefetch_messages(channel)
+    }
+    fn has_cached_messages(&self, channel: Id) -> bool {
+        self.0.has_cached_messages(channel)
+    }
+    fn recent_cached_channels(&self, n: usize) -> Vec<Id> {
+        self.0.recent_cached_channels(n)
     }
     fn select_guild(&self, guild: Option<Id>) -> BoxFuture<()> {
         self.0.select_guild(guild)
@@ -1060,6 +1069,10 @@ fn main() -> anyhow::Result<()> {
         window.set_scale_factor(scale);
     })?;
     pump(&mut cx, wait * 1000 / 2);
+    if let Some(n) = std::env::var("PHX_SWITCH_BENCH").ok().and_then(|x| x.parse::<usize>().ok()) {
+        switch_bench::run(&mut cx, win.into(), &v, n);
+        return Ok(());
+    }
     if let Some(n) = std::env::var("PHX_INBOX_COLLAPSE").ok().and_then(|v| v.parse::<usize>().ok()) {
         cx.update(|cx| {
             v.update(cx, |app, cx| {
