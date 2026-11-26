@@ -1994,9 +1994,43 @@ fn main() -> anyhow::Result<()> {
     }
     if let Ok(which) = std::env::var("PHX_SS_MODAL") {
         pump(&mut cx, 1500);
-        cx.update_window(win.into(), |_, _, cx| {
+        cx.update_window(win.into(), |_, window, cx| {
             v.update(cx, |app, cx| {
                 let sec = app.selected_guild.map(|g| app.security_state(g));
+                if which == "widget-add" {
+                    phoenix_app::ui::settings::widget_add::open();
+                }
+                if let Some(rest) = which.strip_prefix("role-") {
+                    use phoenix_app::ui::modals::server_settings::roles::{Editor, IconTab, Tab};
+                    let want = std::env::var("PHX_SS_ROLE").ok().and_then(|v| v.parse::<u64>().ok());
+                    phoenix_app::ui::modals::server_settings::with_state(|s| {
+                        let roles = phoenix_app::ui::modals::server_settings::roles::sorted_roles(s);
+                        let pick = roles.iter().find(|r| want.is_none_or(|w| r.get("id").and_then(|i| i.as_str()).and_then(|i| i.parse::<u64>().ok()) == Some(w)) && r.get("managed").and_then(|m| m.as_bool()) != Some(true)).cloned();
+                        if let Some(r) = pick {
+                            let mut e = Editor::new(&r, false);
+                            match rest {
+                                "icon" => e.icon_modal = Some(IconTab::Upload),
+                                "icon-emoji" => e.icon_modal = Some(IconTab::Emoji),
+                                "icon-unicode" => e.icon = Some(phoenix_app::ui::modals::server_settings::roles::IconDraft::Unicode("\u{1F525}".into())),
+                                "links" => e.tab = Tab::Links,
+                                "links-grid" => {
+                                    e.tab = Tab::Links;
+                                    e.links_modal = true;
+                                }
+                                "links-set" => {
+                                    e.tab = Tab::Links;
+                                    let g = phoenix_app::ui::modals::server_settings::roles::add_link(&serde_json::json!([]), "steam");
+                                    e.links = Some(phoenix_app::ui::modals::server_settings::roles::add_link(&g, "twitch"));
+                                }
+                                _ => {}
+                            }
+                            s.role = Some(e);
+                        }
+                    });
+                    if rest == "icon-emoji" {
+                        phoenix_app::ui::pickers::open(app, phoenix_app::ui::pickers::Tab::Emoji, phoenix_app::ui::pickers::EmojiTarget::RoleIcon, window, cx);
+                    }
+                }
                 phoenix_app::ui::modals::server_settings::with_state(|s| match which.as_str() {
                     "prune" => s.prune = Some(phoenix_app::ui::modals::server_settings::people::Prune::default()),
                     "prune-open" => {

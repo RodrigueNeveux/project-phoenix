@@ -1311,6 +1311,20 @@ fn disabled_when(d: gpui::Stateful<gpui::Div>, off: bool) -> gpui::Stateful<gpui
     if off { d.opacity(0.5).cursor_not_allowed() } else { d }
 }
 
+fn open_grid(off: bool, cx: &mut Cx) -> impl Fn(&gpui::ClickEvent, &mut gpui::Window, &mut gpui::App) + 'static {
+    cx.listener(move |_, _, _, cx| {
+        if off {
+            return;
+        }
+        with_state(|s| {
+            if let Some(e) = s.role.as_mut() {
+                e.links_modal = true;
+            }
+        });
+        cx.notify();
+    })
+}
+
 fn links(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
     let role = s.list("roles").iter().find(|r| kit::n(r, "id") == e.id).cloned().unwrap_or(Value::Null);
     let lock = locked(app, s, &role);
@@ -1334,19 +1348,6 @@ fn links(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
                 .child(text(crate::t!("gs.role.links_notice"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).flex_1().whitespace_normal()),
         );
     }
-    let open_grid = move |off: bool, cx: &mut Cx| {
-        cx.listener(move |_, _, _, cx| {
-            if off {
-                return;
-            }
-            with_state(|s| {
-                if let Some(e) = s.role.as_mut() {
-                    e.links_modal = true;
-                }
-            });
-            cx.notify();
-        })
-    };
     if kinds.is_empty() {
         let off = lock || has_members;
         let btn = disabled_when(crate::ui::controls::button("ss-role-link-add", crate::t!("gs.role.links_add"), BtnKind::Primary).w_full(), off).on_click(open_grid(off, cx));
