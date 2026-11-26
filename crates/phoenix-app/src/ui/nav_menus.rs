@@ -214,7 +214,8 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
         .with_icon("chat/boost"),
     );
     if let Some((tag, badge)) = crate::ui::modals::guild_tag::tag_of(app, g) {
-        let chip = crate::ui::modals::guild_tag::chip(g, &tag, badge.as_deref(), &crate::ui::modals::guild_tag::MENU_CHIP).into_any_element();
+        let chip = crate::ui::modals::guild_tag::chip(g, &tag, badge.as_deref(), &crate::ui::modals::guild_tag::MENU_CHIP);
+        let chip = gpui::IntoElement::into_any_element(chip);
         let ee = e.clone();
         let open: crate::ui::context_menu::Handler = std::rc::Rc::new(move |_, _, cx: &mut App| ee.update(cx, |a, cx| a.open_guild_tag_adopt(g, cx)));
         items.push(MenuItem::leading(crate::t!("guild_tag.menu"), chip, None, Some(open)));
