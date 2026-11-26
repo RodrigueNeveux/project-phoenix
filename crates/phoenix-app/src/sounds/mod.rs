@@ -149,6 +149,15 @@ pub fn play(name: &str, volume: f32) -> Option<Handle> {
     start(name, effective_volume(volume), false)
 }
 
+pub fn play_pcm(pcm: Arc<Pcm>, volume: f32) -> Option<Handle> {
+    if MUTED_FOR_TESTS.load(Ordering::Relaxed) || streamer_mutes() {
+        return None;
+    }
+    let h = Handle::new(effective_volume(volume));
+    effects::start(&h, pcm, false);
+    Some(h)
+}
+
 pub fn play_loop(name: &str, volume: f32) -> Option<Handle> {
     if streamer_mutes() {
         return None;

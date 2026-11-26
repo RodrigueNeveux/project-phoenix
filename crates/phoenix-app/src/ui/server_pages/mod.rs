@@ -3,6 +3,7 @@ pub mod automod;
 pub mod boost;
 pub mod community;
 pub mod delete;
+pub mod expr_upload;
 pub mod guide_editors;
 pub mod integrations;
 pub mod mock;
@@ -248,6 +249,17 @@ pub fn open_sub(guild: Id, s: &str) {
             open_modal(guild, "verification");
         }
         "wizard" => set_flag(guild, "onboarding-wizard", true),
+        w if w.starts_with("upload-sticker") || w.starts_with("upload-sound") => {
+            let (kind, path) = w.split_once('=').unwrap_or((w, ""));
+            if kind == "upload-sound" {
+                expr_upload::open_sound(guild);
+            } else {
+                expr_upload::open_sticker(guild, false);
+            }
+            if !path.is_empty() {
+                expr_upload::load_path(std::path::Path::new(path));
+            }
+        }
         w if w.starts_with("wizard:") => {
             set_flag(guild, "onboarding-wizard", true);
             let mut parts = w.split(':').skip(1);
@@ -348,6 +360,9 @@ pub fn notice(app: &PhoenixApp, guild: Id, key: &str, cx: &mut Context<PhoenixAp
 }
 
 pub fn modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    if let Some(m) = expr_upload::render(cx) {
+        return Some(m);
+    }
     if let Some((guild, m)) = with(|s| s.menu.clone()) {
         return Some(automod::rule_menu(guild, m, cx));
     }

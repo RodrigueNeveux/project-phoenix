@@ -271,6 +271,23 @@ impl Drop for Recorder {
     }
 }
 
+pub fn encode_ogg(pcm: &Pcm) -> Result<Vec<u8>> {
+    let ch = usize::from(pcm.channels.max(1));
+    let mono = if ch == 1 { pcm.samples.clone() } else { convert_channels(&pcm.samples, ch, 1) };
+    let mut rs = Resampler::new(pcm.rate.max(1), RATE, 1);
+    let mut pending = Vec::with_capacity(mono.len());
+    rs.process(&mono, &mut pending);
+    let real = pending.len() as u64;
+    let mut opus = OpusEncoder::new(false, BITRATE)?;
+    let mut packets = Vec::with_capacity(pending.len() / FRAME_SAMPLES + 1);
+    for frame in pending.chunks(FRAME_SAMPLES) {
+        let mut f = frame.to_vec();
+        f.resize(FRAME_SAMPLES, 0.);
+        packets.push(opus.encode(&to_i16(&f))?);
+    }
+    Ok(ogg::write_opus(&packets, FRAME_SAMPLES as u64, real, rand::random::<u32>()))
+}
+
 pub fn decode_ogg(data: &[u8]) -> Result<Pcm> {
     let s = ogg::read_opus(data).ok_or(Error::Malformed("not an Ogg Opus file"))?;
     let stereo = s.channels >= 2;
@@ -390,6 +407,17 @@ mod tests {
         let secs = pcm.samples.len() as f64 / 48_000.;
         assert!((secs - rec.duration_secs).abs() < 0.03, "{secs}");
         assert!(pcm.samples.iter().map(|s| s.abs()).fold(0., f32::max) > 0.05);
+    }
+
+    #[test]
+    fn encode_pcm_to_ogg() {
+        let t = tone(44_100, 0.5, 440., 0.5);
+        let stereo: Vec<f32> = t.iter().flat_map(|&x| [x, x]).collect();
+        let ogg = encode_ogg(&Pcm { rate: 44_100, channels: 2, samples: stereo }).unwrap();
+        assert_eq!(&ogg[..4], b"OggS");
+        let pcm = decode_ogg(&ogg).unwrap();
+        let secs = pcm.samples.len() as f64 / 48_000.;
+        assert!((secs - 0.5).abs() < 0.03, "{secs}");
     }
 
     #[test]

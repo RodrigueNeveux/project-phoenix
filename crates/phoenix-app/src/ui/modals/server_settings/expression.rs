@@ -238,6 +238,8 @@ fn rail(state: u8) -> gpui::Div {
 pub fn stickers(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let list = s.list("stickers").to_vec();
     let t = tier(s);
+    let guild = s.guild;
+    let partnered = s.guild_json().get("features").and_then(Value::as_array).is_some_and(|f| f.iter().any(|x| matches!(x.as_str(), Some("PARTNERED" | "VERIFIED"))));
     let mut page = div().flex().flex_col().gap(z(16.)).child(kit::h2(crate::t!("menu.gs.stickers")));
     let mut top = div().flex().flex_col();
     if let Some(level) = lost_level(list.len(), t) {
@@ -344,7 +346,10 @@ pub fn stickers(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
-                    .on_click(cx.listener(|_, _, _, cx| super::pick_upload("sticker", &crate::ui::file_pick::STICKERS, cx)))
+                    .on_click(cx.listener(move |_, _, _, cx| {
+                        crate::ui::server_pages::expr_upload::open_sticker(guild, partnered);
+                        cx.notify();
+                    }))
                     .child(gpui::svg().path(crate::icons::path("plus")).size(z(24.)).text_color(c(tok(idx::TEXT_SUBTLE)))),
             );
         }
@@ -386,7 +391,7 @@ pub fn stickers(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
 }
 
 pub fn soundboard(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
-    let _ = cx;
+    let guild = s.guild;
     let items: Vec<Value> = s.get("sounds").and_then(|v| v.get("items")).and_then(Value::as_array).cloned().unwrap_or_default();
     let t = tier(s);
     let slots = sound_slots(t);
@@ -423,7 +428,10 @@ pub fn soundboard(_app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
         .flex_col()
         .child(kit::h2(crate::t!("menu.gs.soundboard")))
         .child(text(crate::t!("gs.expr.sound_desc"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).mt(z(16.)))
-        .child(div().mt(z(24.)).flex().child(crate::ui::controls::button("ss-sound-upload", crate::t!("gs.expr.sound_upload"), BtnKind::Primary).on_click(cx.listener(|_, _, _, cx| super::pick_upload("sound", &crate::ui::file_pick::SOUNDS, cx)))))
+        .child(div().mt(z(24.)).flex().child(crate::ui::controls::button("ss-sound-upload", crate::t!("gs.expr.sound_upload"), BtnKind::Primary).on_click(cx.listener(move |_, _, _, cx| {
+            crate::ui::server_pages::expr_upload::open_sound(guild);
+            cx.notify();
+        }))))
         .child(text(crate::t!("gs.expr.sound_slots", tier = t, n = slots.saturating_sub(items.len()), total = slots), 16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG).mt(z(50.)).h(z(24.)))
         .child(div().mt(z(32.)).child(head))
         .child(rows)

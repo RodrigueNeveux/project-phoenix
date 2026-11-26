@@ -19,10 +19,11 @@ pub struct GuardedWrite {
     pub method: Method,
     pub path: String,
     pub body: Option<Value>,
+    pub form: Option<super::form::FormBody>,
 }
 
 fn write(method: Method, path: impl Into<String>, body: Option<Value>) -> GuardedWrite {
-    GuardedWrite { method, path: path.into(), body }
+    GuardedWrite { method, path: path.into(), body, form: None }
 }
 
 fn me_patch(fields: &[(&str, Option<&str>)]) -> GuardedWrite {
@@ -162,6 +163,14 @@ impl GuardedWrite {
         write(Method::PUT, format!("/guilds/{guild}/members/@me"), None)
     }
 
+    pub fn create_sticker(guild: u64, sticker: &super::form::StickerUpload) -> Self {
+        GuardedWrite { form: Some(sticker.form()), ..write(Method::POST, format!("/guilds/{guild}/stickers"), None) }
+    }
+
+    pub fn create_sound(guild: u64, sound: &super::form::SoundUpload) -> Self {
+        write(Method::POST, format!("/guilds/{guild}/soundboard-sounds"), Some(sound.body()))
+    }
+
     pub fn refusal(&self) -> Error {
         blocked(&self.method, self.path.clone())
     }
@@ -209,6 +218,8 @@ mod tests {
             GuardedWrite::discovery_category(5, 49, true),
             GuardedWrite::discovery_category(5, 49, false),
             GuardedWrite::start_webauthn_register(),
+            GuardedWrite::create_sticker(5, &super::super::form::tests::sticker()),
+            GuardedWrite::create_sound(5, &super::super::form::tests::sound()),
         ]
     }
 

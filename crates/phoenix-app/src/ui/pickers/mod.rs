@@ -39,6 +39,7 @@ pub enum EmojiTarget {
     PollAnswer(usize),
     GuideTask,
     GuideAnswer,
+    ExprUpload,
     ProfileReact,
 }
 
@@ -245,7 +246,7 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
             prefs.newly_mark_pending(g.0, n.0, chrono::Utc::now().timestamp_millis());
         }
         match (op.target, app.chat.edit.as_ref().map(|e| e.input.clone())) {
-            (EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer, _) => {}
+            (EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload, _) => {}
             (EmojiTarget::ProfileReact, _) => crate::ui::profile_toolbar::reset(),
             (EmojiTarget::Edit, Some(edit)) => edit.update(cx, |s, cx| s.focus(window, cx)),
             _ => app.composer.update(cx, |s, cx| s.focus(window, cx)),
@@ -467,6 +468,14 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
             app.profile_react(text, cx);
             close(app, window, cx);
         }
+        EmojiTarget::ExprUpload => {
+            let tag = match &item {
+                PickItem::Unicode(ix) => crate::ui::server_pages::expr_upload::Tag::Unicode(emoji::toned(*ix, tone)),
+                PickItem::Custom(e) => crate::ui::server_pages::expr_upload::Tag::Custom { id: e.id.0, name: e.name.to_string(), animated: e.animated },
+            };
+            crate::ui::server_pages::expr_upload::pick_emoji(tag);
+            close(app, window, cx);
+        }
         EmojiTarget::GuideTask | EmojiTarget::GuideAnswer => {
             let val = match &item {
                 PickItem::Unicode(ix) => serde_json::json!({ "name": emoji::toned(*ix, tone) }),
@@ -531,7 +540,7 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
         && t != EmojiTarget::Status
         && let Some(el) = render_picker(app, window, cx)
     {
-        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ProfileReact) { gpui::deferred(el).with_priority(50).into_any_element() } else { el });
+        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload | EmojiTarget::ProfileReact) { gpui::deferred(el).with_priority(50).into_any_element() } else { el });
     }
     if let Some(el) = soundboard::render(app, window, cx) {
         out.push(el);
