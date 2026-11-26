@@ -650,7 +650,7 @@ pub fn thread_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<An
             }
         }
         _ => {
-            body = body.child(div().p(z(16.)).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("common.loading")));
+            body = body.child(div().flex_1().flex().flex_col().justify_end().overflow_hidden().child(super::skeleton::for_channel(id.0, app.prefs.synced.compact)));
         }
     }
     let empty = t.input.read(cx).value().is_empty();

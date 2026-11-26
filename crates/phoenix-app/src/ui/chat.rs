@@ -42,6 +42,7 @@ pub mod slash;
 pub mod spoiler;
 pub mod system;
 pub mod embed_rules;
+pub mod skeleton;
 pub use state::ChatState;
 
 pub(crate) fn tk(i: usize) -> gpui::Hsla {
@@ -50,6 +51,7 @@ pub(crate) fn tk(i: usize) -> gpui::Hsla {
 
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let entity = cx.entity();
+    skeleton::set_window_height(f32::from(window.viewport_size().height));
     let show_members = app.show_members && app.selected_guild.is_some();
     let show_members = show_members && app.chat.thread.is_none() && !crate::ui::thread_create::is_open(cx);
     let show_members = show_members && !crate::ui::call_view::active(app);
@@ -663,7 +665,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let Some(ch_id) = app.selected_channel else { return div().into_any_element() };
     let Some(entry) = app.messages.get(&ch_id) else { return div().into_any_element() };
     if ix == 0 {
-        return row_wrapper().child(intro(app, entity, ch_id, entry.reached_start, entry.loading)).into_any_element();
+        return row_wrapper().child(intro(app, entity, ch_id, entry.reached_start)).into_any_element();
     }
     let i = ix - 1;
     let (Some(msg), Some(r)) = (entry.msgs.get(i), entry.rendered.get(i)) else {
@@ -684,18 +686,11 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     el
 }
 
-fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: bool, loading: bool) -> gpui::Div {
+fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: bool) -> gpui::Div {
     let channel = app.channels.get(&ch);
     let name = channel.map(|c| c.name.clone()).unwrap_or_default();
     if !reached_start {
-        return div()
-            .h(z(64.))
-            .flex()
-            .items_center()
-            .justify_center()
-            .text_size(z(14.))
-            .text_color(c(Palette::TEXT_MUTED))
-            .child(if loading { crate::t!("chat.loading_messages") } else { "".into() });
+        return skeleton::for_channel(ch.0, app.prefs.synced.compact);
     }
     if let Some(chan) = channel.filter(|c| c.guild.is_none()) {
         let group = crate::ui::dm_profile_panel::is_group_dm(app, chan.id);
