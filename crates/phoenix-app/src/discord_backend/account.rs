@@ -212,6 +212,11 @@ fn density_to_proto(d: Density) -> i32 {
 }
 
 pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
+    if let GatewayEvent::Unknown { name, data } = ev
+        && (name.starts_with("STAGE_INSTANCE_") || name.starts_with("GUILD_SCHEDULED_EVENT_"))
+    {
+        crate::guild_live::on_event(name, data);
+    }
     match ev {
         GatewayEvent::MessageCreate(m) => {
             let me = s.adapter.lock().me;
@@ -237,11 +242,20 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
             let me = s.adapter.lock().me;
             crate::notifications::on_thread_create(&s.notify.lock(), &s.cache, me, ch);
         }
-        GatewayEvent::Ready(_) => crate::notifications::on_ready(&s.cache),
+        GatewayEvent::Ready(_) => {
+            crate::notifications::on_ready(&s.cache);
+            for g in s.cache.guilds() {
+                crate::guild_live::load(g.id.0, &g.stage_instances, &g.guild_scheduled_events);
+            }
+        }
+        GatewayEvent::GuildDelete(g) => crate::guild_live::forget(g.id.0),
         GatewayEvent::RelationshipAdd(r) => crate::notifications::on_relationship_add(r),
         GatewayEvent::RelationshipRemove(r) => crate::notifications::on_relationship_remove(r),
         GatewayEvent::MessageAck(a) => crate::notifications::on_ack(a.channel_id.0),
         GatewayEvent::GuildCreate(g) | GatewayEvent::GuildUpdate(g) => {
+            if matches!(ev, GatewayEvent::GuildCreate(_)) {
+                crate::guild_live::load(g.id.0, &g.stage_instances, &g.guild_scheduled_events);
+            }
             if let Some(d) = g.properties.default_message_notifications {
                 s.notify.lock().set_default(g.id.0, crate::notifications::Level::from_default(Some(d)));
             }

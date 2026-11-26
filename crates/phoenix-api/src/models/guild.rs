@@ -116,6 +116,8 @@ struct RawGuild {
     data_mode: Option<String>,
     #[serde(default, deserialize_with = "null_default")]
     stage_instances: Vec<serde_json::Value>,
+    #[serde(default, deserialize_with = "null_default")]
+    guild_scheduled_events: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -137,6 +139,7 @@ pub struct Guild {
     pub joined_at: Option<String>,
     pub data_mode: Option<String>,
     pub stage_instances: Vec<serde_json::Value>,
+    pub guild_scheduled_events: Vec<serde_json::Value>,
 }
 
 impl From<RawGuild> for Guild {
@@ -161,6 +164,7 @@ impl From<RawGuild> for Guild {
             joined_at: r.joined_at,
             data_mode: r.data_mode,
             stage_instances: r.stage_instances,
+            guild_scheduled_events: r.guild_scheduled_events,
         };
         for c in g.channels.iter_mut().chain(g.threads.iter_mut()) {
             c.guild_id.get_or_insert(g.id);

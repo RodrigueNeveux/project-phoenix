@@ -970,7 +970,7 @@ mod tests {
         assert_eq!(form.headers[0].0, "X-Discord-Original-MD5");
         let s = sound_write(Id(5), "ding", 0.854, Some(&Tag::Unicode("🔔".into())), b"OggS");
         assert_eq!(s.path, "/guilds/5/soundboard-sounds");
-        let b = s.body.unwrap();
+        let b = s.body.clone().unwrap();
         assert_eq!(b["volume"], serde_json::json!(0.85));
         assert_eq!(b["emoji_name"], "🔔");
         assert_eq!(b["sound"], "data:audio/ogg;base64,T2dnUw==");

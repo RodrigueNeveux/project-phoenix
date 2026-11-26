@@ -158,7 +158,7 @@ fn share_row(app: &PhoenixApp, id: Id, label: SharedString, sub: Option<SharedSt
         .child(
             div()
                 .flex()
-                .flex_shrink()
+                .flex_shrink(1.)
                 .min_w_0()
                 .items_center()
                 .gap(z(12.))

@@ -403,11 +403,32 @@ pub struct MediaState {
     pub video: bool,
     pub screenshare: bool,
     pub connected: bool,
+    pub live_stage: bool,
+    pub active_event: bool,
 }
 
 impl MediaState {
+    pub fn with_live(mut self, live: &crate::guild_live::Live, muted: bool, here: Option<(u64, bool)>, visible: impl Fn(u64) -> bool) -> Self {
+        match here {
+            Some((voice, stage)) => {
+                self.live_stage = stage;
+                self.active_event = live.events.values().any(|c| *c == Some(voice));
+            }
+            None if muted => {}
+            None => {
+                self.live_stage = live.stages.values().any(|c| visible(*c));
+                self.active_event = live.events.values().any(|c| c.is_none_or(&visible));
+            }
+        }
+        self
+    }
+
     pub fn icon(&self) -> Option<&'static str> {
-        if self.screenshare {
+        if self.active_event {
+            Some("calendar")
+        } else if self.live_stage {
+            Some("stage")
+        } else if self.screenshare {
             Some("golive/screen")
         } else if self.video {
             Some("video-call")
@@ -460,7 +481,8 @@ pub fn guild_media(app: &PhoenixApp, g: &Guild) -> MediaState {
             channel_has_video: users.iter().any(|u| flags(*u).video),
             self_stream: crate::ui::go_live::live(app) || flags(me).stream,
         };
-        return media_state(Some(here), false, &[]);
+        let stage = app.channels.get(&v).is_some_and(|c| c.kind == crate::model::ChannelKind::Stage);
+        return media_state(Some(here), false, &[]).with_live(&crate::guild_live::get(g.id.0), false, Some((v.0, stage)), |_| true);
     }
     let guild_muted = prefs.as_ref().is_some_and(|p| p.is_guild_muted(Some(g.id.0)));
     let mut presences = Vec::new();
@@ -475,7 +497,8 @@ pub fn guild_media(app: &PhoenixApp, g: &Guild) -> MediaState {
             presences.push(Presence { eligible, channel_muted, hidden_user, flags: flags(u) });
         }
     }
-    media_state(None, guild_muted, &presences)
+    let visible = |c: u64| chans.contains(&crate::model::Id(c));
+    media_state(None, guild_muted, &presences).with_live(&crate::guild_live::get(g.id.0), guild_muted, None, visible)
 }
 
 pub fn folder_media(app: &PhoenixApp, guilds: &[&Guild]) -> MediaState {
@@ -483,7 +506,7 @@ pub fn folder_media(app: &PhoenixApp, guilds: &[&Guild]) -> MediaState {
         .iter()
         .map(|g| guild_media(app, g))
         .find(|s| s.connected)
-        .map(|s| MediaState { audio: !s.video, ..s })
+        .map(|s| MediaState { audio: !s.video, live_stage: false, active_event: false, ..s })
         .unwrap_or_default()
 }
 
@@ -927,7 +950,7 @@ mod media_tests {
     #[test]
     fn one_streamer_is_enough_for_the_screen_badge() {
         let s = media_state(None, false, &[p(false, false), p(true, false), p(false, false)]);
-        assert_eq!(s, MediaState { audio: true, video: false, screenshare: true, connected: false });
+        assert_eq!(s, MediaState { audio: true, video: false, screenshare: true, connected: false, ..Default::default() });
         assert_eq!(s.icon(), Some("golive/screen"));
     }
 
@@ -940,9 +963,27 @@ mod media_tests {
     }
 
     #[test]
+    fn events_and_stages_come_first_like_the_badge_factory() {
+        let mut live = crate::guild_live::Live::default();
+        live.stages.insert(1, 10);
+        live.events.insert(2, None);
+        let base = media_state(None, false, &[p(true, true)]);
+        assert_eq!(base.with_live(&live, false, None, |_| true).icon(), Some("calendar"));
+        live.events.clear();
+        assert_eq!(base.with_live(&live, false, None, |_| true).icon(), Some("stage"));
+        assert_eq!(base.with_live(&live, false, None, |c| c != 10).icon(), Some("golive/screen"));
+        assert_eq!(MediaState::default().with_live(&live, true, None, |_| true).icon(), None);
+        live.events.insert(3, Some(50));
+        let here = media_state(Some(Here { channel_has_video: false, self_stream: false }), false, &[]);
+        let s = here.with_live(&live, true, Some((50, false)), |_| true);
+        assert_eq!((s.icon(), s.connected), (Some("calendar"), true));
+        assert_eq!(here.with_live(&live, false, Some((60, true)), |_| true).icon(), Some("stage"));
+    }
+
+    #[test]
     fn connected_guild_is_green_and_shows_own_stream_only() {
         let s = media_state(Some(Here { channel_has_video: false, self_stream: false }), true, &[p(true, false)]);
-        assert_eq!(s, MediaState { audio: true, video: false, screenshare: false, connected: true });
+        assert_eq!(s, MediaState { audio: true, video: false, screenshare: false, connected: true, ..Default::default() });
         assert_eq!(s.icon(), Some("speaker"));
         let live = media_state(Some(Here { channel_has_video: true, self_stream: true }), false, &[]);
         assert!(live.connected);

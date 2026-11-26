@@ -8,6 +8,7 @@ pub mod commands;
 pub mod diagnostics;
 pub mod discord_backend;
 pub mod grouping;
+pub mod guild_live;
 pub mod history_ui;
 pub mod history_detached;
 pub mod hwaccel;
