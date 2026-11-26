@@ -3358,7 +3358,7 @@ mod tests {
         assert!(!health_details_available(&partial));
         assert_eq!(health_bar_spring(0.), 0.);
         assert_eq!(health_bar_spring(1.), 1.);
-        assert!(health_bar_spring(0.5) > 0.4 && health_bar_spring(0.5) < 1.);
+        assert!(health_bar_spring(0.5) > 0.3 && health_bar_spring(0.5) < 0.4);
     }
 
     #[test]
