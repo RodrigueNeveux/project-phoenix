@@ -222,14 +222,10 @@ fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
                 div()
                     .flex_1()
                     .min_w_0()
-                    .overflow_hidden()
-                    .flex()
-                    .flex_wrap()
                     .text_size(z(14.))
                     .line_height(z(18.))
                     .text_color(tk(idx::TEXT_DEFAULT))
-                    .child(crate::t!("chat.discovery_notice"))
-                    .child(div().underline().child(crate::t!("chat.discovery_more"))),
+                    .child(discovery_notice_text()),
             )
             .child(
                 div()
@@ -257,6 +253,19 @@ fn discovery_notice(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gp
             )
             .into_any_element(),
     )
+}
+
+fn discovery_notice_text() -> StyledText {
+    let lead = crate::t!("chat.discovery_notice");
+    let more = crate::t!("chat.discovery_more");
+    let start = lead.len();
+    let text = format!("{lead}{more}");
+    let underline = gpui::HighlightStyle {
+        underline: Some(gpui::UnderlineStyle { thickness: gpui::px(1.), ..Default::default() }),
+        ..Default::default()
+    };
+    let end = text.len();
+    StyledText::new(text).with_highlights([(start..end, underline)])
 }
 
 const HDR_ICON: f32 = 20.;
