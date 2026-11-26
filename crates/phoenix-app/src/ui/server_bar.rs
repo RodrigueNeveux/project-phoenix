@@ -456,7 +456,7 @@ pub struct Here {
 
 pub fn media_state(here: Option<Here>, guild_muted: bool, presences: &[Presence]) -> MediaState {
     if let Some(h) = here {
-        return MediaState { audio: true, video: h.channel_has_video, screenshare: h.self_stream, connected: true };
+        return MediaState { audio: true, video: h.channel_has_video, screenshare: h.self_stream, connected: true, ..Default::default() };
     }
     if guild_muted {
         return MediaState::default();
@@ -467,6 +467,7 @@ pub fn media_state(here: Option<Here>, guild_muted: bool, presences: &[Presence]
         video: presences.iter().filter(seen).any(|p| p.flags.video),
         screenshare: presences.iter().any(|p| !p.hidden_user && !p.channel_muted && p.flags.stream),
         connected: false,
+        ..Default::default()
     }
 }
 
