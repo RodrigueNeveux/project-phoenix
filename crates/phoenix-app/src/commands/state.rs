@@ -219,6 +219,8 @@ pub struct ForumCompose {
     pub title: Entity<InputState>,
     pub body: Entity<gpui_component::input::TextareaState>,
     pub tags: Vec<Id>,
+    pub files: Vec<std::path::PathBuf>,
+    pub media_hover: bool,
     pub sending: bool,
     pub error: Option<SharedString>,
 }
@@ -238,6 +240,7 @@ pub struct ForumView {
     pub tags: Vec<Id>,
     pub sort: ForumSort,
     pub sort_menu: bool,
+    pub tags_popout: bool,
     pub gallery: bool,
     pub match_all: bool,
     pub defaults_applied: bool,

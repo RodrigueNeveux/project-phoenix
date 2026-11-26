@@ -1649,6 +1649,21 @@ fn main() -> anyhow::Result<()> {
                         v.guidelines_modal = arg == "all";
                     }
                 }
+                "forumtags" => {
+                    if let Some(f) = app.selected_channel {
+                        app.parity.forums.entry(f).or_default().tags_popout = true;
+                    }
+                }
+                "gallery" => {
+                    if let Some(f) = app.selected_channel {
+                        app.parity.forums.entry(f).or_default().gallery = arg != "list";
+                    }
+                }
+                "compose" => {
+                    if let Some(f) = app.selected_channel {
+                        app.parity.forum_compose_request = Some(f);
+                    }
+                }
                 "favadd" => phoenix_app::ui::favorites::open_add_modal(),
                 "favthreads" => phoenix_app::ui::favorites::open_thread_settings(app, cx),
                 "favlistmenu" => phoenix_app::ui::nav_menus::open(phoenix_app::ui::nav_menus::Target::FavoritesAdd, gpui::point(gpui::px(120.), gpui::px(420.)), window),

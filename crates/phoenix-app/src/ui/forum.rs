@@ -29,6 +29,7 @@ thread_local! {
 
 thread_local! {
     static SORT_ANCHOR: std::cell::Cell<gpui::Point<gpui::Pixels>> = const { std::cell::Cell::new(gpui::point(gpui::px(330.), gpui::px(170.))) };
+    static TAGS_ANCHOR: std::cell::Cell<gpui::Point<gpui::Pixels>> = const { std::cell::Cell::new(gpui::point(gpui::px(900.), gpui::px(170.))) };
 }
 
 fn menu_group_label(t: SharedString) -> AnyElement {
@@ -153,6 +154,35 @@ pub fn ago(now: i64, ts: i64) -> String {
 }
 
 const FORUM_AUTO_RETRIES: u32 = 3;
+pub(crate) const MAX_POST_FILES: usize = 10;
+
+pub(crate) fn add_files(files: &mut Vec<std::path::PathBuf>, picked: Vec<std::path::PathBuf>) {
+    for p in picked {
+        if files.len() >= MAX_POST_FILES {
+            break;
+        }
+        if !files.contains(&p) {
+            files.push(p);
+        }
+    }
+}
+
+fn compose_body(app: &PhoenixApp, forum: Id) -> Option<gpui::Entity<TextareaState>> {
+    app.parity.forums.get(&forum)?.compose.as_ref().map(|c| c.body.clone())
+}
+
+pub fn focus_compose_body(app: &mut PhoenixApp, forum: Id, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    if let Some(b) = compose_body(app, forum) {
+        b.update(cx, |s, cx| s.focus(window, cx));
+    }
+}
+
+pub fn insert_compose_body(app: &mut PhoenixApp, forum: Id, text: String, window: &mut Window, cx: &mut Context<PhoenixApp>) {
+    if let Some(b) = compose_body(app, forum) {
+        b.update(cx, |s, cx| s.insert(text, window, cx));
+    }
+    cx.notify();
+}
 
 impl PhoenixApp {
     fn load_forum(&mut self, forum: Id, fresh: bool, cx: &mut Context<Self>) {
@@ -327,11 +357,39 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    fn clear_forum_tags(&mut self, forum: Id, cx: &mut Context<Self>) {
+        let v = self.parity.forums.entry(forum).or_default();
+        v.tags_popout = false;
+        if v.tags.is_empty() {
+            cx.notify();
+            return;
+        }
+        v.tags.clear();
+        self.load_forum(forum, true, cx);
+        cx.notify();
+    }
+
+    fn pick_compose_files(&mut self, forum: Id, cx: &mut Context<Self>) {
+        let rx = cx.prompt_for_paths(gpui::PathPromptOptions { files: true, directories: false, multiple: true, prompt: None });
+        cx.spawn(async move |this, cx| {
+            if let Ok(Ok(Some(paths))) = rx.await {
+                let _ = this.update(cx, |a, cx| {
+                    if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
+                        add_files(&mut cmp.files, paths);
+                    }
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
     fn submit_post(&mut self, forum: Id, cx: &mut Context<Self>) {
         let Some(comp) = self.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) else { return };
         let title = comp.title.read(cx).value().trim().to_owned();
         let content = comp.body.read(cx).value().trim().to_owned();
-        if title.is_empty() || content.is_empty() {
+        let files = comp.files.clone();
+        if title.is_empty() || (content.is_empty() && files.is_empty()) {
             comp.error = Some(crate::t!("forum.needs_title"));
             cx.notify();
             return;
@@ -346,7 +404,7 @@ impl PhoenixApp {
         }
         let Some(comp) = self.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) else { return };
         comp.sending = true;
-        self.parity_request(ParityRequest::CreatePost { forum, title: title.clone(), content, tags }, cx, move |a, res, cx| {
+        self.parity_request(ParityRequest::CreatePost { forum, title: title.clone(), content, tags, files }, cx, move |a, res, cx| {
             match res {
                 Ok(ParityReply::Channel(t)) => {
                     if let Some(v) = a.parity.forums.get_mut(&forum) {
@@ -377,7 +435,7 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
         let input = cx.new(|cx| InputState::new(window, cx).placeholder(crate::t!("forum.search")));
         cx.subscribe(&input, move |a: &mut PhoenixApp, _, ev: &gpui_component::input::InputEvent, cx| match ev {
             gpui_component::input::InputEvent::Change => cx.notify(),
-            gpui_component::input::InputEvent::PressEnter { .. } => {
+            gpui_component::input::InputEvent::PressEnter { shift: true, .. } => {
                 a.parity.forum_compose_request = Some(forum);
                 cx.notify();
             }
@@ -410,7 +468,7 @@ pub fn prepare(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoen
             s.focus(window, cx)
         });
         let v = app.parity.forums.entry(forum).or_default();
-        v.compose = Some(ForumCompose { title, body, tags: Vec::new(), sending: false, error: None });
+        v.compose = Some(ForumCompose { title, body, tags: Vec::new(), files: Vec::new(), media_hover: false, sending: false, error: None });
         if !v.guidelines_seen {
             v.guidelines_seen = true;
             v.guidelines_open = true;
@@ -563,18 +621,22 @@ fn guidelines(app: &PhoenixApp, forum: Id, text: &str, cx: &mut Context<PhoenixA
 }
 
 fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
+    tag_pill_sized(t, on, false)
+}
+
+fn tag_pill_sized(t: &ForumTag, on: bool, small: bool) -> gpui::Div {
     div()
-        .h(z(32.))
-        .px(z(12.))
+        .h(z(if small { 24. } else { 32. }))
+        .px(z(if small { 8. } else { 12. }))
         .rounded(z(20.))
         .border_1()
         .border_color(c(tok(idx::BORDER_SUBTLE)))
         .flex()
         .flex_none()
         .items_center()
-        .gap(z(4.))
-        .text_size(z(14.))
-        .line_height(z(18.))
+        .overflow_hidden()
+        .text_size(z(if small { 12. } else { 14. }))
+        .line_height(z(if small { 16. } else { 18. }))
         .font_weight(FontWeight::SEMIBOLD)
         .when(on, |d| d.border_color(c(tok(idx::BRAND_500))))
         .bg(c(tok(match (on, crate::theme::is_light()) {
@@ -583,16 +645,77 @@ fn tag_pill(t: &ForumTag, on: bool) -> gpui::Div {
             _ => idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT,
         })))
         .text_color(c(tok(if on { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::CONTROL_SECONDARY_TEXT_DEFAULT })))
-        .when_some(t.emoji.clone(), |d, e| d.child(crate::media::emoji::emoji_element(&e, 16.)))
-        .child(t.name.clone())
+        .when_some(t.emoji.clone(), |d, e| d.child(div().mr(z(6.)).flex_none().child(crate::media::emoji::emoji_element(&e, if small { 12. } else { 14. }))))
+        .child(div().whitespace_nowrap().child(t.name.clone()))
 }
 
 fn pill_states(d: gpui::Stateful<gpui::Div>, on: bool) -> gpui::Stateful<gpui::Div> {
     if on {
-        return d;
+        return d.hover(|s| s.bg(c(tok(idx::OPACITY_BLURPLE_32)))).active(|s| s.bg(c(tok(idx::OPACITY_BLURPLE_12))));
     }
     d.hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
         .active(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE))))
+}
+
+fn secondary_pill(d: gpui::Stateful<gpui::Div>) -> gpui::Stateful<gpui::Div> {
+    d.h(z(32.))
+        .flex_none()
+        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .hover(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_HOVER))))
+        .active(|s| s.bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE))))
+        .cursor_pointer()
+        .flex()
+        .items_center()
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+}
+
+fn count_badge(n: usize) -> gpui::Div {
+    div()
+        .min_w(z(16.))
+        .p(z(2.))
+        .rounded_full()
+        .bg(c(tok(idx::BRAND_500)))
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(gpui::white())
+        .child(n.to_string())
+}
+
+fn primary_sm(id: &'static str, label: SharedString, enabled: bool) -> gpui::Stateful<gpui::Div> {
+    use idx::*;
+    div()
+        .id(id)
+        .h(z(32.))
+        .px(z(12.))
+        .flex_none()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(CONTROL_PRIMARY_BORDER_DEFAULT)))
+        .bg(c(tok(CONTROL_PRIMARY_BACKGROUND_DEFAULT)))
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .text_size(z(14.))
+        .line_height(z(18.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(c(tok(CONTROL_PRIMARY_TEXT_DEFAULT)))
+        .when(enabled, |d| {
+            d.cursor_pointer()
+                .hover(|s| s.bg(c(tok(CONTROL_PRIMARY_BACKGROUND_HOVER))).border_color(c(tok(CONTROL_PRIMARY_BORDER_HOVER))).text_color(c(tok(CONTROL_PRIMARY_TEXT_HOVER))))
+                .active(|s| s.bg(c(tok(CONTROL_PRIMARY_BACKGROUND_ACTIVE))).border_color(c(tok(CONTROL_PRIMARY_BORDER_ACTIVE))).text_color(c(tok(CONTROL_PRIMARY_TEXT_ACTIVE))))
+        })
+        .when(!enabled, |d| d.opacity(0.5))
+        .child(gpui::svg().path(crate::icons::path("chat")).size(z(16.)).flex_none().text_color(c(tok(CONTROL_PRIMARY_TEXT_DEFAULT))))
+        .child(label)
 }
 
 fn card_tag(t: &ForumTag) -> gpui::Div {
@@ -854,18 +977,84 @@ pub(crate) fn grid_columns(width: f32) -> (usize, f32) {
     (n, ((width - 48. - 16. * (n as f32 - 1.)) / n as f32).max(0.))
 }
 
-pub(crate) fn grid_media_size(card: f32) -> (f32, f32) {
+pub(crate) const THREE_BY_TWO: f32 = 2. / 3.;
+pub(crate) const SIXTEEN_BY_NINE: f32 = 0.5625;
+
+pub(crate) fn grid_media_size(card: f32, ratio: f32) -> (f32, f32) {
     let w = card - 26.;
-    (w, (w * 2. / 3.).ceil())
+    (w, (w * ratio).ceil())
 }
 
-fn grid_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, width: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
+pub(crate) fn mosaic(n: usize, w: f32, h: f32) -> Vec<(f32, f32, f32, f32)> {
+    let hw = ((w - 4.) / 2.).ceil();
+    let hh = ((h - 4.) / 2.).ceil();
+    match n {
+        0 => Vec::new(),
+        1 => vec![(0., 0., w, h)],
+        2 => vec![(0., 0., hw, h), (hw + 4., 0., hw, h)],
+        3 => vec![(0., 0., hw, h), (hw + 4., 0., hw, hh), (hw + 4., hh + 4., hw, hh)],
+        _ => vec![(0., 0., hw, hh), (0., hh + 4., hw, hh), (hw + 4., 0., hw, hh), (hw + 4., hh + 4., hw, hh)],
+    }
+}
+
+fn media_mosaic(urls: &[SharedString], total: usize, w: f32, h: f32, keep_ratio: bool) -> gpui::Div {
+    let frames = mosaic(urls.len().min(4), w, h);
+    div()
+        .relative()
+        .ml(z(12.))
+        .w(z(w))
+        .h(z(h))
+        .rounded(z(8.))
+        .border_1()
+        .border_color(gpui::transparent_black())
+        .overflow_hidden()
+        .children(urls.iter().zip(frames).map(|(u, (l, t, fw, fh))| {
+            div()
+                .absolute()
+                .left(z(l))
+                .top(z(t))
+                .w(z(fw))
+                .h(z(fh))
+                .rounded(z(2.))
+                .overflow_hidden()
+                .when(keep_ratio, |d| d.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+                .child(img(u.clone()).size_full().object_fit(if keep_ratio { gpui::ObjectFit::Contain } else { gpui::ObjectFit::Cover }))
+        }))
+        .when(total > 4, |d| {
+            d.child(
+                div()
+                    .absolute()
+                    .bottom(z(6.))
+                    .right(z(6.))
+                    .h(z(24.))
+                    .px(z(4.))
+                    .flex()
+                    .items_center()
+                    .gap(z(4.))
+                    .rounded(z(4.))
+                    .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+                    .shadow(crate::ui::inbox::low_shadow())
+                    .child(gpui::svg().path(crate::icons::path("image")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_DEFAULT))))
+                    .child(
+                        div()
+                            .text_size(z(12.))
+                            .line_height(z(16.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(c(tok(idx::TEXT_DEFAULT)))
+                            .child(format!("+{}", total - 4)),
+                    ),
+            )
+        })
+}
+
+fn grid_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, width: f32, media: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let first = p.first_message.as_ref();
     let author_id = first.map(|m| m.author).or(p.owner);
     let author = author_id.and_then(|u| app.users.get(&u));
     let guild = app.channels.get(&p.thread).and_then(|ch| ch.guild).or(app.selected_guild);
     let (author_color, author_gradient) = author_id.map_or((None, None), |u| app.author_role_style_in(guild, u));
-    let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
+    let images: Vec<SharedString> = first.map(|m| m.attachments.iter().filter(|a| a.kind == AttachmentKind::Image).map(|a| a.url.clone()).collect()).unwrap_or_default();
+    let media_total = first.map_or(0, |m| m.attachments.iter().filter(|a| matches!(a.kind, AttachmentKind::Image | AttachmentKind::Video)).count());
     let reaction = first.and_then(|m| m.reactions.iter().max_by_key(|r| r.count)).cloned();
     let first_id = first.map(|m| m.id);
     let default_reaction = first
@@ -878,7 +1067,7 @@ fn grid_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, width
     let unread = is_unread(app, p);
     let post_tags: Vec<&ForumTag> = p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).collect();
     let has_tags = p.pinned || !post_tags.is_empty();
-    let (mw, mh) = grid_media_size(width);
+    let (mw, mh) = grid_media_size(width, if media { SIXTEEN_BY_NINE } else { THREE_BY_TWO });
     let tag_row = {
         let shadow = crate::ui::inbox::low_shadow();
         div()
@@ -908,65 +1097,54 @@ fn grid_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, width
                 )
             })
     };
-    let body = match thumb {
-        Some(u) => div()
+    let body = if !images.is_empty() {
+        div()
             .relative()
-            .child(
-                div()
-                    .ml(z(12.))
-                    .w(z(mw))
-                    .h(z(mh))
-                    .rounded(z(8.))
-                    .border_1()
-                    .border_color(gpui::transparent_black())
-                    .overflow_hidden()
-                    .child(img(u).size_full().object_fit(gpui::ObjectFit::Cover)),
-            )
-            .when(has_tags, |d| d.child(div().absolute().bottom(z(-2.)).left(z(18.)).child(tag_row))),
-        None => {
-            let preview: SharedString =
-                first.map(|m| crate::ui::chat::reply_preview_text(app, &preview_text(&m.content).into())).unwrap_or_default();
-            div().relative().child(
-                div()
-                    .relative()
-                    .mx(z(12.))
-                    .w(z(mw))
-                    .h(z(mh))
-                    .pt(z(12.))
-                    .px(z(12.))
-                    .rounded(z(8.))
-                    .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
-                    .border_1()
-                    .border_color(c(tok(idx::BORDER_SUBTLE)))
-                    .overflow_hidden()
-                    .child(
-                        div()
-                            .overflow_hidden()
-                            .text_size(z(16.))
-                            .line_height(z(22.))
-                            .text_color(c(tok(if unread { idx::TEXT_STRONG } else { idx::TEXT_MUTED })))
-                            .child(preview),
-                    )
-                    .child(
-                        div()
-                            .absolute()
-                            .bottom_0()
-                            .left_0()
-                            .right_0()
-                            .h(gpui::relative(if has_tags { 0.5 } else { 0.1 }))
-                            .px(z(12.))
-                            .pb(z(8.))
-                            .flex()
-                            .items_end()
-                            .bg(gpui::linear_gradient(
-                                0.,
-                                gpui::linear_color_stop(c(tok(idx::BACKGROUND_BASE_LOW)), 0.2),
-                                gpui::linear_color_stop(c(tok(idx::BACKGROUND_BASE_LOW)).opacity(0.), 1.),
-                            ))
-                            .when(has_tags, |d| d.child(tag_row)),
-                    ),
-            )
-        }
+            .child(media_mosaic(&images[..images.len().min(4)], media_total, mw, mh, media))
+            .when(has_tags, |d| d.child(div().absolute().bottom(z(-2.)).left(z(18.)).child(tag_row)))
+    } else {
+        let preview: SharedString =
+            first.map(|m| crate::ui::chat::reply_preview_text(app, &preview_text(&m.content).into())).unwrap_or_default();
+        div().relative().child(
+            div()
+                .relative()
+                .mx(z(12.))
+                .w(z(mw))
+                .h(z(mh))
+                .pt(z(12.))
+                .px(z(12.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_BASE_LOW)))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .overflow_hidden()
+                .child(
+                    div()
+                        .overflow_hidden()
+                        .text_size(z(16.))
+                        .line_height(z(22.))
+                        .text_color(c(tok(if unread { idx::TEXT_STRONG } else { idx::TEXT_MUTED })))
+                        .child(preview),
+                )
+                .child(
+                    div()
+                        .absolute()
+                        .bottom_0()
+                        .left_0()
+                        .right_0()
+                        .h(gpui::relative(if has_tags { 0.5 } else { 0.1 }))
+                        .px(z(12.))
+                        .pb(z(8.))
+                        .flex()
+                        .items_end()
+                        .bg(gpui::linear_gradient(
+                            0.,
+                            gpui::linear_color_stop(c(tok(idx::BACKGROUND_BASE_LOW)), 0.2),
+                            gpui::linear_color_stop(c(tok(idx::BACKGROUND_BASE_LOW)).opacity(0.), 1.),
+                        ))
+                        .when(has_tags, |d| d.child(tag_row)),
+                ),
+        )
     };
     let author_name: SharedString = author.map(|u| u.display_name.clone()).unwrap_or_else(|| crate::t!("forum.deleted_user"));
     div()
@@ -1076,96 +1254,173 @@ fn grid_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, width
         .into_any_element()
 }
 
-fn media_tile(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &mut Context<PhoenixApp>) -> AnyElement {
-    let first = p.first_message.as_ref();
-    let thumb = first.and_then(|m| m.attachments.iter().find(|a| a.kind == AttachmentKind::Image)).map(|a| a.url.clone());
-    let author = p.owner.or(first.map(|m| m.author)).and_then(|u| app.users.get(&u));
-    let activity = snowflake_time(p.last_message.unwrap_or(p.thread));
-    let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
-    let cover = div().w_full().h(z(146.)).rounded_t(z(8.)).overflow_hidden().bg(c(Palette::BG_TERTIARY));
-    let cover = match thumb {
-        Some(u) => cover.child(img(u).size_full().object_fit(gpui::ObjectFit::Cover)),
-        None => cover.flex().items_center().justify_center().child(icon(Icon::Forum, 40., c(Palette::INTERACTIVE_MUTED))),
-    };
-    div()
-        .id(("media-post", p.thread.0))
-        .w(z(260.))
-        .flex_none()
-        .rounded(z(8.))
-        .bg(c(Palette::BG_SECONDARY))
-        .border_1()
-        .border_color(c(Palette::PANEL_BORDER))
-        .cursor_pointer()
-        .hover(|s| s.bg(c(Palette::BG_MOD_HOVER)))
-        .on_click(cx.listener(move |a, _, w, cx| a.open_thread(r.clone(), w, cx)))
-        .child(cover)
-        .child(
-            div()
-                .p(z(12.))
-                .flex()
-                .flex_col()
-                .gap(z(6.))
-                .when(!p.tags.is_empty(), |d| {
-                    d.child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap(z(4.))
-                            .children(p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).map(|t| tag_pill(t, false))),
-                    )
-                })
-                .child(
-                    div()
-                        .text_size(z(16.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(c(Palette::TEXT_HEADER))
-                        .text_ellipsis()
-                        .child(SharedString::from(p.title.clone())),
-                )
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(z(8.))
-                        .text_size(z(12.))
-                        .text_color(c(Palette::TEXT_MUTED))
-                        .child(div().min_w_0().text_ellipsis().child(author.map(|u| u.display_name.to_string()).unwrap_or_default()))
-                        .child(div().flex().items_center().gap(z(4.)).child(icon(Icon::Threads, 14., c(Palette::INTERACTIVE))).child(p.message_count.to_string()))
-                        .child(ago(now, activity)),
-                ),
-        )
-        .into_any_element()
+fn compose_ready(app: &PhoenixApp, forum: Id, comp: &ForumCompose, cx: &gpui::App) -> (bool, bool) {
+    let title = !comp.title.read(cx).value().trim().is_empty();
+    let content = !comp.body.read(cx).value().trim().is_empty() || !comp.files.is_empty();
+    let needs_tag = !app.backend.forum_settings(forum).unwrap_or_default().can_post(&comp.tags);
+    (title && content && !needs_tag, needs_tag && title && content)
 }
 
-const INLINE_COMPOSER: bool = true;
+fn upload_tile(forum: Id, comp: &ForumCompose, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let add = |id: &'static str, cx: &mut Context<PhoenixApp>| {
+        div()
+            .id(id)
+            .group(id)
+            .size(z(78.))
+            .flex_none()
+            .rounded(z(12.))
+            .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+            .border_1()
+            .border_color(c(tok(idx::BORDER_SUBTLE)))
+            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_STRONG))))
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .on_click(cx.listener(move |a, _, _, cx| a.pick_compose_files(forum, cx)))
+            .child(
+                gpui::svg()
+                    .path(crate::icons::path("image-plus"))
+                    .size(z(28.))
+                    .flex_none()
+                    .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                    .group_hover(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER))))
+                    .id("i")
+                    .group_active(id, |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
+            )
+            .tip(crate::t!("forum.add_media"))
+    };
+    use crate::ui::tooltip::Tipped as _;
+    let frame = div().id("compose-media").relative().size(z(78.)).flex_none();
+    if comp.files.is_empty() {
+        return frame.child(add("compose-media-add", cx));
+    }
+    let thumb = |p: &std::path::Path| {
+        let image = crate::ui::file_pick::accepts(p, &crate::ui::file_pick::IMAGES);
+        div()
+            .size(z(78.))
+            .flex_none()
+            .rounded(z(12.))
+            .overflow_hidden()
+            .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
+            .flex()
+            .items_center()
+            .justify_center()
+            .when(image, |d| d.child(img(p.to_path_buf()).size_full().object_fit(gpui::ObjectFit::Cover)))
+            .when(!image, |d| d.child(gpui::svg().path(crate::icons::path("file")).size(z(28.)).flex_none().text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))))
+    };
+    let collapsed = div()
+        .relative()
+        .size_full()
+        .cursor_pointer()
+        .child(thumb(&comp.files[0]))
+        .child(
+            div()
+                .absolute()
+                .top(z(-4.))
+                .right(z(-4.))
+                .h(z(16.))
+                .min_w(z(8.))
+                .px(z(4.))
+                .rounded(z(16.))
+                .border_2()
+                .border_color(c(tok(idx::BACKGROUND_BASE_LOW)))
+                .bg(c(tok(idx::BRAND_500)))
+                .flex()
+                .items_center()
+                .justify_center()
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::TEXT_OVERLAY_LIGHT)))
+                .child(comp.files.len().to_string()),
+        );
+    let popout = comp.media_hover.then(|| {
+        let mut row = div().flex().gap(z(8.));
+        for (i, f) in comp.files.iter().enumerate() {
+            row = row.child(
+                div().relative().child(thumb(f)).child(
+                    div()
+                        .id(("compose-media-remove", i))
+                        .absolute()
+                        .top(z(4.))
+                        .right(z(4.))
+                        .size(z(24.))
+                        .rounded(z(6.))
+                        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+                        .hover(|s| s.bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER))))
+                        .cursor_pointer()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .on_click(cx.listener(move |a, _, _, cx| {
+                            cx.stop_propagation();
+                            if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut())
+                                && i < cmp.files.len()
+                            {
+                                cmp.files.remove(i);
+                                cmp.media_hover = !cmp.files.is_empty();
+                            }
+                            cx.notify();
+                        }))
+                        .child(gpui::svg().path(crate::icons::path("chat/trash")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL)))),
+                ),
+            );
+        }
+        if comp.files.len() < 10 {
+            row = row.child(add("compose-media-more", cx));
+        }
+        div().absolute().top(z(-24.)).right(z(-24.)).p(z(16.)).child(
+            div()
+                .p(z(8.))
+                .rounded(z(16.))
+                .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
+                .border_1()
+                .border_color(c(tok(idx::BORDER_SUBTLE)))
+                .shadow(crate::ui::inbox::shadow_medium())
+                .child(row),
+        )
+    });
+    frame
+        .on_hover(cx.listener(move |a, h: &bool, _, cx| {
+            if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut())
+                && cmp.media_hover != *h
+            {
+                cmp.media_hover = *h && !cmp.files.is_empty();
+                cx.notify();
+            }
+        }))
+        .child(collapsed)
+        .children(popout)
+}
 
-fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bool, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+fn compose_card(app: &PhoenixApp, forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bool, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let close = cx.listener(move |a: &mut PhoenixApp, _: &gpui::ClickEvent, _, cx| {
         if let Some(v) = a.parity.forums.get_mut(&forum) {
             v.compose = None;
         }
         cx.notify();
     });
-    let ready = !comp.title.read(cx).value().trim().is_empty() && !comp.body.read(cx).value().trim().is_empty();
+    let (ready, tag_missing) = compose_ready(app, forum, comp, cx);
+    let full = comp.tags.len() >= 5;
     let mut tag_list = div().flex().flex_wrap().gap(z(4.));
     for t in tags.iter().filter(|t| !t.moderated) {
         let on = comp.tags.contains(&t.id);
         let id = t.id;
-        tag_list = tag_list.child(
-            pill_states(tag_pill(t, on).h(z(24.)).px(z(8.)).text_size(z(12.)).line_height(z(16.)).id(("compose-tag", id.0)), on)
-                .cursor_pointer()
-                .on_click(cx.listener(move |a, _, _, cx| {
-                    if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
-                        if let Some(i) = cmp.tags.iter().position(|x| *x == id) {
-                            cmp.tags.remove(i);
-                        } else if cmp.tags.len() < 5 {
-                            cmp.tags.push(id);
-                        }
-                    }
-                    cx.notify();
-                })),
-        );
+        let disabled = full && !on;
+        let pill = tag_pill_sized(t, on, true).id(("compose-tag", id.0));
+        tag_list = tag_list.child(if disabled {
+            pill.opacity(0.5).cursor_not_allowed()
+        } else {
+            pill_states(pill, on).cursor_pointer().on_click(cx.listener(move |a, _, _, cx| {
+                if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
+                    cmp.tags = toggle_tag(&cmp.tags, id);
+                }
+                cx.notify();
+            }))
+        });
     }
+    let emoji_open = matches!(crate::ui::pickers::open_tab(cx), Some((_, crate::ui::pickers::EmojiTarget::ForumPost(f))) if f == forum);
     div()
         .mt(z(24.))
         .rounded(z(12.))
@@ -1184,6 +1439,7 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bo
                 .child(
                     div()
                         .id("compose-close")
+                        .group("compose-close")
                         .w(z(26.))
                         .h(z(32.))
                         .mr(z(8.))
@@ -1192,7 +1448,14 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bo
                         .items_center()
                         .cursor_pointer()
                         .on_click(close)
-                        .child(gpui::svg().path(crate::icons::path("close")).size(z(26.)).flex_none().text_color(c(Palette::INTERACTIVE))),
+                        .child(
+                            gpui::svg()
+                                .path(crate::icons::path("close"))
+                                .size(z(26.))
+                                .flex_none()
+                                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                                .group_hover("compose-close", |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE)))),
+                        ),
                 )
                 .child(
                     div()
@@ -1204,6 +1467,7 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bo
                             div()
                                 .h(z(32.))
                                 .pt(z(4.))
+                                .pr(z(12.))
                                 .text_size(z(20.))
                                 .line_height(z(24.))
                                 .font_weight(FontWeight::SEMIBOLD)
@@ -1218,22 +1482,10 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bo
                                 .child(Textarea::new(&comp.body).appearance(false).bordered(false)),
                         ),
                 )
-                .child(
-                    div()
-                        .size(z(78.))
-                        .flex_none()
-                        .rounded(z(12.))
-                        .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_ACTIVE)))
-                        .border_1()
-                        .border_color(c(tok(idx::BORDER_SUBTLE)))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(gpui::svg().path(crate::icons::path("image-plus")).size(z(32.)).flex_none().text_color(c(Palette::INTERACTIVE))),
-                ),
+                .child(upload_tile(forum, comp, cx)),
         )
         .when_some(comp.error.clone(), |d, er| {
-            d.child(div().px(z(46.)).pt(z(4.)).text_size(z(14.)).text_color(c(Palette::TEXT_CRITICAL)).child(er))
+            d.child(div().px(z(46.)).pt(z(4.)).text_size(z(14.)).text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL))).child(er))
         })
         .child(
             div().px(z(8.)).when(!tags.is_empty(), |d| {
@@ -1244,7 +1496,7 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bo
                         .flex()
                         .items_center()
                         .gap(z(8.))
-                        .child(gpui::svg().path(crate::icons::path("forum/tag")).size(z(16.)).flex_none().text_color(c(Palette::INTERACTIVE)))
+                        .child(gpui::svg().path(crate::icons::path("forum/tag")).size(z(16.)).flex_none().text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
                         .child(tag_list),
                 )
             }),
@@ -1259,33 +1511,31 @@ fn compose_card(forum: Id, comp: &ForumCompose, tags: &[ForumTag], has_guide: bo
                 .items_center()
                 .gap(z(8.))
                 .child(
-                    div().size(z(32.)).flex_none().flex().items_center().justify_center().child(
-                        gpui::svg().path(crate::icons::path("emoji")).size(z(18.)).flex_none().text_color(c(Palette::INTERACTIVE)),
-                    ),
+                    crate::ui::states::composer_button_full("forum-compose-emoji", Icon::Emoji, 18., true, emoji_open)
+                        .when(emoji_open, |d| d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
+                        .on_click(cx.listener(move |a, _, w, cx| crate::ui::pickers::toggle(a, crate::ui::pickers::Tab::Emoji, crate::ui::pickers::EmojiTarget::ForumPost(forum), w, cx))),
                 )
                 .child(div().flex_1())
                 .when(has_guide, |d| d.child(guide_button(forum, "compose-guide", cx)))
                 .child(
-                    div()
-                        .id("compose-post")
-                        .h(z(32.))
-                        .px(z(12.))
-                        .flex_none()
-                        .rounded(z(8.))
-                        .bg(c(Palette::BLURPLE))
-                        .flex()
-                        .items_center()
-                        .gap(z(4.))
-                        .text_size(z(14.))
-                        .line_height(z(18.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(gpui::white())
-                        .when(!ready || comp.sending, |d| d.opacity(0.5))
-                        .when(ready && !comp.sending, |d| d.cursor_pointer().on_click(cx.listener(move |a, _, _, cx| a.submit_post(forum, cx))))
-                        .child(gpui::svg().path(crate::icons::path("chat")).size(z(16.)).flex_none().text_color(gpui::white()))
-                        .child(if comp.sending { crate::t!("forum.posting") } else { crate::t!("forum.post") }),
+                    primary_sm("compose-post", if comp.sending { crate::t!("forum.posting") } else { crate::t!("forum.post") }, ready && !comp.sending)
+                        .when(ready && !comp.sending, |d| d.on_click(cx.listener(move |a, _, _, cx| a.submit_post(forum, cx)))),
                 ),
         )
+        .when(tag_missing, |d| {
+            d.child(
+                div()
+                    .px(z(8.))
+                    .pt(z(8.))
+                    .flex()
+                    .justify_end()
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL)))
+                    .child(crate::t!("forum.needs_tag")),
+            )
+        })
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -1318,60 +1568,27 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .when_some(search_input(forum), |d, i| d.child(Input::new(&i).appearance(false).bordered(false).text_size(z(20.)).line_height(z(24.)))),
         )
         .when(has_guide, |d| d.child(guide_button(forum, "forum-guide", cx)))
-        .child(
-            div()
-                .id("forum-new-post")
-                .ml(z(9.))
-                .mr(z(8.))
-                .h(z(32.))
-                .px(z(12.))
-                .flex_none()
-                .rounded(z(8.))
-                .bg(c(Palette::BLURPLE))
-                .cursor_pointer()
-                .hover(|s| s.opacity(0.9))
-                .flex()
-                .items_center()
-                .gap(z(4.))
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(gpui::white())
-                .on_click(cx.listener(move |a, _, _, cx| {
-                    a.parity.forum_compose_request = Some(forum);
-                    cx.notify();
-                }))
-                .child(gpui::svg().path(crate::icons::path("chat")).size(z(16.)).flex_none().text_color(gpui::white()))
-                .child(crate::t!("forum.new_post")),
-        );
+        .child(div().ml(z(9.)).mr(z(8.)).child(primary_sm("forum-new-post", crate::t!("forum.new_post"), true).on_click(cx.listener(move |a, _, _, cx| {
+            a.parity.forum_compose_request = Some(forum);
+            cx.notify();
+        }))));
 
     let sort_open = app.parity.forums.get(&forum).is_some_and(|v| v.sort_menu);
+    let tags_open = v.tags_popout;
     let mut filters = div().pt(z(16.)).pb(z(4.)).flex().items_center().overflow_hidden().child(
-        div()
-            .id("forum-sort")
-            .h(z(32.))
+        secondary_pill(div().id("forum-sort"))
             .pl(z(12.))
             .pr(z(8.))
-            .flex_none()
             .rounded(z(24.))
-            .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
-            .border_1()
-            .border_color(c(tok(idx::BORDER_SUBTLE)))
-            .cursor_pointer()
-            .flex()
-            .items_center()
-            .text_size(z(14.))
-            .line_height(z(18.))
-            .font_weight(FontWeight::MEDIUM)
-            .text_color(c(Palette::INTERACTIVE))
             .on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| {
                 let p = ev.position();
                 SORT_ANCHOR.with(|a| a.set(gpui::point(p.x - gpui::px(40.), p.y + gpui::px(20.))));
                 let v = a.parity.forums.entry(forum).or_default();
                 v.sort_menu = !v.sort_menu;
+                v.tags_popout = false;
                 cx.notify();
             }))
-            .child(gpui::svg().path(crate::icons::path("sort")).size(z(16.)).flex_none().text_color(c(Palette::INTERACTIVE)))
+            .child(gpui::svg().path(crate::icons::path("sort")).size(z(16.)).flex_none().text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
             .child(div().ml(z(8.)).mr(z(4.)).child(crate::t!("forum.sort_view")))
             .child(
                 gpui::svg()
@@ -1379,7 +1596,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .w(z(20.))
                     .h(z(20.))
                     .flex_none()
-                    .text_color(c(Palette::INTERACTIVE)),
+                    .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))),
             ),
     );
     if !tags.is_empty() {
@@ -1394,29 +1611,50 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                     .on_click(cx.listener(move |a, _, _, cx| a.toggle_forum_tag(forum, id, cx))),
             );
         }
+        let selected = v.tags.len();
+        let probe = gpui::canvas(
+            |b, _, _| TAGS_ANCHOR.with(|a| a.set(gpui::point(b.right(), b.bottom()))),
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
         filters = filters.child(div().min_w_0().h(z(32.)).overflow_hidden().child(list)).child(
-            div()
+            secondary_pill(div().id("forum-tags-all"))
+                .relative()
                 .ml(z(8.))
-                .h(z(32.))
                 .px(z(4.))
-                .flex_none()
                 .rounded(z(20.))
-                .bg(c(tok(idx::CONTROL_SECONDARY_BACKGROUND_DEFAULT)))
-                .border_1()
-                .border_color(c(tok(idx::BORDER_SUBTLE)))
-                .flex()
-                .items_center()
-                .gap(z(4.))
-                .pl(z(12.))
-                .text_size(z(14.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(c(Palette::INTERACTIVE))
-                .child(crate::t!("forum.all_tags"))
-                .child(icon(Icon::Chevron, 16., c(Palette::INTERACTIVE))),
+                .on_click(cx.listener(move |a, _, _, cx| {
+                    let v = a.parity.forums.entry(forum).or_default();
+                    v.tags_popout = !v.tags_popout;
+                    v.sort_menu = false;
+                    cx.notify();
+                }))
+                .child(probe)
+                .child(
+                    div()
+                        .min_w(z(52.))
+                        .when(selected == 0, |d| d.pl(z(8.)))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .gap(z(4.))
+                        .map(|d| if selected > 0 { d.child(div().ml(z(4.)).mr(z(2.)).child(count_badge(selected))) } else { d.child(crate::t!("forum.all_tags")) })
+                        .child(
+                            gpui::svg()
+                                .path(crate::icons::path(if tags_open { "chevron-up" } else { "chevron" }))
+                                .size(z(20.))
+                                .flex_none()
+                                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))),
+                        ),
+                ),
         );
     }
 
-    let grid_view = v.gallery && !app.backend.is_media_channel(forum);
+    let media = app.backend.is_media_channel(forum);
+    let grid_view = v.gallery || media;
     let mut col = div()
         .id("forum-list")
         .track_scroll(&LIST_SCROLL.with(|h| h.clone()))
@@ -1447,7 +1685,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             div()
                 .pb(z(16.))
                 .child(match v.compose.as_ref() {
-                    Some(comp) => compose_card(forum, comp, &tags, has_guide, cx).into_any_element(),
+                    Some(comp) => compose_card(app, forum, comp, &tags, has_guide, cx).into_any_element(),
                     None => search_bar.into_any_element(),
                 })
                 .when_some(guide_text.filter(|_| v.guidelines_open), |d, t| d.child(guidelines(app, forum, &t, cx)))
@@ -1528,17 +1766,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         let measured = GRID_WIDTH.with(|g| g.get());
         let (_, cw) = grid_columns(if measured > 0. { measured } else { 939. });
         let cw = (cw - 0.05).max(0.);
-        let mut grid = |posts: &[&ForumPost]| div().flex().flex_wrap().gap(z(16.)).children(posts.iter().map(|p| grid_card(app, p, &tags, now, cw, cx)));
+        let mut grid = |posts: &[&ForumPost]| div().flex().flex_wrap().gap(z(16.)).children(posts.iter().map(|p| grid_card(app, p, &tags, now, cw, media, cx)));
         col = col.child(grid(&active));
         if !older.is_empty() {
             col = col.child(older_header()).child(grid(&older));
-        }
-    } else if app.backend.is_media_channel(forum) {
-        col = col.child(div().flex().flex_wrap().gap(z(16.)).children(active.iter().map(|p| media_tile(app, p, &tags, now, cx))));
-        if !older.is_empty() {
-            col = col
-                .child(older_header())
-                .child(div().flex().flex_wrap().gap(z(16.)).children(older.iter().map(|p| media_tile(app, p, &tags, now, cx))));
         }
     } else {
         for p in active {
@@ -1617,8 +1848,83 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             .child(col)
             .children(crate::ui::chat::scrollbar::auto_scrollbar_div(&LIST_SCROLL.with(|h| h.clone())))
             .children(sort_menu)
+            .children(tags_open.then(|| tags_popout(forum, &tags, &v.tags, cx)))
             .into_any_element(),
     )
+}
+
+fn tags_popout(forum: Id, tags: &[ForumTag], selected: &[Id], cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let at = TAGS_ANCHOR.with(|a| a.get());
+    let mut list = div().flex().flex_wrap().items_center().gap(z(8.)).pb(z(16.));
+    for t in tags {
+        let on = selected.contains(&t.id);
+        let id = t.id;
+        list = list.child(
+            pill_states(tag_pill(t, on).id(("forum-tags-popout", id.0)), on)
+                .cursor_pointer()
+                .on_click(cx.listener(move |a, _, _, cx| a.toggle_forum_tag(forum, id, cx))),
+        );
+    }
+    let card = div()
+        .id("forum-tags-popout")
+        .occlude()
+        .w(z(336.))
+        .p(z(16.))
+        .rounded(z(12.))
+        .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_SUBTLE)))
+        .shadow(crate::ui::inbox::shadow_medium())
+        .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            div()
+                .mb(z(8.))
+                .py(z(4.))
+                .px(z(8.))
+                .flex()
+                .items_center()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                .child(crate::t!("forum.select_tags"))
+                .child(div().ml(z(8.)).child(count_badge(selected.len()))),
+        )
+        .child(list)
+        .child(div().mx(z(4.)).mb(z(8.)).h(px(1.)).bg(c(tok(idx::BORDER_SUBTLE))))
+        .child(
+            div()
+                .id("forum-tags-clear")
+                .group("forum-tags-clear")
+                .cursor_pointer()
+                .text_size(z(16.))
+                .line_height(z(20.))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c(tok(idx::TEXT_BRAND)))
+                .on_click(cx.listener(move |a, _, _, cx| a.clear_forum_tags(forum, cx)))
+                .child(div().group_hover("forum-tags-clear", |s| s.underline()).child(crate::t!("forum.clear_all"))),
+        );
+    gpui::deferred(
+        div()
+            .id("forum-tags-backdrop")
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .occlude()
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |a, _, _, cx| {
+                    if let Some(v) = a.parity.forums.get_mut(&forum) {
+                        v.tags_popout = false;
+                    }
+                    cx.notify();
+                }),
+            )
+            .child(gpui::anchored().anchor(gpui::Anchor::TopRight).position(gpui::point(at.x, at.y + z(8.))).snap_to_window_with_margin(z(8.)).child(card)),
+    )
+    .with_priority(10)
+    .into_any_element()
 }
 
 pub fn guidelines_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -1651,104 +1957,6 @@ pub fn guidelines_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
         .flex_1()
         .on_click(move |_, w, cx| ok(w, cx));
     Some(crate::ui::modals::card_with(480., crate::t!("forum.guide"), None, body.into_any_element(), Some(footer.into_any_element()), close))
-}
-
-pub fn compose_modal(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
-    if INLINE_COMPOSER {
-        return None;
-    }
-    let forum = open_forum(app)?;
-    let comp = app.parity.forums.get(&forum)?.compose.as_ref()?;
-    let tags = app.backend.forum_tags(forum);
-    let e = cx.entity();
-    let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
-        e.update(cx, |a, cx| {
-            if let Some(v) = a.parity.forums.get_mut(&forum) {
-                v.compose = None;
-            }
-            cx.notify();
-        })
-    });
-    let mut tag_row = div().flex().flex_wrap().gap(z(6.));
-    for t in tags.iter().filter(|t| !t.moderated) {
-        let on = comp.tags.contains(&t.id);
-        let id = t.id;
-        tag_row = tag_row.child(
-            pill_states(tag_pill(t, on).id(("compose-tag", id.0)), on)
-                .cursor_pointer()
-                .on_click(cx.listener(move |a, _, _, cx| {
-                    if let Some(cmp) = a.parity.forums.get_mut(&forum).and_then(|v| v.compose.as_mut()) {
-                        if let Some(i) = cmp.tags.iter().position(|x| *x == id) {
-                            cmp.tags.remove(i);
-                        } else if cmp.tags.len() < 5 {
-                            cmp.tags.push(id);
-                        }
-                    }
-                    cx.notify();
-                })),
-        );
-    }
-    let field = |el: AnyElement, h: f32| {
-        div().min_h(px(h)).px(z(10.)).py(z(8.)).rounded(z(8.)).bg(c(Palette::INPUT_BG)).text_size(z(16.)).child(el)
-    };
-    let close2 = close.clone();
-    let card = div()
-        .w(z(560.))
-        .rounded(z(8.))
-        .overflow_hidden()
-        .bg(c(Palette::BG_PRIMARY))
-        .shadow_lg()
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .p(z(16.))
-                .flex()
-                .flex_col()
-                .gap(z(12.))
-                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(crate::t!("forum.new_post")))
-                .child(field(Input::new(&comp.title).appearance(false).bordered(false).into_any_element(), 40.))
-                .child(field(Textarea::new(&comp.body).appearance(false).bordered(false).into_any_element(), 100.))
-                .when(!tags.is_empty(), |d| {
-                    d.child(div().text_size(z(12.)).font_weight(FontWeight::BOLD).text_color(c(Palette::TEXT_MUTED)).child(crate::t!("forum.tags"))).child(tag_row)
-                })
-                .when_some(comp.error.clone(), |d, er| d.child(div().text_size(z(14.)).text_color(c(Palette::TEXT_CRITICAL)).child(er))),
-        )
-        .child(
-            div()
-                .p(z(16.))
-                .bg(c(Palette::BG_SECONDARY))
-                .flex()
-                .justify_end()
-                .items_center()
-                .gap(z(16.))
-                .child(
-                    div()
-                        .id("compose-cancel")
-                        .cursor_pointer()
-                        .text_size(z(14.))
-                        .text_color(c(Palette::TEXT_NORMAL))
-                        .on_click(move |_, w, cx| close2(w, cx))
-                        .child(crate::t!("common.cancel")),
-                )
-                .child(
-                    div()
-                        .id("compose-post")
-                        .h(z(32.))
-                        .px(z(16.))
-                        .rounded(z(8.))
-                        .bg(c(Palette::BLURPLE))
-                        .flex()
-                        .items_center()
-                        .text_size(z(14.))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(gpui::white())
-                        .when(!comp.sending, |d| d.cursor_pointer().on_click(cx.listener(move |a, _, _, cx| a.submit_post(forum, cx))))
-                        .when(comp.sending, |d| d.opacity(0.5))
-                        .child(if comp.sending { crate::t!("forum.posting") } else { crate::t!("forum.post") }),
-                ),
-        );
-    Some(crate::ui::modal::frame("forum-compose", close, card))
 }
 
 #[cfg(test)]
@@ -1806,6 +2014,17 @@ mod tests {
         let (n, w) = grid_columns(1200.);
         assert_eq!(n, 3);
         assert!((w - 373.333).abs() < 0.01);
-        assert_eq!(grid_media_size(437.5), (411.5, 275.));
+        assert_eq!(grid_media_size(437.5, THREE_BY_TWO), (411.5, 275.));
+        assert_eq!(grid_media_size(437.5, SIXTEEN_BY_NINE), (411.5, 232.));
+    }
+
+    #[test]
+    fn media_mosaic_follows_the_client_layout() {
+        assert_eq!(mosaic(1, 400., 300.), vec![(0., 0., 400., 300.)]);
+        assert_eq!(mosaic(2, 401., 300.), vec![(0., 0., 199., 300.), (203., 0., 199., 300.)]);
+        assert_eq!(mosaic(3, 400., 301.)[2], (202., 153., 198., 149.));
+        let four = mosaic(6, 400., 300.);
+        assert_eq!(four.len(), 4);
+        assert_eq!(four[1], (0., 152., 198., 148.));
     }
 }

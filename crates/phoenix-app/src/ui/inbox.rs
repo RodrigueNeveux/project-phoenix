@@ -2189,7 +2189,6 @@ pub fn dialogs(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Vec<AnyElement
     out.extend(crate::ui::events::modal(app, cx));
     out.extend(group_dm(app, cx));
     out.extend(crate::ui::chat::voice_message::draft_modal(app, cx));
-    out.extend(crate::ui::forum::compose_modal(app, cx));
     out.extend(crate::ui::forum::guidelines_modal(app, cx));
     out
 }

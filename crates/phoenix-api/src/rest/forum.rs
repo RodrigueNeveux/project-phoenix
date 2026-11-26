@@ -47,6 +47,12 @@ pub fn forum_post_body(title: &str, content: &str, tags: &[Snowflake]) -> Value 
     })
 }
 
+pub fn forum_post_files_body(title: &str, content: &str, tags: &[Snowflake], filenames: &[String]) -> Value {
+    let mut b = forum_post_body(title, content, tags);
+    b["message"]["attachments"] = Value::Array(filenames.iter().enumerate().map(|(i, f)| json!({ "id": i, "filename": f })).collect());
+    b
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Poll {
     #[serde(default)]
@@ -119,6 +125,22 @@ impl RestClient {
 
     pub async fn create_forum_post(&self, forum: ChannelId, title: &str, content: &str, tags: &[Snowflake]) -> Result<Channel> {
         self.call(Method::POST, &format!("/channels/{forum}/threads"), Body::Json(forum_post_body(title, content, tags))).await
+    }
+
+    pub async fn create_forum_post_with_files(
+        &self,
+        forum: ChannelId,
+        title: &str,
+        content: &str,
+        tags: &[Snowflake],
+        files: Vec<super::FileUpload>,
+    ) -> Result<Channel> {
+        if files.is_empty() {
+            return self.create_forum_post(forum, title, content, tags).await;
+        }
+        let names: Vec<String> = files.iter().map(|f| f.filename.clone()).collect();
+        let payload = forum_post_files_body(title, content, tags, &names);
+        self.call(Method::POST, &format!("/channels/{forum}/threads"), Body::Multipart { payload, files: std::sync::Arc::new(files) }).await
     }
 
     pub async fn vote_poll(&self, channel: ChannelId, message: MessageId, answers: &[u32]) -> Result<()> {
@@ -208,6 +230,10 @@ mod tests {
         let b = forum_post_body("T", "hi", &[Snowflake(4)]);
         assert_eq!(b["applied_tags"][0], "4");
         assert_eq!(b["message"]["content"], "hi");
+        let f = forum_post_files_body("T", "", &[], &["a.png".into(), "b.jpg".into()]);
+        assert_eq!(f["name"], "T");
+        assert_eq!(f["message"]["attachments"][1]["id"], 1);
+        assert_eq!(f["message"]["attachments"][1]["filename"], "b.jpg");
     }
 
     #[test]

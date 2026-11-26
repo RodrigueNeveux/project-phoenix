@@ -158,7 +158,7 @@ pub enum ParityRequest {
     CreatePoll { channel: Id, question: String, answers: Vec<PollAnswerDraft>, hours: u32, multi: bool },
     EndPoll { channel: Id, message: Id },
     ForumPosts { forum: Id, tags: Vec<Id>, offset: u32, by_creation: bool, archived: bool, match_all: bool },
-    CreatePost { forum: Id, title: String, content: String, tags: Vec<Id> },
+    CreatePost { forum: Id, title: String, content: String, tags: Vec<Id>, files: Vec<std::path::PathBuf> },
     Moderate { guild: Id, user: Id, action: ModAction },
     BulkDelete { channel: Id, messages: Vec<Id> },
     CreateGroupDm(Vec<Id>),

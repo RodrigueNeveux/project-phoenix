@@ -42,6 +42,7 @@ pub enum EmojiTarget {
     ExprUpload,
     ProfileReact,
     RoleIcon,
+    ForumPost(Id),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -248,6 +249,7 @@ pub fn close(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoenix
         }
         match (op.target, app.chat.edit.as_ref().map(|e| e.input.clone())) {
             (EmojiTarget::Status | EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload, _) => {}
+            (EmojiTarget::ForumPost(f), _) => crate::ui::forum::focus_compose_body(app, f, window, cx),
             (EmojiTarget::ProfileReact, _) => crate::ui::profile_toolbar::reset(),
             (EmojiTarget::RoleIcon, _) => crate::ui::modals::server_settings::roles::icon_picker_closed(),
             (EmojiTarget::Edit, Some(edit)) => edit.update(cx, |s, cx| s.focus(window, cx)),
@@ -470,6 +472,16 @@ pub fn pick(app: &mut PhoenixApp, item: PickItem, keep_open: bool, window: &mut 
             app.profile_react(text, cx);
             close(app, window, cx);
         }
+        EmojiTarget::ForumPost(f) => {
+            let text = match &item {
+                PickItem::Unicode(ix) => emoji::toned(*ix, tone),
+                PickItem::Custom(e) => e.token(),
+            };
+            crate::ui::forum::insert_compose_body(app, f, text, window, cx);
+            if !keep_open {
+                close(app, window, cx);
+            }
+        }
         EmojiTarget::ExprUpload => {
             let tag = match &item {
                 PickItem::Unicode(ix) => crate::ui::server_pages::expr_upload::Tag::Unicode(emoji::toned(*ix, tone)),
@@ -550,7 +562,7 @@ pub fn render_overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<P
         && t != EmojiTarget::Status
         && let Some(el) = render_picker(app, window, cx)
     {
-        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload | EmojiTarget::ProfileReact | EmojiTarget::RoleIcon) { gpui::deferred(el).with_priority(50).into_any_element() } else { el });
+        out.push(if matches!(t, EmojiTarget::Field(_) | EmojiTarget::PollAnswer(_) | EmojiTarget::GuideTask | EmojiTarget::GuideAnswer | EmojiTarget::ExprUpload | EmojiTarget::ProfileReact | EmojiTarget::RoleIcon | EmojiTarget::ForumPost(_)) { gpui::deferred(el).with_priority(50).into_any_element() } else { el });
     }
     if let Some(el) = soundboard::render(app, window, cx) {
         out.push(el);

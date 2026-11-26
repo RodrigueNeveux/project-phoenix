@@ -254,8 +254,14 @@ pub async fn request(rest: RestClient, req: ParityRequest, emit: EventSink) -> R
                 .collect();
             ParityReply::ForumPosts { posts, has_more: r.has_more }
         }
-        ParityRequest::CreatePost { forum, title, content, tags } => {
-            let ch = rest.create_forum_post(sf(forum), &title, &content, &ids(&tags)).await.map_err(e)?;
+        ParityRequest::CreatePost { forum, title, content, tags, files } => {
+            let mut uploads = Vec::with_capacity(files.len());
+            for p in &files {
+                let bytes = std::fs::read(p).map_err(|x| BackendError(x.to_string()))?;
+                let filename = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
+                uploads.push(phoenix_api::rest::FileUpload { filename, bytes, content_type: crate::ui::file_pick::accepts(p, &crate::ui::file_pick::IMAGES).then(|| crate::ui::file_pick::mime_of(p).into()), ..Default::default() });
+            }
+            let ch = rest.create_forum_post_with_files(sf(forum), &title, &content, &ids(&tags), uploads).await.map_err(e)?;
             ParityReply::Channel(id(ch.id))
         }
         ParityRequest::Moderate { guild, user, action } => {

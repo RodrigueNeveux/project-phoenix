@@ -117,7 +117,7 @@ Reste :
 | window-chrome | clic gauche sur l'icône de la barre | une seconde instance ajouterait une fenêtre et une icône à l'écran |
 | settings | Membres (page member-safety) | la liste vient de `POST members-search`, interdit aux agents |
 | settings | Connexions : lignes de métadonnées | le compte n'a aucune connexion |
-| forum (toutes les lignes ⚠) | | zone de wt/load-bugs |
+| forum | aperçu (œil), compteur de caractères, mode lent et « Voir plus de tags » du formulaire ; fond flouté des posts média ; bordure de la carte galerie | wt/forum3 : composants absents du cache local, aucun salon média sur les serveurs de l'utilisateur, ouvrir un forum dans le client fait un ack |
 
 ## Second compte
 
