@@ -861,12 +861,14 @@ fn tile_fill(theme: Option<(u32, u32)>, dominant: Option<Hsla>) -> TileFill {
     }
 }
 
+type Theme = Option<(u32, u32)>;
+
 thread_local! {
-    static GUILD_THEMES: std::cell::RefCell<std::collections::HashMap<(Id, Id), Option<(u32, u32)>>> = Default::default();
+    static GUILD_THEMES: std::cell::RefCell<std::collections::HashMap<(Id, Id), Theme>> = Default::default();
     static GUILD_THEME_REQUESTS: std::cell::RefCell<std::collections::HashSet<(Id, Id)>> = Default::default();
 }
 
-fn guild_theme(app: &PhoenixApp, guild: Id, user: Id, cx: &mut Context<PhoenixApp>) -> Option<Option<(u32, u32)>> {
+fn guild_theme(app: &PhoenixApp, guild: Id, user: Id, cx: &mut Context<PhoenixApp>) -> Option<Theme> {
     if let Some(t) = GUILD_THEMES.with(|m| m.borrow().get(&(guild, user)).copied()) {
         return Some(t);
     }
@@ -882,7 +884,7 @@ fn guild_theme(app: &PhoenixApp, guild: Id, user: Id, cx: &mut Context<PhoenixAp
     None
 }
 
-fn tile_theme(global: Option<(u32, u32)>, guild: Option<Option<(u32, u32)>>) -> Option<(u32, u32)> {
+fn tile_theme(global: Theme, guild: Option<Theme>) -> Theme {
     guild.unwrap_or(global)
 }
 
