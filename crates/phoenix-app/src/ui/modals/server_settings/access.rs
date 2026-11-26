@@ -709,6 +709,7 @@ pub struct Pending {
     pub pick: Option<JoinType>,
     pub open: Option<String>,
     pub preview: bool,
+    pub details: bool,
     pub agree: bool,
     pub answers: HashMap<usize, usize>,
     pub viewport: f32,
@@ -771,6 +772,7 @@ fn open_extra(s: &mut State, extra: &str) {
             open_question(s, FieldKind::Terms, None, base);
         }
         "preview" => s.access.preview = true,
+        "details" => s.access.details = true,
         _ => {}
     }
 }
@@ -782,6 +784,7 @@ pub fn preselect(s: &mut State, sub: &str) {
     let rest: Vec<&str> = extras.into_iter().filter(|e| *e != "menu").collect();
     s.access.open = (!rest.is_empty()).then(|| rest.join("+"));
     s.access.preview = false;
+    s.access.details = false;
     s.access.draft = None;
 }
 
@@ -2197,7 +2200,16 @@ fn check_texts(app: &PhoenixApp, item: &CheckItem, req: &Value, s: &State, cx: &
                 .child(div().mb(z(8.)).child(muted(crate::t!("gs.access.ck_health_fail_desc"))))
                 .when(!flag(req, "engagement_healthy"), |d| d.child(critical(crate::t!("gs.access.ck_engagement"))))
                 .when(!flag(req, "retention_healthy"), |d| d.child(critical(crate::t!("gs.access.ck_retention"))))
-                .when(req.get("health_score").is_some_and(|h| !h.is_null()), |d| d.child(text(crate::t!("gs.access.ck_health_details"), 14., 18., FontWeight::NORMAL, idx::TEXT_LINK)))
+                .when(health_details_available(req), |d| {
+                    d.child(
+                        div()
+                            .id("gs-access-ck-health-details")
+                            .cursor_pointer()
+                            .hover(|s| s.underline())
+                            .child(text(crate::t!("gs.access.ck_health_details"), 14., 18., FontWeight::NORMAL, idx::TEXT_LINK))
+                            .on_click(edit(cx, |s| s.access.details = true)),
+                    )
+                })
                 .into_any_element(),
         ),
         ("health", _) => (crate::t!("gs.access.ck_health"), muted(crate::t!("gs.access.ck_health_desc"))),
@@ -2489,6 +2501,226 @@ pub fn icon_gradient(palette: Option<&[[u8; 3]]>, lower: gpui::Hsla, lowest: gpu
     }
 }
 
+pub fn health_details_available(req: &Value) -> bool {
+    let Some(h) = req.get("health_score").filter(|h| !h.is_null()) else { return false };
+    let some = |k: &str| h.get(k).is_some_and(|v| !v.is_null());
+    (!flag(req, "retention_healthy") && some("perc_ret_w1_intentful")) || (!flag(req, "engagement_healthy") && some("avg_nonnew_participators") && some("avg_nonnew_communicators"))
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct HealthBlock {
+    pub title: &'static str,
+    pub desc: &'static str,
+    pub label: &'static str,
+    pub current: f64,
+    pub threshold: f64,
+    pub percent: bool,
+}
+
+pub fn health_blocks(req: &Value) -> Vec<HealthBlock> {
+    let h = req.get("health_score").cloned().unwrap_or(Value::Null);
+    let num = |k: &str| h.get(k).and_then(Value::as_f64);
+    let mut out = Vec::new();
+    let engagement = flag(req, "engagement_healthy");
+    if !engagement && let Some(g) = num("avg_nonnew_participators").filter(|g| *g < 40.) {
+        out.push(HealthBlock { title: "gs.access.hd_visitors", desc: "gs.access.hd_visitors_desc", label: "gs.access.hd_visitors_label", current: g, threshold: 40., percent: false });
+    }
+    if !engagement && let Some(p) = num("avg_nonnew_communicators").filter(|p| *p < 20.) {
+        out.push(HealthBlock { title: "gs.access.hd_communicators", desc: "gs.access.hd_communicators_desc", label: "gs.access.hd_communicators_label", current: p, threshold: 20., percent: false });
+    }
+    if !flag(req, "retention_healthy") && let Some(f) = num("perc_ret_w1_intentful") {
+        out.push(HealthBlock { title: "gs.access.hd_retention", desc: "gs.access.hd_retention_desc", label: "gs.access.hd_retention_label", current: (100. * f).floor(), threshold: 10., percent: true });
+    }
+    out
+}
+
+pub fn health_progress(current: f64, threshold: f64) -> f64 {
+    if threshold > 0. { (current / threshold * 100.).floor() } else { 0. }
+}
+
+pub const HEALTH_BAR_MS: u64 = 840;
+
+pub fn health_bar_spring(t: f32) -> f32 {
+    let (tension, friction, mass) = (200f32, 20f32, 50f32);
+    let w0 = (tension / mass).sqrt();
+    let zeta = friction / (2. * (tension * mass).sqrt());
+    let wd = w0 * (1. - zeta * zeta).sqrt();
+    let secs = t * HEALTH_BAR_MS as f32 / 1000.;
+    let x = 1. - (-zeta * w0 * secs).exp() * ((wd * secs).cos() + zeta / (1. - zeta * zeta).sqrt() * (wd * secs).sin());
+    if t >= 1. { 1. } else { x.clamp(0., 1.) }
+}
+
+fn sup(t: &'static str) -> gpui::Div {
+    div().text_size(z(10.)).line_height(z(10.)).child(t)
+}
+
+fn health_block(n: usize, b: &HealthBlock) -> AnyElement {
+    use gpui::AnimationExt;
+    let m = health_progress(b.current, b.threshold);
+    let fmt = |v: f64| {
+        let n = crate::i18n::decimal(v, 3);
+        if b.percent { format!("{n}%") } else { n }
+    };
+    let low = m < 33.;
+    let bar_color = c(tok(if low { idx::RED_400 } else { idx::YELLOW_300 }));
+    let target = m as f32;
+    let bar = div().absolute().top_0().left_0().h(z(8.)).rounded(z(4.)).bg(bar_color).with_animation(
+        ("gs-access-hd-bar", n),
+        gpui::Animation::new(std::time::Duration::from_millis(HEALTH_BAR_MS)).with_easing(health_bar_spring),
+        move |d, k| d.w(gpui::relative(target * k / 100.)),
+    );
+    div()
+        .mb(z(24.))
+        .flex()
+        .flex_col()
+        .child(text(crate::t!(b.title), 16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG).mb(z(8.)))
+        .child(text(crate::t!(b.desc), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT))
+        .child(div().relative().h(z(8.)).mt(z(16.)).mb(z(8.)).child(div().absolute().top_0().left_0().w_full().h(z(8.)).rounded(z(4.)).bg(c(tok(idx::BACKGROUND_BASE_LOWER)))).child(bar))
+        .child(
+            div()
+                .flex()
+                .justify_between()
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(text(fmt(b.current), 16., 20., FontWeight::SEMIBOLD, if low { idx::TEXT_FEEDBACK_CRITICAL } else { idx::TEXT_FEEDBACK_WARNING }))
+                        .child(div().flex().items_start().child(text(crate::t!(b.label), 12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT)).child(sup("1").text_color(c(tok(idx::TEXT_DEFAULT))))),
+                )
+                .child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .items_end()
+                        .child(text(fmt(b.threshold), 14., 18., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT))
+                        .child(text(crate::t!("gs.access.hd_min"), 12., 16., FontWeight::NORMAL, idx::TEXT_DEFAULT)),
+                ),
+        )
+        .into_any_element()
+}
+
+fn health_details_modal(s: &State, cx: &mut Cx) -> Option<AnyElement> {
+    let req = s.get("requirements").filter(|r| !r.is_null())?;
+    let blocks = health_blocks(req);
+    let e = cx.entity();
+    let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
+        with_state(|s| s.access.details = false);
+        e.update(cx, |_, cx| cx.notify());
+    });
+    let separator = || div().my(z(24.)).h(z(1.)).w_full().bg(c(tok(idx::BORDER_SUBTLE)));
+    let mut content = div()
+        .p(z(24.))
+        .flex()
+        .flex_col()
+        .child(text(crate::t!("gs.access.ck_health_fail"), 24., 32., FontWeight::SEMIBOLD, idx::TEXT_STRONG).mb(z(16.)))
+        .child(text(crate::t!("gs.access.hd_desc"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).mb(z(8.)))
+        .child(separator());
+    for (n, b) in blocks.iter().enumerate() {
+        content = content.child(health_block(n, b));
+    }
+    content = content.child(separator()).child(
+        div()
+            .mb(z(8.))
+            .flex()
+            .items_start()
+            .child(sup("1 ").text_color(c(tok(idx::TEXT_DEFAULT))).flex_none().mr(z(2.)))
+            .child(text(crate::t!("gs.access.hd_footnote"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).flex_1().min_w_0()),
+    );
+    let close2 = close.clone();
+    let card = div()
+        .id("gs-access-hd")
+        .relative()
+        .w(z(602.))
+        .min_h(z(400.))
+        .max_h(z(800.))
+        .rounded(z(12.))
+        .border_1()
+        .border_color(c(tok(idx::BORDER_NORMAL)))
+        .bg(c(tok(idx::MODAL_BACKGROUND)))
+        .overflow_y_scroll()
+        .child(content)
+        .child(
+            div()
+                .id("gs-access-hd-close")
+                .absolute()
+                .top(z(12.))
+                .right(z(12.))
+                .p(z(4.))
+                .rounded(z(3.))
+                .cursor_pointer()
+                .opacity(0.5)
+                .hover(|d| d.opacity(1.))
+                .on_click(move |_, w, cx| close2(w, cx))
+                .child(gpui::svg().path(crate::icons::path("close")).size(z(24.)).text_color(c(tok(idx::ICON_STRONG)))),
+        );
+    Some(crate::ui::modal::frame("gs-access-hd-backdrop", close, card))
+}
+
+pub const FADER_STOPS: [(f32, f32); 13] =
+    [(0., 0.), (0.19, 0.262), (0.34, 0.459), (0.47, 0.618), (0.57, 0.722), (0.65, 0.806), (0.73, 0.874), (0.8, 0.925), (0.86, 0.958), (0.91, 0.979), (0.95, 0.992), (0.98, 0.998), (1., 1.)];
+pub const PREVIEW_FADER: f32 = 180.;
+pub const PREVIEW_FADER_EDGE: f32 = 48.;
+
+pub fn fader_stops(top: f32, bottom: f32, height: f32, size: f32, edge: f32) -> Vec<(f32, f32)> {
+    let base = |d: f32| if edge > 0. { 1. - d.min(edge) / edge } else { 1. };
+    let mut out = Vec::new();
+    if top > 0. {
+        let t = base(top);
+        out.extend(FADER_STOPS.iter().map(|(p, a)| (p * size, t + a * (1. - t))));
+    }
+    if bottom > 0. {
+        let (start, n) = (height - size, base(bottom));
+        out.extend(FADER_STOPS.iter().rev().map(|(p, a)| (start + (1. - p) * size, n + a * (1. - n))));
+    }
+    let mut max = f32::MIN;
+    for s in &mut out {
+        max = max.max(s.0);
+        s.0 = max;
+    }
+    out
+}
+
+thread_local! {
+    static PV_SCROLL: gpui::ScrollHandle = gpui::ScrollHandle::new();
+}
+
+fn preview_scroller(content: gpui::Div) -> gpui::Div {
+    let zoom = crate::theme::zoom();
+    let (top, bottom, height) = PV_SCROLL.with(|h| {
+        let off = -f32::from(h.offset().y);
+        let max = f32::from(h.max_offset().y);
+        ((off / zoom).max(0.), ((max - off) / zoom).max(0.), f32::from(h.bounds().size.height) / zoom)
+    });
+    let stops = if height > 0. { fader_stops(top.round(), bottom.round(), height, PREVIEW_FADER, PREVIEW_FADER_EDGE) } else { Vec::new() };
+    let bg = c(tok(idx::BACKGROUND_SURFACE_HIGH));
+    let veil = |a: f32| bg.opacity(1. - a);
+    let mut wrap = div()
+        .relative()
+        .w_full()
+        .flex_1()
+        .min_h_0()
+        .flex()
+        .flex_col()
+        .child(PV_SCROLL.with(|h| div().id("gs-access-pv-scroll").track_scroll(h).w_full().flex_1().min_h_0().overflow_y_scroll().flex().flex_col().items_center().child(content)));
+    if let (Some(first), Some(last)) = (stops.first().copied(), stops.last().copied()) {
+        if first.0 > 0. && first.1 < 1. {
+            wrap = wrap.child(div().absolute().top_0().left_0().right_0().h(z(first.0)).bg(veil(first.1)));
+        }
+        for w in stops.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if b.0 - a.0 <= 0. || (a.1 >= 1. && b.1 >= 1.) {
+                continue;
+            }
+            let grad = gpui::linear_gradient(180., gpui::linear_color_stop(veil(a.1), 0.), gpui::linear_color_stop(veil(b.1), 1.));
+            wrap = wrap.child(div().absolute().left_0().right_0().top(z(a.0)).h(z(b.0 - a.0)).bg(grad));
+        }
+        if last.0 < height && last.1 < 1. {
+            wrap = wrap.child(div().absolute().left_0().right_0().top(z(last.0)).bottom_0().bg(veil(last.1)));
+        }
+    }
+    wrap
+}
+
 fn preview_modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let e = cx.entity();
     let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
@@ -2585,7 +2817,7 @@ fn preview_modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                     .flex()
                     .flex_col()
                     .items_center()
-                    .child(div().id("gs-access-pv-scroll").w_full().flex_1().min_h_0().overflow_y_scroll().flex().flex_col().items_center().child(content))
+                    .child(preview_scroller(content))
                     .child(footer),
             ),
         )
@@ -2677,6 +2909,11 @@ fn choice_rows(s: &State, q: &Question, cx: &mut Cx) -> gpui::Div {
 }
 
 pub fn modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> Option<AnyElement> {
+    if s.access.details
+        && let Some(m) = health_details_modal(s, cx)
+    {
+        return Some(m);
+    }
     if s.access.preview {
         return Some(preview_modal(app, s, cx));
     }
@@ -3083,6 +3320,45 @@ mod tests {
         assert_eq!(minimum_weeks(&json!({ "minimum_age": 50 })), 8);
         let created = 1_420_070_400_000i64 + 1_000;
         assert_eq!(pass_date_ms(1_000 << 22, &req), created + 56 * 86_400_000);
+    }
+
+    #[test]
+    fn preview_fader_matches_the_client_mask() {
+        assert!(fader_stops(0., 0., 600., 180., 48.).is_empty());
+        let bottom = fader_stops(0., 500., 600., 180., 48.);
+        assert_eq!(bottom.len(), 13);
+        assert_eq!(bottom[0], (420., 1.));
+        assert_eq!(bottom[12], (600., 0.));
+        let near = fader_stops(0., 24., 600., 180., 48.);
+        assert_eq!(near[12], (600., 0.5));
+        let both = fader_stops(10., 300., 600., 180., 48.);
+        assert_eq!(both.len(), 26);
+        assert!((both[0].1 - (1. - 10. / 48.)).abs() < 1e-6);
+        assert_eq!(both[12], (180., 1.));
+        let short = fader_stops(100., 100., 200., 180., 48.);
+        assert!(short.windows(2).all(|w| w[1].0 >= w[0].0));
+    }
+
+    #[test]
+    fn health_details_follow_the_client_thresholds() {
+        let req = json!({ "healthy": false, "engagement_healthy": false, "retention_healthy": false, "health_score": { "avg_nonnew_participators": 12.0, "avg_nonnew_communicators": 25.0, "perc_ret_w1_intentful": 0.057 } });
+        assert!(health_details_available(&req));
+        let b = health_blocks(&req);
+        assert_eq!(b.len(), 2);
+        assert_eq!((b[0].title, b[0].current, b[0].threshold, b[0].percent), ("gs.access.hd_visitors", 12., 40., false));
+        assert_eq!((b[1].title, b[1].current, b[1].threshold, b[1].percent), ("gs.access.hd_retention", 5., 10., true));
+        assert_eq!(health_progress(12., 40.), 30.);
+        assert_eq!(health_progress(5., 10.), 50.);
+        assert_eq!(health_progress(12.5, 40.), 31.);
+        assert_eq!(health_progress(1., 0.), 0.);
+        let ok = json!({ "engagement_healthy": true, "retention_healthy": true, "health_score": { "avg_nonnew_participators": 1.0 } });
+        assert!(!health_details_available(&ok));
+        assert!(health_blocks(&ok).is_empty());
+        let partial = json!({ "engagement_healthy": false, "retention_healthy": true, "health_score": { "avg_nonnew_participators": 1.0, "avg_nonnew_communicators": null } });
+        assert!(!health_details_available(&partial));
+        assert_eq!(health_bar_spring(0.), 0.);
+        assert_eq!(health_bar_spring(1.), 1.);
+        assert!(health_bar_spring(0.5) > 0.4 && health_bar_spring(0.5) < 1.);
     }
 
     #[test]

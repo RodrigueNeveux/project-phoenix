@@ -112,6 +112,34 @@ pub struct Upload {
 thread_local! {
     static UPLOAD: RefCell<Option<Upload>> = const { RefCell::new(None) };
     static BOUNDS: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
+    static PLAYHEAD: Cell<Glide> = const { Cell::new(Glide { shown: f32::NAN, from: 0., to: 0., t0: None }) };
+}
+
+pub const PLAYHEAD_TRANSITION_MS: f32 = 500.;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Glide {
+    pub shown: f32,
+    pub from: f32,
+    pub to: f32,
+    pub t0: Option<std::time::Instant>,
+}
+
+pub fn glide(g: Glide, target: f32, immediate: bool, now: std::time::Instant) -> Glide {
+    if immediate || g.shown.is_nan() {
+        return Glide { shown: target, from: target, to: target, t0: None };
+    }
+    let mut g = g;
+    if (g.t0.is_some() && g.to != target) || (g.t0.is_none() && g.shown != target) {
+        g = Glide { shown: g.shown, from: g.shown, to: target, t0: Some(now) };
+    }
+    let Some(t0) = g.t0 else { return g };
+    let k = now.saturating_duration_since(t0).as_secs_f32() * 1000. / PLAYHEAD_TRANSITION_MS;
+    if k >= 1. {
+        return Glide { shown: target, from: target, to: target, t0: None };
+    }
+    let e = crate::ui::states::cubic_bezier(0.25, 0.1, 0.25, 1.)(k);
+    Glide { shown: g.from + (g.to - g.from) * e, ..g }
 }
 
 fn with<R>(f: impl FnOnce(&mut Upload) -> R) -> Option<R> {
@@ -772,11 +800,17 @@ fn trimmer(u: &Upload, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let len_ms = tr.end_ms - tr.start_ms;
     let warn = len_ms > SOUND_MAX_MS;
     let playing = u.clock.is_some();
+    let head = PLAYHEAD.with(|p| {
+        let g = glide(p.get(), left_pct(tr.playhead_ms, total), playing || u.drag.is_some(), std::time::Instant::now());
+        p.set(g);
+        g
+    });
+    let gliding = head.t0.is_some();
     let weak = cx.entity().downgrade();
     let probe = canvas(
         |b, _, _| BOUNDS.with(|c| c.set(Some(b))),
         move |_, _, window, _| {
-            if playing {
+            if playing || gliding {
                 window.request_animation_frame();
             }
             if snapshot(|u| u.drag.is_none()).unwrap_or(true) {
@@ -821,7 +855,7 @@ fn trimmer(u: &Upload, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .absolute()
         .top_0()
         .bottom_0()
-        .left(relative(left_pct(tr.playhead_ms, total) / 100.))
+        .left(relative(head.shown / 100.))
         .w(z(6.))
         .ml(z(-6.))
         .child(div().absolute().top(z(4.)).bottom(z(4.)).left(z(3.)).w(z(3.)).rounded(z(50.)).bg(t(idx::BRAND_500)));
@@ -963,6 +997,24 @@ mod tests {
         let mut out = std::io::Cursor::new(Vec::new());
         image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(w, h, image::Rgba([200, 10, 10, 255]))).write_to(&mut out, image::ImageFormat::Png).unwrap();
         out.into_inner()
+    }
+
+    #[test]
+    fn playhead_glides_back_in_500ms_when_idle() {
+        let t0 = std::time::Instant::now();
+        let ms = |n: u64| t0 + std::time::Duration::from_millis(n);
+        let start = glide(Glide { shown: f32::NAN, from: 0., to: 0., t0: None }, 80., false, t0);
+        assert_eq!((start.shown, start.t0), (80., None));
+        let live = glide(start, 90., true, ms(10));
+        assert_eq!((live.shown, live.t0), (90., None));
+        let back = glide(live, 10., false, ms(20));
+        assert_eq!((back.shown, back.from, back.to, back.t0), (90., 90., 10., Some(ms(20))));
+        let mid = glide(back, 10., false, ms(270));
+        assert!(mid.shown < 50. && mid.shown > 10.);
+        let done = glide(mid, 10., false, ms(520));
+        assert_eq!((done.shown, done.t0), (10., None));
+        let retarget = glide(mid, 30., false, ms(300));
+        assert_eq!((retarget.from, retarget.to, retarget.t0), (mid.shown, 30., Some(ms(300))));
     }
 
     #[test]

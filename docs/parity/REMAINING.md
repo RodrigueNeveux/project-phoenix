@@ -60,7 +60,18 @@ Catégories :
 | settings : son, tête de lecture | avance pendant la lecture et revient au début à la fin | module 122998 `el` (intervalle de 16 ms) |
 | settings : son, encodage | canaux conservés (stéréo), Ogg comme le client (pre-skip 0, tags vides, un paquet par page) | module 903259 |
 
-Restent : la fenêtre de détails de l'activité (chunk 247920), le masque de fondu du défilement de l'aperçu, la transition de 500 ms de la tête de lecture hors lecture, l'autocomplétion de mentions dans l'éditeur de règles (seulement avec `PREVIEW_ENABLED`).
+Reste : l'autocomplétion de mentions dans l'éditeur de règles (seulement avec `PREVIEW_ENABLED`).
+
+## Fermées par wt/discover-fix (26/11)
+
+| ligne | correction | source |
+|---|---|---|
+| discovery : « Pôles étudiants » sous le champ de recherche | barre d'onglets à débordement du client (module 876622 + `3666.Wv`) : largeurs mesurées en body-md/medium, écart 20, « Plus » (`UKOtz+`, body-sm/semibold + chevron xs) qui ouvre le menu `global-discovery-tabs-overflow-menu` (124589, coche sur l'onglet choisi) ; recherche à trois états (770472) : réduite en loupe quand la place libre passe sous 20 px (champ vide) ou flottante (champ rempli), retour à 236 / 284 px ; onglets coupés au conteneur | `7a4fc2e4363f5e29.js`, `3eba9a97d220046a.js`, `46a690ee2e821785.js`, CSS `102247` (`uP9HND`, `B1ffsk`, `Y0eJLL`) |
+| settings : fenêtre de détails de l'activité | module 247920 (chunk 963401), CSS `gm2kSr` ; lien affiché seulement avec des mesures | `6cd06666e3f4353c.js`, `b80318ca3118bf73.css` |
+| settings : fondu de l'aperçu | rampes de 180 px en haut et en bas, alpha de bord sur 48 px | `8192e61e17dc8592.js` `W` |
+| settings : son, tête de lecture | transition `left` 500 ms `ease` hors lecture et hors glisser | CSS `410a6c65e50f79ef.css` `playhead_LGRor2` |
+
+Reste sur Découvrir : le masque `floatingSearchTabsMask_Y0eJLL` sous la recherche flottante (pas de `mask-image` dans GPUI).
 
 ## Faisable (pas encore fait)
 

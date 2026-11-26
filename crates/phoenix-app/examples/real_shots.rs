@@ -1900,6 +1900,12 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 300);
     }
+    if let Some(req) = std::env::var("PHX_DISCOVERY_REQUIREMENTS").ok().and_then(|v| serde_json::from_str::<serde_json::Value>(&v).ok()) {
+        pump(&mut cx, 600);
+        cx.update(|_| phoenix_app::ui::modals::server_settings::with_state(|s| s.data.insert("requirements", req)));
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |_, cx| cx.notify()))?;
+        pump(&mut cx, 1200);
+    }
     if let Some(y) = std::env::var("PHX_SERVER_SETTINGS_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
         pump(&mut cx, 600);
         cx.update(|_| phoenix_app::ui::chat::scrollbar::handle_n("server-settings", 1).set_offset(gpui::point(px(0.), px(-y))));

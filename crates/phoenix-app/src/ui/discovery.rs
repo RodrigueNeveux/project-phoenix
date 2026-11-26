@@ -638,7 +638,7 @@ pub fn static_card(card: &StaticCard, w: f32, h: f32) -> gpui::Div {
         )
 }
 
-fn tab_strip(items: Vec<(gpui::ElementId, SharedString, bool, Option<Category>)>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+fn tab_strip(items: Vec<TabItem>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let mut tabs = div().h_full().flex().items_center().gap(z(30.));
     for (id, label, on, target) in items {
         let mut t = div()
@@ -718,7 +718,7 @@ fn clear_search(window: &mut Window, cx: &mut Context<PhoenixApp>) {
     cx.notify();
 }
 
-fn bar(left: gpui::AnyElement, right: gpui::Div, opaque: bool) -> AnyElement {
+fn bar(left: gpui::AnyElement, right: Option<gpui::Div>, opaque: bool) -> AnyElement {
     div()
         .absolute()
         .top_0()
@@ -733,35 +733,255 @@ fn bar(left: gpui::AnyElement, right: gpui::Div, opaque: bool) -> AnyElement {
         .border_b_1()
         .border_color(tk(idx::BORDER_SUBTLE))
         .child(div().flex_1().min_w_0().h_full().flex().items_center().gap(z(20.)).child(left))
-        .child(right)
+        .children(right)
         .into_any_element()
 }
 
-fn header_bar(icon: &'static str, cats: &[&'static str]) -> AnyElement {
-    let mut tabs = div().h_full().flex().items_center().gap(z(30.));
-    for (n, k) in cats.iter().copied().enumerate() {
-        let on = n == 0;
-        tabs = tabs.child(
-            div()
-                .id(("discovery-cat", n))
-                .h_full()
-                .relative()
-                .flex()
-                .items_center()
-                .cursor_pointer()
-                .text_size(z(14.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(if on { tk(idx::TEXT_STRONG) } else { tk(idx::TEXT_SUBTLE) })
-                .hover(|s| s.text_color(tk(idx::TEXT_STRONG)))
-                .child(crate::t!(k))
-                .when(on, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(z(2.)).bg(tk(idx::BRAND_500)))),
-        );
+fn header_bar(icon: &'static str, cats: &[&'static str], vw: f32, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let items = cats.iter().enumerate().map(|(n, k)| (gpui::ElementId::from(("discovery-cat", n)), crate::t!(*k), n == 0, None)).collect();
+    tab_header(Tab::Apps, icon, items, vw, window, cx)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SearchBar {
+    #[default]
+    Default,
+    Collapsed,
+    Floating,
+}
+
+pub const TAB_MEASURE_GAP: f32 = 20.;
+pub const SEARCH_BAR_W: f32 = 240.;
+pub const SEARCH_ICON_W: f32 = 24.;
+
+pub fn next_search_bar(state: SearchBar, available: f32, empty: bool) -> SearchBar {
+    let i = available.round();
+    match state {
+        SearchBar::Default if i < 20. => {
+            if empty {
+                SearchBar::Collapsed
+            } else {
+                SearchBar::Floating
+            }
+        }
+        SearchBar::Collapsed if i > 236. => SearchBar::Default,
+        SearchBar::Floating if i > 284. => SearchBar::Default,
+        s => s,
     }
-    bar(
-        div().h_full().flex().items_center().gap(z(20.)).child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))).child(tabs).into_any_element(),
-        static_search(),
-        false,
+}
+
+pub fn tabs_container_width(bar_w: f32, state: SearchBar) -> f32 {
+    let search = match state {
+        SearchBar::Default => SEARCH_BAR_W + 20.,
+        SearchBar::Collapsed => SEARCH_ICON_W + 20.,
+        SearchBar::Floating => 0.,
+    };
+    bar_w - 32. - 24. - 20. - search
+}
+
+pub fn measured_sum(widths: &[f32]) -> f32 {
+    widths.iter().enumerate().map(|(n, w)| w + if n == 0 { 0. } else { TAB_MEASURE_GAP }).sum()
+}
+
+pub fn settle_search_bar(state: SearchBar, bar_w: f32, widths: &[f32], empty: bool) -> SearchBar {
+    let sum = measured_sum(widths);
+    let mut s = state;
+    for _ in 0..3 {
+        let n = next_search_bar(s, tabs_container_width(bar_w, s) - sum, empty);
+        if n == s {
+            break;
+        }
+        s = n;
+    }
+    s
+}
+
+pub fn last_visible(widths: &[f32], container: f32, overflow: f32) -> usize {
+    let (mut used, mut last) = (0., 0);
+    for (e, d) in widths.iter().copied().enumerate() {
+        if d.is_nan() || d > container {
+            continue;
+        }
+        let tail = if e + 1 == widths.len() { 0. } else { overflow + TAB_MEASURE_GAP };
+        if (used + d + tail).round() >= container.round() {
+            break;
+        }
+        last = e;
+        used += d + TAB_MEASURE_GAP;
+    }
+    last
+}
+
+thread_local! {
+    static SEARCH_BARS: Cell<[SearchBar; 2]> = const { Cell::new([SearchBar::Default; 2]) };
+    static MORE_OPEN: Cell<Option<Tab>> = const { Cell::new(None) };
+    static MORE_BOUNDS: Cell<Option<gpui::Bounds<gpui::Pixels>>> = const { Cell::new(None) };
+}
+
+fn bar_slot(t: Tab) -> usize {
+    match t {
+        Tab::Apps => 0,
+        Tab::Servers => 1,
+    }
+}
+
+pub fn search_bar(t: Tab) -> SearchBar {
+    SEARCH_BARS.with(|b| b.get()[bar_slot(t)])
+}
+
+pub fn set_search_bar(t: Tab, s: SearchBar) {
+    SEARCH_BARS.with(|b| {
+        let mut v = b.get();
+        v[bar_slot(t)] = s;
+        b.set(v);
+    });
+}
+
+fn label_w(window: &Window, text: &str, size: f32, weight: FontWeight) -> f32 {
+    let mut font = crate::richtext::ui_font();
+    font.weight = weight;
+    let run = gpui::TextRun { len: text.len(), font, color: gpui::black(), background_color: None, underline: None, strikethrough: None };
+    f32::from(window.text_system().layout_line(text, gpui::px(size), &[run], None).width)
+}
+
+fn search_empty(cx: &Context<PhoenixApp>) -> bool {
+    INPUT.with(|i| i.borrow().as_ref().is_none_or(|i| i.read(cx).value().trim().is_empty()))
+}
+
+type TabItem = (gpui::ElementId, SharedString, bool, Option<Category>);
+
+fn tab_header(kind: Tab, icon: &'static str, mut items: Vec<TabItem>, vw: f32, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let widths: Vec<f32> = items.iter().map(|i| label_w(window, &i.1, 16., FontWeight::MEDIUM)).collect();
+    let more_label = crate::t!("discovery.more");
+    let overflow_w = label_w(window, &more_label, 14., FontWeight::SEMIBOLD) + 4. + 16.;
+    let live = kind == Tab::Servers && INPUT.with(|i| i.borrow().is_some());
+    let empty = !live || search_empty(cx);
+    let state = settle_search_bar(search_bar(kind), vw, &widths, empty);
+    set_search_bar(kind, state);
+    let last = last_visible(&widths, tabs_container_width(vw, state), overflow_w);
+    let hidden: Vec<TabItem> = if last + 1 < items.len() { items.split_off(last + 1) } else { Vec::new() };
+    let hidden_selected = hidden.iter().any(|i| i.2);
+    let mut tabs = tab_strip(items, cx);
+    if !hidden.is_empty() {
+        let menu: Vec<(SharedString, bool, Option<Category>)> = hidden.iter().map(|i| (i.1.clone(), i.2, i.3)).collect();
+        tabs = tabs.child(more_tab(kind, more_label, hidden_selected, menu, cx));
+    }
+    let left = div()
+        .w_full()
+        .min_w_0()
+        .h_full()
+        .flex()
+        .items_center()
+        .gap(z(20.))
+        .child(gpui::svg().path(crate::icons::path(icon)).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE)))
+        .child(div().flex_1().min_w_0().h_full().overflow_hidden().child(tabs));
+    let field = (state != SearchBar::Collapsed).then(|| if live { search_field(cx) } else { static_search() });
+    let el = match state {
+        SearchBar::Default => bar(left.into_any_element(), field, false),
+        SearchBar::Collapsed => bar(left.into_any_element(), Some(collapsed_search(kind, cx)), false),
+        SearchBar::Floating => {
+            let floating = div().absolute().top_0().bottom_0().right(z(16.)).flex().items_center().children(field);
+            div().absolute().top_0().left_0().right_0().h(z(HEADER_H)).child(bar(left.into_any_element(), None, false)).child(floating).into_any_element()
+        }
+    };
+    let menu = (MORE_OPEN.with(|m| m.get()) == Some(kind)).then(more_menu);
+    div().absolute().top_0().left_0().right_0().h(z(HEADER_H)).child(el).children(menu.flatten()).into_any_element()
+}
+
+fn collapsed_search(kind: Tab, cx: &mut Context<PhoenixApp>) -> gpui::Div {
+    div().flex_none().w(z(SEARCH_ICON_W)).flex().justify_end().child(
+        div()
+            .id("discovery-search-collapsed")
+            .size(z(24.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .on_click(cx.listener(move |_, _, w, cx| {
+                set_search_bar(kind, SearchBar::Floating);
+                if kind == Tab::Servers
+                    && let Some(i) = INPUT.with(|i| i.borrow().clone())
+                {
+                    i.update(cx, |s, cx| s.focus(w, cx));
+                }
+                cx.notify();
+            }))
+            .child(gpui::svg().path(crate::icons::path("search")).size(z(18.)).text_color(tk(idx::ICON_STRONG))),
     )
+}
+
+thread_local! {
+    static MORE_ITEMS: RefCell<Vec<(SharedString, bool, Option<Category>)>> = const { RefCell::new(Vec::new()) };
+}
+
+fn more_tab(kind: Tab, label: SharedString, selected: bool, menu: Vec<(SharedString, bool, Option<Category>)>, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+    let open = MORE_OPEN.with(|m| m.get()) == Some(kind);
+    MORE_ITEMS.with(|m| *m.borrow_mut() = menu);
+    let color = |hover: bool, icon: bool| {
+        if hover {
+            tk(idx::TEXT_STRONG)
+        } else if selected {
+            tk(idx::TEXT_BRAND)
+        } else if icon {
+            tk(idx::INTERACTIVE_TEXT_DEFAULT)
+        } else {
+            tk(idx::TEXT_DEFAULT)
+        }
+    };
+    let chevron = if open { "chevron-up" } else { "chevron" };
+    div()
+        .id("discovery-cat-more")
+        .group("discovery-cat-more")
+        .h_full()
+        .relative()
+        .flex()
+        .items_center()
+        .gap(z(4.))
+        .cursor_pointer()
+        .child(gpui::canvas(|b, _, _| MORE_BOUNDS.with(|m| m.set(Some(b))), |_, _, _, _| {}).absolute().size_full())
+        .child(
+            div()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(color(false, false))
+                .group_hover("discovery-cat-more", |s| s.text_color(color(true, false)))
+                .child(label),
+        )
+        .child(
+            gpui::svg()
+                .path(crate::icons::path(chevron))
+                .size(z(16.))
+                .text_color(color(false, true))
+                .group_hover("discovery-cat-more", |s| s.text_color(color(true, true))),
+        )
+        .on_click(cx.listener(move |_, _, _, cx| {
+            MORE_OPEN.with(|m| m.set(if m.get() == Some(kind) { None } else { Some(kind) }));
+            cx.notify();
+        }))
+}
+
+fn more_menu() -> Option<AnyElement> {
+    use crate::ui::context_menu::{Dismiss, Handler, MenuItem};
+    let b = MORE_BOUNDS.with(|m| m.get())?;
+    let items: Vec<MenuItem> = MORE_ITEMS.with(|m| m.borrow().clone())
+        .into_iter()
+        .map(|(label, on, target)| {
+            let on_click: Handler = std::rc::Rc::new(move |_: &gpui::ClickEvent, w: &mut Window, _: &mut gpui::App| {
+                if let Some(c) = target {
+                    set_category(c);
+                }
+                MORE_OPEN.with(|m| m.set(None));
+                w.refresh();
+            });
+            MenuItem::Action { label, icon: on.then_some(SharedString::new_static("circle-check")), subtext: None, danger: false, on_click }
+        })
+        .collect();
+    let dismiss: Dismiss = std::rc::Rc::new(|w: &mut Window, _: &mut gpui::App| {
+        MORE_OPEN.with(|m| m.set(None));
+        w.refresh();
+    });
+    Some(crate::ui::context_menu::render_anchored(gpui::point(b.left(), b.bottom() + z(8.)), gpui::Anchor::TopLeft, items, dismiss))
 }
 
 pub const HERO_STOPS: [(f32, [f32; 4]); 3] = [(0., [47., 114., 193., 1.]), (0.3573, [37., 34., 154., 0.8]), (1., [25., 23., 92., 0.])];
@@ -844,6 +1064,12 @@ fn ensure_input(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
             start_search(a, q, None, cx);
         }
         gpui_component::input::InputEvent::Change => cx.notify(),
+        gpui_component::input::InputEvent::Blur => {
+            if search_bar(Tab::Servers) == SearchBar::Floating && i.read(cx).value().trim().is_empty() {
+                set_search_bar(Tab::Servers, SearchBar::Collapsed);
+                cx.notify();
+            }
+        }
         _ => {}
     })
     .detach();
@@ -897,8 +1123,8 @@ pub fn page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>)
             .child(guild_grid(guilds.as_ref(), cols, (GRID_PAD_X, GRID_PAD_X, 20.), GRID_GAP, cx));
     }
     let items = CATEGORIES.iter().enumerate().map(|(n, c)| (gpui::ElementId::from(("discovery-cat", n)), crate::t!(category_text(*c).tab), *c == cat, Some(*c))).collect();
-    let left = div().h_full().flex().items_center().gap(z(20.)).child(gpui::svg().path(crate::icons::path("server/server")).flex_none().size(z(24.)).text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))).child(tab_strip(items, cx));
-    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(body).child(bar(left.into_any_element(), search_field(cx), false)).into_any_element()
+    let header = tab_header(Tab::Servers, "server/server", items, vw, window, cx);
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(body).child(header).into_any_element()
 }
 
 pub fn search_columns(width: f32) -> usize {
@@ -975,7 +1201,7 @@ fn search_page(vw: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .gap(z(20.))
         .child(back)
         .child(text(20., 24., FontWeight::SEMIBOLD, tk(idx::TEXT_STRONG), crate::t!("discovery.search_results", query = query)).min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap());
-    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOW)).child(body).child(bar(left.into_any_element(), search_field(cx), true)).into_any_element()
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOW)).child(body).child(bar(left.into_any_element(), Some(search_field(cx)), true)).into_any_element()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1134,6 +1360,7 @@ fn app_card(a: &DirectoryApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
 fn apps_page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     ensure_apps(app, cx);
     let cols = app_columns(f32::from(window.viewport_size().width) / crate::theme::zoom());
+    let vw = f32::from(window.viewport_size().width) / crate::theme::zoom() - crate::ui::sidebar_resize::width() - 72.;
     let colls = APPS.with(|a| a.borrow().1.clone());
     let mut body = div().flex().flex_col().pb(z(16.));
     for (n, c) in colls.unwrap_or_default().iter().enumerate() {
@@ -1155,7 +1382,7 @@ fn apps_page(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>
             .child(body)
     });
     let cats = ["discovery.apps_cat.featured", "discovery.apps_cat.games", "discovery.apps_cat.entertainment", "discovery.apps_cat.moderation", "discovery.apps_cat.social", "discovery.apps_cat.utilities"];
-    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(scroll).child(header_bar("apps", &cats)).into_any_element()
+    div().size_full().relative().bg(tk(idx::BACKGROUND_BASE_LOWEST)).child(scroll).child(header_bar("apps", &cats, vw, window, cx)).into_any_element()
 }
 
 thread_local! {
@@ -1269,5 +1496,32 @@ mod tests {
         assert_eq!(acronym_size("AS"), 14.);
         assert_eq!(acronym_size("ABCDE"), 10.);
         assert_eq!(acronym_size("ABCDEFGHIJ"), 8.);
+    }
+
+    #[test]
+    fn search_bar_follows_the_tabs_available_width() {
+        use SearchBar::*;
+        assert_eq!(next_search_bar(Default, 19.4, true), Collapsed);
+        assert_eq!(next_search_bar(Default, 19.4, false), Floating);
+        assert_eq!(next_search_bar(Default, 20., true), Default);
+        assert_eq!(next_search_bar(Collapsed, 236., true), Collapsed);
+        assert_eq!(next_search_bar(Collapsed, 237., true), Default);
+        assert_eq!(next_search_bar(Floating, 284., false), Floating);
+        assert_eq!(next_search_bar(Floating, 285., false), Default);
+        let w = [51., 53., 59., 104., 156., 70., 107.];
+        assert_eq!(settle_search_bar(Default, 1600., &w, true), Default);
+        assert_eq!(settle_search_bar(Default, 628., &w, true), Collapsed);
+        assert_eq!(settle_search_bar(Collapsed, 1000., &w, true), Collapsed);
+        assert_eq!(settle_search_bar(Collapsed, 1300., &w, true), Default);
+    }
+
+    #[test]
+    fn overflowing_tabs_move_into_more() {
+        let w = [51., 53., 59., 104., 156., 70., 107.];
+        let all = measured_sum(&w);
+        assert_eq!(last_visible(&w, all + 1., 47.), 6);
+        assert_eq!(last_visible(&w, all, 47.), 5);
+        assert_eq!(last_visible(&w, 400., 47.), 3);
+        assert_eq!(last_visible(&w, 10., 47.), 0);
     }
 }
