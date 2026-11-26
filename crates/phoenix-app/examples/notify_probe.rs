@@ -1,14 +1,49 @@
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
-use phoenix_api::{Cache, ClientProperties, Gateway, GatewayConfig, GatewayEvent, models as api};
+use phoenix_api::{Cache, ClientProperties, Gateway, GatewayConfig, GatewayEvent, RestClient, models as api, rest::CreateMessage};
 use phoenix_app::{
     discord_backend::store::{KeyringStore, TokenStore},
     notifications::{self as n, Level, NotifyPrefs, Target, dbus},
 };
 
 const TEST_CHANNEL: u64 = 1_574_797_385_463_496_724;
+const TEST_GUILD: u64 = 1_369_382_919_948_210_248;
 const STAND_IN: api::Snowflake = api::Snowflake(1);
+const CUES: [&str; 9] = ["message1", "message3", "discodo", "user_join", "user_leave", "disconnect", "deafen", "mute", "call_ringing"];
+
+async fn send_test(rest: &RestClient, me: api::Snowflake) -> anyhow::Result<()> {
+    let ch = rest.get_channel(api::Snowflake(TEST_CHANNEL)).await?;
+    let guild = rest.request_json(reqwest::Method::GET, &format!("/guilds/{TEST_GUILD}"), None).await?;
+    let (gname, cname) = (guild["name"].as_str().unwrap_or_default(), ch.name.clone().unwrap_or_default());
+    anyhow::ensure!(
+        ch.guild_id == Some(api::Snowflake(TEST_GUILD)) && gname == "Aperture Sciences" && cname.contains("phoenix"),
+        "refusing: channel/guild names do not match the test channel"
+    );
+    let text = format!("[Test Phoenix] envoyé depuis le client Rust (Phoenix) — notification de bureau, mention et sons <@{}>", me.0);
+    let m = rest.send_message(api::Snowflake(TEST_CHANNEL), CreateMessage::text(text)).await?;
+    println!("probe: sent test message {} in {gname} / {cname}", m.id);
+    Ok(())
+}
+
+fn summary(cache: &Cache, ready: &phoenix_api::gateway::Ready) {
+    let rels = cache.relationships();
+    let skipped = |u: api::Snowflake| rels.iter().any(|r| r.id == u && (r.is_spam_request || r.user_ignored));
+    let friends = rels.iter().filter(|r| r.kind == api::RelationshipType::IncomingRequest && !r.is_spam_request && !r.user_ignored).count();
+    let games = api::GameRelationship::parse_all(ready.game_relationships.as_ref())
+        .into_iter()
+        .filter(|g| g.kind == api::RelationshipType::IncomingRequest && !skipped(g.id))
+        .count();
+    println!(
+        "probe: pending requests {friends} + game {games}, restricted schedule {}, restricted now {}",
+        ready.user.restricted_schedule.is_some(),
+        n::restricted::active_now()
+    );
+    for cue in CUES {
+        let ok = phoenix_app::sounds::assets::load(cue).and_then(|b| phoenix_app::sounds::assets::decode(&b)).is_some();
+        println!("probe: sound {cue} {}", if ok { "decodes" } else { "MISSING" });
+    }
+}
 
 fn private_bus() -> anyhow::Result<String> {
     let bus = std::env::var("PHOENIX_NOTIFY_PRIVATE_BUS").unwrap_or_default();
@@ -47,6 +82,8 @@ fn main() -> anyhow::Result<()> {
             }
         };
         let me = ready.user.id;
+        n::on_ready(&cache);
+        summary(&cache, &ready);
         let prefs = NotifyPrefs::from_ready_with_defaults(
             ready.user_guild_settings.as_ref(),
             ready.guilds.iter().map(|g| (g.id.0, Level::from_default(g.properties.default_message_notifications))).collect(),
@@ -61,6 +98,9 @@ fn main() -> anyhow::Result<()> {
             prefs.is_guild_or_category_or_channel_muted(g, TEST_CHANNEL, parent)
         );
         let ctx = phoenix_app::sounds::message_ctx();
+        if std::env::var_os("PROBE_SEND").is_some() {
+            send_test(&RestClient::new(token.expose(), ClientProperties::linux_desktop()), me).await?;
+        }
         let deadline = Instant::now() + Duration::from_secs(secs);
         let mut shown = 0u32;
         while Instant::now() < deadline {
@@ -74,8 +114,19 @@ fn main() -> anyhow::Result<()> {
                     }
                     let real = n::show_message(&prefs, &n::facts(&cache, me, m), &ctx);
                     let other = n::show_message(&prefs, &n::facts(&cache, STAND_IN, m), &ctx);
-                    println!("probe: MESSAGE_CREATE {} from_me={} -> as us: {real}, as another account: {other}", m.id, m.author.id == me);
-                    if (real || other) && let Some(t) = n::build(&cache, m) {
+                    let mut theirs = (**m).clone();
+                    theirs.author.id = STAND_IN;
+                    let f = n::facts(&cache, me, &theirs);
+                    let mentioned = n::show_message(&prefs, &f, &ctx);
+                    let notify = n::should_notify(&prefs, &f);
+                    let cues = phoenix_app::sounds::message_sounds(&ctx, &f, theirs.flags, f.blocked, notify, !prefs.allow_no_messages(f.guild, f.channel, f.parent));
+                    println!(
+                        "probe: MESSAGE_CREATE {} from_me={} -> as us: {real}, as another account: {other}, sent by another account to us (mentions us: {}): popup {mentioned}, sounds {cues:?}",
+                        m.id,
+                        m.author.id == me,
+                        f.mentions_me
+                    );
+                    if (real || other || mentioned) && let Some(t) = n::build(&cache, m) {
                         println!("probe: toast title={:?} body={:?} icon={:?}", t.title, t.body, t.icon);
                         n::show(t);
                         shown += 1;
