@@ -362,7 +362,7 @@ exactly on the budget is kept, and 0.001px less cuts it. Phoenix renders « hone
 patch 14 and the composer's `mr(12)`, so the cut itself needed no change. The « hone… » seen
 before came from the box, not from the cut.
 
-Rev: `d00bee73` on `gpui-gradient` (patches 4 to 16). Before: `776d5b2c` on `gpui-rewrap` (patches 4 to 15), `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14), `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+Rev: `22d0f05c` on `gpui-gradient-anim` (patches 4 to 17). Before: `d00bee73` on `gpui-gradient` (patches 4 to 16), `776d5b2c` on `gpui-rewrap` (patches 4 to 15), `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14), `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## 15. Rewrap slack (`src/elements/text.rs` `needs_rewrap`)
 
@@ -420,6 +420,60 @@ device pixels, stop clamping, out-of-order stops), wgpu `gradient_shader_is_vali
 (plain sprite stays solid, gradient sprite ramps per pixel). App: `fonts::name_paint::tests`,
 `fonts::tests::role_gradients_go_back_to_the_first_colour_like_the_client_classes`,
 `prism_stops_cycle_back_to_the_first_colour_over_the_name_length`.
+
+## 17. Gradient scroll and text glow (`src/text_system/gradient.rs`, `src/text_system/glyph_blur.rs`, `src/scene.rs`, `src/window.rs` `present` / `paint_glyph`, `src/platform.rs` `AtlasKey`, wgpu `write_gradient_sprites`)
+
+**Problem.** Patch 16 painted the gradients still. The client scrolls them: role gradients
+while the message or member row is hovered, the PRISM display name style on hover or
+selection, and a hovered role name gets a blurred copy behind it. Animating through a
+`request_animation_frame` would notify the view and lay out and paint the whole chat
+on every frame.
+
+**Reference.** Client CSS (local cache, 2026-11-26):
+- `447505.1c681faad626d654.css`: `.full-motion.app-focused:not(.hardware-acceleration-disabled) .animateGradient_HG2xvK{animation:gradientUsernameAnimation_HG2xvK 1.5s linear infinite}`,
+  `@keyframes gradientUsernameAnimation_HG2xvK{0%{background-position:0}to{background-position:100px}}`;
+  `.usernameGlow_HG2xvK{filter:blur(4px);opacity:0;z-index:-1}`, `.usernameGlowActive_HG2xvK{opacity:.7}`,
+  `.convenienceGlowGradient_HG2xvK:after{background:inherit;background-clip:text;content:attr(data-text);filter:blur(4px);opacity:0;transition:opacity .1s ease-in-out;z-index:-1}`,
+  `.convenienceGlowGradientActive_HG2xvK:after{opacity:.7}`;
+- `163466.71f5984e9faac7fc.css`: `.animated_or4Hj- .prism_or4Hj-{animation:prism-scroll_or4Hj- 2s linear;animation-fill-mode:forwards}`,
+  `.animated_or4Hj-.loop_or4Hj-.loop_or4Hj->*{animation-iteration-count:infinite}`,
+  `@keyframes prism-scroll_or4Hj-{0%{background-position-x:0}to{background-position-x:calc(var(--custom-display-name-styles-prism-cycle)*-1)}}`.
+
+**Patch.**
+- `TextGradient::scroll(Some(GradientScroll { speed, start, duration }))`: `speed` logical px per
+  second of `background-position-x`, from `start` (an `Instant`), for `duration` (`None` = forever;
+  a finite one stops on its last frame, `fill-mode: forwards`). `Window::with_text_gradient`
+  turns it into a `GlyphGradientScroll` (device px per second, start on `gradient_clock`) stored
+  next to the gradient (`Scene::glyph_gradient_scrolls`, same index, copied by `replay`).
+- `Window::present` stamps `Scene::gradient_time` with `gradient_clock(now)` before drawing;
+  `write_gradient_sprites` reads `Scene::glyph_gradient_now`, which moves the gradient tile right
+  by `speed × elapsed` wrapped by the repeat period. The shader and the instance layout are
+  unchanged.
+- While a scroll is still running at that time (`Scene::scrolls_gradients`), `present` sets
+  `needs_present` and schedules a frame. The next platform frame takes the present-only branch of
+  the frame callback: no view is notified, nothing is laid out or painted, the last scene is drawn
+  again at the new time. A hover change or any other redraw rebuilds the scene as usual.
+- `Window::with_text_glow(Some((blur, opacity)), |window| …)` paints the monochrome glyphs drawn
+  inside it as a gaussian blur of their mask (`filter: blur(blur)`: standard deviation `blur`
+  logical px, cut at 3σ, the sprite padded by 3σ) at `opacity` times the element opacity, with the
+  current text gradient if any. The blurred mask is computed once per glyph (`blur_mask`,
+  separable, CPU) and kept in the atlas under `AtlasKey::BlurredGlyph(params, σ bits)`.
+- `Window::set_gradient_elapsed` (test-support) sets the clock of the current frame to a time after
+  its first scroll, for frame-by-frame captures (`real_shots` `PHX_GRADIENT_AT`).
+
+Tests: `text_system::gradient::tests::scroll_moves_the_tile_right_and_wraps_by_the_period`,
+`a_finite_scroll_stops_on_its_last_frame_like_fill_mode_forwards`,
+`the_clock_orders_instants_on_both_sides_of_its_epoch`; `text_system::glyph_blur::tests`
+(padding, gaussian spread and coverage, edge at half coverage, no blur); wgpu
+`headless_renderer_scrolls_gradient_glyphs_at_the_scene_time`. App:
+`fonts::name_paint::tests::role_gradient_scrolls_100px_to_the_right_every_1_5s_like_the_client_keyframes`,
+`prism_scrolls_its_cycle_to_the_left_in_2s_once_or_forever`,
+`reduced_motion_window_focus_and_still_names_do_not_scroll`, `only_moving_role_gradients_glow`.
+
+Not done: the glow's 0.1s opacity transition (it appears and disappears at once), and the blur is
+applied to the glyph coverage, then filled with the gradient, where Chromium blurs the painted
+colours. With a 100px gradient period and a 4px blur the colour difference is under one step of
+the ramp.
 
 ## Running the vendored tests
 

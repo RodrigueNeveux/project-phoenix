@@ -380,9 +380,15 @@ pub fn styled_name<E: gpui::Styled>(el: E, user: Option<&crate::model::User>, in
     }
 }
 
+pub use name_paint::Motion;
+
 pub fn name_text(text: gpui::SharedString, user: Option<&crate::model::User>, size: f32) -> gpui::AnyElement {
+    name_text_moving(text, user, size, Motion::Still)
+}
+
+fn name_text_moving(text: gpui::SharedString, user: Option<&crate::model::User>, size: f32, motion: Motion) -> gpui::AnyElement {
     let fill = name_style(user).and_then(|(_, effect, colors)| dns_fill(*effect, colors, &text));
-    paint_name(text, user, size, fill)
+    paint_name(text, user, size, fill, motion)
 }
 
 pub fn role_name_text(
@@ -393,12 +399,24 @@ pub fn role_name_text(
     gradient: Option<[u32; 3]>,
     show_effect: bool,
 ) -> gpui::AnyElement {
+    role_name_text_moving(text, user, size, in_guild, gradient, show_effect, Motion::Still)
+}
+
+pub fn role_name_text_moving(
+    text: gpui::SharedString,
+    user: Option<&crate::model::User>,
+    size: f32,
+    in_guild: bool,
+    gradient: Option<[u32; 3]>,
+    show_effect: bool,
+    motion: Motion,
+) -> gpui::AnyElement {
     if in_guild {
-        name_text_with(text, user, size, gradient)
+        name_text_with_motion(text, user, size, gradient, motion)
     } else if show_effect {
-        name_text(text, user, size)
+        name_text_moving(text, user, size, motion)
     } else {
-        paint_name(text, user, size, None)
+        paint_name(text, user, size, None, Motion::Still)
     }
 }
 
@@ -408,9 +426,19 @@ pub fn name_text_with(
     size: f32,
     stops: Option<[u32; 3]>,
 ) -> gpui::AnyElement {
+    name_text_with_motion(text, user, size, stops, Motion::Still)
+}
+
+pub fn name_text_with_motion(
+    text: gpui::SharedString,
+    user: Option<&crate::model::User>,
+    size: f32,
+    stops: Option<[u32; 3]>,
+    motion: Motion,
+) -> gpui::AnyElement {
     let dim = crate::theme::is_light();
     let fill = stops.map(|s| role_fill(s.map(|c| if dim { dim_gradient_stop(c) } else { c }), crate::theme::z(100.)));
-    paint_name(text, user, size, fill)
+    paint_name(text, user, size, fill, motion)
 }
 
 pub fn role_fill(colors: [u32; 3], period: gpui::Pixels) -> name_paint::NameFill {
@@ -557,6 +585,7 @@ fn paint_name(
     user: Option<&crate::model::User>,
     size: f32,
     fill: Option<name_paint::NameFill>,
+    motion: Motion,
 ) -> gpui::AnyElement {
     use gpui::IntoElement;
     let ls = name_style(user)
@@ -566,7 +595,7 @@ fn paint_name(
     if ls <= 0. && fill.is_none() {
         return crate::ui::emoji_text::label(text, size);
     }
-    name_paint::NameText::new(text, crate::theme::z(ls * size), fill).into_any_element()
+    name_paint::NameText::new(text, crate::theme::z(ls * size), fill).motion(motion).into_any_element()
 }
 
 pub mod fallback;

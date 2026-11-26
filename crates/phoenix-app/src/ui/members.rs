@@ -740,7 +740,19 @@ pub fn member_row_in(
                                         .overflow_hidden()
                                         .whitespace_nowrap()
                                         .text_ellipsis()
-                                        .child(crate::fonts::role_name_text(name, user, 16., g.is_some(), role_grad, true)),
+                                        .child(crate::fonts::role_name_text_moving(
+                                            name,
+                                            user,
+                                            16.,
+                                            g.is_some(),
+                                            role_grad,
+                                            true,
+                                            if crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(1, uid.0)) {
+                                                crate::fonts::Motion::Loop
+                                            } else {
+                                                crate::fonts::Motion::Still
+                                            },
+                                        )),
                                 )
                                 .when_some(tag, |d, t| {
                                     d.child(crate::ui::tag_popout::clickable(

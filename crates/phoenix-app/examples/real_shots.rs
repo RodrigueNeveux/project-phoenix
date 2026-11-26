@@ -2216,6 +2216,25 @@ fn main() -> anyhow::Result<()> {
             shoot(&mut cx, &format!("{}-leave.png", out.trim_end_matches(".png")))?;
         }
     }
+    if let Ok(spec) = std::env::var("PHX_GRADIENT_AT") {
+        cx.update_window(win.into(), |_, window, _| window.activate_window())?;
+        pump(&mut cx, 300);
+        cx.update_window(win.into(), |_, window, _| window.refresh())?;
+        pump(&mut cx, 300);
+        for ms in spec.split(',').filter_map(|v| v.trim().parse::<u64>().ok()) {
+            let mut img = cx.update_window(win.into(), |_, window, _| {
+                window.set_gradient_elapsed(std::time::Duration::from_millis(ms));
+                window.render_to_image()
+            })??;
+            let (cw, ch) = (((w * scale).round() as u32).min(img.width()), ((h * scale).round() as u32).min(img.height()));
+            if (cw, ch) != (img.width(), img.height()) {
+                img = image::imageops::crop_imm(&img, 0, 0, cw, ch).to_image();
+            }
+            let path = format!("{}-g{ms:04}.png", out.trim_end_matches(".png"));
+            img.save(&path)?;
+            println!("wrote {path} ({}x{})", img.width(), img.height());
+        }
+    }
     let shot = shoot(&mut cx, &out);
     if voice_test {
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::SetCamera(false)))))?;

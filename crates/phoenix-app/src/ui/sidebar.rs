@@ -1089,9 +1089,17 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                         .child(
                                             {
                                                 let dm_user = (is_dm && !is_group).then(|| ch.voice_users.first().and_then(|u| app.users.get(u))).flatten();
-                                                let effect = selected || crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(4, id.0));
+                                                let hovered = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(4, id.0));
+                                                let effect = selected || hovered;
+                                                let motion = if hovered {
+                                                    crate::fonts::Motion::Loop
+                                                } else if selected {
+                                                    crate::fonts::Motion::Once
+                                                } else {
+                                                    crate::fonts::Motion::Still
+                                                };
                                                 crate::fonts::styled_name(div().min_w_0().text_ellipsis(), dm_user, false)
-                                                    .child(crate::fonts::role_name_text(name, dm_user, 16., false, None, effect))
+                                                    .child(crate::fonts::role_name_text_moving(name, dm_user, 16., false, None, effect, motion))
                                             },
                                         )
                                         .when_some(dm_tag, |d, t| d.child(crate::ui::members::server_tag(&t).ml(z(4.))))

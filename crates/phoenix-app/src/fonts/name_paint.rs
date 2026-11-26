@@ -1,7 +1,28 @@
+use std::time::{Duration, Instant};
+
 use gpui::{
-    App, Bounds, Element, ElementId, GlobalElementId, Hsla, InspectorElementId, IntoElement, LayoutId, Pixels,
-    SharedString, Style, TextAlign, TextGradient, Window, point, px, relative, size,
+    App, Bounds, Element, ElementId, GlobalElementId, GradientScroll, Hsla, InspectorElementId, IntoElement, LayoutId,
+    Pixels, SharedString, Style, TextAlign, TextGradient, Window, point, px, relative, size,
 };
+
+pub const ROLE_SCROLL: Duration = Duration::from_millis(1500);
+pub const PRISM_SCROLL: Duration = Duration::from_millis(2000);
+pub const GLOW_BLUR: f32 = 4.;
+pub const GLOW_OPACITY: f32 = 0.7;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Motion {
+    #[default]
+    Still,
+    Once,
+    Loop,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MotionEnv {
+    pub reduced: bool,
+    pub focused: bool,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NameFill {
@@ -37,17 +58,42 @@ impl NameFill {
         }
         Some(stops.iter().fold(base, |g, &(c, p)| g.stop(gpui::rgb(c), p)))
     }
+
+    pub fn scroll(&self, motion: Motion, env: MotionEnv, start: Instant, tile: Pixels) -> Option<GradientScroll> {
+        if motion == Motion::Still || env.reduced || tile <= px(0.) {
+            return None;
+        }
+        let tile = f32::from(tile);
+        match self {
+            NameFill::Role { .. } if env.focused => Some(GradientScroll::new(tile / ROLE_SCROLL.as_secs_f32(), start, None)),
+            NameFill::Prism { .. } => {
+                let duration = (motion == Motion::Once).then_some(PRISM_SCROLL);
+                Some(GradientScroll::new(-tile / PRISM_SCROLL.as_secs_f32(), start, duration))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn glows(&self, motion: Motion) -> bool {
+        motion != Motion::Still && matches!(self, NameFill::Role { .. })
+    }
 }
 
 pub struct NameText {
     text: SharedString,
     spacing: Pixels,
     fill: Option<NameFill>,
+    motion: Motion,
 }
 
 impl NameText {
     pub fn new(text: SharedString, spacing: Pixels, fill: Option<NameFill>) -> Self {
-        Self { text, spacing, fill }
+        Self { text, spacing, fill, motion: Motion::Still }
+    }
+
+    pub fn motion(mut self, motion: Motion) -> Self {
+        self.motion = motion;
+        self
     }
 }
 
@@ -75,7 +121,7 @@ impl Element for NameText {
     type PrepaintState = ();
 
     fn id(&self) -> Option<ElementId> {
-        None
+        (self.motion != Motion::Still && self.fill.is_some()).then(|| ElementId::Name("name-motion".into()))
     }
 
     fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
@@ -139,7 +185,7 @@ impl Element for NameText {
 
     fn paint(
         &mut self,
-        _id: Option<&GlobalElementId>,
+        id: Option<&GlobalElementId>,
         _inspector_id: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         layout: &mut Layout,
@@ -154,15 +200,29 @@ impl Element for NameText {
         let total = if fits { natural } else { bounds.size.width };
         let first: Option<Hsla> = self.fill.as_ref().map(|f| gpui::rgb(f.first()).into());
         let color = first.unwrap_or(base);
-        let gradient = self.fill.as_ref().and_then(|f| f.gradient(bounds.origin, total, layout.line_height, layout.ch));
-        let mut x = px(0.);
-        window.with_text_gradient(gradient.as_ref(), |window| {
+        let mut gradient = self.fill.as_ref().and_then(|f| f.gradient(bounds.origin, total, layout.line_height, layout.ch));
+        let start = id.map(|id| window.with_element_state::<Instant, _>(id, |s, _| {
+            let s = s.unwrap_or_else(Instant::now);
+            (s, s)
+        }));
+        let mut glow = None;
+        if let (Some(fill), Some(g), Some(start)) = (self.fill.as_ref(), gradient.as_mut(), start) {
+            let env = MotionEnv { reduced: crate::ui::settings::effects::reduced_motion(), focused: window.is_window_active() };
+            g.scroll = fill.scroll(self.motion, env, start, g.tile.size.width);
+            if fill.glows(self.motion) {
+                glow = Some((crate::theme::z(GLOW_BLUR), GLOW_OPACITY));
+            }
+        }
+        let paint = |window: &mut Window, cx: &mut App, glyphs_only: bool| {
+            let mut x = px(0.);
             for (s, adv) in &layout.chars {
                 if !fits && x + *adv > limit {
                     break;
                 }
-                let line = self.shape(s, window, color);
-                let _ = line.paint(point(bounds.origin.x + x, bounds.origin.y), layout.line_height, TextAlign::Left, None, window, cx);
+                if !(glyphs_only && is_pictograph(s)) {
+                    let line = self.shape(s, window, color);
+                    let _ = line.paint(point(bounds.origin.x + x, bounds.origin.y), layout.line_height, TextAlign::Left, None, window, cx);
+                }
                 x += *adv + self.spacing;
             }
             if !fits {
@@ -170,6 +230,13 @@ impl Element for NameText {
                 let _ = line.paint(point(bounds.origin.x + x, bounds.origin.y), layout.line_height, TextAlign::Left, None, window, cx);
                 x += layout.ellipsis + self.spacing;
             }
+            x
+        };
+        let x = window.with_text_gradient(gradient.as_ref(), |window| {
+            if glow.is_some() {
+                window.with_text_glow(glow, |window| paint(window, cx, true));
+            }
+            paint(window, cx, false)
         });
         if let Some((size, ascent, descent, mut u)) = layout.underline {
             let (y, thickness) =
@@ -269,6 +336,73 @@ mod tests {
         assert_eq!(g.tile.size.width, px(96.));
         assert_eq!(g.angle, 90.);
         assert!(g.repeat_x);
+    }
+
+    const MOVING: MotionEnv = MotionEnv { reduced: false, focused: true };
+
+    fn role() -> NameFill {
+        NameFill::Role { stops: vec![(0x9e6bff, 0.), (0x9fc1ff, 0.5), (0x9e6bff, 1.)], period: px(100.) }
+    }
+
+    fn prism() -> NameFill {
+        NameFill::Prism { stops: vec![(0xff0000, 0.), (0x0000ff, 0.5), (0xff0000, 1.)], chars: 12, min: px(38.) }
+    }
+
+    #[test]
+    fn role_gradient_scrolls_100px_to_the_right_every_1_5s_like_the_client_keyframes() {
+        let start = Instant::now();
+        let scroll = role().scroll(Motion::Loop, MOVING, start, px(100.)).unwrap();
+        assert_eq!(scroll.duration, None);
+        let s = scroll.to_glyph_scroll(1.5);
+        let t0 = gpui::gradient_clock(start);
+        let period = 150.;
+        assert!(close(s.displacement(t0, period), 0.));
+        assert!(close(s.displacement(t0 + 0.375, period), 37.5));
+        assert!(close(s.displacement(t0 + 0.75, period), 75.));
+        assert!(close(s.displacement(t0 + 1.5, period), 0.));
+        assert!(close(s.displacement(t0 + 2.25, period), 75.));
+        assert!(s.running(t0 + 60.));
+        let g = role().gradient(point(px(0.), px(0.)), px(250.), px(20.), px(0.)).unwrap().scroll(Some(scroll));
+        let d = g.to_glyph_gradient(1.5, 1.);
+        let moved = s.apply(d, t0 + 0.375);
+        assert!(close(moved.position_at(37.5, 0.), 0.));
+        assert!(close(moved.position_at(0., 0.), 0.75));
+    }
+
+    #[test]
+    fn prism_scrolls_its_cycle_to_the_left_in_2s_once_or_forever() {
+        let start = Instant::now();
+        let t0 = gpui::gradient_clock(start);
+        let once = prism().scroll(Motion::Once, MOVING, start, px(96.)).unwrap().to_glyph_scroll(1.);
+        assert!(close(once.displacement(t0 + 0.5, 96.), 72.));
+        assert!(close(once.displacement(t0 + 1., 96.), 48.));
+        assert!(once.running(t0 + 1.9));
+        assert!(!once.running(t0 + 2.01));
+        assert!(close(once.displacement(t0 + 30., 96.), 0.));
+        let looped = prism().scroll(Motion::Loop, MOVING, start, px(96.)).unwrap().to_glyph_scroll(1.);
+        assert!(looped.running(t0 + 30.));
+        assert!(close(looped.displacement(t0 + 2.5, 96.), 72.));
+    }
+
+    #[test]
+    fn reduced_motion_window_focus_and_still_names_do_not_scroll() {
+        let start = Instant::now();
+        let reduced = MotionEnv { reduced: true, focused: true };
+        let blurred = MotionEnv { reduced: false, focused: false };
+        assert!(role().scroll(Motion::Still, MOVING, start, px(100.)).is_none());
+        assert!(role().scroll(Motion::Loop, reduced, start, px(100.)).is_none());
+        assert!(prism().scroll(Motion::Loop, reduced, start, px(96.)).is_none());
+        assert!(role().scroll(Motion::Loop, blurred, start, px(100.)).is_none());
+        assert!(prism().scroll(Motion::Loop, blurred, start, px(96.)).is_some());
+        assert!(NameFill::Diagonal(vec![(0, 0.1), (0xffffff, 0.9)]).scroll(Motion::Loop, MOVING, start, px(40.)).is_none());
+    }
+
+    #[test]
+    fn only_moving_role_gradients_glow() {
+        assert!(role().glows(Motion::Loop));
+        assert!(!role().glows(Motion::Still));
+        assert!(!prism().glows(Motion::Loop));
+        assert_eq!((GLOW_BLUR, GLOW_OPACITY), (4., 0.7));
     }
 
     #[test]
