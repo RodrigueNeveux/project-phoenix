@@ -168,6 +168,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/channel-browse.svg" => s!(r#"<path d="M4 6h12M4 12h7M4 18h5"/><circle cx="17" cy="16" r="3"/><path d="m19.5 18.5 2 2"/>"#),
         "icons/boost.svg" => s!(r#"<path d="M12 2 4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6z"/><path d="m12 7-3 5h6l-3 5"/>"#),
         "icons/chevron-right.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
+        "icons/chevron-small-left.svg" => s!(r#"<path d="m15 6-6 6 6 6"/>"#),
         "icons/mod/chevron-large-right.svg" => s!(r#"<path d="m8 4 8 8-8 8"/>"#),
         "icons/mod/user-minus.svg" => s!(r#"<circle cx="10" cy="8" r="4"/><path d="M3 20a7 7 0 0 1 12-4.9M16 17h6"/>"#),
         "icons/mod/hammer.svg" => s!(r#"<path d="m14 4 6 6-3 3-6-6zM12.5 8.5 4 17l3 3 8.5-8.5"/>"#),
@@ -217,6 +218,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
             "</svg>"
         ),
         "icons/plus.svg" => s!(r#"<path d="M12 5v14M5 12h14"/>"#),
+        "icons/plus-small.svg" => s!(r#"<path d="M12 7v10M7 12h10"/>"#),
         "icons/sys/ticket.svg" => s!(r#"<path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2.5a2.5 2.5 0 0 0 0 5V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2.5a2.5 2.5 0 0 0 0-5zM15 5v14"/>"#),
         "icons/sys/hand-request-speak.svg" => s!(r#"<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-6.5a1.5 1.5 0 0 1 3 0V11m0-5a1.5 1.5 0 0 1 3 0v5m0-2.5a1.5 1.5 0 0 1 3 0V15a7 7 0 0 1-12.6 4.2L5 15.5a1.5 1.5 0 0 1 2.4-1.8L8 14.5"/>"#),
         "icons/sys/mic-arrow-right.svg" => s!(r#"<rect x="6" y="2" width="7" height="12" rx="3.5"/><path d="M3 11a6.5 6.5 0 0 0 13 0M9.5 17.5V21M15 18h7m-3-3 3 3-3 3"/>"#),
