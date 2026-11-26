@@ -792,7 +792,7 @@ fn main() -> anyhow::Result<()> {
         }
     };
     let v = view.borrow().clone().expect("view");
-    if let Some(prefix) = std::env::var("PHX_BOOT_FRAMES").ok() {
+    if let Ok(prefix) = std::env::var("PHX_BOOT_FRAMES") {
         let every: u64 = std::env::var("PHX_BOOT_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
         let opened = std::time::Instant::now();
         let mut after = 0;
