@@ -1,10 +1,9 @@
 use phoenix_api::{
-    gateway::{GatewayCommand, GuildSubscription, UpdatePresence},
+    gateway::GuildSubscription,
     rest::{profile::CustomStatus, settings::CustomStatusProto},
 };
-use serde_json::{Value, json};
 
-use super::{DiscordBackend, api_err, convert};
+use super::{DiscordBackend, api_err, convert, self_presence::Custom};
 use crate::{
     backend::{AppEvent, BoxFuture},
     model::{Id, Presence},
@@ -42,16 +41,14 @@ impl DiscordBackend {
     pub(super) fn people_status(&self, status: Presence, custom: Option<String>) -> BoxFuture<()> {
         self.with_session(move |_, s| async move {
             let custom = custom.filter(|t| !t.trim().is_empty());
-            let activities = custom
-                .as_ref()
-                .map(|t| vec![json!({"type": 4, "name": "Custom Status", "state": t})])
-                .unwrap_or_default();
-            let _ = s.gateway.send(GatewayCommand::UpdatePresence(UpdatePresence {
-                since: 0,
-                activities,
-                status: status_str(status).into(),
-                afk: false,
-            }));
+            {
+                let mut l = s.presence.lock();
+                l.set_status(status_str(status));
+                if l.custom.as_ref().map(|c| c.proto.text.as_str()) != custom.as_deref() {
+                    l.custom = custom.clone().map(|t| Custom { proto: CustomStatusProto { text: t, ..Default::default() }, ..Default::default() });
+                }
+            }
+            super::self_presence::send(&s);
             let cs = custom.map(|t| CustomStatus { text: Some(t), ..Default::default() });
             s.rest.update_status_settings(Some(status_str(status)), Some(cs.as_ref())).await.map_err(api_err)
         })
@@ -59,12 +56,12 @@ impl DiscordBackend {
 
     pub(super) fn people_custom_status(&self, status: Presence, draft: Option<StatusDraft>) -> BoxFuture<()> {
         self.with_session(move |_, s| async move {
-            let _ = s.gateway.send(GatewayCommand::UpdatePresence(UpdatePresence {
-                since: 0,
-                activities: draft.as_ref().map(custom_activity).into_iter().collect(),
-                status: status_str(status).into(),
-                afk: false,
-            }));
+            {
+                let mut l = s.presence.lock();
+                l.set_status(status_str(status));
+                l.custom = draft.as_ref().map(custom_local);
+            }
+            super::self_presence::send(&s);
             let proto = draft.as_ref().map(custom_status_proto);
             s.rest.save_custom_status(proto.as_ref()).await.map(|_| ()).map_err(api_err)
         })
@@ -95,27 +92,21 @@ pub(crate) fn custom_status_proto(d: &StatusDraft) -> CustomStatusProto {
     }
 }
 
-pub(crate) fn custom_activity(d: &StatusDraft) -> Value {
-    let mut a = json!({"name": "Custom Status", "type": 4});
-    if !d.text.is_empty() {
-        a["state"] = json!(d.text);
-    }
-    if d.expires_at_ms > 0 {
-        a["timestamps"] = json!({"end": d.expires_at_ms});
-    }
-    if let Some(e) = &d.emoji {
-        a["emoji"] = match e.id {
-            Some(id) => json!({"id": id.0.to_string(), "name": e.name, "animated": e.animated}),
-            None => json!({"id": null, "name": e.name, "animated": false}),
-        };
-    }
-    a
+fn custom_local(d: &StatusDraft) -> Custom {
+    Custom { proto: custom_status_proto(d), label: None, animated: d.emoji.as_ref().map(|e| e.animated) }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::discord_backend::self_presence::Local;
     use crate::ui::modals::custom_status::{ClearAfter, StatusEmoji, draft};
+    use serde_json::{Value, json};
+
+    fn activity(d: &StatusDraft, now: u64) -> Value {
+        let l = Local { status: Some("online".into()), custom: Some(custom_local(d)) };
+        l.payload(now, |_| false).activities.remove(0)
+    }
 
     #[test]
     fn custom_status_body_matches_the_client() {
@@ -128,11 +119,11 @@ mod tests {
             CustomStatusProto { text: "Lunch".into(), emoji_id: 42, emoji_name: "dance".into(), expires_at_ms: now + 1_800_000, created_at_ms: now }
         );
         assert_eq!(
-            custom_activity(&d),
-            json!({"name": "Custom Status", "type": 4, "state": "Lunch", "timestamps": {"end": now + 1_800_000}, "emoji": {"id": "42", "name": "dance", "animated": true}})
+            activity(&d, now),
+            json!({"name": "Custom Status", "type": 4, "state": "Lunch", "timestamps": {"end": now + 1_800_000}, "emoji": {"id": "42", "name": "dance", "animated": true}, "metadata": {}})
         );
         let u = draft("", Some(StatusEmoji { id: None, name: "\u{1f354}".into(), animated: false }), ClearAfter::Never, now).unwrap();
-        assert_eq!(custom_activity(&u), json!({"name": "Custom Status", "type": 4, "emoji": {"id": null, "name": "\u{1f354}", "animated": false}}));
+        assert_eq!(activity(&u, now), json!({"name": "Custom Status", "type": 4, "emoji": {"id": null, "name": "\u{1f354}", "animated": false}, "metadata": {}}));
         let p = custom_status_proto(&u);
         assert_eq!((p.emoji_id, p.expires_at_ms, p.text.as_str()), (0, 0, ""));
     }

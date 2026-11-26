@@ -124,3 +124,13 @@ where its value is stored and what it changes in the UI.
 * "Start Discord minimized" (`OS_START_MINIMIZED`) is Windows-only in the client (predicate `uF`), so it is not shown on Linux, like the client.
 * Compact avatars are gated by `display_compact_avatars`; the 40px size/offset still needs comparison in the official enabled state.
 * Live updates: USER_SETTINGS_PROTO_UPDATE (type 1) now reloads the synced settings (`AppEvent::SettingsChanged`).
+
+## Own presence (gateway op 3)
+
+Source: web.js module 225123 (`ConnectionStore`, presence committer `H`), 894768 (`SelfPresenceStore`), LocalActivityStore and 685396 (custom status activity), socket `presenceUpdate(status, since, activities, afk)`.
+
+* ✅ IDENTIFY keeps `status: "unknown"` like the client; the real presence goes out as op 3 right after READY (`H.update()` at the end of the READY handler) and again on every RESUMED (`H.forceUpdate()`). Before this, Phoenix never sent op 3 after identifying, so friends saw the account offline.
+* ✅ Status comes from settings proto 1, field 11.1 (`status.status`); empty or `unknown` means `online`.
+* ✅ Custom status (field 11.2) is sent as `{"name":"Custom Status","type":4,"state"?,"timestamps"?:{"end"},"emoji":null|{"id","name","animated"},"metadata":{}}`, plus `details` and `metadata.label` when field 11.2.6 is set. It is dropped once `expires_at_ms` has passed, and no activity is sent while invisible.
+* ✅ Resent when USER_SETTINGS_PROTO_UPDATE (type 1, partial or full) changes the status or the custom status, and when the status picker or the custom status modal changes them. `self_presence` tests cover the payloads.
+* ❌ Idle and AFK: the client marks idle after 10 min without input (`6e5`, IdleStore 885576, system idle time polled every 10 s, or at once on lock/suspend), with `since` = last input, and `afk` after min(`voiceAndVideo.afkTimeout` (field 5.6, default 60 s), 10 min). Phoenix always sends `since: 0, afk: false`. On KDE Wayland `org.freedesktop.ScreenSaver.GetSessionIdleTime` answers NotSupported, so only the lock-screen signal would be usable.

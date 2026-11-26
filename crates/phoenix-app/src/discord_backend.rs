@@ -16,6 +16,7 @@ mod inbox;
 mod msg_cache;
 mod snapshot;
 mod preupload;
+mod self_presence;
 #[cfg(test)]
 pub(crate) use profile_edit::bodies as profile_edit_bodies;
 pub mod store;
@@ -80,6 +81,7 @@ struct Session {
     last_typing: Mutex<Option<(u64, Instant)>>,
     notify: Mutex<crate::notifications::NotifyPrefs>,
     new_notifications: bool,
+    presence: Mutex<self_presence::Local>,
 }
 
 struct Inner {
@@ -265,7 +267,11 @@ async fn connect(inner: Arc<Inner>, token: Secret, remember: bool) -> Result<Rea
     let data = convert::build_ready(&cache, &ready, &prefs);
     crate::perf::span("ready_built", t0);
     let adapter = Adapter::new(ready.user.id, prefs);
-    Ok(start_session(&inner, rest, gateway, cache, &ready, adapter, rx, data))
+    let data = start_session(&inner, rest, gateway, cache, &ready, adapter, rx, data);
+    if let Some(s) = inner.session.lock().clone() {
+        self_presence::send(&s);
+    }
+    Ok(data)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -295,6 +301,7 @@ fn start_session(
             ready.guilds.iter().map(|g| (g.id.0, crate::notifications::Level::from_default(g.properties.default_message_notifications))).collect(),
         )),
         new_notifications: inbox::new_notifications(ready.notification_settings.as_ref()),
+        presence: Mutex::new(self_presence::Local::from_base64(ready.user_settings_proto.as_deref())),
     });
     pins::init(&session.cache);
     phoenix_api::rest::experiments::set_apex(ready.apex_experiments.as_ref());
@@ -386,7 +393,14 @@ async fn pump(inner: Arc<Inner>, s: Arc<Session>, mut rx: UnboundedReceiver<Gate
         crate::voice::start_time::on_gateway(&ev);
         thread_members::on_gateway(&ev);
         pins::on_gateway(&ev);
+        match &ev {
+            GatewayEvent::Resumed => self_presence::send(&s),
+            GatewayEvent::Unknown { name, data } if name == "USER_SETTINGS_PROTO_UPDATE" => self_presence::on_settings_update(&s, data),
+            _ => {}
+        }
         if let GatewayEvent::Ready(r) = &ev {
+            *s.presence.lock() = self_presence::Local::from_base64(r.user_settings_proto.as_deref());
+            self_presence::send(&s);
             pins::init(&s.cache);
             let run_id = crate::notifications::reminders::restart();
             let (rest, cache) = (s.rest.clone(), s.cache.clone());
