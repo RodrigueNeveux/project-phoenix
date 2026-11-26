@@ -416,6 +416,15 @@ pub fn primary_cta(q: &Quest, label: &SharedString) -> Cta {
     }
 }
 
+pub fn premium_multiplier() -> Option<f64> {
+    QUESTS.with(|q| {
+        q.borrow().as_ref()?.iter().find_map(|x| {
+            let (base, boosted) = (x.orbs?, x.premium_orbs?);
+            (base > 0 && boosted > base).then(|| boosted as f64 / base as f64)
+        })
+    })
+}
+
 pub fn quest(id: u64) -> Option<Quest> {
     QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.iter().find(|x| x.id == id).cloned()))
 }
