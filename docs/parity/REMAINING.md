@@ -34,14 +34,21 @@ Catégories :
 | popouts : puce de tag de la Mod View | déjà faite (a8bb91f1), doc corrigé | 9a2d37de |
 | report : `share_with_parents` / `settings_upsells` | tracés (conditions, textes) mais non construits : ado + Centre familial, et sous-type du signalement absent du nœud | a07df836 (doc) |
 
+## Fermées par wt/remaining2 (26/11)
+
+| ligne | correction | commit |
+|---|---|---|
+| settings : modale d'ajout d'autocollant | module 445002 (chunk 429143 du CDN) : aperçu sombre / clair, fichier, émoji associé, nom, description, contrôles de type et de taille, redimensionnement 320×320 ; envoi multipart identique au FormData de Chromium (`phoenix_api::rest::form`, en-tête `X-Discord-Original-MD5`), refusé par la garde | de9f527a |
+| settings : modale d'ajout de son | module 122998 (chunk 68027) : découpe avec la forme d'onde du worker 658777, poignées, tête de lecture, limite de 5 s, volume plafonné par le multiplicateur de sonie ; décodage symphonia, clip encodé en Ogg Opus, POST refusé par la garde | de9f527a |
+| navigation : Favoris, « Paramètres du fil » | déjà construite (modale 167846, b81fdd3d), doc corrigé | — |
+| navigation : Favoris, lignes de la modale d'ajout | ligne de partage 61916 → 359378 (48 px, libellé semibold, sous-libellé, case indicateur), icône serveur + type de salon 255266 ; partagée avec Transférer comme dans le client | e0d9ce3a |
+| composer : marges de 1 px, `> ` caché, liens | marges du CSS par boîtes transparentes ; le curseur saute le `> ` caché ; découpage `[` / `](url)` vérifié dans le décorateur du client (déjà conforme) | f9dfb182 |
+
 ## Faisable (pas encore fait)
 
 | fichier | ligne | ce qu'il faut |
 |---|---|---|
-| settings | Autocollants / Soundboard : modales d'ajout | modales du client (nom, émoji, volume), sans exécuter les POST |
 | settings | guide du serveur (étape 4) : vignettes, sélecteurs d'émoji, glisser-déposer | code en cache |
-| navigation | Favoris : « Paramètres du fil » (stub), lignes de la modale d'ajout | modules 167846 et 677993 |
-| composer | `margin-inline` 1 px de `before_s/u/em` ; `> ` caché qui garde deux arrêts du curseur ; séparation `[`/`](url)` | CSS en cache ; comportement de l'éditeur |
 | composer | coller texte + image : GPUI lit le texte d'abord | patch GPUI (presse-papiers Wayland) |
 | popouts | Shop This Look : fiche produit | modale `722258.B` |
 | report | lignes `share_with_parents` et `settings_upsells` | tracées (a07df836) ; il manque le sous-type du signalement et l'état Centre familial |
