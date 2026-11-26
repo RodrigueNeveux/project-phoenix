@@ -168,7 +168,10 @@ pub fn compute_channel_permissions(
 
 pub fn timed_out(until: Option<&str>, now_unix: u64) -> bool {
     let now = crate::rest::moderation::rfc3339(now_unix);
-    until.is_some_and(|u| u.len() >= 19 && now.len() >= 19 && u[..19] > now[..19])
+    match (until.and_then(|u| u.get(..19)), now.get(..19)) {
+        (Some(u), Some(n)) => u > n,
+        _ => false,
+    }
 }
 
 pub fn restrict_member(perms: Permissions, timed_out: bool, pending: bool) -> Permissions {
