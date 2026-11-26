@@ -1595,8 +1595,8 @@ pub fn card_guild(app: &PhoenixApp, s: &State) -> crate::ui::discovery::StaticCa
     let id = s.guild.0;
     let name = app.guilds.iter().find(|x| x.id == s.guild).map(|x| x.name.clone()).unwrap_or_else(|| kit::s(g, "name").into());
     let description = s.access.draft.as_ref().and_then(|d| d.description.clone()).unwrap_or_else(|| kit::s(g, "description"));
-    let banner = g
-        .get("discovery_splash").and_then(Value::as_str).filter(|h| !h.is_empty()).map(|h| format!("https://cdn.discordapp.com/discovery-splashes/{id}/{h}.jpg?size=480").into()));
+    let banner: Option<SharedString> =
+        g.get("discovery_splash").and_then(Value::as_str).filter(|h| !h.is_empty()).map(|h| format!("https://cdn.discordapp.com/discovery-splashes/{id}/{h}.jpg?size=480").into());
     let (online, members) = guild_counts(app, s);
     crate::ui::discovery::StaticCard {
         guild: crate::ui::discovery::DiscoverableGuild {
