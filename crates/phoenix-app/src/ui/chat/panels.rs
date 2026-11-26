@@ -233,7 +233,30 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         ee.update(cx, |a, cx| a.open_custom_reminder(ch, id, cx))
     }));
     items.push(MenuItem::submenu_with_icon(crate::t!("msg.remind"), "inbox/clock", reminders));
-    items.push(MenuItem::submenu_with_icon(crate::t!("menu.apps"), "apps", vec![MenuItem::disabled(crate::t!("menu.apps_none"), None)]));
+    if app.selected_channel == Some(ch) {
+        super::slash::ensure_loaded(app, cx);
+    }
+    let cmds = if app.selected_channel == Some(ch) { super::slash::message_commands(app, cx) } else { Vec::new() };
+    let apps: Vec<MenuItem> = if cmds.is_empty() {
+        vec![MenuItem::disabled(crate::t!("menu.apps_none"), None)]
+    } else {
+        cmds.into_iter()
+            .map(|c| {
+                let ee = e.clone();
+                let icon = super::slash::app_icon(&c, 20.);
+                let label: SharedString = c.name.clone().into();
+                let run: context_menu::Handler = Rc::new(move |_, _, cx| {
+                    let c = c.clone();
+                    ee.update(cx, |a, cx| {
+                        a.chat.menu = None;
+                        super::slash::run_message_command(a, c, ch, id, cx)
+                    })
+                });
+                MenuItem::leading(label, icon, None, Some(run))
+            })
+            .collect()
+    };
+    items.push(MenuItem::submenu_with_icon(crate::t!("menu.apps"), "apps", apps));
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.mark_unread"), ic(ChatIcon::Unread), move |_, _, cx| {
         ee.update(cx, |a, cx| a.mark_unread_from(ch, id, cx))

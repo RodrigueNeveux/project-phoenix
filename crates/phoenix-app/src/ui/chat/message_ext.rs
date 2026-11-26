@@ -59,7 +59,84 @@ fn tool_button(id: &'static str, msg: u64, i: SharedString, _size: f32) -> gpui:
     ui::states::track(bar_button(id), k).child(sized)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToolbarButton {
+    CopyId,
+    CopyLink,
+    MarkUnread,
+    Bookmark,
+    Pin,
+    Thread,
+    ReplySelf,
+    Quick,
+    AddReaction,
+    Reply,
+    Edit,
+    Forward,
+    ViewThread,
+    Publish,
+    Delete,
+    More,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ToolbarCaps {
+    pub expanded: bool,
+    pub dev: bool,
+    pub own: bool,
+    pub can_pin: bool,
+    pub can_start_thread: bool,
+    pub can_view_thread: bool,
+    pub can_delete: bool,
+    pub can_publish: bool,
+}
+
+pub fn toolbar_layout(k: ToolbarCaps) -> Vec<ToolbarButton> {
+    use ToolbarButton::*;
+    let mut v = Vec::new();
+    if k.expanded {
+        if k.dev {
+            v.push(CopyId);
+        }
+        v.extend([CopyLink, MarkUnread, Bookmark]);
+        if k.can_pin {
+            v.push(Pin);
+        }
+        if k.can_start_thread {
+            v.push(Thread);
+        }
+        if k.own {
+            v.push(ReplySelf);
+        }
+    } else {
+        v.push(Quick);
+    }
+    v.push(AddReaction);
+    if !k.own {
+        v.push(Reply);
+    }
+    if k.own {
+        v.push(Edit);
+    }
+    v.push(Forward);
+    if !k.can_start_thread && k.can_view_thread {
+        v.push(ViewThread);
+    }
+    if k.can_publish {
+        v.push(Publish);
+    }
+    if k.can_delete && k.expanded {
+        v.push(Delete);
+    } else {
+        v.push(More);
+    }
+    v
+}
+
+pub const CROSSPOSTED: u64 = 1;
+
 pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shift: bool) -> gpui::AnyElement {
+    use crate::ui::tooltip::Tipped as _;
     let (ch, id) = (msg.channel, msg.id);
     let own = msg.author == app.me.id;
     let e = entity.clone();
@@ -91,57 +168,120 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         }
         let e2 = e.clone();
         return bar
-            .child(tool_button("tb-retry", id.0, ChatIcon::Retry.path(), 20.).on_click(move |_, _, cx| e2.update(cx, |a, cx| a.retry_send(ch, id, cx))))
-            .child(tool_button("tb-discard", id.0, ChatIcon::Trash.path(), 20.).on_click(move |_, _, cx| e.update(cx, |a, cx| a.discard_local(ch, id, cx))))
+            .child(tool_button("tb-retry", id.0, ChatIcon::Retry.path(), 20.).tip(crate::t!("tb.retry")).on_click(move |_, _, cx| e2.update(cx, |a, cx| a.retry_send(ch, id, cx))))
+            .child(tool_button("tb-discard", id.0, ChatIcon::Trash.path(), 20.).tip(crate::t!("tb.delete")).on_click(move |_, _, cx| e.update(cx, |a, cx| a.discard_local(ch, id, cx))))
             .into_any_element();
     }
-    let guild = app.channels.get(&ch).and_then(|c| c.guild);
-    for (i, q) in app.chat.quick_reactions_for(guild, app.backend.has_premium(), 3).into_iter().enumerate() {
-        let e = e.clone();
-        bar = bar.child(
-            bar_button(("quick", i))
-                .child(crate::media::emoji::emoji_element(&q.emoji, 20.))
-                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.react_with(ch, id, q.emoji.clone(), q.id, cx))),
-        );
-    }
-    bar = bar.child(div().w(z(1.)).h(z(24.)).my(z(2.)).mx(z(4.)).rounded_full().bg(tk(idx::BORDER_SUBTLE)));
-    bar = bar.child(tool_button("tb-react", id.0, ChatIcon::AddReaction.path(), 20.).on_click({
-        let e = e.clone();
-        move |_, _, cx| e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
-    }));
-    if own {
-        bar = bar.child(tool_button("tb-edit", id.0, ChatIcon::Edit.path(), 18.).on_click({
-            let e = e.clone();
-            move |_, w, cx| e.update(cx, |a, cx| a.start_edit(id, w, cx))
-        }));
-    } else {
-        bar = bar.child(tool_button("tb-reply", id.0, Icon::Reply.path(), 20.).on_click({
-            let e = e.clone();
-            move |_, w, cx| e.update(cx, |a, cx| a.start_reply(id, w, cx))
-        }));
-    }
-    bar = bar.child(tool_button("tb-forward", id.0, crate::icons::path("chat/forwarded"), 20.).on_click({
-        let e = e.clone();
-        move |_, _, cx| e.update(cx, |a, cx| a.open_forward(ch, id, cx))
-    }));
-    if shift && own {
-        bar = bar.child(
-            bar_button("tb-delete")
-                .child(icon(ChatIcon::Trash, 20., tk(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT)))
-                .on_click({
+    let channel = app.channels.get(&ch);
+    let guild = channel.and_then(|c| c.guild);
+    let manage = crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES);
+    let announcement = channel.is_some_and(|c| c.kind == crate::model::ChannelKind::Announcement);
+    let crossposted = msg.flags & CROSSPOSTED != 0;
+    let caps = ToolbarCaps {
+        expanded: shift,
+        dev: app.prefs.synced.developer_mode,
+        own,
+        can_pin: guild.is_none() || crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | (1 << 51)),
+        can_start_thread: guild.is_some() && msg.thread.is_none(),
+        can_view_thread: msg.thread.is_some(),
+        can_delete: own || manage,
+        can_publish: announcement && (own || manage) && guild.is_some_and(|g| app.backend.guild_features(g).iter().any(|f| f == "NEWS")),
+    };
+    let bookmarked = app.parity.inbox.saved.iter().any(|m| m.id == id);
+    for b in toolbar_layout(caps) {
+        use ToolbarButton as B;
+        let ee = e.clone();
+        let el: AnyElement = match b {
+            B::Quick => {
+                for (i, q) in app.chat.quick_reactions_for(guild, app.backend.has_premium(), 3).into_iter().enumerate() {
                     let e = e.clone();
-                    move |ev, _, cx| {
-                        let skip = ev.modifiers().shift;
-                        e.update(cx, |a, cx| a.request_delete(ch, id, skip, cx))
-                    }
-                }),
-        );
+                    bar = bar.child(
+                        bar_button(("quick", i))
+                            .child(crate::media::emoji::emoji_element(&q.emoji, 20.))
+                            .on_click(move |_, _, cx| e.update(cx, |a, cx| a.react_with(ch, id, q.emoji.clone(), q.id, cx))),
+                    );
+                }
+                div().w(z(1.)).h(z(24.)).my(z(2.)).mx(z(4.)).rounded_full().bg(tk(idx::BORDER_SUBTLE)).into_any_element()
+            }
+            B::CopyId => tool_button("tb-copy-id", id.0, ChatIcon::IdBadge.path(), 20.)
+                .tip(crate::t!("msg.copy_id"))
+                .on_click(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(id.0.to_string())))
+                .into_any_element(),
+            B::CopyLink => tool_button("tb-copy-link", id.0, ChatIcon::Link.path(), 20.)
+                .tip(crate::t!("tb.copy_link"))
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| a.copy_message_link(ch, id, cx)))
+                .into_any_element(),
+            B::MarkUnread => tool_button("tb-unread", id.0, ChatIcon::Unread.path(), 20.)
+                .tip(crate::t!("tb.mark_unread"))
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| a.mark_unread_from(ch, id, cx)))
+                .into_any_element(),
+            B::Bookmark => tool_button("tb-bookmark", id.0, crate::icons::path(if bookmarked { "inbox/bookmark" } else { "menu/bookmark" }), 20.)
+                .tip(if bookmarked { crate::t!("tb.remove_bookmark") } else { crate::t!("msg.bookmark") })
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| if bookmarked { a.unsave(ch, id, cx) } else { a.save_message(ch, id, cx) }))
+                .into_any_element(),
+            B::Pin => tool_button("tb-pin", id.0, Icon::Pin.path(), 20.)
+                .tip(if msg.pinned { crate::t!("msg.unpin") } else { crate::t!("msg.pin") })
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| a.toggle_pin(ch, id, cx)))
+                .into_any_element(),
+            B::Thread => tool_button("tb-thread", id.0, crate::icons::path("chat/thread"), 20.)
+                .tip(crate::t!("msg.create_thread"))
+                .on_click(move |_, w, cx| ee.update(cx, |a, cx| a.open_create_thread_from(ch, id, w, cx)))
+                .into_any_element(),
+            B::ReplySelf | B::Reply => tool_button(if b == B::Reply { "tb-reply" } else { "tb-reply-self" }, id.0, Icon::Reply.path(), 20.)
+                .tip(crate::t!("msg.reply"))
+                .on_click(move |_, w, cx| ee.update(cx, |a, cx| a.start_reply(id, w, cx)))
+                .into_any_element(),
+            B::AddReaction => tool_button("tb-react", id.0, ChatIcon::AddReaction.path(), 20.)
+                .tip(crate::t!("msg.add_reaction"))
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx)))
+                .into_any_element(),
+            B::Edit => tool_button("tb-edit", id.0, ChatIcon::Edit.path(), 18.)
+                .tip(crate::t!("tb.edit"))
+                .on_click(move |_, w, cx| ee.update(cx, |a, cx| a.start_edit(id, w, cx)))
+                .into_any_element(),
+            B::Forward => tool_button("tb-forward", id.0, crate::icons::path("chat/forwarded"), 20.)
+                .tip(crate::t!("msg.forward"))
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| a.open_forward(ch, id, cx)))
+                .into_any_element(),
+            B::ViewThread => {
+                let t = msg.thread.clone();
+                tool_button("tb-view-thread", id.0, crate::icons::path("chat/thread"), 20.)
+                    .tip(crate::t!("tb.view_thread"))
+                    .on_click(move |_, w, cx| {
+                        if let Some(t) = t.clone() {
+                            ee.update(cx, |a, cx| a.open_thread(t, w, cx));
+                        }
+                    })
+                    .into_any_element()
+            }
+            B::Publish if crossposted => tool_button("tb-publish", id.0, crate::icons::path("megaphone"), 20.)
+                .tip(crate::t!("tb.published"))
+                .opacity(0.5)
+                .cursor_not_allowed()
+                .into_any_element(),
+            B::Publish => tool_button("tb-publish", id.0, crate::icons::path("megaphone"), 20.)
+                .tip(crate::t!("tb.publish"))
+                .on_click(move |_, _, cx| ee.update(cx, |a, cx| a.blocked_write(crate::actions::guard::GuardedWrite::crosspost(ch.0, id.0), cx)))
+                .into_any_element(),
+            B::Delete => bar_button("tb-delete")
+                .child(icon(ChatIcon::Trash, 20., tk(idx::CONTROL_CRITICAL_SECONDARY_TEXT_DEFAULT)))
+                .tip(crate::t!("tb.delete"))
+                .on_click(move |ev, _, cx| {
+                    let skip = ev.modifiers().shift;
+                    ee.update(cx, |a, cx| a.request_delete(ch, id, skip, cx))
+                })
+                .into_any_element(),
+            B::More => tool_button("tb-more", id.0, ChatIcon::More.path(), 20.)
+                .tip(crate::t!("tb.more"))
+                .on_click(move |ev, _, cx| {
+                    let pos = ev.position();
+                    ee.update(cx, |a, cx| a.open_message_menu(ch, id, pos, cx))
+                })
+                .into_any_element(),
+        };
+        bar = bar.child(el);
     }
-    bar.child(tool_button("tb-more", id.0, ChatIcon::More.path(), 20.).on_click(move |ev, _, cx| {
-        let pos = ev.position();
-        e.update(cx, |a, cx| a.open_message_menu(ch, id, pos, cx))
-    }))
-    .into_any_element()
+    bar.into_any_element()
 }
 
 pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
@@ -859,4 +999,23 @@ pub(crate) fn split_at(bounds: &[usize], range: std::ops::Range<usize>) -> Vec<s
         out.push(at..range.end);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toolbar_follows_the_client_hover_bar() {
+        use ToolbarButton::*;
+        let other = ToolbarCaps { can_pin: true, can_start_thread: true, ..Default::default() };
+        assert_eq!(toolbar_layout(other), [Quick, AddReaction, Reply, Forward, More]);
+        let own = ToolbarCaps { own: true, can_delete: true, ..other };
+        assert_eq!(toolbar_layout(own), [Quick, AddReaction, Edit, Forward, More]);
+        let shift = ToolbarCaps { expanded: true, dev: true, ..own };
+        assert_eq!(toolbar_layout(shift), [CopyId, CopyLink, MarkUnread, Bookmark, Pin, Thread, ReplySelf, AddReaction, Edit, Forward, Delete]);
+        let threaded = ToolbarCaps { can_start_thread: false, can_view_thread: true, can_publish: true, ..other };
+        assert_eq!(toolbar_layout(threaded), [Quick, AddReaction, Reply, Forward, ViewThread, Publish, More]);
+        assert_eq!(toolbar_layout(ToolbarCaps { expanded: true, ..other }).last(), Some(&More));
+    }
 }

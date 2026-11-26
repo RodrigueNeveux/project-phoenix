@@ -295,7 +295,7 @@ impl PhoenixApp {
         cx.notify();
     }
 
-    fn unsave(&mut self, channel: Id, id: Id, cx: &mut Context<Self>) {
+    pub(crate) fn unsave(&mut self, channel: Id, id: Id, cx: &mut Context<Self>) {
         self.parity.inbox.saved.retain(|m| m.id != id);
         self.parity_request(ParityRequest::SetSaved { channel, message: id, saved: false }, cx, |_, _, _| {});
         cx.notify();
