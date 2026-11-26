@@ -46,6 +46,35 @@ pub fn assignments(v: &Value) -> Vec<(u32, i64)> {
         .collect()
 }
 
+pub fn apex_assignments(v: &Value) -> Vec<(u32, i64)> {
+    v.get("assignments")
+        .and_then(|a| a.get("1"))
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|units| units.values())
+        .filter_map(|u| u.get("assignments").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|a| {
+            let a = a.as_array()?;
+            let hash = u32::try_from(a.first()?.as_u64()?).ok()?;
+            Some((hash, a.get(1)?.as_i64()?))
+        })
+        .collect()
+}
+
+static APEX: std::sync::RwLock<Vec<(u32, i64)>> = std::sync::RwLock::new(Vec::new());
+
+pub fn set_apex(v: Option<&Value>) {
+    let list = v.map(apex_assignments).unwrap_or_default();
+    if let Ok(mut a) = APEX.write() {
+        *a = list;
+    }
+}
+
+pub fn apex() -> Vec<(u32, i64)> {
+    APEX.read().map(|a| a.clone()).unwrap_or_default()
+}
+
 pub fn bucket(list: &[(u32, i64)], name: &str) -> i64 {
     let h = murmur3(name);
     list.iter().find(|(x, _)| *x == h).map_or(0, |(_, b)| *b)
@@ -53,14 +82,29 @@ pub fn bucket(list: &[(u32, i64)], name: &str) -> i64 {
 
 impl RestClient {
     pub async fn user_experiments(&self) -> Result<Vec<(u32, i64)>> {
-        let v: Value = self.call(Method::GET, "/experiments", super::Body::None).await?;
-        Ok(assignments(&v))
+        let mut out = apex();
+        match self.call::<Value>(Method::GET, "/experiments", super::Body::None).await {
+            Ok(v) => out.extend(assignments(&v)),
+            Err(e) if out.is_empty() => return Err(e),
+            Err(_) => {}
+        }
+        Ok(out)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn apex_assignments_read_the_user_unit_variant() {
+        let v = serde_json::json!({"assignments": {"1": {"42": {"evaluation_id": "x", "assignments": [[3012809029u64, 1, 0, 2], [2094783262u64, 1, 2, 1], [7, 0, 0, 3]]}}, "2": {"9": {"assignments": [[5, 1, 0, 1]]}}}});
+        let list = apex_assignments(&v);
+        assert_eq!(list, vec![(3_012_809_029, 1), (2_094_783_262, 1), (7, 0)]);
+        assert_eq!(murmur3(A11Y_TARGET_SIZE), 3_012_809_029);
+        assert_eq!(murmur3(SOUNDBOARD_NEW_SOUNDS_BADGE), 2_094_783_262);
+        assert_eq!(bucket(&list, A11Y_TARGET_SIZE), 1);
+    }
 
     #[test]
     fn hash_matches_the_client_murmur3() {

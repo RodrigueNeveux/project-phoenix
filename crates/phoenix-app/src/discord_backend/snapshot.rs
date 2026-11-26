@@ -221,6 +221,7 @@ fn load() -> Option<(Ui, Core)> {
     crate::perf::span("snapshot_built", t0);
     let mut events: Vec<AppEvent> = convert::self_activities(&ready).into_iter().collect();
     events.extend(convert::self_status(&ready));
+    phoenix_api::rest::experiments::set_apex(ready.apex_experiments.as_ref());
     events.extend(nav::snapshot(&cache, &ready));
     events.extend(people);
     let resume = (fresh && !other_owner())

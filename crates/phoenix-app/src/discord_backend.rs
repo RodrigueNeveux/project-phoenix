@@ -295,6 +295,7 @@ fn start_session(
         new_notifications: inbox::new_notifications(ready.notification_settings.as_ref()),
     });
     pins::init(&session.cache);
+    phoenix_api::rest::experiments::set_apex(ready.apex_experiments.as_ref());
     *inner.session.lock() = Some(session.clone());
     for page in std::mem::take(&mut *inner.pre_session_pages.lock()) {
         ensure_message_authors(inner, &session, &page);

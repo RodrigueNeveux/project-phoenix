@@ -38,6 +38,8 @@ pub struct Ready {
     #[serde(default)]
     pub sessions: Option<Value>,
     #[serde(default)]
+    pub apex_experiments: Option<Value>,
+    #[serde(default)]
     pub country_code: Option<String>,
     #[serde(default)]
     pub auth_session_id_hash: Option<String>,
