@@ -781,6 +781,7 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(title_color)
                             .line_clamp(2)
+                            .text_ellipsis()
                             .child(SharedString::from(p.title.clone())),
                     )
                     .child(
