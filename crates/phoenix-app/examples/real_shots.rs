@@ -1365,6 +1365,17 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 "guilddrop" => app.nav.guild_menu = true,
+                "guildtag" => {
+                    if let Some(g) = app.selected_guild {
+                        app.open_guild_tag_adopt(g, cx);
+                    }
+                }
+                "boostmenu" => {
+                    if let Some(g) = app.selected_guild {
+                        phoenix_app::ui::extra_menus::open(phoenix_app::ui::extra_menus::Target::BoostBar(g), gpui::point(px(160.), px(130.)), window);
+                    }
+                }
+                "shiftbar" => app.chat.shift_held = true,
                 "usermenu" => {
                     let u = app.selected_guild.and_then(|g| app.members.get(&g)?.get(arg.parse().unwrap_or(0)).map(|m| m.user));
                     if let Some(u) = u {
