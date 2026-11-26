@@ -34,6 +34,13 @@ impl OpusEncoder {
     }
 }
 
+impl OpusEncoder {
+    pub fn enable_fec(&mut self, expected_loss_pct: u8) -> Result<()> {
+        self.inner.set_inband_fec(true).map_err(err)?;
+        self.inner.set_packet_loss_perc(expected_loss_pct.min(100)).map_err(err)
+    }
+}
+
 impl AudioEncoder for OpusEncoder {
     fn encode(&mut self, pcm: &[i16]) -> Result<Vec<u8>> {
         if pcm.len() != FRAME_SAMPLES * self.channels {
@@ -58,6 +65,13 @@ impl OpusDecoder {
     pub fn new(stereo: bool) -> Result<Self> {
         let ch = if stereo { Channels::Stereo } else { Channels::Mono };
         Ok(Self { inner: Decoder::new(SampleRate::Hz48000, ch).map_err(err)?, channels: if stereo { 2 } else { 1 } })
+    }
+
+    pub fn decode_fec(&mut self, next: &[u8]) -> Result<Vec<i16>> {
+        let mut out = vec![0i16; FRAME_SAMPLES * self.channels];
+        let n = self.inner.decode(Some(next), &mut out, true).map_err(err)?;
+        out.truncate(n * self.channels);
+        Ok(out)
     }
 }
 
@@ -85,5 +99,19 @@ mod tests {
         assert_eq!(d.decode(Some(&pkt)).unwrap().len(), FRAME_SAMPLES * 2);
         assert_eq!(d.decode(None).unwrap().len(), FRAME_SAMPLES * 2);
         assert!(e.encode(&pcm[..10]).is_err());
+    }
+
+    #[test]
+    fn fec_recovers_a_lost_frame() {
+        let mut e = OpusEncoder::new(true, 64_000).unwrap();
+        e.enable_fec(10).unwrap();
+        let mut d = OpusDecoder::new(true).unwrap();
+        let pcm: Vec<i16> = (0..FRAME_SAMPLES * 2).map(|i| ((i as f32 * 0.03).sin() * 9000.0) as i16).collect();
+        let pkts: Vec<Vec<u8>> = (0..4).map(|_| e.encode(&pcm).unwrap()).collect();
+        d.decode(Some(&pkts[0])).unwrap();
+        d.decode(Some(&pkts[1])).unwrap();
+        let rec = d.decode_fec(&pkts[3]).unwrap();
+        assert_eq!(rec.len(), FRAME_SAMPLES * 2);
+        assert_eq!(d.decode(Some(&pkts[3])).unwrap().len(), FRAME_SAMPLES * 2);
     }
 }

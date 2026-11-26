@@ -274,6 +274,91 @@ pub fn stream_payload(
     }
 }
 
+pub const UNMAPPED_HOLD: usize = 25;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RxPacket {
+    pub ssrc: u32,
+    pub sequence: u16,
+    pub timestamp: u32,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Default)]
+pub struct Receiver {
+    ssrc_users: HashMap<u32, u64>,
+    unmapped: HashMap<u32, std::collections::VecDeque<RxPacket>>,
+    last_heard: HashMap<u64, Instant>,
+    decrypt_errors: u32,
+}
+
+impl Receiver {
+    pub fn user_for(&self, ssrc: u32) -> Option<u64> {
+        self.ssrc_users.get(&ssrc).copied()
+    }
+
+    pub fn map_ssrc(&mut self, ssrc: u32, uid: u64) -> Vec<RxPacket> {
+        if ssrc == 0 {
+            return Vec::new();
+        }
+        self.ssrc_users.retain(|s, u| *u != uid || *s == ssrc);
+        self.ssrc_users.insert(ssrc, uid);
+        self.unmapped.remove(&ssrc).map(Vec::from).unwrap_or_default()
+    }
+
+    pub fn hold(&mut self, p: RxPacket) {
+        if !self.unmapped.contains_key(&p.ssrc) && self.unmapped.len() >= 32 {
+            return;
+        }
+        let q = self.unmapped.entry(p.ssrc).or_default();
+        q.push_back(p);
+        while q.len() > UNMAPPED_HOLD {
+            q.pop_front();
+        }
+    }
+
+    pub fn remove_user(&mut self, uid: u64, events: &mpsc::UnboundedSender<VoiceEvent>) {
+        self.ssrc_users.retain(|_, u| *u != uid);
+        if self.last_heard.remove(&uid).is_some() {
+            let _ = events.send(VoiceEvent::Speaking { user_id: uid, speaking: false });
+        }
+    }
+
+    pub fn deliver(
+        &mut self,
+        uid: u64,
+        p: RxPacket,
+        dave: &mut DaveSession,
+        audio_in: &mut (dyn FnMut(AudioIn) + Send),
+        events: &mpsc::UnboundedSender<VoiceEvent>,
+    ) {
+        let opus = match dave.decrypt(uid, &p.payload) {
+            Ok(f) => f,
+            Err(e) => {
+                self.decrypt_errors += 1;
+                if self.decrypt_errors.is_power_of_two() {
+                    tracing::debug!(error = %e, user = uid, "voice: frame decrypt failed");
+                }
+                return;
+            }
+        };
+        if opus != OPUS_SILENCE && self.last_heard.insert(uid, Instant::now()).is_none() {
+            let _ = events.send(VoiceEvent::Speaking { user_id: uid, speaking: true });
+        }
+        audio_in(AudioIn { user_id: uid, ssrc: p.ssrc, sequence: p.sequence, timestamp: p.timestamp, opus });
+    }
+
+    pub fn expire(&mut self, now: Instant, events: &mpsc::UnboundedSender<VoiceEvent>) {
+        self.last_heard.retain(|uid, t| {
+            let alive = now.duration_since(*t) < SPEAKING_TIMEOUT;
+            if !alive {
+                let _ = events.send(VoiceEvent::Speaking { user_id: *uid, speaking: false });
+            }
+            alive
+        });
+    }
+}
+
 fn send_dave_actions(gw: &GatewayHandle, actions: Vec<DaveAction>) {
     for a in actions {
         let r = match a {
@@ -299,8 +384,7 @@ async fn run(
     let mls = OpenMlsSession::new(cfg.user_id, cfg.channel_id)?;
     let mut dave = DaveSession::new(Box::new(mls), cfg.user_id);
     let mut media: Option<Media> = None;
-    let mut ssrc_users: HashMap<u32, u64> = HashMap::new();
-    let mut last_heard: HashMap<u64, Instant> = HashMap::new();
+    let mut rx = Receiver::default();
     let mut was_e2ee = false;
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     let mut recv_buf_errors = 0u32;
@@ -366,15 +450,19 @@ async fn run(
                         }
                         ServerMessage::Speaking { user_id, ssrc, .. } => {
                             if let Some(uid) = user_id.and_then(|u| u.parse::<u64>().ok()) {
-                                ssrc_users.insert(ssrc, uid);
                                 dave.add_users([uid]);
+                                for p in rx.map_ssrc(ssrc, uid) {
+                                    rx.deliver(uid, p, &mut dave, &mut *audio_in, events);
+                                }
                             }
                         }
                         ServerMessage::Video(v) => {
                             if let Some(uid) = v.user_id.as_deref().and_then(|u| u.parse::<u64>().ok()) {
                                 if v.audio_ssrc != 0 {
-                                    ssrc_users.insert(v.audio_ssrc, uid);
                                     dave.add_users([uid]);
+                                    for p in rx.map_ssrc(v.audio_ssrc, uid) {
+                                        rx.deliver(uid, p, &mut dave, &mut *audio_in, events);
+                                    }
                                 }
                                 video_users.retain(|_, u| *u != uid);
                                 if v.video_ssrc != 0 {
@@ -389,10 +477,7 @@ async fn run(
                         ServerMessage::ClientDisconnect { user_id } => {
                             if let Ok(uid) = user_id.parse::<u64>() {
                                 dave.remove_user(uid);
-                                ssrc_users.retain(|_, u| *u != uid);
-                                if last_heard.remove(&uid).is_some() {
-                                    let _ = events.send(VoiceEvent::Speaking { user_id: uid, speaking: false });
-                                }
+                                rx.remove_user(uid, events);
                             }
                         }
                         ServerMessage::Dave(d) => {
@@ -480,21 +565,11 @@ async fn run(
                         last_seq.insert(h.ssrc, prev);
                     }
                 }
-                let Some(&uid) = ssrc_users.get(&h.ssrc) else { continue };
-                let opus = match dave.decrypt(uid, payload) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        recv_buf_errors += 1;
-                        if recv_buf_errors.is_power_of_two() {
-                            tracing::debug!(error = %e, user = uid, "voice: frame decrypt failed");
-                        }
-                        continue;
-                    }
-                };
-                if opus != OPUS_SILENCE && last_heard.insert(uid, Instant::now()).is_none() {
-                    let _ = events.send(VoiceEvent::Speaking { user_id: uid, speaking: true });
+                let p = RxPacket { ssrc: h.ssrc, sequence: h.sequence, timestamp: h.timestamp, payload: payload.to_vec() };
+                match rx.user_for(h.ssrc) {
+                    Some(uid) => rx.deliver(uid, p, &mut dave, &mut *audio_in, events),
+                    None => rx.hold(p),
                 }
-                audio_in(AudioIn { user_id: uid, ssrc: h.ssrc, sequence: h.sequence, timestamp: h.timestamp, opus });
             }
             frame = audio_out.recv(), if audio_open => {
                 let Some(frame) = frame else { audio_open = false; continue };
@@ -536,14 +611,7 @@ async fn run(
                 }
             }
             _ = tick.tick() => {
-                let now = Instant::now();
-                last_heard.retain(|uid, t| {
-                    let alive = now.duration_since(*t) < SPEAKING_TIMEOUT;
-                    if !alive {
-                        let _ = events.send(VoiceEvent::Speaking { user_id: *uid, speaking: false });
-                    }
-                    alive
-                });
+                rx.expire(Instant::now(), events);
                 ticks += 1;
                 if ticks.is_multiple_of(10) && media.is_some() {
                     let _ = events.send(VoiceEvent::Stats(stats));
@@ -662,5 +730,133 @@ mod video_tests {
         assert_eq!(stopped.video_ssrc, 0);
         assert!(!stopped.streams[0].active);
         assert!(st.update(1280, 720, 30, 2_500_000, false).is_none());
+    }
+}
+
+#[cfg(test)]
+mod receive_tests {
+    use super::*;
+    use crate::rtp::RtpHeader;
+    use crate::udp::classify_and_decrypt;
+
+    fn wire(tx: &mut TransportCipher, ssrc: u32, seq: u16, payload: &[u8]) -> Vec<u8> {
+        let mut h = RtpHeader::new(Codec::Opus.payload_type(), seq, seq as u32 * 960, ssrc, false);
+        h.extension = Some((0xbede, vec![0x10, 0x7f, 0x00, 0x00]));
+        tx.encrypt_rtp(&rtp::build_packet(&h, payload)).unwrap()
+    }
+
+    fn unwrap_wire(rx: &TransportCipher, w: &[u8]) -> RxPacket {
+        let Incoming::Rtp(p) = classify_and_decrypt(Some(rx), w).unwrap() else { panic!("rtcp") };
+        let (h, payload) = rtp::parse_packet(&p).unwrap();
+        assert_eq!(h.extension.as_ref().map(|e| e.0), Some(0xbede));
+        RxPacket { ssrc: h.ssrc, sequence: h.sequence, timestamp: h.timestamp, payload: payload.to_vec() }
+    }
+
+    fn collect() -> (Box<dyn FnMut(AudioIn) + Send>, std::sync::Arc<std::sync::Mutex<Vec<AudioIn>>>) {
+        let got = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let g = got.clone();
+        (Box::new(move |a| g.lock().unwrap().push(a)), got)
+    }
+
+    #[test]
+    fn transport_and_dave_layers_peel_off_per_sender() {
+        let (mut alice, mut bob) = crate::dave::session::tests::paired_sessions();
+        let (etx, mut erx) = mpsc::unbounded_channel();
+        let (mut sink, got) = collect();
+        for mode in [EncryptionMode::Aes256GcmRtpSize, EncryptionMode::XChaCha20Poly1305RtpSize] {
+            let mut tx = TransportCipher::new(mode, &[3; 32]).unwrap();
+            let rxc = TransportCipher::new(mode, &[3; 32]).unwrap();
+            let mut r = Receiver::default();
+            let opus = [0x78u8, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+            let e2ee = alice.encrypt(Codec::Opus, &opus).unwrap();
+            let p = unwrap_wire(&rxc, &wire(&mut tx, 77, 10, &e2ee));
+            assert_eq!(p.payload, e2ee);
+            assert!(r.user_for(77).is_none());
+            r.hold(p);
+            let held = r.map_ssrc(77, 1);
+            assert_eq!(held.len(), 1);
+            for p in held {
+                r.deliver(1, p, &mut bob, &mut *sink, &etx);
+            }
+            let p = unwrap_wire(&rxc, &wire(&mut tx, 77, 11, &e2ee));
+            r.deliver(r.user_for(77).unwrap(), p, &mut bob, &mut *sink, &etx);
+            let mut bad = e2ee.clone();
+            bad[2] ^= 0x40;
+            let p = unwrap_wire(&rxc, &wire(&mut tx, 77, 12, &bad));
+            r.deliver(1, p, &mut bob, &mut *sink, &etx);
+            let p = unwrap_wire(&rxc, &wire(&mut tx, 77, 13, &opus));
+            r.deliver(1, p, &mut bob, &mut *sink, &etx);
+        }
+        let got = got.lock().unwrap();
+        assert!(got.iter().all(|a| a.opus == [0x78u8, 9, 8, 7, 6, 5, 4, 3, 2, 1] && a.user_id == 1 && a.ssrc == 77));
+        assert_eq!(got.iter().map(|a| a.sequence).collect::<Vec<_>>(), [10, 11, 13, 10, 11, 13]);
+        for _ in 0..2 {
+            assert_eq!(erx.try_recv().ok(), Some(VoiceEvent::Speaking { user_id: 1, speaking: true }));
+        }
+        assert!(erx.try_recv().is_err());
+    }
+
+    #[test]
+    fn ssrc_remap_hold_limit_and_speaking_timeout() {
+        let (etx, mut erx) = mpsc::unbounded_channel();
+        let mut dave = DaveSession::new(Box::new(OpenMlsSession::new(1, 9).unwrap()), 1);
+        let (mut sink, got) = collect();
+        let mut r = Receiver::default();
+        for s in 0..40u16 {
+            r.hold(RxPacket { ssrc: 5, sequence: s, timestamp: 0, payload: vec![1, 2, 3] });
+        }
+        let held = r.map_ssrc(5, 42);
+        assert_eq!(held.len(), UNMAPPED_HOLD);
+        assert_eq!(held[0].sequence, 15);
+        assert!(r.map_ssrc(0, 42).is_empty());
+        r.map_ssrc(6, 42);
+        assert_eq!((r.user_for(5), r.user_for(6)), (None, Some(42)));
+        r.deliver(42, RxPacket { ssrc: 6, sequence: 1, timestamp: 0, payload: OPUS_SILENCE.to_vec() }, &mut dave, &mut *sink, &etx);
+        assert!(erx.try_recv().is_err());
+        r.deliver(42, RxPacket { ssrc: 6, sequence: 2, timestamp: 960, payload: vec![0x78, 1] }, &mut dave, &mut *sink, &etx);
+        assert_eq!(erx.try_recv().ok(), Some(VoiceEvent::Speaking { user_id: 42, speaking: true }));
+        r.expire(Instant::now(), &etx);
+        assert!(erx.try_recv().is_err());
+        r.expire(Instant::now() + SPEAKING_TIMEOUT, &etx);
+        assert_eq!(erx.try_recv().ok(), Some(VoiceEvent::Speaking { user_id: 42, speaking: false }));
+        r.deliver(42, RxPacket { ssrc: 6, sequence: 3, timestamp: 1920, payload: vec![0x78, 1] }, &mut dave, &mut *sink, &etx);
+        r.remove_user(42, &etx);
+        assert_eq!(erx.try_recv().ok(), Some(VoiceEvent::Speaking { user_id: 42, speaking: true }));
+        assert_eq!(erx.try_recv().ok(), Some(VoiceEvent::Speaking { user_id: 42, speaking: false }));
+        assert!(r.user_for(6).is_none());
+        assert_eq!(got.lock().unwrap().len(), 3);
+    }
+
+    #[cfg(feature = "opus")]
+    #[test]
+    fn received_packets_reach_the_mixer() {
+        use crate::audio::AudioControl;
+        use crate::audio::mixer::Mixer;
+        use crate::media::AudioEncoder;
+        use crate::media::opus::OpusEncoder;
+        let (mut alice, mut bob) = crate::dave::session::tests::paired_sessions();
+        let (etx, _erx) = mpsc::unbounded_channel();
+        let mixer = std::sync::Arc::new(std::sync::Mutex::new(Mixer::default()));
+        let m2 = mixer.clone();
+        let mut sink: Box<dyn FnMut(AudioIn) + Send> = Box::new(move |a| m2.lock().unwrap().push(a));
+        let mut tx = TransportCipher::new(EncryptionMode::Aes256GcmRtpSize, &[9; 32]).unwrap();
+        let rxc = TransportCipher::new(EncryptionMode::Aes256GcmRtpSize, &[9; 32]).unwrap();
+        let mut enc = OpusEncoder::new(true, 64_000).unwrap();
+        let pcm: Vec<i16> = (0..crate::FRAME_SAMPLES * 2).map(|i| (((i / 2) as f32 * 0.06).sin() * 10000.0) as i16).collect();
+        let mut r = Receiver::default();
+        r.map_ssrc(300, 1);
+        for s in 0..8u16 {
+            let e2ee = alice.encrypt(Codec::Opus, &enc.encode(&pcm).unwrap()).unwrap();
+            let p = unwrap_wire(&rxc, &wire(&mut tx, 300, s, &e2ee));
+            r.deliver(1, p, &mut bob, &mut *sink, &etx);
+        }
+        let c = AudioControl::default();
+        let mut m = mixer.lock().unwrap();
+        let e: f32 = (0..6).map(|_| m.mix_frame(&c).iter().map(|s| s * s).sum::<f32>()).sum();
+        assert!(e > 1.0);
+        let st = m.stats();
+        assert_eq!(st[0].0, 1);
+        assert_eq!(st[0].1.decoded, 6);
+        assert!(st[0].1.level_db > -40.0);
     }
 }

@@ -76,7 +76,7 @@ fn streamer_mutes() -> bool {
 }
 
 fn scaled(output_volume: u32, volume: f32) -> f32 {
-    (output_volume as f32 / 100. * volume).min(1.)
+    (crate::voice::prefs::amplitude(output_volume as f32) * volume).min(1.)
 }
 
 fn effective_volume(volume: f32) -> f32 {
@@ -313,9 +313,9 @@ mod tests {
         assert!(play("deafen", VOLUME).is_none());
         assert!(PLAYED.with(|p| p.borrow().is_empty()), "streamer mode mutes");
         prefs(|_| {});
-        assert!((scaled(200, 0.4) - 0.8).abs() < 1e-6);
+        assert!((scaled(200, 0.4) - 0.4 * 10f32.powf(0.3)).abs() < 1e-5);
         assert_eq!(scaled(200, 1.), 1.);
-        assert!((scaled(50, 0.4) - 0.2).abs() < 1e-6);
+        assert!((scaled(50, 0.4) - 0.4 * 0.5f32.powf(2.8)).abs() < 1e-6);
         play("mute", VOLUME);
         assert_eq!(PLAYED.with(|p| p.borrow().clone()), ["mute"]);
     }

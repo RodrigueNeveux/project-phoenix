@@ -181,15 +181,15 @@ impl VoicePrefs {
 
     pub fn user_gain(&self, id: Id) -> f32 {
         let u = self.user(id);
-        if u.muted { 0. } else { u.volume as f32 / 100. }
+        if u.muted { 0. } else { amplitude(u.volume as f32) }
     }
 
     pub fn controls(&self) -> Vec<VoiceControl> {
         let mut v = vec![
             VoiceControl::SetInputDevice(self.input_device.clone()),
             VoiceControl::SetOutputDevice(self.output_device.clone()),
-            VoiceControl::SetInputVolume(self.input_volume as f32 / 100.),
-            VoiceControl::SetOutputVolume(self.output_volume as f32 / 100.),
+            VoiceControl::SetInputVolume(amplitude(self.input_volume as f32)),
+            VoiceControl::SetOutputVolume(amplitude(self.output_volume as f32)),
             VoiceControl::SetSensitivity(if self.auto_sensitivity { None } else { Some(self.sensitivity_db) }),
             VoiceControl::SetNoiseSuppression(self.noise_suppression),
             VoiceControl::SetEchoCancellation(self.echo_cancellation),
@@ -201,6 +201,14 @@ impl VoicePrefs {
         v.extend(self.users.keys().map(|u| VoiceControl::SetUserVolume(Id(*u), self.user_gain(Id(*u)))));
         v
     }
+}
+
+pub fn amplitude(perceptual_pct: f32) -> f32 {
+    if perceptual_pct <= 0. {
+        return 0.;
+    }
+    let n = perceptual_pct / 100.;
+    if n < 1. { n.powf(2.8) } else { 10f32.powf((n - 1.) * 6. / 20.) }
 }
 
 pub fn prefs() -> &'static Mutex<VoicePrefs> {
@@ -242,5 +250,12 @@ mod tests {
         assert_eq!((c.output_volume, c.sensitivity_db), (200, -100.));
         assert_eq!(p.user_gain(Id(9)), 0.);
         assert_eq!(p.user_gain(Id(1)), 1.);
+        p.users.insert(9, UserAudio { volume: 50, muted: false });
+        assert!((p.user_gain(Id(9)) - 0.5f32.powf(2.8)).abs() < 1e-6);
+        p.users.insert(9, UserAudio { volume: 200, muted: false });
+        assert!((p.user_gain(Id(9)) - 10f32.powf(0.3)).abs() < 1e-5);
+        assert_eq!(amplitude(0.), 0.);
+        assert!((amplitude(100.) - 1.).abs() < 1e-6);
+        assert!((crate::voice::soundboard::perceptual(amplitude(73.) * 100.) - 73.).abs() < 1e-3);
     }
 }

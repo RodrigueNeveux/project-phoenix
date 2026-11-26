@@ -34,7 +34,7 @@ pub fn perceptual(v: f32) -> f32 {
 }
 
 pub fn playback_volume(sound_volume: f32, setting: f32, output_volume: u32) -> f32 {
-    (sound_volume * (perceptual(setting) / 100.) * (output_volume as f32 / 100.).min(1.)).clamp(0., 1.)
+    (sound_volume * (perceptual(setting) / 100.) * crate::voice::prefs::amplitude(output_volume as f32).min(1.)).clamp(0., 1.)
 }
 
 pub fn setting_volume(app: &PhoenixApp) -> f32 {
@@ -228,7 +228,7 @@ mod tests {
         assert!((perceptual(50.) - 0.5f32.powf(1. / 2.8) * 100.).abs() < 1e-4);
         assert!((playback_volume(0.5, 100., 200) - 0.5).abs() < 1e-6);
         assert_eq!(playback_volume(1., 0., 100), 0.);
-        assert!((playback_volume(1., 100., 50) - 0.5).abs() < 1e-6);
+        assert!((playback_volume(1., 100., 50) - 0.5f32.powf(2.8)).abs() < 1e-6);
     }
 
     #[test]

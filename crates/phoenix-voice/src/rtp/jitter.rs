@@ -14,6 +14,8 @@ pub enum JitterOutput {
     Lost { first: u16, count: u16 },
 }
 
+const RESYNC: u64 = 1000;
+
 pub struct JitterBuffer {
     depth: usize,
     capacity: usize,
@@ -41,10 +43,20 @@ impl JitterBuffer {
         }
     }
 
-    pub fn push(&mut self, p: JitterPacket) {
+    pub fn reset(&mut self) {
+        self.packets.clear();
+        self.next = None;
+        self.highest = None;
+    }
+
+    pub fn push(&mut self, p: JitterPacket) -> bool {
         let ext = self.extend(p.sequence);
+        if self.next.is_some_and(|n| ext + RESYNC < n) || self.highest.is_some_and(|h| ext > h + RESYNC) {
+            self.reset();
+            return self.push(p);
+        }
         if self.next.is_some_and(|n| ext < n) {
-            return;
+            return false;
         }
         if self.highest.is_none_or(|h| ext > h) {
             self.highest = Some(ext);
@@ -53,7 +65,7 @@ impl JitterBuffer {
             self.next = Some(ext);
         }
         if self.next.is_some_and(|n| ext < n) {
-            return;
+            return false;
         }
         self.packets.entry(ext).or_insert(p);
         if self.next.is_some_and(|n| ext < n) {
@@ -65,6 +77,11 @@ impl JitterBuffer {
                 self.next = Some(k + 1);
             }
         }
+        true
+    }
+
+    pub fn peek(&self) -> Option<&JitterPacket> {
+        self.packets.get(&self.next?)
     }
 
     pub fn pop(&mut self) -> Option<JitterOutput> {
@@ -128,7 +145,32 @@ mod tests {
         assert!(drain(&mut j).is_empty());
         j.push(pk(13));
         assert_eq!(drain(&mut j), ["lost11x1", "12", "13"]);
-        j.push(pk(11));
+        assert!(!j.push(pk(11)));
         assert!(j.is_empty());
+    }
+
+    #[test]
+    fn resyncs_when_the_sender_restarts_its_sequence() {
+        let mut j = JitterBuffer::new(2, 64);
+        for s in 40000..40003 {
+            j.push(pk(s));
+        }
+        assert_eq!(drain(&mut j), ["40000", "40001", "40002"]);
+        assert!(j.push(pk(12)));
+        assert!(j.push(pk(13)));
+        assert_eq!(drain(&mut j), ["12", "13"]);
+        assert!(j.push(pk(5000)));
+        assert_eq!(drain(&mut j), ["5000"]);
+    }
+
+    #[test]
+    fn peek_shows_the_packet_after_a_gap() {
+        let mut j = JitterBuffer::new(2, 64);
+        j.push(pk(1));
+        assert_eq!(drain(&mut j), ["1"]);
+        j.push(pk(3));
+        j.push(pk(4));
+        assert!(matches!(j.pop(), Some(JitterOutput::Lost { first: 2, count: 1 })));
+        assert_eq!(j.peek().map(|p| p.sequence), Some(3));
     }
 }

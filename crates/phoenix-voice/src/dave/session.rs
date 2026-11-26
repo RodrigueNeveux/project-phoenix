@@ -251,7 +251,7 @@ impl DaveSession {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::dave::openmls_session::OpenMlsSession;
 
@@ -267,8 +267,7 @@ mod tests {
         assert!(!s.is_active());
     }
 
-    #[test]
-    fn end_to_end_media_between_two_clients() {
+    pub(crate) fn paired_sessions() -> (DaveSession, DaveSession) {
         use openmls::prelude::tls_codec::{Deserialize as _, Serialize as _};
         use openmls::prelude::*;
         use openmls_basic_credential::SignatureKeyPair;
@@ -301,6 +300,12 @@ mod tests {
         a.handle(&DaveServerMessage::ExecuteTransition { transition_id: 3 });
         b.handle(&DaveServerMessage::ExecuteTransition { transition_id: 3 });
         assert!(a.is_active() && b.is_active());
+        (a, b)
+    }
+
+    #[test]
+    fn end_to_end_media_between_two_clients() {
+        let (mut a, mut b) = paired_sessions();
         assert_eq!(a.epoch_authenticator(), b.epoch_authenticator());
         let frame = [0x78u8, 1, 2, 3, 4, 5, 6, 7];
         let enc = a.encrypt(Codec::Opus, &frame).unwrap();

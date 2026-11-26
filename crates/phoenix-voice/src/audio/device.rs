@@ -18,6 +18,7 @@ use crate::{Error, FRAME_SAMPLES, Result};
 
 const RATE: u32 = 48_000;
 const MAX_OUT_MS: usize = 120;
+const OUT_TARGET_MS: usize = 60;
 
 pub fn input_devices() -> Vec<String> {
     if let Some(v) = super::pulse::devices(true).filter(|v| !v.is_empty()) {
@@ -96,6 +97,12 @@ impl PlaybackSink {
     }
     pub fn remove_user(&self, user: u64) {
         lock(&self.mixer).remove_user(user);
+    }
+    pub fn stats(&self) -> Vec<(u64, super::mixer::TrackStats)> {
+        lock(&self.mixer).stats()
+    }
+    pub fn output_level_db(&self) -> f32 {
+        lock(&self.mixer).output_level_db()
     }
 }
 
@@ -343,6 +350,9 @@ fn encode_loop(
         tracing::warn!("opus encoder unavailable");
         return;
     };
+    if let Err(e) = enc.enable_fec(10) {
+        tracing::debug!(error = %e, "opus fec");
+    }
     let mut rs = Resampler::new(rate, RATE, 1);
     let mut proc = Processor::default();
     let mut pending: Vec<f32> = Vec::with_capacity(FRAME_SAMPLES * 4);
@@ -487,25 +497,48 @@ fn mix_loop(
 ) {
     let mut rs = Resampler::new(RATE, rate, ch);
     let cap = rate as usize * ch * MAX_OUT_MS / 1000;
-    let mut next = Instant::now();
+    let target = rate as usize * ch * OUT_TARGET_MS / 1000;
+    let log = std::env::var_os("PHOENIX_SOUND_LOG").is_some();
+    let mut last_log = Instant::now();
+    let mut underruns = 0u64;
     let mut buf = Vec::with_capacity(FRAME_SAMPLES * 4);
     while !stop.load(Ordering::Relaxed) {
-        let frame = lock(&mixer).mix_frame(&control);
-        let frame = convert_channels(&frame, 2, ch);
-        buf.clear();
-        rs.process(&frame, &mut buf);
-        {
+        let queued = lock(&q).len();
+        if queued == 0 {
+            underruns += 1;
+        }
+        let mut pending = queued;
+        while pending < target && !stop.load(Ordering::Relaxed) {
+            let frame = lock(&mixer).mix_frame(&control);
+            let frame = convert_channels(&frame, 2, ch);
+            buf.clear();
+            rs.process(&frame, &mut buf);
             let mut q = lock(&q);
             if q.len() + buf.len() <= cap {
                 q.extend(buf.iter().copied());
             }
+            pending = q.len();
+            if buf.is_empty() {
+                break;
+            }
         }
-        next += Duration::from_millis(20);
-        let now = Instant::now();
-        if next > now {
-            std::thread::sleep(next - now);
-        } else if now - next > Duration::from_millis(200) {
-            next = now;
+        if log && last_log.elapsed() >= Duration::from_secs(1) {
+            last_log = Instant::now();
+            let m = lock(&mixer);
+            for (user, s) in m.stats() {
+                eprintln!(
+                    "voice-recv: user={user} ssrc={} received={} decoded={} fec={} plc={} late={} dropped={} resets={} level_db={:.1}",
+                    s.ssrc, s.received, s.decoded, s.recovered, s.concealed, s.late, s.dropped, s.resets, s.level_db
+                );
+            }
+            eprintln!(
+                "voice-recv: mixer out_db={:.1} queue_ms={} underruns={underruns} deafened={} output_gain={:.2}",
+                m.output_level_db(),
+                pending * 1000 / (rate as usize * ch).max(1),
+                control.deafened(),
+                control.output_gain()
+            );
         }
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
