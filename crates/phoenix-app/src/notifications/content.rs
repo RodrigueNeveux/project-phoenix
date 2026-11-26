@@ -26,6 +26,18 @@ pub trait Lookup {
     fn user(&self, id: u64) -> Option<api::User>;
     fn role(&self, guild: u64, id: u64) -> Option<String>;
     fn guild_exists(&self, id: u64) -> bool;
+    fn guild_name(&self, _id: u64) -> Option<String> {
+        None
+    }
+    fn me(&self) -> Option<u64> {
+        None
+    }
+}
+
+pub const USER_MESSAGE: [u8; 9] = [0, 19, 20, 23, 26, 41, 45, 47, 68];
+
+pub fn is_user_message(kind: MessageType) -> bool {
+    USER_MESSAGE.contains(&kind.value())
 }
 
 pub fn isolate(s: &str) -> String {
@@ -58,7 +70,7 @@ pub fn title(look: &dyn Lookup, author: &str, c: &Chan, m: &api::Message) -> Str
             let parent = c.parent.and_then(|p| look.channel(p));
             match (&parent, m.kind == MessageType::ThreadStarterMessage) {
                 (Some(o), true) => decorate(author, o, o.parent.and_then(|p| look.channel(p)).as_ref()),
-                _ if !m.kind.is_regular() && !c.guild.is_some_and(|g| look.guild_exists(g)) => author.to_owned(),
+                _ if !is_user_message(m.kind) && !c.guild.is_some_and(|g| look.guild_exists(g)) => author.to_owned(),
                 _ => decorate(author, c, parent.as_ref()),
             }
         }
@@ -155,9 +167,22 @@ fn plain_name(u: &api::User) -> String {
     u.display_name().to_owned()
 }
 
-pub fn system(m: &api::Message) -> Option<String> {
+fn automod_notification(m: &api::Message) -> Option<Option<String>> {
+    let e = m.embeds.iter().find(|e| e.kind.as_deref() == Some("auto_moderation_notification"))?;
+    Some(e.fields.iter().find(|f| f.name == "notification_type").map(|f| f.value.clone()))
+}
+
+fn incident_time(content: &str) -> String {
+    match chrono::DateTime::parse_from_rfc3339(content) {
+        Ok(t) => crate::i18n::clock(t.with_timezone(&chrono::Local)),
+        Err(_) => String::new(),
+    }
+}
+
+pub fn system(look: &dyn Lookup, c: &Chan, m: &api::Message) -> Option<String> {
     let name = plain_name(&m.author);
     let other = m.mentions.first().map(|u| plain_name(&u.user));
+    let guild_name = || c.guild.and_then(|g| look.guild_name(g));
     Some(match m.kind {
         MessageType::RecipientAdd => crate::t!("notif.recipient_add", username = name, other = other?).to_string(),
         MessageType::RecipientRemove => match (other, m.mentions.first().map(|u| u.user.id)) {
@@ -165,10 +190,49 @@ pub fn system(m: &api::Message) -> Option<String> {
             (Some(_), _) => crate::t!("notif.recipient_leave", username = name).to_string(),
             (None, _) => return None,
         },
+        MessageType::Call => {
+            let call = m.call.as_ref()?;
+            let me = look.me()?;
+            if call.participants.iter().any(|p| p.0 == me) {
+                return None;
+            }
+            crate::t!("notif.call", username = name).to_string()
+        }
+        MessageType::ChannelNameChange => {
+            let forum_post = c.parent.and_then(|p| look.channel(p)).is_some_and(|p| matches!(p.kind, ChannelType::GuildForum | ChannelType::GuildMedia));
+            let key = if forum_post { "notif.post_rename" } else { "notif.channel_rename" };
+            crate::i18n::t(key, &[("username", name.as_str()), ("channel", m.content.as_str())]).to_string()
+        }
+        MessageType::ChannelIconChange => crate::t!("notif.group_icon", username = name).to_string(),
         MessageType::ChannelPinnedMessage => crate::t!("notif.pin", username = name).to_string(),
+        MessageType::UserJoin if m.author.bot => match m.actor.as_ref() {
+            Some(actor) => crate::t!("notif.app_added_by", username = plain_name(actor), app = name).to_string(),
+            None => crate::t!("notif.app_added", app = name).to_string(),
+        },
         MessageType::UserJoin => crate::i18n::t(join_key(m.id.0), &[("username", name.as_str())]).to_string(),
-        MessageType::GuildBoost => crate::t!("notif.boost", username = name).to_string(),
-        _ => return None,
+        MessageType::GuildBoost | MessageType::GuildBoostTier1 | MessageType::GuildBoostTier2 | MessageType::GuildBoostTier3 => crate::t!("notif.boost", username = name).to_string(),
+        MessageType::GuildInviteReminder => crate::t!("notif.invite_reminder").to_string(),
+        MessageType::ThreadStarterMessage => crate::t!("notif.thread_started", username = name, thread = c.name).to_string(),
+        MessageType::AutoModerationAction => match automod_notification(m) {
+            Some(kind) => {
+                let g = guild_name()?;
+                match kind.as_deref() {
+                    Some("activity_alerts_enabled") => crate::t!("notif.automod_alerts", guild = g).to_string(),
+                    Some("interaction_blocked") => crate::t!("notif.automod_blocked", guild = g).to_string(),
+                    _ => crate::t!("notif.automod_unusual", guild = g).to_string(),
+                }
+            }
+            None => m.content.clone(),
+        },
+        MessageType::RoleSubscriptionPurchase => return None,
+        k if k.value() == 44 => {
+            let product = m.purchase_notification.as_ref()?.pointer("/guild_product_purchase/product_name")?.as_str()?;
+            crate::t!("notif.purchase", username = name, product = product).to_string()
+        }
+        k if k.value() == 36 => crate::t!("notif.security_on", username = name, guild = guild_name()?, time = incident_time(&m.content)).to_string(),
+        k if k.value() == 37 => crate::t!("notif.security_off", username = name, guild = guild_name()?).to_string(),
+        k if matches!(k.value(), 32..=34) => return None,
+        _ => m.content.clone(),
     })
 }
 
@@ -182,8 +246,8 @@ pub fn body(look: &dyn Lookup, c: &Chan, m: &api::Message) -> Option<String> {
         crate::t!("notif.poll", question = q).to_string()
     } else if m.kind == MessageType::PollResult {
         crate::t!("notif.poll_result", question = poll_result_question(m)).to_string()
-    } else if !m.kind.is_regular() {
-        unparse(look, c, &system(m)?)
+    } else if !is_user_message(m.kind) {
+        unparse(look, c, &system(look, c, m)?)
     } else {
         let mut r = unparse(look, c, &m.content);
         if c.kind == ChannelType::Dm && !m.author.bot && m.content.starts_with("> -# *") && r.starts_with("> -#") {
@@ -258,6 +322,12 @@ impl Lookup for CacheLookup<'_> {
     fn guild_exists(&self, id: u64) -> bool {
         self.cache.guild(api::Snowflake(id)).is_some()
     }
+    fn guild_name(&self, id: u64) -> Option<String> {
+        self.cache.guild(api::Snowflake(id)).map(|g| g.properties.name.clone())
+    }
+    fn me(&self) -> Option<u64> {
+        self.cache.current_user().map(|u| u.id.0)
+    }
 }
 
 #[cfg(test)]
@@ -286,6 +356,12 @@ mod tests {
         }
         fn guild_exists(&self, _: u64) -> bool {
             true
+        }
+        fn guild_name(&self, id: u64) -> Option<String> {
+            (id == 1).then(|| "Aperture".to_owned())
+        }
+        fn me(&self) -> Option<u64> {
+            Some(99)
         }
     }
 
@@ -379,6 +455,54 @@ mod tests {
         assert_eq!(body(&f, &dm, &msg("> -# *note*")).unwrap(), "> *note*");
         let unknown = api::Message { kind: MessageType::Call, ..msg("") };
         assert!(body(&f, c, &unknown).is_none());
+    }
+
+    #[test]
+    fn system_messages_follow_stringify() {
+        let f = fake();
+        let c = &f.chans[&2];
+        let sys = |kind: u8, content: &str| api::Message { kind: MessageType::from(kind), ..msg(content) };
+        let mut call = sys(3, "");
+        call.call = Some(api::MessageCall { participants: vec![api::Snowflake(10)], ended_timestamp: None });
+        assert_eq!(system(&f, c, &call).unwrap(), crate::t!("notif.call", username = "alice").to_string());
+        call.call.as_mut().unwrap().participants.push(api::Snowflake(99));
+        assert!(system(&f, c, &call).is_none());
+        assert_eq!(system(&f, c, &sys(4, "nouveau")).unwrap(), crate::t!("notif.channel_rename", username = "alice", channel = "nouveau").to_string());
+        let mut chans = f.chans.clone();
+        chans.insert(7, chan(7, ChannelType::GuildForum, "forum", None));
+        let post = chan(8, ChannelType::PublicThread, "post", Some(7));
+        let forum = Fake { chans, users: f.users.clone(), nicks: f.nicks.clone() };
+        assert_eq!(system(&forum, &post, &sys(4, "titre")).unwrap(), crate::t!("notif.post_rename", username = "alice", channel = "titre").to_string());
+        assert_eq!(system(&f, c, &sys(5, "")).unwrap(), crate::t!("notif.group_icon", username = "alice").to_string());
+        for tier in 9..=11 {
+            assert_eq!(system(&f, c, &sys(tier, "")).unwrap(), crate::t!("notif.boost", username = "alice").to_string());
+        }
+        assert_eq!(system(&f, c, &sys(22, "")).unwrap(), crate::t!("notif.invite_reminder").to_string());
+        assert_eq!(system(&f, &f.chans[&3], &sys(21, "")).unwrap(), crate::t!("notif.thread_started", username = "alice", thread = "idée").to_string());
+        let mut bot = sys(7, "");
+        bot.author.bot = true;
+        assert_eq!(system(&f, c, &bot).unwrap(), crate::t!("notif.app_added", app = "alice").to_string());
+        bot.actor = Some(user(11, "bob"));
+        assert_eq!(system(&f, c, &bot).unwrap(), crate::t!("notif.app_added_by", username = "bob", app = "alice").to_string());
+        let mut am = sys(24, "brut");
+        assert_eq!(system(&f, c, &am).unwrap(), "brut");
+        am.embeds.push(api::Embed {
+            kind: Some("auto_moderation_notification".into()),
+            fields: vec![api::EmbedField { name: "notification_type".into(), value: "interaction_blocked".into(), inline: false }],
+            ..Default::default()
+        });
+        assert_eq!(system(&f, c, &am).unwrap(), crate::t!("notif.automod_blocked", guild = "Aperture").to_string());
+        am.embeds[0].fields[0].value = "raid".into();
+        assert_eq!(system(&f, c, &am).unwrap(), crate::t!("notif.automod_unusual", guild = "Aperture").to_string());
+        let mut buy = sys(44, "");
+        assert!(system(&f, c, &buy).is_none());
+        buy.purchase_notification = Some(serde_json::json!({ "guild_product_purchase": { "product_name": "Pack" } }));
+        assert_eq!(system(&f, c, &buy).unwrap(), crate::t!("notif.purchase", username = "alice", product = "Pack").to_string());
+        assert_eq!(system(&f, c, &sys(37, "")).unwrap(), crate::t!("notif.security_off", username = "alice", guild = "Aperture").to_string());
+        assert!(system(&f, c, &sys(36, "x")).unwrap().contains("Aperture"));
+        assert!(system(&f, c, &sys(33, "")).is_none());
+        assert_eq!(system(&f, c, &sys(12, "suivi")).unwrap(), "suivi");
+        assert!(is_user_message(MessageType::Unknown(68)) && !is_user_message(MessageType::ThreadStarterMessage));
     }
 
     #[test]
