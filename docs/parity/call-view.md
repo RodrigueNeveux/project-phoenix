@@ -197,6 +197,6 @@ Sources: chunk `9b3cd218` Channel `render`: when `shouldRenderCall()` the channe
 | control | behaviour now | source | status |
 |---|---|---|---|
 | Invite (left edge) | guild call: Invite People for the guild; DM call: add-friends picker on the call channel | — | ✅ (it had no handler) |
-| mic caret | opens the audio device menu (input device, input volume, voice settings) at the click, highlighted while open | `audio-device-context` menu in the web bundle | ⚠ the client menu also has the output device, input profile, input meter and push-to-talk rows |
+| mic caret | the full `audio-device-context` menu of the call tray (every flag set in `fc9b5c3443825c91.js`): input device, input profile (`LM3U3k`: Voice Isolation, Studio, Custom, always enabled in this build, module 852712), output device / input volume, input level meter (`ye+BAy`, notch meter, only in a call), output volume / Push to Talk (greyed out on Studio), Deafen, Voice Settings; centred above the caret | `9c90d6f3aabcf794.js` module 96020 | ✅ (btn-home2) ⚠ spatial audio is left out (hidden on this platform in the client) |
 | camera caret | camera list (V4L2 nodes, first one by default, a pick sends `SetCameraDevice`) / Video Settings (`LKzQSF`, opens Voice & Video) | `video-device-context` (module 28499: device list `u.H(VIDEO_INPUT)`, then `video-settings`) | ⚠ the middle row `E.A(userId)` is not drawn |
 | activity | inert on purpose | brief: opening the shelf writes `settings-proto/1` | ➖ |
