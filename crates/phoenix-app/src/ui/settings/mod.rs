@@ -1,7 +1,7 @@
 pub mod account;
 pub mod nested;
 pub mod sessions;
-mod art;
+pub mod art;
 pub mod authorized_apps;
 pub mod connections;
 pub mod billing;

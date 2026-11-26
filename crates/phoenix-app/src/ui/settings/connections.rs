@@ -87,7 +87,7 @@ pub fn platform_label(kind: &str) -> &'static str {
         "playstation" => "PlayStation Network",
         "spotify" => "Spotify",
         "xbox" => "Xbox",
-        "amazonmusic" => "Amazon Music",
+        "amazonmusic" | "amazon-music" => "Amazon Music",
         "bungie" => "Bungie.net",
         "domain" => "Domain",
         "epicgames" => "Epic Games",

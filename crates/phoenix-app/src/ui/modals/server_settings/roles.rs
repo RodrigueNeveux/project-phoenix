@@ -104,6 +104,8 @@ pub struct Editor {
     pub icon: Option<IconDraft>,
     pub icon_modal: Option<IconTab>,
     pub icon_too_big: bool,
+    pub links: Option<Value>,
+    pub links_modal: bool,
 }
 
 impl Editor {
@@ -131,11 +133,13 @@ impl Editor {
             icon: None,
             icon_modal: None,
             icon_too_big: false,
+            links: None,
+            links_modal: false,
         }
     }
 
     pub fn dirty(&self) -> bool {
-        self.colors != self.colors0 || self.perms != self.perms0 || self.hoist != self.hoist0 || self.mention != self.mention0 || self.icon.is_some()
+        self.colors != self.colors0 || self.perms != self.perms0 || self.hoist != self.hoist0 || self.mention != self.mention0 || self.icon.is_some() || self.links.is_some()
     }
 
     pub fn reset(&mut self) {
@@ -145,6 +149,7 @@ impl Editor {
         self.mention = self.mention0;
         self.name = None;
         self.icon = None;
+        self.links = None;
     }
 
     pub fn commit(&mut self) {
@@ -153,6 +158,7 @@ impl Editor {
         self.hoist0 = self.hoist;
         self.mention0 = self.mention;
         self.icon = None;
+        self.links = None;
     }
 
     pub fn edit(&self, cx: &gpui::App) -> Option<RoleEdit> {
@@ -205,6 +211,84 @@ pub enum IconTab {
 pub enum IconPick {
     Unicode(String),
     Custom(u64),
+}
+
+pub const LINK_TYPES: [&str; 22] = [
+    "riotgames", "battlenet", "bluesky", "letterboxd", "paypal", "reddit", "steam", "twitter", "ebay", "crunchyroll", "playstation", "spotify", "xbox", "amazon-music", "bungie", "domain",
+    "epicgames", "facebook", "github", "roblox", "twitch", "youtube",
+];
+
+pub const LINKS_MAX: usize = 10;
+
+fn link_key(v: &Value) -> String {
+    format!("{}:{}", kit::s(v, "connection_type"), v.get("application_id").and_then(Value::as_str).unwrap_or(""))
+}
+
+pub fn link_items(groups: &Value) -> Vec<Value> {
+    groups.as_array().into_iter().flatten().filter_map(Value::as_array).flatten().cloned().collect()
+}
+
+pub fn links_or(groups: &Value) -> bool {
+    groups.as_array().is_some_and(|g| g.len() > 1)
+}
+
+pub fn regroup(items: &[Value], or: bool) -> Value {
+    if !or {
+        return if items.is_empty() { serde_json::json!([]) } else { serde_json::json!([items]) };
+    }
+    let mut keys: Vec<String> = Vec::new();
+    let mut groups: Vec<Vec<Value>> = Vec::new();
+    for it in items {
+        let k = link_key(it);
+        match keys.iter().position(|x| *x == k) {
+            Some(i) => groups[i].push(it.clone()),
+            None => {
+                keys.push(k);
+                groups.push(vec![it.clone()]);
+            }
+        }
+    }
+    serde_json::json!(groups)
+}
+
+pub fn add_link(groups: &Value, kind: &str) -> Value {
+    let mut items = link_items(groups);
+    items.push(serde_json::json!({ "connection_type": kind }));
+    regroup(&items, links_or(groups))
+}
+
+pub fn remove_link(groups: &Value, key: &str) -> Value {
+    let items: Vec<Value> = link_items(groups).into_iter().filter(|v| link_key(v) != key).collect();
+    regroup(&items, links_or(groups))
+}
+
+pub fn link_kinds(groups: &Value) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for it in link_items(groups) {
+        let k = link_key(&it);
+        if !out.contains(&k) {
+            out.push(k);
+        }
+    }
+    out
+}
+
+fn links_call(guild: u64, role: u64) -> phoenix_api::rest::guild_server::ServerCall {
+    phoenix_api::rest::guild_server::ServerCall::RoleConnections { guild: Snowflake(guild), role: Snowflake(role) }
+}
+
+pub fn links_write(guild: u64, e: &Editor) -> Option<AdminCall> {
+    let config = e.links.clone()?;
+    Some(AdminCall::Server(phoenix_api::rest::guild_server::ServerCall::SetRoleConnections { guild: Snowflake(guild), role: Snowflake(e.id), config }))
+}
+
+fn set_links(f: impl FnOnce(&Value) -> Value, base: Value) {
+    with_state(|s| {
+        if let Some(e) = s.role.as_mut() {
+            let cur = e.links.clone().unwrap_or(base);
+            e.links = Some(f(&cur));
+        }
+    });
 }
 
 pub const ROLE_ICON_MAX_BYTES: u64 = 256_000;
@@ -1216,17 +1300,192 @@ fn theme_preview(guild: u64, role: &Value, e: &Editor) -> AnyElement {
     out.into_any_element()
 }
 
-fn links() -> AnyElement {
-    div()
-        .mt(z(24.))
-        .flex()
-        .flex_col()
-        .gap(z(8.))
-        .child(text(crate::t!("gs.role.links_notice"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).p(z(8.)).rounded(z(8.)).bg(c(tok(idx::BACKGROUND_FEEDBACK_MOD_INFO))))
-        .child(text(crate::t!("gs.role.links_title"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG).mt(z(16.)))
-        .child(text(crate::t!("gs.role.links_desc"), 14., 18., FontWeight::NORMAL, idx::TEXT_SUBTLE))
-        .child(div().mt(z(16.)).flex().justify_center().child(crate::ui::controls::button("ss-role-link-add", crate::t!("gs.role.links_add"), BtnKind::Secondary)))
-        .into_any_element()
+fn platform_icon(kind: &str, size: f32) -> AnyElement {
+    match crate::ui::settings::art::connection_icon(kind) {
+        Some((url, app_icon)) => gpui::img(SharedString::from(url)).flex_none().size(z(size)).when(app_icon, |i| i.rounded(z(size))).object_fit(gpui::ObjectFit::Contain).into_any_element(),
+        None => gpui::svg().path(crate::icons::path("chat/link")).flex_none().size(z(size)).text_color(c(tok(idx::ICON_DEFAULT))).into_any_element(),
+    }
+}
+
+fn disabled_when(d: gpui::Stateful<gpui::Div>, off: bool) -> gpui::Stateful<gpui::Div> {
+    if off { d.opacity(0.5).cursor_not_allowed() } else { d }
+}
+
+fn links(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
+    let role = s.list("roles").iter().find(|r| kit::n(r, "id") == e.id).cloned().unwrap_or(Value::Null);
+    let lock = locked(app, s, &role);
+    let has_members = e.members.as_ref().is_some_and(|m| !m.is_empty());
+    let fetched = crate::ui::server_pages::fetch(app, s.guild, links_call(s.guild.0, e.id), cx).filter(Value::is_array).unwrap_or_else(|| serde_json::json!([]));
+    let groups = e.links.clone().unwrap_or_else(|| fetched.clone());
+    let kinds = link_kinds(&groups);
+    let mut out = div().mt(z(24.)).flex().flex_col();
+    if has_members {
+        out = out.child(
+            div()
+                .mb(z(16.))
+                .p(z(8.))
+                .flex()
+                .items_center()
+                .rounded(z(4.))
+                .border_1()
+                .border_color(c(tok(idx::STATUS_WARNING_BACKGROUND)))
+                .bg(gpui::rgba(0xFAA61A1A))
+                .child(gpui::svg().path(crate::icons::path("settings/circle-error")).flex_none().size(z(40.)).mr(z(8.)).text_color(c(tok(idx::STATUS_WARNING_BACKGROUND))))
+                .child(text(crate::t!("gs.role.links_notice"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).flex_1().whitespace_normal()),
+        );
+    }
+    let open_grid = move |off: bool, cx: &mut Cx| {
+        cx.listener(move |_, _, _, cx| {
+            if off {
+                return;
+            }
+            with_state(|s| {
+                if let Some(e) = s.role.as_mut() {
+                    e.links_modal = true;
+                }
+            });
+            cx.notify();
+        })
+    };
+    if kinds.is_empty() {
+        let off = lock || has_members;
+        let btn = disabled_when(crate::ui::controls::button("ss-role-link-add", crate::t!("gs.role.links_add"), BtnKind::Primary).w_full(), off).on_click(open_grid(off, cx));
+        return out
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(z(8.))
+                    .child(text(crate::t!("gs.role.links_title"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG))
+                    .child(text(crate::t!("gs.role.links_desc"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).mb(z(8.)).whitespace_normal())
+                    .child(btn),
+            )
+            .into_any_element();
+    }
+    let base = fetched.clone();
+    let clear = disabled_when(
+        div()
+            .id("ss-role-link-clear")
+            .flex_none()
+            .cursor_pointer()
+            .text_size(z(14.))
+            .line_height(z(18.))
+            .font_weight(FontWeight::SEMIBOLD)
+            .text_color(c(tok(idx::TEXT_FEEDBACK_CRITICAL)))
+            .hover(|s| s.underline())
+            .child(crate::t!("gs.role.links_clear")),
+        lock,
+    )
+    .on_click(cx.listener(move |_, _, _, cx| {
+        if lock {
+            return;
+        }
+        with_state(|s| {
+            if let Some(e) = s.role.as_mut() {
+                e.links = Some(serde_json::json!([]));
+            }
+        });
+        cx.notify();
+    }));
+    let or = links_or(&groups);
+    let can_or = regroup(&link_items(&groups), true).as_array().map_or(0, Vec::len) >= 2;
+    let opts = vec![crate::t!("gs.role.links_any"), crate::t!("gs.role.links_all")];
+    let b2 = base.clone();
+    let on_pick: kit::OnPick = std::rc::Rc::new(move |_, i, cx| {
+        set_links(|g| regroup(&link_items(g), i == 0), b2.clone());
+        cx.notify();
+    });
+    let cur = usize::from(!or);
+    let mut select = div().w_full().child(kit::dropdown(s, "role-links-op", SharedString::from(opts[cur].clone()).into_any_element(), opts, Some(cur), on_pick, cx));
+    if lock || !can_or {
+        select = select.opacity(0.5);
+    }
+    let rows = kinds
+        .iter()
+        .enumerate()
+        .map(|(i, key)| {
+            let kind = key.split(':').next().unwrap_or_default().to_owned();
+            let label = crate::ui::settings::connections::platform_label(&kind);
+            let key = key.clone();
+            let b3 = base.clone();
+            div()
+                .mb(z(8.))
+                .p(z(16.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .child(div().mr(z(4.)).child(platform_icon(&kind, 24.)))
+                        .child(text(crate::t!("gs.role.links_must", platformName = label), 16., 20., FontWeight::MEDIUM, idx::TEXT_DEFAULT).flex_1())
+                        .child(disabled_when(kit::icon_btn(("ss-role-link-rm", i), "close-small", 32., 16., false), lock).on_click(cx.listener(move |_, _, _, cx| {
+                            if lock {
+                                return;
+                            }
+                            set_links(|g| remove_link(g, &key), b3.clone());
+                            cx.notify();
+                        }))),
+                )
+                .into_any_element()
+        })
+        .collect::<Vec<_>>();
+    out = out
+        .child(div().mb(z(8.)).flex().items_center().child(div().flex_1().child(text(crate::t!("gs.role.links_title"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG))).child(clear))
+        .child(text(crate::t!("gs.role.links_desc"), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).whitespace_normal())
+        .child(div().mt(z(16.)).flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.role.links_requirements"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG)).child(select))
+        .child(div().mt(z(16.)).flex().flex_col().children(rows));
+    if kinds.len() < LINKS_MAX {
+        out = out.child(disabled_when(crate::ui::controls::button_icon("ss-role-link-more", "plus-circle", crate::t!("gs.role.links_add"), BtnKind::Secondary).w_full(), lock).on_click(open_grid(lock, cx)));
+    }
+    out.into_any_element()
+}
+
+pub fn links_modal(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
+    let ent = cx.entity();
+    let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
+        with_state(|s| {
+            if let Some(e) = s.role.as_mut() {
+                e.links_modal = false;
+            }
+        });
+        ent.update(cx, |_, cx| cx.notify());
+    });
+    let fetched = crate::ui::server_pages::fetch(app, s.guild, links_call(s.guild.0, e.id), cx).filter(Value::is_array).unwrap_or_else(|| serde_json::json!([]));
+    let groups = e.links.clone().unwrap_or_else(|| fetched.clone());
+    let used: Vec<String> = link_items(&groups).iter().map(|v| kit::s(v, "connection_type")).collect();
+    let tiles = LINK_TYPES.iter().enumerate().filter(|(_, k)| !used.iter().any(|u| u == *k)).map(|(i, k)| {
+        let kind = (*k).to_owned();
+        let base = fetched.clone();
+        div()
+            .id(("ss-role-link-tile", i))
+            .mr(z(8.))
+            .mb(z(8.))
+            .size(z(44.))
+            .rounded(z(8.))
+            .flex()
+            .items_center()
+            .justify_center()
+            .cursor_pointer()
+            .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
+            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
+            .tooltip(crate::ui::tooltip::tip(crate::ui::settings::connections::platform_label(&kind)))
+            .child(platform_icon(&kind, 28.))
+            .on_click(cx.listener(move |_, _, _, cx| {
+                let kind = kind.clone();
+                set_links(|g| add_link(g, &kind), base.clone());
+                with_state(|s| {
+                    if let Some(e) = s.role.as_mut() {
+                        e.links_modal = false;
+                    }
+                });
+                cx.notify();
+            }))
+            .into_any_element()
+    });
+    let body = div().mt(z(16.)).mb(z(8.)).mr(z(-8.)).flex().flex_wrap().justify_center().children(tiles);
+    crate::ui::modals::card_with(440., crate::t!("gs.role.links_modal_title"), None, body.into_any_element(), None, close)
 }
 
 pub fn member_matches(q: &str, name: &str, tag: &str) -> bool {
@@ -1402,7 +1661,7 @@ pub fn editor(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let body = match e.tab {
         Tab::Display => display(app, s, e, cx),
         Tab::Permissions => permissions(e, cx),
-        Tab::Links => links(),
+        Tab::Links => links(app, s, e, cx),
         Tab::Members => members(app, s, e, cx),
     };
     let header = div()
@@ -1500,6 +1759,31 @@ mod tests {
         assert!(has_icon(&r, &e));
         e.icon = Some(IconDraft::Clear);
         assert!(!has_icon(&r, &e));
+    }
+
+    #[test]
+    fn role_links_group_like_the_client() {
+        let empty = json!([]);
+        let one = add_link(&empty, "steam");
+        assert_eq!(one, json!([[{ "connection_type": "steam" }]]));
+        let two = add_link(&one, "twitch");
+        assert_eq!(two, json!([[{ "connection_type": "steam" }, { "connection_type": "twitch" }]]));
+        assert!(!links_or(&two));
+        let any = regroup(&link_items(&two), true);
+        assert_eq!(any, json!([[{ "connection_type": "steam" }], [{ "connection_type": "twitch" }]]));
+        assert!(links_or(&any));
+        assert_eq!(link_kinds(&any), ["steam:", "twitch:"]);
+        let three = add_link(&any, "github");
+        assert_eq!(three.as_array().map(Vec::len), Some(3));
+        let metadata = json!([[{ "connection_type": "steam", "connection_metadata_field": "steam_game_count", "operator": 3, "value": "5" }, { "connection_type": "steam" }]]);
+        assert_eq!(remove_link(&metadata, "steam:"), json!([]));
+        let mut e = Editor::new(&json!({ "id": "6", "name": "Linked" }), false);
+        assert!(links_write(5, &e).is_none());
+        e.links = Some(two.clone());
+        assert!(e.dirty());
+        let w = phoenix_api::rest::guild_manage::build(&links_write(5, &e).unwrap());
+        assert_eq!((w.method.as_str(), w.path.as_str(), w.body), ("PUT", "/guilds/5/roles/6/connections/configuration", Some(two)));
+        assert!(!crate::actions::guard::read_only_action(&crate::actions::ActionRequest::Admin(links_write(5, &e).unwrap())));
     }
 
     #[test]

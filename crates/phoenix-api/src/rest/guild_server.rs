@@ -38,6 +38,8 @@ pub enum ServerCall {
     DiscoverableContent { guild: Snowflake },
     ServerIndex { guild: Snowflake },
     TopGames { guild: Snowflake },
+    RoleConnections { guild: Snowflake, role: Snowflake },
+    SetRoleConnections { guild: Snowflake, role: Snowflake, config: Value },
     PruneCount { guild: Snowflake, days: u32, roles: Vec<Snowflake> },
     PublicApps { ids: Vec<Snowflake> },
     EditDiscoveryMetadata { guild: Snowflake, patch: Value },
@@ -254,6 +256,8 @@ pub fn build(call: &ServerCall) -> ApiReq {
         S::DiscoverableContent { guild } => req(Method::GET, format!("/guilds/{guild}/discoverable-content"), None),
         S::ServerIndex { guild } => req(Method::GET, format!("/index/servers/{guild}"), None),
         S::TopGames { guild } => req(Method::GET, format!("/guilds/{guild}/top-games"), None),
+        S::RoleConnections { guild, role } => req(Method::GET, format!("/guilds/{guild}/roles/{role}/connections/configuration"), None),
+        S::SetRoleConnections { guild, role, config } => req(Method::PUT, format!("/guilds/{guild}/roles/{role}/connections/configuration"), Some(config.clone())),
         S::PruneCount { guild, days, roles } => {
             let mut q = format!("days={days}");
             for r in roles {
@@ -334,6 +338,15 @@ impl ServerCall {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn role_connections_read_and_put() {
+        let r = build(&ServerCall::RoleConnections { guild: Snowflake(5), role: Snowflake(6) });
+        assert_eq!((r.method.clone(), r.path.as_str()), (Method::GET, "/guilds/5/roles/6/connections/configuration"));
+        let body = json!([[{ "connection_type": "steam", "connection_metadata_field": null, "application_id": null, "operator": null, "value": null }]]);
+        let w = build(&ServerCall::SetRoleConnections { guild: Snowflake(5), role: Snowflake(6), config: body.clone() });
+        assert_eq!((w.method.clone(), w.path.as_str(), w.body), (Method::PUT, "/guilds/5/roles/6/connections/configuration", Some(body)));
+    }
 
     #[test]
     fn top_games_and_public_apps_are_reads() {
