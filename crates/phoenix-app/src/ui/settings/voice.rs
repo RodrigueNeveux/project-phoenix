@@ -692,47 +692,60 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
     ensure_devices(cx);
     let p = prefs().lock().clone();
     let (inputs, outputs) = DEVICES.with(|d| d.borrow().clone()).unwrap_or_default();
+    let top = top_rows(&super::view::query(app, cx));
     div()
         .on_mouse_down(MouseButton::Left, cx.listener(|_, _, _, cx| {
             if OPEN_SELECT.with(|o| o.take()).is_some() {
                 cx.notify();
             }
         }))
-        .child(h1(crate::t!("sp.vo.t1")))
-        .child(
-            div()
-                .mt(z(11.))
-                .flex()
-                .gap(z(16.))
-                .child(column([
-                    h5(crate::t!("voice.input_device")).into_any_element(),
-                    select("input", p.input_device.clone(), inputs, |p, v| p.input_device = v, cx).into_any_element(),
-                ]))
-                .child(column([
-                    h5(crate::t!("voice.output_device")).into_any_element(),
-                    select("output", p.output_device.clone(), outputs, |p, v| p.output_device = v, cx).into_any_element(),
-                ])),
-        )
-        .child(
-            div()
-                .mt(z(30.))
-                .flex()
-                .gap(z(16.))
-                .child(column([
-                    h5(crate::t!("voice.input_volume")).into_any_element(),
-                    pct_slider("input-volume", p.input_volume, 100, |p, v| p.input_volume = v, cx).into_any_element(),
-                ]))
-                .child(column([
-                    h5(crate::t!("voice.output_volume")).into_any_element(),
-                    pct_slider("output-volume", p.output_volume, 200, |p, v| p.output_volume = v, cx).into_any_element(),
-                ])),
-        )
-        .child(div().mt(z(35.)).child(mic_test(app, cx)))
-        .child(divider())
+        .when(top.iter().any(|v| *v), |d| d.child(h1(crate::t!("sp.vo.t1"))))
+        .when(top[0], |d| {
+            d.child(
+                div()
+                    .mt(z(11.))
+                    .flex()
+                    .gap(z(16.))
+                    .child(column([
+                        h5(crate::t!("voice.input_device")).into_any_element(),
+                        select("input", p.input_device.clone(), inputs, |p, v| p.input_device = v, cx).into_any_element(),
+                    ]))
+                    .child(column([
+                        h5(crate::t!("voice.output_device")).into_any_element(),
+                        select("output", p.output_device.clone(), outputs, |p, v| p.output_device = v, cx).into_any_element(),
+                    ])),
+            )
+        })
+        .when(top[1], |d| {
+            d.child(
+                div()
+                    .mt(z(30.))
+                    .flex()
+                    .gap(z(16.))
+                    .child(column([
+                        h5(crate::t!("voice.input_volume")).into_any_element(),
+                        pct_slider("input-volume", p.input_volume, 100, |p, v| p.input_volume = v, cx).into_any_element(),
+                    ]))
+                    .child(column([
+                        h5(crate::t!("voice.output_volume")).into_any_element(),
+                        pct_slider("output-volume", p.output_volume, 200, |p, v| p.output_volume = v, cx).into_any_element(),
+                    ])),
+            )
+        })
+        .when(top[2], |d| d.child(div().mt(z(35.)).child(mic_test(app, cx))))
+        .when(top.iter().any(|v| *v), |d| d.child(divider()))
         .child(super::pages::render(app, LOWER, cx))
 }
 
 use super::pages::{B, Bind};
+
+pub fn top_rows(q: &str) -> [bool; 3] {
+    let hit = |k: &str| crate::t!(k).to_lowercase().contains(q);
+    if q.is_empty() || hit("sp.vo.t1") || hit("settings.page.voice_video") {
+        return [true; 3];
+    }
+    [hit("voice.input_device") || hit("voice.output_device"), hit("voice.input_volume") || hit("voice.output_volume"), hit("voice.mic_test")]
+}
 
 static LOWER: &[B] = &[
     B::Custom("sp.vo.profile", profile_row),
@@ -1066,4 +1079,17 @@ fn stream_strength(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
         .child(h5(crate::t!("sp.vo.stream_att_force")))
         .child(pct_slider("attenuation", p.attenuation, 100, |p, v| p.attenuation = v, cx))
         .into_any_element()
+}
+
+#[cfg(test)]
+mod search_tests {
+    #[test]
+    fn the_top_rows_follow_the_settings_search() {
+        assert_eq!(super::top_rows(""), [true; 3]);
+        let mic = crate::t!("voice.input_device").to_lowercase();
+        assert_eq!(super::top_rows(&mic), [true, false, false]);
+        let vol = crate::t!("voice.output_volume").to_lowercase();
+        assert!(super::top_rows(&vol)[1]);
+        assert_eq!(super::top_rows("zzzz-nothing"), [false; 3]);
+    }
 }
