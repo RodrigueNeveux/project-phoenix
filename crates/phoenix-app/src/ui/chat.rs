@@ -556,9 +556,9 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::Div {
                             pin_button(app, if app.chat.pins.is_some() { on } else { ic })
                                 .on_click(cx.listener(|a, _, _, cx| a.toggle_pins(cx))),
                         )
-                        .child(hdr_named(if is_group_dm { "gdm-add" } else { "dm-add" }, "add-to-dm", ic).on_click(cx.listener(move |a, _, _, cx| {
+                        .child(hdr_named(if is_group_dm { "gdm-add" } else { "dm-add" }, "add-to-dm", ic).on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| {
                             if let Some(c) = cid {
-                                a.open_add_to_dm(c, cx);
+                                a.open_add_to_dm_at(c, Some((ev.position() + gpui::point(gpui::px(0.), z(20.)), gpui::Anchor::TopRight)), cx);
                             }
                         })))
                         .map(|d| {
@@ -750,7 +750,7 @@ fn intro(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, reached_start: b
                         .gap(z(8.))
                         .child(
                             button_icon("gdm-intro-invite", "invite", crate::t!("header.add_to_gdm"), BtnKind::Primary)
-                                .on_click(move |_, _, cx| e1.update(cx, |a, cx| a.open_add_to_dm(ch, cx))),
+                                .on_click(move |ev, _, cx| e1.update(cx, |a, cx| a.open_add_to_dm_at(ch, Some((ev.position() + gpui::point(gpui::px(0.), z(24.)), gpui::Anchor::TopLeft)), cx))),
                         )
                         .child(
                             button_icon("gdm-intro-edit", "pen", crate::t!("menu.edit_group"), BtnKind::Secondary)

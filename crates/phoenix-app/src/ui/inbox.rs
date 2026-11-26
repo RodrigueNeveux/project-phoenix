@@ -346,13 +346,22 @@ impl PhoenixApp {
     }
 
     pub fn open_group_dm_picker(&mut self, cx: &mut Context<Self>) {
-        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false, channel: None, with: Vec::new() });
+        self.open_group_dm_picker_at(None, cx);
+    }
+
+    pub fn open_group_dm_picker_at(&mut self, anchor: Option<(gpui::Point<gpui::Pixels>, gpui::Anchor)>, cx: &mut Context<Self>) {
+        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false, channel: None, with: Vec::new(), anchor, group: false });
         cx.notify();
     }
 
     pub fn open_add_to_dm(&mut self, channel: Id, cx: &mut Context<Self>) {
+        self.open_add_to_dm_at(channel, None, cx);
+    }
+
+    pub fn open_add_to_dm_at(&mut self, channel: Id, anchor: Option<(gpui::Point<gpui::Pixels>, gpui::Anchor)>, cx: &mut Context<Self>) {
         let with = dm_recipients(self, channel);
-        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false, channel: Some(channel), with });
+        let group = crate::ui::dm_profile_panel::is_group_dm(self, channel);
+        self.parity.group_dm = Some(GroupDmPicker { search: None, picked: Vec::new(), sending: false, channel: Some(channel), with, anchor, group });
         cx.notify();
     }
 
@@ -1984,6 +1993,14 @@ pub fn dm_recipients(app: &PhoenixApp, channel: Id) -> Vec<Id> {
     list.into_iter().filter(|u| *u != me).collect()
 }
 
+pub fn picker_texts(existing: bool, group: bool, picked: usize) -> (SharedString, SharedString) {
+    match (existing, group) {
+        (false, _) => (crate::t!("groupdm.title_new"), if picked > 1 { crate::t!("groupdm.create_group") } else { crate::t!("groupdm.create") }),
+        (true, false) => (crate::t!("groupdm.title_dm"), crate::t!("groupdm.create_group")),
+        (true, true) => (crate::t!("groupdm.title_group"), crate::t!("groupdm.add")),
+    }
+}
+
 pub fn picker_room(picked: usize, with: usize) -> usize {
     GROUP_DM_MAX.saturating_sub(picked + with)
 }
@@ -2065,8 +2082,9 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                 ),
         );
     }
-    let label = if p.picked.len() > 1 { crate::t!("groupdm.create_group") } else { crate::t!("groupdm.create") };
+    let (title, label) = picker_texts(p.channel.is_some(), p.group, p.picked.len());
     let can = !p.picked.is_empty() && !p.sending;
+    let new = p.channel.is_none();
     let e = cx.entity();
     let close: crate::ui::modal::Action = std::rc::Rc::new(move |_, cx| {
         e.update(cx, |a, cx| {
@@ -2088,7 +2106,7 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                 .flex()
                 .flex_col()
                 .gap(z(4.))
-                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(crate::t!("groupdm.select")))
+                .child(div().text_size(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(Palette::TEXT_HEADER)).child(title))
                 .child(div().text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)).child(if left == 1 { crate::t!("groupdm.left_one") } else { crate::t!("groupdm.left_many", left = left) }))
                 .child(
                     div()
@@ -2111,24 +2129,57 @@ fn group_dm(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement
                     .children(crate::ui::chat::scrollbar::bar_for("gdm-list", crate::ui::chat::scrollbar::Bar::AutoFade)),
             ),
         )
-        .child(
-            div().p(z(16.)).border_t_1().border_color(c(Palette::DIVIDER)).child(
+        .child({
+            let cancel = close.clone();
+            div()
+                .p(z(16.))
+                .border_t_1()
+                .border_color(c(Palette::DIVIDER))
+                .flex()
+                .gap(z(8.))
+                .when(new, |d| {
+                    d.child(
+                        crate::ui::controls::button("gdm-cancel", crate::t!("common.cancel"), crate::ui::controls::BtnKind::Secondary)
+                            .flex_1()
+                            .on_click(move |_, w, cx| cancel(w, cx)),
+                    )
+                })
+                .child(
+                    crate::ui::controls::button("gdm-create", label, crate::ui::controls::BtnKind::Primary)
+                        .flex_1()
+                        .when(can, |d| d.on_click(cx.listener(|a, _, _, cx| a.create_group_dm(cx))))
+                        .when(!can, |d| d.opacity(0.5).cursor_not_allowed()),
+                )
+        });
+    if let Some((pos, corner)) = p.anchor {
+        let dismiss = close.clone();
+        return Some(
+            gpui::deferred(
                 div()
-                    .id("gdm-create")
-                    .h(z(38.))
-                    .rounded(z(8.))
-                    .bg(c(Palette::BLURPLE))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .text_size(z(14.))
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(gpui::white())
-                    .when(can, |d| d.cursor_pointer().on_click(cx.listener(|a, _, _, cx| a.create_group_dm(cx))))
-                    .when(!can, |d| d.opacity(0.5))
-                    .child(label),
-            ),
+                    .id("group-dm-popout-layer")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .occlude()
+                    .on_mouse_down(gpui::MouseButton::Left, move |_, w, cx| dismiss(w, cx))
+                    .child(
+                        gpui::anchored().anchor(corner).position(pos).snap_to_window_with_margin(z(8.)).child(
+                            div()
+                                .id("group-dm-popout")
+                                .occlude()
+                                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .border_1()
+                                .border_color(tk(idx::BORDER_SUBTLE))
+                                .rounded(z(8.))
+                                .child(card),
+                        ),
+                    ),
+            )
+            .with_priority(3)
+            .into_any_element(),
         );
+    }
     Some(crate::ui::modal::frame("group-dm-modal", close, card))
 }
 
@@ -2342,6 +2393,17 @@ fn thread_facepile(app: &PhoenixApp, ids: &[Id], count: u32) -> Option<gpui::Div
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn add_to_dm_popout_follows_the_client_titles_and_actions() {
+        use crate::i18n::t_in;
+        let _ = super::picker_texts(false, false, 1);
+        assert_eq!(t_in("en-US", "groupdm.title_new", &[]).as_ref(), "New Message");
+        assert_eq!(t_in("en-US", "groupdm.title_dm", &[]).as_ref(), "Add to DM");
+        assert_eq!(t_in("en-US", "groupdm.title_group", &[]).as_ref(), "Invite to Group DM");
+        assert_eq!(t_in("fr", "groupdm.add", &[]).as_ref(), "Ajouter");
+    }
+
     use super::*;
 
     #[test]
