@@ -1068,7 +1068,7 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
 mod tests {
     #[test]
     fn forum_post_reaction_keeps_custom_token() {
-        let r = |emoji: &str, id: Option<u64>| crate::model::Reaction { emoji: emoji.to_string().into(), count: 1, me: false, emoji_id: id.map(crate::model::Id) };
+        let r = |emoji: &str, id: Option<u64>| crate::model::Reaction { emoji: emoji.to_string().into(), count: 1, me: false, emoji_id: id.map(crate::model::Id), ..Default::default() };
         assert_eq!(super::reaction_token(&r("<:icon_vote_fleche_up:673309754604388380>", Some(673309754604388380))), "<:icon_vote_fleche_up:673309754604388380>");
         assert_eq!(super::reaction_token(&r("<a:Content:1548639781192208474>", Some(1548639781192208474))), "<a:Content:1548639781192208474>");
         assert_eq!(super::reaction_token(&r("hihihi", Some(7))), "<:hihihi:7>");

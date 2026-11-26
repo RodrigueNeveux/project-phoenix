@@ -49,6 +49,10 @@ pub fn sync_motion(animate_emoji: bool, focused: bool) {
     WINDOW_FOCUSED.store(focused, Ordering::Relaxed);
 }
 
+pub fn animate_emoji() -> bool {
+    ANIMATE_EMOJI.load(Ordering::Relaxed)
+}
+
 pub fn should_play(auto: bool, hovered: bool) -> bool {
     WINDOW_FOCUSED.load(Ordering::Relaxed) && ((auto && ANIMATE_EMOJI.load(Ordering::Relaxed)) || hovered)
 }

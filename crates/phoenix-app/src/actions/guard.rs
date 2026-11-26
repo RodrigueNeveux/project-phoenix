@@ -8,7 +8,7 @@ use crate::commands::ParityRequest;
 fn action_method(req: &ActionRequest) -> Option<Method> {
     match req {
         ActionRequest::Admin(c) => Some(phoenix_api::rest::guild_manage::build(c).method),
-        ActionRequest::Reminders | ActionRequest::ReportMenu(_) => Some(Method::GET),
+        ActionRequest::Reminders | ActionRequest::ReportMenu(_) | ActionRequest::Reactors { .. } => Some(Method::GET),
         _ => None,
     }
 }
@@ -45,6 +45,14 @@ mod tests {
 
     const G: Snowflake = Snowflake(1);
     const U: Snowflake = Snowflake(2);
+
+    #[test]
+    fn reactor_lists_are_reads() {
+        let emoji = crate::model::Reaction { emoji: "👍".into(), ..Default::default() };
+        for burst in [false, true] {
+            assert!(read_only_action(&ActionRequest::Reactors { channel: Id(1), msg: Id(2), emoji: emoji.clone(), burst }));
+        }
+    }
 
     #[test]
     fn mod_view_reads_pass() {

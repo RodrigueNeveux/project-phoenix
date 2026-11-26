@@ -94,6 +94,8 @@ pub struct ReactionEvent {
     pub emoji: ReactionEmoji,
     #[serde(default)]
     pub burst: bool,
+    #[serde(default, deserialize_with = "null_default")]
+    pub burst_colors: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

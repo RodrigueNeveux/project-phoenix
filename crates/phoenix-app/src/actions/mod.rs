@@ -33,7 +33,7 @@ pub enum ActionRequest {
     CreateStandaloneThread { channel: Id, name: String, private: bool, announcement: bool },
     Remind { channel: Id, msg: Id, due_unix: u64 },
     Reminders,
-    Reactors { channel: Id, msg: Id, emoji: Reaction },
+    Reactors { channel: Id, msg: Id, emoji: Reaction, burst: bool },
     RemoveReactions { channel: Id, msg: Id, emoji: Option<Reaction> },
     ReportMenu(ReportTarget),
     SubmitReport { menu: Box<ReportMenu>, target: ReportTarget, steps: Vec<ReportStep> },

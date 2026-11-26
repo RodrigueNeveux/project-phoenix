@@ -292,9 +292,12 @@ pub fn message(m: &api::Message) -> model::Message {
                     (_, Some(n)) => n.clone().into(),
                     _ => "?".into(),
                 },
-                count: r.count,
-                me: r.me || r.me_burst,
+                count: if r.count_details.normal + r.count_details.burst > 0 { r.count_details.normal } else { r.count },
+                me: r.me,
                 emoji_id: r.emoji.id.map(id),
+                burst_count: r.count_details.burst,
+                me_burst: r.me_burst,
+                burst_colors: r.burst_colors.iter().map(|c| c.clone().into()).collect(),
             })
             .collect(),
         kind: match message_kind(m.kind) {
@@ -1185,7 +1188,14 @@ impl Adapter {
             }
             GatewayEvent::MessageReactionAdd(r) | GatewayEvent::MessageReactionRemove(r) => {
                 if let Some(m) = cache.message(r.channel_id, r.message_id) {
-                    out.push(AppEvent::MessageUpdate(message(&m)));
+                    let conv = message(&m);
+                    let burst = (r.burst && matches!(ev, GatewayEvent::MessageReactionAdd(_)))
+                        .then(|| conv.reactions.iter().find(|x| burst_target(x, &r.emoji)).cloned())
+                        .flatten();
+                    out.push(AppEvent::MessageUpdate(conv));
+                    if let Some(x) = burst {
+                        out.push(AppEvent::BurstReaction { channel: id(r.channel_id), msg: id(r.message_id), emoji: x.emoji, emoji_id: x.emoji_id, colors: x.burst_colors });
+                    }
                 }
             }
             GatewayEvent::MessageReactionRemoveAll(r) | GatewayEvent::MessageReactionRemoveEmoji(r) => {
@@ -1413,6 +1423,15 @@ pub fn fatal_message(code: u16, reason: &str) -> String {
         4004 => "Your session is no longer valid. Please log in again.".into(),
         _ if reason.is_empty() => format!("Disconnected from Discord (code {code})."),
         _ => format!("Disconnected from Discord: {reason} (code {code})."),
+    }
+}
+
+
+pub fn burst_target(x: &model::Reaction, e: &api::ReactionEmoji) -> bool {
+    match (x.emoji_id, e.id) {
+        (Some(a), Some(b)) => a == id(b),
+        (None, None) => e.name.as_deref() == Some(x.emoji.as_ref()),
+        _ => false,
     }
 }
 

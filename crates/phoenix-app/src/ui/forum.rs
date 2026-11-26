@@ -834,7 +834,7 @@ fn post_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, cx: &
         .and_then(|_| app.channels.get(&p.thread).and_then(|t| t.parent).or_else(|| open_forum(app)))
         .and_then(|f| app.backend.forum_settings(f))
         .and_then(|s| s.reaction)
-        .map(|(id, name)| crate::model::Reaction { emoji: default_emoji_token(id, &name).into(), count: 0, me: false, emoji_id: id });
+        .map(|(id, name)| crate::model::Reaction { emoji: default_emoji_token(id, &name).into(), count: 0, me: false, emoji_id: id, ..Default::default() });
     let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
     let unread = is_unread(app, p);
     let title_color = if unread { c(Palette::TEXT_HEADER) } else { c(Palette::TEXT_MUTED) };
@@ -1062,7 +1062,7 @@ fn grid_card(app: &PhoenixApp, p: &ForumPost, tags: &[ForumTag], now: i64, width
         .and_then(|_| app.channels.get(&p.thread).and_then(|t| t.parent).or_else(|| open_forum(app)))
         .and_then(|f| app.backend.forum_settings(f))
         .and_then(|s| s.reaction)
-        .map(|(id, name)| crate::model::Reaction { emoji: default_emoji_token(id, &name).into(), count: 0, me: false, emoji_id: id });
+        .map(|(id, name)| crate::model::Reaction { emoji: default_emoji_token(id, &name).into(), count: 0, me: false, emoji_id: id, ..Default::default() });
     let r = ThreadRef { id: p.thread, name: p.title.clone().into(), message_count: p.message_count };
     let unread = is_unread(app, p);
     let post_tags: Vec<&ForumTag> = p.tags.iter().filter_map(|t| tags.iter().find(|x| x.id == *t)).collect();

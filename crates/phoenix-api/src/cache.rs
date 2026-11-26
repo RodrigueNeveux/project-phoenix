@@ -445,7 +445,15 @@ impl Cache {
             GatewayEvent::MessageReactionAdd(r) | GatewayEvent::MessageReactionRemove(r) => {
                 let add = matches!(ev, GatewayEvent::MessageReactionAdd(_));
                 let me = s.me.as_ref().is_some_and(|u| u.id == r.user_id);
-                return modify_message(&mut s, r.channel_id, r.message_id, |m| m.apply_reaction(&r.emoji, me, add, r.burst));
+                return modify_message(&mut s, r.channel_id, r.message_id, |m| {
+                    m.apply_reaction(&r.emoji, me, add, r.burst);
+                    if add
+                        && r.burst
+                        && let Some(x) = m.reactions.iter_mut().find(|x| x.emoji.same_as(&r.emoji) && x.burst_colors.is_empty())
+                    {
+                        x.burst_colors = r.burst_colors.clone();
+                    }
+                });
             }
             GatewayEvent::MessageReactionRemoveAll(r) => {
                 return modify_message(&mut s, r.channel_id, r.message_id, |m| m.reactions.clear());

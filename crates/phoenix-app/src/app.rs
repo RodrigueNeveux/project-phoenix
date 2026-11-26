@@ -865,6 +865,11 @@ impl PhoenixApp {
                 self.append_message(m, cx)
             }
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
+            AppEvent::BurstReaction { channel, msg, emoji, emoji_id, colors } => {
+                if let Some(p) = ui::burst::palette(&colors, !crate::theme::is_light()) {
+                    ui::burst::play(ui::burst::Play { channel, msg, token: &emoji, emoji_id, accent: p.accent, kind: ui::burst::Kind::External }, cx);
+                }
+            }
             AppEvent::HistoryRefresh { channel, messages } => crate::history_ui::on_refresh(self, channel, messages, cx),
             AppEvent::MessageDelete { channel, id } => {
                 crate::tts::on_message_delete(channel, id);

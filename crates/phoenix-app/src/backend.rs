@@ -63,6 +63,7 @@ pub enum AppEvent {
     Ready,
     MessageCreate(Message),
     MessageUpdate(Message),
+    BurstReaction { channel: Id, msg: Id, emoji: gpui::SharedString, emoji_id: Option<Id>, colors: Vec<gpui::SharedString> },
     MessageDelete { channel: Id, id: Id },
     TypingStart { channel: Id, user: Id, nick: Option<gpui::SharedString> },
     PresenceUpdate { user: Id, presence: Presence },

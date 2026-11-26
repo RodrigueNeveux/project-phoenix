@@ -271,6 +271,21 @@ impl GuardedWrite {
         write(Method::PUT, "/users/@me/clan", Some(json!({ "identity_guild_id": guild.to_string(), "identity_enabled": enabled })))
     }
 
+    pub fn burst_reaction(channel: u64, message: u64, emoji: &crate::models::ReactionEmoji, add: bool) -> Self {
+        let e: String = url::form_urlencoded::byte_serialize(emoji.route_form().as_bytes()).collect();
+        let base = format!("/channels/{channel}/messages/{message}/reactions/{e}");
+        if add {
+            write(Method::PUT, format!("{base}/@me?location=Message&type=1"), None)
+        } else {
+            write(Method::DELETE, format!("{base}/1/@me?location=Message&burst=true"), None)
+        }
+    }
+
+    pub fn remove_user_burst_reaction(channel: u64, message: u64, emoji: &crate::models::ReactionEmoji, user: u64) -> Self {
+        let e: String = url::form_urlencoded::byte_serialize(emoji.route_form().as_bytes()).collect();
+        write(Method::DELETE, format!("/channels/{channel}/messages/{message}/reactions/{e}/1/{user}?location=Message&burst=true"), None)
+    }
+
     pub fn refusal(&self) -> Error {
         blocked(&self.method, self.path.clone())
     }
@@ -292,6 +307,9 @@ mod tests {
             GuardedWrite::batch_channel_update(5, json!([{ "id": "6", "position": 0 }])),
             GuardedWrite::set_guild_identity(5, true),
             GuardedWrite::remove_user_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, 3),
+            GuardedWrite::burst_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, true),
+            GuardedWrite::burst_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, false),
+            GuardedWrite::remove_user_burst_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, 3),
             GuardedWrite::change_username("name", None, "pw"),
             GuardedWrite::change_email("a@b.c", Some("tok"), "pw"),
             GuardedWrite::send_email_code(),

@@ -535,8 +535,9 @@ impl RestClient {
         message: MessageId,
         emoji: &ReactionEmoji,
         limit: u8,
+        burst: bool,
     ) -> Result<Vec<User>> {
-        let p = format!("{}?limit={}", Self::reaction_path(channel, message, emoji), limit.clamp(1, 100));
+        let p = format!("{}?limit={}&type={}", Self::reaction_path(channel, message, emoji), limit.clamp(1, 100), u8::from(burst));
         self.call(Method::GET, &p, Body::None).await
     }
 

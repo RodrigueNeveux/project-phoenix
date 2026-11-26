@@ -81,8 +81,8 @@ pub async fn request(rest: RestClient, req: ActionRequest, emit: EventSink) -> R
             }
             ActionReply::Messages(msgs.into_iter().map(message).collect())
         }
-        R::Reactors { channel, msg, emoji: r } => {
-            let us = rest.get_reactions(sf(channel), sf(msg), &emoji(&r), 100).await.map_err(e)?;
+        R::Reactors { channel, msg, emoji: r, burst } => {
+            let us = rest.get_reactions(sf(channel), sf(msg), &emoji(&r), 100, burst).await.map_err(e)?;
             ActionReply::Users(us.iter().map(user).collect())
         }
         R::RemoveReactions { channel, msg, emoji: r } => {

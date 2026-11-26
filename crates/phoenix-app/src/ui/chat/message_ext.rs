@@ -300,63 +300,12 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, a
     let hc = crate::theme::high_contrast();
     let mut row = div().pt(z(if after_accessory { 8. } else { 4. })).pb(z(10.)).mb(z(-8.)).flex().flex_wrap().gap(z(4.)).items_center();
     for (ix, r) in msg.reactions.iter().enumerate() {
-        let e = entity.clone();
-        let rc = r.clone();
-        let emoji_el = div().my(z(2.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.));
-        let fade_key = crate::ui::states::key(("reaction", msg.id.0, ix));
-        row = row.child(
-            crate::ui::states::track(div().id(("reaction", ix)), fade_key)
-                .relative()
-                .py(z(2.))
-                .px(z(6.))
-                .rounded(z(8.))
-                .flex()
-                .items_center()
-                .gap(z(6.))
-                .border_1()
-                .when(r.me, |d| {
-                    if crate::theme::is_light() {
-                        d.bg(tk(idx::BRAND_160)).border_color(tk(idx::BRAND_500))
-                    } else {
-                        d.bg(tk(idx::REACTION_BACKGROUND_REACTED_DEFAULT))
-                            .border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT))
-                    }
-                })
-                .when(!r.me, |d| {
-                    d.child(crate::ui::states::fade_layer_pressed(
-                        fade_key,
-                        tk(idx::REACTION_BACKGROUND_DEFAULT),
-                        tk(idx::REACTION_BACKGROUND_HOVER),
-                        Some(("reaction", tk(idx::REACTION_BACKGROUND_ACTIVE))),
-                        100,
-                        8.,
-                    ))
-                    .border_color(if hc { tk(idx::BORDER_SUBTLE) } else { gpui::transparent_black() })
-                    .hover(move |s| s.border_color(tk(if hc { idx::BORDER_STRONG } else { idx::REACTION_BORDER_HOVER })))
-                })
-                .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
-                .cursor_pointer()
-                .group("reaction")
-                .child(emoji_el)
-                .child(
-                    div()
-                        .text_size(z(16.))
-                        .line_height(z(16.))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .text_color(tk(match (r.me, crate::theme::is_light()) {
-                            (true, true) => idx::BRAND_560,
-                            (true, false) => idx::REACTION_TEXT_REACTED_DEFAULT,
-                            _ => idx::TEXT_SUBTLE,
-                        }))
-                        .group_hover("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_HOVER)))
-                        .id("count")
-                        .group_active("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_ACTIVE)))
-                        .w(z(12. * r.count.to_string().len() as f32))
-                        .text_center()
-                        .child(SharedString::from(r.count.to_string())),
-                )
-                .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_reaction(ch, id, &rc, cx))),
-        );
+        if r.burst_count > 0 {
+            row = row.child(burst_pill(entity, msg, ix, r));
+        }
+        if r.count > 0 {
+            row = row.child(normal_pill(entity, msg, ix, r));
+        }
     }
     let e = entity.clone();
     row.child(
@@ -382,6 +331,144 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, a
             }),
     )
     .into_any_element()
+}
+
+fn count_label(n: u32) -> gpui::Div {
+    div().text_size(z(16.)).line_height(z(16.)).font_weight(FontWeight::SEMIBOLD).w(z(12. * n.to_string().len() as f32)).text_center()
+}
+
+fn normal_pill(entity: &Entity<PhoenixApp>, msg: &Message, ix: usize, r: &crate::model::Reaction) -> AnyElement {
+    let (ch, id) = (msg.channel, msg.id);
+    let hc = crate::theme::high_contrast();
+    let e = entity.clone();
+    let rc = r.clone();
+    let emoji_el = div().my(z(2.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.));
+    let fade_key = crate::ui::states::key(("reaction", msg.id.0, ix));
+    crate::ui::states::track(div().id(("reaction", ix)), fade_key)
+        .relative()
+        .py(z(2.))
+        .px(z(6.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .gap(z(6.))
+        .border_1()
+        .when(r.me, |d| {
+            if crate::theme::is_light() {
+                d.bg(tk(idx::BRAND_160)).border_color(tk(idx::BRAND_500))
+            } else {
+                d.bg(tk(idx::REACTION_BACKGROUND_REACTED_DEFAULT)).border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT))
+            }
+        })
+        .when(!r.me, |d| {
+            d.child(crate::ui::states::fade_layer_pressed(
+                fade_key,
+                tk(idx::REACTION_BACKGROUND_DEFAULT),
+                tk(idx::REACTION_BACKGROUND_HOVER),
+                Some(("reaction", tk(idx::REACTION_BACKGROUND_ACTIVE))),
+                100,
+                8.,
+            ))
+            .border_color(if hc { tk(idx::BORDER_SUBTLE) } else { gpui::transparent_black() })
+            .hover(move |s| s.border_color(tk(if hc { idx::BORDER_STRONG } else { idx::REACTION_BORDER_HOVER })))
+        })
+        .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
+        .cursor_pointer()
+        .group("reaction")
+        .child(emoji_el)
+        .child(
+            count_label(r.count)
+                .text_color(tk(match (r.me, crate::theme::is_light()) {
+                    (true, true) => idx::BRAND_560,
+                    (true, false) => idx::REACTION_TEXT_REACTED_DEFAULT,
+                    _ => idx::TEXT_SUBTLE,
+                }))
+                .group_hover("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_HOVER)))
+                .id("count")
+                .group_active("reaction", |s| s.text_color(tk(idx::REACTION_TEXT_ACTIVE)))
+                .child(SharedString::from(r.count.to_string())),
+        )
+        .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_reaction(ch, id, &rc, cx)))
+        .into_any_element()
+}
+
+fn burst_pill(entity: &Entity<PhoenixApp>, msg: &Message, ix: usize, r: &crate::model::Reaction) -> AnyElement {
+    use crate::ui::burst;
+    let (ch, id) = (msg.channel, msg.id);
+    let hc = crate::theme::high_contrast();
+    let pal = burst::palette(&r.burst_colors, !crate::theme::is_light());
+    let key = burst::Key::new(ch, id, &r.emoji, r.emoji_id);
+    let playing = burst::playing(&key);
+    let hide = playing.is_some();
+    let emoji_el = div()
+        .my(z(2.))
+        .children(playing.as_ref().map(|(img, _)| burst::overlay(img.clone(), 20.)))
+        .child(div().when(hide, |d| d.opacity(0.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.)));
+    let fade_key = crate::ui::states::key(("reaction-burst", msg.id.0, ix));
+    let (e_hover, e_click) = (entity.clone(), entity.clone());
+    let (rh, rc) = (r.clone(), r.clone());
+    let accent = pal.map(|p| p.accent);
+    let me_burst = r.me_burst;
+    let pill = crate::ui::states::track(div().id(("reaction-burst", ix)), fade_key)
+        .relative()
+        .py(z(2.))
+        .px(z(6.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .gap(z(6.))
+        .border_1()
+        .cursor_pointer()
+        .map(|d| match pal {
+            Some(p) => d
+                .bg(p.background_rgba(p.opacity))
+                .border_color(if me_burst {
+                    gpui::Hsla::from(p.background_rgba(1.))
+                } else if hc {
+                    tk(idx::BORDER_SUBTLE)
+                } else {
+                    gpui::transparent_black()
+                })
+                .when(!me_burst, |d| d.hover(move |s| s.border_color(tk(if hc { idx::BORDER_STRONG } else { idx::REACTION_BORDER_HOVER }))))
+                .child(div().absolute().inset_0().rounded(z(8.)).opacity(0.35).shadow(vec![gpui::BoxShadow {
+                    color: p.accent_rgba(1.).into(),
+                    offset: gpui::point(z(0.), z(0.)),
+                    blur_radius: z(16.),
+                    spread_radius: z(0.),
+                    inset: false,
+                }])),
+            None => d
+                .when(me_burst, |d| d.bg(tk(idx::REACTION_BACKGROUND_REACTED_DEFAULT)).border_color(tk(idx::REACTION_BORDER_REACTED_DEFAULT)))
+                .when(!me_burst, |d| {
+                    d.bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
+                        .border_color(gpui::transparent_black())
+                        .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
+                }),
+        })
+        .child(emoji_el)
+        .child(
+            count_label(r.burst_count)
+                .map(|d| match pal {
+                    Some(p) => d.text_color(p.accent_rgba(1.)),
+                    None => d.text_color(tk(if me_burst { idx::REACTION_TEXT_REACTED_DEFAULT } else { idx::TEXT_SUBTLE })),
+                })
+                .child(SharedString::from(r.burst_count.to_string())),
+        )
+        .on_hover(move |on, _, cx| {
+            if *on && let Some(accent) = accent {
+                let rh = rh.clone();
+                e_hover.update(cx, |_, cx| burst::play(burst::Play { channel: ch, msg: id, token: &rh.emoji, emoji_id: rh.emoji_id, accent, kind: burst::Kind::Hover }, cx));
+            }
+        })
+        .on_click(move |_, _, cx| e_click.update(cx, |a, cx| a.toggle_burst_reaction(ch, id, &rc, cx)));
+    match playing.map(|(_, at)| at) {
+        Some(at) if !crate::ui::settings::effects::reduced_motion() => {
+            let t = (at.elapsed().as_secs_f32() / 0.5).min(1.);
+            let (dx, dy) = burst::shake_offset(t);
+            if t < 1. { pill.left(z(dx)).top(z(dy)).into_any_element() } else { pill.into_any_element() }
+        }
+        _ => pill.into_any_element(),
+    }
 }
 
 pub fn edit_box(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, cx: &App) -> Option<Div> {

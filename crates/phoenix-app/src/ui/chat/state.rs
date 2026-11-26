@@ -182,14 +182,14 @@ pub fn apply_reaction(m: &mut Message, emoji: &str, emoji_id: Option<Id>, add: b
                 r.count += 1;
             } else {
                 r.count = r.count.saturating_sub(1);
-                if r.count == 0 {
+                if r.count == 0 && r.burst_count == 0 {
                     m.reactions.remove(ix);
                 }
             }
             true
         }
         None if add => {
-            m.reactions.push(Reaction { emoji: emoji.to_string().into(), count: 1, me: true, emoji_id });
+            m.reactions.push(Reaction { emoji: emoji.to_string().into(), count: 1, me: true, emoji_id, ..Default::default() });
             true
         }
         None => false,
@@ -416,6 +416,19 @@ impl PhoenixApp {
 
     pub fn toggle_reaction(&mut self, channel: Id, msg: Id, r: &Reaction, cx: &mut Context<Self>) {
         self.set_reaction_local(channel, msg, r.emoji.clone(), r.emoji_id, !r.me, cx);
+    }
+
+    pub fn toggle_burst_reaction(&mut self, channel: Id, msg: Id, r: &Reaction, cx: &mut Context<Self>) {
+        if !self.backend.has_premium() {
+            crate::ui::settings::open(self, cx);
+            if let Some(s) = self.settings.as_mut() {
+                s.page = crate::ui::settings::Page::Nitro;
+            }
+            cx.notify();
+            return;
+        }
+        let e = crate::actions::exec::emoji(r);
+        self.blocked_write(crate::actions::guard::GuardedWrite::burst_reaction(channel.0, msg.0, &e, !r.me_burst), cx);
     }
 
     pub fn react_with(&mut self, channel: Id, msg: Id, emoji: SharedString, emoji_id: Option<Id>, cx: &mut Context<Self>) {
@@ -1125,7 +1138,7 @@ mod tests {
     #[test]
     fn custom_reaction_matches_by_id() {
         let mut m = Message::default();
-        m.reactions.push(Reaction { emoji: "<:a:7>".into(), count: 2, me: false, emoji_id: Some(Id(7)) });
+        m.reactions.push(Reaction { emoji: "<:a:7>".into(), count: 2, me: false, emoji_id: Some(Id(7)), ..Default::default() });
         assert!(apply_reaction(&mut m, "<:renamed:7>", Some(Id(7)), true));
         assert_eq!(m.reactions.len(), 1);
         assert_eq!(m.reactions[0].count, 3);

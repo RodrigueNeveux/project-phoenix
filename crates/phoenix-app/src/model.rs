@@ -200,6 +200,9 @@ pub struct Reaction {
     pub count: u32,
     pub me: bool,
     pub emoji_id: Option<Id>,
+    pub burst_count: u32,
+    pub me_burst: bool,
+    pub burst_colors: Vec<SharedString>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

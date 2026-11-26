@@ -91,6 +91,7 @@ pub mod channel_unread_bar;
 pub mod user_menu;
 pub mod view_as;
 pub mod voice_effects;
+pub mod burst;
 pub mod voice_panel;
 pub mod go_live;
 pub mod voice_row;

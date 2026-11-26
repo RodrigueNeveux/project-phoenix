@@ -332,12 +332,28 @@ pub fn card_with(width: f32, title: SharedString, subtitle: Option<SharedString>
     card_rich(width, title, subtitle.map(|s| strong_marked(&s).into_any_element()), body, footer, close)
 }
 
+pub fn card_max(width: f32, max_h: f32, title: SharedString, body: AnyElement, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    card_sized(width, max_h, title, None, body, None, close_action(cx))
+}
+
 pub fn card_rich(width: f32, title: SharedString, subtitle: Option<AnyElement>, body: AnyElement, footer: Option<AnyElement>, close: crate::ui::modal::Action) -> AnyElement {
+    card_sized(width, 720., title, subtitle, body, footer, close)
+}
+
+fn card_sized(
+    width: f32,
+    max_h: f32,
+    title: SharedString,
+    subtitle: Option<AnyElement>,
+    body: AnyElement,
+    footer: Option<AnyElement>,
+    close: crate::ui::modal::Action,
+) -> AnyElement {
     let close2 = close.clone();
     let el = div()
         .relative()
         .w(z(width))
-        .max_h(z(720.))
+        .max_h(z(max_h))
         .rounded(z(12.))
         .bg(c(tok(idx::BACKGROUND_SURFACE_HIGH)))
         .border_1()

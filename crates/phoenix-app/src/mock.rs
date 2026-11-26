@@ -321,9 +321,9 @@ impl MockBackend {
                 m.reply_mentions_author = rng.next().is_multiple_of(2);
             }
             if rng.next().is_multiple_of(9) {
-                m.reactions.push(Reaction { emoji: "👍".into(), count: 1 + (rng.next() % 5) as u32, me: rng.next().is_multiple_of(2), emoji_id: None });
+                m.reactions.push(Reaction { emoji: "👍".into(), count: 1 + (rng.next() % 5) as u32, me: rng.next().is_multiple_of(2), emoji_id: None, ..Default::default() });
                 if rng.next().is_multiple_of(2) {
-                    m.reactions.push(Reaction { emoji: "🔥".into(), count: 1 + (rng.next() % 3) as u32, me: false, emoji_id: None });
+                    m.reactions.push(Reaction { emoji: "🔥".into(), count: 1 + (rng.next() % 3) as u32, me: false, emoji_id: None, ..Default::default() });
                 }
             }
             if m.content.contains("github.com") {
@@ -733,7 +733,7 @@ impl Backend for MockBackend {
                     reply_to: Some(reply_to),
                     embeds: vec![],
                     attachments: vec![],
-                    reactions: vec![Reaction { emoji: "💜".into(), count: 1, me: false, emoji_id: None }],
+                    reactions: vec![Reaction { emoji: "💜".into(), count: 1, me: false, emoji_id: None, ..Default::default() }],
                     ..Default::default()
                 })
             });
