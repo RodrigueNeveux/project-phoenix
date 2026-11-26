@@ -1980,6 +1980,7 @@ mod activity_header_tests {
             image: None,
             start: None,
             application_id: None,
+            party: None,
         }
     }
 
