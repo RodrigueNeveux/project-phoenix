@@ -641,8 +641,39 @@ fn hero(cx: &mut Context<PhoenixApp>) -> AnyElement {
             .flex()
             .items_center()
             .cursor_pointer()
-            .bg(if light { gpui::white() } else { gpui::Hsla::from(rgba(0x0000008f)) })
-            .text_color(if light { gpui::black() } else { gpui::white() })
+            .border_1()
+            .map(|d| {
+                let [bg, bgh, bga, br, brh, bra, fg, fgh, fga] = if light {
+                    [
+                        idx::CONTROL_OVERLAY_PRIMARY_BACKGROUND_DEFAULT,
+                        idx::CONTROL_OVERLAY_PRIMARY_BACKGROUND_HOVER,
+                        idx::CONTROL_OVERLAY_PRIMARY_BACKGROUND_ACTIVE,
+                        idx::CONTROL_OVERLAY_PRIMARY_BORDER_DEFAULT,
+                        idx::CONTROL_OVERLAY_PRIMARY_BORDER_HOVER,
+                        idx::CONTROL_OVERLAY_PRIMARY_BORDER_ACTIVE,
+                        idx::CONTROL_OVERLAY_PRIMARY_TEXT_DEFAULT,
+                        idx::CONTROL_OVERLAY_PRIMARY_TEXT_HOVER,
+                        idx::CONTROL_OVERLAY_PRIMARY_TEXT_ACTIVE,
+                    ]
+                } else {
+                    [
+                        idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT,
+                        idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_HOVER,
+                        idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_ACTIVE,
+                        idx::CONTROL_OVERLAY_SECONDARY_BORDER_DEFAULT,
+                        idx::CONTROL_OVERLAY_SECONDARY_BORDER_HOVER,
+                        idx::CONTROL_OVERLAY_SECONDARY_BORDER_ACTIVE,
+                        idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT,
+                        idx::CONTROL_OVERLAY_SECONDARY_TEXT_HOVER,
+                        idx::CONTROL_OVERLAY_SECONDARY_TEXT_ACTIVE,
+                    ]
+                };
+                d.bg(tk(bg))
+                    .border_color(tk(br))
+                    .text_color(tk(fg))
+                    .hover(move |s| s.bg(tk(bgh)).border_color(tk(brh)).text_color(tk(fgh)))
+                    .active(move |s| s.bg(tk(bga)).border_color(tk(bra)).text_color(tk(fga)))
+            })
             .text_size(z(16.))
             .line_height(z(20.))
             .font_weight(FontWeight::MEDIUM)
