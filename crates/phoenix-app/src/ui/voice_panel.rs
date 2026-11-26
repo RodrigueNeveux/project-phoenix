@@ -32,6 +32,8 @@ thread_local! {
     static USER_MENU: Cell<Option<(Id, Point<Pixels>)>> = const { Cell::new(None) };
     static POPOUT: Cell<Option<Tab>> = const { Cell::new(None) };
     static AUDIO_MENU: RefCell<Option<AudioMenu>> = const { RefCell::new(None) };
+    static CAMERA_MENU: RefCell<Option<(Point<Pixels>, Vec<String>)>> = const { RefCell::new(None) };
+    static CAMERA_PICK: RefCell<Option<String>> = const { RefCell::new(None) };
     static FLAGS: RefCell<HashMap<Id, VoiceFlags>> = RefCell::new(HashMap::new());
 }
 
@@ -218,6 +220,59 @@ pub fn toggle_audio_menu(kind: Audio, pos: Point<Pixels>) {
         (kind, pos, if kind == Audio::Mic { inputs } else { outputs })
     });
     AUDIO_MENU.with(|m| *m.borrow_mut() = next);
+}
+
+pub fn toggle_camera_menu(pos: Point<Pixels>) {
+    let open = CAMERA_MENU.with(|m| m.borrow().is_some());
+    let next = (!open).then(|| (pos, crate::ui::settings::voice::cameras()));
+    CAMERA_MENU.with(|m| *m.borrow_mut() = next);
+}
+
+pub fn camera_menu_open() -> bool {
+    CAMERA_MENU.with(|m| m.borrow().is_some())
+}
+
+pub fn picked_camera(cams: &[String], pick: Option<&str>) -> Option<usize> {
+    pick.and_then(|p| cams.iter().position(|c| c == p)).or_else(|| (!cams.is_empty()).then_some(0))
+}
+
+fn camera_menu(pos: Point<Pixels>, cams: Vec<String>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let e = cx.entity();
+    let dismiss: context_menu::Dismiss = Rc::new(move |_: &mut Window, cx: &mut App| {
+        CAMERA_MENU.with(|m| *m.borrow_mut() = None);
+        e.update(cx, |_, cx| cx.notify());
+    });
+    let current = CAMERA_PICK.with(|p| p.borrow().clone());
+    let on = picked_camera(&cams, current.as_deref());
+    let mut items: Vec<MenuItem> = Vec::new();
+    if cams.is_empty() {
+        items.push(MenuItem::disabled(crate::t!("voice.no_video"), None));
+    }
+    for (i, name) in cams.into_iter().enumerate() {
+        let e = cx.entity();
+        let pick = name.clone();
+        items.push(MenuItem::radio(name, on == Some(i), move |_, _, cx: &mut App| {
+            CAMERA_PICK.with(|p| *p.borrow_mut() = Some(pick.clone()));
+            CAMERA_MENU.with(|m| *m.borrow_mut() = None);
+            let pick = pick.clone();
+            e.update(cx, |a, cx| {
+                drop(a.backend.voice_control(crate::voice::VoiceControl::SetCameraDevice(Some(pick))));
+                cx.notify();
+            });
+        }));
+    }
+    items.push(MenuItem::Separator);
+    let e = cx.entity();
+    items.push(MenuItem::action(crate::t!("voice.video_settings"), Some(crate::icons::path("gear")), move |_, _, cx| {
+        CAMERA_MENU.with(|m| *m.borrow_mut() = None);
+        e.update(cx, |a, cx| {
+            crate::ui::settings::open(a, cx);
+            if let Some(s) = a.settings.as_mut() {
+                s.page = crate::ui::settings::Page::VoiceVideo;
+            }
+        });
+    }));
+    context_menu::render(pos - gpui::point(px(0.), px(120.)), items, dismiss)
 }
 
 pub fn audio_menu_open(kind: Audio) -> bool {
@@ -1105,6 +1160,9 @@ pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Phoenix
     if let Some((kind, pos, devices)) = AUDIO_MENU.with(|m| m.borrow().clone()) {
         out.push(audio_menu(kind, pos, devices, cx));
     }
+    if let Some((pos, cams)) = CAMERA_MENU.with(|m| m.borrow().clone()) {
+        out.push(camera_menu(pos, cams, cx));
+    }
     if app.voice_channel.is_none() {
         USER_MENU.with(|m| m.set(None));
         POPOUT.with(|p| p.set(None));
@@ -1122,4 +1180,18 @@ pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Phoenix
 pub fn open_user_menu(user: Id, pos: Point<Pixels>, cx: &mut App) {
     USER_MENU.with(|m| m.set(Some((user, pos))));
     cx.refresh_windows();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn camera_pick_falls_back_to_the_first_device() {
+        let cams = vec!["A".to_owned(), "B".to_owned()];
+        assert_eq!(picked_camera(&cams, None), Some(0));
+        assert_eq!(picked_camera(&cams, Some("B")), Some(1));
+        assert_eq!(picked_camera(&cams, Some("gone")), Some(0));
+        assert_eq!(picked_camera(&[], None), None);
+    }
 }

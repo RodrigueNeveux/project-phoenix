@@ -1504,7 +1504,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             },
                             cx,
                         ))
-                        .child(center_button(
+                        .child(center_button_ex(
                             "call-camera",
                             anim(
                                 "call-camera",
@@ -1515,6 +1515,11 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             ),
                             cam_look,
                             true,
+                            Some(std::rc::Rc::new(|_: &mut PhoenixApp, pos: gpui::Point<gpui::Pixels>, cx: &mut Context<PhoenixApp>| {
+                                crate::ui::voice_panel::toggle_camera_menu(pos);
+                                cx.notify();
+                            })),
+                            crate::ui::voice_panel::camera_menu_open(),
                             if me.video { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") },
                             |a, cx| {
                                 let on = !crate::ui::voice_panel::flags(a.me.id).video;

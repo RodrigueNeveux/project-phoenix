@@ -198,5 +198,5 @@ Sources: chunk `9b3cd218` Channel `render`: when `shouldRenderCall()` the channe
 |---|---|---|---|
 | Invite (left edge) | guild call: Invite People for the guild; DM call: add-friends picker on the call channel | — | ✅ (it had no handler) |
 | mic caret | opens the audio device menu (input device, input volume, voice settings) at the click, highlighted while open | `audio-device-context` menu in the web bundle | ⚠ the client menu also has the output device, input profile, input meter and push-to-talk rows |
-| camera caret | still inert | `video-device-context` | ❌ Phoenix has no camera device list yet |
+| camera caret | camera list (V4L2 nodes, first one by default, a pick sends `SetCameraDevice`) / Video Settings (`LKzQSF`, opens Voice & Video) | `video-device-context` (module 28499: device list `u.H(VIDEO_INPUT)`, then `video-settings`) | ⚠ the middle row `E.A(userId)` is not drawn |
 | activity | inert on purpose | brief: opening the shelf writes `settings-proto/1` | ➖ |
