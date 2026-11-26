@@ -8,6 +8,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("chevron-right", &["ChevronSmallRightIcon"]),
     ("friends/discovery-arrow", &["path:m5.41667 4.2625 5.66573 5.7375"]),
     ("link-external", &["LinkExternalSmallIcon"]),
+    ("x-neutral", &["XNeutralIcon"]),
     ("crown", &["CrownIcon"]),
     ("new-user", &["NewUserIcon"]),
     ("chat-check", &["ChatCheckIcon"]),

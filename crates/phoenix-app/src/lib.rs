@@ -31,6 +31,7 @@ pub mod richtext;
 pub mod search_highlight;
 pub mod shortcuts;
 pub mod sounds;
+pub mod splash;
 pub mod streamer;
 pub mod theme;
 pub mod thread_recent;
@@ -98,7 +99,7 @@ fn init_base(cx: &mut App) {
     media::lru::init(cx);
 }
 
-pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {
+pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) -> Option<gpui::AnyWindowHandle> {
     tray::spawn(cx);
     notifications::spawn(cx);
     let opts = window_options(cx);
@@ -119,5 +120,6 @@ pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {
         view.read(cx).focus.clone().focus(window, cx);
         cx.new(|cx| Root::new(view, window, cx))
     })
-    .expect("failed to open window");
+    .ok()
+    .map(Into::into)
 }

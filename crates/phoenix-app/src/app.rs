@@ -92,6 +92,7 @@ pub struct PhoenixApp {
     pub login_mfa_step: bool,
     pub login_error: Option<SharedString>,
     pub logging_in: bool,
+    pub boot: crate::ui::boot::Boot,
 
     pub me: User,
     pub users: HashMap<Id, User>,
@@ -363,6 +364,7 @@ impl PhoenixApp {
             login_mfa_step: false,
             login_error: None,
             logging_in,
+            boot: Default::default(),
             me: User {
                 id: Id(0),
                 name: "".into(),
@@ -1522,6 +1524,7 @@ impl Render for PhoenixApp {
         };
         let (sx, sy) = ui::shake::offset(window, crate::ui::settings::effects::reduced_motion()).unwrap_or((0., 0.));
         let body = div().size_full().relative().left(px(sx)).top(px(sy)).child(body).into_any_element();
+        let boot = ui::boot::render(self, window, cx);
         div()
             .id("phoenix-root")
             .key_context(CONTEXT)
@@ -1572,7 +1575,8 @@ impl Render for PhoenixApp {
             .children(crate::actions::overlays(self, window, cx))
             .children(ui::pickers::render_status_picker(self, window, cx))
             .children(crate::shortcuts::render_help(self, window, cx))
-            .when(self.screen == Screen::Login, |d| d.child(ui::title_bar::login_bar(window, cx)))
+            .children(boot)
+            .when(self.screen == Screen::Login && !self.boot.showing(), |d| d.child(ui::title_bar::login_bar(window, cx)))
             .children(ui::window_chrome::resize_handles(window))
             .children(ui::incoming_call::render(self, cx))
     }

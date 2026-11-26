@@ -10,11 +10,15 @@ fn main() {
     phoenix_app::perf::start();
     phoenix_app::autostart::refresh();
     let mock = std::env::var("PHOENIX_MOCK").is_ok_and(|v| !v.is_empty() && v != "0");
+    phoenix_app::splash::preload();
     gpui_platform::application()
         .with_assets(Assets)
         .run(move |cx| {
-            phoenix_app::init(cx);
+            phoenix_app::init_deferred(cx);
+            phoenix_app::ui::boot::enable();
             phoenix_app::sounds::init();
+            let splash = phoenix_app::splash::open(cx);
+            phoenix_app::perf::mark("splash_opened");
             let backend: Arc<dyn Backend> = if mock {
                 cx.set_http_client(phoenix_app::demo_media::client());
                 Arc::new(MockBackend::new())
@@ -23,16 +27,33 @@ fn main() {
                 cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(b.http_client())));
                 Arc::new(b)
             };
-            phoenix_app::open_main_window(backend, cx);
-            phoenix_app::perf::mark("main_window_opened");
-            bench_hooks(cx);
-            cx.activate(true);
+            cx.spawn(async move |cx| {
+                let started = std::time::Instant::now();
+                while !phoenix_app::fonts::fallback::ready() && started.elapsed() < SPLASH_MAX {
+                    cx.background_executor().timer(std::time::Duration::from_millis(16)).await;
+                }
+                cx.update(|cx| {
+                    if let Some(s) = splash {
+                        phoenix_app::splash::set_status(s, phoenix_app::splash::Status::Starting, cx);
+                    }
+                    let main = phoenix_app::open_main_window(backend, cx);
+                    phoenix_app::perf::mark("main_window_opened");
+                    bench_hooks(main, cx);
+                    if let Some(s) = splash {
+                        phoenix_app::splash::close(s, cx);
+                    }
+                    cx.activate(true);
+                });
+            })
+            .detach();
         });
 }
 
-fn bench_hooks(cx: &mut gpui::App) {
+const SPLASH_MAX: std::time::Duration = std::time::Duration::from_secs(3);
+
+fn bench_hooks(main: Option<gpui::AnyWindowHandle>, cx: &mut gpui::App) {
     if (std::env::var_os("PHOENIX_BENCH").is_some() || phoenix_app::perf::enabled())
-        && let Some(win) = cx.windows().first().copied()
+        && let Some(win) = main
     {
         let _ = win.update(cx, |_, window, _| {
             window.on_next_frame(|_, _| {

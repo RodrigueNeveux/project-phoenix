@@ -78,10 +78,99 @@ fn fc(args: &[&str], format: &str) -> Vec<String> {
     if NATIVE_FALLBACK || crate::paths::is_sandboxed() {
         return Vec::new();
     }
+    let key = format!("{}\u{1f}{format}", args.join("\u{1f}"));
+    if let Some(hit) = fc_cache().lock().entries.get(&key) {
+        return hit.clone();
+    }
     let Ok(out) = std::process::Command::new("fc-match").args(args).arg(format!("--format={format}")).output() else {
         return Vec::new();
     };
-    String::from_utf8_lossy(&out.stdout).lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect()
+    let lines: Vec<String> = String::from_utf8_lossy(&out.stdout).lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect();
+    let mut c = fc_cache().lock();
+    c.entries.insert(key, lines.clone());
+    c.dirty = true;
+    lines
+}
+
+#[derive(Default)]
+struct FcCache {
+    stamp: u64,
+    entries: std::collections::HashMap<String, Vec<String>>,
+    dirty: bool,
+}
+
+impl FcCache {
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({ "stamp": self.stamp, "entries": self.entries })
+    }
+
+    fn from_json(v: &serde_json::Value) -> Option<Self> {
+        let stamp = v.get("stamp")?.as_u64()?;
+        let entries = v
+            .get("entries")?
+            .as_object()?
+            .iter()
+            .map(|(k, l)| (k.clone(), l.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_owned)).collect()).unwrap_or_default()))
+            .collect();
+        Some(Self { stamp, entries, dirty: false })
+    }
+}
+
+fn fc_cache_path() -> Option<PathBuf> {
+    Some(crate::paths::cache_dir()?.join("fontconfig-match.json"))
+}
+
+pub fn fontconfig_stamp(dirs: &[PathBuf]) -> u64 {
+    let mut stamp = 0u64;
+    for d in dirs {
+        let Ok(rd) = std::fs::read_dir(d) else { continue };
+        let own = std::fs::metadata(d).and_then(|m| m.modified()).ok();
+        for t in rd.flatten().filter_map(|e| e.metadata().ok()?.modified().ok()).chain(own) {
+            let secs = t.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            stamp = stamp.max(secs);
+        }
+    }
+    stamp
+}
+
+fn fontconfig_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![PathBuf::from("/var/cache/fontconfig"), PathBuf::from("/etc/fonts"), PathBuf::from("/etc/fonts/conf.d")];
+    if let Some(h) = crate::paths::home() {
+        dirs.push(h.join(".cache/fontconfig"));
+        dirs.push(h.join(".config/fontconfig"));
+        dirs.push(h.join(".config/fontconfig/conf.d"));
+    }
+    dirs
+}
+
+fn fc_cache() -> &'static parking_lot::Mutex<FcCache> {
+    static C: OnceLock<parking_lot::Mutex<FcCache>> = OnceLock::new();
+    C.get_or_init(|| {
+        let stamp = fontconfig_stamp(&fontconfig_dirs());
+        let loaded = fc_cache_path()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+            .and_then(|v| FcCache::from_json(&v))
+            .filter(|c| c.stamp == stamp);
+        parking_lot::Mutex::new(loaded.unwrap_or(FcCache { stamp, ..Default::default() }))
+    })
+}
+
+fn save_fc_cache() {
+    let mut c = fc_cache().lock();
+    if !c.dirty {
+        return;
+    }
+    let Some(path) = fc_cache_path() else { return };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(bytes) = serde_json::to_vec(&c.to_json()) {
+        let tmp = path.with_extension("tmp");
+        if std::fs::write(&tmp, bytes).is_ok() && std::fs::rename(&tmp, &path).is_ok() {
+            c.dirty = false;
+        }
+    }
 }
 
 pub const CODE_STACK: &[&str] = &[
@@ -497,6 +586,11 @@ pub fn prepare() -> Option<Prepared> {
         }
         blobs.push(bytes.into());
     }
+    for name in preferred_script_fonts(crate::i18n::locale()) {
+        let _ = fc(&[name], "%{family[0]}\n");
+    }
+    let _ = code_family();
+    save_fc_cache();
     Some(Prepared { chain, blobs })
 }
 
@@ -777,5 +871,31 @@ mod tests {
         assert_eq!(crate::fonts::ttf_family(&r).as_deref(), Some("Phx DejaVu Sans"));
         let face = ttf_parser::Face::parse(&r, 0).expect("parses");
         assert!(face.glyph_index('★').is_some());
+    }
+}
+
+#[cfg(test)]
+mod fc_cache_tests {
+    use super::*;
+
+    #[test]
+    fn cache_round_trips_through_json() {
+        let mut c = FcCache { stamp: 42, ..Default::default() };
+        c.entries.insert("Noto Sans\u{1f}%{family[0]}\n".into(), vec!["Noto Sans".into()]);
+        let back = FcCache::from_json(&c.to_json()).unwrap();
+        assert_eq!(back.stamp, 42);
+        assert_eq!(back.entries, c.entries);
+        assert!(!back.dirty);
+    }
+
+    #[test]
+    fn stamp_follows_the_newest_entry() {
+        let dir = std::env::temp_dir().join(format!("phx-fcstamp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a"), b"x").unwrap();
+        let s = fontconfig_stamp(std::slice::from_ref(&dir));
+        assert!(s > 0);
+        assert_eq!(fontconfig_stamp(&[dir.join("missing")]), 0);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -585,7 +585,7 @@ pub fn key_caps(keys: &str) -> Vec<SharedString> {
         .collect()
 }
 
-fn combo(keys: &str) -> gpui::Div {
+pub fn combo(keys: &str) -> gpui::Div {
     let caps = key_caps(keys);
     let n = caps.len();
     div()
