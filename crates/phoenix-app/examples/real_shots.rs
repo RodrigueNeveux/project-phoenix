@@ -2235,6 +2235,47 @@ fn main() -> anyhow::Result<()> {
             println!("wrote {path} ({}x{})", img.width(), img.height());
         }
     }
+    if let Some(secs) = std::env::var("PHX_PRESENT_CPU").ok().and_then(|v| v.parse::<u64>().ok()) {
+        let cpu = || -> f64 {
+            let stat = std::fs::read_to_string("/proc/self/stat").unwrap_or_default();
+            let f: Vec<&str> = stat.rsplit_once(')').map_or("", |(_, r)| r).split_whitespace().collect();
+            let ticks = |i: usize| f.get(i).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.);
+            (ticks(11) + ticks(12)) / 100.
+        };
+        cx.update_window(win.into(), |_, window, _| window.activate_window())?;
+        pump(&mut cx, 300);
+        let leave = gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+            position: gpui::point(px(1.), px(1.)),
+            pressed_button: None,
+            modifiers: gpui::Modifiers::default(),
+        });
+        for (label, redraw, hovered) in [("animated, present only", false, true), ("animated, full redraw", true, true), ("idle", false, false)] {
+            if !hovered {
+                let ev = leave.clone();
+                cx.update_window(win.into(), |_, window, cx| {
+                    window.dispatch_event(ev, cx);
+                })?;
+                pump(&mut cx, 300);
+            }
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.simulate_frame_request(win.into());
+            let (c0, t0) = (cpu(), std::time::Instant::now());
+            let mut frames = 0u32;
+            while t0.elapsed() < std::time::Duration::from_secs(secs) {
+                std::thread::sleep(std::time::Duration::from_millis(16));
+                if redraw {
+                    cx.update_window(win.into(), |_, window, _| window.refresh())?;
+                }
+                cx.simulate_frame_request(win.into());
+                frames += 1;
+            }
+            let scrolling = cx.update_window(win.into(), |_, window, _| window.scrolls_gradients())?;
+            println!(
+                "present cpu {label}: {:.1} % of one core over {frames} frame requests, scrolling={scrolling}",
+                (cpu() - c0) / t0.elapsed().as_secs_f64() * 100.
+            );
+        }
+    }
     let shot = shoot(&mut cx, &out);
     if voice_test {
         cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, _| drop(app.backend.voice_control(phoenix_app::voice::VoiceControl::SetCamera(false)))))?;
