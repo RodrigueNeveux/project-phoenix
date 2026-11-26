@@ -32,3 +32,5 @@ Sliders hold the value the client shows (perceptual, 0–200). The engine gets `
 4. Check the user menu: the volume slider and "Mute" change only that person; the headset button silences everything (`deafened=true`, `out_db=-100`).
 
 Automated tests: `connection::receive_tests`, `audio::mixer::tests`, `rtp::jitter::tests`, `media::opus::tests`, `dave::session::tests`, `crypto::tests`.
+
+Without the full app: `PHX_VOICE=1 PHX_CHANNEL=1574900893613039696 PHX_VOICE_HOLD=30000 PHOENIX_SOUND_LOG=1 int-bin/real_shots …` joins the test channel off screen with the mic muted and a synthetic input, stays 30 s, prints `voice hold t=… others=… speaking=… received=…` each second next to the `voice-recv:` lines, then leaves.

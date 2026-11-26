@@ -2241,6 +2241,22 @@ fn main() -> anyhow::Result<()> {
                 a.voice_channel.map(|c| c.0)
             );
         });
+        let hold = std::env::var("PHX_VOICE_HOLD").ok().and_then(|v| v.parse::<u64>().ok()).unwrap_or(0).min(120_000);
+        for t in 0..hold / 1000 {
+            pump(&mut cx, 1000);
+            cx.update(|cx| {
+                let a = v.read(cx);
+                let me = a.me.id;
+                let others: Vec<Id> = a.channels.get(&Id(VOICE_TEST_CHANNEL)).map(|c| c.voice_users.iter().copied().filter(|u| *u != me).collect()).unwrap_or_default();
+                let speaking = others.iter().filter(|u| a.voice.is_speaking(**u)).count();
+                println!(
+                    "voice hold t={t} others={} speaking={speaking} received={} lost={}",
+                    others.len(),
+                    a.voice.stats.packets_received,
+                    a.voice.stats.packets_lost
+                );
+            });
+        }
         if std::env::var_os("PHX_VOICE_CAMERA").is_some() {
             cx.update_window(win.into(), |_, _, cx| {
                 v.update(cx, |app, _| {
