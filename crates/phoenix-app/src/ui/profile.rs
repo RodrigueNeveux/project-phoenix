@@ -164,17 +164,22 @@ pub(crate) fn section_title(t: SharedString) -> Div {
         .child(t)
 }
 
-fn activity_block(a: &Activity, big: bool) -> Option<AnyElement> {
-    let title = match a.kind {
+fn activity_header(a: &Activity) -> Option<SharedString> {
+    Some(match a.kind {
         ActivityKind::Custom => return None,
-        ActivityKind::Playing => crate::t!("activity.playing").to_string(),
-        ActivityKind::Streaming => crate::t!("activity.streaming", name = a.name).to_string(),
-        ActivityKind::Listening => crate::t!("activity.listening", name = a.name).to_string(),
-        ActivityKind::Watching => crate::t!("activity.watching", name = a.name).to_string(),
-        ActivityKind::Competing => crate::t!("activity.competing").to_string(),
-    };
+        ActivityKind::Playing => crate::t!("activity.playing"),
+        ActivityKind::Streaming if ["twitch", "youtube"].contains(&a.name.to_lowercase().as_str()) => crate::t!("activity.streaming_platform", name = a.name),
+        ActivityKind::Streaming => crate::t!("activity.live"),
+        ActivityKind::Listening => crate::t!("activity.listening", name = a.name),
+        ActivityKind::Watching => crate::t!("activity.watching", name = a.name),
+        ActivityKind::Competing => crate::t!("activity.competing"),
+    })
+}
+
+fn activity_block(a: &Activity, big: bool, bot: bool) -> Option<AnyElement> {
+    let title = activity_header(a)?;
     let spotify = a.is_spotify();
-    let line1 = if spotify || a.kind == ActivityKind::Streaming { a.details.clone() } else { Some(a.name.clone()) };
+    let line1 = if spotify { a.details.clone() } else if a.kind == ActivityKind::Streaming { a.details.clone().or_else(|| Some(a.name.clone())) } else { Some(a.name.clone()) };
     let mut lines: Vec<SharedString> = Vec::new();
     if spotify {
         if let Some(s) = &a.state {
@@ -184,15 +189,15 @@ fn activity_block(a: &Activity, big: bool) -> Option<AnyElement> {
         lines.extend(a.details.clone().filter(|_| a.kind != ActivityKind::Streaming));
         lines.extend(a.state.clone());
     }
-    if let Some(start) = a.start {
+    if let Some(start) = a.start.filter(|_| !bot) {
         let mins = (chrono::Utc::now().timestamp_millis() - start).max(0) / 60_000;
         lines.push(if mins >= 60 { format!("{}:{:02}:00", mins / 60, mins % 60) } else { format!("{mins}:00") }.into());
     }
     let s = if big { 60. } else { 48. };
-    let art: AnyElement = match &a.image {
+    let art: Option<AnyElement> = (!bot).then(|| match &a.image {
         Some(u) => img(u.clone()).size(z(s)).rounded(z(8.)).flex_none().into_any_element(),
         None => div().size(z(s)).rounded(z(8.)).flex_none().bg(c(tok(idx::BACKGROUND_MOD_NORMAL))).into_any_element(),
-    };
+    });
     Some(
         div()
             .flex()
@@ -217,7 +222,7 @@ fn activity_block(a: &Activity, big: bool) -> Option<AnyElement> {
                     .flex()
                     .gap(z(if big { 12. } else { 8. }))
                     .items_center()
-                    .child(art)
+                    .children(art)
                     .child(
                         div()
                             .min_w_0()
@@ -908,6 +913,7 @@ fn popout_card_inner(
 ) -> Div {
     ensure_avatar_colour(app, uid, cx);
     let i = info(app, uid, guild);
+    let bot = i.user.as_deref().is_some_and(|u| u.bot);
     let theme = i.prof.and_then(|p| p.theme);
     let bg = theme.map(|t| crate::ui::profile_theme::composite(t, t.0)).unwrap_or(tok(idx::BACKGROUND_SURFACE_HIGH));
     let e = cx.entity();
@@ -1004,7 +1010,7 @@ fn popout_card_inner(
     let offline = matches!(i.presence, crate::model::Presence::Offline);
     let voice_here = guild.is_none_or(|g| app.channels.values().any(|c| c.guild == Some(g) && c.voice_users.contains(&uid)));
     for a in i.acts.iter().filter(|_| !offline) {
-        if let Some(b) = activity_block(a, false) {
+        if let Some(b) = activity_block(a, false, bot) {
             body = body.child(div().pb(z(8.)).child(b));
         }
     }
@@ -1522,7 +1528,7 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
         }
         _ => {
             panel = panel.gap(z(24.));
-            let cards: Vec<AnyElement> = i.acts.iter().filter_map(|a| activity_block(a, true)).collect();
+            let cards: Vec<AnyElement> = i.acts.iter().filter_map(|a| activity_block(a, true, bot)).collect();
             if cards.is_empty() {
                 panel = panel.child(empty(crate::t!("profile.idle_activity", name = i.display)));
             } else {
@@ -1706,5 +1712,36 @@ mod role_fit_tests {
         assert_eq!(roles_fit(&[100., 100., 100., 100., 100.], 230.), (4, 2));
         assert_eq!(roles_fit(&[300., 300., 300.], 230.), (2, 1));
         assert_eq!(roles_fit(&[], 230.), (0, 0));
+    }
+}
+
+#[cfg(test)]
+mod activity_header_tests {
+    use super::activity_header;
+    use crate::presence::{Activity, ActivityKind};
+
+    fn streaming(name: &str) -> Activity {
+        Activity {
+            kind: ActivityKind::Streaming,
+            name: name.to_owned().into(),
+            details: None,
+            state: None,
+            emoji: None,
+            url: None,
+            display_type: None,
+            image: None,
+            start: None,
+            application_id: None,
+        }
+    }
+
+    #[test]
+    fn streaming_header_names_only_known_platforms() {
+        assert_eq!(activity_header(&streaming("Twitch")), Some(crate::t!("activity.streaming_platform", name = "Twitch")));
+        assert_eq!(activity_header(&streaming("youtube")), Some(crate::t!("activity.streaming_platform", name = "youtube")));
+        assert_eq!(activity_header(&streaming("J'aime bien ce point violet.")), Some(crate::t!("activity.live")));
+        let mut custom = streaming("x");
+        custom.kind = ActivityKind::Custom;
+        assert_eq!(activity_header(&custom), None);
     }
 }
