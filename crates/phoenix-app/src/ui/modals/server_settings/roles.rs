@@ -1397,7 +1397,7 @@ fn links(app: &PhoenixApp, s: &State, e: &Editor, cx: &mut Cx) -> AnyElement {
         cx.notify();
     });
     let cur = usize::from(!or);
-    let mut select = div().w_full().child(kit::dropdown(s, "role-links-op", SharedString::from(opts[cur].clone()).into_any_element(), opts, Some(cur), on_pick, cx));
+    let mut select = div().w_full().child(kit::dropdown(s, "role-links-op", opts[cur].clone().into_any_element(), opts, Some(cur), on_pick, cx));
     if lock || !can_or {
         select = select.opacity(0.5);
     }
