@@ -1340,9 +1340,22 @@ impl Backend for DiscordBackend {
         })
     }
     fn upload_stream_preview(&self, stream_key: String, thumbnail: String) -> BoxFuture<()> {
-        self.with_session(move |_, s| async move { s.rest.upload_stream_preview(&stream_key, &thumbnail).await.map_err(api_err) })
+        self.with_session(move |_, s| async move {
+            s.rest.upload_stream_preview(&stream_key, &thumbnail).await.map_err(|e| {
+                tracing::warn!(key = %stream_key, "stream preview upload failed: {e}");
+                api_err(e)
+            })
+        })
     }
     fn stream_preview(&self, stream_key: String) -> BoxFuture<Option<String>> {
-        self.with_session(move |_, s| async move { Ok(s.rest.stream_preview(&stream_key).await.map_err(api_err)?.url) })
+        self.with_session(move |_, s| async move {
+            match s.rest.stream_preview(&stream_key).await {
+                Ok(p) => Ok(p.url),
+                Err(e) => {
+                    tracing::warn!(key = %stream_key, "stream preview fetch failed: {e}");
+                    Err(api_err(e))
+                }
+            }
+        })
     }
 }

@@ -140,9 +140,16 @@ impl Cache {
         let Some(ch) = s.channels.get(&channel) else { return Permissions::empty() };
         let Some(gid) = ch.guild_id else { return Permissions::all() };
         let (Some(me), Some(guild)) = (&s.me, s.guilds.get(&gid)) else { return Permissions::empty() };
-        let roles = s.members.get(&(gid, me.id)).map(|m| m.roles.clone()).unwrap_or_default();
+        let member = s.members.get(&(gid, me.id));
+        let roles = member.map(|m| m.roles.clone()).unwrap_or_default();
         let ow_src = if ch.kind.is_thread() { ch.parent_id.and_then(|p| s.channels.get(&p)).unwrap_or(ch) } else { ch };
-        compute_channel_permissions(gid, guild.owner_id(), me.id, &roles, &guild.roles, &ow_src.permission_overwrites)
+        let perms = compute_channel_permissions(gid, guild.owner_id(), me.id, &roles, &guild.roles, &ow_src.permission_overwrites);
+        if guild.owner_id() == Some(me.id) {
+            return perms;
+        }
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let muted = member.is_some_and(|m| timed_out(m.communication_disabled_until.as_deref(), now));
+        restrict_member(perms, muted, member.is_some_and(|m| m.pending == Some(true)))
     }
 
     pub fn member_permissions_in(&self, channel: ChannelId, user: UserId) -> Option<Permissions> {

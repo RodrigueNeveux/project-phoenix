@@ -165,3 +165,19 @@ pub fn compute_channel_permissions(
     let base = compute_base_permissions(guild_id, owner_id, user_id, member_roles, roles);
     apply_overwrites(base, guild_id, user_id, member_roles, overwrites)
 }
+
+pub fn timed_out(until: Option<&str>, now_unix: u64) -> bool {
+    let now = crate::rest::moderation::rfc3339(now_unix);
+    until.is_some_and(|u| u.len() >= 19 && now.len() >= 19 && u[..19] > now[..19])
+}
+
+pub fn restrict_member(perms: Permissions, timed_out: bool, pending: bool) -> Permissions {
+    let mut p = perms;
+    if timed_out && !p.contains(Permissions::ADMINISTRATOR) {
+        p &= Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY | Permissions::CHANGE_NICKNAME;
+    }
+    if pending {
+        p &= Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY;
+    }
+    p
+}

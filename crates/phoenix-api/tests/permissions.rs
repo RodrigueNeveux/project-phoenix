@@ -80,3 +80,36 @@ fn permission_serde() {
     let p: Permissions = serde_json::from_str("\"9223372036854775808\"").unwrap();
     assert_eq!(p.bits(), 1 << 63);
 }
+
+#[test]
+fn timeout_keeps_only_view_history_and_nickname() {
+    let all = Permissions::VIEW_CHANNEL | Permissions::CONNECT | Permissions::SEND_MESSAGES | Permissions::READ_MESSAGE_HISTORY | Permissions::CHANGE_NICKNAME;
+    let p = restrict_member(all, true, false);
+    assert_eq!(p, Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY | Permissions::CHANGE_NICKNAME);
+    assert!(!p.contains(Permissions::CONNECT));
+    assert_eq!(restrict_member(Permissions::all(), true, false), Permissions::all());
+    assert_eq!(restrict_member(all, false, false), all);
+    assert_eq!(restrict_member(all, false, true), Permissions::VIEW_CHANNEL | Permissions::READ_MESSAGE_HISTORY);
+}
+
+#[test]
+fn timeout_ends_at_its_timestamp() {
+    let now = 1_800_000_000;
+    assert!(timed_out(Some("2030-01-01T00:00:00+00:00"), now));
+    assert!(timed_out(Some("2030-01-01T00:00:00.123000+00:00"), now));
+    assert!(!timed_out(Some("2020-01-01T00:00:00+00:00"), now));
+    assert!(!timed_out(None, now));
+    assert!(!timed_out(Some(""), now));
+}
+
+#[test]
+fn voice_connect_follows_overwrites() {
+    let mut r = roles();
+    r[0].permissions |= Permissions::CONNECT;
+    let deny = vec![ow(G, OverwriteType::Role, Permissions::empty(), Permissions::CONNECT)];
+    assert!(!compute_channel_permissions(G, None, ME, &[], &r, &deny).contains(Permissions::CONNECT));
+    let back = vec![ow(G, OverwriteType::Role, Permissions::empty(), Permissions::CONNECT), ow(HELPER, OverwriteType::Role, Permissions::CONNECT, Permissions::empty())];
+    assert!(compute_channel_permissions(G, None, ME, &[HELPER], &r, &back).contains(Permissions::CONNECT));
+    let member = vec![ow(ME, OverwriteType::Member, Permissions::empty(), Permissions::CONNECT), ow(HELPER, OverwriteType::Role, Permissions::CONNECT, Permissions::empty())];
+    assert!(!compute_channel_permissions(G, None, ME, &[HELPER], &r, &member).contains(Permissions::CONNECT));
+}

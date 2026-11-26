@@ -234,6 +234,17 @@ mod tests {
         assert_eq!(a.x - px(316.), px(415.));
         assert_eq!(a.y - px(60.), px(290.));
     }
+
+    #[test]
+    fn preview_needs_connect_or_presence() {
+        let connect = phoenix_api::models::Permissions::CONNECT.bits();
+        let view = phoenix_api::models::Permissions::VIEW_CHANNEL.bits();
+        assert!(can_fetch_preview(false, Some(connect | view)));
+        assert!(!can_fetch_preview(false, Some(view)));
+        assert!(!can_fetch_preview(false, None));
+        assert!(can_fetch_preview(true, None));
+        assert!(can_fetch_preview(true, Some(0)));
+    }
 }
 
 pub fn stage_audience(app: &crate::app::PhoenixApp, channel: Id) -> AnyElement {
@@ -356,7 +367,20 @@ thread_local! {
 pub const PREVIEW_TTL: std::time::Duration = std::time::Duration::from_secs(120);
 pub const PREVIEW_RETRY: std::time::Duration = std::time::Duration::from_secs(10);
 
+pub fn can_fetch_preview(in_channel: bool, perms: Option<u64>) -> bool {
+    in_channel || perms.is_some_and(|p| p & phoenix_api::models::Permissions::CONNECT.bits() != 0)
+}
+
+pub fn preview_allowed(app: &crate::app::PhoenixApp, key: &str) -> bool {
+    let Some(k) = crate::voice::stream::parse_key(key) else { return false };
+    let ch = Id(k.channel);
+    can_fetch_preview(app.voice_channel == Some(ch), app.backend.channel_permissions(ch))
+}
+
 pub fn fetch_preview(app: &crate::app::PhoenixApp, key: String, cx: &mut gpui::App) {
+    if !preview_allowed(app, &key) {
+        return;
+    }
     let now = std::time::Instant::now();
     let go = PREVIEWS.with(|p| {
         let mut p = p.borrow_mut();
