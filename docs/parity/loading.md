@@ -66,3 +66,11 @@ limited to that server, target channel opened as soon as the cached session has 
 358d46b7: connecting screen from 0.1 s to 2.8 s, then the UI. The frame buffer is larger than the window
 when `PHX_SCALE` is not 2 (black band on the right and bottom): crop to `PHX_W·PHX_SCALE × PHX_H·PHX_SCALE`.
 The spinner video is not drawn in these headless frames yet.
+
+## Channel preload (`history_ui::preload`, `hover_channel`, `hover_guild`)
+
+| item | client | ours | status |
+|---|---|---|---|
+| trigger | `onMouseDown` on a channel row (`handleMouseDown` in the text channel component, chunk `6b05ca0762af596a.js`), a DM row (`e8`, web bundle) and a favourite (`onMouseDown`), all through `ChannelActions.preload(guildId, channelId)` (module 377480) | mouse down on a channel or DM row; hover also reads the page from the message cache (or fetches it in the background when there is none), and hovering a server icon does the same for the channel it would open (`PhoenixApp::guild_target`) | ✅ |
+| what it does | dispatches `CHANNEL_PRELOAD` with `context: MAIN`; `MessageManager` (123363) fetches the messages (`j` → `P({guildId, channelId})`), `ForumManager` loads forum posts; no `CHANNEL_SELECT`, so no ack | first page loaded and laid out on a `phoenix-layout` thread into `PhoenixApp::messages`; nothing is selected or acked; at most 24 preloaded pages are kept, the oldest unopened one is dropped | ✅ |
+| after READY | — | the 8 most recently cached channels are preloaded, one every 150 ms, 1.5 s after READY | ✅ |
