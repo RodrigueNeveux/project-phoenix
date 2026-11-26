@@ -208,7 +208,9 @@ fn ctx() -> MutexGuard<'static, MessageCtx> {
 }
 
 pub fn message_ctx() -> MessageCtx {
-    *ctx()
+    let mut c = *ctx();
+    c.quiet |= crate::notifications::restricted::active_now();
+    c
 }
 
 pub fn set_focused(on: bool) {
@@ -248,7 +250,7 @@ pub fn on_message(prefs: &crate::notifications::NotifyPrefs, cache: &phoenix_api
     let f = crate::notifications::facts(cache, me, m);
     let notify = crate::notifications::should_notify(prefs, &f);
     let allow_any = !prefs.allow_no_messages(f.guild, f.channel, f.parent);
-    let c = *ctx();
+    let c = message_ctx();
     for s in message_sounds(&c, &f, m.flags, blocked, notify, allow_any) {
         play(s, VOLUME);
     }

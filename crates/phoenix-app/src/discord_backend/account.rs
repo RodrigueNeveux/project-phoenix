@@ -249,6 +249,7 @@ pub(super) fn on_gateway(s: &Session, ev: &GatewayEvent) {
             }
         }
         GatewayEvent::GuildDelete(g) => crate::guild_live::forget(g.id.0),
+        GatewayEvent::UserUpdate(u) => crate::notifications::on_user_update(&s.cache, u),
         GatewayEvent::RelationshipAdd(r) => crate::notifications::on_relationship_add(r),
         GatewayEvent::RelationshipRemove(r) => crate::notifications::on_relationship_remove(r),
         GatewayEvent::MessageAck(a) => crate::notifications::on_ack(a.channel_id.0),

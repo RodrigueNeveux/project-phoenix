@@ -13,6 +13,7 @@ pub mod content;
 #[cfg(target_os = "linux")]
 pub mod dbus;
 pub mod reminders;
+pub mod restricted;
 
 use content::Lookup;
 
@@ -467,6 +468,14 @@ pub fn build(cache: &Cache, m: &api::Message) -> Option<Toast> {
     })
 }
 
+pub fn on_user_update(cache: &Cache, user: &api::User) {
+    if let Some(schedule) = &user.restricted_schedule
+        && cache.current_user().is_some_and(|u| u.id == user.id)
+    {
+        restricted::set(Some(schedule));
+    }
+}
+
 pub fn gate_open() -> bool {
     let c = crate::sounds::message_ctx();
     enabled() && !c.dnd && !c.quiet
@@ -502,6 +511,7 @@ fn rel_user(r: &api::Relationship) -> u64 {
 }
 
 pub fn on_ready(cache: &Cache) {
+    restricted::set(cache.current_user().and_then(|u| u.restricted_schedule.clone()).as_ref());
     let set = cache.relationships().iter().filter(|r| matches!(r.kind, api::RelationshipType::OutgoingRequest)).map(|r| rel_user(r)).collect();
     *outgoing() = Some(set);
     *seen_stages() = Some(cache.guilds().iter().flat_map(|g| g.stage_instances.iter().filter_map(|i| snowflake(i.get("id")))).collect());

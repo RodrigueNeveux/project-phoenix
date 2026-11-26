@@ -53,6 +53,8 @@ pub struct User {
     pub flags: Option<u64>,
     #[serde(default)]
     pub bio: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restricted_schedule: Option<serde_json::Value>,
 }
 
 pub(crate) fn nameplate_from_collectibles(collectibles: Option<&serde_json::Value>) -> Option<(String, Option<String>)> {
