@@ -39,6 +39,7 @@ pub struct Quest {
     pub task: Task,
     pub app_quest: bool,
     pub cta: Option<SharedString>,
+    pub cta_link: Option<SharedString>,
     pub enrolled: bool,
     pub completed: bool,
     pub claimed: bool,
@@ -289,6 +290,7 @@ pub fn parse(v: &Value, now: DateTime<Utc>) -> Vec<Quest> {
             task: task_of(&tasks),
             app_quest: features.contains(&APP_FEATURE),
             cta: cfg["cta_config"]["button_label"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_owned().into()),
+            cta_link: cfg["cta_config"]["link"].as_str().filter(|s| !s.is_empty()).map(|s| s.to_owned().into()),
             enrolled: !us["enrolled_at"].is_null(),
             completed: !us["completed_at"].is_null(),
             claimed: !us["claimed_at"].is_null(),
@@ -375,10 +377,43 @@ fn orb_icon(size: f32) -> gpui::Svg {
     gpui::svg().path(crate::icons::path("orbs")).size(z(size)).flex_none().text_color(tk(idx::TEXT_STRONG))
 }
 
-fn button(id: impl Into<gpui::ElementId>, label: SharedString, primary: bool, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
+pub const QUEST_HOME_DESKTOP: u8 = 11;
+
+pub const PAID_TERMS_ORBS: &str = "https://discord.com/terms/paid-services-terms#14";
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Cta {
+    Enroll(u64),
+    Open(SharedString),
+    Preview(SharedString),
+}
+
+pub fn primary_cta(q: &Quest, label: &SharedString) -> Cta {
+    if q.enrolled { Cta::Preview(label.clone()) } else { Cta::Enroll(q.id) }
+}
+
+pub fn secondary_cta(q: &Quest) -> Option<(SharedString, Cta)> {
+    let label = q.cta.clone()?;
+    let cta = q.cta_link.clone().map_or_else(|| Cta::Preview(label.clone()), Cta::Open);
+    Some((label, cta))
+}
+
+fn run(a: &mut PhoenixApp, cta: &Cta, cx: &mut Context<PhoenixApp>) {
+    match cta {
+        Cta::Enroll(id) => a.blocked_write(crate::actions::guard::GuardedWrite::quest_enroll(*id, QUEST_HOME_DESKTOP), cx),
+        Cta::Open(url) => cx.open_url(url),
+        Cta::Preview(l) => a.stub(l, cx),
+    }
+}
+
+fn open_orbs_shop(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    crate::ui::shop_page::select_tab(crate::ui::shop_page::ORBS_TAB);
+    a.open_home_view(crate::ui::home::data::HomeView::Shop, cx);
+}
+
+fn button(id: impl Into<gpui::ElementId>, label: SharedString, primary: bool, cta: Cta, cx: &mut Context<PhoenixApp>) -> gpui::Stateful<gpui::Div> {
     let kind = if primary { crate::ui::controls::BtnKind::Primary } else { crate::ui::controls::BtnKind::Secondary };
-    let l = label.clone();
-    crate::ui::controls::button(id, label, kind).flex_1().min_w_0().on_click(cx.listener(move |a, _, _, cx| a.stub(&l, cx)))
+    crate::ui::controls::button(id, label, kind).flex_1().min_w_0().on_click(cx.listener(move |a, _, _, cx| run(a, &cta, cx)))
 }
 
 fn util_button(icon: &'static str) -> gpui::Div {
@@ -515,8 +550,11 @@ fn tile(q: &Quest, premium: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .flex()
         .items_center()
         .gap(z(8.))
-        .children(q.cta.clone().map(|l| button(("quest-cta2", q.id), l, false, cx)))
-        .child(button(("quest-cta1", q.id), primary, true, cx));
+        .children(secondary_cta(q).map(|(l, cta)| button(("quest-cta2", q.id), l, false, cta, cx)))
+        .child({
+            let cta = primary_cta(q, &primary);
+            button(("quest-cta1", q.id), primary, true, cta, cx)
+        });
     div()
         .id(("quest-tile", q.id))
         .w_full()
@@ -574,7 +612,7 @@ fn header_bar(cx: &mut Context<PhoenixApp>) -> AnyElement {
                 .id("quests-balance")
                 .pl(z(10.))
                 .cursor_pointer()
-                .on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("quests.explore_shop"), cx)))
+                .on_click(cx.listener(|a, _, _, cx| open_orbs_shop(a, cx)))
                 .child(
                     div()
                         .h(z(32.))
@@ -595,7 +633,6 @@ fn hero(cx: &mut Context<PhoenixApp>) -> AnyElement {
     let shop = crate::t!("quests.explore_shop");
     let terms = crate::t!("quests.terms");
     let overlay_btn = |id: &'static str, label: SharedString, light: bool| {
-        let l = label.clone();
         div()
             .id(id)
             .h(z(40.))
@@ -610,7 +647,7 @@ fn hero(cx: &mut Context<PhoenixApp>) -> AnyElement {
             .line_height(z(20.))
             .font_weight(FontWeight::MEDIUM)
             .child(label)
-            .on_click(cx.listener(move |a, _, _, cx| a.stub(&l, cx)))
+            .on_click(cx.listener(move |a, _, _, cx| if light { open_orbs_shop(a, cx) } else { cx.open_url(PAID_TERMS_ORBS) }))
     };
     div()
         .relative()
@@ -895,7 +932,7 @@ mod tests {
             {"id": "2", "config": {"expires_at": "2030-01-01T00:00:00+00:00", "features": [26, 15], "messages": {"quest_name": "A", "game_title": "G", "game_publisher": "P"},
               "assets": {"hero": "quests/2/h.jpg", "logotype_dark": "PLACEHOLDER", "logotype": "quests/2/l.png"},
               "rewards_config": {"rewards": [{"type": 4, "messages": {"name": "700 Orbs"}, "orb_quantity": 700, "premium_orb_quantity": 840}]},
-              "task_config_v2": {"tasks": {"PLAY_ON_DESKTOP": {"target": 900}}}, "cta_config": {"button_label": "Télécharger"}},
+              "task_config_v2": {"tasks": {"PLAY_ON_DESKTOP": {"target": 900}}}, "cta_config": {"button_label": "Télécharger", "link": "https://example.com/get"}},
              "user_status": {"enrolled_at": "x", "completed_at": null, "claimed_at": null, "progress": {"PLAY_ON_DESKTOP": {"value": 450}}}},
             {"id": "3", "config": {"expires_at": "2030-01-01T00:00:00+00:00", "messages": {"quest_name": "V"},
               "rewards_config": {"rewards": [{"type": 4, "orb_quantity": 200, "premium_orb_quantity": 240}]},
@@ -915,6 +952,11 @@ mod tests {
         assert_eq!(q[0].task, Task::Play { minutes: 15 });
         assert!(q[0].app_quest && q[0].enrolled && !q[0].completed);
         assert_eq!(q[0].cta.as_deref(), Some("Télécharger"));
+        assert_eq!(q[0].cta_link.as_deref(), Some("https://example.com/get"));
+        assert_eq!(secondary_cta(&q[0]), Some(("Télécharger".into(), Cta::Open("https://example.com/get".into()))));
+        assert_eq!(primary_cta(&q[0], &"x".into()), Cta::Preview("x".into()));
+        assert_eq!(primary_cta(&q[1], &"x".into()), Cta::Enroll(3));
+        assert!(secondary_cta(&q[1]).is_none());
         assert!((q[0].progress - 0.5).abs() < 1e-6);
         assert_eq!(q[1].task, Task::Video { seconds: 35 });
         assert!(!q[1].app_quest && q[1].cta.is_none());
@@ -940,6 +982,7 @@ mod tests {
             task: Task::Other,
             app_quest: false,
             cta: None,
+            cta_link: None,
             enrolled: false,
             completed: false,
             claimed: false,

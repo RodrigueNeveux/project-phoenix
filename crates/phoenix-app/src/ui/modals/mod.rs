@@ -25,6 +25,7 @@ pub mod poll_create;
 pub mod privacy;
 pub mod reactions;
 pub mod report;
+pub mod report_raid;
 pub mod server_settings;
 pub mod settings_form;
 pub mod settings_layout;
@@ -112,6 +113,7 @@ pub enum Modal {
     CreatePoll(poll_create::State),
     GoLive(go_live::State),
     LeaveLink(leave_link::State),
+    ReportRaid(report_raid::State),
     Follow(follow::State),
     EditGroup(gdm::EditGroup),
     GroupInvites(gdm::Invites),
@@ -254,6 +256,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::CreatePoll(s) => poll_create::render(app, s, cx),
             Modal::GoLive(s) => go_live::render(app, s, cx),
             Modal::LeaveLink(s) => leave_link::render(s, cx),
+            Modal::ReportRaid(s) => report_raid::render(s, cx),
             Modal::StreamFeedback(s) => stream_feedback::render(s, cx),
             Modal::Follow(s) => follow::render(app, s, cx),
             Modal::EditGroup(g) => gdm::render_edit_group(g, cx),
@@ -315,6 +318,10 @@ pub fn card(width: f32, title: SharedString, subtitle: Option<SharedString>, bod
 }
 
 pub fn card_with(width: f32, title: SharedString, subtitle: Option<SharedString>, body: AnyElement, footer: Option<AnyElement>, close: crate::ui::modal::Action) -> AnyElement {
+    card_rich(width, title, subtitle.map(|s| strong_marked(&s).into_any_element()), body, footer, close)
+}
+
+pub fn card_rich(width: f32, title: SharedString, subtitle: Option<AnyElement>, body: AnyElement, footer: Option<AnyElement>, close: crate::ui::modal::Action) -> AnyElement {
     let close2 = close.clone();
     let el = div()
         .relative()
@@ -344,7 +351,7 @@ pub fn card_with(width: f32, title: SharedString, subtitle: Option<SharedString>
                 .flex_col()
                 .gap(z(8.))
                 .child(div().pr(z(36.)).text_size(z(20.)).line_height(z(24.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(idx::TEXT_STRONG))).child(title))
-                .children(subtitle.map(|s| div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(strong_marked(&s)))),
+                .children(subtitle.map(|s| div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(s))),
         )
         .child(div().px(z(24.)).pt(z(8.)).flex().flex_col().min_h_0().text_size(z(16.)).text_color(c(tok(idx::TEXT_DEFAULT))).child(body))
         .children(footer.map(|f| div().pt(z(16.)).px(z(24.)).pb(z(8.)).flex().gap(z(8.)).justify_end().child(f)))

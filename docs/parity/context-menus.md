@@ -27,3 +27,11 @@ Renders: `PHX_OPEN=guildmenu|chanmenu[:n]|catmenu[:n]|usermenu[:n]|msgmenu int-b
 | rows | item_M3qk4j | 34 (text) / 36 (icon) / 52 (subtext), padding 8, 14/18 medium, icon 20 + mr 8 | ✅ |
 | edge nudging | web.*.js nudgeTopAlignment | 12px window margin, max-height = window − top − 12 (was 16) | ✅ |
 | keyboard | web.*.js list navigators | Up/Down wrap, Home/End, Right/Left submenu, Enter/Space, Esc | ✅ (type-ahead not seen in the client) |
+
+## Button pass (wt/btn-home, 26/11)
+
+| entry | behaviour now | source | status |
+|---|---|---|---|
+| server: Server Insights | opens Server Settings on Analytics, shown with the same rule as the settings page (community + Manage Server) | chunk `6c30816cda95e0b0.js` id `insights` → `en.A.open(id, BEX.ANALYTICS)` | ✅ |
+| server: Report Raid | shown with Ban, Kick, Timeout or Manage Server on a community server; opens the module 935074 modal (title `uYPGsS`, subtitle `Hg8Ee7` with the help link to article 10989121220631, checkbox group of the five raid types in the client order, gap 16 / padding 8 0 4 from `group_Si_H15`, Cancel / Submit); Submit sends `POST /guilds/{id}/auto-moderation/report-raid` through the guard, which refuses it with the blocked-write toast | `6c30816cda95e0b0.js` (`report-raid`, `$.ic` module 974103), CDN chunk `5ef1ef49ddc769e5.js` (935074), `aed76361ef0ef614.js` (859706 `B`), CSS `3942.05b22d8cf5539c36.css` | ✅ |
+| user / DM / message: Apps > | disabled "No Commands Available" row (`YSNlV2`), as the client shows when the app list is empty | `b1ab6c34147db858.js` `menu-commands-empty` | ✅ (Phoenix does not list user-installed app commands yet) |

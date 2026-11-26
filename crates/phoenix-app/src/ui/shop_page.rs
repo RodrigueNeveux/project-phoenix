@@ -260,6 +260,12 @@ fn search_input(window: &mut Window, cx: &mut Context<PhoenixApp>) -> gpui::Enti
     i
 }
 
+pub const ORBS_TAB: usize = 2;
+
+pub fn select_tab(i: usize) {
+    TAB.with(|t| t.set(i));
+}
+
 fn header(window: &mut Window, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let search = search_input(window, cx);
     let tabs = [crate::t!("shop.tab_now"), crate::t!("shop.tab_browse"), crate::t!("shop.tab_orbs"), crate::t!("shop.tab_more")];

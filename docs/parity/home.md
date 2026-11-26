@@ -86,3 +86,13 @@ No real-data compare ran for this pass: the user's Discord was on a guild channe
   - Nitro and Shop pages;
   - empty-state illustrations through runtime asset extraction;
   - a real-data compare when the user's Discord shows Home.
+
+## Quests buttons (wt/btn-home, 26/11)
+
+| control | behaviour now | source | status |
+|---|---|---|---|
+| hero "Explore the Orbs Shop", balance pill | open the Shop on its Orbs tab | `62ff494ee72ec4ad.js` (`T.Cz({tab: ORBS})` from the banner and from `ORBS_BALANCE_MENU`) | ✅ (the Orbs tab still shows the full grid) |
+| hero "Discord Orbs Terms" | opens `https://discord.com/terms/paid-services-terms#14` | `X7G.PAID_TERMS_ORBS` | ✅ |
+| tile "Accept Quest" / "Watch" | `POST /quests/{id}/enroll` with `location: 11` (QUEST_HOME_DESKTOP), refused by the guard with the blocked-write toast | `62ae5fafb88cf9ee.js` (`tL.Oy`), web bundle `QUESTS_ENROLL` | ✅ (the video modal that "Watch" opens in the client is not built) |
+| tile secondary CTA | opens `cta_config.link` | quest config | ✅ |
+| tile "View Quest" when enrolled, ⋯ and play buttons | still a preview stub | — | ❌ |

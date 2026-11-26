@@ -103,12 +103,6 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
 
     let has_reactions = msg.is_some_and(|x| !x.reactions.is_empty());
     let in_guild = app.channels.get(&ch).is_some_and(|c| c.guild.is_some());
-    let stub = |key: &'static str, icon: &str| {
-        let ee = e.clone();
-        MenuItem::action(crate::t!(key), Some(crate::icons::path(icon)), move |_, _, cx| {
-            ee.update(cx, |a, cx| a.stub(&crate::t!(key), cx))
-        })
-    };
     let mut strip = div().flex().items_center().gap(z(4.)).p(z(8.));
     let guild = app.channels.get(&ch).and_then(|c| c.guild);
     for (i, q) in app.chat.quick_reactions_for(guild, app.backend.has_premium(), 4).into_iter().enumerate() {
@@ -239,7 +233,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         ee.update(cx, |a, cx| a.open_custom_reminder(ch, id, cx))
     }));
     items.push(MenuItem::submenu_with_icon(crate::t!("msg.remind"), "inbox/clock", reminders));
-    items.push(MenuItem::submenu_with_icon(crate::t!("menu.apps"), "apps", vec![stub("menu.apps_none", "apps")]));
+    items.push(MenuItem::submenu_with_icon(crate::t!("menu.apps"), "apps", vec![MenuItem::disabled(crate::t!("menu.apps_none"), None)]));
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.mark_unread"), ic(ChatIcon::Unread), move |_, _, cx| {
         ee.update(cx, |a, cx| a.mark_unread_from(ch, id, cx))

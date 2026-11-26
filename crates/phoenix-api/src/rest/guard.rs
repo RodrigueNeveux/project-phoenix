@@ -171,6 +171,14 @@ impl GuardedWrite {
         write(Method::POST, format!("/guilds/{guild}/soundboard-sounds"), Some(sound.body()))
     }
 
+    pub fn report_raid(guild: u64) -> Self {
+        write(Method::POST, format!("/guilds/{guild}/auto-moderation/report-raid"), None)
+    }
+
+    pub fn quest_enroll(quest: u64, location: u8) -> Self {
+        write(Method::POST, format!("/quests/{quest}/enroll"), Some(json!({ "location": location, "metadata_sealed": null, "traffic_metadata_sealed": null })))
+    }
+
     pub fn refusal(&self) -> Error {
         blocked(&self.method, self.path.clone())
     }
@@ -220,6 +228,8 @@ mod tests {
             GuardedWrite::start_webauthn_register(),
             GuardedWrite::create_sticker(5, &super::super::form::tests::sticker()),
             GuardedWrite::create_sound(5, &super::super::form::tests::sound()),
+            GuardedWrite::report_raid(5),
+            GuardedWrite::quest_enroll(8, 11),
         ]
     }
 
@@ -268,6 +278,13 @@ mod tests {
         let add = GuardedWrite::discovery_category(5, 49, true);
         assert_eq!((add.method, add.path.as_str(), add.body), (Method::PUT, "/guilds/5/discovery-categories/49", None));
         assert_eq!(GuardedWrite::discovery_category(5, 49, false).method, Method::DELETE);
+        let raid = GuardedWrite::report_raid(5);
+        assert_eq!((raid.method, raid.path.as_str(), raid.body), (Method::POST, "/guilds/5/auto-moderation/report-raid", None));
+        let quest = GuardedWrite::quest_enroll(8, 11);
+        assert_eq!(
+            (quest.method, quest.path.as_str(), quest.body),
+            (Method::POST, "/quests/8/enroll", Some(json!({ "location": 11, "metadata_sealed": null, "traffic_metadata_sealed": null })))
+        );
     }
 
     #[tokio::test]

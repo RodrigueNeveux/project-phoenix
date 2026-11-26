@@ -213,7 +213,10 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)));
     if manage_guild {
         items.push(act(&e, crate::t!("menu.server_settings"), move |a, _, cx| a.open_server_settings(g, 0, cx)));
-        items.push(stub(&e, "menu.gs.analytics"));
+    }
+    if crate::ui::modals::server_settings::visible(app, g, "menu.gs.analytics") {
+        let section = crate::ui::modals::server_settings::section_index("menu.gs.analytics");
+        items.push(act(&e, crate::t!("menu.gs.analytics"), move |a, _, cx| a.open_server_settings(g, section, cx)));
     }
     if manage_channels {
         items.push(act(&e, crate::t!("menu.create_channel"), move |a, _, cx| a.open_create_channel(g, None, crate::model::ChannelKind::Text, cx)));
@@ -255,9 +258,14 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
             let e = e.clone();
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
         }));
+    }
+    if crate::ui::modals::report_raid::visible(app, g) {
+        if !manage_guild {
+            items.push(MenuItem::Separator);
+        }
         items.push(MenuItem::danger(crate::t!("menu.report_raid"), None, {
             let e = e.clone();
-            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.stub(&crate::t!("menu.report_raid"), cx))
+            move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_report_raid(g, cx))
         }));
     }
     if !owner {
@@ -294,9 +302,6 @@ pub fn favorites_add_items(e: &Ent) -> Vec<MenuItem> {
     ]
 }
 
-fn stub(e: &Ent, key: &'static str) -> MenuItem {
-    act(e, crate::t!(key), move |a, _, cx| a.stub(&crate::t!(key), cx))
-}
 
 fn rail_move(app: &PhoenixApp, e: &Ent, item: crate::ui::modals::gdm::RailRef) -> Option<MenuItem> {
     use crate::ui::modals::gdm::{Dest, RailRef, placement};
@@ -478,7 +483,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                     items.push(act(&e, crate::t!("menu.close_dm"), move |a, _, cx| a.close_dm(id, cx)));
                     if let Some(u) = peer {
                         items.push(MenuItem::Separator);
-                        items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![stub(&e, "menu.apps_none")]));
+                        items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![MenuItem::disabled(crate::t!("menu.apps_none"), None)]));
                         let invites: Vec<MenuItem> = app
                             .guilds
                             .iter()

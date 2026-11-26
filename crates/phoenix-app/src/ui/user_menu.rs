@@ -63,7 +63,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     let rel = app.nav.relationship(u).map(|r| r.kind);
     let friend = rel == Some(crate::ui::home::data::RelationshipKind::Friend);
     let bot = app.users.get(&u).is_some_and(|x| x.bot);
-    let stub = |key: &'static str| act(crate::t!(key), Rc::new(move |a, _, _, cx| a.stub(&crate::t!(key), cx)));
     if !me && friend {
         items.push(act(crate::t!("menu.call"), Rc::new(move |a, _, _, cx| a.open_call_ui(u, cx))));
     }
@@ -87,7 +86,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(act(crate::t!("menu.change_nickname"), Rc::new(move |a, _, _, cx| a.open_nickname(gid, Some(u), cx))));
         }
     }
-    items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![stub("menu.apps_none")]));
+    items.push(MenuItem::submenu(crate::t!("menu.apps"), vec![MenuItem::disabled(crate::t!("menu.apps_none"), None)]));
     if !me {
         if !bot {
             let invites: Vec<MenuItem> = app
