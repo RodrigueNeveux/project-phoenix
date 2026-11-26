@@ -155,6 +155,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/link-external.svg" => s!(r#"<path d="M9 6h9v9M18 6 6 18"/>"#),
         "icons/viewer/zoom.svg" => s!(r#"<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6m-3-3h6"/>"#),
         "icons/heart.svg" => s!(r#"<path d="M12 20s-7.5-4.6-9-9.3C2 7.4 4.3 4.5 7.4 4.5c2 0 3.6 1.2 4.6 2.8 1-1.6 2.6-2.8 4.6-2.8 3.1 0 5.4 2.9 4.4 6.2C19.5 15.4 12 20 12 20z"/>"#),
+        "icons/heart-outline.svg" => s!(r#"<path d="M12 20s-7.5-4.6-9-9.3C2 7.4 4.3 4.5 7.4 4.5c2 0 3.6 1.2 4.6 2.8 1-1.6 2.6-2.8 4.6-2.8 3.1 0 5.4 2.9 4.4 6.2C19.5 15.4 12 20 12 20z"/>"#),
         "icons/server/badge.svg" => s!(r#"<path d="M6 3h12l-1.5 15L12 21l-4.5-3z"/><circle cx="12" cy="10" r="2.5"/>"#),
         "icons/server/envelope.svg" => s!(r#"<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>"#),
         "icons/server/clipboard.svg" => s!(r#"<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM8 11h8M8 15h8"/>"#),
@@ -228,6 +229,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/check.svg" => s!(r#"<path d="m5 12.5 4.5 4.5L19 7.5"/>"#),
         "icons/check-small.svg" => s!(r#"<path d="m7.5 12.5 3 3L16.5 9"/>"#),
         "icons/guild/flower-star.svg" => f!(r#"<path d="M12 1.5l2.6 2.2 3.4-.4 1 3.3 3 1.6-1 3.3 1 3.3-3 1.6-1 3.3-3.4-.4-2.6 2.2-2.6-2.2-3.4.4-1-3.3-3-1.6 1-3.3-1-3.3 3-1.6 1-3.3 3.4.4z"/>"#),
+        "icons/guild/home.svg" => f!(r#"<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>"#),
         "icons/check-small-bold.svg" => concat!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">"#,
             r#"<path d="m6 12 4 4 8-8"/>"#,
