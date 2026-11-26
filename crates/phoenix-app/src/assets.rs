@@ -128,6 +128,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/event/location.svg" => s!(r#"<path d="M12 21s-6.5-6.2-6.5-11a6.5 6.5 0 0 1 13 0c0 4.8-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.5"/>"#),
         "icons/chevron.svg" => s!(r#"<path d="m6 9 6 6 6-6"/>"#),
         "icons/friends/discovery-arrow.svg" => s!(r#"<path d="m9 6 6 6-6 6"/>"#),
+        "icons/x-neutral.svg" => f!(r#"<path d="M13.9 10.6 21 2.5h-1.7l-6.2 7L8.2 2.5H2.5l7.5 10.6-7.5 8.4h1.7l6.5-7.4 5.2 7.4h5.7zm-2.3 2.6-.8-1.1L4.8 3.8h2.6l4.9 6.9.8 1.1 6.3 8.9h-2.6z"/>"#),
         "icons/shield.svg" => s!(r#"<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>"#),
         "icons/settings-info.svg" => s!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>"#),
         "icons/media/replay.svg" => f!(r#"<path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/>"#),
