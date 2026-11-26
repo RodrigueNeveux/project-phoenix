@@ -47,7 +47,7 @@ pub fn ensure_with(avatar: &str, cx: &mut App, done: impl FnOnce(&mut App) + 'st
         if resp.body_mut().read_to_end(&mut bytes).await.is_err() {
             return;
         }
-        let Some(rgb) = dominant_png(&bytes) else { return };
+        let Some(rgb) = cx.background_spawn(async move { dominant_png(&bytes) }).await else { return };
         cx.update(|cx| {
             CACHE.with(|c| c.borrow_mut().insert(url, Some(rgb)));
             cx.refresh_windows();
