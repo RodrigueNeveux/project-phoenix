@@ -136,7 +136,7 @@ through CDP. `PHX_COMPACT=1` = compact message display.
 `PHX_VIEW=friends` opens the Friends page (`PHX_TAB` = online|all|pending|blocked|add);
 `PHX_VIEW=inbox` opens the inbox popout over the location (`PHX_TAB` =
 mentions|unreads|saved|reminders|scheduled).
-`PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|thread:<id>|thread_create:<msg>|attach|poll_create|leave|invite|post[:n]|events|community[:browse]|guide.
+`PHX_OPEN` = pins|threads|search[:q]|filters[:date|calendar|list<n>]|settings[:page]|server_settings[:n]|emoji|gif|sticker|msgmenu|chanmenu[:n]|catmenu[:n]|guildmenu|guilddrop|usermenu[:n]|switcher|thread:<id>|thread_create:<msg>|attach|poll_create|leave|invite|raid|add_to_dm|post[:n]|events|community[:browse]|guide.
 `PHX_PROFILE=member:<n>` = nth member of the list; `PHX_DEBUG_GIF=1` prints the GIF home previews.
 `PHX_FX_STILL=1` = still profile effects (reduce motion).
 `PHX_GRADIENT_AT=0,375,…` writes `<out>-gNNNN.png`, the frame with the gradient clock that many ms

@@ -1593,6 +1593,16 @@ fn main() -> anyhow::Result<()> {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::LeaveGuild(g), cx);
                     }
                 }
+                "raid" => {
+                    if let Some(guild) = app.selected_guild {
+                        app.open_report_raid(guild, cx);
+                    }
+                }
+                "add_to_dm" => {
+                    if let Some(c) = app.selected_channel {
+                        app.open_add_to_dm(c, cx);
+                    }
+                }
                 "invite" => {
                     if let Some(guild) = app.selected_guild {
                         app.show_overlay(phoenix_app::ui::home::data::Overlay::InviteLink { guild, link: None }, cx);
