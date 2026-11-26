@@ -362,7 +362,7 @@ exactly on the budget is kept, and 0.001px less cuts it. Phoenix renders « hone
 patch 14 and the composer's `mr(12)`, so the cut itself needed no change. The « hone… » seen
 before came from the box, not from the cut.
 
-Rev: `22d0f05c` on `gpui-gradient-anim` (patches 4 to 17). Before: `d00bee73` on `gpui-gradient` (patches 4 to 16), `776d5b2c` on `gpui-rewrap` (patches 4 to 15), `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14), `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
+Rev: `7ebb03d2` on `gpui-gradient-anim2` (patches 4 to 17). Before: `22d0f05c` on `gpui-gradient-anim` (patch 17 without the benchmark hooks), `d00bee73` on `gpui-gradient` (patches 4 to 16), `776d5b2c` on `gpui-rewrap` (patches 4 to 15), `fc9bf4e7` on `gpui-ellipsis2` (patches 4 to 14), `5e340a80` on `gpui-richtext` (patches 4 to 13), `0c04d8e7` on `gpui-baseline2` (patches 4 to 11), `4c7d4f5a` on `gpui-baseline` (patch 9 with the descent sign bug), `0ce4a85b` on `gpui-underline`, `265d2211` on `gpui-marks`.
 
 ## 15. Rewrap slack (`src/elements/text.rs` `needs_rewrap`)
 
@@ -460,6 +460,9 @@ on every frame.
   separable, CPU) and kept in the atlas under `AtlasKey::BlurredGlyph(params, σ bits)`.
 - `Window::set_gradient_elapsed` (test-support) sets the clock of the current frame to a time after
   its first scroll, for frame-by-frame captures (`real_shots` `PHX_GRADIENT_AT`).
+- `HeadlessAppContext::simulate_frame_request` (test-support) delivers one platform frame request,
+  so a benchmark drives the real draw or present-only branch; `Window::scrolls_gradients` says
+  whether the current frame keeps re-presenting (`real_shots` `PHX_PRESENT_CPU`).
 
 Tests: `text_system::gradient::tests::scroll_moves_the_tile_right_and_wraps_by_the_period`,
 `a_finite_scroll_stops_on_its_last_frame_like_fill_mode_forwards`,
