@@ -82,11 +82,20 @@ pub fn window_options(cx: &App) -> WindowOptions {
 }
 
 pub fn init(cx: &mut App) {
+    init_base(cx);
+    fonts::register(cx);
+}
+
+pub fn init_deferred(cx: &mut App) {
+    init_base(cx);
+    fonts::register_deferred(cx);
+}
+
+fn init_base(cx: &mut App) {
     gpui_component::init(cx);
     Theme::change(ThemeMode::Dark, None, cx);
     app::bind_keys(cx);
     media::lru::init(cx);
-    fonts::register(cx);
 }
 
 pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) {

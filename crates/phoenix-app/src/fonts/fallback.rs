@@ -27,6 +27,7 @@ const EMOJI_SEQUENCE_PARTS: [(u32, u32); 7] = [
 ];
 
 static REGISTERED: OnceLock<Vec<String>> = OnceLock::new();
+static PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static WEB_NOTO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 const WEB_NOTO_NAME: &str = "Phx Noto Sans Web";
 
@@ -40,6 +41,9 @@ pub fn ui_fallbacks() -> gpui::FontFallbacks {
     let cache = CHAINS.get_or_init(|| parking_lot::RwLock::new(std::collections::HashMap::new()));
     if let Some(fb) = cache.read().get(loc) {
         return fb.clone();
+    }
+    if REGISTERED.get().is_none() && PENDING.load(std::sync::atomic::Ordering::Relaxed) {
+        return gpui::FontFallbacks::from_fonts(Vec::new());
     }
     let mut chain = if let Some(base) = REGISTERED.get() {
         let mut out = Vec::new();
@@ -374,13 +378,52 @@ fn emoji_copy(font: &[u8], family: &str, keep: impl Fn(u32) -> bool) -> Option<V
     rebuild(font, family, Some(&ps), Some(cmap_format12(&map)))
 }
 
+pub struct Prepared {
+    chain: Vec<String>,
+    blobs: Vec<std::borrow::Cow<'static, [u8]>>,
+}
+
+pub fn ready() -> bool {
+    REGISTERED.get().is_some()
+}
+
 pub fn register(cx: &mut gpui::App) {
     if REGISTERED.get().is_some() {
         return;
     }
-    if std::env::var_os("PHX_NO_FONT_FALLBACK").is_some() {
-        let _ = REGISTERED.set(Vec::new());
+    match prepare() {
+        Some(p) => install(p, cx),
+        None => {
+            let _ = REGISTERED.set(Vec::new());
+        }
+    }
+}
+
+pub fn register_in_background(cx: &mut gpui::App) {
+    if REGISTERED.get().is_some() {
         return;
+    }
+    PENDING.store(true, std::sync::atomic::Ordering::Relaxed);
+    let task = cx.background_executor().spawn(async move { prepare() });
+    cx.spawn(async move |cx| {
+        let prepared = task.await;
+        cx.update(|cx| {
+            match prepared {
+                Some(p) => install(p, cx),
+                None => {
+                    let _ = REGISTERED.set(Vec::new());
+                }
+            }
+            crate::perf::mark("font_fallback_ready");
+            cx.refresh_windows();
+        });
+    })
+    .detach();
+}
+
+pub fn prepare() -> Option<Prepared> {
+    if std::env::var_os("PHX_NO_FONT_FALLBACK").is_some() {
+        return None;
     }
     let mut blobs: Vec<std::borrow::Cow<'static, [u8]>> = Vec::new();
     let web: Vec<Vec<u8>> = web_dir()
@@ -453,6 +496,14 @@ pub fn register(cx: &mut gpui::App) {
             chain.push(selector);
         }
         blobs.push(bytes.into());
+    }
+    Some(Prepared { chain, blobs })
+}
+
+pub fn install(p: Prepared, cx: &mut gpui::App) {
+    let Prepared { mut chain, blobs } = p;
+    if REGISTERED.get().is_some() {
+        return;
     }
     if chain.is_empty() || (!blobs.is_empty() && cx.text_system().add_fonts(blobs).is_err()) {
         chain = plain_chain();

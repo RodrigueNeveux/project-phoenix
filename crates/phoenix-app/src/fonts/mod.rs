@@ -335,19 +335,38 @@ fn install(fonts: Vec<Decoded>, cx: &mut gpui::App) -> bool {
     true
 }
 
+static EXTRACTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn ready() -> bool {
+    fallback::ready() && EXTRACTED.load(Ordering::Relaxed)
+}
+
 pub fn register(cx: &mut gpui::App) {
     fallback::register(cx);
+    register_faces(cx);
+}
+
+pub fn register_deferred(cx: &mut gpui::App) {
+    fallback::register_in_background(cx);
+    register_faces(cx);
+}
+
+fn register_faces(cx: &mut gpui::App) {
     let cached = out_dir().map(|d| load_decoded(&d)).unwrap_or_default();
     install(cached, cx);
     apply_theme_fonts(cx);
     if std::env::var_os("PHX_NO_FONT_EXTRACT").is_some() {
+        EXTRACTED.store(true, Ordering::Relaxed);
         return;
     }
     let task = cx.background_executor().spawn(async move { extract_and_decode() });
     cx.spawn(async move |cx| {
         let fonts = task.await;
         cx.update(|cx| {
-            if install(fonts, cx) {
+            let changed = install(fonts, cx);
+            EXTRACTED.store(true, Ordering::Relaxed);
+            crate::perf::mark("fonts_extracted");
+            if changed {
                 cx.refresh_windows();
             }
         });
