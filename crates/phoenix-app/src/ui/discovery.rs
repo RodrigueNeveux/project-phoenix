@@ -1064,11 +1064,9 @@ fn ensure_input(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
             start_search(a, q, None, cx);
         }
         gpui_component::input::InputEvent::Change => cx.notify(),
-        gpui_component::input::InputEvent::Blur => {
-            if search_bar(Tab::Servers) == SearchBar::Floating && i.read(cx).value().trim().is_empty() {
-                set_search_bar(Tab::Servers, SearchBar::Collapsed);
-                cx.notify();
-            }
+        gpui_component::input::InputEvent::Blur if search_bar(Tab::Servers) == SearchBar::Floating && i.read(cx).value().trim().is_empty() => {
+            set_search_bar(Tab::Servers, SearchBar::Collapsed);
+            cx.notify();
         }
         _ => {}
     })

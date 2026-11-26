@@ -869,6 +869,10 @@ fn main() -> anyhow::Result<()> {
                 app.select_guild(None, cx);
                 app.selected_channel = None;
                 phoenix_app::ui::discovery::open(if tab == "apps" { phoenix_app::ui::discovery::Tab::Apps } else { phoenix_app::ui::discovery::Tab::Servers });
+            } else if view == "shop" {
+                app.select_guild(None, cx);
+                app.nav.home = phoenix_app::ui::home::data::HomeView::Shop;
+                app.selected_channel = None;
             } else if view == "quests" {
                 app.select_guild(None, cx);
                 app.nav.home = phoenix_app::ui::home::data::HomeView::Quests;
