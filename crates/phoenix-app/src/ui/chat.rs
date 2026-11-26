@@ -990,7 +990,7 @@ pub(crate) fn message(
     let compact_header_left = 16. * crate::theme::font_scale();
     let is_bot = author.is_some_and(|a| a.bot);
     let overflow = if compact {
-        compact_header_overflow(
+        compact_header_measured(id, compact_header_left).unwrap_or_else(|| compact_header_overflow(
             &r.time_short,
             &name,
             compact_avatars,
@@ -998,7 +998,7 @@ pub(crate) fn message(
             author.and_then(|u| u.tag.as_ref()).map(|t| t.0.as_ref()),
             compact_header_left,
             cx,
-        )
+        ))
     } else {
         0.
     };
@@ -1320,7 +1320,8 @@ pub(crate) fn message(
                     .when_some(app.author_role_icon(msg.author), |d, u| d.child(role_icon(u)))
                     .when(app.is_new_member(msg.author), |d| d.child(new_member_badge(msg.id)))
                     .when(is_bot, |d| d.child(bot_tag(author.is_some_and(|u| u.verified_bot))))
-                    .when(crate::ui::forum::is_op(app, msg.channel, msg.author), |d| d.child(crate::ui::forum::op_tag())),
+                    .when(crate::ui::forum::is_op(app, msg.channel, msg.author), |d| d.child(crate::ui::forum::op_tag()))
+                    .child(compact_header_probe(id)),
             )
             .child(content)
     } else {
@@ -1436,6 +1437,32 @@ fn text_width(cx: &App, font: &gpui::Font, size: gpui::Pixels, s: &str) -> f32 {
     s.chars().map(|ch| ts.advance(id, size, ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum()
 }
 
+thread_local! {
+    static COMPACT_HEADER_W: std::cell::RefCell<std::collections::HashMap<u64, f32>> = std::cell::RefCell::new(Default::default());
+}
+
+fn compact_header_probe(id: Id) -> impl IntoElement {
+    gpui::canvas(
+        move |b, w, _| {
+            let nw = f32::from(b.size.width);
+            let old = COMPACT_HEADER_W.with_borrow_mut(|m| m.insert(id.0, nw));
+            if old.is_none_or(|o| (o - nw).abs() > 0.5) {
+                w.on_next_frame(|w, _| w.refresh());
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+fn compact_header_measured(id: Id, left: f32) -> Option<f32> {
+    let w = COMPACT_HEADER_W.with_borrow(|m| m.get(&id.0).copied())?;
+    Some((f32::from(z(left)) + w + f32::from(z(4.)) - f32::from(fz(80.))).max(0.))
+}
+
 fn compact_header_overflow(time: &str, name: &str, compact_avatars: bool, bot: bool, tag: Option<&str>, left: f32, cx: &App) -> f32 {
     let mut name_font = crate::richtext::ui_font();
     name_font.weight = FontWeight::MEDIUM;
@@ -1462,18 +1489,28 @@ fn indent_rich(t: &RichText, width: f32, cx: &App) -> RichText {
     if width <= 0. {
         return t.clone();
     }
-    const SP: char = '\u{2009}';
+    const SP: char = '\u{a0}';
     let font = crate::richtext::ui_font();
-    let adv = text_width(cx, &font, fz(16.), "\u{2009}").max(1.);
-    let n = (width / adv).ceil() as usize;
-    let prefix: String = std::iter::repeat_n(SP, n).collect();
+    let mut wide = font.clone();
+    wide.style = gpui::FontStyle::Italic;
+    let a = text_width(cx, &font, fz(16.), "\u{a0}");
+    let b = text_width(cx, &wide, fz(16.), "\u{a0}");
+    if a <= 0. {
+        return t.clone();
+    }
+    let (regular, italic) = indent_split(width, a, b);
+    let prefix: String = std::iter::repeat_n(SP, regular + italic).collect();
     let shift = prefix.len();
+    let cut = regular * SP.len_utf8();
+    let run = |len: usize, font: gpui::Font| gpui::TextRun { len, font, color: gpui::transparent_black(), background_color: None, underline: None, strikethrough: None };
     let mut out = t.clone();
     out.text = format!("{prefix}{}", t.text).into();
-    out.runs.insert(
-        0,
-        gpui::TextRun { len: shift, font, color: gpui::transparent_black(), background_color: None, underline: None, strikethrough: None },
-    );
+    if italic > 0 {
+        out.runs.insert(0, run(shift - cut, wide));
+    }
+    if regular > 0 {
+        out.runs.insert(0, run(cut, font));
+    }
     for r in &mut out.click_ranges {
         *r = r.start + shift..r.end + shift;
     }
@@ -1481,6 +1518,18 @@ fn indent_rich(t: &RichText, width: f32, cx: &App) -> RichText {
         *r = r.start + shift..r.end + shift;
     }
     out
+}
+
+fn indent_split(width: f32, a: f32, b: f32) -> (usize, usize) {
+    let n = (width / a).floor().max(0.);
+    let rem = width - n * a;
+    let d = b - a;
+    let k = if d > 0.01 { (rem / d).round().min(n) } else { 0. };
+    let err = (rem - k * d).abs();
+    if err > (a - rem).abs() {
+        return ((n as usize) + 1, 0);
+    }
+    ((n - k) as usize, k as usize)
 }
 
 fn edited_marker(ts: i64) -> impl IntoElement {
@@ -2282,4 +2331,21 @@ fn flash_overlay(id: Id) -> AnyElement {
             },
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod indent_tests {
+    use super::indent_split;
+
+    #[test]
+    fn compact_indent_mixes_regular_and_italic_spaces_to_hit_the_width() {
+        let (a, b) = (3.52, 3.84);
+        for w in [0.5, 2., 10., 40., 57.3, 121.9] {
+            let (r, i) = indent_split(w, a, b);
+            let got = r as f32 * a + i as f32 * b;
+            let bound = if w >= 40. { (b - a) / 2. + 1e-3 } else { a / 2. + 1e-3 };
+            assert!((got - w).abs() <= bound, "{w}: {r}+{i} gives {got}");
+        }
+        assert_eq!(indent_split(0., a, b), (0, 0));
+    }
 }
