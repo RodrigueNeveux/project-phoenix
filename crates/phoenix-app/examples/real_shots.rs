@@ -467,6 +467,9 @@ impl Backend for ReadOnly {
     fn quests(&self) -> BoxFuture<serde_json::Value> {
         self.0.quests()
     }
+    fn quest_home_hero(&self) -> BoxFuture<serde_json::Value> {
+        self.0.quest_home_hero()
+    }
     fn discoverable_guilds(&self, category: Option<u32>, offset: u32) -> BoxFuture<serde_json::Value> {
         self.0.discoverable_guilds(category, offset)
     }

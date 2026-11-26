@@ -379,6 +379,9 @@ pub trait Backend: Send + Sync + 'static {
     fn quests(&self) -> BoxFuture<serde_json::Value> {
         Box::pin(async { Ok(serde_json::Value::Null) })
     }
+    fn quest_home_hero(&self) -> BoxFuture<serde_json::Value> {
+        Box::pin(async { Ok(serde_json::Value::Null) })
+    }
     fn discoverable_guilds(&self, _category: Option<u32>, _offset: u32) -> BoxFuture<serde_json::Value> {
         Box::pin(async { Ok(serde_json::Value::Null) })
     }

@@ -228,6 +228,98 @@ thread_local! {
     static REQUESTED: Cell<bool> = const { Cell::new(false) };
     static FAILED: Cell<bool> = const { Cell::new(false) };
     static CLAIMED_FAILED: Cell<bool> = const { Cell::new(false) };
+    static HERO: RefCell<Option<HomeHero>> = const { RefCell::new(None) };
+    static HERO_REQUESTED: Cell<bool> = const { Cell::new(false) };
+    static HERO_SEEN: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+}
+
+pub const QUEST_HOME_BANNER_DESKTOP: u8 = 3;
+pub const CREATIVE_QUEST_HOME_HERO: u64 = 2;
+pub const QUEST_HOME_ENTRYPOINT_ONBOARDING: usize = 632;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HomeHero {
+    pub id: String,
+    pub image: Option<SharedString>,
+    pub has_content: bool,
+}
+
+pub fn home_hero_path() -> String {
+    format!("/quests/get-decisions?placement={QUEST_HOME_BANNER_DESKTOP}&num_decisions_requested=1")
+}
+
+fn filled(v: &Value) -> bool {
+    v.as_str().is_some_and(|s| !s.is_empty())
+}
+
+fn gradient(v: &Value) -> bool {
+    filled(&v["start"]) && filled(&v["end"])
+}
+
+pub fn parse_home_hero(v: &Value) -> Option<HomeHero> {
+    let c = &v["decisions"][0]["creative"];
+    if c["creative_type"].as_u64() != Some(CREATIVE_QUEST_HOME_HERO) {
+        return None;
+    }
+    let content = &c["creative_content"];
+    let e = &content["quest_home_entrypoint"];
+    let id = match &content["id"] {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        _ => String::new(),
+    };
+    let image = asset(&e["image"]);
+    let tooltip = filled(&e["tooltip_title"]) && filled(&e["tooltip_subtitle"]);
+    let has_content = !e.is_null() && (image.is_some() || gradient(&e["linear_gradient"]) || gradient(&e["radial_gradient"]) || tooltip);
+    Some(HomeHero { id, image, has_content })
+}
+
+pub fn dismissed(contents: &[u8], id: usize) -> bool {
+    contents.get(id / 8).is_some_and(|b| b & (1 << (id % 8)) != 0)
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EntryPoint {
+    pub onboarding: bool,
+    pub hero_badge: bool,
+    pub hero: Option<HomeHero>,
+}
+
+pub fn entry_point(has_quests: bool, onboarding_dismissed: bool, hero: Option<HomeHero>, seen: bool) -> EntryPoint {
+    let hero = hero.filter(|h| h.has_content);
+    let shows_hero = hero.is_some();
+    EntryPoint { onboarding: !shows_hero && has_quests && !onboarding_dismissed, hero_badge: shows_hero && !seen, hero }
+}
+
+pub fn sidebar_entry(onboarding_dismissed: bool) -> EntryPoint {
+    let has_quests = QUESTS.with(|q| q.borrow().as_ref().is_some_and(|l| !l.is_empty()));
+    let hero = HERO.with(|h| h.borrow().clone());
+    let seen = hero.as_ref().is_some_and(|h| HERO_SEEN.with(|s| s.borrow().contains(&h.id)));
+    entry_point(has_quests, onboarding_dismissed, hero, seen)
+}
+
+pub fn mark_hero_seen() {
+    if let Some(id) = HERO.with(|h| h.borrow().as_ref().map(|h| h.id.clone())) {
+        HERO_SEEN.with(|s| {
+            let mut s = s.borrow_mut();
+            if !s.contains(&id) {
+                s.push(id);
+            }
+        });
+    }
+}
+
+pub(crate) fn ensure_hero(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    if HERO_REQUESTED.with(|r| r.replace(true)) {
+        return;
+    }
+    let fut = app.backend.quest_home_hero();
+    cx.spawn(async move |this, cx| {
+        let v = fut.await.unwrap_or(Value::Null);
+        HERO.with(|h| *h.borrow_mut() = parse_home_hero(&v));
+        let _ = this.update(cx, |_, cx| cx.notify());
+    })
+    .detach();
 }
 
 fn asset(v: &Value) -> Option<SharedString> {
@@ -1153,5 +1245,37 @@ mod tests {
         assert_eq!(c[1].logotype.as_deref(), Some("https://cdn.discordapp.com/quests/1/l.png"));
         assert_eq!(c[0].art.as_deref(), Some("https://cdn.discordapp.com/quests/2/a.png"));
         assert_eq!(claimed_columns(1071.), 4);
+    }
+
+    #[test]
+    fn home_hero_entrypoint_follows_the_client() {
+        let v = serde_json::json!({"decisions": [{"creative": {"creative_type": 2, "creative_content": {"id": "77", "quest_home_entrypoint": {"image": "quests/h/e.png"}}}}]});
+        let h = parse_home_hero(&v).unwrap();
+        assert_eq!(h, HomeHero { id: "77".into(), image: Some("https://cdn.discordapp.com/quests/h/e.png".into()), has_content: true });
+        let tooltip_only = serde_json::json!({"decisions": [{"creative": {"creative_type": 2, "creative_content": {"id": 5, "quest_home_entrypoint": {"tooltip_title": "a"}}}}]});
+        assert!(!parse_home_hero(&tooltip_only).unwrap().has_content);
+        let gradient = serde_json::json!({"decisions": [{"creative": {"creative_type": 2, "creative_content": {"id": 5, "quest_home_entrypoint": {"linear_gradient": {"start": "#000", "end": "#fff"}}}}}]});
+        assert!(parse_home_hero(&gradient).unwrap().has_content);
+        assert_eq!(parse_home_hero(&serde_json::json!({"decisions": [{"creative": {"creative_type": 1}}]})), None);
+        assert_eq!(parse_home_hero(&Value::Null), None);
+        assert_eq!(home_hero_path(), "/quests/get-decisions?placement=3&num_decisions_requested=1");
+    }
+
+    #[test]
+    fn quests_row_badges() {
+        let hero = HomeHero { id: "1".into(), image: None, has_content: true };
+        assert!(entry_point(true, false, None, false).onboarding);
+        assert!(!entry_point(true, true, None, false).onboarding);
+        assert!(!entry_point(false, false, None, false).onboarding);
+        let e = entry_point(true, false, Some(hero.clone()), false);
+        assert!(!e.onboarding && e.hero_badge && e.hero.is_some());
+        assert!(!entry_point(true, false, Some(hero), true).hero_badge);
+        let empty = HomeHero { has_content: false, ..Default::default() };
+        assert_eq!(entry_point(false, true, Some(empty), false), EntryPoint::default());
+        let mut bits = vec![0u8; 80];
+        assert!(!dismissed(&bits, QUEST_HOME_ENTRYPOINT_ONBOARDING));
+        bits[79] = 1;
+        assert!(dismissed(&bits, QUEST_HOME_ENTRYPOINT_ONBOARDING));
+        assert!(!dismissed(&[], QUEST_HOME_ENTRYPOINT_ONBOARDING));
     }
 }

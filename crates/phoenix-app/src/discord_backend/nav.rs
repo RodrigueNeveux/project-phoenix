@@ -126,6 +126,12 @@ pub fn sounds_dismissed(proto: &[u8]) -> HashMap<u64, u64> {
     out
 }
 
+pub fn quest_onboarding_dismissed(proto: &[u8]) -> bool {
+    let Some(uc) = fields(proto).into_iter().find(|f| f.0 == 4 && f.1 == 2).map(|f| f.2) else { return false };
+    let contents = fields(uc).into_iter().find(|f| f.0 == 1 && f.1 == 2).map(|f| f.2).unwrap_or_default();
+    crate::ui::quests_page::dismissed(contents, crate::ui::quests_page::QUEST_HOME_ENTRYPOINT_ONBOARDING)
+}
+
 pub fn sounds_seen(cache: &Cache, proto: &[u8]) -> Vec<(Id, u64)> {
     let dismissed = sounds_dismissed(proto);
     let since = crate::ui::inbox_unreads::snowflake_from_ms(NEW_SOUNDS_SINCE_MS);
@@ -349,6 +355,7 @@ pub fn snapshot(cache: &Cache, ready: &Ready) -> Vec<AppEvent> {
         AppEvent::Nav(NavEvent::Snapshot { relationships, folders, threads, extras, message_requests, spam_requests }),
         AppEvent::Nav(NavEvent::Banners(banners)),
         AppEvent::Nav(NavEvent::SoundsSeen(sounds_seen(cache, &proto))),
+        AppEvent::Nav(NavEvent::QuestOnboardingDismissed(quest_onboarding_dismissed(&proto))),
     ]
 }
 
@@ -391,9 +398,13 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
                 if !f.is_empty() {
                     out.push(AppEvent::Nav(NavEvent::Folders(f)));
                 }
-                let seen = base64::engine::general_purpose::STANDARD.decode(p.trim()).map(|b| sounds_seen(cache, &b)).unwrap_or_default();
+                let bytes = base64::engine::general_purpose::STANDARD.decode(p.trim()).ok();
+                let seen = bytes.as_deref().map(|b| sounds_seen(cache, b)).unwrap_or_default();
                 if !seen.is_empty() {
                     out.push(AppEvent::Nav(NavEvent::SoundsSeen(seen)));
+                }
+                if let Some(b) = bytes.as_deref().filter(|b| fields(b).iter().any(|f| f.0 == 4)) {
+                    out.push(AppEvent::Nav(NavEvent::QuestOnboardingDismissed(quest_onboarding_dismissed(b))));
                 }
             }
         }

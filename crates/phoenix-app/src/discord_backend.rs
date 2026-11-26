@@ -1183,6 +1183,10 @@ impl Backend for DiscordBackend {
     fn quests(&self) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/quests/@me", None).await.map_err(api_err) })
     }
+    fn quest_home_hero(&self) -> BoxFuture<serde_json::Value> {
+        let path = crate::ui::quests_page::home_hero_path();
+        self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err) })
+    }
     fn discoverable_guilds(&self, category: Option<u32>, offset: u32) -> BoxFuture<serde_json::Value> {
         let path = crate::ui::discovery::featured_path(category, offset);
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, &path, None).await.map_err(api_err) })

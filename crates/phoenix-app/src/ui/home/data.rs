@@ -113,6 +113,7 @@ pub enum NavEvent {
     Banners(Vec<(Id, Option<String>)>),
     Folders(Vec<GuildFolder>),
     SoundsSeen(Vec<(Id, u64)>),
+    QuestOnboardingDismissed(bool),
 }
 
 #[derive(Clone, Debug)]
@@ -198,6 +199,7 @@ pub struct NavState {
     pub relationships: Vec<Relationship>,
     pub folders: Vec<GuildFolder>,
     pub sounds_seen: HashMap<Id, u64>,
+    pub quest_onboarding_dismissed: bool,
     pub expanded_folders: HashSet<u64>,
     pub threads: HashMap<Id, Vec<Channel>>,
     pub extras: HashMap<Id, ChannelExtra>,
@@ -286,6 +288,7 @@ impl NavState {
             NavEvent::ThreadUpsert(t) => self.upsert_thread(t),
             NavEvent::Folders(f) => self.folders = f,
             NavEvent::SoundsSeen(s) => self.sounds_seen.extend(s),
+            NavEvent::QuestOnboardingDismissed(d) => self.quest_onboarding_dismissed = d,
             NavEvent::ThreadDelete(id) => {
                 for v in self.threads.values_mut() {
                     v.retain(|t| t.id != id);

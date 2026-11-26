@@ -165,6 +165,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
             .child(crate::ui::sidebar_resize::handle(cx))
             .into_any_element();
     }
+    if app.selected_guild.is_none() && !app.favorites_view {
+        crate::ui::quests_page::ensure_loaded(app, cx);
+        crate::ui::quests_page::ensure_hero(app, cx);
+    }
     let entity = cx.entity();
     let weak = entity.downgrade();
     app.sidebar_list.set_scroll_handler(move |ev: &gpui::ListScrollEvent, _w, cx: &mut App| {
@@ -693,19 +697,74 @@ fn other_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, r: SidebarRow, ix: u
     }
 }
 
+fn text_badge(label: SharedString, bg: usize, fg: usize) -> gpui::Div {
+    div()
+        .relative()
+        .flex_none()
+        .flex()
+        .items_center()
+        .px(z(8.))
+        .rounded_full()
+        .bg(t(bg))
+        .text_color(t(fg))
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(SharedString::from(label.to_uppercase()))
+}
+
 fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     let app = entity.read(cx);
     let home = app.nav.home;
     let requests = app.nav.message_requests.len() as u32;
     let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
     let nitro_tier2 = app.backend.premium_tier2();
+    let entry = crate::ui::quests_page::sidebar_entry(app.nav.quest_onboarding_dismissed);
     let nav = |id: &'static str, i: Icon, label: SharedString, view: Option<HomeView>, count: u32| {
         let selected = view.is_some_and(|v| v == home);
         let e = entity.clone();
         let stub = label.clone();
+        let quest = if id == "quests" { entry.clone() } else { Default::default() };
+        let strong = quest.onboarding;
+        let hero = quest.hero.clone();
         div().w_full().pl(z(8.)).pr(z(8.)).py(z(1.)).child(
             div()
                 .id(id)
+                .group(id)
+                .relative()
+                .when(strong || hero.is_some(), |d| d.overflow_hidden())
+                .when(strong, |d| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .top(z(1.))
+                            .bottom(z(1.))
+                            .left_0()
+                            .right_0()
+                            .rounded(z(8.))
+                            .bg(gpui::linear_gradient(
+                                90.,
+                                gpui::linear_color_stop(gpui::rgb(0x394aff), 0.),
+                                gpui::linear_color_stop(gpui::rgb(0xe901d9), 1.),
+                            ))
+                            .opacity(0.16)
+                            .group_hover(id, |s| s.opacity(0.2)),
+                    )
+                })
+                .when_some(hero.as_ref().and_then(|h| h.image.clone()), |d, src| {
+                    d.child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .bottom_0()
+                            .right_0()
+                            .flex()
+                            .justify_end()
+                            .opacity(0.)
+                            .group_hover(id, |s| s.opacity(1.))
+                            .child(gpui::img(src).h_full().object_fit(gpui::ObjectFit::Contain)),
+                    )
+                })
                 .h(z(38.))
                 .pl(z(10.))
                 .pr(z(16.))
@@ -717,7 +776,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                 .text_size(z(16.))
                 .line_height(z(20.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(t(if selected { idx::TEXT_DEFAULT } else { idx::TEXT_MUTED }))
+                .text_color(t(if selected { idx::TEXT_DEFAULT } else if strong { idx::TEXT_STRONG } else { idx::TEXT_MUTED }))
                 .when(selected, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
                 .when(!selected, |d| {
                     let hover_fg = if id == "quests" { idx::TEXT_STRONG } else { idx::INTERACTIVE_TEXT_HOVER };
@@ -725,13 +784,22 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                         .active(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_ACTIVE)))
                 })
                 .on_click(move |_, _, cx| {
+                    if id == "quests" {
+                        crate::ui::quests_page::mark_hero_seen();
+                    }
                     e.update(cx, |a, cx| match view {
                         Some(v) => a.open_home_view(v, cx),
                         None => a.stub(&stub, cx),
                     })
                 })
-                .child(icon(i, 20. * crate::theme::zoom(), t(if selected { idx::ICON_STRONG } else { idx::ICON_MUTED })))
+                .child({
+                    let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
+                    let hover = hero.is_some() && !selected;
+                    icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover(id, |s| s.text_color(t(idx::ICON_STRONG))))
+                })
                 .child(div().flex_1().min_w_0().text_ellipsis().child(label))
+                .when(quest.onboarding, |d| d.child(text_badge(crate::t!("dm.quests_new"), idx::BADGE_PRIMARY_BACKGROUND, idx::BADGE_PRIMARY_TEXT)))
+                .when(quest.hero_badge, |d| d.child(text_badge(crate::t!("dm.quests_new"), idx::BADGE_EXPRESSIVE_BACKGROUND, idx::BADGE_EXPRESSIVE_TEXT)))
                 .when(count > 0, |d| d.child(badge(count).bg(c(Palette::NOTIFICATION)))),
         )
     };
