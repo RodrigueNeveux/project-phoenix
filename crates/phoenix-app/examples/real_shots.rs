@@ -2265,7 +2265,9 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 300);
     }
-    if let Ok(edit) = std::env::var("PHX_EDIT") {
+    if let Ok(edit) = std::env::var("PHX_EDIT")
+        && std::env::var_os("PHX_EDIT_SAVE").is_none()
+    {
         let draft = edit.replace("\\n", "\n");
         cx.update_window(win.into(), |_, window, cx| {
             v.update(cx, |app, cx| {
@@ -2614,7 +2616,23 @@ fn main() -> anyhow::Result<()> {
     if std::env::var_os("PHX_WRITE").is_some() {
         let stem = out.trim_end_matches(".png").to_string();
         if std::env::var_os("PHX_EDIT_SAVE").is_some() {
-            cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| app.save_edit(window, cx)))?;
+            let draft = std::env::var("PHX_EDIT").unwrap_or_default().replace("\\n", "\n");
+            cx.update_window(win.into(), |_, window, cx| {
+                v.update(cx, |app, cx| {
+                    if app.chat.edit.is_none()
+                        && let Some((_, id)) = writable_target(app)
+                    {
+                        app.start_edit(id, window, cx);
+                        if let Some(input) = app.chat.edit.as_ref().map(|e| e.input.clone()).filter(|_| !draft.is_empty()) {
+                            input.update(cx, |s, cx| {
+                                s.set_value("", window, cx);
+                                s.insert(draft.clone(), window, cx);
+                            });
+                        }
+                    }
+                    app.save_edit(window, cx);
+                })
+            })?;
             println!("edit saved");
             pump(&mut cx, 2500);
             shoot(&mut cx, &format!("{stem}-edited.png"))?;
