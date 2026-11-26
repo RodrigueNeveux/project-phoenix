@@ -1127,6 +1127,10 @@ pub(crate) fn popout_shadow() -> Vec<gpui::BoxShadow> {
     ]
 }
 
+fn mutual_tab_label<N: PartialEq + Default + std::fmt::Display>(n: N, none: &str, some: &str) -> SharedString {
+    if n == N::default() { crate::t!(none) } else { crate::t!(some, n = n) }
+}
+
 pub const TAB_FRIENDS: u8 = 1;
 pub const TAB_SERVERS: u8 = 2;
 pub const TAB_BOARD: u8 = 3;
@@ -1408,7 +1412,13 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
     let board = crate::ui::profile_board::get(app, uid, cx);
     let has_board = !board.is_empty();
     let sel = MODAL_TAB.with(|c| c.get());
-    let sel = if sel == TAB_BOARD && !has_board { 0 } else { sel };
+    let has_wishlist = me || !board.wishlist.is_empty();
+    let sel = match sel {
+        TAB_BOARD if !has_board => 0,
+        TAB_WISHLIST if !has_wishlist => 0,
+        TAB_FRIENDS | TAB_SERVERS if me => 0,
+        s => s,
+    };
     let first = if has_board { TAB_BOARD } else { 0 };
     let tab = |n: u8, t: SharedString| {
         let on = sel == n;
@@ -1554,9 +1564,9 @@ fn modal_card_inner(app: &PhoenixApp, uid: Id, guild: Option<Id>, vp: gpui::Size
                 .border_color(c(tok(idx::BORDER_SUBTLE)))
                 .children(has_board.then(|| tab(TAB_BOARD, crate::t!("pe.tab.board"))))
                 .child(tab(0, crate::t!("profile.activity")))
-                .child(tab(TAB_WISHLIST, crate::t!("pe.tab.wishlist")))
-                .child(tab(TAB_FRIENDS, crate::t!("profile.mutual_friends", n = mutual_f)))
-                .child(tab(TAB_SERVERS, crate::t!("profile.mutual_servers", n = mutual_s))),
+                .children(has_wishlist.then(|| tab(TAB_WISHLIST, crate::t!("pe.tab.wishlist"))))
+                .children((!me).then(|| tab(TAB_FRIENDS, mutual_tab_label(mutual_f, "profile.tab_no_mutual_friends", "profile.mutual_friends"))))
+                .children((!me).then(|| tab(TAB_SERVERS, mutual_tab_label(mutual_s, "profile.tab_no_mutual_servers", "profile.mutual_servers")))),
         )
         .child({
             let h = PANEL_SCROLL.with(|h| h.clone());
@@ -1733,6 +1743,12 @@ mod activity_header_tests {
             start: None,
             application_id: None,
         }
+    }
+
+    #[test]
+    fn empty_mutual_tabs_use_the_client_none_label() {
+        assert_eq!(super::mutual_tab_label(0u32, "profile.tab_no_mutual_friends", "profile.mutual_friends"), crate::t!("profile.tab_no_mutual_friends"));
+        assert_eq!(super::mutual_tab_label(3usize, "profile.tab_no_mutual_servers", "profile.mutual_servers"), crate::t!("profile.mutual_servers", n = 3));
     }
 
     #[test]
