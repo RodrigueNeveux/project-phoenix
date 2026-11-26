@@ -2219,6 +2219,22 @@ fn main() -> anyhow::Result<()> {
     if let Ok(spec) = std::env::var("PHX_GRADIENT_AT") {
         cx.update_window(win.into(), |_, window, _| window.activate_window())?;
         pump(&mut cx, 300);
+        cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
+        pump(&mut cx, 200);
+        if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
+            let (x, y) = v.split_once(',')?;
+            Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))
+        }) {
+            let ev = gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                position: gpui::point(px(x), px(y)),
+                pressed_button: None,
+                modifiers: gpui::Modifiers::default(),
+            });
+            cx.update_window(win.into(), |_, window, cx| {
+                window.dispatch_event(ev, cx);
+            })?;
+            pump(&mut cx, 200);
+        }
         cx.update_window(win.into(), |_, window, _| window.refresh())?;
         pump(&mut cx, 300);
         for ms in spec.split(',').filter_map(|v| v.trim().parse::<u64>().ok()) {
@@ -2244,6 +2260,22 @@ fn main() -> anyhow::Result<()> {
         };
         cx.update_window(win.into(), |_, window, _| window.activate_window())?;
         pump(&mut cx, 300);
+        cx.update_window(win.into(), |_, window, _| window.set_scale_factor(scale))?;
+        pump(&mut cx, 200);
+        if let Some((x, y)) = std::env::var("PHX_MOUSE").ok().and_then(|v| {
+            let (x, y) = v.split_once(',')?;
+            Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))
+        }) {
+            let ev = gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
+                position: gpui::point(px(x), px(y)),
+                pressed_button: None,
+                modifiers: gpui::Modifiers::default(),
+            });
+            cx.update_window(win.into(), |_, window, cx| {
+                window.dispatch_event(ev, cx);
+            })?;
+            pump(&mut cx, 200);
+        }
         let leave = gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent {
             position: gpui::point(px(1.), px(1.)),
             pressed_button: None,
