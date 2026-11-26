@@ -643,25 +643,38 @@ fn update_runs_after_truncation(
     let mut truncate_at = result.len() - ellipsis.len();
     match truncate_from {
         TruncateFrom::Start => {
+            let mut covered = false;
             for (run_index, run) in runs.iter_mut().enumerate().rev() {
                 if run.len <= truncate_at {
                     truncate_at -= run.len;
                 } else {
                     run.len = truncate_at + ellipsis.len();
                     runs.splice(..run_index, std::iter::empty());
+                    covered = true;
                     break;
                 }
             }
+            // PHOENIX PATCH (ellipsis): a cut that keeps the whole text (one grapheme wider
+            // than the box) leaves the affix without a run; give it to the first run.
+            if !covered && let Some(first) = runs.first_mut() {
+                first.len += truncate_at + ellipsis.len();
+            }
         }
         TruncateFrom::End => {
+            let mut covered = false;
             for (run_index, run) in runs.iter_mut().enumerate() {
                 if run.len <= truncate_at {
                     truncate_at -= run.len;
                 } else {
                     run.len = truncate_at + ellipsis.len();
                     runs.truncate(run_index + 1);
+                    covered = true;
                     break;
                 }
+            }
+            // PHOENIX PATCH (ellipsis): same for the end, the affix joins the last run.
+            if !covered && let Some(last) = runs.last_mut() {
+                last.len += truncate_at + ellipsis.len();
             }
         }
         TruncateFrom::Middle => {
@@ -1568,6 +1581,15 @@ mod tests {
         // Runs res: Run0 { string: abcd, len: 4, ... }, Run1 { string: efgh, len:
         // 4, ... }, Run2 { string: …, len: 3, ... }
         perform_test("abcdefgh…", &[4, 4, 4], &[4, 4, 3]);
+
+        // PHOENIX PATCH (ellipsis): a single grapheme wider than the box keeps the whole
+        // text, so the runs must still cover the appended affix.
+        let mut runs = generate_test_runs(&[1]);
+        update_runs_after_truncation("a…", "…", &mut runs, TruncateFrom::End);
+        assert_eq!(runs.iter().map(|r| r.len).sum::<usize>(), "a…".len());
+        let mut runs = generate_test_runs(&[2, 2]);
+        update_runs_after_truncation("…abcd", "…", &mut runs, TruncateFrom::Start);
+        assert_eq!(runs.iter().map(|r| r.len).sum::<usize>(), "…abcd".len());
     }
 
     // For compatibility with the test macro
