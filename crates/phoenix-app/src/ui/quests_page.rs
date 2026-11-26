@@ -48,6 +48,8 @@ pub struct Quest {
     pub enrolled_at: Option<DateTime<Utc>>,
     pub reward_types: Vec<u64>,
     pub tasks: Vec<String>,
+    pub video_thumb: Option<SharedString>,
+    pub video_portrait: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -299,6 +301,10 @@ pub fn parse(v: &Value, now: DateTime<Utc>) -> Vec<Quest> {
             enrolled_at: date(&us["enrolled_at"]),
             reward_types: cfg["rewards_config"]["rewards"].as_array().map(|r| r.iter().filter_map(|x| x["type"].as_u64()).collect()).unwrap_or_default(),
             tasks: tasks.keys().cloned().collect(),
+            video_thumb: asset(&tasks.get("WATCH_VIDEO").map_or(Value::Null, |t| t["assets"]["video"]["thumbnail"].clone())).or_else(|| asset(&cfg["assets"]["hero"])),
+            video_portrait: tasks
+                .get("WATCH_VIDEO")
+                .is_some_and(|t| t["assets"]["video"]["height"].as_u64().unwrap_or(0) > t["assets"]["video"]["width"].as_u64().unwrap_or(u64::MAX)),
         });
     }
     out.retain(|q| !q.claimed);
@@ -378,6 +384,19 @@ fn orb_icon(size: f32) -> gpui::Svg {
 }
 
 pub const QUEST_HOME_DESKTOP: u8 = 11;
+pub const PRIVACY_ARTICLE: &str = "22225542459415";
+
+pub fn privacy_url() -> String {
+    format!("https://support.discord.com/hc/{}/articles/{PRIVACY_ARTICLE}", crate::i18n::locale().to_lowercase())
+}
+
+pub fn disclosure(q: &Quest) -> SharedString {
+    if matches!(q.task, Task::Video { .. }) {
+        crate::t!("quests.disclosure_video", publisher = q.publisher.clone())
+    } else {
+        crate::t!("quests.disclosure_game", publisher = q.publisher.clone(), game = q.game.clone())
+    }
+}
 
 pub const PAID_TERMS_ORBS: &str = "https://discord.com/terms/paid-services-terms#14";
 
@@ -386,10 +405,19 @@ pub enum Cta {
     Enroll(u64),
     Open(SharedString),
     Preview(SharedString),
+    Video { quest: u64, enroll: bool },
 }
 
 pub fn primary_cta(q: &Quest, label: &SharedString) -> Cta {
-    if q.enrolled { Cta::Preview(label.clone()) } else { Cta::Enroll(q.id) }
+    match (q.task, q.enrolled) {
+        (Task::Video { .. }, enrolled) => Cta::Video { quest: q.id, enroll: !enrolled },
+        (_, true) => Cta::Preview(label.clone()),
+        (_, false) => Cta::Enroll(q.id),
+    }
+}
+
+pub fn quest(id: u64) -> Option<Quest> {
+    QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.iter().find(|x| x.id == id).cloned()))
 }
 
 pub fn secondary_cta(q: &Quest) -> Option<(SharedString, Cta)> {
@@ -403,6 +431,14 @@ fn run(a: &mut PhoenixApp, cta: &Cta, cx: &mut Context<PhoenixApp>) {
         Cta::Enroll(id) => a.blocked_write(crate::actions::guard::GuardedWrite::quest_enroll(*id, QUEST_HOME_DESKTOP), cx),
         Cta::Open(url) => cx.open_url(url),
         Cta::Preview(l) => a.stub(l, cx),
+        Cta::Video { quest: id, enroll } => {
+            if *enroll {
+                a.blocked_write(crate::actions::guard::GuardedWrite::quest_enroll(*id, QUEST_HOME_DESKTOP), cx);
+            }
+            if let Some(q) = quest(*id) {
+                a.open_quest_video(q, cx);
+            }
+        }
     }
 }
 
@@ -448,9 +484,12 @@ fn tile(q: &Quest, premium: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .flex()
                         .justify_end()
                         .gap(z(16.))
-                        .when(matches!(q.task, Task::Video { .. }), |d| d.child(util_button("play")))
+                        .when(matches!(q.task, Task::Video { .. }), |d| {
+                            let cta = Cta::Video { quest: q.id, enroll: !q.enrolled };
+                            d.child(util_button("play").id(("quest-play", q.id)).cursor_pointer().on_click(cx.listener(move |a, _, _, cx| run(a, &cta, cx))))
+                        })
                         .child({
-                            let target = crate::ui::extra_menus::Target::QuestMore { quest: q.id, cta: q.cta.clone().zip(q.cta_link.clone()) };
+                            let target = crate::ui::extra_menus::Target::QuestMore(Box::new(q.clone()));
                             util_button("more-horizontal").id(("quest-more", q.id)).cursor_pointer().on_click(move |ev, w, _| {
                                 crate::ui::extra_menus::open(target.clone(), ev.position(), w);
                             })
@@ -972,7 +1011,7 @@ mod tests {
              "user_status": {"enrolled_at": "x", "completed_at": null, "claimed_at": null, "progress": {"PLAY_ON_DESKTOP": {"value": 450}}}},
             {"id": "3", "config": {"expires_at": "2030-01-01T00:00:00+00:00", "messages": {"quest_name": "V"},
               "rewards_config": {"rewards": [{"type": 4, "orb_quantity": 200, "premium_orb_quantity": 240}]},
-              "task_config_v2": {"tasks": {"WATCH_VIDEO": {"target": 35}}}}, "user_status": null},
+              "task_config_v2": {"tasks": {"WATCH_VIDEO": {"target": 35, "assets": {"video": {"thumbnail": "quests/3/t.jpg", "width": 1080, "height": 1920}}}}}}, "user_status": null},
             {"id": "4", "config": {"expires_at": "2030-01-01T00:00:00+00:00", "messages": {"quest_name": "C"}}, "user_status": {"claimed_at": "x", "enrolled_at": "x", "completed_at": "x"}},
             {"id": "1", "config": {"expires_at": "2020-01-01T00:00:00+00:00"}, "user_status": null}
         ]})
@@ -991,7 +1030,10 @@ mod tests {
         assert_eq!(q[0].cta_link.as_deref(), Some("https://example.com/get"));
         assert_eq!(secondary_cta(&q[0]), Some(("Télécharger".into(), Cta::Open("https://example.com/get".into()))));
         assert_eq!(primary_cta(&q[0], &"x".into()), Cta::Preview("x".into()));
-        assert_eq!(primary_cta(&q[1], &"x".into()), Cta::Enroll(3));
+        assert_eq!(primary_cta(&q[1], &"x".into()), Cta::Video { quest: 3, enroll: true });
+        assert_eq!(q[1].video_thumb.as_deref(), Some("https://cdn.discordapp.com/quests/3/t.jpg"));
+        assert!(q[1].video_portrait);
+        assert!(disclosure(&q[1]).len() > 10);
         assert!(secondary_cta(&q[1]).is_none());
         assert!((q[0].progress - 0.5).abs() < 1e-6);
         assert_eq!(q[1].task, Task::Video { seconds: 35 });
@@ -1027,6 +1069,8 @@ mod tests {
             enrolled_at: None,
             reward_types: Vec::new(),
             tasks: Vec::new(),
+            video_thumb: None,
+            video_portrait: false,
         };
         f(&mut x);
         x

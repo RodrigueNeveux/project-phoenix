@@ -137,6 +137,8 @@ pub enum Modal {
     StreamFeedback(stream_feedback::State),
     ShopProduct(Box<phoenix_api::rest::collectibles::LookSku>),
     ShopPurchase(Box<crate::ui::shop_buy::State>),
+    QuestVideo(Box<crate::ui::quests_page::Quest>),
+    QuestDisclosure(Box<crate::ui::quests_page::Quest>),
 }
 
 pub fn prepare(window: &mut Window, cx: &mut Context<PhoenixApp>) {
@@ -282,6 +284,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::Account(s) => account_edit::render(app, s, cx),
             Modal::ShopProduct(l) => crate::ui::shop_pdp::render(app, l, cx),
             Modal::ShopPurchase(s) => crate::ui::shop_buy::render(app, s, cx),
+            Modal::QuestVideo(q) => crate::ui::quest_modals::render_video(q, cx),
+            Modal::QuestDisclosure(q) => crate::ui::quest_modals::render_disclosure(q, cx),
         })
     })
 }

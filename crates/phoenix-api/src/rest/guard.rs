@@ -226,6 +226,14 @@ impl GuardedWrite {
         write(Method::POST, format!("/quests/{quest}/enroll"), Some(json!({ "location": location, "metadata_sealed": null, "traffic_metadata_sealed": null })))
     }
 
+    pub fn quest_dismiss(quest: u64, content: u8) -> Self {
+        write(Method::POST, format!("/quests/{quest}/dismissible-content/{content}/dismiss"), Some(json!({ "traffic_metadata_sealed": null })))
+    }
+
+    pub fn quest_video_progress(quest: u64, timestamp: f64) -> Self {
+        write(Method::POST, format!("/quests/{quest}/video-progress"), Some(json!({ "timestamp": timestamp })))
+    }
+
     pub fn ring_call(channel: u64) -> Self {
         write(Method::POST, format!("/channels/{channel}/call/ring"), Some(json!({ "recipients": null })))
     }
@@ -316,6 +324,8 @@ mod tests {
             GuardedWrite::prune(5, 7, &[6]),
             GuardedWrite::create_webhook(6, "Captain Hook"),
             GuardedWrite::sku_purchase(7, true, 599, "eur"),
+            GuardedWrite::quest_dismiss(8, 11),
+            GuardedWrite::quest_video_progress(8, 0.),
         ]
     }
 
@@ -375,6 +385,8 @@ mod tests {
         );
         let ring = GuardedWrite::ring_call(9);
         assert_eq!((ring.method, ring.path.as_str(), ring.body), (Method::POST, "/channels/9/call/ring", Some(json!({ "recipients": null }))));
+        assert_eq!(GuardedWrite::quest_dismiss(8, 11).path, "/quests/8/dismissible-content/11/dismiss");
+        assert_eq!(GuardedWrite::quest_video_progress(8, 2.5).body, Some(json!({ "timestamp": 2.5 })));
         let buy = GuardedWrite::sku_purchase(7, false, 120, "discord_orb");
         assert_eq!((buy.method.clone(), buy.path.as_str()), (Method::POST, "/store/skus/7/purchase"));
         assert_eq!(buy.body.as_ref().and_then(|b| b.get("expected_currency")).and_then(Value::as_str), Some("discord_orb"));

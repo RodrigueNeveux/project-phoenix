@@ -29,7 +29,7 @@ pub enum Target {
     WishlistMore(Option<String>),
     AnnouncementSend { channel: Id, can_thread: bool },
     ModViewRoles { user: Id, guild: Id },
-    QuestMore { quest: u64, cta: Option<(SharedString, SharedString)> },
+    QuestMore(Box<crate::ui::quests_page::Quest>),
     SecurityKey { id: String, name: SharedString, last: bool },
 }
 
@@ -158,16 +158,35 @@ pub fn quest_link(quest: u64) -> String {
     format!("https://discord.com/quests/{quest}")
 }
 
-fn quest_items(e: &Ent, quest: u64, cta: Option<(SharedString, SharedString)>) -> Vec<MenuItem> {
+fn quest_items(e: &Ent, q: &crate::ui::quests_page::Quest) -> Vec<MenuItem> {
+    let quest = q.id;
     let mut items = Vec::new();
-    if let Some((label, url)) = cta {
+    if let Some((label, url)) = q.cta.clone().zip(q.cta_link.clone()) {
         items.push(MenuItem::action(label, Some(crate::icons::path("menu/open-link")), move |_, _, cx: &mut App| cx.open_url(&url)));
     }
-    let e = e.clone();
+    let share = e.clone();
     items.push(MenuItem::action(crate::t!("quests.share"), Some(crate::icons::path("chat/link")), move |_, _, cx: &mut App| {
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(quest_link(quest)));
-        e.update(cx, |a, cx| a.parity_toast(crate::t!("viewer.link_copied"), cx));
+        share.update(cx, |a, cx| a.parity_toast(crate::t!("viewer.link_copied"), cx));
     }));
+    items.push(MenuItem::Separator);
+    let more = e.clone();
+    items.push(MenuItem::action(crate::t!("quests.view_more"), Some(crate::icons::path("quests")), move |_, _, cx: &mut App| {
+        more.update(cx, |a, cx| a.open_home_view(crate::ui::home::data::HomeView::Quests, cx))
+    }));
+    let why = e.clone();
+    let detail = q.clone();
+    items.push(MenuItem::action(crate::t!("quests.why"), None, move |_, _, cx: &mut App| {
+        let d = detail.clone();
+        why.update(cx, |a, cx| a.open_quest_disclosure(d, cx))
+    }));
+    let hide = e.clone();
+    items.push(
+        MenuItem::action(crate::t!("quests.hide"), None, move |_, _, cx: &mut App| {
+            hide.update(cx, |a, cx| a.blocked_write(crate::actions::guard::GuardedWrite::quest_dismiss(quest, crate::ui::quests_page::QUEST_HOME_DESKTOP), cx))
+        })
+        .with_subtext(crate::t!("quests.hide_hint")),
+    );
     items
 }
 
@@ -426,7 +445,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Target::WishlistMore(w) => wishlist_more_items(&e, w.clone()),
         Target::AnnouncementSend { channel, can_thread } => announcement_items(*channel, *can_thread),
         Target::ModViewRoles { user, guild } => mod_view_role_items(app, &e, *user, *guild),
-        Target::QuestMore { quest, cta } => quest_items(&e, *quest, cta.clone()),
+        Target::QuestMore(q) => quest_items(&e, q),
         Target::SecurityKey { id, name, last } => security_key_items(&e, id.clone(), name.clone(), *last),
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
