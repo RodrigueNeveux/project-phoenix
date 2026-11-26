@@ -761,7 +761,12 @@ fn main() -> anyhow::Result<()> {
     cx.update(|cx| {
         let _ = cx.text_system().add_fonts(fonts);
         cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(http)));
-        phoenix_app::init(cx);
+        if std::env::var_os("PHX_BOOT_FRAMES").is_some() {
+            phoenix_app::ui::boot::enable();
+            phoenix_app::init_deferred(cx);
+        } else {
+            phoenix_app::init(cx);
+        }
         if std::env::var_os("PHX_FX_STILL").is_some() {
             cx.set_reduce_motion(true);
         }
@@ -787,6 +792,32 @@ fn main() -> anyhow::Result<()> {
         }
     };
     let v = view.borrow().clone().expect("view");
+    if let Some(prefix) = std::env::var("PHX_BOOT_FRAMES").ok() {
+        let every: u64 = std::env::var("PHX_BOOT_EVERY").ok().and_then(|v| v.parse().ok()).unwrap_or(100);
+        let opened = std::time::Instant::now();
+        let mut after = 0;
+        let mut n = 0;
+        while opened.elapsed() < Duration::from_secs(20) && after < 3 {
+            let tick = std::time::Instant::now();
+            cx.run_until_parked();
+            cx.update_window(win.into(), |_, window, _| window.refresh())?;
+            cx.run_until_parked();
+            let showing = cx.update(|cx| v.read(cx).boot.showing());
+            let img = cx.capture_screenshot(win.into())?;
+            let ms = opened.elapsed().as_millis();
+            let path = format!("{prefix}-{n:03}.png");
+            img.save(&path)?;
+            println!("boot frame {n} t={ms}ms showing={showing} {path}");
+            n += 1;
+            if !showing {
+                after += 1;
+            }
+            if let Some(rest) = Duration::from_millis(every).checked_sub(tick.elapsed()) {
+                std::thread::sleep(rest);
+            }
+        }
+        return Ok(());
+    }
     let mut ready = false;
     for _ in 0..60 {
         pump(&mut cx, 500);

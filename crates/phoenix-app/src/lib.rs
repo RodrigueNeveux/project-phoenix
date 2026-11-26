@@ -85,11 +85,13 @@ pub fn window_options(cx: &App) -> WindowOptions {
 pub fn init(cx: &mut App) {
     init_base(cx);
     fonts::register(cx);
+    perf::mark("init_done");
 }
 
 pub fn init_deferred(cx: &mut App) {
     init_base(cx);
     fonts::register_deferred(cx);
+    perf::mark("init_done");
 }
 
 fn init_base(cx: &mut App) {
