@@ -45,6 +45,26 @@ fn voice_test_allowed(channel: Option<Id>) -> bool {
 }
 
 const SEND_PREFIX: &str = "[Test Phoenix] envoyé depuis le client Rust (Phoenix) — ";
+const TEST_MARK: &str = "[Test Phoenix]";
+
+static WRITABLE: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+fn sandbox_write(ch: Id, msg: Id) -> bool {
+    std::env::var_os("PHX_WRITE").is_some() && ch.0 == SANDBOX_CHANNEL && WRITABLE.lock().is_ok_and(|w| w.contains(&msg.0))
+}
+
+fn writable_target(app: &PhoenixApp) -> Option<(Id, Id)> {
+    let ch = app.selected_channel.filter(|c| c.0 == SANDBOX_CHANNEL)?;
+    let msgs = &app.messages.get(&ch)?.msgs;
+    let wanted = std::env::var("PHX_TARGET").ok().and_then(|v| parse_id(&v));
+    let m = msgs.iter().rev().find(|m| m.author == app.me.id && m.content.starts_with(TEST_MARK) && wanted.is_none_or(|w| w == m.id))?;
+    if let Ok(mut w) = WRITABLE.lock()
+        && !w.contains(&m.id.0)
+    {
+        w.push(m.id.0);
+    }
+    Some((ch, m.id))
+}
 
 fn report_path(path: &str) {
     use phoenix_app::ui::modals::Modal;
@@ -150,11 +170,19 @@ impl Backend for ReadOnly {
     fn drop_preupload(&self, key: u64) {
         self.0.drop_preupload(key);
     }
-    fn edit_message(&self, _: Id, _: Id, _: String) -> BoxFuture<Message> {
-        denied()
+    fn edit_message(&self, ch: Id, msg: Id, content: String) -> BoxFuture<Message> {
+        if !sandbox_write(ch, msg) || !content.starts_with(TEST_MARK) {
+            return denied();
+        }
+        eprintln!("write: edit {msg:?}");
+        self.0.edit_message(ch, msg, content)
     }
-    fn delete_message(&self, _: Id, _: Id) -> BoxFuture<()> {
-        denied()
+    fn delete_message(&self, ch: Id, msg: Id) -> BoxFuture<()> {
+        if !sandbox_write(ch, msg) {
+            return denied();
+        }
+        eprintln!("write: delete {msg:?}");
+        self.0.delete_message(ch, msg)
     }
     fn trigger_typing(&self, _: Id) -> BoxFuture<()> {
         denied()
@@ -229,8 +257,12 @@ impl Backend for ReadOnly {
             _ => denied(),
         }
     }
-    fn set_reaction(&self, _: Id, _: Id, _: Reaction, _: bool) -> BoxFuture<()> {
-        denied()
+    fn set_reaction(&self, ch: Id, msg: Id, r: Reaction, add: bool) -> BoxFuture<()> {
+        if !sandbox_write(ch, msg) {
+            return denied();
+        }
+        eprintln!("write: reaction {} add={add} on {msg:?}", r.emoji);
+        self.0.set_reaction(ch, msg, r, add)
     }
     fn set_pinned(&self, _: Id, _: Id, _: bool) -> BoxFuture<()> {
         denied()
@@ -2222,7 +2254,11 @@ fn main() -> anyhow::Result<()> {
         let draft = draft.replace("\\n", "\n");
         cx.update_window(win.into(), |_, window, cx| {
             v.update(cx, |app, cx| {
-                app.composer.update(cx, |s, cx| s.set_value(draft.clone(), window, cx));
+                app.composer.update(cx, |s, cx| {
+                    s.set_value("", window, cx);
+                    s.focus(window, cx);
+                    s.insert(draft.clone(), window, cx);
+                });
                 phoenix_app::ui::chat::rich_input::sync(app, cx);
                 cx.notify();
             })
@@ -2234,11 +2270,18 @@ fn main() -> anyhow::Result<()> {
         cx.update_window(win.into(), |_, window, cx| {
             v.update(cx, |app, cx| {
                 let me = app.me.id;
-                let last = app.selected_channel.and_then(|ch| app.messages.get(&ch)).and_then(|e| e.msgs.iter().rev().find(|m| m.author == me).map(|m| m.id));
+                let last = if std::env::var_os("PHX_WRITE").is_some() {
+                    writable_target(app).map(|(_, id)| id)
+                } else {
+                    app.selected_channel.and_then(|ch| app.messages.get(&ch)).and_then(|e| e.msgs.iter().rev().find(|m| m.author == me).map(|m| m.id))
+                };
                 if let Some(id) = last {
                     app.start_edit(id, window, cx);
                     if let Some(input) = app.chat.edit.as_ref().map(|e| e.input.clone()).filter(|_| !draft.is_empty()) {
-                        input.update(cx, |s, cx| s.set_value(draft.clone(), window, cx));
+                        input.update(cx, |s, cx| {
+                            s.set_value("", window, cx);
+                            s.insert(draft.clone(), window, cx);
+                        });
                     }
                     phoenix_app::ui::chat::rich_input::sync(app, cx);
                     cx.notify();
@@ -2556,6 +2599,64 @@ fn main() -> anyhow::Result<()> {
             shoot(&mut cx, &format!("{}-progress{i}.png", out.trim_end_matches(".png")))?;
         }
         pump(&mut cx, (hold + 3000).saturating_sub(steps * 250));
+    }
+    if let Ok(i) = std::env::var("PHX_AC_ACCEPT") {
+        let i = i.parse().unwrap_or(0);
+        shoot(&mut cx, &format!("{}-ac.png", out.trim_end_matches(".png")))?;
+        cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| phoenix_app::ui::autocomplete::accept(app, i, window, cx)))?;
+        pump(&mut cx, 300);
+        let (text, edit) = cx.update(|cx| {
+            let app = v.read(cx);
+            (app.composer.read(cx).value().to_string(), app.chat.edit.as_ref().map(|e| e.input.read(cx).value().to_string()))
+        });
+        println!("after accept: composer={text:?} edit={edit:?}");
+    }
+    if std::env::var_os("PHX_WRITE").is_some() {
+        let stem = out.trim_end_matches(".png").to_string();
+        if std::env::var_os("PHX_EDIT_SAVE").is_some() {
+            cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| app.save_edit(window, cx)))?;
+            println!("edit saved");
+            pump(&mut cx, 2500);
+            shoot(&mut cx, &format!("{stem}-edited.png"))?;
+        }
+        if let Ok(emoji) = std::env::var("PHX_REACT") {
+            let target = cx.update(|cx| writable_target(v.read(cx)));
+            anyhow::ensure!(target.is_some(), "PHX_REACT needs a test message of ours in the sandbox channel");
+            let (ch, id) = target.unwrap_or_default();
+            let (name, eid) = match emoji.split_once(':') {
+                Some((n, i)) => (n.to_string(), parse_id(i)),
+                None => (emoji.clone(), None),
+            };
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.react_with(ch, id, name.clone().into(), eid, cx)))?;
+            println!("reacted {emoji} on {id:?}");
+            pump(&mut cx, 2500);
+            shoot(&mut cx, &format!("{stem}-reacted.png"))?;
+            if std::env::var_os("PHX_UNREACT").is_some() {
+                cx.update_window(win.into(), |_, _, cx| {
+                    v.update(cx, |app, cx| {
+                        let r = app.messages.get(&ch).and_then(|e| e.msgs.iter().find(|m| m.id == id)).and_then(|m| m.reactions.iter().find(|r| r.emoji.as_ref() == name && r.me).cloned());
+                        if let Some(r) = r {
+                            app.toggle_reaction(ch, id, &r, cx);
+                        }
+                    })
+                })?;
+                println!("unreacted {emoji}");
+                pump(&mut cx, 2500);
+                shoot(&mut cx, &format!("{stem}-unreacted.png"))?;
+            }
+        }
+        if std::env::var_os("PHX_DELETE").is_some() {
+            let target = cx.update(|cx| writable_target(v.read(cx)));
+            anyhow::ensure!(target.is_some(), "PHX_DELETE needs a test message of ours in the sandbox channel");
+            let (ch, id) = target.unwrap_or_default();
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.request_delete(ch, id, false, cx)))?;
+            pump(&mut cx, 400);
+            shoot(&mut cx, &format!("{stem}-confirm.png"))?;
+            cx.update_window(win.into(), |_, _, cx| v.update(cx, |app, cx| app.confirm_delete(cx)))?;
+            println!("deleted {id:?}");
+            pump(&mut cx, 2500);
+            shoot(&mut cx, &format!("{stem}-deleted.png"))?;
+        }
     }
     if let Ok(spec) = std::env::var("PHX_HOVER_ANIM") {
         for ms in spec.split(',').filter_map(|v| v.trim().parse::<u64>().ok()) {
