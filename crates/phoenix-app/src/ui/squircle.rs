@@ -18,7 +18,7 @@ pub fn shape() -> gpui::Svg {
 }
 
 fn numbers(s: &str) -> Vec<f64> {
-    s.split(|c: char| c == ' ' || c == ',').filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect()
+    s.split([' ', ',']).filter(|t| !t.is_empty()).filter_map(|t| t.parse().ok()).collect()
 }
 
 pub fn outline(steps: usize) -> Vec<(f64, f64)> {

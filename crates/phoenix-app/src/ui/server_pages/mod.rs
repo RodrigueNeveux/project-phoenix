@@ -256,8 +256,12 @@ pub fn open_sub(guild: Id, s: &str) {
             } else {
                 expr_upload::open_sticker(guild, false);
             }
+            let (path, play) = path.split_once("#play=").map_or((path, None), |(p, ms)| (p, ms.parse::<f64>().ok()));
             if !path.is_empty() {
                 expr_upload::load_path(std::path::Path::new(path));
+            }
+            if let Some(ms) = play {
+                expr_upload::play_silent_from(ms);
             }
         }
         w if w.starts_with("wizard:") => {

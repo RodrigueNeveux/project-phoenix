@@ -173,7 +173,7 @@ fn hsl_rgb(h: f64, s: f64, l: f64) -> [u8; 3] {
     let a = s * l.min(1. - l) / 100.;
     let f = |n: f64| {
         let k = (n + h / 30.) % 12.;
-        (255. * (l - a * (k - 3.).min(9. - k).min(1.).max(-1.))).round().clamp(0., 255.) as u8
+        (255. * (l - a * (k - 3.).min(9. - k).clamp(-1., 1.))).round().clamp(0., 255.) as u8
     };
     [f(0.), f(8.), f(4.)]
 }

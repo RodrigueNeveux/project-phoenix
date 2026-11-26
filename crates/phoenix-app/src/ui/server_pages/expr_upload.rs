@@ -106,6 +106,7 @@ pub struct Upload {
     pub trim: Trim,
     pub drag: Option<Grip>,
     pub playing: Option<phoenix_voice::audio::effects::Handle>,
+    pub clock: Option<(std::time::Instant, f64)>,
 }
 
 thread_local! {
@@ -148,6 +149,7 @@ fn open(guild: Id, kind: Kind, partnered: bool) {
             trim: Trim { start_ms: 0., end_ms: 2. * 10_000., playhead_ms: 0. },
             drag: None,
             playing: None,
+            clock: None,
         })
     });
 }
@@ -405,6 +407,7 @@ fn load_sound(path: &Path) {
         if let Some(h) = u.playing.take() {
             h.stop();
         }
+        u.clock = None;
         u.error = None;
         u.max_volume = mult;
         u.volume = u.volume.min(mult);
@@ -657,25 +660,65 @@ fn apply_drag(x: Pixels) {
     });
 }
 
+fn halt(u: &mut Upload) {
+    if let Some(h) = u.playing.take() {
+        h.stop();
+    }
+    u.clock = None;
+}
+
 fn stop_playback() {
-    with(|u| {
-        if let Some(h) = u.playing.take() {
-            h.stop();
-        }
-    });
+    with(halt);
+}
+
+fn start(u: &mut Upload, volume: f32) {
+    let Some(pcm) = u.file.as_ref().and_then(|f| f.pcm.clone()) else { return };
+    let from = if u.trim.playhead_ms >= u.trim.end_ms { u.trim.start_ms } else { u.trim.playhead_ms };
+    let clip = Arc::new(trimmed(&pcm, from, u.trim.end_ms));
+    u.trim.playhead_ms = from;
+    u.playing = crate::sounds::play_pcm(clip, volume);
+    u.clock = Some((std::time::Instant::now(), from));
 }
 
 fn toggle_play() {
     with(|u| {
-        if let Some(h) = u.playing.take() {
-            h.stop();
+        if u.clock.is_some() {
+            halt(u);
             return;
         }
-        let Some(pcm) = u.file.as_ref().and_then(|f| f.pcm.clone()) else { return };
-        let from = if u.trim.playhead_ms >= u.trim.end_ms { u.trim.start_ms } else { u.trim.playhead_ms };
-        let clip = Arc::new(trimmed(&pcm, from, u.trim.end_ms));
-        u.playing = crate::sounds::play_pcm(clip, u.volume.min(1.));
+        let v = u.volume.min(1.);
+        start(u, v);
     });
+}
+
+pub fn play_silent_from(ms: f64) {
+    with(|u| {
+        halt(u);
+        u.trim.playhead_ms = ms.clamp(u.trim.start_ms, u.trim.end_ms);
+        start(u, 0.);
+    });
+}
+
+pub fn advance(trim: Trim, from: f64, elapsed_ms: f64) -> (Trim, bool) {
+    let pos = from + elapsed_ms;
+    if pos < trim.end_ms {
+        (Trim { playhead_ms: pos.max(trim.playhead_ms), ..trim }, true)
+    } else {
+        (Trim { playhead_ms: trim.start_ms, ..trim }, false)
+    }
+}
+
+fn tick() -> bool {
+    with(|u| {
+        let Some((t0, from)) = u.clock else { return false };
+        let (trim, on) = advance(u.trim, from, t0.elapsed().as_secs_f64() * 1000.);
+        u.trim = trim;
+        if !on {
+            halt(u);
+        }
+        on
+    })
+    .unwrap_or(false)
 }
 
 fn waveform_canvas(peaks: Vec<f32>) -> AnyElement {
@@ -728,11 +771,14 @@ fn trimmer(u: &Upload, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let tr = u.trim;
     let len_ms = tr.end_ms - tr.start_ms;
     let warn = len_ms > SOUND_MAX_MS;
-    let playing = u.playing.as_ref().is_some_and(|h| !h.is_stopped());
+    let playing = u.clock.is_some();
     let weak = cx.entity().downgrade();
     let probe = canvas(
         |b, _, _| BOUNDS.with(|c| c.set(Some(b))),
         move |_, _, window, _| {
+            if playing {
+                window.request_animation_frame();
+            }
             if snapshot(|u| u.drag.is_none()).unwrap_or(true) {
                 return;
             }
@@ -901,6 +947,7 @@ fn sound_modal(u: &Upload, cx: &mut Context<PhoenixApp>) -> AnyElement {
 }
 
 pub fn render(cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
+    tick();
     let u = snapshot(Upload::clone)?;
     Some(match u.kind {
         Kind::Sticker => sticker_modal(&u, cx),
@@ -916,6 +963,18 @@ mod tests {
         let mut out = std::io::Cursor::new(Vec::new());
         image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(w, h, image::Rgba([200, 10, 10, 255]))).write_to(&mut out, image::ImageFormat::Png).unwrap();
         out.into_inner()
+    }
+
+    #[test]
+    fn playhead_advances_then_resets_at_the_end_like_the_client_interval() {
+        let tr = Trim { start_ms: 200., end_ms: 1200., playhead_ms: 500. };
+        let (a, on) = advance(tr, 500., 300.);
+        assert!(on);
+        assert_eq!(a.playhead_ms, 800.);
+        let (b, on) = advance(tr, 500., 700.);
+        assert!(!on);
+        assert_eq!(b.playhead_ms, 200.);
+        assert_eq!((b.start_ms, b.end_ms), (200., 1200.));
     }
 
     #[test]
