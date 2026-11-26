@@ -23,6 +23,14 @@ fn main() -> anyhow::Result<()> {
         _ => None,
     });
     let caret = rest.iter().find_map(|a| a.strip_prefix("caret=").map(str::to_owned));
+    let count = rest.iter().find_map(|a| a.strip_prefix("n=").and_then(|v| v.parse::<u64>().ok()));
+    let win_size = rest
+        .iter()
+        .find_map(|a| {
+            let (w, h) = a.strip_prefix("win=")?.split_once('x')?;
+            Some((w.parse::<f32>().ok()?, h.parse::<f32>().ok()?))
+        })
+        .unwrap_or((1280., 800.));
     let sub = rest.iter().find_map(|a| a.strip_prefix("sub=").and_then(|v| v.parse::<usize>().ok()));
     let theme = rest.iter().find_map(|a| {
         let (p, s) = a.strip_prefix("theme=")?.split_once(',')?;
@@ -51,7 +59,7 @@ fn main() -> anyhow::Result<()> {
     });
     let view: Rc<RefCell<Option<Entity<PhoenixApp>>>> = Rc::default();
     let v2 = view.clone();
-    let win = cx.open_window(size(px(1280.), px(800.)), move |window, cx| {
+    let win = cx.open_window(size(px(win_size.0), px(win_size.1)), move |window, cx| {
         let v = cx.new(|cx| PhoenixApp::new(Arc::new(MockBackend::new()), window, cx));
         *v2.borrow_mut() = Some(v.clone());
         cx.new(|cx| Root::new(v, window, cx))
@@ -99,6 +107,11 @@ fn main() -> anyhow::Result<()> {
                             ch.voice_users.push(u);
                         }
                     }
+                }
+                if let Some(n) = count
+                    && let Some(ch) = app.channels.get_mut(&lounge)
+                {
+                    ch.voice_users = std::iter::once(me).chain((3..).map(Id).take(n.saturating_sub(1) as usize)).collect();
                 }
                 app.voice_channel = Some(lounge);
                 app.open_channel_chat(lounge, cx);

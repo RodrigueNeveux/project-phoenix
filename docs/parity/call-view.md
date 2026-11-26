@@ -20,9 +20,9 @@ Code: `crates/phoenix-app/src/ui/call_view.rs`. Offscreen render: `cargo run -p 
 | stream placeholder tile | emptyPreviewContainer_ (#1408) | bg | --background-base-lower | `render_tile` stream | ✅ |
 | stream tile picture | `StreamPreview` (module 142893 consumer in web.b63d846b329d6470.js): `previewUrl` from `GET /streams/{key}/preview` → `<img class=image_hELJz2>` (`object-fit: contain`, full size); without one, `emptyPreviewContainer_hELJz2` (flex column, gap 10, centred) with the illustration and `uQZTBV` | img / placeholder | live frame (own or watched) → preview image → illustration + "stream just started": `emptyPreviewImage_hELJz2` 80 % × 60 %, centred, no-repeat, the viewBox-only SVG drawn as `contain` (`.images-dark` `/assets/6b1a461f35c05c7a.svg`, `.images-light` `/assets/bc689a4cf705a445.svg`, CSS `390430.0c9088eae4beff43.css`), loaded at runtime from discord.com/assets (`call_view::stream_empty_preview`) | `render_tile` stream, `voice_row::fetch_preview` (2 min cache) | ✅ (was an empty tile with only the screen icon; the call_view demo shows a generated desktop image, `demo_media::stream_still`, set with `call_view::set_demo_still`, never a client asset) |
 | LIVE pill | liveIndicator_ (#1413) | font / radius / bg | 12px 600 / 4px / --status-danger | `render_tile` | ✅ |
-| grid layout (no focus) | - | columns | biggest 16:9 tile | `grid` | ✅ (click focused tile → grid) |
-| spotlight focused tile | videoSizer_QKgWuD / focusedVideo_QKgWuD (#1372) | box | 684x387 16:9, 72px below top bar, 8 above strip | `render` focus branch | ✅ |
-| participants strip | root_coTPKH / tileSizer_coTPKH (#1402-#1514) | height / tile / gap | 112 / (W-gaps)/n ≈135 / 8 | `render` STRIP_H | ✅ |
+| grid layout (no focus) | module 511205 (chunk `9cf4c852`), CSS `row_xFRALB` / `tile_xFRALB` / `tileSizer_xFRALB`; caller 526369 passes `paddingTop: 64, paddingBottom: 64` | columns / tile width / vertical centring | width W, height H of the whole call container (under the top bar and tray); C = W − 16, Y = H − 128; binary search from ⌊C/25⌋ for the widest tile e with cols(e)·rows(e) ≥ n, cols(e) = max(1, ⌊(C−e)/(8+e)⌋+1), rows(e) = ⌊(Y−e/(16/9))/(8+e/(16/9))⌋+1 (over 25 tiles: capacity capped at 25, the list scrolls); rows centred in C, top padding 64 + max(0, Y − rows·(⌊e·9/16⌋+8))/2; margin-inline-end 8 except the last column, margin-bottom 8 except the last row; `padColumn` (padding 0 2) when one more column would still fit in W | `ui/call_layout.rs` `grid`, `call_view::grid_layer` | ✅ solo call in pass1 (1119.4x807.2, 2 tiles): 1 column, 596x335.25, top 64, x 678.3, same as the dump; tests for 1–12 and 40 tiles at four sizes |
+| spotlight focused tile | module 699707 (chunk `9cf4c852`), `root_FowdXv` / `tileWrapper_FowdXv` / `videoFrame_FowdXv` (top −60 with the strip) | box | strip shown when open and H > 384: band = H − 2·(72+68); width min(W, band·aspect) (aspect 16/9, or the stream video ratio), centred; y = (H − h)/2 − 60 | `call_layout::focus`, `call_view::focused_layer` | ✅ dump vanilla-call-view (864x667): 684x387 at (90, 80) |
+| participants strip | 163432 `i` (tileWidth 16/9·112+8, tileMinWidth 124, margin 8, limit 12); CSS `root_coTPKH` 112 high, `tileSizer_coTPKH` 195x112, 8 between, flex-shrink | count / width / place | count = min(⌊(W−8)/132⌋, 12, others); tiles 195 wide shrinking to fit W − 16; the tile gets width min((W−8)/count − 8, 207.1) for its overlay rules; bottom edge = (H + h)/2 + 60 | `call_layout::strip`, `focused_layer` | ✅ dump: 6 tiles of 134.7 at y 475 |
 | button section | buttonSection_9bvEB0 (#1298) | bg / border / radius / gap / padding | --background-surface-high / 1px --border-muted / 12 / 8 / 4 | `section` | ✅ |
 | center button | centerButton_K9Xq13 (#1301) | size / radius | 40x40, 8 (attached 8 0 0 8) | `center_button` | ✅ |
 | caret nub | contextMenuNub_.attachedCaret_ (#1306) | size / radius / margin | 20x40 / 0 8 8 0 / 1px | `center_button` | ✅ |
@@ -37,6 +37,7 @@ Code: `crates/phoenix-app/src/ui/call_view.rs`. Offscreen render: `cargo run -p 
 | tray / camera icons | icon provider WindowLaunchIcon, FullscreenEnterIcon, VideoSlashIcon (path data matches dump #1362/#1366) | - | - | icons/names.rs `call/*` | ✅ |
 | tray responsive collapse | call controls module `bf(width)`: <=650 NO_INVITE, <=550 MINIMAL; bottomControls_rTsZa_ grid minmax(max-content,1fr) auto minmax(max-content,1fr) | invite / 2nd section hidden | 650 / 550 px | `collapse()` / `bottom_controls` | ✅ 1280 px + chat: hang-up fully visible (call_view example) |
 | overlay fade | overlayContainer_7NOr2f, actionRow_FowdXv | transition | opacity .2s ease-in-out | `overlay_opacity()` (smoothstep, raf while fading) | ✅ |
+| participants strip toggle position | `actionRow_FowdXv` inside the video frame, style bottom −16 with the strip, else 40 + max(0, 72 − (H − h)/2), translateY(100%) | top | focused tile bottom + 16 with the strip | `call_layout::focus` `action_top` | ✅ dump: y 483 |
 | participants strip toggle | participantsButton_1uD6uZ (#1394-#1400) | box / bg / radius / shadow | 60x32, pad 4, --primary-630 (hover 700), r48, --shadow-border+--shadow-high, caret+members 24 | `strip_button` | ✅ |
 | mic / camera icon | lottieIcon_69Onuk (#1303, #1312) | toggle animation | Lottie animation on toggle, static at rest | static end-frame icon | ⛔ rest state matches; animation needs a Lottie player. Checked the client's animations in the local cache (Lottie_HoverOnOff_Camera, Lottie_HoverOnOff_Microphone): 4–5 precomp layers, masks, 3 trim paths, 10–17 animated properties each. A subset renderer would need precomps, masks, trim paths (path length) and bezier easing, plus runtime extraction from the cache (the JSON can't be committed). That is not cheap for two icons |
 
@@ -220,3 +221,43 @@ Sources: voice gateway v8 and DAVE protocol docs (discord/dave-protocol), client
 | logs | | `PHOENIX_SOUND_LOG=1`: once per second `voice-recv: user=… ssrc=… received decoded fec plc late dropped resets level_db` per speaker and `voice-recv: mixer out_db queue_ms underruns deafened output_gain` | ✅ |
 
 Live check: needs another person speaking in `〢🔊・phoenix-vocal`; how to run it is in `docs/VOICE.md`. Received camera video and received Go Live streams are outside this lot: camera receive is H.264-only and was never checked live; stream receive is coded (op 20, viewer connection, 1280x720 decode, stream audio as its own mixer track) but was never checked live either.
+
+
+## Tile overlay breakpoints (wt/voice-polish, 26/11)
+
+Sources: tile 175203 (`c76f31703f6181cd.js`), module 345812 (`DO` ≤160, `VE` ≤220, `Yb` ≤124), user tile 83982 (`d6caa202`), CSS `655282.*.css` `_7NOr2f`.
+
+| rule | client | Phoenix (`call_layout::tile_look`) | status |
+|---|---|---|---|
+| avatar | `o<124 ? SIZE_40 : SIZE_80` | 40 / 80 | ✅ |
+| name pill | hidden when width ≤ 124 (`!eT`), `experimentOverlayTitle_7NOr2f` padding 6 8, gap 4, min-height 20, radius `--custom-base-tile-border-radius` 8 | same | ✅ |
+| name size | body-sm/normal (14/18) when width ≤ 220, else body-md/normal (16/20) | same | ✅ |
+| overlay inset | `overlayContainer_7NOr2f` margin 12, `.compact` (≤220) margin 4 | same | ✅ |
+| width used | grid: tile width; focused: the call width; strip: min((W−8)/count − 8, 207.1) | same | ✅ |
+
+## Radius review (wt/voice-polish, 26/11)
+
+Computed `border-radius` from pass1 (`compare/voice/pass1/1-call.json`) against the code: tile and speaking border 8 (`--custom-base-tile-border-radius`), tray sections 12, split mic/camera buttons 8 0 0 8 / 0 8 8 0, hang-up 12, tray side icons 8, solo tile buttons 8, voice panel card 8 with the voice section clipped by it, ping and panel buttons 8. All already matched; nothing changed.
+
+## Voice connection state (wt/voice-polish, 26/11)
+
+Module 917592 `getStatus` (`9c90d6f3aabcf794.js`, also in `web.b63d846b329d6470.js`):
+
+| client state | text | kind | Phoenix `VoiceStatus` |
+|---|---|---|---|
+| AWAITING_ENDPOINT | `uQle7a` En attente du serveur vocal | connecting | `AwaitingEndpoint` (after the join and when VOICE_SERVER_UPDATE has no endpoint) |
+| CONNECTING | `MzW9sN` Connexion en cours | connecting | `Reconnecting` (voice gateway resume) |
+| RTC_CONNECTING | `Gp51dl` Connexion SCTR | connecting | `Connecting` (voice gateway started) |
+| RTC_CONNECTED | `daXg45` Voix connectée / `HtVOdd` Vidéo connectée | connected (colour from the ping quality) | `Connected` |
+| NO_ROUTE | `mGhOIi` Aucun chemin de connexion | error | `NoRoute` (UDP IP discovery timed out) |
+| RTC_DISCONNECTED | `M7LDmE` SCTR déconnecté | error | `Failed` (any other end of the voice connection) |
+| DISCONNECTED | `NLKQbx` Déconnecté | error | `Idle` |
+
+Before, every end of the voice connection showed « Aucun chemin de connexion » and `Idle` showed « Voix connectée ». ✅ test `status_labels_follow_the_client`.
+
+## Sidebar voice channel row (wt/voice-polish, 26/11)
+
+| element | client | Phoenix | status |
+|---|---|---|---|
+| call timer | `sm` → `sn.z` = 693879 `f`: `body-xs/normal` (12/16, 400), `tabularNumbers`, `textColor: text-feedback-positive`, gg sans (not monospace); format `M:SS`, `H:MM:SS` from an hour (583846 `W6`) | 12/16 400, `tnum`, no wrap | ✅ (it used the monospace font and could wrap to « 0:0 / 6 ») |
+| set a status | `r9`: shown when connected, allowed to set it and (no subtitle or hovered); `statusText_UqhBJC` body-xs/medium 12/16 ellipsis, `pencilIcon_UqhBJC` PencilIcon xxs, ml 4, `--channels-default`, hover `--interactive-text-hover` | same, with the hover colour | ✅ ➖ the permission check is not applied |
