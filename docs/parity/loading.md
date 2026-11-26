@@ -32,7 +32,7 @@ Legend: ✅ implemented and traced to the source, ⚠ partial, ❌ missing.
 | exit | container opacity .2s ease-out, text and spinner .15s (`--connecting-content-fade-duration`), spinner scale 1 → .5, unmounted after 200ms | `Boot::frame` | ✅ |
 | problems | after 10s, slides up from below (.2s ease-out): "Connection problems? Let us know!" 14px, "Tweet Us" + "Server Status" links 16px medium `--text-link`, hover opacity .8 | same; X icon from `XNeutralIcon` | ⚠ the status link icon is a local SVG of the client, not drawn |
 | incident | statuspage incident name and update body replace the tip | not fetched | ❌ |
-| connected sound | `discodo` when the "connected" sound option is on | not played | ❌ |
+| connected sound | `discodo` on connect, only with the `discodoEasterEgg` key (16 quick Home clicks), see sounds.md | played when the screen starts to fade, same key | ✅ |
 | when it hides | the client hides it on gateway connect | Phoenix hides it when the UI is stable: fonts installed (fallback chain + gg sans extraction), the cached session applied, and the open text channel has its cached or fetched page; capped at 5s on the main screen | ✅ |
 
 ## Message placeholders (`ui/chat/skeleton.rs`)

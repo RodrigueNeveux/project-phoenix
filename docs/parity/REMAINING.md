@@ -128,13 +128,15 @@ Reste :
 |---|---|---|
 | composer | coller texte + image : GPUI lit le texte d'abord | patch du presse-papiers Wayland : `gpui-pre-linux` 0.3.12 n'est pas vendored (crates.io), voir plus bas |
 | report | ligne `share_with_parents` | `settings_upsells` construite par wt/remaining4 ; `share_with_parents` ne s'affiche que pour un compte ado relié au Centre familial (2e compte) |
+| notifications | clic sur la notification d'un événement programmé : ouvrir la modale de détails de l'événement | Phoenix n'a pas encore cette modale, il ouvre le serveur |
+| notifications | clic sur une notification sous Windows et macOS | notify-rust n'y remonte pas le clic ; à faire avec les API natives (toast activé, `UNUserNotificationCenter`) |
+| notifications | offres Nitro non vues dans la pastille de l'Accueil | Phoenix ne lit pas les offres (`getUnacknowledgedOffers`) |
 
 ## Direct (client officiel, utilisateur présent)
 
 | fichier | ligne | pourquoi |
 |---|---|---|
 | window-chrome | icône du rail : état activité (AppsIcon) | le store des activités intégrées ne se remplit qu'avec une activité lancée dans un vocal ; rien en GET |
-| notifications | invitations d'activité, cartes parrainage / checkpoint | il faut recevoir ces messages (activité lancée, parrainage) pour voir leur forme |
 | settings | select « Quelqu'un réagit » : `max-content` + la moitié de l'espace libre (316 px mesurés) | la largeur intrinsèque du select n'est connue que mesurée ; Phoenix met 280 |
 | real-compare | barre « Nouveaux non lus » en haut (#bienvenue) | rejouer avec `RUST_LOG=phoenix::unread_bar=debug` sur un serveur avec des non-lus |
 | real-compare | coupe du placeholder du compositeur, position verticale du compositeur | zone de wt/placeholder-cut |
@@ -157,7 +159,6 @@ Reste :
 | settings | variantes non-admin de la barre latérale des paramètres de serveur | le compte est admin |
 | settings | Nitro sans abonnement, A2F désactivée, applications autorisées (variante jeu) | le compte est Nitro Squad, A2F active |
 | popouts | profil : amis de jeu (`getGameFriendsForUser`) | aucun ami de jeu sur le compte |
-| notifications | demandes en attente : amis de jeu | idem |
 
 ## Décision de l'utilisateur
 
@@ -169,7 +170,6 @@ Reste :
 | settings-wiring | aperçu Markdown dans la zone d'édition des messages | l'édition est un `InputState` d'une ligne : la remplacer par l'éditeur du compositeur |
 | chat | menu des messages en échec réduit à 3 entrées | volontaire : les autres entrées appelleraient l'API avec un id local |
 | composer | image d'en-tête envoyée en pièce jointe et non en `MEDIA_GALLERY` | composants v2 à l'envoi (zone forums) |
-| notifications | heures restreintes du Centre familial, classements, aperçu complet du serveur, overlay de jeu, activités | fonctions absentes de Phoenix |
 | sounds, shortcuts | sons d'activité / de stage ; modale Lo-fi Wumpus (animation Rive) | pas d'activités ; GPUI ne dessine pas Rive |
 | inventory | lecteur vidéo intégré (menus « … » et vitesse), Nouveautés, Centre familial complet | fonctions absentes de Phoenix |
 | settings | Avantages de boost : art de la barre de progression ; dégradés radiaux du profil de serveur | GPUI n'a pas de dégradé radial ; image du client |
