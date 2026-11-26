@@ -425,6 +425,10 @@ pub fn premium_multiplier() -> Option<f64> {
     })
 }
 
+pub fn first_video_quest() -> Option<Quest> {
+    QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.iter().find(|x| matches!(x.task, Task::Video { .. })).cloned()))
+}
+
 pub fn first_quest() -> Option<Quest> {
     QUESTS.with(|q| q.borrow().as_ref().and_then(|l| l.first().cloned()))
 }

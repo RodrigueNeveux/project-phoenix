@@ -1719,6 +1719,11 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                 }
+                "questvideo" => {
+                    if let Some(q) = phoenix_app::ui::quests_page::first_video_quest() {
+                        app.open_quest_video(q, cx);
+                    }
+                }
                 "questmenu" | "questwhy" => {
                     if let Some(q) = phoenix_app::ui::quests_page::first_quest() {
                         if kind == "questwhy" {
