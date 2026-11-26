@@ -603,7 +603,7 @@ const DISCOVER_KEY: u64 = 3;
 fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
     let selected = app.selected_guild.is_none() && !app.favorites_view && crate::ui::discovery::current().is_none();
     let hover = hovered(HOME_KEY);
-    let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
+    let pending = app.nav.pending_requests() + app.nav.message_requests.len() as u32;
     let e = entity.clone();
     row("home", HOME_KEY, entity)
         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_guild(None, cx)))

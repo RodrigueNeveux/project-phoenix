@@ -188,6 +188,21 @@ pub struct Relationship {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GameRelationship {
+    pub id: Snowflake,
+    #[serde(default)]
+    pub application_id: Option<Snowflake>,
+    #[serde(rename = "type")]
+    pub kind: RelationshipType,
+}
+
+impl GameRelationship {
+    pub fn parse_all(v: Option<&serde_json::Value>) -> Vec<Self> {
+        v.and_then(serde_json::Value::as_array).map(|a| a.iter().filter_map(|x| serde_json::from_value(x.clone()).ok()).collect()).unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 mod nameplate_tests {
     use super::User;

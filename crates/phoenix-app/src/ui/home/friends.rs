@@ -207,7 +207,7 @@ pub fn initial_tab(rels: &[Relationship]) -> FriendsTab {
 }
 
 fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    let pending = pending_badge(&app.nav.relationships) as u32;
+    let pending = app.nav.pending_requests();
     let friends = app.nav.count(RelationshipKind::Friend);
     let online = app.nav.relationships.iter().any(|r| r.kind == RelationshipKind::Friend && app.presence_of(r.user) != Presence::Offline);
     let has_pending = app.nav.count(RelationshipKind::Incoming) + app.nav.count(RelationshipKind::Outgoing) > 0;
@@ -2102,7 +2102,13 @@ mod tests {
         let shown: Vec<u64> =
             [&spam, &ignored, &plain, &out].iter().filter(|r| in_tab(r, FriendsTab::Pending, false)).map(|r| r.user.0).collect();
         assert_eq!(shown, vec![3, 4]);
-        assert_eq!(pending_badge(&[spam, ignored, plain, out]), 1);
+        assert_eq!(pending_badge(&[spam.clone(), ignored.clone(), plain.clone(), out.clone()]), 1);
+        let mut nav = crate::ui::home::data::NavState { relationships: vec![spam, ignored, plain, out], ..Default::default() };
+        nav.apply(crate::ui::home::data::NavEvent::GameRequests(vec![(Id(1), Id(50)), (Id(8), Id(50))]));
+        nav.apply(crate::ui::home::data::NavEvent::GameRequest { user: Id(9), app: Id(51), incoming: true });
+        assert_eq!(nav.pending_requests(), 3, "game requests count too, except from spam or ignored users");
+        nav.apply(crate::ui::home::data::NavEvent::GameRequest { user: Id(9), app: Id(51), incoming: false });
+        assert_eq!(nav.pending_requests(), 2);
     }
 
     #[test]

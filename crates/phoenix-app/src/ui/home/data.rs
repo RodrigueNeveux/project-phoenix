@@ -106,6 +106,8 @@ pub enum NavEvent {
     },
     RelationshipUpsert(Relationship),
     RelationshipRemove(Id),
+    GameRequests(Vec<(Id, Id)>),
+    GameRequest { user: Id, app: Id, incoming: bool },
     Activity { user: Id, activity: Option<SharedString> },
     ThreadUpsert(Channel),
     ThreadDelete(Id),
@@ -197,6 +199,7 @@ pub enum Overlay {
 #[derive(Default)]
 pub struct NavState {
     pub relationships: Vec<Relationship>,
+    pub game_requests: Vec<(Id, Id)>,
     pub folders: Vec<GuildFolder>,
     pub sounds_seen: HashMap<Id, u64>,
     pub quest_onboarding_dismissed: bool,
@@ -243,6 +246,12 @@ impl NavState {
         self.relationship(user).is_some_and(|r| r.ignored && r.kind != RelationshipKind::Blocked)
     }
 
+    pub fn pending_requests(&self) -> u32 {
+        let skipped = |u: Id| self.relationships.iter().any(|r| r.user == u && (r.spam || r.ignored));
+        let games = self.game_requests.iter().filter(|(u, _)| !skipped(*u)).count();
+        (crate::ui::home::friends::pending_badge(&self.relationships) + games) as u32
+    }
+
     pub fn count(&self, kind: RelationshipKind) -> usize {
         self.relationships.iter().filter(|r| r.kind == kind).count()
     }
@@ -277,6 +286,13 @@ impl NavState {
                 self.relationships.push(r);
             }
             NavEvent::RelationshipRemove(u) => self.relationships.retain(|x| x.user != u),
+            NavEvent::GameRequests(g) => self.game_requests = g,
+            NavEvent::GameRequest { user, app, incoming } => {
+                self.game_requests.retain(|k| *k != (user, app));
+                if incoming {
+                    self.game_requests.push((user, app));
+                }
+            }
             NavEvent::Activity { user, activity } => match activity {
                 Some(a) => {
                     self.activities.insert(user, a);

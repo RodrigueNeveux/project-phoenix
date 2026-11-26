@@ -351,8 +351,14 @@ pub fn snapshot(cache: &Cache, ready: &Ready) -> Vec<AppEvent> {
     let message_requests = cache.private_channels().iter().filter(|c| c.is_message_request && !c.is_spam).map(|c| id(c.id)).collect();
     let spam_requests = cache.private_channels().iter().filter(|c| c.is_spam).map(|c| id(c.id)).collect();
     let proto = ready.user_settings_proto.as_deref().and_then(|b| base64::engine::general_purpose::STANDARD.decode(b.trim()).ok()).unwrap_or_default();
+    let games = api::GameRelationship::parse_all(ready.game_relationships.as_ref())
+        .into_iter()
+        .filter(|g| g.kind == RelationshipType::IncomingRequest)
+        .map(|g| (id(g.id), g.application_id.map_or(Id(0), id)))
+        .collect();
     vec![
         AppEvent::Nav(NavEvent::Snapshot { relationships, folders, threads, extras, message_requests, spam_requests }),
+        AppEvent::Nav(NavEvent::GameRequests(games)),
         AppEvent::Nav(NavEvent::Banners(banners)),
         AppEvent::Nav(NavEvent::SoundsSeen(sounds_seen(cache, &proto))),
         AppEvent::Nav(NavEvent::QuestOnboardingDismissed(quest_onboarding_dismissed(&proto))),
@@ -378,6 +384,12 @@ pub fn on_gateway(cache: &Cache, ev: &GatewayEvent) -> Vec<AppEvent> {
                 && let Some(r) = relationship(&r)
             {
                 out.push(AppEvent::Nav(NavEvent::RelationshipUpsert(r)));
+            }
+        }
+        GatewayEvent::Unknown { name, data } if name == "GAME_RELATIONSHIP_ADD" || name == "GAME_RELATIONSHIP_REMOVE" => {
+            if let (Some(user), app) = (data.get("id").and_then(snowflake), data.get("application_id").and_then(snowflake)) {
+                let incoming = name == "GAME_RELATIONSHIP_ADD" && data.get("type").and_then(Value::as_u64) == Some(u64::from(RelationshipType::IncomingRequest.value()));
+                out.push(AppEvent::Nav(NavEvent::GameRequest { user: Id(user), app: Id(app.unwrap_or(0)), incoming }));
             }
         }
         GatewayEvent::ThreadCreate(c) | GatewayEvent::ThreadUpdate(c) => {

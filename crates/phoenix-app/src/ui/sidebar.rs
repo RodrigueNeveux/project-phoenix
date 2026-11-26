@@ -724,7 +724,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
     let app = entity.read(cx);
     let home = app.nav.home;
     let requests = app.nav.message_requests.len() as u32;
-    let pending = app.nav.count(crate::ui::home::data::RelationshipKind::Incoming) as u32;
+    let pending = app.nav.pending_requests();
     let nitro_tier2 = app.backend.premium_tier2();
     let entry = crate::ui::quests_page::sidebar_entry(app.nav.quest_onboarding_dismissed);
     let nav = |id: &'static str, i: Icon, label: SharedString, view: Option<HomeView>, count: u32| {

@@ -21,6 +21,8 @@ pub struct Ready {
     pub connected_accounts: Vec<serde_json::Value>,
     #[serde(default, deserialize_with = "null_default")]
     pub relationships: Vec<Relationship>,
+    #[serde(default)]
+    pub game_relationships: Option<Value>,
     #[serde(default, deserialize_with = "null_default")]
     pub users: Vec<User>,
     #[serde(default, deserialize_with = "null_default")]

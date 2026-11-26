@@ -1280,7 +1280,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     if !i.open {
         return None;
     }
-    let pending = app.nav.count(RelationshipKind::Incoming);
+    let pending = app.nav.pending_requests();
     let mut controls = div().ml_auto().flex().items_center().gap(z(8.));
     match i.tab {
         InboxTab::Unreads => {
@@ -1310,7 +1310,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
             .w_auto()
             .min_w(z(32.))
             .gap(z(8.))
-            .when(pending > 0, |d| d.child(crate::ui::badge(pending as u32)))
+            .when(pending > 0, |d| d.child(crate::ui::badge(pending)))
             .on_click(cx.listener(|a, _, _, cx| {
                 a.parity.inbox.open = false;
                 a.select_guild(None, cx);
