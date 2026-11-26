@@ -1,6 +1,6 @@
 use std::cell::{Cell, RefCell};
 
-use gpui::{AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div, img, prelude::*, rgb};
+use gpui::{AnyElement, Context, FontWeight, Hsla, IntoElement, ParentElement, SharedString, Styled, Window, div, img, prelude::*};
 use serde_json::Value;
 
 use crate::{
@@ -454,12 +454,19 @@ fn verified_badge(partner: bool) -> AnyElement {
     div()
         .size(z(16.))
         .flex_none()
-        .rounded_full()
-        .bg(if partner { tk(idx::BRAND_500) } else { rgb(0x3d9e60).into() })
+        .relative()
         .flex()
         .items_center()
         .justify_center()
-        .child(gpui::svg().path(crate::icons::path("check")).size(z(10.)).text_color(gpui::white()))
+        .child(
+            gpui::svg()
+                .path(crate::icons::path("guild/flower-star"))
+                .absolute()
+                .inset_0()
+                .size(z(16.))
+                .text_color(tk(if partner { idx::BRAND_500 } else { idx::GREEN_360 })),
+        )
+        .child(gpui::svg().path(crate::icons::path("check-small")).size(z(10.)).text_color(gpui::white()))
         .into_any_element()
 }
 
