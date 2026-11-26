@@ -737,7 +737,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         div().w_full().pl(z(8.)).pr(z(8.)).py(z(1.)).child(
             div()
                 .id(id)
-                .group(id)
+                .when(id == "quests", |d| d.group("quests-row"))
                 .relative()
                 .when(strong || hero.is_some(), |d| d.overflow_hidden())
                 .when(strong, |d| {
@@ -755,7 +755,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                                 gpui::linear_color_stop(gpui::rgb(0xe901d9), 1.),
                             ))
                             .opacity(0.16)
-                            .group_hover(id, |s| s.opacity(0.2)),
+                            .group_hover("quests-row", |s| s.opacity(0.2)),
                     )
                 })
                 .when_some(hero.as_ref().and_then(|h| h.image.clone()), |d, src| {
@@ -768,7 +768,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                             .flex()
                             .justify_end()
                             .opacity(0.)
-                            .group_hover(id, |s| s.opacity(1.))
+                            .group_hover("quests-row", |s| s.opacity(1.))
                             .child(gpui::img(src).h_full().object_fit(gpui::ObjectFit::Contain)),
                     )
                 })
@@ -802,7 +802,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                 .child({
                     let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
                     let hover = hero.is_some() && !selected;
-                    icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover(id, |s| s.text_color(t(idx::ICON_STRONG))))
+                    icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover("quests-row", |s| s.text_color(t(idx::ICON_STRONG))))
                 })
                 .child(div().flex_1().min_w_0().text_ellipsis().child(label))
                 .when(quest.onboarding, |d| d.child(text_badge(crate::t!("dm.quests_new"), idx::BADGE_PRIMARY_BACKGROUND, idx::BADGE_PRIMARY_TEXT)))
