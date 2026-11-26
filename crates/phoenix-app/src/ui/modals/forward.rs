@@ -57,7 +57,7 @@ fn destinations_of(app: &PhoenixApp, q: &str, favorites: bool) -> Vec<(Id, Share
                 _ => false,
             };
             if let Some(ch) = app.channels.get(id).filter(kinds).filter(|c| !favorites || !crate::ui::favorites::is_favorite(app, c.id)) {
-                out.push((*id, format!("#{}", ch.name).into(), Some(g.name.clone())));
+                out.push((*id, ch.name.clone(), Some(g.name.clone())));
             }
         }
     }
@@ -79,74 +79,137 @@ fn toggle_max(picked: &mut Vec<Id>, id: Id, max: usize) {
     }
 }
 
+fn guild_channel_icon(app: &PhoenixApp, ch: &crate::model::Channel) -> AnyElement {
+    let guild = ch.guild.and_then(|g| app.guilds.iter().find(|x| x.id == g));
+    let face: AnyElement = match guild.map(|g| &g.icon) {
+        Some(crate::model::ImageRef::Url(u)) => gpui::img(u.clone()).size(z(24.)).rounded(z(8.)).flex_none().into_any_element(),
+        _ => {
+            let acr = guild.map(|g| g.acronym.to_string()).unwrap_or_default();
+            let size = [13., 11., 10., 10., 10., 10., 10.][acr.chars().count().saturating_sub(1).min(6)];
+            div()
+                .size(z(24.))
+                .rounded(z(8.))
+                .bg(c(tok(idx::BACKGROUND_MOD_STRONG)))
+                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .font_weight(FontWeight::MEDIUM)
+                .text_size(z(size))
+                .line_height(gpui::relative(1.2))
+                .whitespace_nowrap()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(acr)
+                .into_any_element()
+        }
+    };
+    div()
+        .relative()
+        .w(z(32.))
+        .h(z(29.))
+        .child(face)
+        .child(
+            div()
+                .absolute()
+                .left(z(12.))
+                .top(z(9.))
+                .p(z(4.))
+                .rounded_full()
+                .bg(c(tok(idx::BACKGROUND_MOD_STRONG)))
+                .child(crate::ui::icon(crate::ui::sidebar::channel_icon(ch.kind), 12., c(tok(idx::TEXT_SUBTLE)))),
+        )
+        .into_any_element()
+}
+
+fn share_row(app: &PhoenixApp, id: Id, label: SharedString, sub: Option<SharedString>, on: bool, disabled: bool, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let ch = app.channels.get(&id);
+    let group = ch.is_some_and(|c| c.guild.is_none()) && app.nav.extras.get(&id).is_some_and(|e| e.recipients > 1 || e.group_icon.is_some());
+    let peer = ch.filter(|c| c.guild.is_none() && !group).and_then(|c| c.voice_users.first().copied());
+    let ring = c(tok(idx::BACKGROUND_SURFACE_HIGH));
+    let icon: AnyElement = match (ch, peer) {
+        (Some(ch), _) if ch.guild.is_some() => guild_channel_icon(app, ch),
+        (_, Some(u)) => crate::ui::avatar_with_status(app.users.get(&u), 32., app.presence_of(u), ring).into_any_element(),
+        _ if group => crate::ui::group_dm::group_avatar(app, id, 32., ring),
+        _ => crate::ui::avatar(None, 32.),
+    };
+    let sub = sub.or_else(|| peer.and_then(|u| app.users.get(&u)).map(|u| u.name.clone()));
+    let label_col = if disabled { idx::TEXT_MUTED } else { idx::TEXT_STRONG };
+    div()
+        .id(("fwd-row", id.0))
+        .flex_none()
+        .min_h(z(48.))
+        .mx(z(-8.))
+        .px(z(8.))
+        .rounded(z(8.))
+        .flex()
+        .items_center()
+        .justify_between()
+        .when(disabled, |d| d.cursor(gpui::CursorStyle::OperationNotAllowed))
+        .when(!disabled, |d| {
+            d.cursor_pointer().hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER)))).on_click(cx.listener(move |_, _, _, cx| {
+                with_modal(|m| {
+                    if let Some(Modal::Forward(f)) = m {
+                        let max = f.max();
+                        toggle_max(&mut f.picked, id, max);
+                    }
+                });
+                cx.notify();
+            }))
+        })
+        .child(
+            div()
+                .flex()
+                .flex_shrink()
+                .min_w_0()
+                .items_center()
+                .gap(z(12.))
+                .overflow_hidden()
+                .child(div().flex_none().when(disabled, |d| d.opacity(0.5)).child(icon))
+                .child(
+                    div()
+                        .my(z(4.))
+                        .flex()
+                        .flex_col()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).text_color(c(tok(label_col))).truncate().child(label))
+                        .children(sub.map(|s| div().text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_MUTED))).truncate().child(s))),
+                ),
+        )
+        .child(div().flex_none().ml(z(16.)).child(checkbox(on, disabled)))
+        .into_any_element()
+}
+
+pub fn checkbox(on: bool, disabled: bool) -> gpui::Div {
+    let (bg, border) = if on {
+        (idx::CHECKBOX_BACKGROUND_SELECTED_DEFAULT, idx::CHECKBOX_BORDER_SELECTED_DEFAULT)
+    } else {
+        (idx::CHECKBOX_BACKGROUND_DEFAULT, idx::CHECKBOX_BORDER_DEFAULT)
+    };
+    div()
+        .size(z(20.))
+        .rounded(z(4.))
+        .border_1()
+        .border_color(c(tok(border)))
+        .bg(c(tok(bg)))
+        .when(disabled, |d| d.opacity(0.5))
+        .flex()
+        .items_center()
+        .justify_center()
+        .when(on, |d| d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(c(tok(idx::CHECKBOX_ICON_ACTIVE)))))
+}
+
 pub fn render(app: &PhoenixApp, f: &Forward, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let q = f.search.as_ref().map(|s| s.read(cx).value().to_string()).unwrap_or_default();
-    let mut list = div().id("fwd-list").h(z(320.)).overflow_y_scroll().flex().flex_col().gap(z(2.));
+    let mut list = div().id("fwd-list").h(z(320.)).px(z(8.)).overflow_y_scroll().flex().flex_col();
     let dest = destinations_of(app, &q, f.favorites);
     if dest.is_empty() {
         let none = if f.favorites { crate::t!("fav.add_none") } else { crate::t!("fwd.none") };
         list = list.child(div().p(z(16.)).text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_MUTED))).child(none));
     }
+    let full = f.picked.len() >= f.max();
     for (id, name, sub) in dest.into_iter().take(200) {
         let on = f.picked.contains(&id);
-        let peer = app.channels.get(&id).and_then(|c| if c.guild.is_none() { c.voice_users.first().copied() } else { None });
-        list = list.child(
-            div()
-                .id(("fwd-row", id.0))
-                .h(z(44.))
-                .px(z(8.))
-                .rounded(z(8.))
-                .cursor_pointer()
-                .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
-                .flex()
-                .items_center()
-                .gap(z(12.))
-                .on_click(cx.listener(move |_, _, _, cx| {
-                    with_modal(|m| {
-                        if let Some(Modal::Forward(f)) = m {
-                            let max = f.max();
-                            toggle_max(&mut f.picked, id, max);
-                        }
-                    });
-                    cx.notify();
-                }))
-                .child(match peer {
-                    Some(u) => crate::ui::avatar(app.users.get(&u), 32.),
-                    None => div()
-                        .size(z(32.))
-                        .rounded_full()
-                        .bg(c(tok(idx::BACKGROUND_MOD_NORMAL)))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child("#")
-                        .into_any_element(),
-                })
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .items_baseline()
-                        .gap(z(6.))
-                        .child(div().text_size(z(16.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).truncate().child(name))
-                        .children(sub.map(|s| div().text_size(z(14.)).text_color(c(tok(idx::TEXT_SUBTLE))).truncate().child(s))),
-                )
-                .child(
-                    div()
-                        .size(z(20.))
-                        .rounded(z(4.))
-                        .border_1()
-                        .border_color(c(tok(idx::BORDER_STRONG)))
-                        .when(on, |d| d.bg(c(tok(idx::BACKGROUND_BRAND))).border_color(c(tok(idx::BACKGROUND_BRAND))))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_color(gpui::white())
-                        .text_size(z(14.))
-                        .when(on, |d| d.child("✓")),
-                ),
-        );
+        list = list.child(share_row(app, id, name, sub, on, full && !on, cx));
     }
     let mut body = div().flex().flex_col().gap(z(12.));
     if let Some(s) = &f.search {
