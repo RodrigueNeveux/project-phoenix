@@ -545,6 +545,93 @@ fn card(g: &DiscoverableGuild, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .into_any_element()
 }
 
+pub const STATIC_SPLASH_DARK: &str = "https://discord.com/assets/b00e3f0a7090b61f.svg";
+pub const STATIC_SPLASH_LIGHT: &str = "https://discord.com/assets/90bd7fcad4aab8ed.svg";
+pub const STATIC_CARD_W: f32 = 200.;
+pub const STATIC_CARD_H: f32 = 258.;
+const ACRONYM_SIZES: [f32; 7] = [16., 16., 14., 14., 12., 10., 8.];
+
+pub struct StaticCard {
+    pub guild: DiscoverableGuild,
+    pub online: Option<u64>,
+    pub members: Option<u64>,
+    pub local_splash: Option<std::path::PathBuf>,
+}
+
+pub fn acronym_size(acronym: &str) -> f32 {
+    ACRONYM_SIZES.get(acronym.chars().count()).copied().unwrap_or(ACRONYM_SIZES[ACRONYM_SIZES.len() - 1])
+}
+
+pub fn static_card(card: &StaticCard, w: f32, h: f32) -> gpui::Div {
+    let g = &card.guild;
+    let light = crate::theme::is_light();
+    let splash = match (&card.local_splash, &g.banner) {
+        (Some(p), _) => img(p.clone()),
+        (None, Some(u)) => img(u.clone()),
+        _ => img(SharedString::new_static(if light { STATIC_SPLASH_LIGHT } else { STATIC_SPLASH_DARK })),
+    };
+    let acronym = crate::model::acronym(&g.name);
+    let inner = match g.icon.clone() {
+        Some(u) => img(u).size_full().into_any_element(),
+        None => div()
+            .size_full()
+            .bg(tk(idx::BRAND_500))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(text(acronym_size(&acronym), 18., FontWeight::NORMAL, gpui::white(), acronym))
+            .into_any_element(),
+    };
+    let icon = div()
+        .absolute()
+        .left(z(12.))
+        .bottom(z(-21.))
+        .size(z(48.))
+        .p(z(4.))
+        .rounded(z(16.))
+        .bg(tk(if light { idx::BACKGROUND_SURFACE_HIGH } else { idx::BACKGROUND_MOD_NORMAL }))
+        .child(div().size_full().rounded(z(13.)).overflow_hidden().child(inner));
+    let count = |dot: Hsla, label: SharedString, last: bool| div().flex().items_center().when(!last, |d| d.mr(z(16.))).child(div().size(z(8.)).mr(z(4.)).flex_none().rounded_full().bg(dot)).child(text(12., 16., FontWeight::NORMAL, tk(idx::TEXT_DEFAULT), label));
+    let mut counts = div().flex().flex_none();
+    if let Some(n) = card.online {
+        counts = counts.child(count(tk(idx::GREEN_360), crate::t!("discovery.card_online", membersOnline = group_digits(n)), card.members.is_none()));
+    }
+    if let Some(n) = card.members {
+        counts = counts.child(count(tk(idx::TEXT_MUTED), crate::t!("discovery.card_members", count = group_digits(n)), true));
+    }
+    div()
+        .relative()
+        .w(z(w.max(STATIC_CARD_W)))
+        .h(z(h.max(STATIC_CARD_H)))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .rounded(z(crate::theme::generated::global::RADIUS_SM))
+        .overflow_hidden()
+        .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
+        .shadow(crate::ui::inbox::popout_shadow())
+        .child(div().relative().flex_none().h(z(112.)).mb(z(28.)).child(splash.size_full().object_fit(gpui::ObjectFit::Cover)).child(icon))
+        .child(
+            div()
+                .flex_1()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .px(z(12.))
+                .pb(z(12.))
+                .child(
+                    div()
+                        .w_full()
+                        .flex()
+                        .items_center()
+                        .when(g.verified || g.partnered, |d| d.child(div().ml(z(-2.)).mr(z(4.)).child(verified_badge(g.partnered && !g.verified))))
+                        .child(text(16., 20., FontWeight::SEMIBOLD, tk(idx::TEXT_DEFAULT), g.name.clone()).min_w_0().overflow_hidden().text_ellipsis().whitespace_nowrap()),
+                )
+                .child(div().flex_1().min_h_0().child(text(14., 18., FontWeight::NORMAL, tk(idx::TEXT_DEFAULT), g.description.clone()).my(z(8.)).line_clamp(3)))
+                .child(counts),
+        )
+}
+
 fn tab_strip(items: Vec<(gpui::ElementId, SharedString, bool, Option<Category>)>, cx: &mut Context<PhoenixApp>) -> gpui::Div {
     let mut tabs = div().h_full().flex().items_center().gap(z(30.));
     for (id, label, on, target) in items {
@@ -1168,5 +1255,13 @@ mod tests {
         assert_eq!(columns(1111.), 3);
         assert_eq!(columns(760.), 2);
         assert_eq!(columns(300.), 1);
+    }
+
+    #[test]
+    fn static_card_acronym_shrinks_like_the_client() {
+        assert_eq!(acronym_size(""), 16.);
+        assert_eq!(acronym_size("AS"), 14.);
+        assert_eq!(acronym_size("ABCDE"), 10.);
+        assert_eq!(acronym_size("ABCDEFGHIJ"), 8.);
     }
 }

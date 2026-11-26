@@ -150,6 +150,10 @@ impl GuardedWrite {
         write(Method::PATCH, format!("/guilds/{guild}/discovery-metadata"), Some(body))
     }
 
+    pub fn discovery_category(guild: u64, category: u64, add: bool) -> Self {
+        write(if add { Method::PUT } else { Method::DELETE }, format!("/guilds/{guild}/discovery-categories/{category}"), None)
+    }
+
     pub fn start_webauthn_register() -> Self {
         write(Method::POST, "/users/@me/mfa/webauthn/credentials", Some(json!({})))
     }
@@ -202,6 +206,8 @@ mod tests {
             GuardedWrite::member_verification(5, json!([]), false),
             GuardedWrite::guild_profile_visibility(5, 3),
             GuardedWrite::discovery_metadata(5, json!({ "keywords": [] })),
+            GuardedWrite::discovery_category(5, 49, true),
+            GuardedWrite::discovery_category(5, 49, false),
             GuardedWrite::start_webauthn_register(),
         ]
     }
@@ -248,6 +254,9 @@ mod tests {
         );
         assert_eq!(GuardedWrite::guild_profile_visibility(5, 1).body, Some(json!({ "visibility": 1 })));
         assert_eq!(GuardedWrite::edit_guild(5, json!({})).path, "/guilds/5");
+        let add = GuardedWrite::discovery_category(5, 49, true);
+        assert_eq!((add.method, add.path.as_str(), add.body), (Method::PUT, "/guilds/5/discovery-categories/49", None));
+        assert_eq!(GuardedWrite::discovery_category(5, 49, false).method, Method::DELETE);
     }
 
     #[tokio::test]

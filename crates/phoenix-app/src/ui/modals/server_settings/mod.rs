@@ -293,6 +293,7 @@ pub fn call_for(key: &str, guild: Id, s: &State) -> Option<AdminCall> {
         "verification" => AdminCall::MemberVerification { guild: g },
         "requirements" => AdminCall::DiscoveryRequirements { guild: g },
         "disc_meta" => AdminCall::Server(phoenix_api::rest::guild_server::ServerCall::DiscoveryMetadata { guild: g }),
+        "disc_cats" => AdminCall::Server(phoenix_api::rest::guild_server::ServerCall::DiscoveryCategories { locale: crate::i18n::locale().to_owned() }),
         "bans" => AdminCall::Bans { guild: g },
         "audit" => AdminCall::AuditLogFiltered {
             guild: g,
@@ -566,7 +567,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         .size_full()
         .child(shell)
         .children(crate::ui::server_pages::modal(app, cx).map(|m| gpui::deferred(m).with_priority(25)))
-        .children((s.key() == "menu.gs.access").then(|| access::modal(s, cx)).flatten().map(|m| gpui::deferred(m).with_priority(25)))
+        .children((s.key() == "menu.gs.access").then(|| access::modal(app, s, cx)).flatten().map(|m| gpui::deferred(m).with_priority(25)))
         .into_any_element()
 }
 

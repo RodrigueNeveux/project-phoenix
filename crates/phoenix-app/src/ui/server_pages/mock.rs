@@ -45,7 +45,12 @@ pub fn reply(c: &ServerCall) -> Value {
         },
         S::DiscoveryMetadata { .. } => json!({ "primary_category_id": 49, "category_ids": [14], "reasons_to_join": [{ "reason": "Rust", "emoji_name": "🦀" }],
             "about": "Phoenix est un client natif.", "social_links": ["https://github.com/phoenix"] }),
-        S::DiscoveryCategories { .. } => json!([{ "id": 49, "name": "Bots" }, { "id": 14, "name": "Discussion générale" }]),
+        S::DiscoveryCategories { .. } => json!([
+            { "id": 49, "name": "Bots", "is_primary": true },
+            { "id": 14, "name": "Discussion générale", "is_primary": true },
+            { "id": 13, "name": "Autre", "is_primary": true },
+            { "id": 3, "name": "Anime et manga", "is_primary": false }
+        ]),
         S::DiscoverableContent { .. } => json!({ "channel_summaries": { "enabled": true, "channels": [{ "channel_id": "10", "included": true }] },
             "channel_messages": { "enabled": false, "channels": [] } }),
         S::ServerIndex { .. } => json!({ "seo": { "canonical_url": "https://discord.com/servers/phoenix-demo-1" } }),
