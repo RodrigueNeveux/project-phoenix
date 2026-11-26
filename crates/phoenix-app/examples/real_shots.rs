@@ -2629,7 +2629,10 @@ fn main() -> anyhow::Result<()> {
     if let Ok(keys) = std::env::var("PHX_KEYS") {
         let stem = out.trim_end_matches(".png").to_string();
         if std::env::var_os("PHX_KEYS_COMPOSER").is_some() {
-            cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| app.composer.update(cx, |s, cx| s.focus(window, cx))))?;
+            cx.update_window(win.into(), |_, window, cx| {
+                window.activate_window();
+                v.update(cx, |app, cx| app.composer.update(cx, |s, cx| s.focus(window, cx)))
+            })?;
             pump(&mut cx, 200);
         }
         for (i, key) in keys.split_whitespace().enumerate() {

@@ -404,6 +404,26 @@ impl Harness {
 }
 
 #[gpui::test]
+fn up_edits_the_last_message_the_client_lets_you_edit(cx: &mut TestAppContext) {
+    let mut h = keyed(cx);
+    let here = h.channels[0];
+    let (text, voice, pin) = (Id(9_300_101), Id(9_300_102), Id(9_300_103));
+    h.act(|a, _, cx| {
+        let me = a.me.id;
+        a.append_message(Message { id: text, channel: here, author: me, content: "mine".into(), ..Default::default() }, cx);
+        let flags = phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE;
+        a.append_message(Message { id: voice, channel: here, author: me, flags, ..Default::default() }, cx);
+        a.append_message(Message { id: pin, channel: here, author: me, type_id: 6, ..Default::default() }, cx);
+    });
+    h.act(|a, w, cx| a.composer.update(cx, |s, cx| s.focus(w, cx)));
+    h.keys("up");
+    assert_eq!(h.read(|a| a.chat.edit.as_ref().map(|e| e.id)), Some(text), "Up did not skip the voice message and the pin notice");
+    let mut caret = None;
+    h.act(|a, _, cx| caret = a.chat.edit.as_ref().map(|e| e.input.read(cx).cursor()));
+    assert_eq!(caret, Some("mine".len()), "the edit caret is not at the end");
+}
+
+#[gpui::test]
 fn escape_from_the_composer_walks_the_client_stack(cx: &mut TestAppContext) {
     let mut h = keyed(cx);
     let here = h.channels[0];
