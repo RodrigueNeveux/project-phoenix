@@ -22,6 +22,7 @@ fn main() -> anyhow::Result<()> {
         "menu=streams" => Some(phoenix_app::ui::call_menus::TrayMenu::Streams),
         _ => None,
     });
+    let caret = rest.iter().find_map(|a| a.strip_prefix("caret=").map(str::to_owned));
     let sub = rest.iter().find_map(|a| a.strip_prefix("sub=").and_then(|v| v.parse::<usize>().ok()));
     let theme = rest.iter().find_map(|a| {
         let (p, s) = a.strip_prefix("theme=")?.split_once(',')?;
@@ -123,6 +124,11 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
                 phoenix_app::ui::call_menus::open(menu);
+                match caret.as_deref() {
+                    Some("mic") => phoenix_app::ui::voice_panel::toggle_audio_menu(phoenix_app::ui::voice_panel::Audio::Mic, gpui::point(gpui::px(560.), gpui::px(700.))),
+                    Some("camera") => phoenix_app::ui::voice_panel::toggle_camera_menu(gpui::point(gpui::px(620.), gpui::px(700.))),
+                    _ => {}
+                }
                 if toasts {
                     let lines = ["anyone up for a match tonight?", "", "the stream looks great from here"];
                     for (i, text) in lines.into_iter().enumerate() {
