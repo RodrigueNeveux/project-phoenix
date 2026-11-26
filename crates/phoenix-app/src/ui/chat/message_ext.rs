@@ -85,6 +85,7 @@ pub struct ToolbarCaps {
     pub expanded: bool,
     pub dev: bool,
     pub own: bool,
+    pub can_edit: bool,
     pub can_pin: bool,
     pub can_start_thread: bool,
     pub can_view_thread: bool,
@@ -121,7 +122,7 @@ pub fn toolbar_layout(k: ToolbarCaps) -> Vec<ToolbarButton> {
     if !k.own {
         v.push(Reply);
     }
-    if k.own {
+    if k.can_edit {
         v.push(Edit);
     }
     v.push(Forward);
@@ -187,6 +188,7 @@ pub fn toolbar(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, shi
         expanded: shift,
         dev: app.prefs.synced.developer_mode,
         own,
+        can_edit: app.can_edit(msg),
         can_pin: guild.is_none() || crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | (1 << 51)),
         can_start_thread: guild.is_some() && msg.thread.is_none(),
         can_view_thread: msg.thread.is_some(),
@@ -1116,8 +1118,10 @@ mod tests {
         use ToolbarButton::*;
         let other = ToolbarCaps { can_pin: true, can_start_thread: true, ..Default::default() };
         assert_eq!(toolbar_layout(other), [Quick, AddReaction, Reply, Forward, More]);
-        let own = ToolbarCaps { own: true, can_delete: true, ..other };
+        let own = ToolbarCaps { own: true, can_edit: true, can_delete: true, ..other };
         assert_eq!(toolbar_layout(own), [Quick, AddReaction, Edit, Forward, More]);
+        let own_poll = ToolbarCaps { can_edit: false, ..own };
+        assert_eq!(toolbar_layout(own_poll), [Quick, AddReaction, Forward, More]);
         let shift = ToolbarCaps { expanded: true, dev: true, ..own };
         assert_eq!(toolbar_layout(shift), [CopyId, CopyLink, MarkUnread, Bookmark, Pin, Thread, ReplySelf, AddReaction, Edit, Forward, Delete]);
         let threaded = ToolbarCaps { can_start_thread: false, can_view_thread: true, can_publish: true, ..other };

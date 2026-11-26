@@ -221,7 +221,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         }));
     }
     items.push(MenuItem::Separator);
-    if own {
+    if msg.is_some_and(|m| app.can_edit(m)) {
         let ee = e.clone();
         items.push(MenuItem::action(crate::t!("msg.edit"), ic(ChatIcon::Edit), move |_, w, cx| {
             ee.update(cx, |a, cx| a.start_edit(id, w, cx))

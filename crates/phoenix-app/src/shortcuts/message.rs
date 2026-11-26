@@ -132,7 +132,9 @@ impl PhoenixApp {
     fn focused_message_key(&mut self, ch: Id, id: Id, ks: &Keystroke, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let m = &ks.modifiers;
         let plain = m.number_of_modifiers() == 0;
-        let own = self.messages.get(&ch).and_then(|l| l.msgs.iter().find(|x| x.id == id)).is_some_and(|x| x.author == self.me.id);
+        let target = self.messages.get(&ch).and_then(|l| l.msgs.iter().find(|x| x.id == id));
+        let own = target.is_some_and(|x| x.author == self.me.id);
+        let editable = target.is_some_and(|x| self.can_edit(x));
         match ks.key.as_str() {
             "up" | "down" if plain => {
                 let to = step_in(&self.message_ids(ch), Some(id), if ks.key == "up" { -1 } else { 1 });
@@ -147,7 +149,7 @@ impl PhoenixApp {
                 set_focused(None);
                 focus_composer(self, window, cx);
             }
-            "e" if plain && own => {
+            "e" if plain && editable => {
                 set_focused(None);
                 self.start_edit(id, window, cx);
             }

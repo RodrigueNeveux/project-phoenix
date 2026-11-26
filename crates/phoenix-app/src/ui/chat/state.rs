@@ -317,10 +317,19 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    pub fn can_edit(&self, m: &Message) -> bool {
+        m.author == self.me.id
+            && !super::pending::is_local(m)
+            && matches!(m.type_id, 0 | 19 | 20 | 23 | 26 | 41 | 45 | 47 | 68)
+            && m.flags & phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE == 0
+            && m.forward.is_none()
+            && crate::commands::store::get(m.id).is_none_or(|p| p.poll.is_none())
+    }
+
     pub fn start_edit(&mut self, id: Id, window: &mut Window, cx: &mut Context<Self>) {
         let Some(channel) = self.selected_channel else { return };
         let Some(m) = self.find_msg(channel, id) else { return };
-        if m.author != self.me.id || super::pending::is_local(m) {
+        if !self.can_edit(m) {
             return;
         }
         let content = m.content.clone();

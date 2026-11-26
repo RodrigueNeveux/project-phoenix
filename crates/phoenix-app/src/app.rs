@@ -1269,7 +1269,7 @@ impl PhoenixApp {
         let Some(m) = self
             .messages
             .get(&ch)
-            .and_then(|e| e.msgs.iter().rev().find(|m| m.author == self.me.id && !ui::chat::pending::is_local(m)))
+            .and_then(|e| e.msgs.iter().rev().find(|m| self.can_edit(m)))
         else {
             return false;
         };
