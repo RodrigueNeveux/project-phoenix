@@ -133,7 +133,8 @@ pub fn render_video(q: &Quest, cx: &mut Context<PhoenixApp>) -> AnyElement {
             cx.notify();
         }))
         .child(gpui::svg().path(crate::icons::path("close")).size(z(18.)).text_color(gpui::white()));
-    div().id("quest-video-modal").relative().flex().flex_col().child(close).child(video).child(footer).into_any_element()
+    let el = div().id("quest-video-modal").relative().flex().flex_col().child(close).child(video).child(footer);
+    crate::ui::modal::frame("quest-video-frame", crate::ui::modals::close_action(cx), el)
 }
 
 pub fn render_disclosure(q: &Quest, cx: &mut Context<PhoenixApp>) -> AnyElement {

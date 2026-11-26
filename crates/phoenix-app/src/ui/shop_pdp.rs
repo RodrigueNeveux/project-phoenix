@@ -197,7 +197,7 @@ pub fn render(app: &PhoenixApp, l: &LookSku, cx: &mut Context<PhoenixApp>) -> An
         .child(div().absolute().top_0().left_0().size_full().flex().items_center().justify_center().child(big))
         .child(div().absolute().top(z(16.)).right(z(16.)).flex().items_start().gap(z(10.)).child(close));
     let w = modal_width(crate::ui::title_bar::viewport_w_css());
-    div()
+    let el = div()
         .id("shop-pdp")
         .w(z(w))
         .h(z(MODAL_H))
@@ -209,8 +209,8 @@ pub fn render(app: &PhoenixApp, l: &LookSku, cx: &mut Context<PhoenixApp>) -> An
         .shadow(vec![gpui::BoxShadow { color: gpui::hsla(0., 0., 0., 0.24), offset: gpui::point(z(0.), z(12.)), blur_radius: z(24.), spread_radius: z(0.), inset: false }])
         .flex()
         .child(rail)
-        .child(right)
-        .into_any_element()
+        .child(right);
+    crate::ui::modal::frame("shop-pdp-modal", crate::ui::modals::close_action(cx), el)
 }
 
 impl PhoenixApp {
