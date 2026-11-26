@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 
+use crate::ui::tooltip::Tipped as _;
 use gpui::{AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, Window, div, img, prelude::*};
 use serde_json::Value;
 
@@ -63,6 +64,20 @@ thread_local! {
     static ORBS: Cell<Option<u64>> = const { Cell::new(None) };
     static BALANCE_ASKED: Cell<bool> = const { Cell::new(false) };
     static SEARCH: RefCell<Option<gpui::Entity<gpui_component::input::InputState>>> = const { RefCell::new(None) };
+    static WISHED: RefCell<Vec<crate::ui::profile_wishlist::WishItem>> = const { RefCell::new(Vec::new()) };
+}
+
+pub fn wished(sku: u64) -> Option<crate::ui::profile_wishlist::WishItem> {
+    let sku = sku.to_string();
+    WISHED.with(|w| w.borrow().iter().find(|it| it.sku.as_ref() == sku).cloned())
+}
+
+pub fn wishlist_write(sku: u64, current: Option<&crate::ui::profile_wishlist::WishItem>) -> crate::actions::guard::GuardedWrite {
+    let sku = sku.to_string();
+    match current {
+        Some(it) => crate::actions::guard::GuardedWrite::wishlist_remove_sku(&it.wishlist, &sku),
+        None => crate::actions::guard::GuardedWrite::wishlist_add_sku(&sku),
+    }
 }
 
 pub const TIER_DEFAULT: &str = "0";
@@ -240,6 +255,13 @@ fn ensure_loaded(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) {
     if REQUESTED.with(|r| r.replace(true)) {
         return;
     }
+    let wishlist = app.backend.wishlist(app.me.id);
+    cx.spawn(async move |this, cx| {
+        let items = wishlist.await.unwrap_or_default();
+        WISHED.with(|w| *w.borrow_mut() = items);
+        let _ = this.update(cx, |_, cx| cx.notify());
+    })
+    .detach();
     let orbs = app.backend.orbs_balance();
     cx.spawn(async move |this, cx| {
         if let Ok(b) = orbs.await {
@@ -507,6 +529,9 @@ pub(crate) fn card_sized(app: &PhoenixApp, k: &ShopCard, width: f32, height: f32
     };
     let buy_id: SharedString = format!("shop-buy-{scope}-{}", k.sku).into();
     let gift_id: SharedString = format!("shop-gift-{scope}-{}", k.sku).into();
+    let wish_id: SharedString = format!("shop-wish-{scope}-{}", k.sku).into();
+    let wish = wished(k.sku);
+    let sku = k.sku;
     div()
         .id(group.clone())
         .group(group.clone())
@@ -550,6 +575,36 @@ pub(crate) fn card_sized(app: &PhoenixApp, k: &ShopCard, width: f32, height: f32
                 gpui::linear_color_stop(tk(idx::BACKGROUND_BASE_LOWEST), 0.),
                 gpui::linear_color_stop(tk(idx::BACKGROUND_BASE_LOWEST).opacity(0.), 1.),
             )))
+        })
+        .child({
+            let on = wish.is_some();
+            let tip = if on { crate::t!("wishlist.remove_tip") } else { crate::t!("wishlist.add_tip") };
+            div()
+                .absolute()
+                .top(z(12.))
+                .right(z(12.))
+                .when(!on, |d| d.opacity(0.).group_hover(group.clone(), |s| s.opacity(1.)))
+                .child(
+                    div()
+                        .id(wish_id)
+                        .size(z(40.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(z(8.))
+                        .border_1()
+                        .border_color(tk(idx::BORDER_MUTED))
+                        .bg(tk(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT))
+                        .hover(|s| s.bg(tk(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_HOVER)))
+                        .active(|s| s.bg(tk(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_ACTIVE)))
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |a, _, _, cx| {
+                            cx.stop_propagation();
+                            a.blocked_write(wishlist_write(sku, wished(sku).as_ref()), cx);
+                        }))
+                        .child(if on { glyph("heart", 20., gpui::rgb(0xec1060).into()) } else { glyph("heart-outline", 20., tk(idx::ICON_STRONG)) })
+                        .tip(tip),
+                )
         })
         .children(off.map(|p| {
             div().absolute().top(z(12.)).left(z(12.)).child(
@@ -1155,6 +1210,16 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoeni
 #[cfg(test)]
 mod tests {
     use super::{discount, parse};
+
+    #[test]
+    fn card_heart_adds_or_removes_through_the_guard() {
+        let add = super::wishlist_write(42, None);
+        assert_eq!((add.method.as_str(), add.path.as_str()), ("POST", "/users/@me/wishlist/items"));
+        let it = crate::ui::profile_wishlist::WishItem { sku: "42".into(), wishlist: "9".into(), ..Default::default() };
+        let rm = super::wishlist_write(42, Some(&it));
+        assert_eq!((rm.method.as_str(), rm.path.as_str()), ("DELETE", "/users/@me/wishlists/9/items/42"));
+        assert!(!crate::actions::guard::read_only_write(&rm) && !crate::actions::guard::read_only_write(&add));
+    }
 
     #[test]
     fn bundle_names_lead_with_the_bold_count() {

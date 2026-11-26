@@ -58,7 +58,11 @@ impl DiscordBackend {
             if std::env::var_os("PHX_DEBUG_WISHLIST").is_some() {
                 eprintln!("wishlist shape {}", shape_of(&v));
             }
-            Ok(crate::ui::profile_wishlist::items(&v))
+            let mut items = crate::ui::profile_wishlist::items(&v);
+            for it in items.iter_mut().filter(|it| it.wishlist.is_empty()) {
+                it.wishlist = id.clone().into();
+            }
+            Ok(items)
         })
     }
 }

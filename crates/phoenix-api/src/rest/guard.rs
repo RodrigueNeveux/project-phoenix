@@ -174,6 +174,10 @@ impl GuardedWrite {
         write(Method::POST, "/users/@me/wishlist/items", Some(json!({ "sku_id": sku })))
     }
 
+    pub fn wishlist_remove_sku(wishlist: &str, sku: &str) -> Self {
+        write(Method::DELETE, format!("/users/@me/wishlists/{wishlist}/items/{sku}"), None)
+    }
+
     pub fn crosspost(channel: u64, message: u64) -> Self {
         write(Method::POST, format!("/channels/{channel}/messages/{message}/crosspost"), None)
     }
@@ -423,6 +427,8 @@ mod tests {
         let rm = GuardedWrite::remove_phone("pw");
         assert_eq!((rm.method, rm.body), (Method::DELETE, Some(json!({ "password": "pw", "change_phone_reason": "user_settings_update" }))));
         assert_eq!(GuardedWrite::wishlist_visibility("9", false).body, Some(json!({ "visibility": 0 })));
+        let rm = GuardedWrite::wishlist_remove_sku("9", "42");
+        assert_eq!((rm.method, rm.path.as_str(), rm.body), (Method::DELETE, "/users/@me/wishlists/9/items/42", None));
         assert_eq!(GuardedWrite::crosspost(3, 4).path, "/channels/3/messages/4/crosspost");
         let ob = GuardedWrite::put_onboarding(5, json!({ "prompts": [] }));
         assert_eq!((ob.method, ob.path.as_str(), ob.body), (Method::PUT, "/guilds/5/onboarding", Some(json!({ "prompts": [] }))));

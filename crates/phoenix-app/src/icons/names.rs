@@ -34,6 +34,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("pin", &["PinIcon"]),
     ("star", &["StarIcon"]),
     ("heart", &["HeartIcon"]),
+    ("heart-outline", &["HeartOutlineIcon"]),
     ("tag", &["TagIcon"]),
     ("members", &["GroupIcon"]),
     ("calendar", &["CalendarIcon"]),
