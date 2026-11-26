@@ -157,6 +157,7 @@ pub fn on_right_click(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&Mo
 pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, after_accessory: bool) -> AnyElement {
     let _ = app;
     let (ch, id) = (msg.channel, msg.id);
+    let hc = crate::theme::high_contrast();
     let mut row = div().pt(z(if after_accessory { 8. } else { 4. })).pb(z(10.)).mb(z(-8.)).flex().flex_wrap().gap(z(4.)).items_center();
     for (ix, r) in msg.reactions.iter().enumerate() {
         let e = entity.clone();
@@ -190,11 +191,8 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, a
                         100,
                         8.,
                     ))
-                    .border_color(gpui::transparent_black())
-                    .hover(|s| s.border_color(tk(idx::REACTION_BORDER_HOVER)))
-                    .when(crate::theme::high_contrast(), |d| {
-                        d.border_color(tk(idx::BORDER_SUBTLE)).hover(|s| s.border_color(tk(idx::BORDER_STRONG)))
-                    })
+                    .border_color(if hc { tk(idx::BORDER_SUBTLE) } else { gpui::transparent_black() })
+                    .hover(move |s| s.border_color(tk(if hc { idx::BORDER_STRONG } else { idx::REACTION_BORDER_HOVER })))
                 })
                 .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
                 .cursor_pointer()
@@ -228,16 +226,16 @@ pub fn reactions(app: &PhoenixApp, entity: &Entity<PhoenixApp>, msg: &Message, a
             .px(z(7.))
             .rounded(z(8.))
             .border_1()
-            .border_color(gpui::transparent_black())
+            .border_color(if hc { tk(idx::BORDER_SUBTLE) } else { gpui::transparent_black() })
             .flex()
             .items_center()
             .bg(tk(idx::REACTION_BACKGROUND_DEFAULT))
             .cursor_pointer()
-            .hover(|s| s.bg(tk(idx::REACTION_BACKGROUND_HOVER)).border_color(tk(idx::REACTION_BORDER_HOVER)))
-            .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
-            .when(crate::theme::high_contrast(), |d| {
-                d.border_color(tk(idx::BORDER_SUBTLE)).hover(|s| s.border_color(tk(idx::BORDER_STRONG)))
+            .hover(move |s| {
+                s.bg(tk(idx::REACTION_BACKGROUND_HOVER))
+                    .border_color(tk(if hc { idx::BORDER_STRONG } else { idx::REACTION_BORDER_HOVER }))
             })
+            .active(|s| s.bg(tk(idx::REACTION_BACKGROUND_ACTIVE)).border_color(tk(idx::REACTION_BORDER_ACTIVE)))
             .child(icon(ChatIcon::AddReaction, 18., tk(idx::REACTION_TEXT_DEFAULT)))
             .on_click(move |_, _, cx| {
                 e.update(cx, |a, cx| a.open_emoji_picker(EmojiTarget::Reaction { channel: ch, msg: id }, cx))
