@@ -1,6 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
+    time::{Duration, Instant},
 };
 
 use gpui::{
@@ -252,7 +253,7 @@ const EASE_OUT_QUINT: gpui::CubicBezier = gpui::CubicBezier(0.22, 1., 0.36, 1.);
 
 thread_local! {
     static HOVERED: Cell<Option<u64>> = const { Cell::new(None) };
-    static PILLS: RefCell<HashMap<u64, (f32, f32, std::time::Instant)>> = RefCell::new(HashMap::new());
+    static PILLS: RefCell<HashMap<u64, (f32, f32, Instant)>> = RefCell::new(HashMap::new());
 }
 
 fn hovered(key: u64) -> bool {
@@ -377,9 +378,9 @@ fn pill(key: u64, selected: bool, hover: bool, unread: bool) -> AnyElement {
     };
     let (from, to, at) = PILLS.with(|p| {
         let mut p = p.borrow_mut();
-        let e = p.entry(key).or_insert((target, target, std::time::Instant::now()));
+        let e = p.entry(key).or_insert((target, target, Instant::now()));
         if e.1 != target {
-            *e = (e.1, target, std::time::Instant::now());
+            *e = (e.1, target, Instant::now());
         }
         *e
     });
@@ -600,13 +601,56 @@ fn unread_dm_items(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Vec<AnyElem
 const ADD_KEY: u64 = 2;
 const DISCOVER_KEY: u64 = 3;
 
+pub const DISCODO_KEY: &str = "discodo-easter-egg";
+const DISCODO_CLICKS: u32 = 16;
+const DISCODO_RESET: Duration = Duration::from_millis(500);
+const DISCODO_LABEL: Duration = Duration::from_secs(1);
+
+thread_local! {
+    static DISCODO: Cell<(u32, Option<Instant>)> = const { Cell::new((0, None)) };
+    static DISCODO_SHOWN: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+pub fn discodo_click(state: (u32, Option<Instant>), now: Instant) -> ((u32, Option<Instant>), bool) {
+    let clicks = if state.1.is_some_and(|t| now.duration_since(t) < DISCODO_RESET) { state.0 } else { 0 };
+    if clicks + 1 == DISCODO_CLICKS { ((0, None), true) } else { ((clicks + 1, Some(now)), false) }
+}
+
+fn on_home_click(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
+    let now = Instant::now();
+    let (next, fire) = discodo_click(DISCODO.get(), now);
+    DISCODO.set(next);
+    if fire {
+        let on = !a.prefs.local.flag(DISCODO_KEY, false);
+        a.prefs.local.ui.insert(DISCODO_KEY.into(), u64::from(on));
+        a.prefs.local.save();
+        crate::sounds::play(if on { "discodo" } else { "user_leave" }, 1.);
+        DISCODO_SHOWN.set(Some(now));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(DISCODO_LABEL).await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+    a.select_guild(None, cx);
+}
+
+fn home_label(app: &PhoenixApp) -> SharedString {
+    match DISCODO_SHOWN.get() {
+        Some(t) if t.elapsed() < DISCODO_LABEL => {
+            if app.prefs.local.flag(DISCODO_KEY, false) { crate::t!("home.discodo_on") } else { crate::t!("home.discodo_off") }
+        }
+        _ => crate::t!("dm.title"),
+    }
+}
+
 fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
     let selected = app.selected_guild.is_none() && !app.favorites_view && crate::ui::discovery::current().is_none();
     let hover = hovered(HOME_KEY);
     let pending = app.nav.pending_requests() + app.nav.message_requests.len() as u32;
     let e = entity.clone();
     row("home", HOME_KEY, entity)
-        .on_click(move |_, _, cx| e.update(cx, |a, cx| a.select_guild(None, cx)))
+        .on_click(move |_, _, cx| e.update(cx, on_home_click))
         .child(pill(HOME_KEY, selected, hover, false))
         .child(masked(
             ICON,
@@ -630,7 +674,7 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
             None,
             count(pending),
         ))
-        .when(hover, |d| d.child(right_tooltip(crate::t!("dm.title"), ICON)))
+        .when(hover, |d| d.child(right_tooltip(home_label(app), ICON)))
         .into_any_element()
 }
 
@@ -1006,6 +1050,21 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedS
 #[cfg(test)]
 mod rail_dm_tests {
     use super::*;
+
+    #[test]
+    fn sixteen_quick_home_clicks_toggle_discodo() {
+        let t0 = Instant::now();
+        let mut st = (0, None);
+        for i in 0..15 {
+            let (next, fire) = discodo_click(st, t0 + Duration::from_millis(100 * i));
+            assert!(!fire);
+            st = next;
+        }
+        let (next, fire) = discodo_click(st, t0 + Duration::from_millis(1500));
+        assert!(fire && next == (0, None), "the 16th click fires and resets");
+        let (slow, _) = discodo_click((15, Some(t0)), t0 + DISCODO_RESET);
+        assert_eq!(slow.0, 1, "a 500 ms pause starts over");
+    }
 
     fn ids(v: &[u64]) -> Vec<Id> {
         v.iter().map(|&x| Id(x)).collect()

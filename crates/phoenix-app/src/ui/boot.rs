@@ -336,7 +336,12 @@ pub fn render(app: &mut PhoenixApp, window: &mut Window, _cx: &mut Context<Phoen
     let capped = app.boot.main_since.is_some_and(|t| t.elapsed() >= MAIN_CAP);
     let held = hold().is_some_and(|h| app.boot.started.elapsed() < h);
     let ready = (stable(app) || capped) && !held && !app.boot.offline;
-    let f = app.boot.frame(ready, Instant::now())?;
+    let hiding = app.boot.hide_at.is_some();
+    let f = app.boot.frame(ready, Instant::now());
+    if !hiding && app.boot.hide_at.is_some() && app.screen == Screen::Main && app.prefs.local.flag(crate::ui::server_bar::DISCODO_KEY, false) {
+        crate::sounds::play("discodo", 1.);
+    }
+    let f = f?;
     window.request_animation_frame();
     let spinner = match crate::splash::spinner() {
         Some(image) => img(image).size_full().into_any_element(),
