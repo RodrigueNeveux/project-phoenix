@@ -42,6 +42,8 @@ Catégories :
 | settings : modale d'ajout de son | module 122998 (chunk 68027) : découpe avec la forme d'onde du worker 658777, poignées, tête de lecture, limite de 5 s, volume plafonné par le multiplicateur de sonie ; décodage symphonia, clip encodé en Ogg Opus, POST refusé par la garde | de9f527a |
 | navigation : Favoris, « Paramètres du fil » | déjà construite (modale 167846, b81fdd3d), doc corrigé | — |
 | navigation : Favoris, lignes de la modale d'ajout | ligne de partage 61916 → 359378 (48 px, libellé semibold, sous-libellé, case indicateur), icône serveur + type de salon 255266 ; partagée avec Transférer comme dans le client | e0d9ce3a |
+| notifications : autres types de messages système | tous les cas de `stringify` (appel, renommage, icône, appli ajoutée, paliers de boost, rappel d'invitation, fil, achat, AutoMod, cybersécurité, contenu par défaut), liste d'arrivées corrigée | 57680358 |
+| window-chrome : icône du rail, événement et scène | ordre de la fabrique `N` (événement, scène, partage, vidéo, voix), données du gateway ; sourdine déjà conforme | c756eb79 |
 | composer : marges de 1 px, `> ` caché, liens | marges du CSS par boîtes transparentes ; le curseur saute le `> ` caché ; découpage `[` / `](url)` vérifié dans le décorateur du client (déjà conforme) | f9dfb182 |
 
 ## Faisable (pas encore fait)
@@ -52,14 +54,14 @@ Catégories :
 | composer | coller texte + image : GPUI lit le texte d'abord | patch GPUI (presse-papiers Wayland) |
 | popouts | Shop This Look : fiche produit | modale `722258.B` |
 | report | lignes `share_with_parents` et `settings_upsells` | tracées (a07df836) ; il manque le sous-type du signalement et l'état Centre familial |
-| notifications | autres types de messages système, invitations d'activité, cartes parrainage / checkpoint | `stringify` en cache |
-| window-chrome | icône de la barre : sourdine / suppression de serveur, états événement / stage / activité | `hasAnyUnread` et priorités en cache |
 | text | modales non mesurées (réactions, transfert, recherche, soundboard, popout de groupe, création de fil) | dumps à faire ou CSS en cache |
 
 ## Direct (client officiel, utilisateur présent)
 
 | fichier | ligne | pourquoi |
 |---|---|---|
+| window-chrome | icône du rail : état activité (AppsIcon) | le store des activités intégrées ne se remplit qu'avec une activité lancée dans un vocal ; rien en GET |
+| notifications | invitations d'activité, cartes parrainage / checkpoint | il faut recevoir ces messages (activité lancée, parrainage) pour voir leur forme |
 | settings | select « Quelqu'un réagit » : `max-content` + la moitié de l'espace libre (316 px mesurés) | la largeur intrinsèque du select n'est connue que mesurée ; Phoenix met 280 |
 | real-compare | barre « Nouveaux non lus » en haut (#bienvenue) | rejouer avec `RUST_LOG=phoenix::unread_bar=debug` sur un serveur avec des non-lus |
 | real-compare | coupe du placeholder du compositeur, position verticale du compositeur | zone de wt/placeholder-cut |
