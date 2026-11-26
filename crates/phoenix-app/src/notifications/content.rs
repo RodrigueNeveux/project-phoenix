@@ -236,18 +236,52 @@ pub fn system(look: &dyn Lookup, c: &Chan, m: &api::Message) -> Option<String> {
     })
 }
 
+const PREMIUM_REFERRAL: u8 = 35;
+const CHECKPOINT_CARD: u8 = 20;
+const ACTIVITY_JOIN: u64 = 1;
+const ACTIVITY_LISTEN: u64 = 3;
+const ACTIVITY_JOIN_REQUEST: u64 = 5;
+
+fn activity_invite(look: &dyn Lookup, c: &Chan, m: &api::Message) -> Option<String> {
+    let kind = m.activity.as_ref()?.get("type").and_then(serde_json::Value::as_u64);
+    let user = look.member_name(c.guild, &m.author);
+    let pick = |channel: &'static str, group: &'static str, dm: &'static str| match c.kind {
+        ChannelType::GroupDm => group,
+        ChannelType::Dm => dm,
+        _ => channel,
+    };
+    if let Some(app) = &m.application {
+        let game = app.get("name").and_then(serde_json::Value::as_str).unwrap_or_default();
+        let key = match kind {
+            Some(ACTIVITY_JOIN) => pick("notif.activity_join", "notif.activity_join_group", "notif.activity_join_dm"),
+            Some(ACTIVITY_JOIN_REQUEST) => "notif.activity_join_request",
+            _ => return Some(String::new()),
+        };
+        return Some(crate::i18n::t(key, &[("user", user.as_str()), ("game", game)]).to_string());
+    }
+    (kind == Some(ACTIVITY_LISTEN))
+        .then(|| crate::i18n::t(pick("notif.activity_listen", "notif.activity_listen_group", "notif.activity_listen_dm"), &[("user", user.as_str())]).to_string())
+}
+
 pub fn body(look: &dyn Lookup, c: &Chan, m: &api::Message) -> Option<String> {
     let forwarded = m.message_reference.as_ref().is_some_and(|r| r.kind == Some(MessageReferenceType::Forward));
+    let stringified = if is_user_message(m.kind) { None } else { Some(system(look, c, m)?) };
     let mut r = if forwarded {
         crate::t!("notif.forwarded").to_string()
+    } else if let Some(a) = activity_invite(look, c, m) {
+        a
     } else if let Some(s) = m.sticker_items.first() {
         crate::t!("notif.sticker", name = s.name).to_string()
+    } else if m.kind.value() == PREMIUM_REFERRAL {
+        crate::t!("notif.premium_referral", username = plain_name(&m.author)).to_string()
     } else if let Some(q) = poll_question(m) {
         crate::t!("notif.poll", question = q).to_string()
     } else if m.kind == MessageType::PollResult {
         crate::t!("notif.poll_result", question = poll_result_question(m)).to_string()
-    } else if !is_user_message(m.kind) {
-        unparse(look, c, &system(look, c, m)?)
+    } else if m.components.first().is_some_and(|x| x.type_id() == CHECKPOINT_CARD) {
+        crate::t!("notif.checkpoint").to_string()
+    } else if let Some(text) = stringified {
+        unparse(look, c, &text)
     } else {
         let mut r = unparse(look, c, &m.content);
         if c.kind == ChannelType::Dm && !m.author.bot && m.content.starts_with("> -# *") && r.starts_with("> -#") {
@@ -393,6 +427,32 @@ mod tests {
 
     fn iso(s: &str) -> String {
         isolate(s)
+    }
+
+    #[test]
+    fn activity_invites_referrals_and_checkpoints() {
+        let f = fake();
+        let dm = Chan { id: 9, kind: ChannelType::Dm, name: String::new(), parent: None, guild: None };
+        let group = Chan { id: 8, kind: ChannelType::GroupDm, name: "g".into(), parent: None, guild: None };
+        let game = Some(serde_json::json!({"name": "Portal 2"}));
+        let invite = |t: u64, app: Option<serde_json::Value>| api::Message { activity: Some(serde_json::json!({"type": t})), application: app, ..msg("") };
+        let join = invite(1, game.clone());
+        assert_eq!(body(&f, &f.chans[&2], &join).unwrap(), crate::t!("notif.activity_join", user = "Alice du serveur", game = "Portal 2").to_string());
+        assert_eq!(body(&f, &group, &join).unwrap(), crate::t!("notif.activity_join_group", user = "alice", game = "Portal 2").to_string());
+        assert_eq!(body(&f, &dm, &join).unwrap(), crate::t!("notif.activity_join_dm", user = "alice", game = "Portal 2").to_string());
+        assert_eq!(body(&f, &dm, &invite(5, game.clone())).unwrap(), crate::t!("notif.activity_join_request", user = "alice", game = "Portal 2").to_string());
+        assert_eq!(body(&f, &dm, &invite(3, None)).unwrap(), crate::t!("notif.activity_listen_dm", user = "alice").to_string());
+        assert_eq!(body(&f, &f.chans[&2], &invite(3, None)).unwrap(), crate::t!("notif.activity_listen", user = "Alice du serveur").to_string());
+        let spectate = api::Message { content: "x".into(), ..invite(2, game) };
+        assert_eq!(body(&f, &dm, &spectate).unwrap(), "", "an app activity other than join falls back to nothing");
+        let referral = api::Message { kind: MessageType::from(35), ..msg("ignored") };
+        assert_eq!(body(&f, &dm, &referral).unwrap(), crate::t!("notif.premium_referral", username = "alice").to_string());
+        let card: api::Message = serde_json::from_value(serde_json::json!({
+            "id": "1", "channel_id": "9", "content": "", "author": {"id": "10", "username": "alice"},
+            "components": [{"type": 20, "id": 1}]
+        }))
+        .unwrap();
+        assert_eq!(body(&f, &dm, &card).unwrap(), crate::t!("notif.checkpoint").to_string());
     }
 
     #[test]
