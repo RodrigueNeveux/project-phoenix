@@ -171,8 +171,11 @@ pub struct Guild {
 impl From<RawGuild> for Guild {
     fn from(r: RawGuild) -> Self {
         let boosts = r.top.premium_subscription_count;
+        let (profile, incidents) = (r.top.profile.clone(), r.top.incidents_data.clone());
         let mut properties = r.properties.unwrap_or(r.top);
         properties.premium_subscription_count = properties.premium_subscription_count.or(boosts);
+        properties.profile = properties.profile.or(profile);
+        properties.incidents_data = properties.incidents_data.or(incidents);
         let mut g = Guild {
             id: r.id,
             properties,
@@ -261,6 +264,19 @@ mod tests {
         let i = g.properties.incidents_data.unwrap();
         assert_eq!(i.invites_disabled_until.as_deref(), Some("2026-01-23T19:31:24.511000+00:00"));
         assert!(i.dms_disabled_until.is_none() && i.raid_detected_at.is_none());
+    }
+
+    #[test]
+    fn top_level_profile_survives_a_properties_object() {
+        let g: Guild = serde_json::from_value(serde_json::json!({
+            "id": "5",
+            "properties": { "name": "G", "features": ["GUILD_TAGS"] },
+            "profile": { "tag": "GLAD", "badge": "4f56" },
+            "incidents_data": { "dms_disabled_until": "2026-01-23T19:31:24.511000+00:00" }
+        }))
+        .unwrap();
+        assert_eq!(g.properties.profile.and_then(|p| p.tag).as_deref(), Some("GLAD"));
+        assert!(g.properties.incidents_data.is_some());
     }
 
     #[test]
