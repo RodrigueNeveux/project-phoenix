@@ -69,6 +69,115 @@ pub fn dominant_png(bytes: &[u8]) -> Option<u32> {
     Some((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
 }
 
+thread_local! {
+    static PALETTES: RefCell<HashMap<String, Option<Vec<[u8; 3]>>>> = RefCell::new(HashMap::new());
+}
+
+pub fn icon_palette(url: &str) -> Option<Vec<[u8; 3]>> {
+    PALETTES.with(|c| c.borrow().get(url).cloned().flatten())
+}
+
+pub fn ensure_palette(url: &str, cx: &mut App) {
+    let fresh = PALETTES.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.contains_key(url) {
+            false
+        } else {
+            c.insert(url.to_owned(), None);
+            true
+        }
+    });
+    if !fresh {
+        return;
+    }
+    let http = cx.http_client();
+    let url = url.to_owned();
+    cx.spawn(async move |cx| {
+        let Ok(mut resp) = http.get(&url, Default::default(), true).await else { return };
+        let mut bytes = Vec::new();
+        if resp.body_mut().read_to_end(&mut bytes).await.is_err() {
+            return;
+        }
+        let Some(p) = cx.background_spawn(async move { palette_of(&bytes) }).await else { return };
+        cx.update(|cx| {
+            PALETTES.with(|c| c.borrow_mut().insert(url, Some(p)));
+            cx.refresh_windows();
+        });
+    })
+    .detach();
+}
+
+pub fn palette_of(bytes: &[u8]) -> Option<Vec<[u8; 3]>> {
+    let img = image::load_from_memory(bytes).ok()?.to_rgba8();
+    let px: Vec<[u8; 3]> = img
+        .pixels()
+        .step_by(10)
+        .filter(|p| p[3] >= 125 && !(p[0] > 250 && p[1] > 250 && p[2] > 250))
+        .map(|p| [p[0], p[1], p[2]])
+        .collect();
+    let q = palette(&px, 5);
+    let first = q.first().copied().unwrap_or([0, 0, 0]);
+    let mut out: Vec<[u8; 3]> = q.into_iter().take(2).collect();
+    out.extend(shades(first, 3));
+    Some(out)
+}
+
+fn fixed1(x: f64) -> f64 {
+    (x * 10.).round() / 10.
+}
+
+pub fn shades(rgb: [u8; 3], count: usize) -> Vec<[u8; 3]> {
+    let (r, g, b) = (f64::from(rgb[0]) / 255., f64::from(rgb[1]) / 255., f64::from(rgb[2]) / 255.);
+    let min = r.min(g).min(b);
+    let max = r.max(g).max(b);
+    let delta = max - min;
+    let raw = if delta == 0. {
+        0.
+    } else if max == r {
+        ((g - b) / delta) % 6.
+    } else if max == g {
+        (b - r) / delta + 2.
+    } else {
+        (r - g) / delta + 4.
+    };
+    let mut hue = (60. * raw).round();
+    if hue < 0. {
+        hue += 360.;
+    }
+    let mid = (max + min) / 2.;
+    let mut sat = fixed1(100. * if delta == 0. { 0. } else { delta / (1. - (2. * mid - 1.).abs()) });
+    let mut light = fixed1(100. * mid);
+    if sat < 30. {
+        sat += 30.;
+    }
+    if light > 80. {
+        light -= 40.;
+    }
+    if light < 20. {
+        light += 15.;
+    }
+    let step = 360. / (count as f64 + 1.);
+    let mut out = Vec::with_capacity(count);
+    while out.len() < count {
+        hue -= step;
+        if hue < 0. {
+            hue += 360.;
+        }
+        out.push(hsl_rgb(hue, sat, light));
+    }
+    out
+}
+
+fn hsl_rgb(h: f64, s: f64, l: f64) -> [u8; 3] {
+    let l = l / 100.;
+    let a = s * l.min(1. - l) / 100.;
+    let f = |n: f64| {
+        let k = (n + h / 30.) % 12.;
+        (255. * (l - a * (k - 3.).min(9. - k).min(1.).max(-1.))).round().clamp(0., 255.) as u8
+    };
+    [f(0.), f(8.), f(4.)]
+}
+
 const SIG: u32 = 5;
 const SHIFT: u32 = 8 - SIG;
 
@@ -285,6 +394,13 @@ mod tests {
         let p = palette(&px, 5);
         assert_eq!(p[0], [124, 20, 28]);
         assert!(p.contains(&[20, 44, 204]));
+    }
+
+    #[test]
+    fn shades_rotate_the_hue_like_the_client() {
+        assert_eq!(shades([255, 0, 0], 3), vec![[128, 0, 255], [0, 255, 255], [128, 255, 0]]);
+        assert_eq!(shades([10, 10, 10], 1), vec![[34, 63, 63]]);
+        assert_eq!(shades([88, 101, 242], 3), vec![[88, 242, 152], [242, 229, 88], [242, 88, 178]]);
     }
 
     #[test]

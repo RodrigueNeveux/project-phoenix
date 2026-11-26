@@ -53,6 +53,10 @@ pub fn markdown_highlighted(
     markdown_sized(app, text, false, Some((entity, msg)), Some(hl))
 }
 
+pub fn markdown_md(app: &PhoenixApp, text: &str) -> AnyElement {
+    markdown_lines(app, text, false, None, None, Some(20.))
+}
+
 pub fn markdown_body_sm(app: &PhoenixApp, text: &str) -> AnyElement {
     markdown_lines(app, text, true, None, None, Some(18.))
 }

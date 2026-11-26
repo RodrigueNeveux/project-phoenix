@@ -1900,6 +1900,12 @@ fn main() -> anyhow::Result<()> {
         })?;
         pump(&mut cx, 300);
     }
+    if let Some(y) = std::env::var("PHX_SERVER_SETTINGS_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
+        pump(&mut cx, 600);
+        cx.update(|_| phoenix_app::ui::chat::scrollbar::handle_n("server-settings", 1).set_offset(gpui::point(px(0.), px(-y))));
+        cx.update_window(win.into(), |_, _, cx| v.update(cx, |_, cx| cx.notify()))?;
+        pump(&mut cx, 300);
+    }
     if let Ok(draft) = std::env::var("PHX_DRAFT") {
         let draft = draft.replace("\\n", "\n");
         cx.update_window(win.into(), |_, window, cx| {

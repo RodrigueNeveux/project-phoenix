@@ -102,6 +102,8 @@ pub const MAX_CHOICES: usize = 8;
 pub const DESCRIPTION_LEN: usize = 300;
 pub const MAX_TAGS: usize = 10;
 pub const TAG_LEN: usize = 30;
+pub const PREVIEW_TEXT_LEN: usize = 150;
+pub const PREVIEW_PARAGRAPH_LEN: usize = 1000;
 pub const PUBLIC: u8 = 1;
 pub const PUBLIC_WITH_RECRUITMENT: u8 = 3;
 
@@ -708,6 +710,7 @@ pub struct Pending {
     pub open: Option<String>,
     pub preview: bool,
     pub agree: bool,
+    pub answers: HashMap<usize, usize>,
     pub viewport: f32,
     pub viewport_h: f32,
 }
@@ -739,29 +742,45 @@ pub fn ensure(s: &mut State) {
     let join = s.access.pick.take().unwrap_or_else(|| join_type(s.guild_json()));
     let d = fresh(s, join);
     s.access.draft = Some(d);
-    match s.access.open.take().as_deref() {
-        Some("question") => {
+    let extras = s.access.open.take().unwrap_or_default();
+    for extra in extras.split('+') {
+        open_extra(s, extra);
+    }
+}
+
+fn open_extra(s: &mut State, extra: &str) {
+    if let Some(id) = extra.strip_prefix("primary=").and_then(|v| v.parse::<u64>().ok()) {
+        if let Some(d) = s.access.draft.as_mut() {
+            d.primary = Some(id);
+        }
+        return;
+    }
+    match extra {
+        "cat" => s.open_select = Some("gs-access-cat"),
+        "subcat" => s.open_select = Some("gs-access-subcat"),
+        "question" => {
             if let Some(f) = s.access.draft.as_ref().and_then(|d| d.fields.iter().position(|f| FieldKind::of(f) != Some(FieldKind::Terms)).map(|i| (i, d.fields[i].clone()))) {
                 open_question(s, FieldKind::of(&f.1).unwrap_or(FieldKind::Text), Some(f.0), f.1);
             }
         }
-        Some("text") => open_question(s, FieldKind::Text, None, Value::Null),
-        Some("paragraph") => open_question(s, FieldKind::Paragraph, None, Value::Null),
-        Some("choice") => open_question(s, FieldKind::Choice, None, Value::Null),
-        Some("terms") => {
+        "text" => open_question(s, FieldKind::Text, None, Value::Null),
+        "paragraph" => open_question(s, FieldKind::Paragraph, None, Value::Null),
+        "choice" => open_question(s, FieldKind::Choice, None, Value::Null),
+        "terms" => {
             let base = s.access.draft.as_ref().map(|d| json!({ "values": d.rule_values() })).unwrap_or(Value::Null);
             open_question(s, FieldKind::Terms, None, base);
         }
-        Some("preview") => s.access.preview = true,
+        "preview" => s.access.preview = true,
         _ => {}
     }
 }
 
 pub fn preselect(s: &mut State, sub: &str) {
     s.access.pick = JoinType::from_sub(sub);
-    let extra = sub.split_once('+').map(|x| x.1);
-    s.access.menu = extra == Some("menu");
-    s.access.open = extra.filter(|e| *e != "menu").map(str::to_owned);
+    let extras: Vec<&str> = sub.split('+').skip(1).collect();
+    s.access.menu = extras.contains(&"menu");
+    let rest: Vec<&str> = extras.into_iter().filter(|e| *e != "menu").collect();
+    s.access.open = (!rest.is_empty()).then(|| rest.join("+"));
     s.access.preview = false;
     s.access.draft = None;
 }
@@ -858,6 +877,9 @@ fn save_question(s: &mut State) {
 }
 
 fn sync(s: &mut State, key: &str, v: String) {
+    if key.starts_with("pv:") {
+        return;
+    }
     let p = &mut s.access;
     p.error = None;
     if let Some(id) = key.strip_prefix("rule:").and_then(|x| x.parse::<u64>().ok()) {
@@ -883,6 +905,22 @@ fn sync(s: &mut State, key: &str, v: String) {
     }
 }
 
+fn is_rule_key(key: &str) -> bool {
+    key.starts_with("rule:") || key.starts_with("qrule:")
+}
+
+pub fn mention_content(text: &str, r: &dyn crate::markdown::MentionResolver) -> gpui_component::input::InputContent {
+    crate::ui::chat::rich_input::content(text, r)
+}
+
+fn mention_tokens(app: &PhoenixApp, area: &Entity<TextareaState>, cx: &mut Cx) {
+    let text = area.read(cx).value().to_string();
+    let content = mention_content(&text, &app.resolver());
+    area.update(cx, |st, cx| {
+        let _ = st.set_tokens(content, cx);
+    });
+}
+
 fn limit_for(key: &str, s: &State) -> (usize, bool) {
     if key.starts_with("rule:") || key.starts_with("qrule:") {
         (RULE_LEN, false)
@@ -894,6 +932,10 @@ fn limit_for(key: &str, s: &State) -> (usize, bool) {
         (DESCRIPTION_LEN, false)
     } else if key == "d:tag" {
         (TAG_LEN, true)
+    } else if key.starts_with("pv:text:") {
+        (PREVIEW_TEXT_LEN, true)
+    } else if key.starts_with("pv:para:") {
+        (PREVIEW_PARAGRAPH_LEN, false)
     } else {
         (usize::MAX, false)
     }
@@ -933,6 +975,28 @@ pub fn prepare(s: &mut State, window: &mut Window, cx: &mut Cx) {
     if d.join == JoinType::Discoverable && !s.access.inputs.contains_key("d:tag") {
         want_inputs.push(("d:tag".into(), String::new(), crate::t!("gs.access.d_tags_ph")));
     }
+    if s.access.preview {
+        for (i, f) in preview_fields(d, &crate::t!("gs.access.terms_label")).iter().enumerate() {
+            match FieldKind::of(f) {
+                Some(FieldKind::Paragraph) => {
+                    let k = format!("pv:para:{i}");
+                    if !s.access.areas.contains_key(&k) {
+                        want_areas.push((k, String::new(), crate::t!("gs.access.pv_answer_ph"), 3));
+                    }
+                }
+                Some(FieldKind::Text) => {
+                    let k = format!("pv:text:{i}");
+                    if !s.access.inputs.contains_key(&k) {
+                        want_inputs.push((k, String::new(), crate::t!("gs.access.pv_answer_ph")));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if let Some(k) = want_areas.iter().map(|w| &w.0).chain(want_inputs.iter().map(|w| &w.0)).find(|k| *k == "pv:para:0" || *k == "pv:text:0") {
+            s.access.focus = Some(k.clone());
+        }
+    }
     if let Some(q) = s.access.question.as_ref() {
         if q.kind != FieldKind::Terms && !s.access.inputs.contains_key("q:label") {
             want_inputs.push(("q:label".into(), q.label.clone(), crate::t!("gs.access.question_input_ph")));
@@ -952,9 +1016,11 @@ pub fn prepare(s: &mut State, window: &mut Window, cx: &mut Cx) {
         }
     }
     for (key, init, ph, rows) in want_areas {
-        let e = cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, 12).placeholder(ph).default_value(init));
+        let grow = if key.starts_with("pv:para:") { 50 } else { 12 };
+        let e = cx.new(|cx| TextareaState::new(window, cx).auto_grow(rows, grow).placeholder(ph).default_value(init));
         let k = key.clone();
-        let sub = cx.subscribe_in(&e, window, move |_, st, ev: &InputEvent, w, cx| {
+        let rich = is_rule_key(&key);
+        let sub = cx.subscribe_in(&e, window, move |app, st, ev: &InputEvent, w, cx| {
             if let InputEvent::Change = ev {
                 let v = st.read(cx).value().to_string();
                 let (max, _) = with_state(|s| limit_for(&k, s)).unwrap_or((usize::MAX, false));
@@ -963,10 +1029,17 @@ pub fn prepare(s: &mut State, window: &mut Window, cx: &mut Cx) {
                     st.update(cx, |s, cx| s.set_value(cut.clone(), w, cx));
                 }
                 with_state(|s| sync(s, &k, cut));
+                if rich {
+                    mention_tokens(app, st, cx);
+                }
                 cx.notify();
             }
         });
         s.subs.push(sub);
+        if rich {
+            let area = e.clone();
+            cx.defer_in(window, move |app, _, cx| mention_tokens(app, &area, cx));
+        }
         s.access.areas.insert(key, e);
     }
     for (key, init, ph) in want_inputs {
@@ -1230,7 +1303,7 @@ fn rules_editor(s: &State, disabled: bool, modal: bool, cx: &mut Cx) -> AnyEleme
         let key = rule_key(modal, r.id);
         let group: SharedString = format!("gs-access-rule-{}-{}", modal as u8, r.id).into();
         let body = match s.access.areas.get(&key) {
-            Some(e) => div().child(Textarea::new(e).appearance(false).bordered(false).disabled(disabled)).into_any_element(),
+            Some(e) => div().child(Textarea::new(e).token(crate::ui::chat::rich_input::render_token).appearance(false).bordered(false).disabled(disabled)).into_any_element(),
             None => text(r.value.clone(), 16., 22., FontWeight::NORMAL, idx::TEXT_DEFAULT).into_any_element(),
         };
         let row = div()
@@ -1999,16 +2072,100 @@ fn critical(t: SharedString) -> AnyElement {
     text(t, 14., 18., FontWeight::NORMAL, idx::TEXT_FEEDBACK_CRITICAL).into_any_element()
 }
 
-fn check_texts(item: &CheckItem, req: &Value, s: &State) -> (SharedString, AnyElement) {
+#[derive(Clone)]
+pub enum HookClick {
+    Url(String),
+    Safety,
+}
+
+pub struct Hook {
+    pub word: SharedString,
+    pub color: usize,
+    pub weight: Option<FontWeight>,
+    pub click: Option<HookClick>,
+}
+
+pub fn hook_ranges(body: &str, hooks: &[Hook]) -> Vec<(std::ops::Range<usize>, usize)> {
+    let mut out: Vec<(std::ops::Range<usize>, usize)> = Vec::new();
+    for (i, h) in hooks.iter().enumerate() {
+        if h.word.is_empty() {
+            continue;
+        }
+        let mut from = 0;
+        while let Some(at) = body[from..].find(&*h.word).map(|k| k + from) {
+            let r = at..at + h.word.len();
+            if out.iter().all(|(o, _)| o.end <= r.start || r.end <= o.start) {
+                out.push((r, i));
+                break;
+            }
+            from = at + h.word.len();
+        }
+    }
+    out.sort_by_key(|(r, _)| r.start);
+    out
+}
+
+fn muted_hooked(id: (&'static str, usize), body: SharedString, hooks: Vec<Hook>, cx: &mut Cx) -> AnyElement {
+    let ranges = hook_ranges(&body, &hooks);
+    let highlights: Vec<(std::ops::Range<usize>, HighlightStyle)> =
+        ranges.iter().map(|(r, i)| (r.clone(), HighlightStyle { color: Some(c(tok(hooks[*i].color))), font_weight: hooks[*i].weight, ..Default::default() })).collect();
+    let styled = StyledText::new(body).with_highlights(highlights);
+    let clicks: Vec<(std::ops::Range<usize>, HookClick)> = ranges.iter().filter_map(|(r, i)| hooks[*i].click.clone().map(|k| (r.clone(), k))).collect();
+    let el = div().text_size(z(14.)).line_height(z(18.)).text_color(c(tok(idx::TEXT_MUTED)));
+    if clicks.is_empty() {
+        return el.child(styled).into_any_element();
+    }
+    let e = cx.entity();
+    let (spans, actions): (Vec<_>, Vec<_>) = clicks.into_iter().unzip();
+    el.child(gpui::InteractiveText::new(id, styled).on_click(spans, move |ix, _, cx| match &actions[ix] {
+        HookClick::Url(u) => cx.open_url(u),
+        HookClick::Safety => e.update(cx, |a, cx| super::pick(super::section_index("menu.gs.safety"), a, cx)),
+    }))
+    .into_any_element()
+}
+
+fn link_hook(word: SharedString, click: HookClick) -> Hook {
+    Hook { word, color: idx::TEXT_LINK, weight: None, click: Some(click) }
+}
+
+fn critical_hook(word: SharedString) -> Hook {
+    Hook { word, color: idx::TEXT_FEEDBACK_CRITICAL, weight: None, click: None }
+}
+
+pub const TERMS_URL: &str = "https://discord.com/terms";
+pub const GUIDELINES_ARTICLE: &str = "360035969312";
+
+fn guidelines_url() -> String {
+    format!("https://support.discord.com/hc/{}/articles/{GUIDELINES_ARTICLE}", crate::i18n::locale().to_lowercase())
+}
+
+pub fn banned_channels(req: &Value, names: impl Fn(u64) -> Option<String>) -> Vec<(String, Vec<String>)> {
+    let Some(m) = req.get("nsfw_properties").and_then(|n| n.get("channels_banned_keywords")).and_then(Value::as_object) else { return Vec::new() };
+    m.iter()
+        .filter_map(|(id, kws)| {
+            let name = names(id.parse().ok()?)?;
+            let kws = kws.as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect()).unwrap_or_default();
+            Some((name, kws))
+        })
+        .collect()
+}
+
+fn check_texts(app: &PhoenixApp, item: &CheckItem, req: &Value, s: &State, cx: &mut Cx) -> (SharedString, AnyElement) {
     let min = discovery_count(minimum_size(req));
     let weeks = minimum_weeks(req).to_string();
     let partner = has(s.guild_json(), "PARTNERED");
     let fail = item.state == Check::Fail;
     match (item.key, item.state) {
-        ("safe", _) => (
-            if fail { crate::t!("gs.access.ck_safe_fail") } else { crate::t!("gs.access.ck_safe") },
-            muted(if fail { crate::t!("gs.access.ck_safe_fail_desc") } else { crate::t!("gs.access.ck_safe_desc") }),
+        ("safe", Check::Fail) => (
+            crate::t!("gs.access.ck_safe_fail"),
+            muted_hooked(
+                ("gs-access-ck-safe", 0),
+                crate::t!("gs.access.ck_safe_fail_desc"),
+                vec![link_hook(crate::t!("gs.access.ck_safe_terms"), HookClick::Url(TERMS_URL.into())), link_hook(crate::t!("gs.access.ck_safe_guidelines"), HookClick::Url(guidelines_url()))],
+                cx,
+            ),
         ),
+        ("safe", _) => (crate::t!("gs.access.ck_safe"), muted(crate::t!("gs.access.ck_safe_desc"))),
         ("size", _) if fail => (
             crate::t!("gs.access.ck_size_fail", minMembers = min),
             muted(if partner { crate::t!("gs.access.ck_size_fail_desc_partner", minMembers = min) } else { crate::t!("gs.access.ck_size_fail_desc", minMembers = min) }),
@@ -2021,7 +2178,16 @@ fn check_texts(item: &CheckItem, req: &Value, s: &State) -> (SharedString, AnyEl
         ("age", _) => (crate::t!("gs.access.ck_age"), muted(crate::t!("gs.access.ck_age_desc", minimumGuildAge = weeks))),
         ("health", Check::Pending) => (
             crate::t!("gs.access.ck_health_pending"),
-            muted(if flag(req, "size") { crate::t!("gs.access.ck_health_pending_desc") } else { crate::t!("gs.access.ck_health_small", minMembers = 200) }),
+            if flag(req, "size") {
+                muted_hooked(
+                    ("gs-access-ck-health", 0),
+                    crate::t!("gs.access.ck_health_pending_desc"),
+                    vec![Hook { word: crate::t!("gs.access.ck_health_pending_hook"), color: idx::TEXT_FEEDBACK_WARNING, weight: Some(FontWeight::BOLD), click: None }],
+                    cx,
+                )
+            } else {
+                muted(crate::t!("gs.access.ck_health_small", minMembers = 200))
+            },
         ),
         ("health", Check::Fail) => (
             crate::t!("gs.access.ck_health_fail"),
@@ -2038,23 +2204,26 @@ fn check_texts(item: &CheckItem, req: &Value, s: &State) -> (SharedString, AnyEl
         ("nsfw", _) if fail => {
             let n = req.get("nsfw_properties").cloned().unwrap_or(Value::Null);
             let present = |k: &str| n.get(k).is_some_and(|v| !v.is_null());
+            let banned = banned_channels(req, |id| app.channels.get(&crate::model::Id(id)).filter(|ch| ch.guild == Some(s.guild)).map(|ch| format!("#{}", ch.name)));
             (
                 crate::t!("gs.access.ck_nsfw_fail"),
                 div()
                     .flex()
                     .flex_col()
-                    .when(present("channels"), |d| d.child(muted(crate::t!("gs.access.ck_nsfw_channels"))))
-                    .when(present("name"), |d| d.child(muted(crate::t!("gs.access.ck_nsfw_name"))))
-                    .when(present("description"), |d| d.child(muted(crate::t!("gs.access.ck_nsfw_description"))))
+                    .when(present("channels"), |d| d.child(muted_hooked(("gs-access-ck-nsfw", 0), crate::t!("gs.access.ck_nsfw_channels"), vec![critical_hook(crate::t!("gs.access.ck_nsfw_channels_hook"))], cx)))
+                    .when(!banned.is_empty(), |d| d.child(div().ml(z(16.)).flex().flex_col().children(banned.into_iter().map(|(name, kws)| muted(format!("{name}: {}", kws.join(", ")).into())))))
+                    .when(present("name"), |d| d.child(muted_hooked(("gs-access-ck-nsfw", 1), crate::t!("gs.access.ck_nsfw_name"), vec![critical_hook(crate::t!("gs.access.ck_nsfw_name_hook"))], cx)))
+                    .when(present("description"), |d| d.child(muted_hooked(("gs-access-ck-nsfw", 2), crate::t!("gs.access.ck_nsfw_description"), vec![critical_hook(crate::t!("gs.access.ck_nsfw_description_hook"))], cx)))
                     .when(["icon", "discovery_splash", "invite_splash", "banner"].iter().any(|k| present(k)), |d| d.child(muted(crate::t!("gs.access.ck_nsfw_images"))))
                     .into_any_element(),
             )
         }
         ("nsfw", _) => (crate::t!("gs.access.ck_nsfw"), muted(crate::t!("gs.access.ck_nsfw_desc"))),
-        (_, _) => (
-            if fail { crate::t!("gs.access.ck_2fa_fail") } else { crate::t!("gs.access.ck_2fa") },
-            muted(if fail { crate::t!("gs.access.ck_2fa_fail_desc") } else { crate::t!("gs.access.ck_2fa_desc") }),
+        (_, Check::Fail) => (
+            crate::t!("gs.access.ck_2fa_fail"),
+            muted_hooked(("gs-access-ck-2fa", 0), crate::t!("gs.access.ck_2fa_fail_desc"), vec![link_hook(crate::t!("gs.access.ck_2fa_fail_link"), HookClick::Safety)], cx),
         ),
+        (_, _) => (crate::t!("gs.access.ck_2fa"), muted(crate::t!("gs.access.ck_2fa_desc"))),
     }
 }
 
@@ -2062,7 +2231,7 @@ fn discovery_count(n: u64) -> String {
     crate::ui::discovery::group_digits(n)
 }
 
-fn checklist(s: &State, header: AnyElement) -> AnyElement {
+fn checklist(app: &PhoenixApp, s: &State, header: AnyElement, cx: &mut Cx) -> AnyElement {
     let shell = || {
         div()
             .flex()
@@ -2089,7 +2258,7 @@ fn checklist(s: &State, header: AnyElement) -> AnyElement {
             .child(div().flex_1().min_w_0().child(header)),
     );
     for (i, it) in items.iter().enumerate() {
-        let (name, desc) = check_texts(it, req, s);
+        let (name, desc) = check_texts(app, it, req, s, cx);
         let icon = match it.state {
             Check::Pending => gpui::svg().path(crate::icons::path("settings/circle-error")).size(z(20.)).text_color(c(tok(idx::YELLOW_300))),
             Check::Pass => gpui::svg().path(crate::icons::path("circle-check")).size(z(20.)).text_color(c(tok(idx::GREEN_360))),
@@ -2113,6 +2282,7 @@ fn discoverable_block(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     match view(s) {
         None => text(crate::t!("common.loading"), 14., 18., FontWeight::MEDIUM, idx::TEXT_MUTED).into_any_element(),
         Some(View::Disqualified) => checklist(
+            app,
             s,
             div()
                 .flex()
@@ -2125,8 +2295,10 @@ fn discoverable_block(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                 )))
                 .child(text(crate::t!("gs.access.d_removed_desc"), 14., 18., FontWeight::MEDIUM, idx::TEXT_SUBTLE))
                 .into_any_element(),
+            cx,
         ),
         Some(View::Ineligible) => checklist(
+            app,
             s,
             div()
                 .text_size(z(16.))
@@ -2135,6 +2307,7 @@ fn discoverable_block(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                 .text_color(c(tok(idx::TEXT_STRONG)))
                 .child(with_marked(crate::t!("gs.access.d_ineligible"), crate::t!("gs.access.d_ineligible_word"), idx::TEXT_FEEDBACK_CRITICAL, FontWeight::BOLD))
                 .into_any_element(),
+            cx,
         ),
         Some(v) => discovery_form(app, s, v, cx),
     }
@@ -2171,7 +2344,8 @@ fn fake_input(placeholder: SharedString, min_h: f32, counter: Option<&'static st
         .into_any_element()
 }
 
-fn preview_field(f: &Value, agree: bool, cx: &mut Cx) -> AnyElement {
+fn preview_field(app: &PhoenixApp, s: &State, i: usize, f: &Value, cx: &mut Cx) -> AnyElement {
+    let agree = s.access.agree;
     let label: SharedString = f.get("label").and_then(Value::as_str).unwrap_or_default().to_owned().into();
     let strings = |k: &str| f.get(k).and_then(Value::as_array).map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect::<Vec<_>>()).unwrap_or_default();
     let body = match FieldKind::of(f) {
@@ -2187,7 +2361,7 @@ fn preview_field(f: &Value, agree: bool, cx: &mut Cx) -> AnyElement {
                     .pb(z(if i + 1 == n { 8. } else { 16. }))
                     .when(i + 1 < n, |d| d.border_b_1().border_color(c(tok(idx::BORDER_SUBTLE))))
                     .child(text(format!("{}.", i + 1), 16., 20., FontWeight::NORMAL, idx::TEXT_MUTED).flex_none())
-                    .child(div().flex_1().min_w_0().pl(z(12.)).child(text(v, 16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT)))
+                    .child(div().flex_1().min_w_0().pl(z(12.)).child(crate::ui::components::markdown_md(app, &v)))
             }));
             let check = div()
                 .id("gs-access-pv-agree")
@@ -2209,25 +2383,46 @@ fn preview_field(f: &Value, agree: bool, cx: &mut Cx) -> AnyElement {
                 .child(text(crate::t!("gs.access.pv_agree"), 16., 20., FontWeight::NORMAL, idx::TEXT_DEFAULT));
             return div().mt(z(40.)).p(z(1.)).child(field_title(crate::t!("gs.access.pv_rules"))).child(rows).child(check).into_any_element();
         }
-        Some(FieldKind::Paragraph) => fake_input(crate::t!("gs.access.pv_answer_ph"), 88., Some("1000")),
-        Some(FieldKind::Choice) => div()
-            .flex()
-            .flex_col()
-            .gap(z(8.))
-            .children(strings("choices").into_iter().map(|o| {
+        Some(FieldKind::Paragraph) => match s.access.areas.get(&format!("pv:para:{i}")) {
+            Some(e) => {
+                let left = PREVIEW_PARAGRAPH_LEN.saturating_sub(e.read(cx).value().to_string().chars().count());
                 div()
-                    .flex()
-                    .items_center()
-                    .gap(z(8.))
+                    .relative()
+                    .min_h(z(88.))
                     .px(z(12.))
                     .py(z(10.))
                     .rounded(z(8.))
-                    .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-                    .child(div().size(z(20.)).flex_none().rounded_full().border_2().border_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
-                    .child(text(o, 16., 20., FontWeight::MEDIUM, idx::TEXT_DEFAULT))
-            }))
-            .into_any_element(),
-        _ => fake_input(crate::t!("gs.access.pv_answer_ph"), 40., None),
+                    .border_1()
+                    .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+                    .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .child(Textarea::new(e).appearance(false).bordered(false))
+                    .child(div().absolute().right(z(10.)).bottom(z(6.)).child(text(left.to_string(), 12., 16., FontWeight::NORMAL, idx::TEXT_MUTED)))
+                    .into_any_element()
+            }
+            None => fake_input(crate::t!("gs.access.pv_answer_ph"), 88., Some("1000")),
+        },
+        Some(FieldKind::Choice) => {
+            let picked = s.access.answers.get(&i).copied().unwrap_or(usize::MAX);
+            let e = cx.entity();
+            div().id(("gs-access-pv-q", i)).child(crate::ui::modals::settings_form::radio_group(
+                "gs-access-pv-choice",
+                strings("choices").into_iter().map(|o| (SharedString::from(o), None)).collect(),
+                picked,
+                std::rc::Rc::new(move |k, _, cx| {
+                    with_state(|s| {
+                        s.access.answers.insert(i, k);
+                    });
+                    e.update(cx, |_, cx| cx.notify());
+                }),
+            ))
+            .into_any_element()
+        }
+        _ => match s.access.inputs.get(&format!("pv:text:{i}")) {
+            Some(e) => crate::ui::modals::input_box(e).into_any_element(),
+            None => fake_input(crate::t!("gs.access.pv_answer_ph"), 40., None),
+        },
     };
     div().mt(z(40.)).p(z(1.)).child(field_title(label)).child(body).into_any_element()
 }
@@ -2276,7 +2471,22 @@ fn sidebar_card(app: &PhoenixApp, s: &State) -> (AnyElement, gpui::Background) {
         return (div().w(z(280.)).child(super::profile::preview(s, s.guild.0)).into_any_element(), bg);
     }
     let card = crate::ui::discovery::static_card(&card_guild(app, s), 280., crate::ui::discovery::STATIC_CARD_H).into_any_element();
-    (card, gpui::linear_gradient(315., gpui::linear_color_stop(lower, 0.), gpui::linear_color_stop(lowest, 1.)))
+    let (from, to) = icon_gradient(palette_url(s).and_then(|u| crate::ui::avatar_color::icon_palette(&u)).as_deref(), lower, lowest);
+    (card, gpui::linear_gradient(315., gpui::linear_color_stop(from, 0.), gpui::linear_color_stop(to, 1.)))
+}
+
+pub fn palette_url(s: &State) -> Option<String> {
+    let g = s.guild_json();
+    let h = g.get("icon").or_else(|| g.get("icon_hash")).and_then(Value::as_str).filter(|h| !h.is_empty())?;
+    Some(format!("https://cdn.discordapp.com/icons/{}/{h}.webp?size=40", s.guild.0))
+}
+
+pub fn icon_gradient(palette: Option<&[[u8; 3]]>, lower: gpui::Hsla, lowest: gpui::Hsla) -> (gpui::Hsla, gpui::Hsla) {
+    let rgb = |p: [u8; 3]| gpui::Hsla::from(gpui::rgb((u32::from(p[0]) << 16) | (u32::from(p[1]) << 8) | u32::from(p[2])));
+    match palette {
+        Some(p) if !p.is_empty() => (rgb(p[0]), p.get(2).copied().map(rgb).unwrap_or(lowest)),
+        _ => (lower, lowest),
+    }
 }
 
 fn preview_modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
@@ -2285,6 +2495,9 @@ fn preview_modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
         with_state(|s| {
             s.access.preview = false;
             s.access.agree = false;
+            s.access.answers.clear();
+            s.access.areas.retain(|k, _| !k.starts_with("pv:"));
+            s.access.inputs.retain(|k, _| !k.starts_with("pv:"));
         });
         e.update(cx, |_, cx| cx.notify());
     });
@@ -2292,6 +2505,9 @@ fn preview_modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
     let manual = fields.iter().any(|f| FieldKind::of(f) != Some(FieldKind::Terms));
     let name = app.guilds.iter().find(|g| g.id == s.guild).map(|g| g.name.clone()).unwrap_or_default();
     let level = s.guild_json().get("verification_level").and_then(Value::as_u64).unwrap_or(0);
+    if let Some(u) = palette_url(s) {
+        crate::ui::avatar_color::ensure_palette(&u, cx);
+    }
     let (card, gradient) = sidebar_card(app, s);
     let mut content = div()
         .w_full()
@@ -2302,8 +2518,8 @@ fn preview_modal(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
         .child(text(if manual { crate::t!("gs.access.pv_title", guildName = name) } else { crate::t!("gs.access.pv_title_rules") }, 32., 40., FontWeight::MEDIUM, idx::TEXT_STRONG).my(z(8.)))
         .child(text(if manual { crate::t!("gs.access.pv_desc") } else { crate::t!("gs.access.pv_desc_rules") }, 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT))
         .when(!manual, |d| d.children(requirement(level)));
-    for f in &fields {
-        content = content.child(preview_field(f, s.access.agree, cx));
+    for (i, f) in fields.iter().enumerate() {
+        content = content.child(preview_field(app, s, i, f, cx));
     }
     let footer = div()
         .w_full()
@@ -2572,6 +2788,37 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn checklist_hooks_mark_the_client_words() {
+        let body = "Tu dois changer le nom de ton serveur";
+        let hooks = vec![Hook { word: "nom de ton serveur".into(), color: idx::TEXT_FEEDBACK_CRITICAL, weight: None, click: None }];
+        assert_eq!(hook_ranges(body, &hooks), vec![(19..body.len(), 0)]);
+        let terms = "violation de nos Conditions et de notre Charte.";
+        let two = vec![link_hook("Charte".into(), HookClick::Safety), link_hook("Conditions".into(), HookClick::Safety), link_hook("absent".into(), HookClick::Safety)];
+        let r = hook_ranges(terms, &two);
+        assert_eq!(r.iter().map(|(r, i)| (&terms[r.clone()], *i)).collect::<Vec<_>>(), vec![("Conditions", 1), ("Charte", 0)]);
+    }
+
+    #[test]
+    fn banned_channels_list_known_channels_with_their_keywords() {
+        let req = json!({ "nsfw_properties": { "channels_banned_keywords": { "1": ["a", "b"], "2": ["c"] } } });
+        let got = banned_channels(&req, |id| (id == 1).then(|| "#general".to_owned()));
+        assert_eq!(got, vec![("#general".to_owned(), vec!["a".to_owned(), "b".to_owned()])]);
+        assert!(banned_channels(&json!({}), |_| None).is_empty());
+    }
+
+    #[test]
+    fn preview_gradient_uses_the_icon_palette_like_the_client() {
+        let lower = gpui::hsla(0., 0., 0.1, 1.);
+        let lowest = gpui::hsla(0., 0., 0.05, 1.);
+        assert_eq!(icon_gradient(None, lower, lowest), (lower, lowest));
+        let p = [[255, 0, 0], [0, 0, 255], [128, 0, 255]];
+        let (a, b) = icon_gradient(Some(&p), lower, lowest);
+        assert_eq!(a, gpui::Hsla::from(gpui::rgb(0xff0000)));
+        assert_eq!(b, gpui::Hsla::from(gpui::rgb(0x8000ff)));
+        assert_eq!(icon_gradient(Some(&p[..2]), lower, lowest).1, lowest);
+    }
 
     fn x<'a>(guild: &'a Value, form: &'a Value) -> Ctx<'a> {
         static NULL: Value = Value::Null;
