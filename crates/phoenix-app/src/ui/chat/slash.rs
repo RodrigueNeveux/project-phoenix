@@ -192,7 +192,7 @@ fn fill(app: &mut PhoenixApp, cmd: &SlashCommand, window: &mut Window, cx: &mut 
         Some(o) => format!("/{} {}:", cmd.name, o),
         None => format!("/{} ", cmd.name),
     };
-    app.composer.update(cx, |s, cx| s.set_value(v, window, cx));
+    app.composer.update(cx, |s, cx| super::rich_input::set_value_at_end(s, v, window, cx));
     let st = state(cx);
     st.selected = 0;
     st.auto_choices.clear();
@@ -214,7 +214,7 @@ fn fill_option(app: &mut PhoenixApp, cmd_name: &str, opt_name: &str, val: Option
     } else {
         format!("{} {opt_name}:", cur.trim_end())
     };
-    app.composer.update(cx, |s, cx| s.set_value(next, window, cx));
+    app.composer.update(cx, |s, cx| super::rich_input::set_value_at_end(s, next, window, cx));
     cx.notify();
 }
 

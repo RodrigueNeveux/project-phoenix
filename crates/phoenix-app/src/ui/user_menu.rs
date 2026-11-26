@@ -51,7 +51,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 a.composer.update(cx, |s, cx| {
                     let v = s.value().to_string();
                     let sep = if v.is_empty() || v.ends_with(' ') { "" } else { " " };
-                    s.set_value(format!("{v}{sep}<@{}> ", u.0), w, cx);
+                    crate::ui::chat::rich_input::set_value_at_end(s, format!("{v}{sep}<@{}> ", u.0), w, cx);
                     s.focus(w, cx);
                 })
             }),

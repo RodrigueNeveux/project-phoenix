@@ -313,6 +313,12 @@ fn wanted_rich(app: &PhoenixApp, area: &Area, cx: &App) -> std::rc::Rc<Rich> {
     })
 }
 
+pub fn set_value_at_end(s: &mut gpui_component::input::TextareaState, value: String, window: &mut gpui::Window, cx: &mut Context<gpui_component::input::TextareaState>) {
+    let end = value.len();
+    s.set_value(value, window, cx);
+    s.set_selected_range(end..end, cx);
+}
+
 pub fn sync(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
     let composer = app.composer.clone();
     sync_area(app, &composer, cx);

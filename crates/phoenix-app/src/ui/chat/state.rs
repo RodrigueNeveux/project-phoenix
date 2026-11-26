@@ -327,7 +327,7 @@ impl PhoenixApp {
         let max_rows = ((f32::from(window.viewport_size().height) * 0.5 / 22.).floor() as usize).max(2);
         let input = cx.new(|cx| gpui_component::input::TextareaState::new(window, cx).auto_grow(1, max_rows).submit_on_enter(true));
         input.update(cx, |s, cx| {
-            s.set_value(content, window, cx);
+            super::rich_input::set_value_at_end(s, content.to_string(), window, cx);
             s.focus(window, cx);
         });
         let sub = cx.subscribe_in(&input, window, |this, input, ev: &InputEvent, window, cx| match ev {

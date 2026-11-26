@@ -225,7 +225,7 @@ fn attach_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<gpui::A
     items.push(MenuItem::action(crate::t!("attach.apps"), Some(crate::icons::path("apps")), act(|a, _, w, cx| {
         a.composer.update(cx, |s, cx| {
             if s.value().is_empty() {
-                s.set_value("/", w, cx);
+                super::rich_input::set_value_at_end(s, "/".into(), w, cx);
             }
             s.focus(w, cx);
         });
