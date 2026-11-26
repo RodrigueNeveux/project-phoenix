@@ -207,6 +207,12 @@ pub fn rich_for(text: &str) -> Rich {
             .clone_edges(true);
         rich.push(RichSpan::new(r.clone()).text_box(b));
     }
+    for (r, start, end) in md::marker_gaps(text) {
+        let mut b = TextBox::new(r.clone()).padding(px(if start != 0. { start } else { end }));
+        b.open_start = start == 0.;
+        b.open_end = end == 0.;
+        rich.push(RichSpan::new(r).text_box(b));
+    }
     let mut lines: Vec<LineStyle> = Vec::new();
     for q in &blocks.quotes {
         lines.push(
@@ -240,6 +246,37 @@ pub fn rich_for(text: &str) -> Rich {
     rich.sort_by_key(|s| (s.range.start, s.range.end));
     lines.sort_by_key(|l| l.range.start);
     Rich { decorations, spans: rich, lines }
+}
+
+pub fn snap(quotes: &[Range<usize>], prev: usize, cur: usize) -> Option<usize> {
+    let q = quotes.iter().find(|q| q.len() >= 2 && (cur == q.start || cur == q.start + 1))?;
+    let s = q.start;
+    if cur == s + 1 && prev == s + 2 && s > 0 {
+        return Some(s - 1);
+    }
+    Some(s + 2)
+}
+
+thread_local! {
+    static LAST_CARET: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+pub fn snap_quote_caret(area: &Area, cx: &mut App) {
+    let (text, range) = {
+        let st = area.read(cx);
+        (st.value().to_string(), st.selected_range())
+    };
+    if !range.is_empty() {
+        LAST_CARET.with(|c| c.set(range.end));
+        return;
+    }
+    let cur = range.start;
+    let prev = LAST_CARET.with(|c| c.replace(cur));
+    let quotes = crate::markdown::input::blocks(&text).quotes;
+    if let Some(to) = snap(&quotes, prev, cur).filter(|t| *t != cur && *t <= text.len()) {
+        LAST_CARET.with(|c| c.set(to));
+        area.update(cx, |s, cx| s.set_selected_range(to..to, cx));
+    }
 }
 
 fn fingerprint() -> [u32; 4] {
@@ -393,6 +430,32 @@ pub fn take_plain(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quote_marker_is_a_single_caret_stop() {
+        let text = "hi\n> quote";
+        let q = crate::markdown::input::blocks(text).quotes;
+        assert_eq!(q, vec![3..10]);
+        assert_eq!(snap(&q, 5, 4), Some(2));
+        assert_eq!(snap(&q, 2, 3), Some(5));
+        assert_eq!(snap(&q, 9, 3), Some(5));
+        assert_eq!(snap(&q, 5, 5), None);
+        let first = crate::markdown::input::blocks("> a").quotes;
+        assert_eq!(snap(&first, 2, 1), Some(2));
+        assert_eq!(snap(&first, 3, 0), Some(2));
+    }
+
+    #[test]
+    fn strike_underline_and_italic_markers_get_the_client_margins() {
+        let gaps = crate::markdown::input::marker_gaps("~~a~~ __b__ *c* **d**");
+        assert_eq!(gaps, vec![(0..2, 0., 1.), (3..5, 1., 0.), (6..8, 0., 1.), (9..11, 1., 0.), (12..13, 0., -1.), (14..15, 1., 0.)]);
+        let rich = rich_for("~~a~~");
+        let boxes: Vec<_> = rich.spans.iter().filter_map(|s| s.text_box.clone()).collect();
+        assert_eq!(boxes.len(), 2);
+        assert!(boxes[0].open_start && !boxes[0].open_end && boxes[0].padding == px(1.));
+        assert!(!boxes[1].open_start && boxes[1].open_end);
+        assert!(boxes.iter().all(|b| b.background.is_none() && b.border_color.is_none()));
+    }
 
     struct R;
     impl MentionResolver for R {

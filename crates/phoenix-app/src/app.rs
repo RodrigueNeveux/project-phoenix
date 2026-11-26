@@ -241,6 +241,11 @@ impl PhoenixApp {
                 _ => {}
             }
         }));
+        subs.push(cx.observe(&composer, |this, area, cx| {
+            if ui::chat::rich_input::enabled(this) {
+                ui::chat::rich_input::snap_quote_caret(&area, cx);
+            }
+        }));
         for input in [&login_email, &login_password, &login_token, &login_mfa] {
             subs.push(cx.subscribe_in(input, window, |this, _, ev: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter { .. } = ev {

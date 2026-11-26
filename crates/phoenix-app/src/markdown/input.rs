@@ -16,6 +16,7 @@ pub const SUBTEXT_MARK: u16 = 1 << 12;
 
 struct Out {
     spans: Vec<(Range<usize>, u16)>,
+    gaps: Vec<(Range<usize>, f32, f32)>,
 }
 
 impl Out {
@@ -52,8 +53,22 @@ pub fn spans(text: &str) -> Vec<(Range<usize>, u16)> {
     scan(text).0
 }
 
-fn scan(text: &str) -> (Vec<(Range<usize>, u16)>, Vec<CodeBlock>) {
-    let mut out = Out { spans: Vec::new() };
+pub fn marker_gaps(text: &str) -> Vec<(Range<usize>, f32, f32)> {
+    scan(text).2
+}
+
+fn gap(style: u16) -> Option<(f32, f32)> {
+    match style {
+        STRIKE | UNDERLINE => Some((1., 1.)),
+        ITALIC => Some((-1., 1.)),
+        _ => None,
+    }
+}
+
+type Scan = (Vec<(Range<usize>, u16)>, Vec<CodeBlock>, Vec<(Range<usize>, f32, f32)>);
+
+fn scan(text: &str) -> Scan {
+    let mut out = Out { spans: Vec::new(), gaps: Vec::new() };
     let mut code = Vec::new();
     let mut i = 0;
     while i < text.len() {
@@ -88,7 +103,7 @@ fn scan(text: &str) -> (Vec<(Range<usize>, u16)>, Vec<CodeBlock>) {
         line(text, i, stop, &mut out);
         i = if next_fence.is_some() { stop } else { line_end + 1 };
     }
-    (out.spans, code)
+    (out.spans, code, out.gaps)
 }
 
 fn line_ranges(text: &str) -> Vec<Range<usize>> {
@@ -262,6 +277,10 @@ fn run(text: &str, start: usize, end: usize, attrs: u16, out: &mut Out) {
             out.push(start + plain..at, attrs);
             let m = marker(attrs, s);
             out.push(at..at + body.start, m);
+            if let Some((before, after)) = gap(s) {
+                out.gaps.push((at..at + body.start, 0., before));
+                out.gaps.push((at + body.end..at + len, after, 0.));
+            }
             run(text, at + body.start, at + body.end, attrs | s, out);
             out.push(at + body.end..at + len, m);
             i += len;
