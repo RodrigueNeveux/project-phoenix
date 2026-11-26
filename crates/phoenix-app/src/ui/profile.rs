@@ -478,6 +478,10 @@ fn role_text_w(cx: &gpui::App, s: &str) -> f32 {
     s.chars().map(|ch| ts.advance(id, px(12.), ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum()
 }
 
+fn role_pill_w(text: f32, r: &crate::model::Role, removable: bool) -> f32 {
+    2. + 2. + 12. + 8. + (if r.connection { 16. } else { 0. }) + text + (if r.icon.is_some() { 16. } else { 0. }) + (if removable { 23. } else { 8. })
+}
+
 fn roles_fit(widths: &[f32], second_row: f32) -> (usize, usize) {
     let mut shown = 0;
     let mut row2 = 0;
@@ -505,7 +509,7 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
     let widths: Vec<f32> = roles
         .iter()
         .zip(&removable)
-        .map(|(r, rm)| 2. + 2. + 12. + 8. + role_text_w(cx, &r.name) + (if r.icon.is_some() { 16. } else { 0. }) + (if *rm { 23. } else { 8. }))
+        .map(|(r, rm)| role_pill_w(role_text_w(cx, &r.name), r, *rm))
         .collect();
     let expanded = ROLES_EXPANDED.with(|e| e.borrow().contains(&uid));
     let total = roles.len();
@@ -550,13 +554,7 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
             })
             .map(|d| {
                 if expanded {
-                    d.child(
-                        gpui::svg()
-                            .path(crate::icons::path("chevron-right"))
-                            .size(z(12.))
-                            .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
-                            .with_transformation(gpui::Transformation::rotate(gpui::percentage(0.5))),
-                    )
+                    d.child(gpui::svg().path(crate::icons::path("chevron-small-left")).size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
                 } else {
                     d.child(SharedString::from(format!("+{}", total - shown)))
                 }
@@ -572,16 +570,20 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
             .justify_center()
             .size(z(24.))
             .rounded(z(8.))
-            .border_1()
-            .border_color(c(tok(idx::USER_PROFILE_BORDER)))
             .cursor_pointer()
-            .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
+            .group("profile-roles-add")
             .tooltip(crate::ui::tooltip::tip(crate::t!("profile.add_role")))
             .on_click(move |_, _, cx| {
                 cx.stop_propagation();
                 e.update(cx, |a, cx| a.stub(&crate::t!("profile.add_role"), cx));
             })
-            .child(gpui::svg().path(crate::icons::path("plus")).size(z(12.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT))))
+            .child(
+                gpui::svg()
+                    .path(crate::icons::path("plus-small"))
+                    .size(z(18.))
+                    .text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))
+                    .group_hover("profile-roles-add", |s| s.text_color(c(tok(idx::INTERACTIVE_TEXT_HOVER)))),
+            )
     });
     div().mt(z(2.)).flex().flex_wrap().gap(z(4.)).children(roles.into_iter().take(shown).enumerate().map(|(i, r)| {
         let cap = if !expanded && shown < total && i >= row2 { second_row } else { ROLE_ROW_W };
@@ -628,6 +630,9 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
             .line_height(z(16.))
             .text_color(c(tok(idx::TEXT_DEFAULT)))
             .child(div().size(z(12.)).mx(z(4.)).flex_none().rounded_full().bg(role_color(r.color.or(Some(0x99AAB5)))))
+            .when(r.connection, |d| {
+                d.child(gpui::svg().path(crate::icons::path("link")).size(z(12.)).mr(z(4.)).flex_none().text_color(c(tok(idx::ICON_DEFAULT))))
+            })
             .child(div().min_w_0().text_ellipsis().whitespace_nowrap().overflow_hidden().child(r.name.clone()))
             .when_some(r.icon.clone(), |d, u| {
                 d.child(div().flex_none().ml(z(4.)).child(img(u).size(z(12.)).object_fit(gpui::ObjectFit::Contain)))
@@ -1682,7 +1687,18 @@ mod role_order_tests {
 
 #[cfg(test)]
 mod role_fit_tests {
-    use super::roles_fit;
+    use super::{role_pill_w, roles_fit};
+    use crate::model::{Id, Role};
+
+    #[test]
+    fn role_pill_reserves_dot_link_name_icon_and_remove_like_the_client() {
+        let mut r = Role { id: Id(2), name: "r".into(), color: None, position: 1, hoist: false, icon: None, managed: false, connection: false };
+        assert_eq!(role_pill_w(40., &r, false), 2. + 2. + 12. + 8. + 40. + 8.);
+        r.icon = Some("https://cdn.discordapp.com/role-icons/2/a.webp".into());
+        assert_eq!(role_pill_w(40., &r, false), 2. + 2. + 12. + 8. + 40. + 16. + 8.);
+        r.connection = true;
+        assert_eq!(role_pill_w(40., &r, true), 2. + 2. + 12. + 8. + 16. + 40. + 16. + 23.);
+    }
 
     #[test]
     fn roles_fill_two_rows_like_the_client() {

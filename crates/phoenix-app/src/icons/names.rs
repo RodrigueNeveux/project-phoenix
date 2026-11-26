@@ -16,6 +16,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("circle-check-bg", &["CircleCheckIcon#secondary"]),
     ("check-small-bold", &["CheckmarkSmallBoldIcon"]),
     ("plus", &["PlusLargeIcon"]),
+    ("plus-small", &["PlusSmallIcon"]),
+    ("chevron-small-left", &["ChevronSmallLeftIcon"]),
     ("palette", &["PaintPaletteIcon"]),
     ("info", &["CircleInformationIcon"]),
     ("warning", &["CircleWarningIcon", "CircleErrorIcon"]),
