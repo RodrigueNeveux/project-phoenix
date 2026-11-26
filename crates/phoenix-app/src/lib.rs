@@ -12,6 +12,7 @@ pub mod guild_live;
 pub mod history_ui;
 pub mod history_detached;
 pub mod hwaccel;
+pub mod keybinds;
 pub mod i18n;
 pub mod fonts;
 pub mod icons;

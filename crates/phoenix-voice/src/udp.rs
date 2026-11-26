@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tokio::net::UdpSocket;
@@ -7,6 +8,25 @@ use crate::crypto::TransportCipher;
 use crate::{Error, Result};
 
 pub const DISCOVERY_LEN: usize = 74;
+
+pub const DSCP_EF_TOS: u32 = 0xB8;
+
+static QOS: AtomicBool = AtomicBool::new(false);
+
+pub fn set_qos(on: bool) {
+    QOS.store(on, Ordering::Relaxed);
+}
+
+pub fn qos() -> bool {
+    QOS.load(Ordering::Relaxed)
+}
+
+fn mark_priority(socket: &UdpSocket, v4: bool) {
+    let r = if v4 { socket.set_tos_v4(DSCP_EF_TOS) } else { socket.set_tclass_v6(DSCP_EF_TOS) };
+    if let Err(e) = r {
+        tracing::warn!("voice QoS marking failed: {e}");
+    }
+}
 
 pub fn discovery_request(ssrc: u32) -> [u8; DISCOVERY_LEN] {
     let mut b = [0u8; DISCOVERY_LEN];
@@ -49,6 +69,9 @@ impl MediaSocket {
     pub async fn connect(server: SocketAddr) -> Result<Self> {
         let bind: SocketAddr = if server.is_ipv4() { ([0, 0, 0, 0], 0).into() } else { ([0u16; 8], 0).into() };
         let socket = UdpSocket::bind(bind).await?;
+        if qos() {
+            mark_priority(&socket, server.is_ipv4());
+        }
         socket.connect(server).await?;
         Ok(Self { socket, cipher: None })
     }
@@ -140,5 +163,13 @@ mod tests {
         let s = MediaSocket::connect(addr).await.unwrap();
         let (ip, _port) = s.discover(7).await.unwrap();
         assert_eq!(ip, "127.0.0.1");
+    }
+
+    #[tokio::test]
+    async fn qos_marks_the_media_socket_expedited() {
+        set_qos(true);
+        let s = MediaSocket::connect("127.0.0.1:9".parse().unwrap()).await.unwrap();
+        assert_eq!(s.socket.tos_v4().unwrap(), DSCP_EF_TOS);
+        set_qos(false);
     }
 }

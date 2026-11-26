@@ -31,7 +31,9 @@ pub const AFK_TIMEOUTS: &[u64] = &[60, 120, 180, 240, 300, 360, 420, 480, 540, 6
 
 pub static ENTRIES: &[Entry] = &[
     en("push-delay", &[5, 6], true, AFK_TIMEOUTS, 0),
+    b("vo-always-preview", &[5, 5], false),
     b("n-stream", &[5, 7], true),
+    inv("vo-stream-preview", &[5, 10], true),
     b("md-preview", &[6, 2], true),
     b("split-threads", &[6, 3], true),
     Entry { id: "spoilers", path: &[6, 4], wrapper: true, kind: Kind::Str(&["ON_CLICK", "ALWAYS", "IF_MODERATOR"]), default: 0 },

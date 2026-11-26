@@ -39,6 +39,8 @@ pub fn sync(app: &PhoenixApp, os_reduced_motion: bool) {
     STICKER_MODE.store(p.synced.pick("stickers") as u8, Relaxed);
     INLINE_ATTACHMENTS.store(p.synced.flag("media-uploads"), Relaxed);
     ALT_TEXT.store(p.synced.flag("alt-text"), Relaxed);
+    phoenix_voice::udp::set_qos(p.local.flag("vo-qos", false));
+    crate::ui::profile_theme::set_sync_with_app(p.local.flag("theme-profiles", false));
 }
 
 pub fn spoilers_always() -> bool {

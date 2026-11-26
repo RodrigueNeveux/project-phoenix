@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use crate::theme::generated::idx;
 
@@ -12,7 +13,16 @@ pub enum Scheme {
     Light,
 }
 
+static SYNC_WITH_APP: AtomicBool = AtomicBool::new(false);
+
+pub fn set_sync_with_app(on: bool) {
+    SYNC_WITH_APP.store(on, Relaxed);
+}
+
 pub fn scheme((primary, _): (u32, u32)) -> Scheme {
+    if SYNC_WITH_APP.load(Relaxed) {
+        return if app_is_light() { Scheme::Light } else { Scheme::Dark };
+    }
     let ch = |sh: u32| ((primary >> sh) & 0xFF) as f32;
     let y = (0.299 * ch(16) + 0.587 * ch(8) + 0.114 * ch(0)) / 255.;
     if y > 0.5 { Scheme::Light } else { Scheme::Dark }

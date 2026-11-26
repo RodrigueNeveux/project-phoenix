@@ -1456,7 +1456,7 @@ static APPEARANCE: &[B] = &[
     B::Custom("sp.ap.limited", limited_theme),
     B::Custom("sp.ap.colors", nitro_themes),
     B::Switch("theme-devices", "sp.ap.sync_devices", "", Bind::Pref(true)),
-    B::Switch("theme-profiles", "sp.ap.apply_profiles", "", Bind::Pref(true)),
+    B::Switch("theme-profiles", "sp.ap.apply_profiles", "", Bind::Pref(false)),
     B::Related("help", "settings.page.accessibility", "sp.ap.a11y_d", Page::Accessibility),
     B::Divider,
     B::Custom("sp.ap.icon", nitro_app_icon),
@@ -1905,10 +1905,186 @@ fn updates_section(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     row.into_any_element()
 }
 
+fn static_id(s: String) -> &'static str {
+    thread_local! {
+        static IDS: std::cell::RefCell<std::collections::HashMap<String, &'static str>> = Default::default();
+    }
+    IDS.with(|m| *m.borrow_mut().entry(s.clone()).or_insert_with(|| Box::leak(s.into_boxed_str())))
+}
+
+fn kb_label(t: SharedString) -> Div {
+    div().pb(z(8.)).text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(t)
+}
+
+fn kb_field(id: &'static str, text: SharedString, strong: bool) -> gpui::Stateful<Div> {
+    div()
+        .id(eid(id))
+        .h(z(40.))
+        .pl(z(12.))
+        .flex()
+        .items_center()
+        .rounded(z(8.))
+        .border_1()
+        .border_color(c(tok(idx::INPUT_BORDER_DEFAULT)))
+        .hover(|s| s.border_color(c(tok(idx::INPUT_BORDER_HOVER))))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .cursor_pointer()
+        .child(div().flex_1().min_w_0().truncate().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(if strong { idx::TEXT_STRONG } else { idx::TEXT_MUTED }))).child(text))
+        .child(div().w(z(36.)).h_full().flex().items_center().justify_center().pr(z(4.)).child(gpui::svg().path("icons/chevron.svg").size(z(20.)).text_color(c(tok(idx::TEXT_STRONG)))))
+}
+
+fn kb_recorder(k: &crate::keybinds::Keybind, cx: &mut Cx) -> Div {
+    let recording = crate::keybinds::recording() == Some(k.id);
+    let id = k.id;
+    let has = !k.shortcut.is_empty();
+    let label: SharedString = if recording {
+        crate::t!("voice.press_key")
+    } else if has {
+        crate::voice::ptt::label(&k.shortcut).into()
+    } else {
+        crate::t!("sp.sy.kb_none")
+    };
+    div()
+        .h(z(40.))
+        .pl(z(12.))
+        .pr(z(4.))
+        .rounded(z(8.))
+        .bg(c(tok(idx::INPUT_BACKGROUND_DEFAULT)))
+        .border_1()
+        .border_color(c(tok(if recording { idx::BORDER_FEEDBACK_CRITICAL } else { idx::INPUT_BORDER_DEFAULT })))
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_size(z(14.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(c(tok(if has || recording { idx::TEXT_STRONG } else { idx::TEXT_MUTED })))
+                .child(label),
+        )
+        .child(
+            controls::button_sm(
+                eid(format!("kb-rec-{id}")),
+                if recording { crate::t!("voice.stop_recording") } else if has { crate::t!("voice.edit_keybind") } else { crate::t!("voice.record_keybind") },
+                if recording { BtnKind::Critical } else { BtnKind::Secondary },
+            )
+            .on_click(cx.listener(move |_, _, _, cx| {
+                crate::voice::ptt::set_recording(false);
+                crate::keybinds::set_recording(if recording { None } else { Some(id) });
+                cx.notify();
+            })),
+        )
+}
+
+fn voice_channel_options(app: &PhoenixApp) -> Vec<(u64, SharedString)> {
+    let mut out = Vec::new();
+    for g in &app.guilds {
+        for ch in app.guild_channels.get(&g.id).into_iter().flatten() {
+            if let Some(c) = app.channels.get(ch).filter(|c| matches!(c.kind, crate::model::ChannelKind::Voice | crate::model::ChannelKind::Stage)) {
+                out.push((ch.0, SharedString::from(format!("{} ({})", c.name, g.name))));
+            }
+        }
+    }
+    out
+}
+
+fn kb_entry(app: &PhoenixApp, k: &crate::keybinds::Keybind, cx: &mut Cx) -> Div {
+    use crate::keybinds::{ACTIONS, Action};
+    use crate::ui::tooltip::Tipped;
+    let id = k.id;
+    let cur = ACTIONS.iter().position(|a| *a == k.action).unwrap_or(0);
+    let action = dropdown_with(
+        app,
+        static_id(format!("kb-act-{id}")),
+        kb_field(static_id(format!("kb-act-field-{id}")), k.action.label(), true),
+        ACTIONS.iter().map(|a| a.label()).collect(),
+        cur,
+        280.,
+        move |a, i, cx| {
+            if let Some(s) = a.settings.as_mut() {
+                s.open_select = None;
+            }
+            crate::keybinds::edit(a, id, |b| b.action = ACTIONS[i], cx)
+        },
+        cx,
+    );
+    let enabled = k.enabled;
+    let controls_col = div()
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(z(8.))
+        .ml(z(24.))
+        .pt(z(28.))
+        .child(
+            div()
+                .id(eid(format!("kb-rm-{id}")))
+                .size(z(32.))
+                .rounded(z(8.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .cursor_pointer()
+                .hover(|s| s.bg(c(tok(idx::CONTROL_ICON_ONLY_BACKGROUND_HOVER))))
+                .child(gpui::svg().path(crate::icons::path("chat/trash")).size(z(20.)).text_color(c(tok(idx::CONTROL_ICON_ONLY_ICON_DEFAULT))))
+                .on_click(cx.listener(move |a, _, _, cx| {
+                    if crate::keybinds::recording() == Some(id) {
+                        crate::keybinds::set_recording(None);
+                    }
+                    update_local(a, |p| p.keybinds.retain(|k| k.id != id), cx)
+                })),
+        )
+        .child(
+            div()
+                .relative()
+                .tip(if enabled { crate::t!("kb.disable") } else { crate::t!("kb.enable") })
+                .child(controls::switch(eid(format!("kb-on-{id}")), enabled).on_click(cx.listener(move |a, _, _, cx| crate::keybinds::edit(a, id, |b| b.enabled = !enabled, cx)))),
+        );
+    let channel = (k.action == Action::SwitchToVoiceChannel).then(|| {
+        let opts = voice_channel_options(app);
+        let sel = k.channel.and_then(|c| opts.iter().position(|o| o.0 == c));
+        let text = sel.map(|i| opts[i].1.clone()).unwrap_or_else(|| crate::t!("kb.pick_channel"));
+        let ids: Vec<u64> = opts.iter().map(|o| o.0).collect();
+        div().mt(z(12.)).flex().flex_col().child(kb_label(crate::t!("kb.channel"))).child(dropdown_with(
+            app,
+            static_id(format!("kb-ch-{id}")),
+            kb_field(static_id(format!("kb-ch-field-{id}")), text, sel.is_some()),
+            opts.into_iter().map(|o| o.1).collect(),
+            sel.unwrap_or(usize::MAX),
+            576.,
+            move |a, i, cx| {
+                if let Some(s) = a.settings.as_mut() {
+                    s.open_select = None;
+                }
+                let ch = ids.get(i).copied();
+                crate::keybinds::edit(a, id, |b| b.channel = ch, cx)
+            },
+            cx,
+        ))
+    });
+    div()
+        .flex()
+        .flex_col()
+        .child(
+            div()
+                .flex()
+                .gap(z(16.))
+                .child(div().w(z(280.)).flex_none().flex().flex_col().child(kb_label(crate::t!("kb.action"))).child(action))
+                .child(div().w(z(280.)).flex_none().flex().flex_col().child(kb_label(crate::t!("sp.sy.kb_keybind"))).child(kb_recorder(k, cx)))
+                .child(controls_col),
+        )
+        .children(k.action.description().map(|d| div().w(z(280.)).mt(z(2.)).text_size(z(12.)).line_height(z(16.)).text_color(c(tok(idx::TEXT_SUBTLE))).child(d)))
+        .children(channel)
+}
+
 fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
-    let n = get_pick(app, "kb-count", Pick::Ui(0));
     let add = controls::button_icon(eid("kb-add"), "plus", tr("sp.sy.add_kb"), BtnKind::Secondary)
-        .on_click(cx.listener(move |a, _, _, cx| set_pick(a, "kb-count", Pick::Ui(0), n + 1, cx)));
+        .on_click(cx.listener(|a, _, _, cx| update_local(a, |p| {
+            crate::keybinds::add(&mut p.keybinds);
+        }, cx)));
     let mut col = div()
         .flex()
         .flex_col()
@@ -1926,34 +2102,17 @@ fn custom_keybinds(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
             tr("sp.sy.kb_saved"),
             Some(controls::button_sm(eid("kb-os"), tr("sp.sy.kb_os"), BtnKind::Secondary)),
         ));
-    if n == 0 {
+    let mut list: Vec<&crate::keybinds::Keybind> = app.prefs.local.keybinds.iter().collect();
+    list.sort_by_key(|k| k.id);
+    if list.is_empty() {
         col = col.child(desc_text(tr("sp.sy.no_kb")));
     }
-    for i in 0..n {
-        col = col.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(z(16.))
-                .p(z(16.))
-                .rounded(z(8.))
-                .border_1()
-                .border_color(c(tok(idx::BORDER_SUBTLE)))
-                .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
-                .child(
-                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(tr("sp.sy.kb_action"))).child(desc_text(tr("sp.sy.kb_unassigned"))),
-                )
-                .child(
-                    div().flex_1().flex().flex_col().gap(z(8.)).child(title_text(tr("sp.sy.kb_keybind"))).child(desc_text(tr("sp.sy.kb_none"))),
-                )
-                .child(
-                    div()
-                        .id(eid(format!("kb-rm-{i}")))
-                        .cursor_pointer()
-                        .child(gpui::svg().path(crate::icons::path("close")).size(z(20.)).text_color(c(tok(idx::ICON_DEFAULT))))
-                        .on_click(cx.listener(move |a, _, _, cx| set_pick(a, "kb-count", Pick::Ui(0), n - 1, cx))),
-                ),
-        );
+    let n = list.len();
+    for (i, k) in list.into_iter().enumerate() {
+        col = col.child(kb_entry(app, k, cx));
+        if i + 1 < n {
+            col = col.child(div().my(z(8.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))));
+        }
     }
     col.into_any_element()
 }

@@ -32,7 +32,7 @@ pub fn label(keystroke: &str) -> String {
         .join(" + ")
 }
 
-fn stroke_string(k: &Keystroke) -> String {
+pub(crate) fn stroke_string(k: &Keystroke) -> String {
     let mut parts = Vec::new();
     if k.modifiers.control {
         parts.push("ctrl");
@@ -50,7 +50,7 @@ fn stroke_string(k: &Keystroke) -> String {
     parts.join("-")
 }
 
-fn base_key(binding: &str) -> &str {
+pub(crate) fn base_key(binding: &str) -> &str {
     binding.rsplit('-').next().unwrap_or(binding)
 }
 

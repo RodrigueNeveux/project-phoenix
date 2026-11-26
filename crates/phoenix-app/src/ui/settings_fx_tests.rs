@@ -198,3 +198,34 @@ fn message_edit_uses_the_rich_composer(cx: &mut TestAppContext) {
     h.act(|a, w, cx| a.cancel_edit(w, cx));
     assert!(h.act(|a, _, cx| a.chat.edit.is_none() && !crate::ui::pickers::is_open(cx)));
 }
+
+#[gpui::test]
+fn voice_switch_warning_follows_the_setting(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let (g, voice): (Id, Vec<Id>) = h.act(|a, _, _| {
+        a.guilds
+            .iter()
+            .map(|g| (g.id, a.guild_channels.get(&g.id).into_iter().flatten().copied().filter(|c| a.channels[c].kind == ChannelKind::Voice).collect::<Vec<_>>()))
+            .find(|(_, v)| v.len() >= 2)
+            .unwrap()
+    });
+    let (here, there) = (voice[0], voice[1]);
+    h.act(|a, _, _| a.voice_channel = Some(here));
+    assert!(h.act(|a, _, _| a.voice_switch_needs_confirm(there)));
+    assert!(!h.act(|a, _, _| a.voice_switch_needs_confirm(here)));
+    h.act(|a, _, cx| a.select_channel(there, cx));
+    assert!(crate::actions::with_modal(|m| matches!(m, Some(crate::ui::modals::Modal::Form(_)))));
+    assert_eq!(h.act(|a, _, _| a.voice_channel), Some(here));
+    crate::actions::close_modal();
+    h.act(|a, _, _| {
+        a.prefs.local.ui.insert("vo-switch-warn".into(), 0);
+    });
+    assert!(!h.act(|a, _, _| a.voice_switch_needs_confirm(there)));
+    h.act(|a, _, _| {
+        a.prefs.local.ui.remove("vo-switch-warn");
+        if let Some(gg) = a.guilds.iter_mut().find(|x| x.id == g) {
+            gg.afk_channel = Some(here);
+        }
+    });
+    assert!(!h.act(|a, _, _| a.voice_switch_needs_confirm(there)));
+}

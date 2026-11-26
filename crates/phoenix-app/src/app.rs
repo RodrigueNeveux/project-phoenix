@@ -618,12 +618,58 @@ impl PhoenixApp {
     pub fn select_channel(&mut self, id: Id, cx: &mut Context<Self>) {
         let Some(ch) = self.channels.get(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
-            self.join_voice(Some(id), cx);
-            self.open_channel_chat(id, cx);
-            crate::ui::call_view::show(id);
+            if self.voice_switch_needs_confirm(id) {
+                self.confirm_voice_switch(id, cx);
+                return;
+            }
+            self.enter_voice_channel(id, cx);
             return;
         }
         self.open_channel_chat(id, cx);
+    }
+
+    fn enter_voice_channel(&mut self, id: Id, cx: &mut Context<Self>) {
+        self.join_voice(Some(id), cx);
+        self.open_channel_chat(id, cx);
+        crate::ui::call_view::show(id);
+    }
+
+    pub fn voice_switch_needs_confirm(&self, target: Id) -> bool {
+        let Some(cur) = self.voice_channel else { return false };
+        if cur == target || !self.prefs.local.flag("vo-switch-warn", true) {
+            return false;
+        }
+        let guild = self.channels.get(&target).and_then(|c| c.guild);
+        let afk = guild.and_then(|g| self.guilds.iter().find(|x| x.id == g)).and_then(|g| g.afk_channel);
+        afk != Some(cur)
+    }
+
+    fn confirm_voice_switch(&mut self, id: Id, cx: &mut Context<Self>) {
+        let name = self.channels.get(&id).map(|c| c.name.to_string()).unwrap_or_default();
+        crate::actions::open_modal(
+            ui::modals::Modal::Form(ui::modals::Form {
+                title: crate::t!("vc.switch_title"),
+                subtitle: Some(crate::t!("vc.switch_body", channel = name)),
+                fields: Vec::new(),
+                choices: Vec::new(),
+                choice: None,
+                check: Some((crate::t!("vc.switch_dont_ask"), false)),
+                submit: crate::t!("vc.switch_confirm"),
+                danger: false,
+                on_submit: std::rc::Rc::new(move |a: &mut PhoenixApp, v: Vec<String>, _: Option<usize>, cx: &mut Context<PhoenixApp>| {
+                    if v.last().is_some_and(|x| x == "1") {
+                        ui::settings::update_local(a, |p| {
+                            p.ui.insert("vo-switch-warn".into(), 0);
+                        }, cx);
+                    }
+                    a.enter_voice_channel(id, cx);
+                }),
+                preview: None,
+                width: 480.,
+            }),
+            None,
+        );
+        cx.notify();
     }
 
     pub fn open_channel_chat(&mut self, id: Id, cx: &mut Context<Self>) {
@@ -971,7 +1017,9 @@ impl PhoenixApp {
                 self.rebuild_sidebar();
             }
             AppEvent::Voice(e) => {
-                if let crate::voice::VoiceUiEvent::Stream(crate::voice::StreamUiEvent::Preview { key, thumbnail }) = &e {
+                if let crate::voice::VoiceUiEvent::Stream(crate::voice::StreamUiEvent::Preview { key, thumbnail }) = &e
+                    && self.prefs.synced.flag("vo-stream-preview")
+                {
                     let fut = self.backend.upload_stream_preview(key.clone(), thumbnail.clone());
                     let key = key.clone();
                     std::thread::spawn(move || {
@@ -1527,8 +1575,15 @@ impl Render for PhoenixApp {
             .on_action(cx.listener(|this, _: &QuickSwitcher, w, cx| this.open_switcher(w, cx)))
             .on_action(cx.listener(Self::on_escape))
             .on_action(cx.listener(ui::settings::open_action))
-            .capture_key_down(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_down(this, ev, cx)))
-            .capture_key_up(cx.listener(|this, ev, _, cx| crate::voice::ptt::on_key_up(this, ev, cx)))
+            .capture_key_down(cx.listener(|this, ev, _, cx| {
+                if !crate::keybinds::on_key_down(this, ev, cx) {
+                    crate::voice::ptt::on_key_down(this, ev, cx)
+                }
+            }))
+            .capture_key_up(cx.listener(|this, ev, _, cx| {
+                crate::keybinds::on_key_up(this, ev, cx);
+                crate::voice::ptt::on_key_up(this, ev, cx)
+            }))
             .on_key_down(cx.listener(|this, ev: &gpui::KeyDownEvent, w, cx| {
                 if ui::focus_ring::on_key_down(ev, w, cx) {
                     cx.stop_propagation();

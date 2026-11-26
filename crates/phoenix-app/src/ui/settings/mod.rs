@@ -157,6 +157,7 @@ pub struct LocalPrefs {
     pub trusted_domains: std::collections::BTreeSet<String>,
     pub trusted_protocols: std::collections::BTreeSet<String>,
     pub collapsed_in_inbox: std::collections::BTreeSet<u64>,
+    pub keybinds: Vec<crate::keybinds::Keybind>,
 }
 
 impl Default for LocalPrefs {
@@ -175,6 +176,7 @@ impl Default for LocalPrefs {
             trusted_domains: Default::default(),
             trusted_protocols: Default::default(),
             collapsed_in_inbox: Default::default(),
+            keybinds: Vec::new(),
         }
     }
 }
@@ -227,6 +229,7 @@ impl LocalPrefs {
                 .and_then(Value::as_array)
                 .map(|a| a.iter().filter_map(|x| x.as_u64().or_else(|| x.as_str().and_then(|s| s.parse().ok()))).collect())
                 .unwrap_or_default(),
+            keybinds: v.get("keybinds").and_then(Value::as_array).map(|a| a.iter().filter_map(crate::keybinds::Keybind::from_json).collect()).unwrap_or_default(),
         }
     }
     pub fn to_json(&self) -> Value {
@@ -244,6 +247,7 @@ impl LocalPrefs {
             "trusted_domains": self.trusted_domains,
             "trusted_protocols": self.trusted_protocols,
             "collapsed_in_inbox": self.collapsed_in_inbox,
+            "keybinds": self.keybinds.iter().map(crate::keybinds::Keybind::to_json).collect::<Vec<_>>(),
         })
     }
     pub fn load() -> Self {

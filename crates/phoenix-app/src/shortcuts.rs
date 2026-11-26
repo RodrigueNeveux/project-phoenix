@@ -416,7 +416,7 @@ impl PhoenixApp {
         self.select_guild(target, cx);
     }
 
-    fn history_step(&mut self, back: bool, cx: &mut Context<Self>) {
+    pub(crate) fn history_step(&mut self, back: bool, cx: &mut Context<Self>) {
         let to = with(|s| if back { s.history.back() } else { s.history.forward() });
         if let Some(id) = to.filter(|id| self.channels.contains_key(id)) {
             self.goto_channel(id, cx);
