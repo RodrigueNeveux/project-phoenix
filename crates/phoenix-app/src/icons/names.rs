@@ -244,5 +244,6 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("settings-info", &["SettingsInfoIcon"]),
     ("media/replay", &["path:M12,5 L12,1 L7,6 L12,11"]),
     ("mod/robot", &["RobotIcon"]),
+    ("settings/nitro-wordmark", &["path:M98.8266537 8.64800265L97.5788372"]),
     ("mod/chevron-large-right", &["ChevronLargeRightIcon"]),
 ];

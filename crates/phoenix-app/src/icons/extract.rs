@@ -188,8 +188,13 @@ fn build(body: &str, second: bool) -> Option<String> {
     if shapes.is_empty() {
         return None;
     }
+    let evenodd = root.find("(\"g\",{").is_some_and(|g| {
+        let o = g + "(\"g\",".len();
+        close_brace(root.as_bytes(), o).is_some_and(|c| literal_attrs(&root[o + 1..c]).iter().any(|(k, v)| k == "fillRule" && v == "evenodd"))
+    });
+    let rule = if evenodd { r#" fill-rule="evenodd""# } else { "" };
     Some(format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view_box}" fill="black">{shapes}</svg>"#
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view_box}" fill="black"{rule}>{shapes}</svg>"#
     ))
 }
 
@@ -218,6 +223,13 @@ mod tests {
         let s = icon_svg(js, "path:M8 6.66659C").unwrap();
         assert!(s.contains(r#"viewBox="0 0 16 16""#) && s.contains(r#"d="M8 6.66659C9 6 8 5z""#) && s.contains(r#"fill-rule="evenodd" clip-rule="evenodd" d="M11 11.5z""#), "{s}");
     }
+    #[test]
+    fn keeps_the_even_odd_rule_of_a_wrapping_group() {
+        let js = r#"224016(e,t,n){n.d(t,{},{A:function(e){let{width:t=106,height:n=26}=e;return(0,i.jsxs)("svg",{width:t,height:n,viewBox:"0 0 106 26",children:[(0,i.jsx)("title",{children:"Nitro"}),(0,i.jsx)("g",{fill:"none",fillRule:"evenodd",children:(0,i.jsx)("path",{className:s,fill:a,d:"M9 8L7 1z"})})]})}})}"#;
+        let s = icon_svg(js, "path:M9 8L7").unwrap();
+        assert!(s.contains(r#"viewBox="0 0 106 26""#) && s.contains(r#"fill-rule="evenodd""#) && s.contains(r#"d="M9 8L7 1z""#), "{s}");
+    }
+
     #[test]
     fn finds_a_named_function_component_by_its_path() {
         let js = r#"var S=n(1);function T(e){let{width:t=16,height:n=16,color:r="currentColor",foreground:a,...s}=e;return(0,i.jsx)("svg",{...(0,g.A)(s),width:t,height:n,viewBox:"0 0 24 24",children:(0,i.jsx)("path",{className:a,fill:r,d:"M12,5 L12,1 L7,6 L12,11 L12,7 Z"})})}var N=n(2);"#;

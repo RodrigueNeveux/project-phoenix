@@ -100,7 +100,7 @@ pub fn refresh(dir: &Path) -> bool {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     entries.iter().for_each(|(k, _)| k.hash(&mut h));
     NAMES.hash(&mut h);
-    4u8.hash(&mut h);
+    5u8.hash(&mut h);
     let stamp = format!("{:016x}", h.finish());
     let stamp_file = dir.join(".build");
     if std::fs::read_to_string(&stamp_file).is_ok_and(|s| s.trim() == stamp) {
