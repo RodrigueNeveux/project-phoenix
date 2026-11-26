@@ -315,7 +315,7 @@ pub fn render(guild: Id, badge: u32, cx: &mut Context<PhoenixApp>) -> Option<Any
         gpui::deferred(
             gpui::anchored()
                 .position_mode(gpui::AnchoredPositionMode::Local)
-                .anchor(gpui::Corner::BottomLeft)
+                .anchor(gpui::Anchor::BottomLeft)
                 .position(gpui::point(z(32. - width / 2.), z(-8.)))
                 .child(pop),
         )
