@@ -13,7 +13,7 @@ FHS="$WORK/fhs/usr"
 install -Dm755 "$BIN" "$FHS/bin/discord-phoenix"
 install -Dm644 "$HERE/discord-phoenix.desktop" "$FHS/share/applications/discord-phoenix.desktop"
 if [ -f "$ICON" ]; then
-  install -Dm644 "$ICON" "$FHS/share/icons/hicolor/512x512/apps/discord-phoenix.png"
+  install -Dm644 "$ICON" "$FHS/share/icons/hicolor/512x512/apps/io.github.RoxasYTB.DiscordPhoenix.png"
 else
   echo "warning: $ICON missing; packages will have no icon" >&2
 fi
@@ -47,8 +47,8 @@ if [ "${SKIP_APPIMAGE:-0}" != 1 ]; then
   APPDIR="$WORK/AppDir"
   cp -r "$WORK/fhs" "$APPDIR"
   cp "$HERE/discord-phoenix.desktop" "$APPDIR/"
-  if [ -f "$ICON" ]; then cp "$ICON" "$APPDIR/discord-phoenix.png"; else
-    printf '\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x01\0\0\0\x01\x08\x06\0\0\0\x1f\x15\xc4\x89\0\0\0\rIDATx\x9cc\xf8\x0f\0\0\x01\x01\0\x05\x18\xd8N\0\0\0\0IEND\xaeB`\x82' > "$APPDIR/discord-phoenix.png"
+  if [ -f "$ICON" ]; then cp "$ICON" "$APPDIR/io.github.RoxasYTB.DiscordPhoenix.png"; else
+    printf '\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x01\0\0\0\x01\x08\x06\0\0\0\x1f\x15\xc4\x89\0\0\0\rIDATx\x9cc\xf8\x0f\0\0\x01\x01\0\x05\x18\xd8N\0\0\0\0IEND\xaeB`\x82' > "$APPDIR/io.github.RoxasYTB.DiscordPhoenix.png"
   fi
   cat > "$APPDIR/AppRun" <<'RUN'
 #!/bin/sh

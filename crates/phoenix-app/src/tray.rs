@@ -143,58 +143,21 @@ fn load_png(path: &Path) -> Option<image::RgbaImage> {
     Some(image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).ok()?.to_rgba8())
 }
 
-fn app_rgba() -> Option<image::RgbaImage> {
-    image::load_from_memory_with_format(crate::assets::APP_ICON_PNG, image::ImageFormat::Png).ok().map(|i| i.to_rgba8())
-}
-
-const TRAY_SIZES: [u32; 3] = [24, 32, 64];
-const UNREAD_RED: [f32; 3] = [240., 71., 71.];
-
-pub fn with_unread_dot(icon: &image::RgbaImage) -> image::RgbaImage {
-    let mut out = icon.clone();
-    let s = out.width() as f32;
-    let r = s * 0.19;
-    let (cx, cy, gap) = (s - r, r, s * 0.06);
-    for (x, y, p) in out.enumerate_pixels_mut() {
-        let d = ((x as f32 + 0.5 - cx).powi(2) + (y as f32 + 0.5 - cy).powi(2)).sqrt();
-        let hole = (r + gap - d + 0.5).clamp(0., 1.);
-        let dot = (r - d + 0.5).clamp(0., 1.);
-        let below = p[3] as f32 / 255. * (1. - hole);
-        let a = dot + below * (1. - dot);
-        if a <= 0. {
-            *p = image::Rgba([0, 0, 0, 0]);
-            continue;
-        }
-        for c in 0..3 {
-            p[c] = ((UNREAD_RED[c] * dot + p[c] as f32 * below * (1. - dot)) / a).round() as u8;
-        }
-        p[3] = (a * 255.).round() as u8;
-    }
-    out
-}
-
-fn app_pixmap(unread: bool) -> Pixmap {
-    let Some(rgba) = app_rgba() else { return Vec::new() };
-    TRAY_SIZES
-        .iter()
-        .map(|&s| {
-            let icon = image::imageops::resize(&rgba, s, s, image::imageops::FilterType::Lanczos3);
-            argb(&if unread { with_unread_dot(&icon) } else { icon })
-        })
-        .collect()
+fn app_pixmap() -> Pixmap {
+    let Ok(img) = image::load_from_memory_with_format(crate::assets::APP_ICON_PNG, image::ImageFormat::Png) else {
+        return Vec::new();
+    };
+    let rgba = img.to_rgba8();
+    [32u32, 64].iter().map(|&s| argb(&image::imageops::resize(&rgba, s, s, image::imageops::FilterType::Lanczos3))).collect()
 }
 
 fn icons() -> HashMap<&'static str, Pixmap> {
-    let fallback = app_pixmap(false);
+    let fallback = app_pixmap();
     let dir = client_tray_dirs().into_iter().next();
     ICON_NAMES
         .iter()
         .map(|&n| {
-            let px = match n {
-                "tray" => fallback.clone(),
-                "tray-unread" => app_pixmap(true),
-                _ => dir.as_ref().and_then(|d| load_png(&d.join(format!("{n}.png")))).map(|i| vec![argb(&i)]).unwrap_or_else(|| fallback.clone()),
-            };
+            let px = dir.as_ref().and_then(|d| load_png(&d.join(format!("{n}.png")))).map(|i| vec![argb(&i)]).unwrap_or_else(|| fallback.clone());
             (n, px)
         })
         .collect()
@@ -553,14 +516,6 @@ mod tests {
         assert_eq!(idle, vec![ID_OPEN, ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
         let call = menu_ids(&TrayState { connected: true, ..Default::default() });
         assert_eq!(call, vec![ID_OPEN, ID_SEP_VOICE, ID_MUTE, ID_DEAFEN, ID_VOICE_SETTINGS, ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
-    }
-
-    #[test]
-    fn tray_unread_dot_sits_in_the_top_right_corner() {
-        let icon = image::RgbaImage::from_pixel(24, 24, image::Rgba([10, 20, 30, 255]));
-        let out = with_unread_dot(&icon);
-        assert_eq!(out.get_pixel(20, 3)[0], 240);
-        assert_eq!(out.get_pixel(3, 20), &image::Rgba([10, 20, 30, 255]));
     }
 
     #[test]
