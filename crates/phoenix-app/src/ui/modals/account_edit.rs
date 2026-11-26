@@ -250,7 +250,7 @@ fn helper(t: SharedString) -> gpui::Div {
 }
 
 fn input(i: &Entity<InputState>, password: bool, leading: Option<&'static str>) -> gpui::Div {
-    let field = Input::new(i).appearance(false).bordered(false);
+    let field = Input::new(i).appearance(false).bordered(false).px(z(0.)).text_size(z(16.)).line_height(z(20.));
     let field = if password { field.mask_toggle() } else { field };
     div()
         .h(z(40.))
