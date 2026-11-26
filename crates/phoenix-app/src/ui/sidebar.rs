@@ -1131,6 +1131,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             None => icon(i, 16., col).group_hover("ch-action", hov).id("g").group_active("ch-action", act).into_any_element(),
         })
     };
+    let vc_status = (ch.kind == ChannelKind::Voice).then(|| crate::voice::start_time::status(id.0)).flatten();
+    let can_set_status = connected && app.backend.channel_permissions(id).is_none_or(|p| p & (1 << 48) != 0);
+    let status_line = vc_status.is_some() || can_set_status;
     let timer = (matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) && !ch.voice_users.is_empty())
         .then(|| crate::voice::start_time::get(id.0))
         .flatten()
@@ -1226,7 +1229,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             div()
                 .id(("chrow", id.0))
                 .group(group)
-                .h(z(if is_dm { 48. } else if connected { space::channels_name_lh() + 24. } else { space::channels_name_lh() + 8. }))
+                .h(z(if is_dm { 48. } else if status_line { space::channels_name_lh() + 24. } else { space::channels_name_lh() + 8. }))
                 .pl(z(10.))
                 .pr(z(if is_dm { 0. } else { 10. }))
                 .rounded(z(ROW_RADIUS))
@@ -1288,9 +1291,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 )
                 .child(
                     if guild_dim {
-                        div().flex_none().opacity(0.5).child(top_line(lead, connected)).into_any_element()
+                        div().flex_none().opacity(0.5).child(top_line(lead, status_line)).into_any_element()
                     } else {
-                        top_line(lead, connected)
+                        top_line(lead, status_line)
                     },
                 )
                 .child(
@@ -1335,7 +1338,9 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                         }),
                                 ),
                         )
-                        .when(connected, |d| {
+                        .when(status_line, |d| {
+                            let status_entity = entity.clone();
+                            let text = vc_status.clone();
                             d.child(
                                 div()
                                     .id(("vc-status", id.0))
@@ -1343,21 +1348,37 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                     .flex()
                                     .items_center()
                                     .min_w_0()
+                                    .overflow_hidden()
                                     .text_size(z(12.))
                                     .line_height(z(16.))
                                     .font_weight(FontWeight::MEDIUM)
                                     .text_color(t(idx::CHANNELS_DEFAULT))
-                                    .hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER)))
-                                    .child(div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::t!("voice.set_status")))
-                                    .child(
-                                        gpui::svg()
-                                            .path(crate::icons::path("pen"))
-                                            .ml(z(4.))
-                                            .size(z(12.))
-                                            .flex_none()
-                                            .text_color(t(idx::CHANNELS_DEFAULT))
-                                            .group_hover("vc-status", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
-                                    ),
+                                    .when(can_set_status, |d| {
+                                        d.hover(|s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))).on_click(move |_, _, cx| {
+                                            cx.stop_propagation();
+                                            let current = crate::voice::start_time::status(id.0).unwrap_or_default();
+                                            let fut = status_entity.read(cx).backend.guarded_write(
+                                                crate::actions::guard::GuardedWrite::voice_channel_status(id.0, &current),
+                                            );
+                                            cx.background_executor().spawn(async move { drop(fut.await) }).detach();
+                                        })
+                                    })
+                                    .map(|d| match text {
+                                        Some(st) => d.child(
+                                            div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::ui::emoji_text::markup_label(st.into(), 12.)),
+                                        ),
+                                        None => d
+                                            .child(div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::t!("voice.set_status")))
+                                            .child(
+                                                gpui::svg()
+                                                    .path(crate::icons::path("pen"))
+                                                    .ml(z(4.))
+                                                    .size(z(12.))
+                                                    .flex_none()
+                                                    .text_color(t(idx::CHANNELS_DEFAULT))
+                                                    .group_hover("vc-status", |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
+                                            ),
+                                    }),
                             )
                         })
                         .when_some(dm_sub, |d, s| d.child(s))
@@ -1372,8 +1393,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         }),
                 )
                 .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
-                .when(ch.mentions == 0, |d| d.children(invite_hover.map(|h| top_line(h, connected))))
-                .children(timer.map(|t| top_line(t, connected)))
+                .when(ch.mentions == 0, |d| d.children(invite_hover.map(|h| top_line(h, status_line))))
+                .children(timer.map(|t| top_line(t, status_line)))
                 .children(limit_pill)
                 .children(close)
                 .map(|d| crate::ui::focus_ring::ring_inset_edges(d, crate::ui::states::key(("chrow", id.0)), ROW_RADIUS, 0., 2., 4., 2.)),

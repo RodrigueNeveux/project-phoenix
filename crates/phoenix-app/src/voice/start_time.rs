@@ -7,6 +7,7 @@ use serde_json::Value;
 #[derive(Default)]
 struct Store {
     start: HashMap<u64, i64>,
+    status: HashMap<u64, String>,
     requested: HashSet<u64>,
 }
 
@@ -25,6 +26,13 @@ fn id(v: &Value) -> Option<u64> {
     v.get("id")?.as_str()?.parse().ok()
 }
 
+fn set_status(s: &mut Store, channel: u64, v: &Value) {
+    match v.get("status").and_then(Value::as_str).filter(|t| !t.is_empty()) {
+        Some(t) => s.status.insert(channel, t.to_owned()),
+        None => s.status.remove(&channel),
+    };
+}
+
 fn ts(v: &Value) -> Option<i64> {
     v.get("voice_start_time").and_then(Value::as_i64)
 }
@@ -35,12 +43,18 @@ pub fn apply(name: &str, data: &Value) -> bool {
         "CHANNEL_INFO" => {
             for c in data.get("channels").and_then(Value::as_array).into_iter().flatten() {
                 if let Some(i) = id(c) {
+                    set_status(&mut s, i, c);
                     match ts(c) {
                         Some(t) => s.start.insert(i, t),
                         None => s.start.remove(&i),
                     };
                 }
             }
+            true
+        }
+        "VOICE_CHANNEL_STATUS_UPDATE" => {
+            let Some(i) = id(data) else { return false };
+            set_status(&mut s, i, data);
             true
         }
         "VOICE_CHANNEL_START_TIME_UPDATE" => {
@@ -64,6 +78,19 @@ pub fn on_gateway(ev: &GatewayEvent) -> bool {
 
 pub fn get(channel: u64) -> Option<i64> {
     STORE.lock().ok()?.start.get(&channel).copied()
+}
+
+pub fn status(channel: u64) -> Option<String> {
+    STORE.lock().ok()?.status.get(&channel).cloned()
+}
+
+pub fn set_channel_status(channel: u64, status: Option<&str>) {
+    if let Ok(mut s) = STORE.lock() {
+        match status.filter(|t| !t.is_empty()) {
+            Some(t) => s.status.insert(channel, t.to_owned()),
+            None => s.status.remove(&channel),
+        };
+    }
 }
 
 pub fn ticking() -> bool {
@@ -107,5 +134,16 @@ mod tests {
         assert_eq!(get(77), None);
         assert!(request(5).is_some());
         assert!(request(5).is_none());
+    }
+
+    #[test]
+    fn keeps_voice_channel_statuses() {
+        apply("CHANNEL_INFO", &serde_json::json!({"guild_id":"1","channels":[{"id":"78","status":"on code <:ferris:42> 🦀"},{"id":"79","status":""}]}));
+        assert_eq!(status(78).as_deref(), Some("on code <:ferris:42> 🦀"));
+        assert_eq!(status(79), None);
+        apply("VOICE_CHANNEL_STATUS_UPDATE", &serde_json::json!({"id":"78","guild_id":"1","status":null}));
+        assert_eq!(status(78), None);
+        apply("VOICE_CHANNEL_STATUS_UPDATE", &serde_json::json!({"id":"79","guild_id":"1","status":"pause"}));
+        assert_eq!(status(79).as_deref(), Some("pause"));
     }
 }

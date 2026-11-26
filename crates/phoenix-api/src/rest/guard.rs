@@ -182,6 +182,10 @@ impl GuardedWrite {
         write(Method::POST, format!("/channels/{channel}/messages/{message}/crosspost"), None)
     }
 
+    pub fn voice_channel_status(channel: u64, status: &str) -> Self {
+        write(Method::PUT, format!("/channels/{channel}/voice-status"), Some(json!({ "status": status })))
+    }
+
     pub fn change_call_region(channel: u64, region: &str) -> Self {
         write(Method::PATCH, format!("/channels/{channel}/call"), Some(json!({ "region": region })))
     }
@@ -349,6 +353,7 @@ mod tests {
         vec![
             GuardedWrite::change_password("old", "new"),
             GuardedWrite::batch_channel_update(5, json!([{ "id": "6", "position": 0 }])),
+            GuardedWrite::voice_channel_status(7, "status"),
             GuardedWrite::set_guild_identity(5, true),
             GuardedWrite::remove_user_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, 3),
             GuardedWrite::burst_reaction(1, 2, &crate::models::ReactionEmoji { id: None, name: Some("👍".into()), animated: false }, true),

@@ -23,6 +23,7 @@ fn main() -> anyhow::Result<()> {
         _ => None,
     });
     let caret = rest.iter().find_map(|a| a.strip_prefix("caret=").map(str::to_owned));
+    let vc_status = rest.iter().find_map(|a| a.strip_prefix("status=").map(str::to_owned));
     let count = rest.iter().find_map(|a| a.strip_prefix("n=").and_then(|v| v.parse::<u64>().ok()));
     let win_size = rest
         .iter()
@@ -113,6 +114,7 @@ fn main() -> anyhow::Result<()> {
                 {
                     ch.voice_users = std::iter::once(me).chain((3..).map(Id).take(n.saturating_sub(1) as usize)).collect();
                 }
+                phoenix_app::voice::start_time::set_channel_status(lounge.0, vc_status.as_deref());
                 app.voice_channel = Some(lounge);
                 app.open_channel_chat(lounge, cx);
                 phoenix_app::ui::call_view::show(lounge);

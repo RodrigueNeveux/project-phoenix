@@ -246,7 +246,8 @@ mod tests {
     fn tile_look_follows_the_client_breakpoints() {
         let big = tile_look(596.);
         assert_eq!((big.avatar, big.show_name, big.compact, big.inset, big.name_size), (80., true, false, 12., (16., 20.)));
-        let mid = tile_look(200.);
+        let mid = tile_look(190.);
+        assert!(!tile_look(200.).small && tile_look(200.).compact);
         assert!(mid.compact && mid.small && mid.show_name && mid.inset == 4.);
         let tiny = tile_look(120.);
         assert_eq!((tiny.avatar, tiny.show_name), (40., false));

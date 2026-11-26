@@ -289,6 +289,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .on_mouse_move(cx.listener(|_, _, _, cx| woke(cx)))
         .child(tiles_el)
         .child(top_bar(app, crate::ui::dm_profile_panel::channel_name(app, ch), cx))
+        .children(header_status(ch_id))
         .child(div().h(z(8.)))
         .child(div().flex_1().min_h_0())
         .child(bottom_controls(app, collapse(gw), cx))
@@ -708,6 +709,24 @@ fn stream_menu(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElem
         w.toggle_fullscreen();
     }));
     Some(crate::ui::context_menu::render(pos, items, dismiss))
+}
+
+fn header_status(channel: Id) -> Option<gpui::Div> {
+    let status = crate::voice::start_time::status(channel.0)?;
+    Some(
+        div().flex_none().pl(z(24. + 28.)).pr(z(24.)).flex().child(
+            div()
+                .min_w_0()
+                .max_w(gpui::relative(0.75))
+                .overflow_hidden()
+                .text_ellipsis()
+                .whitespace_nowrap()
+                .text_size(z(12.))
+                .line_height(z(16.))
+                .text_color(t(idx::CHANNEL_ICON))
+                .child(crate::ui::emoji_text::markup_label(status.into(), 12.)),
+        ),
+    )
 }
 
 fn grid_layer(app: &PhoenixApp, tiles: &[Tile], gw: f32, gh: f32, fade: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
