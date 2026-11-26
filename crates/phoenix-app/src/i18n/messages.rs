@@ -11,6 +11,7 @@ pub struct Mapping {
     pub hash: &'static str,
     pub upper: bool,
     pub flat: bool,
+    pub bold: bool,
     pub args: Vec<(&'static str, &'static str)>,
 }
 
@@ -33,17 +34,20 @@ fn parse_mappings(src: &'static str) -> HashMap<&'static str, Mapping> {
         let Some(hash) = parts.next() else { continue };
         let mut upper = false;
         let mut flat = false;
+        let mut bold = false;
         let mut args = Vec::new();
         for tok in parts {
             if tok == "^upper" {
                 upper = true;
             } else if tok == "^flat" {
                 flat = true;
+            } else if tok == "^bold" {
+                bold = true;
             } else if let Some((from, to)) = tok.split_once('=') {
                 args.push((from, to));
             }
         }
-        out.insert(k.trim(), Mapping { hash, upper, flat, args });
+        out.insert(k.trim(), Mapping { hash, upper, flat, bold, args });
     }
     out
 }
@@ -57,7 +61,7 @@ pub fn render(locale: &str, ast: &Value, args: &[(&str, &str)], mapping: &Mappin
         })
         .collect();
     let mut out = String::new();
-    eval_node(locale, ast, &mapped, None, &mut out);
+    eval_node(locale, ast, &mapped, None, mapping.bold, &mut out);
     if mapping.flat {
         out = out.replace('\n', " ");
     }
@@ -68,7 +72,7 @@ pub fn render(locale: &str, ast: &Value, args: &[(&str, &str)], mapping: &Mappin
     }
 }
 
-fn eval_node(locale: &str, node: &Value, args: &[(&str, &str)], pound: Option<&str>, out: &mut String) {
+fn eval_node(locale: &str, node: &Value, args: &[(&str, &str)], pound: Option<&str>, bold: bool, out: &mut String) {
     match node {
         Value::String(s) => out.push_str(s),
         Value::Array(items) => {
@@ -76,10 +80,10 @@ fn eval_node(locale: &str, node: &Value, args: &[(&str, &str)], pound: Option<&s
                 return;
             }
             if let Some(kind) = items[0].as_u64() {
-                eval_typed(locale, kind, items, args, pound, out);
+                eval_typed(locale, kind, items, args, pound, bold, out);
             } else {
                 for item in items {
-                    eval_node(locale, item, args, pound, out);
+                    eval_node(locale, item, args, pound, bold, out);
                 }
             }
         }
@@ -99,7 +103,7 @@ fn ungrouped(raw: &str) -> std::borrow::Cow<'_, str> {
     }
 }
 
-fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], pound: Option<&str>, out: &mut String) {
+fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], pound: Option<&str>, bold: bool, out: &mut String) {
     match kind {
         1 => {
             if let Some(name) = items.get(1).and_then(Value::as_str)
@@ -133,7 +137,7 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
             let Some(cases) = items.get(2).and_then(Value::as_object) else { return };
             let val = find_arg(args, name).unwrap_or("");
             if let Some(branch) = cases.get(val).or_else(|| cases.get("other")) {
-                eval_node(locale, branch, args, pound, out);
+                eval_node(locale, branch, args, pound, bold, out);
             }
         }
         6 => {
@@ -150,7 +154,7 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
                 intl::decimal(locale, n - offset, 2)
             };
             if let Some(branch) = cases.get(&exact).or_else(|| cases.get(cat)).or_else(|| cases.get("other")) {
-                eval_node(locale, branch, args, Some(&formatted), out);
+                eval_node(locale, branch, args, Some(&formatted), bold, out);
             }
         }
         7 => {
@@ -162,8 +166,15 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
             if items.get(1).and_then(Value::as_str) == Some("$p") && !out.is_empty() && !out.ends_with('\n') {
                 out.push('\n');
             }
+            let strong = bold && items.get(1).and_then(Value::as_str) == Some("$b");
+            if strong {
+                out.push_str("**");
+            }
             if let Some(children) = items.get(2) {
-                eval_node(locale, children, args, pound, out);
+                eval_node(locale, children, args, pound, bold, out);
+            }
+            if strong {
+                out.push_str("**");
             }
         }
         _ => {}
@@ -184,7 +195,7 @@ mod tests {
                 "other": [[7], " items"]
             }, 0, "cardinal"]
         ]);
-        let m = Mapping { hash: "x", upper: false, flat: false, args: vec![("n", "count")] };
+        let m = Mapping { hash: "x", upper: false, flat: false, bold: false, args: vec![("n", "count")] };
         assert_eq!(render("en-US", &ast, &[("n", "0")], &m), "No items");
         assert_eq!(render("en-US", &ast, &[("n", "1")], &m), "1 item");
         assert_eq!(render("en-US", &ast, &[("n", "1234")], &m), "1,234 items");
@@ -193,8 +204,10 @@ mod tests {
         assert_eq!(render("en-US", &ast, &[("n", "1 234")], &m), "1,234 items");
 
         let hook = json!([[8, "$b", ["Hello ", [1, "name"]]]]);
-        let m2 = Mapping { hash: "y", upper: true, flat: false, args: vec![] };
+        let m2 = Mapping { hash: "y", upper: true, flat: false, bold: false, args: vec![] };
         assert_eq!(render("en-US", &hook, &[("name", "Bob")], &m2), "HELLO BOB");
+        let m3 = Mapping { hash: "z", upper: false, flat: false, bold: true, args: vec![] };
+        assert_eq!(render("en-US", &hook, &[("name", "Bob")], &m3), "**Hello Bob**");
     }
 
     #[test]
@@ -203,7 +216,7 @@ mod tests {
             [8, "$p", ["Les serveurs qui obtiennent plus de 10 nouveaux membres par semaine. Au moins une semaine."]],
             [8, "$p", ["Observe ton serveur du point de vue d'un ", [8, "$b", ["nouveau"]], " membre."]]
         ]);
-        let m = Mapping { hash: "kMBzFj", upper: false, flat: false, args: vec![] };
+        let m = Mapping { hash: "kMBzFj", upper: false, flat: false, bold: false, args: vec![] };
         assert_eq!(
             render("fr", &ast, &[], &m),
             "Les serveurs qui obtiennent plus de 10 nouveaux membres par semaine. Au moins une semaine.\nObserve ton serveur du point de vue d'un nouveau membre."
@@ -217,9 +230,9 @@ mod tests {
     #[test]
     fn line_breaks_follow_the_client_white_space() {
         let ast = json!(["Déplace automatiquement les membres\net les rend muets."]);
-        let pre = Mapping { hash: "a", upper: false, flat: false, args: vec![] };
+        let pre = Mapping { hash: "a", upper: false, flat: false, bold: false, args: vec![] };
         assert_eq!(render("fr", &ast, &[], &pre), "Déplace automatiquement les membres\net les rend muets.");
-        let normal = Mapping { hash: "a", upper: false, flat: true, args: vec![] };
+        let normal = Mapping { hash: "a", upper: false, flat: true, bold: false, args: vec![] };
         assert_eq!(render("fr", &ast, &[], &normal), "Déplace automatiquement les membres et les rend muets.");
     }
 

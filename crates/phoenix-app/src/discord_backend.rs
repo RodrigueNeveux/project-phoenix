@@ -1210,6 +1210,9 @@ impl Backend for DiscordBackend {
     fn webauthn_credentials(&self) -> BoxFuture<serde_json::Value> {
         self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/users/@me/mfa/webauthn/credentials", None).await.map_err(api_err) })
     }
+    fn teams(&self) -> BoxFuture<serde_json::Value> {
+        self.with_session(move |_, s| async move { s.rest.request_json(reqwest::Method::GET, "/teams?include_payout_account_status=true", None).await.map_err(api_err) })
+    }
     fn lurk_guild(&self, guild: Id) -> BoxFuture<()> {
         self.with_session(move |_, s| async move {
             let path = crate::ui::discovery::lurk_path(guild.0, &crate::commands::session_id());

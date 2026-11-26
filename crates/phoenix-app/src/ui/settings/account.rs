@@ -178,30 +178,48 @@ pub fn removal_flow(owns_server: bool, delete: bool) -> Option<crate::ui::modals
     (!owns_server).then_some(Flow::Confirm(if delete { Confirm::DeleteAccount } else { Confirm::DisableAccount }))
 }
 
+pub fn owns_team(teams: &serde_json::Value, me: u64) -> bool {
+    teams.as_array().is_some_and(|a| a.iter().any(|t| t.get("owner_user_id").and_then(serde_json::Value::as_str).and_then(|s| s.parse::<u64>().ok()) == Some(me)))
+}
+
+fn removal_alert(title: SharedString, body: SharedString, window: &mut gpui::Window) {
+    crate::actions::open_modal(
+        crate::ui::modals::Modal::Form(crate::ui::modals::Form {
+            title,
+            subtitle: Some(body),
+            fields: Vec::new(),
+            choices: Vec::new(),
+            choice: None,
+            check: None,
+            submit: crate::t!("common.okay"),
+            danger: false,
+            on_submit: std::rc::Rc::new(|_, _, _, _| {}),
+            preview: None,
+            width: 440.,
+        }),
+        Some(window),
+    );
+}
+
 fn start_removal(a: &mut PhoenixApp, delete: bool, window: &mut gpui::Window, cx: &mut Cx) {
-    let owns = a.guilds.iter().any(|g| g.owner == Some(a.me.id));
-    match removal_flow(owns, delete) {
-        Some(flow) => a.open_account_edit(flow, window, cx),
-        None => {
-            crate::actions::open_modal(
-                crate::ui::modals::Modal::Form(crate::ui::modals::Form {
-                    title: crate::t!("acct.owns_servers_title"),
-                    subtitle: Some(crate::t!("acct.owns_servers_body")),
-                    fields: Vec::new(),
-                    choices: Vec::new(),
-                    choice: None,
-                    check: None,
-                    submit: crate::t!("common.okay"),
-                    danger: false,
-                    on_submit: std::rc::Rc::new(|_, _, _, _| {}),
-                    preview: None,
-                    width: 440.,
-                }),
-                Some(window),
-            );
+    let me = a.me.id;
+    let fut = a.backend.teams();
+    cx.spawn_in(window, async move |this, cx| {
+        let teams = fut.await.unwrap_or(serde_json::Value::Null);
+        let _ = this.update_in(cx, |a, window, cx| {
+            if owns_team(&teams, me.0) {
+                removal_alert(crate::t!("acct.owns_teams_title"), crate::t!("acct.owns_teams_body"), window);
+            } else {
+                let owns = a.guilds.iter().any(|g| g.owner == Some(me));
+                match removal_flow(owns, delete) {
+                    Some(flow) => a.open_account_edit(flow, window, cx),
+                    None => removal_alert(crate::t!("acct.owns_servers_title"), crate::t!("acct.owns_servers_body"), window),
+                }
+            }
             cx.notify();
-        }
-    }
+        });
+    })
+    .detach();
 }
 
 pub(super) fn removal_rows(cx: &mut Cx) -> Vec<AnyElement> {
@@ -295,6 +313,10 @@ mod tests {
         assert_eq!(super::removal_flow(true, true), None);
         assert_eq!(super::removal_flow(false, false), Some(Flow::Confirm(Confirm::DisableAccount)));
         assert_eq!(super::removal_flow(false, true), Some(Flow::Confirm(Confirm::DeleteAccount)));
+        let teams = serde_json::json!([{ "id": "1", "owner_user_id": "7" }, { "id": "2", "owner_user_id": "8" }]);
+        assert!(super::owns_team(&teams, 8));
+        assert!(!super::owns_team(&teams, 9));
+        assert!(!super::owns_team(&serde_json::Value::Null, 7));
     }
 
     #[test]

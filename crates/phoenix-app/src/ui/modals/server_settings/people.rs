@@ -600,13 +600,24 @@ pub fn prunable_roles(roles: &[Value], guild: Id, mine: &[u64], owner: bool) -> 
 fn prune_text(p: &Prune, count: Option<u64>) -> SharedString {
     let days = p.days.to_string();
     let members = count.map_or_else(|| "-1".to_owned(), |n| n.to_string());
+    let one = |n: u64| crate::i18n::intl::plural(crate::i18n::locale(), n as f64) == "one" || (n == 0 && crate::i18n::locale().starts_with("fr"));
+    let mp = match count {
+        Some(n) => crate::i18n::t(if one(n) { "gs.prune.members_one" } else { "gs.prune.members_other" }, &[("n", &crate::i18n::number(n as i64))]),
+        None => crate::t!("gs.prune.members_loading"),
+    };
+    let dp = crate::i18n::t(if one(u64::from(p.days)) { "gs.prune.days_one" } else { "gs.prune.days_other" }, &[("n", &days)]);
     let key = match (p.roles.is_empty(), count.is_some()) {
         (true, true) => "gs.prune.count",
         (true, false) => "gs.prune.count_loading",
         (false, true) => "gs.prune.count_roles",
         (false, false) => "gs.prune.count_roles_loading",
     };
-    crate::i18n::t(key, &[("members", &members), ("days", &days)])
+    crate::i18n::t(key, &[("members", &members), ("days", &days), ("mp", &mp), ("dp", &dp)])
+}
+
+fn prune_body(p: &Prune, count: Option<u64>) -> gpui::StyledText {
+    let (plain, ranges) = crate::ui::modals::strong_ranges(&prune_text(p, count));
+    gpui::StyledText::new(plain).with_highlights(ranges.into_iter().map(|r| (r, gpui::HighlightStyle { font_weight: Some(FontWeight::SEMIBOLD), ..Default::default() })))
 }
 
 fn prune_option(id: (&'static str, usize), label: SharedString, on: bool, multi: bool) -> gpui::Stateful<gpui::Div> {
@@ -733,7 +744,7 @@ pub fn prune_modal(app: &PhoenixApp, s: &State, p: &Prune, cx: &mut Cx) -> AnyEl
         .gap(z(16.))
         .child(div().flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.prune.last_seen"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG)).child(days_box))
         .child(div().flex().flex_col().gap(z(8.)).child(text(crate::t!("gs.prune.roles"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG)).child(roles_box))
-        .child(text(prune_text(p, count), 14., 18., FontWeight::NORMAL, idx::TEXT_DEFAULT).whitespace_normal());
+        .child(div().text_size(z(14.)).line_height(z(18.)).font_weight(FontWeight::NORMAL).text_color(c(tok(idx::TEXT_DEFAULT))).whitespace_normal().child(prune_body(p, count)));
     let c2 = close.clone();
     let c3 = close.clone();
     let footer = div()
