@@ -792,7 +792,21 @@ two sides were not on the same messages: the user scrolled), composer 2.2, membe
 |---|---|---|---|
 | Channel list | « Nouveaux messages non lus » pill missing when the unread channel is the first row, cut by the top edge | `isChannelVisible` (chunk `6b05ca0762af596a.js`): for the top bar a row is visible only when its top is below `scrollTop`, for the bottom bar only when its bottom is above `scrollTop + offsetHeight`; `isUnreadVisible` uses `isItemVisible(…, true)` (fully inside) | `channel_unread_bar.rs` `place_of`: a partly hidden row counts as above or below. Test `partly_hidden_rows_count_as_hidden_like_the_client` |
 | Voice panel | panel 4 px shorter than the client: connection row 32 instead of 40, ping and buttons not offset | experiment `2026-09-a11y-chassis-target-size` (module 657043, buckets 1 and 2 set `.enlarge-target-size` on `<html>`); CSS `587669.09c9393812bb8ea9.css` (`rtcConnectionStatus` height auto, label 24, `labelWrapper` mt −1 pb 1, `largeClickablePing` mt 6), `593586.d3f89ba5001fe235.css` (`container_9U6LUN` gap 10, padding-top X − 2, `connection` / `inner` height auto, `voiceButtonsContainer` pt 4). Live boxes: container 104.8 tall, ping 32 at +6, label 24 then subtext 16, buttons row at +58, separator at +104.8 | `voice_panel.rs` `panel_box` / `enlarge_targets` (bucket ≥ 1 from `GET /experiments`). Tests `enlarged_voice_panel_lands_on_the_client_boxes`, `target_size_experiment_turns_on_for_both_enabled_buckets` |
+| Voice panel | three bars in the ping square; « Voix connectée » semibold, subtext regular | live SVG in `largePing_4LJE6I`: `ConnectionFineIcon` (3 arcs). Map in chunk `web.b63d846b329d6470.js`: FINE → `ConnectionFineIcon`, AVERAGE → `ConnectionAverageIcon`, BAD → `ConnectionBadIcon`, UNKNOWN → `ConnectionUnknownIcon`, default colours `ICON_FEEDBACK_POSITIVE` / `_WARNING` / `_CRITICAL` / `INTERACTIVE_ICON_DEFAULT`; 18 px (`largePing` 18 + padding 7). Computed styles: label `text_Ybsmt1` 16/20 weight 500, padding-top 4 (enlarged); subtext 12 px weight 500 | `voice_panel.rs` `connection_icon` (icons extracted at runtime, `names.rs`), label and subtext `FontWeight::MEDIUM`, label padding 4 when enlarged. Test `connection_icon_follows_the_client_quality_map` |
 
 The other `.enlarge-target-size` rules (category `addButton_yOdhm_` 24 px, DM header buttons, DM row close button, channel row
 `iconItem_Wx6SnQ` padding 4, `channelInfo` pe 4, `children_TNyK-N` margins) were already drawn at the enlarged size from the dumps of this
 account: same positions on both sides. They are not switched off when the experiment is off.
+
+### Open (not fixed here)
+
+- Rail: the client showed one DM with an unread mention under Home (badge 1); Phoenix's render 30 s later did not. The user opened that DM
+  a few minutes later, so the state is gone and the cause (read state `mention_count` or the DM list) could not be traced.
+- User panel: the client avatar shows Do Not Disturb, Phoenix's render showed Online, while Phoenix's member list had the right status for
+  other users. Own status comes from `self_status` (settings proto field 11, then READY `sessions` "all") and `SESSIONS_REPLACE`; not
+  reproduced offline.
+- Voice panel: the soundboard button's « nouveaux sons » dot is on in the client and was not drawn by Phoenix in this render
+  (`has_new_sounds` needs the experiment bucket and `sounds_seen` for the guild); not traced.
+- The three window sizes were rendered without the client's live state (sidebar width, folders, voice) when the CDP pause was on, so their
+  fixed region scores (rail + channels 20–22 %, user panel 12–16 %, member list 12–16 %) mostly measure that, not a layout gap. At the client size
+  with the live state the same regions score 11.7 / 9.3 / 8.5 %.
