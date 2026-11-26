@@ -302,7 +302,7 @@ fn card(app: &PhoenixApp, k: &ShopCard, cx: &mut Context<PhoenixApp>) -> AnyElem
                         .font_weight(FontWeight::MEDIUM)
                         .text_color(tk(idx::TEXT_STRONG))
                         .when(k.items > 0, |d| {
-                            d.child(div().flex_none().font_weight(FontWeight::SEMIBOLD).child(crate::t!("shop.items", n = k.items)))
+                            d.child(div().flex_none().mr(z(4.)).font_weight(FontWeight::SEMIBOLD).child(SharedString::from(crate::t!("shop.items", n = k.items).trim().to_owned())))
                         })
                         .child(div().min_w_0().overflow_hidden().text_ellipsis().child(name)),
                 )
