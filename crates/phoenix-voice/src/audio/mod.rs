@@ -54,6 +54,8 @@ pub struct AudioControl {
     ptt_pressed: AtomicBool,
     ptt_release_ms: AtomicU32,
     transmitting: AtomicBool,
+    #[cfg(feature = "opus")]
+    mic_tests: AtomicU32,
 }
 
 impl Default for AudioControl {
@@ -77,6 +79,8 @@ impl Default for AudioControl {
             ptt_pressed: AtomicBool::new(false),
             ptt_release_ms: AtomicU32::new(20),
             transmitting: AtomicBool::new(false),
+            #[cfg(feature = "opus")]
+            mic_tests: AtomicU32::new(0),
         }
     }
 }
@@ -198,6 +202,10 @@ impl AudioControl {
     }
     pub fn set_transmitting(&self, v: bool) {
         self.transmitting.store(v, Ordering::Relaxed);
+    }
+    #[cfg(feature = "opus")]
+    fn mic_test_active(&self) -> bool {
+        self.mic_tests.load(Ordering::Relaxed) != 0
     }
 }
 

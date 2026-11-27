@@ -272,7 +272,7 @@ impl AudioOut {
                     };
                     carry.extend_from_slice(&chunk[..n]);
                     let whole = carry.len() - carry.len() % 4;
-                    let samples = carry[..whole].chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+                    let samples = carry[..whole].as_chunks::<4>().0.iter().copied().map(f32::from_le_bytes);
                     if let Ok(mut b) = s.buf.lock() {
                         b.extend(samples);
                     }

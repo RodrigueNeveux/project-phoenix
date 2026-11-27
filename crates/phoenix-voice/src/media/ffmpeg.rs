@@ -291,7 +291,7 @@ pub fn read_pam(r: &mut impl std::io::BufRead) -> Option<(u32, u32, Vec<u8>)> {
     }
     let mut buf = vec![0u8; (w * h * 4) as usize];
     r.read_exact(&mut buf).ok()?;
-    for px in buf.chunks_exact_mut(4) {
+    for px in buf.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
     }
     Some((w, h, buf))

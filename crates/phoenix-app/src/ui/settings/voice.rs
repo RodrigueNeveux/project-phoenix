@@ -18,7 +18,7 @@ use crate::assets::Icon;
 use crate::theme::{Palette, c, generated::idx, tok};
 use crate::ui::icon;
 use crate::voice::call::{PortalState, manager, portal_state};
-use crate::voice::prefs::{InputMode, PROFILE_CUSTOM, VoicePrefs, prefs, update};
+use crate::voice::prefs::{InputMode, PROFILE_CUSTOM, PROFILE_STUDIO, VoicePrefs, prefs, update};
 use crate::voice::{VoiceStatus, ptt};
 
 type Cx<'a> = Context<'a, PhoenixApp>;
@@ -29,12 +29,18 @@ const SENS_LOW: u32 = 0xF0B232;
 const SENS_HIGH: u32 = 0x23A55A;
 pub const DB_MIN: f32 = -100.;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MicTestPlace {
+    Settings,
+    NoisePopout,
+}
+
 thread_local! {
     static BOUNDS: RefCell<HashMap<&'static str, Bounds<Pixels>>> = RefCell::new(HashMap::new());
     static DRAG: Cell<Option<&'static str>> = const { Cell::new(None) };
     static OPEN_SELECT: Cell<Option<&'static str>> = const { Cell::new(None) };
-    static MIC_TEST: RefCell<Option<MicTest>> = const { RefCell::new(None) };
-    static MIC_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
+    static MIC_TEST: RefCell<Option<(MicTestPlace, MicTest)>> = const { RefCell::new(None) };
+    static MIC_ERROR: RefCell<Option<(MicTestPlace, String)>> = const { RefCell::new(None) };
     static DEVICES: RefCell<Option<(Vec<String>, Vec<String>)>> = const { RefCell::new(None) };
     static LOADING: Cell<bool> = const { Cell::new(false) };
     static TICKING: Cell<bool> = const { Cell::new(false) };
@@ -362,10 +368,6 @@ fn button(id: &'static str, label: SharedString, bg: u32, _hover: u32) -> gpui::
     crate::ui::controls::button(id, label, kind)
 }
 
-fn meter(level_db: f32, active: bool) -> Div {
-    meter_bar(level_db, active, 28.)
-}
-
 pub fn meter_bar(level_db: f32, active: bool, height: f32) -> Div {
     let frac = if active { ((level_db - DB_MIN) / -DB_MIN).clamp(0., 1.) } else { 0. };
     div().flex_1().h(z(height)).child(
@@ -400,68 +402,91 @@ pub fn meter_bar(level_db: f32, active: bool, height: f32) -> Div {
 }
 
 pub fn live_level() -> Option<(f32, bool)> {
-    let t = MIC_TEST.with(|m| m.borrow().as_ref().map(|t| (t.level_db(), t.gate_open())));
+    let t = MIC_TEST.with(|m| m.borrow().as_ref().map(|(_, t)| (t.level_db(), t.gate_open())));
     t.or_else(|| {
         let c = manager().control();
         (c.input_level_db() > DB_MIN).then(|| (c.input_level_db(), c.transmitting()))
     })
 }
 
-fn mic_testing() -> bool {
-    MIC_TEST.with(|m| m.borrow().is_some())
+fn mic_test_place() -> Option<MicTestPlace> {
+    MIC_TEST.with(|m| m.borrow().as_ref().map(|(place, _)| *place))
 }
 
-fn stop_mic_test() {
-    if let Some(t) = MIC_TEST.with(|m| m.borrow_mut().take()) {
+fn stop_mic_test(place: MicTestPlace) {
+    if mic_test_place() == Some(place)
+        && let Some((_, t)) = MIC_TEST.with(|m| m.borrow_mut().take())
+    {
         std::thread::spawn(move || t.stop());
     }
 }
 
-fn start_mic_test() {
+pub(crate) fn stop_quick_mic_test() {
+    stop_mic_test(MicTestPlace::NoisePopout);
+    MIC_ERROR.with(|error| {
+        let mut error = error.borrow_mut();
+        if error.as_ref().is_some_and(|(place, _)| *place == MicTestPlace::NoisePopout) {
+            *error = None;
+        }
+    });
+}
+
+fn start_mic_test(place: MicTestPlace) {
+    if mic_test_place().is_some() {
+        return;
+    }
     let p = prefs().lock().clone();
     match MicTest::start(Arc::clone(manager().control()), p.input_device, p.output_device, true) {
         Ok(t) => {
             MIC_ERROR.with(|e| *e.borrow_mut() = None);
-            MIC_TEST.with(|m| *m.borrow_mut() = Some(t));
+            MIC_TEST.with(|m| *m.borrow_mut() = Some((place, t)));
         }
-        Err(e) => MIC_ERROR.with(|x| *x.borrow_mut() = Some(e.to_string())),
+        Err(e) => MIC_ERROR.with(|x| *x.borrow_mut() = Some((place, e.to_string()))),
     }
 }
 
 fn restart_mic_test() {
-    if mic_testing() {
-        if let Some(t) = MIC_TEST.with(|m| m.borrow_mut().take()) {
-            t.stop();
-        }
-        start_mic_test();
+    if let Some((place, t)) = MIC_TEST.with(|m| m.borrow_mut().take()) {
+        t.stop();
+        start_mic_test(place);
     }
 }
 
-fn ensure_ticker(cx: &mut Cx) {
+fn ensure_ticker(cx: &mut Cx, settings_open: bool) {
     if TICKING.with(Cell::get) {
         return;
     }
     TICKING.with(|t| t.set(true));
     cx.spawn(async move |this, cx| {
+        let mut settings_was_open = settings_open;
         loop {
             cx.background_executor().timer(Duration::from_millis(50)).await;
-            let keep = this
+            let (settings_open, quick_open) = this
                 .update(cx, |a, cx| {
-                    let on = a.settings.as_ref().is_some_and(|s| s.page == Page::VoiceVideo);
-                    if on {
+                    let settings = a.settings.as_ref().is_some_and(|s| s.page == Page::VoiceVideo);
+                    let quick = crate::ui::voice_panel::noise_popout_open(a);
+                    if settings || (quick && mic_test_place() == Some(MicTestPlace::NoisePopout)) {
                         cx.notify();
                     }
-                    on
+                    (settings, quick)
                 })
-                .unwrap_or(false);
-            if !keep {
+                .unwrap_or_default();
+            if settings_was_open && !settings_open {
+                OPEN_SELECT.with(|o| o.set(None));
+                ptt::set_recording(false);
+            }
+            if !settings_open {
+                stop_mic_test(MicTestPlace::Settings);
+            }
+            if !quick_open {
+                stop_quick_mic_test();
+            }
+            if !settings_open && (!quick_open || mic_test_place() != Some(MicTestPlace::NoisePopout)) {
                 break;
             }
+            settings_was_open = settings_open;
         }
         TICKING.with(|t| t.set(false));
-        OPEN_SELECT.with(|o| o.set(None));
-        ptt::set_recording(false);
-        stop_mic_test();
     })
     .detach();
 }
@@ -658,11 +683,27 @@ fn sensitivity(p: &VoicePrefs, cx: &mut Cx) -> Div {
         })
 }
 
-fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
-    let testing = mic_testing();
+fn mic_test_controls(place: MicTestPlace, in_call: bool, cx: &mut Cx) -> Div {
+    let compact = place == MicTestPlace::NoisePopout;
+    let testing = mic_test_place() == Some(place);
     let level = live_level().map(|(db, _)| db).unwrap_or(DB_MIN);
-    let err = MIC_ERROR.with(|e| e.borrow().clone());
-    let in_call = app.voice.status == VoiceStatus::Connected;
+    let err = MIC_ERROR.with(|e| e.borrow().as_ref().filter(|(p, _)| *p == place).map(|(_, e)| e.clone()));
+    let label = if testing {
+        crate::t!("voice.stop_testing")
+    } else if compact {
+        crate::t!("voice.quick_mic_test")
+    } else {
+        crate::t!("voice.lets_check")
+    };
+    let button = if compact {
+        let button = crate::ui::controls::button_sm("voice-noise-mic-test", label.clone(), crate::ui::controls::BtnKind::Secondary)
+            .min_w(z(68.))
+            .role(gpui::Role::Button)
+            .aria_label(label);
+        crate::ui::focus_ring::ring(button, crate::ui::states::key("voice-noise-mic-test"), 8.)
+    } else {
+        button("vs-mic-test", label, if testing { 0x4E5058 } else { Palette::BLURPLE }, if testing { 0x6D6F78 } else { 0x4752C4 })
+    };
     div()
         .flex()
         .flex_col()
@@ -670,41 +711,54 @@ fn mic_test(app: &PhoenixApp, cx: &mut Cx) -> Div {
             div()
                 .flex()
                 .items_center()
-                .gap(z(16.))
+                .gap(z(if compact { 10. } else { 16. }))
                 .child(
-                    button(
-                        "vs-mic-test",
-                        if testing { crate::t!("voice.stop_testing") } else { crate::t!("voice.lets_check") },
-                        if testing { 0x4E5058 } else { Palette::BLURPLE },
-                        if testing { 0x6D6F78 } else { 0x4752C4 },
-                    )
-                    .on_click(cx.listener(move |_, _, _, cx| {
+                    button.flex_none().on_click(cx.listener(move |_, _, _, cx| {
                         if testing {
-                            stop_mic_test();
+                            stop_mic_test(place);
                         } else {
-                            start_mic_test();
+                            start_mic_test(place);
+                            if compact && mic_test_place() == Some(place) {
+                                ensure_ticker(cx, false);
+                            }
                         }
                         cx.notify();
                     })),
                 )
-                .child(meter(level, testing || in_call)),
+                .child(meter_bar(level, testing || in_call, if compact { 18. } else { 28. })),
         )
-        .child(
-            div()
-                .mt(z(36.))
-                .flex()
-                .gap(z(4.))
-                .text_size(z(14.))
-                .line_height(z(18.))
-                .text_color(c(tok(idx::TEXT_SUBTLE)))
-                .child(crate::t!("voice.help"))
-                .child(div().text_color(c(tok(idx::TEXT_LINK))).child(format!("{}.", crate::t!("voice.help_link")))),
-        )
+        .when(compact && testing, |d| {
+            d.child(
+                div()
+                    .mt(z(8.))
+                    .text_size(z(12.))
+                    .line_height(z(16.))
+                    .text_color(c(tok(idx::TEXT_SUBTLE)))
+                    .child(crate::t!("voice.quick_mic_paused")),
+            )
+        })
+        .when(!compact, |d| {
+            d.child(
+                div()
+                    .mt(z(36.))
+                    .flex()
+                    .gap(z(4.))
+                    .text_size(z(14.))
+                    .line_height(z(18.))
+                    .text_color(c(tok(idx::TEXT_SUBTLE)))
+                    .child(crate::t!("voice.help"))
+                    .child(div().text_color(c(tok(idx::TEXT_LINK))).child(format!("{}.", crate::t!("voice.help_link")))),
+            )
+        })
         .when_some(err, |d, e| d.child(div().mt(z(8.)).text_size(z(12.)).text_color(c(Palette::RED)).child(SharedString::from(e))))
 }
 
+pub(crate) fn quick_mic_test(cx: &mut Cx) -> Div {
+    mic_test_controls(MicTestPlace::NoisePopout, false, cx)
+}
+
 pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
-    ensure_ticker(cx);
+    ensure_ticker(cx, true);
     ensure_devices(cx);
     let p = prefs().lock().clone();
     let (inputs, outputs) = DEVICES.with(|d| d.borrow().clone()).unwrap_or_default();
@@ -748,7 +802,9 @@ pub fn render(app: &PhoenixApp, cx: &mut Cx) -> Div {
                     ])),
             )
         })
-        .when(top[2], |d| d.child(div().mt(z(35.)).child(mic_test(app, cx))))
+        .when(top[2], |d| {
+            d.child(div().mt(z(35.)).child(mic_test_controls(MicTestPlace::Settings, app.voice.status == VoiceStatus::Connected, cx)))
+        })
         .when(top.iter().any(|v| *v), |d| d.child(divider()))
         .child(super::pages::render(app, LOWER, cx))
 }
@@ -855,41 +911,42 @@ fn profile_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum NoiseMode {
-    Krisp,
+pub(crate) enum NoiseMode {
+    Rnnoise,
     Standard,
     Off,
 }
 
 impl NoiseMode {
-    pub const ALL: [NoiseMode; 3] = [NoiseMode::Krisp, NoiseMode::Standard, NoiseMode::Off];
+    const ALL: [Self; 3] = [Self::Rnnoise, Self::Standard, Self::Off];
 
-    pub fn of(p: &VoicePrefs) -> Self {
-        if p.noise_cancellation {
-            NoiseMode::Krisp
-        } else if p.noise_suppression {
-            NoiseMode::Standard
+    pub(crate) fn effective(p: &VoicePrefs) -> Self {
+        let processing = p.processing();
+        if processing.noise_cancellation {
+            Self::Rnnoise
+        } else if processing.noise_suppression {
+            Self::Standard
         } else {
-            NoiseMode::Off
+            Self::Off
         }
     }
 
-    pub fn apply(self, p: &mut VoicePrefs) {
-        p.noise_cancellation = self == NoiseMode::Krisp;
-        p.noise_suppression = self == NoiseMode::Standard;
+    pub(crate) fn apply(self, p: &mut VoicePrefs) {
+        p.noise_cancellation = self == Self::Rnnoise;
+        p.noise_suppression = self == Self::Standard;
     }
 
-    fn label(self) -> SharedString {
+    pub(crate) fn label(self) -> SharedString {
         crate::t!(match self {
-            NoiseMode::Krisp => "voice.noise_krisp",
-            NoiseMode::Standard => "voice.noise_standard",
-            NoiseMode::Off => "voice.noise_none",
+            Self::Rnnoise => "voice.noise_krisp",
+            Self::Standard => "voice.noise_standard",
+            Self::Off => "voice.noise_none",
         })
     }
 }
 
 fn noise_row(p: &VoicePrefs, cx: &mut Cx) -> Div {
-    let now = NoiseMode::of(p);
+    let now = NoiseMode::effective(p);
     let entries = NoiseMode::ALL
         .iter()
         .map(|m| {
@@ -913,7 +970,17 @@ fn noise_row(p: &VoicePrefs, cx: &mut Cx) -> Div {
                 .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!("voice.noise")))
                 .child(note(crate::t!("voice.noise_select_note"))),
         )
-        .child(div().w(z(220.)).flex_none().child(select_box("noise-mode", now.label(), entries, cx)))
+        .child(
+            div()
+                .id("voice-noise-mode-selector")
+                .w(z(220.))
+                .flex_none()
+                .when(now == NoiseMode::Rnnoise, |d| {
+                    let engine = crate::t!("voice.noise_krisp_engine");
+                    d.aria_description(engine.clone()).tooltip(crate::ui::tooltip::tip(engine))
+                })
+                .child(select_box("noise-mode", now.label(), entries, cx)),
+        )
 }
 
 fn agc_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
@@ -936,6 +1003,9 @@ fn vad_krisp_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
 
 fn ptt_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     let p = prefs().lock().clone();
+    if p.audio_profile == PROFILE_STUDIO {
+        return div().into_any_element();
+    }
     let on = p.input_mode == InputMode::PushToTalk;
     div()
         .pb(z(3.))
@@ -1193,14 +1263,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn noise_select_maps_to_the_client_flags() {
+    fn noise_select_maps_to_the_effective_processing() {
         let mut p = VoicePrefs::default();
-        assert_eq!(NoiseMode::of(&p), NoiseMode::Krisp);
+        assert_eq!(NoiseMode::effective(&p), NoiseMode::Rnnoise);
         NoiseMode::Standard.apply(&mut p);
         assert!(p.noise_suppression && !p.noise_cancellation);
-        assert_eq!(NoiseMode::of(&p), NoiseMode::Standard);
+        assert_eq!(NoiseMode::effective(&p), NoiseMode::Standard);
         NoiseMode::Off.apply(&mut p);
         assert!(!p.noise_suppression && !p.noise_cancellation);
+        assert_eq!(NoiseMode::effective(&p), NoiseMode::Off);
+        assert_eq!(crate::i18n::t_in("fr", "voice.noise_krisp", &[]).as_ref(), "Krisp");
         assert_eq!(crate::i18n::t_in("en-US", "voice.noise_none", &[]).as_ref(), "None");
     }
 }

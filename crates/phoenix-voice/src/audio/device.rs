@@ -394,7 +394,7 @@ fn encode_loop(
             }
             let (db, open) = proc.process(&control, &mut frame);
             control.set_input_level_db(db);
-            let send = open && !control.muted() && !control.deafened();
+            let send = open && !control.muted() && !control.deafened() && !control.mic_test_active();
             control.set_transmitting(send);
             frames += 1;
             sent += u64::from(send);
@@ -438,10 +438,27 @@ pub struct MicTest {
     threads: Vec<JoinHandle<()>>,
     level: Arc<std::sync::atomic::AtomicU32>,
     open: Arc<AtomicBool>,
+    _pause: Option<MicTestPause>,
+}
+
+struct MicTestPause(Arc<AudioControl>);
+
+impl MicTestPause {
+    fn new(control: Arc<AudioControl>) -> Self {
+        control.mic_tests.fetch_add(1, Ordering::Relaxed);
+        Self(control)
+    }
+}
+
+impl Drop for MicTestPause {
+    fn drop(&mut self) {
+        self.0.mic_tests.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
 impl MicTest {
     pub fn start(control: Arc<AudioControl>, input: Option<String>, output: Option<String>, loopback: bool) -> Result<Self> {
+        let pause = loopback.then(|| MicTestPause::new(control.clone()));
         let stop = Arc::new(AtomicBool::new(false));
         let out_queue: Arc<Mutex<VecDeque<f32>>> = Arc::new(Mutex::new(VecDeque::new()));
         let (cap_tx, cap_rx) = std_mpsc::channel::<Vec<f32>>();
@@ -461,12 +478,16 @@ impl MicTest {
                 .map_err(Error::Io)?,
         ];
         let (ifmt, ofmt) = ready_rx.recv_timeout(Duration::from_secs(5)).map_err(|_| Error::Timeout("audio devices"))?;
-        let Some((irate, _)) = ifmt else {
-            drop(io_stop_tx);
-            for t in threads {
-                let _ = t.join();
+        let (irate, ofmt) = match (ifmt, ofmt) {
+            (Some((rate, _)), output) if output.is_some() || !loopback => (rate, output),
+            (input, _) => {
+                drop(io_stop_tx);
+                for t in threads {
+                    let _ = t.join();
+                }
+                let missing = if input.is_none() { "no microphone" } else { "no speakers" };
+                return Err(Error::Unsupported(missing.into()));
             }
-            return Err(Error::Unsupported("no microphone".into()));
         };
         let level = Arc::new(std::sync::atomic::AtomicU32::new((-100.0f32).to_bits()));
         let open = Arc::new(AtomicBool::new(false));
@@ -490,9 +511,6 @@ impl MicTest {
                             o2.store(gate_open, Ordering::Relaxed);
                             if let Some((rs, ch, cap)) = rs_out.as_mut() {
                                 let g = control.output_gain();
-                                if !gate_open {
-                                    frame.iter_mut().for_each(|s| *s = 0.0);
-                                }
                                 let f: Vec<f32> = frame.iter().map(|s| s * g).collect();
                                 let f = convert_channels(&f, 1, *ch);
                                 buf.clear();
@@ -507,7 +525,7 @@ impl MicTest {
                 })
                 .map_err(Error::Io)?,
         );
-        Ok(Self { stop, io_stop: Some(io_stop_tx), threads, level, open })
+        Ok(Self { stop, io_stop: Some(io_stop_tx), threads, level, open, _pause: pause })
     }
 
     pub fn level_db(&self) -> f32 {
@@ -601,5 +619,49 @@ fn mix_loop(
             m.reset_peaks();
         }
         std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn mic_test_pauses_call_audio_until_the_last_test_stops() {
+        let control = Arc::new(AudioControl::default());
+        control.set_gate(Some(-100.0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (capture_tx, capture_rx) = std_mpsc::channel();
+        let (voice_tx, mut voice_rx) = mpsc::unbounded_channel();
+        let (encoder_control, encoder_stop) = (control.clone(), stop.clone());
+        let encoder = std::thread::spawn(move || {
+            encode_loop(encoder_control, encoder_stop, capture_rx, RATE, voice_tx, Processor::new(None, true));
+        });
+        let mut next_voice_frame = async || {
+            capture_tx.send(synthetic_frame(0, FRAME_SAMPLES)).unwrap();
+            tokio::time::timeout(Duration::from_secs(5), voice_rx.recv()).await.expect("voice encoder timed out").unwrap()
+        };
+
+        let AudioOut::Frame(opus) = next_voice_frame().await else { panic!("expected an encoded voice frame") };
+        let mut mixer = Mixer::default();
+        for sequence in 0..4 {
+            mixer.push(AudioIn { user_id: 1, ssrc: 1, sequence, timestamp: u32::from(sequence) * FRAME_SAMPLES as u32, opus: opus.clone() });
+        }
+        assert!(mixer.mix_frame(&control).iter().any(|s| *s != 0.0));
+
+        let test = MicTestPause::new(control.clone());
+        let second_test = MicTestPause::new(control.clone());
+        assert!(matches!(next_voice_frame().await, AudioOut::End));
+        assert!(mixer.mix_frame(&control).iter().all(|s| *s == 0.0));
+        drop(test);
+        assert!(matches!(next_voice_frame().await, AudioOut::End));
+        assert!(mixer.mix_frame(&control).iter().all(|s| *s == 0.0));
+        drop(second_test);
+        assert!(matches!(next_voice_frame().await, AudioOut::Frame(_)));
+        assert!(mixer.mix_frame(&control).iter().any(|s| *s != 0.0));
+
+        stop.store(true, Ordering::Relaxed);
+        drop(capture_tx);
+        encoder.join().unwrap();
     }
 }

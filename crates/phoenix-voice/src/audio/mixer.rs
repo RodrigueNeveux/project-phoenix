@@ -195,7 +195,7 @@ impl Mixer {
         let mut acc = vec![0f32; FRAME_SAMPLES * 2];
         let now = Instant::now();
         self.tracks.retain(|_, t| now.duration_since(t.last_push) < IDLE_DROP);
-        let deaf = control.deafened();
+        let deaf = control.deafened() || control.mic_test_active();
         for (uid, t) in self.tracks.iter_mut() {
             let Some(pcm) = t.next_frame() else {
                 t.stats.level_db = -100.0;

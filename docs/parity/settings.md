@@ -339,8 +339,8 @@ Réglage propre à Phoenix, sans équivalent dans le client officiel (décision 
 | item | client source | Phoenix | state |
 |---|---|---|---|
 | profile overrides | `web.b63d846b329d6470.js` `e8` / `t3`, defaults `e5` | `voice::prefs::VoicePrefs::processing` | ✅ test `input_profiles_override_the_custom_settings_like_the_client` |
-| Noise Suppression select (Krisp / Standard / None) | `52b6e35ba37f71f0.js` `r6`, strings `t8Qhib`, `OWKjw5`, `rdoNzt`, `qXeYHw`, `wkYAlz` | `settings::voice::noise_row` | ✅ options and flags; ⚠ « Powered by Krisp » and the Krisp logo left out (RNNoise runs instead, see VOICE.md) |
+| Noise Suppression select (Krisp / Standard / None) | `52b6e35ba37f71f0.js` `r6`, strings `t8Qhib`, `OWKjw5`, `rdoNzt`, `qXeYHw`, `wkYAlz` | `settings::voice::noise_row` | Krisp (RNNoise) / Standard / None. See [voice processing](../VOICE.md#input-processing-audioprocessing). |
 | Echo Cancellation switch | `rH` (`iWTwu6`, no subtitle) | `profile_row` | ✅ now does AEC3 |
 | Automatic Gain Control, Advanced Voice Activity | advanced accordion `rB` → `rD` (`cUMdH0`, `6EjbvA`), `rV` (`BbESsg`, `LoOB1F`) | `agc_row`, `vad_krisp_row` in the advanced block | ✅ custom only, `rV` disabled outside VAD + auto |
-| voice panel noise button | noise popout switch `setNoiseCancellation(!t)`, disabled outside Custom with `/tqmfM` | `voice_panel::toggle_noise_cancellation` | ⚠ toggles directly (no popout yet) |
+| voice panel noise button | noise popout with switch and mic test, 276 px wide in the supplied reference | `voice_panel::noise_popout` | Custom switches between Krisp (RNNoise) and Standard. The other profiles show their locked state. The panel can test the processed microphone locally. |
 

@@ -57,7 +57,7 @@ fn decode(bytes: &[u8]) -> Option<RenderImage> {
         let buf = f.into_buffer();
         let h = ((buf.height() as u64 * ART_PX as u64) / buf.width().max(1) as u64).max(1) as u32;
         let mut buf = image::imageops::resize(&buf, ART_PX, h, image::imageops::FilterType::Triangle);
-        for p in buf.chunks_exact_mut(4) {
+        for p in buf.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
         frames.push(image::Frame::from_parts(buf, 0, 0, delay));

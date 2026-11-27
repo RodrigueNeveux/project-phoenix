@@ -22,7 +22,14 @@ pub fn qos() -> bool {
 }
 
 fn mark_priority(socket: &UdpSocket, v4: bool) {
-    let r = if v4 { socket.set_tos_v4(DSCP_EF_TOS) } else { socket.set_tclass_v6(DSCP_EF_TOS) };
+    let r = if v4 {
+        socket.set_tos_v4(DSCP_EF_TOS)
+    } else {
+        #[cfg(windows)]
+        return;
+        #[cfg(not(windows))]
+        socket.set_tclass_v6(DSCP_EF_TOS)
+    };
     if let Err(e) = r {
         tracing::warn!("voice QoS marking failed: {e}");
     }

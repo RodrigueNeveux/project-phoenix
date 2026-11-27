@@ -199,18 +199,20 @@ impl VoicePrefs {
             .unwrap_or_default()
     }
 
-    pub fn save(&self) {
+    fn save(&self) {
         let Some(p) = path() else { return };
-        let data = serde_json::to_vec_pretty(&self.to_json()).unwrap_or_default();
-        std::thread::spawn(move || {
+        let write = || -> std::io::Result<()> {
             if let Some(dir) = p.parent() {
-                let _ = std::fs::create_dir_all(dir);
+                std::fs::create_dir_all(dir)?;
             }
+            let data = serde_json::to_vec_pretty(&self.to_json())?;
             let tmp = p.with_extension("json.tmp");
-            if std::fs::write(&tmp, data).is_ok() {
-                let _ = std::fs::rename(tmp, p);
-            }
-        });
+            std::fs::write(&tmp, data)?;
+            std::fs::rename(tmp, p)
+        };
+        if let Err(error) = write() {
+            tracing::warn!(%error, "could not save voice preferences");
+        }
     }
 
     pub fn user(&self, id: Id) -> UserAudio {
@@ -297,6 +299,9 @@ pub fn update(f: impl FnOnce(&mut VoicePrefs), save: bool) {
         let mut p = prefs().lock();
         let before = p.clone();
         f(&mut p);
+        if save {
+            p.save();
+        }
         (before, p.clone())
     };
     if before == after {
@@ -307,9 +312,6 @@ pub fn update(f: impl FnOnce(&mut VoicePrefs), save: bool) {
         if !old.contains(&c) {
             super::call::manager().apply_control(None, c);
         }
-    }
-    if save {
-        after.save();
     }
 }
 
