@@ -383,11 +383,6 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                 let k = &ev.keystroke;
                                 if k.modifiers.number_of_modifiers() == 0 && super::slash::on_key(a, &k.key, w, cx) {
                                     cx.stop_propagation();
-                                    return;
-                                }
-                                let edit = k.key == "up" && k.modifiers.number_of_modifiers() == 0;
-                                if edit && a.edit_last(w, cx) {
-                                    cx.stop_propagation();
                                 }
                             }))
                             .when_some(vbar, |d, bar| d.child(bar))

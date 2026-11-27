@@ -220,6 +220,9 @@ impl PhoenixApp {
             if in_composer && ks.key == "tab" && m.shift && !m.control && self.composer.read(cx).value().is_empty() {
                 return self.focus_last_message(window, cx);
             }
+            if in_composer && ks.key == "up" && m.number_of_modifiers() == 0 && self.edit_last(window, cx) {
+                return true;
+            }
             if passes_through_composer(ks) {
                 return dispatch_global(ks, window, cx);
             }
