@@ -22,7 +22,16 @@ pub fn qos() -> bool {
 }
 
 fn mark_priority(socket: &UdpSocket, v4: bool) {
-    let r = if v4 { socket.set_tos_v4(DSCP_EF_TOS) } else { socket.set_tclass_v6(DSCP_EF_TOS) };
+    let r = if v4 {
+        socket.set_tos_v4(DSCP_EF_TOS)
+    } else {
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            socket.set_tclass_v6(DSCP_EF_TOS)
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        return;
+    };
     if let Err(e) = r {
         tracing::warn!("voice QoS marking failed: {e}");
     }
