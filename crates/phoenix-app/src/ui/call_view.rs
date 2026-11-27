@@ -1550,7 +1550,7 @@ pub(crate) enum Look {
     Green,
 }
 
-type CaretClick = std::rc::Rc<dyn Fn(&mut PhoenixApp, gpui::Point<gpui::Pixels>, &mut Context<PhoenixApp>)>;
+pub(crate) type CaretClick = std::rc::Rc<dyn Fn(&mut PhoenixApp, gpui::Point<gpui::Pixels>, &mut Context<PhoenixApp>)>;
 
 pub(crate) fn center_button(
     id: &'static str,

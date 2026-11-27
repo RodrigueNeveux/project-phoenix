@@ -1,0 +1,18 @@
+# discord:// links, invites and in-app links
+
+Sources: desktop host `resources/app.asar` 1.0.171 (`extractUrlFromArgs`: `--url -- <url>` or the first argument starting with `discord://`; `second-instance` hands the URL to the running window and focuses it; macOS `open-url`), `discord_desktop_core/core.asar` (`handleOpenUrl`: only `discord:` URLs, path = `new URL(pathname, WEBAPP_ENDPOINT).pathname`, query kept, then `MAIN_WINDOW_PATH`), web `MAIN_WINDOW_PATH` handler (special paths `/oauth2/authorize`, `/one-time`, otherwise `transitionTo(path)`), routes `INVITE(code)`, `INVITE_PROXY(code)`, `CHANNEL(g, c, m)`. Invite modal: store 539895 `INVITE_MODAL_OPEN` (already a member: go to `target_channel_id` / the invite channel if viewable, else the guild; group DM already open: go to it), modal 654000 (chunk `f58b1301353d44b9.js`), header 700156 (chunk `4db2f563b4494b0c.js`), CSS `*_jh4URK` (807432) and `*_rN1Ls3` (332923).
+
+| Element | Client | Phoenix | State |
+|---|---|---|---|
+| protocol registration, Linux | `x-scheme-handler/discord` | `MimeType=x-scheme-handler/discord;` in `packaging/linux/discord-phoenix.desktop` (tar, deb, AppImage) | ✅ |
+| protocol registration, macOS | `CFBundleURLTypes` | `packaging/macos/Info.plist`, URLs arrive through GPUI `on_open_urls` | ❌ not tested (no Mac here) |
+| protocol registration, Windows | `HKCU\Software\Classes\discord` | `packaging/windows/register-protocol.ps1`, `discord-protocol.reg.in`, or `discord-phoenix --register-protocol` (also `xdg-mime default` on Linux) | ❌ not tested (no Windows here) |
+| single instance | Electron single-instance lock, `--multi-instance` | Unix socket `instance.sock` in the config dir (TCP loopback + `instance.port` on Windows); a second launch sends `token\turl` and exits; `--multi-instance` or `PHOENIX_MULTI_INSTANCE=1` disables it; the mock backend never uses it | ✅ unit test |
+| window focus | `setWindowVisible` + `focus` | xdg-activation token of the second launch (`XDG_ACTIVATION_TOKEN` / `DESKTOP_STARTUP_ID`) handed over, then `tray::activate` | ✅ |
+| routing | path of the `discord://` URL | `deeplink::parse` / `route`: `/channels/@me[/c[/m]]`, `/channels/g[/c[/m]]`, `/invite/code`, `/invite-proxy/code`, `?event=`; https `discord.gg`, `(ptb./canary./www.)discord(app).com` | ✅ unit tests |
+| not loaded yet | route kept until ready | retried every 500 ms for 60 s; unknown channel in a known guild opens the guild after 10 s; message links wait for the first page then `jump_to_message` | ✅ |
+| voice or stage channel link | transitionTo, no join | opens the channel chat, never joins voice | ✅ |
+| chat links | Discord links stay in the app | `leave_link::click` sends http(s) invite and channel links to the router before the leave-link check | ✅ |
+| invite modal | sm modal: icon 64, `5u47va` / `3rE1P8` body-md, name heading-xl/semibold text-strong, online and members pills (dot 10, gap 4, online margin-end 16, text 16), `9sWQNT` primary full width with 16 px avatar, `ndsK4Z` text button body-sm/medium; invalid: `u9zxnX` / `FWkU6P` / `wcqOoF` | `ui/modals/accept_invite.rs` | ⚠ no avatar in the accept button, no splash (xl) variant, no join settings accordion (`A5wHQ/`), padding not measured |
+
+Testing on Linux without touching the default handler of the session: put the `.desktop` file in an isolated `XDG_DATA_HOME/applications`, write `x-scheme-handler/discord=discord-phoenix.desktop` in an isolated `XDG_CONFIG_HOME/mimeapps.list`, and run `xdg-open` with `XDG_CURRENT_DESKTOP` unset so it uses the generic path. The official client keeps the user's handler.
