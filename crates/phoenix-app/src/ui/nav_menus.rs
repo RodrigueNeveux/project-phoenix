@@ -578,19 +578,17 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             items.push(MenuItem::Separator);
             items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), muted, Some(g), None));
             let en = e.clone();
-            items.push(MenuItem::Submenu {
-                label: crate::t!("menu.notify_settings"),
-                items: notify_radios(app, &e, Some(g), None),
-                icon: None,
-                subtext: Some(level_label(app, Some(g), None)),
-                on_click: Some(Rc::new(move |_, _, cx: &mut App| {
+            let mut notify = notify_item(app, &e, Some(g), None).with_subtext(level_label(app, Some(g), None));
+            if let MenuItem::Submenu { on_click, .. } = &mut notify {
+                *on_click = Some(Rc::new(move |_, _, cx: &mut App| {
                     en.update(cx, |a, cx| {
                         let st = crate::ui::modals::guild_notify::State::new(a, g);
                         crate::actions::open_modal(crate::ui::modals::Modal::GuildNotify(st), None);
                         cx.notify();
                     })
-                })),
-            });
+                }));
+            }
+            items.push(notify);
             items.push(MenuItem::check(crate::t!("menu.hide_muted"), hide, {
                 let e = e.clone();
                 move |_, _, cx: &mut App| {
