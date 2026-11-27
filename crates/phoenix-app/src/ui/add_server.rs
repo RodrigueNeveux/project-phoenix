@@ -261,6 +261,14 @@ pub fn create_guild_body_for_locale(
     serde_json::Value::Object(obj)
 }
 
+pub fn plain_create_guild_body(name: &str, icon: Option<&str>) -> serde_json::Value {
+    let mut body = serde_json::json!({ "name": name.trim() });
+    if let Some(icon) = icon {
+        body["icon"] = serde_json::json!(icon);
+    }
+    body
+}
+
 pub fn create_guild_body(
     name: &str,
     icon: Option<&str>,
@@ -986,6 +994,11 @@ mod tests {
         assert_eq!(minimal["system_channel_id"], serde_json::Value::Null);
         assert!(minimal.get("roles").is_none());
         assert_eq!(minimal["guild_template_code"], CREATE.code);
+    }
+
+    #[test]
+    fn plain_create_guild_body_only_has_the_name() {
+        assert_eq!(plain_create_guild_body(" Friends ", None), serde_json::json!({ "name": "Friends" }));
     }
 
     #[test]
