@@ -936,7 +936,6 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
     let state = t(idx::CHANNELS_DEFAULT);
     let red = t(idx::ICON_FEEDBACK_CRITICAL);
     let tag = u.and_then(|u| u.tag.clone());
-    let e = entity.clone();
     let e2 = entity.clone();
     let selected = app.people.popout.as_ref().is_some_and(|p| p.user == user);
     let guild = app.selected_guild;
