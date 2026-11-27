@@ -234,6 +234,7 @@ pub enum TextareaEntry {
     Cut,
     Copy,
     Paste,
+    PastePlain,
     Separator,
 }
 
@@ -273,6 +274,7 @@ pub fn textarea_layout(commands: bool, send_button: bool, spell: SpellMenu, spel
         out.push(T::Copy);
     }
     out.push(T::Paste);
+    out.push(T::PastePlain);
     out
 }
 
@@ -369,6 +371,13 @@ pub fn textarea_items(app: &PhoenixApp, e: &Ent, cx: &App) -> Vec<MenuItem> {
             T::Cut => edit_in(&area, crate::t!("ta.cut"), "Ctrl+X", || Box::new(gpui_component::input::Cut)),
             T::Copy => edit_in(&area, crate::t!("ta.copy"), "Ctrl+C", || Box::new(gpui_component::input::Copy)),
             T::Paste => edit_in(&area, crate::t!("ta.paste"), "Ctrl+V", || Box::new(gpui_component::input::Paste)),
+            T::PastePlain => {
+                let area = area.clone();
+                MenuItem::action(crate::t!("ta.paste_plain"), None, move |_, w, cx: &mut App| {
+                    area.update(cx, |s, cx| s.focus(w, cx));
+                    w.dispatch_action(Box::new(gpui_component::input::Paste), cx);
+                })
+            }
             T::Separator => MenuItem::Separator,
         })
         .collect()
@@ -782,9 +791,12 @@ mod tests {
         use TextareaEntry as T;
         assert_eq!(
             textarea_layout(true, true, SpellMenu::default(), true, true),
-            vec![T::Suggestions, T::SendButton, T::Separator, T::Spellcheck, T::Languages, T::Separator, T::Cut, T::Copy, T::Paste]
+            vec![T::Suggestions, T::SendButton, T::Separator, T::Spellcheck, T::Languages, T::Separator, T::Cut, T::Copy, T::Paste, T::PastePlain]
         );
-        assert_eq!(textarea_layout(false, false, SpellMenu::default(), false, false), vec![T::Separator, T::Spellcheck, T::Separator, T::Paste]);
+        assert_eq!(
+            textarea_layout(false, false, SpellMenu::default(), false, false),
+            vec![T::Separator, T::Spellcheck, T::Separator, T::Paste, T::PastePlain]
+        );
         let typo = SpellMenu { corrections: 2, misspelled: true, learned: false };
         assert_eq!(
             textarea_layout(true, false, typo, true, false),
@@ -798,16 +810,20 @@ mod tests {
                 T::Spellcheck,
                 T::Languages,
                 T::Separator,
-                T::Paste
+                T::Paste,
+                T::PastePlain
             ]
         );
         let learned = SpellMenu { corrections: 0, misspelled: false, learned: true };
         assert_eq!(
             textarea_layout(false, false, learned, true, false),
-            vec![T::Separator, T::RemoveFromDictionary, T::Spellcheck, T::Languages, T::Separator, T::Paste]
+            vec![T::Separator, T::RemoveFromDictionary, T::Spellcheck, T::Languages, T::Separator, T::Paste, T::PastePlain]
         );
         let unsure = SpellMenu { corrections: 0, misspelled: true, learned: true };
-        assert_eq!(textarea_layout(false, false, unsure, false, false), vec![T::Separator, T::AddToDictionary, T::Spellcheck, T::Separator, T::Paste]);
+        assert_eq!(
+            textarea_layout(false, false, unsure, false, false),
+            vec![T::Separator, T::AddToDictionary, T::Spellcheck, T::Separator, T::Paste, T::PastePlain]
+        );
     }
 
     #[test]

@@ -6,11 +6,13 @@ Renders: `PHX_OPEN=guildmenu|chanmenu[:n]|catmenu[:n]|usermenu[:n]|msgmenu int-b
 
 | menu | dump | items / order / separators | status |
 |---|---|---|---|
-| server | vanilla-menu-guild | Mark As Read (disabled when read) / Invite / Mute >, Notification Settings > (subtext), Hide Muted ☐, Show All ☐ / Server Settings >, Privacy, Per-server Profile / Create Channel, Category, Event / Move To… > / Security Actions, Leave (danger) / Copy ID | ✅ (render matches) |
-| folder | vanilla-menu-folder | Mark Folder As Read / Move To… > / Folder Settings, Close All Folders | ✅ |
-| text channel | vanilla-menu-channel | Mark As Read / Favorites > / Invite, Pin to Top, Copy Link / Mute >, Notification > / Move To… > / Edit, Clone, Create Text, Delete (danger) / Copy ID | ✅ (render matches) |
+| server | vanilla-menu-guild, `816581f077f92643.js` | Mark As Read (disabled when read) / Invite / Mute >, Notification Settings > (subtext, clicking opens GuildNotify modal), Hide Muted ☐, Show All ☐ / Server Settings > (any of Manage Guild/Roles/Nicknames/Webhooks/Expressions, Ban, View Audit Log, or owner), Privacy, Per-server Profile / Create Channel, Category, Event / Move To… > / Security Actions, Report Raid, Leave (danger) / Copy ID | ✅ |
+| folder | vanilla-menu-folder, `225cc9ca3d5899d3.js` | Mark Folder As Read / Move To… > / Folder Settings, Close All Folders | ✅ |
+| text / announcement / forum channel | vanilla-menu-channel, `d4030cd60f4ad310.js` | Mark As Read / Favorites > / Invite, Pin to Top, Copy Link / Mute >, Notification > / Move To… > / Edit, Clone, Create Text, Delete (danger) / Copy ID | ✅ |
+| voice / stage channel | `455341c02bc5364b.js` | Mark As Read / Favorites > / Invite to Voice Channel, Pin to Top, Copy Link / Open Chat, Hide Names ☐ / Mute > / Move To… > / Edit, Clone, Create Voice, Delete (danger) / Copy ID | ✅ (Stage now uses vocal layout) |
 | notification submenu | vanilla-menu-channel-notify | Use Category Default (subtext) ◉, All, @mentions, Nothing | ✅ (fr label "@mentions" fixed) |
-| category | vanilla-menu-category | Mark As Read / Collapse ☐, Collapse All / Mute >, Notification > / Move To… > / Edit, Delete / Copy ID | ✅ |
+| category | vanilla-menu-category, `f167976c224cba1c.js` | Mark As Read / Collapse ☐ (checkbox), Collapse All (hidden when all categories are collapsed) / Mute >, Notification > / Move To… > / Edit, Delete / Copy ID | ✅ |
+| textarea | `14ae1b9e3d94518f.js` | Suggestions >, Show Send Message Button ☐ / spell corrections / Add/Remove from Dictionary, Spellcheck ☐, Languages / Cut, Copy, Paste, Paste as Plain Text | ✅ |
 | DM | vanilla-menu-dm | Mark As Read / Pin, Favorites > / Profile, Call, Add Note (subtext), Friend Nickname, Close DM / Apps >, Invite >, Remove Friend, Ignore, Block / Mute @x > / Copy User ID, Copy Channel ID | ✅ |
 | group DM | vanilla-menu-group-dm | Mark As Read / Pin, Favorites > / Invites, Edit Group / Mute > / Leave (danger) / Copy ID | ✅ |
 | member | vanilla-menu-member-2/-5, menus-a/user-avatar-other (2026-11-27) | Profile, Mention, Send Message, Call, Add/Edit Note, Friend Nickname / Change Nickname, Apps >, Invite >, Remove Friend, Ignore, Block / Roles > (checkboxes) / Mod View, Timeout (non-bots), Kick, Ban / Copy ID | ✅ (wired on member list, chat avatars/usernames, reply authors, and `<@id>` mentions; Timeout hidden on bots) |

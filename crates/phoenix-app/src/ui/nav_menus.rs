@@ -197,18 +197,30 @@ fn level_label(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> gpui
 }
 
 const MANAGE_CHANNELS: u64 = 1 << 4;
-const MANAGE_GUILD: u64 = 1 << 5;
 const MANAGE_EVENTS: u64 = 1 << 33;
+const SERVER_SETTINGS_PERMS: u64 = (1 << 2)
+    | (1 << 5)
+    | (1 << 7)
+    | (1 << 27)
+    | (1 << 28)
+    | (1 << 29)
+    | (1 << 30)
+    | (1 << 43);
 
 fn perms(app: &PhoenixApp, g: Id, bit: u64) -> bool {
     crate::ui::inbox::has_perm(app.backend.guild_permissions(g), bit)
+}
+
+fn can_server_settings(app: &PhoenixApp, g: Id) -> bool {
+    let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
+    owner || crate::ui::inbox::has_perm(app.backend.guild_permissions(g), SERVER_SETTINGS_PERMS)
 }
 
 pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> Vec<MenuItem> {
     let e = cx.entity();
     let mut items = Vec::new();
     let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
-    let (manage_guild, manage_channels, events) = (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
+    let (manage_channels, events) = (perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
     let community = app.guilds.iter().any(|x| x.id == g && x.community);
     items.push(
         act(&e, crate::t!("settings.page.server_boost"), move |_, _, cx| {
@@ -226,7 +238,7 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     }
     items.push(MenuItem::Separator);
     items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)).with_icon("add-to-dm"));
-    if owner || manage_guild {
+    if can_server_settings(app, g) {
         items.push(act(&e, crate::t!("menu.server_settings"), move |a, window, cx| {
             a.open_server_settings(g, 0, cx);
             window.refresh();
@@ -390,30 +402,38 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             items.push(MenuItem::Separator);
             if let Some(g) = guild {
                 let cat = ch.kind == ChannelKind::Category;
-                let voice = ch.kind == ChannelKind::Voice;
+                let voice = matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage);
                 let manage = perms(app, g, MANAGE_CHANNELS);
                 if cat {
                     let collapsed = app.collapsed.contains(&id);
-                    items.push(act(
-                        &e,
-                        crate::t!(if collapsed { "menu.expand_category" } else { "menu.collapse_category" }),
-                        move |a, _, cx| a.toggle_category_saved(id, cx),
-                    ));
-                    items.push(act(&e, crate::t!("menu.collapse_all"), move |a, _, cx| {
-                        let cats: Vec<Id> = a
-                            .guild_channels
-                            .get(&g)
-                            .into_iter()
-                            .flatten()
-                            .filter(|c| a.channels.get(c).is_some_and(|c| c.kind == ChannelKind::Category))
-                            .copied()
-                            .collect();
-                        for c in cats {
-                            if !a.collapsed.contains(&c) {
-                                a.toggle_category_saved(c, cx);
-                            }
-                        }
+                    let ec = e.clone();
+                    items.push(MenuItem::check(crate::t!("menu.collapse_category"), collapsed, move |_, _, cx: &mut App| {
+                        ec.update(cx, |a, cx| a.toggle_category_saved(id, cx))
                     }));
+                    let any_expanded = app
+                        .guild_channels
+                        .get(&g)
+                        .into_iter()
+                        .flatten()
+                        .filter(|c| app.channels.get(c).is_some_and(|c| c.kind == ChannelKind::Category))
+                        .any(|c| !app.collapsed.contains(c));
+                    if any_expanded {
+                        items.push(act(&e, crate::t!("menu.collapse_all"), move |a, _, cx| {
+                            let cats: Vec<Id> = a
+                                .guild_channels
+                                .get(&g)
+                                .into_iter()
+                                .flatten()
+                                .filter(|c| a.channels.get(c).is_some_and(|c| c.kind == ChannelKind::Category))
+                                .copied()
+                                .collect();
+                            for c in cats {
+                                if !a.collapsed.contains(&c) {
+                                    a.toggle_category_saved(c, cx);
+                                }
+                            }
+                        }));
+                    }
                 } else {
                     items.push(crate::actions::channel::favorite_item(app, &e, id));
                     items.push(MenuItem::Separator);
@@ -547,8 +567,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             let muted = guild_muted(app, g);
             let hide = app.nav.hide_muted.contains(&g);
             let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
-            let (manage_guild, manage_channels, events) =
-                (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
+            let (manage_channels, events) = (perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
             if app.guilds.iter().find(|x| x.id == g).is_some_and(|x| x.unread || x.mentions > 0) {
                 items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
             } else {
@@ -558,7 +577,20 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)));
             items.push(MenuItem::Separator);
             items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), muted, Some(g), None));
-            items.push(notify_item(app, &e, Some(g), None).with_subtext(level_label(app, Some(g), None)));
+            let en = e.clone();
+            items.push(MenuItem::Submenu {
+                label: crate::t!("menu.notify_settings"),
+                items: notify_radios(app, &e, Some(g), None),
+                icon: None,
+                subtext: Some(level_label(app, Some(g), None)),
+                on_click: Some(Rc::new(move |_, _, cx: &mut App| {
+                    en.update(cx, |a, cx| {
+                        let st = crate::ui::modals::guild_notify::State::new(a, g);
+                        crate::actions::open_modal(crate::ui::modals::Modal::GuildNotify(st), None);
+                        cx.notify();
+                    })
+                })),
+            });
             items.push(MenuItem::check(crate::t!("menu.hide_muted"), hide, {
                 let e = e.clone();
                 move |_, _, cx: &mut App| {
@@ -574,7 +606,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             }));
             items.extend(crate::actions::channel::show_all_item(app, &e, g));
             items.push(MenuItem::Separator);
-            if manage_guild {
+            if can_server_settings(app, g) {
                 items.push(crate::actions::channel::server_settings_item(app, &e, g));
             }
             items.push(act(&e, crate::t!("menu.privacy_settings"), move |a, _, cx| a.open_privacy_settings(g, cx)));
@@ -599,6 +631,12 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                 items.push(MenuItem::danger(label, None, {
                     let e = e.clone();
                     move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
+                }));
+            }
+            if crate::ui::modals::report_raid::visible(app, g) {
+                items.push(MenuItem::danger(crate::t!("menu.report_raid"), None, {
+                    let e = e.clone();
+                    move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_report_raid(g, cx))
                 }));
             }
             if !owner {
