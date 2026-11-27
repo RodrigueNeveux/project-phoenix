@@ -102,6 +102,8 @@ pub enum VoiceControl {
     SetOutputVolume(f32),
     SetUserVolume(Id, f32),
     SetNoiseSuppression(bool),
+    SetNoiseCancellation(bool),
+    SetVadKrisp(bool),
     SetEchoCancellation(bool),
     SetAgc(bool),
     SetPushToTalk(bool),

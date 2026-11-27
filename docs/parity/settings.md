@@ -333,3 +333,14 @@ Réglage propre à Phoenix, sans équivalent dans le client officiel (décision 
 | Écritures hors garde (accusé de lecture sur Échap, ordre du rail, wt/func-keys) | inchangées | n'utilisent pas `guarded_write` | ✅ |
 | Modération `ActionRequest::Admin` (`Kick`, `Ban`, `Unban`, `AddRoleMember`, `RemoveRoleMember`, `IncidentActions`), `ActionRequest::SetRole` / `SetMemberRoles`, `ParityRequest::Moderate` (timeout, exclusion, bannissement, débannissement) | désactivé : refus `WriteBlocked` sans réseau, même toast qu'avant ; activé : envoi réel par le chemin habituel (`rest.admin`, `kick_member`, `ban_member`…) | `guard::refuse_action` / `refuse_parity` en tête de `actions::exec::request` et `commands::exec::request` (wt/mod-toggle). Avant ce changement, seul l'example `real_shots` filtrait ces requêtes : le binaire principal les envoyait sans garde | ✅ tests `moderation_is_refused_by_default`, `agents_can_never_moderate`, `allowed_moderation_goes_through_the_normal_send_path` (faux serveur local), `other_admin_calls_are_not_moderation` |
 | Autres appels `ActionRequest::Admin` en écriture (fils, MP de groupe, messages programmés, salons, rôles, webhooks…) | hors de cet interrupteur, comportement inchangé | — | ⚠ (décision de l'utilisateur : les protéger casserait l'administration courante dans Phoenix tant que l'interrupteur est éteint) |
+
+## Voice processing (Voice & Video, input profile)
+
+| item | client source | Phoenix | state |
+|---|---|---|---|
+| profile overrides | `web.b63d846b329d6470.js` `e8` / `t3`, defaults `e5` | `voice::prefs::VoicePrefs::processing` | ✅ test `input_profiles_override_the_custom_settings_like_the_client` |
+| Noise Suppression select (Krisp / Standard / None) | `52b6e35ba37f71f0.js` `r6`, strings `t8Qhib`, `OWKjw5`, `rdoNzt`, `qXeYHw`, `wkYAlz` | `settings::voice::noise_row` | ✅ options and flags; ⚠ « Powered by Krisp » and the Krisp logo left out (RNNoise runs instead, see VOICE.md) |
+| Echo Cancellation switch | `rH` (`iWTwu6`, no subtitle) | `profile_row` | ✅ now does AEC3 |
+| Automatic Gain Control, Advanced Voice Activity | advanced accordion `rB` → `rD` (`cUMdH0`, `6EjbvA`), `rV` (`BbESsg`, `LoOB1F`) | `agc_row`, `vad_krisp_row` in the advanced block | ✅ custom only, `rV` disabled outside VAD + auto |
+| voice panel noise button | noise popout switch `setNoiseCancellation(!t)`, disabled outside Custom with `/tqmfM` | `voice_panel::toggle_noise_cancellation` | ⚠ toggles directly (no popout yet) |
+

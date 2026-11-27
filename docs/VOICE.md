@@ -4,7 +4,49 @@
 
 ## Sending
 
-microphone (cpal / PulseAudio) → `audio::device::encode_loop` (high-pass, noise suppression, gain, gate or push-to-talk, AGC) → Opus 48 kHz mono 64 kb/s with in-band FEC → `DaveSession::encrypt` → RTP → `TransportCipher` (`*_rtpsize`) → UDP. op 5 SPEAKING is sent when transmission starts and 5 silence frames close it.
+microphone (cpal / PulseAudio) → `audio::device::encode_loop` (input volume, `audio::processing::InputChain`, gate or push-to-talk) → Opus 48 kHz mono 64 kb/s with in-band FEC → `DaveSession::encrypt` → RTP → `TransportCipher` (`*_rtpsize`) → UDP. op 5 SPEAKING is sent when transmission starts and 5 silence frames close it.
+
+## Input processing (`audio::processing`)
+
+Every 20 ms Opus frame goes through `InputChain` as two 10 ms blocks of 480 samples at 48 kHz mono, in this order:
+
+1. high-pass filter + echo cancellation + "Standard" noise suppression: one `sonora::AudioProcessing` (pure Rust port of the WebRTC audio processing module, AEC3, NS level High, internal rate 48 kHz). Built only when echo cancellation or a noise suppressor is on.
+2. "Krisp" noise suppression: `nnnoiseless` (pure Rust RNNoise). Its voice probability feeds the Advanced Voice Activity gate.
+3. Automatic gain control: a second `sonora::AudioProcessing` with only AGC2 (adaptive digital, default WebRTC parameters, limiter), so it runs after RNNoise like the client's chain runs AGC last.
+
+The echo reference is the mixer output: `mix_loop` pushes each 20 ms frame it actually queues to the speakers into a `RenderTap` (bounded channel, mono downmix), with the queue length ahead of it in ms; the encode thread drains it before each capture block (`process_render_f32`) and sets the stream delay to that queue length + 10 ms. AEC3 also estimates the delay itself. Soundboard sounds and notification sounds (separate streams in `effects.rs`) are not part of the reference.
+
+Latency added: none in Off and Standard mode (WebRTC processes the block in place), one 10 ms block in Krisp mode (RNNoise overlap-add). The self-test measures it by cross-correlation.
+
+The chain is rebuilt only when a stage is switched on or off. `ChainSettings::from_control` reads the effective flags sent by the app; the synthetic tone input (`SYNTHETIC_INPUT`) bypasses the chain so the transport tests keep a steady tone, the synthetic noisy voice (`SYNTHETIC_VOICE_INPUT`) goes through it.
+
+### Settings, profiles and the client model
+
+Same fields and same override table as the client (`web.b63d846b329d6470.js`, defaults `e5`, profile table `e8`, merge `t3`):
+
+| | stored default | Voice Isolation | Studio | Custom |
+|---|---|---|---|---|
+| echo cancellation | on | on | off | stored |
+| noise suppression (Standard) | off | off | off | stored |
+| noise cancellation (Krisp) | on | on | off | stored |
+| automatic gain control | on | on | off | stored |
+| sensitivity | auto | auto | manual −84 dB | stored |
+| Advanced Voice Activity (`vadUseKrisp`) | on | on | off | stored |
+| input mode | stored | stored | voice activity | stored |
+
+`VoicePrefs::processing()` applies the table, `controls()` sends the result. Choosing a profile no longer overwrites the stored values (the client keeps them for Custom). The Custom block shows the client's controls: echo cancellation switch, the Noise Suppression select (Krisp / Standard / None, `r6` in `52b6e35ba37f71f0.js`, `setNoiseCancellation` + `setNoiseSuppression`), and in the advanced section Automatic Gain Control (`rD`) and Advanced Voice Activity (`rV`, disabled outside voice activity with automatic sensitivity). The noise button of the voice panel toggles Krisp like the client's popout switch (`setNoiseCancellation(!t)`, which also sets Standard to the opposite) and does nothing outside Custom, where its tooltip gives the client's `/tqmfM` text. Old `voice.json` files: `noise_suppression` without `noise_cancellation` becomes the Krisp flag.
+
+Advanced Voice Activity: with Krisp on, automatic sensitivity and `vad_use_krisp`, the gate opens when the RNNoise voice probability of a frame reaches 0.8 (0.5 without AGC, the client's `vadKrispActivationThreshold` rule) and stays open 12 frames (the client's `vadTrailing` 25 × 10 ms ≈ 240 ms). Otherwise the level gate (`dsp::NoiseGate`) decides.
+
+### Krisp versus RNNoise
+
+Krisp is a proprietary model shipped inside Discord's native voice module; it cannot be reused. Phoenix runs RNNoise (Xiph, BSD, 2017) in its place under the "Krisp" label of the select, so the UI keeps the client's options. Differences to expect: RNNoise is a small GRU on 22 bands with a pitch filter, it removes steady noise (fans, hum, hiss, traffic) well but lets more transient noise through (keyboard clicks, dishes, a dog) and can colour voices slightly; Krisp also removes background voices and transients. The Krisp logo and the "Powered by Krisp" text are not shown.
+
+### Measuring
+
+`cargo test -p phoenix-voice --features audio --lib processing` runs the generated-signal tests (synthetic voice: glottal pulses through three formant resonators, syllables and pauses; pink + white noise; echo path with a 60 ms delay and two reflections plus double talk). `PHX_AUDIOPROC_SELFTEST=1 int-bin/real_shots` prints one line per mode with the noise reduction, the SNR gain, the latency and the CPU time per 10 ms block, then exits. During a call, `PHOENIX_SOUND_LOG=1` prints every 5 s `voice-proc: chain=… in_db=… out_db=… open=… cpu_avg_us=… load=…% latency_ms=… render_blocks=… erle=…`.
+
+Live test with a generated source: `PHX_VOICE=1 PHX_VOICE_TALK=1 PHX_VOICE_SOURCE=voice PHX_VOICE_PROFILE=iso PHX_CHANNEL=1574900893613039696 PHX_VOICE_HOLD=30000 PHOENIX_SOUND_LOG=1 int-bin/real_shots …` joins the test channel unmuted with the synthetic noisy voice (never the microphone), the profile is applied without saving `voice.json`.
 
 ## Receiving
 

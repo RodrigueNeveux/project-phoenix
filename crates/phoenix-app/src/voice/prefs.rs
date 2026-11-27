@@ -40,6 +40,8 @@ pub struct VoicePrefs {
     pub ptt_delay_ms: u32,
     pub echo_cancellation: bool,
     pub noise_suppression: bool,
+    pub noise_cancellation: bool,
+    pub vad_use_krisp: bool,
     pub agc: bool,
     pub attenuation: u32,
     pub attenuate_self: bool,
@@ -48,6 +50,22 @@ pub struct VoicePrefs {
     pub self_mute: bool,
     pub self_deaf: bool,
     pub audio_profile: u32,
+}
+
+pub const PROFILE_ISOLATION: u32 = 0;
+pub const PROFILE_STUDIO: u32 = 1;
+pub const PROFILE_CUSTOM: u32 = 2;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Processing {
+    pub echo_cancellation: bool,
+    pub noise_suppression: bool,
+    pub noise_cancellation: bool,
+    pub agc: bool,
+    pub auto_sensitivity: bool,
+    pub sensitivity_db: f32,
+    pub vad_use_krisp: bool,
+    pub push_to_talk: bool,
 }
 
 impl Default for VoicePrefs {
@@ -63,7 +81,9 @@ impl Default for VoicePrefs {
             ptt_key: None,
             ptt_delay_ms: 20,
             echo_cancellation: true,
-            noise_suppression: true,
+            noise_suppression: false,
+            noise_cancellation: true,
+            vad_use_krisp: true,
             agc: true,
             attenuation: 0,
             attenuate_self: false,
@@ -71,7 +91,7 @@ impl Default for VoicePrefs {
             users: HashMap::new(),
             self_mute: false,
             self_deaf: false,
-            audio_profile: 0,
+            audio_profile: PROFILE_CUSTOM,
         }
     }
 }
@@ -111,7 +131,9 @@ impl VoicePrefs {
             ptt_key: s("ptt_key"),
             ptt_delay_ms: n("ptt_delay_ms").map(|x| x.clamp(0., 2000.) as u32).unwrap_or(d.ptt_delay_ms),
             echo_cancellation: b("echo_cancellation", d.echo_cancellation),
-            noise_suppression: b("noise_suppression", d.noise_suppression),
+            noise_suppression: if v.get("noise_cancellation").is_some() { b("noise_suppression", d.noise_suppression) } else { false },
+            noise_cancellation: b("noise_cancellation", b("noise_suppression", d.noise_cancellation)),
+            vad_use_krisp: b("vad_use_krisp", d.vad_use_krisp),
             agc: b("agc", d.agc),
             attenuation: n("attenuation").map(|x| x.clamp(0., 100.) as u32).unwrap_or(d.attenuation),
             attenuate_self: b("attenuate_self", d.attenuate_self),
@@ -142,6 +164,8 @@ impl VoicePrefs {
             "ptt_delay_ms": self.ptt_delay_ms,
             "echo_cancellation": self.echo_cancellation,
             "noise_suppression": self.noise_suppression,
+            "noise_cancellation": self.noise_cancellation,
+            "vad_use_krisp": self.vad_use_krisp,
             "agc": self.agc,
             "attenuation": self.attenuation,
             "attenuate_self": self.attenuate_self,
@@ -184,19 +208,57 @@ impl VoicePrefs {
         if u.muted { 0. } else { amplitude(u.volume as f32) }
     }
 
+    pub fn processing(&self) -> Processing {
+        let mut p = Processing {
+            echo_cancellation: self.echo_cancellation,
+            noise_suppression: self.noise_suppression && !self.noise_cancellation,
+            noise_cancellation: self.noise_cancellation,
+            agc: self.agc,
+            auto_sensitivity: self.auto_sensitivity,
+            sensitivity_db: self.sensitivity_db,
+            vad_use_krisp: self.vad_use_krisp,
+            push_to_talk: self.input_mode == InputMode::PushToTalk,
+        };
+        match self.audio_profile {
+            PROFILE_ISOLATION => {
+                p.echo_cancellation = true;
+                p.noise_suppression = false;
+                p.noise_cancellation = true;
+                p.agc = true;
+                p.auto_sensitivity = true;
+                p.vad_use_krisp = true;
+            }
+            PROFILE_STUDIO => {
+                p.echo_cancellation = false;
+                p.noise_suppression = false;
+                p.noise_cancellation = false;
+                p.agc = false;
+                p.auto_sensitivity = false;
+                p.sensitivity_db = -84.;
+                p.vad_use_krisp = false;
+                p.push_to_talk = false;
+            }
+            _ => {}
+        }
+        p
+    }
+
     pub fn controls(&self) -> Vec<VoiceControl> {
+        let e = self.processing();
         let mut v = vec![
             VoiceControl::SetInputDevice(self.input_device.clone()),
             VoiceControl::SetOutputDevice(self.output_device.clone()),
             VoiceControl::SetInputVolume(amplitude(self.input_volume as f32)),
             VoiceControl::SetOutputVolume(amplitude(self.output_volume as f32)),
-            VoiceControl::SetSensitivity(if self.auto_sensitivity { None } else { Some(self.sensitivity_db) }),
-            VoiceControl::SetNoiseSuppression(self.noise_suppression),
-            VoiceControl::SetEchoCancellation(self.echo_cancellation),
-            VoiceControl::SetAgc(self.agc),
+            VoiceControl::SetSensitivity(if e.auto_sensitivity { None } else { Some(e.sensitivity_db) }),
+            VoiceControl::SetNoiseSuppression(e.noise_suppression),
+            VoiceControl::SetNoiseCancellation(e.noise_cancellation),
+            VoiceControl::SetVadKrisp(e.vad_use_krisp),
+            VoiceControl::SetEchoCancellation(e.echo_cancellation),
+            VoiceControl::SetAgc(e.agc),
             VoiceControl::SetPttDelay(self.ptt_delay_ms),
-            VoiceControl::SetPushToTalk(self.input_mode == InputMode::PushToTalk),
-            VoiceControl::SetPttKey(if self.input_mode == InputMode::PushToTalk { self.ptt_key.clone() } else { None }),
+            VoiceControl::SetPushToTalk(e.push_to_talk),
+            VoiceControl::SetPttKey(if e.push_to_talk { self.ptt_key.clone() } else { None }),
         ];
         v.extend(self.users.keys().map(|u| VoiceControl::SetUserVolume(Id(*u), self.user_gain(Id(*u)))));
         v
@@ -257,5 +319,42 @@ mod tests {
         assert_eq!(amplitude(0.), 0.);
         assert!((amplitude(100.) - 1.).abs() < 1e-6);
         assert!((crate::voice::soundboard::perceptual(amplitude(73.) * 100.) - 73.).abs() < 1e-3);
+    }
+
+    #[test]
+    fn input_profiles_override_the_custom_settings_like_the_client() {
+        let custom = VoicePrefs {
+            echo_cancellation: false,
+            noise_suppression: true,
+            noise_cancellation: false,
+            agc: false,
+            auto_sensitivity: false,
+            sensitivity_db: -40.,
+            input_mode: InputMode::PushToTalk,
+            ..Default::default()
+        };
+        let e = custom.processing();
+        assert!(!e.echo_cancellation && e.noise_suppression && !e.noise_cancellation && !e.agc && e.push_to_talk);
+        assert_eq!(e.sensitivity_db, -40.);
+        let iso = VoicePrefs { audio_profile: PROFILE_ISOLATION, ..custom.clone() }.processing();
+        assert!(iso.echo_cancellation && !iso.noise_suppression && iso.noise_cancellation && iso.agc && iso.auto_sensitivity && iso.vad_use_krisp);
+        let studio = VoicePrefs { audio_profile: PROFILE_STUDIO, ..custom.clone() }.processing();
+        assert!(!studio.echo_cancellation && !studio.noise_suppression && !studio.noise_cancellation && !studio.agc && !studio.push_to_talk);
+        assert_eq!((studio.auto_sensitivity, studio.sensitivity_db), (false, -84.));
+        assert!(!studio.vad_use_krisp);
+        let c = VoicePrefs { audio_profile: PROFILE_STUDIO, ..custom }.controls();
+        assert!(c.contains(&VoiceControl::SetSensitivity(Some(-84.))));
+        assert!(c.contains(&VoiceControl::SetPttKey(None)));
+    }
+
+    #[test]
+    fn old_noise_suppression_flag_becomes_krisp() {
+        let old = VoicePrefs::from_json(&json!({"noise_suppression": true}));
+        assert!(old.noise_cancellation && !old.noise_suppression);
+        let off = VoicePrefs::from_json(&json!({"noise_suppression": false}));
+        assert!(!off.noise_cancellation && !off.noise_suppression);
+        let d = VoicePrefs::default();
+        assert!(d.echo_cancellation && !d.noise_suppression && d.noise_cancellation && d.agc && d.vad_use_krisp);
+        assert_eq!(d.audio_profile, PROFILE_CUSTOM);
     }
 }

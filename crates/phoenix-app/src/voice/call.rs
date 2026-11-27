@@ -677,6 +677,8 @@ impl VoiceManager {
             VoiceControl::SetOutputVolume(v) => self.control.set_output_gain(v),
             VoiceControl::SetUserVolume(u, v) => self.control.set_user_volume(u.0, v),
             VoiceControl::SetNoiseSuppression(v) => self.control.set_noise_suppression(v),
+            VoiceControl::SetNoiseCancellation(v) => self.control.set_noise_cancellation(v),
+            VoiceControl::SetVadKrisp(v) => self.control.set_vad_use_krisp(v),
             VoiceControl::SetEchoCancellation(v) => self.control.set_echo_cancellation(v),
             VoiceControl::SetAgc(v) => self.control.set_agc(v),
             VoiceControl::SetPushToTalk(v) => {

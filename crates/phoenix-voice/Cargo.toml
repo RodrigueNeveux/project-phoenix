@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 [features]
 default = []
 opus = ["dep:audiopus"]
-audio = ["opus", "dep:cpal"]
+audio = ["opus", "dep:cpal", "dep:sonora", "dep:nnnoiseless"]
 ffmpeg = []
 vaapi = []
 nvenc = []
@@ -28,6 +28,8 @@ hmac = "0.12"
 sha2 = "0.10"
 audiopus = { version = "0.2", optional = true }
 cpal = { version = "0.15", optional = true }
+sonora = { version = "0.3", optional = true }
+nnnoiseless = { version = "0.5", default-features = false, optional = true }
 openmls = "0.9"
 openmls_rust_crypto = "0.6"
 openmls_basic_credential = "0.6"

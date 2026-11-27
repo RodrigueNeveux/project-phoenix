@@ -303,7 +303,7 @@ pub fn toggle_call_audio_menu(pos: Point<Pixels>) {
 }
 
 pub const PROFILES: [&str; 3] = ["voice.profile_iso", "voice.profile_studio", "voice.profile_custom"];
-pub const PROFILE_STUDIO: u32 = 1;
+pub use crate::voice::prefs::PROFILE_STUDIO;
 
 fn device_submenu(kind: Audio, devices: Vec<String>) -> MenuItem {
     let current = {
@@ -337,18 +337,7 @@ fn profile_submenu() -> MenuItem {
         .enumerate()
         .map(|(i, k)| {
             MenuItem::radio(crate::t!(*k), now == i as u32, move |_, _, _| {
-                update(
-                    move |p| {
-                        p.audio_profile = i as u32;
-                        if i < 2 {
-                            let on = i == 0;
-                            p.echo_cancellation = on;
-                            p.noise_suppression = on;
-                            p.agc = on;
-                        }
-                    },
-                    true,
-                )
+                update(move |p| p.audio_profile = i as u32, true)
             })
         })
         .collect();
@@ -542,6 +531,13 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, deafened: b
         return context_menu::render_anchored(pos - gpui::point(px(0.), px(8.)), gpui::Anchor::BottomCenter, items, dismiss);
     }
     context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
+}
+
+pub fn toggle_noise_cancellation(p: &mut crate::voice::prefs::VoicePrefs) {
+    if p.audio_profile == crate::voice::prefs::PROFILE_CUSTOM {
+        p.noise_cancellation = !p.noise_cancellation;
+        p.noise_suppression = !p.noise_cancellation;
+    }
 }
 
 pub fn ptt_toggled(on: bool) -> crate::voice::prefs::InputMode {
@@ -742,7 +738,10 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         (Some(p), _) => crate::t!("voice.ping", p = p),
         (None, _) => crate::t!("voice.waiting_server"),
     };
-    let noise = prefs().lock().noise_suppression;
+    let (noise, noise_profile) = {
+        let p = prefs().lock();
+        (p.processing().noise_cancellation, p.audio_profile)
+    };
     let enlarge = enlarge_targets(app, cx);
     let bx = panel_box(enlarge);
     div()
@@ -833,13 +832,14 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                 }),
                                 false,
                             )
-                            .tip(if noise {
-                                crate::t!("voice.noise_off")
-                            } else {
-                                crate::t!("voice.noise_on")
+                            .tip(match noise_profile {
+                                crate::voice::prefs::PROFILE_ISOLATION => crate::t!("voice.noise_by_iso"),
+                                PROFILE_STUDIO => crate::t!("voice.noise_by_studio"),
+                                _ if noise => crate::t!("voice.noise_off"),
+                                _ => crate::t!("voice.noise_on"),
                             })
                             .on_click(cx.listener(|_, _, _, cx| {
-                                update(|p| p.noise_suppression = !p.noise_suppression, true);
+                                update(toggle_noise_cancellation, true);
                                 cx.notify();
                             })),
                         )
@@ -1431,5 +1431,19 @@ mod tests {
         use crate::voice::prefs::InputMode;
         assert_eq!(ptt_toggled(true), InputMode::VoiceActivity);
         assert_eq!(ptt_toggled(false), InputMode::PushToTalk);
+    }
+
+    #[test]
+    fn noise_button_toggles_krisp_only_in_the_custom_profile() {
+        use crate::voice::prefs::{PROFILE_CUSTOM, PROFILE_ISOLATION, VoicePrefs};
+        let mut p = VoicePrefs { audio_profile: PROFILE_CUSTOM, ..Default::default() };
+        toggle_noise_cancellation(&mut p);
+        assert!(!p.noise_cancellation && p.noise_suppression);
+        toggle_noise_cancellation(&mut p);
+        assert!(p.noise_cancellation && !p.noise_suppression);
+        let mut iso = VoicePrefs { audio_profile: PROFILE_ISOLATION, ..Default::default() };
+        toggle_noise_cancellation(&mut iso);
+        assert!(iso.noise_cancellation && iso.processing().noise_cancellation);
+        assert_eq!(crate::i18n::t_in("fr", "voice.noise_by_iso", &[]).as_ref(), "L'annulation de bruit est enabled par le profil d'entrée Voice Isolation.");
     }
 }

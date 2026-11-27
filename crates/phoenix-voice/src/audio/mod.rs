@@ -7,6 +7,8 @@ pub mod device;
 pub mod pulse;
 #[cfg(feature = "audio")]
 pub mod effects;
+#[cfg(feature = "audio")]
+pub mod processing;
 pub mod ogg;
 #[cfg(feature = "audio")]
 pub mod voice_message;
@@ -44,6 +46,8 @@ pub struct AudioControl {
     user_volume: Mutex<HashMap<u64, f32>>,
     priority_speakers: Mutex<HashSet<u64>>,
     noise_suppression: AtomicBool,
+    noise_cancellation: AtomicBool,
+    vad_use_krisp: AtomicBool,
     agc: AtomicBool,
     echo_cancellation: AtomicBool,
     push_to_talk: AtomicBool,
@@ -64,7 +68,9 @@ impl Default for AudioControl {
             input_level_db: AtomicU32::new((-100.0f32).to_bits()),
             user_volume: Mutex::new(HashMap::new()),
             priority_speakers: Mutex::new(HashSet::new()),
-            noise_suppression: AtomicBool::new(true),
+            noise_suppression: AtomicBool::new(false),
+            noise_cancellation: AtomicBool::new(true),
+            vad_use_krisp: AtomicBool::new(true),
             agc: AtomicBool::new(true),
             echo_cancellation: AtomicBool::new(true),
             push_to_talk: AtomicBool::new(false),
@@ -144,6 +150,18 @@ impl AudioControl {
     }
     pub fn set_noise_suppression(&self, v: bool) {
         self.noise_suppression.store(v, Ordering::Relaxed);
+    }
+    pub fn noise_cancellation(&self) -> bool {
+        self.noise_cancellation.load(Ordering::Relaxed)
+    }
+    pub fn set_noise_cancellation(&self, v: bool) {
+        self.noise_cancellation.store(v, Ordering::Relaxed);
+    }
+    pub fn vad_use_krisp(&self) -> bool {
+        self.vad_use_krisp.load(Ordering::Relaxed)
+    }
+    pub fn set_vad_use_krisp(&self, v: bool) {
+        self.vad_use_krisp.store(v, Ordering::Relaxed);
     }
     pub fn agc(&self) -> bool {
         self.agc.load(Ordering::Relaxed)

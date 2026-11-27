@@ -8,7 +8,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{Device, SampleFormat, SampleRate, Stream, StreamConfig, SupportedStreamConfig};
 use tokio::sync::mpsc;
 
-use super::dsp::{Agc, HighPass, NoiseGate, NoiseSuppressor, Resampler, convert_channels, level_db, to_i16};
+use super::dsp::{NoiseGate, Resampler, convert_channels, level_db, to_i16};
+use super::processing::{ChainSettings, InputChain, KrispGate, RenderFeed, RenderTap, SyntheticNoisyVoice, render_channel};
 use super::mixer::Mixer;
 use super::{AudioControl, lock};
 use crate::connection::{AudioIn, AudioOut};
@@ -126,6 +127,8 @@ impl AudioEngine {
         let (cap_tx, cap_rx) = std_mpsc::channel::<Vec<f32>>();
         let (io_stop_tx, io_stop_rx) = std_mpsc::channel::<()>();
         let (ready_tx, ready_rx) = std_mpsc::channel::<(Option<(u32, usize)>, Option<(u32, usize)>)>();
+        let (tap, feed) = render_channel();
+        let bypass = input.as_deref() == Some(SYNTHETIC_INPUT);
 
         let mut threads = Vec::new();
         let oq = out_queue.clone();
@@ -134,11 +137,12 @@ impl AudioEngine {
             std::thread::Builder::new()
                 .name("phoenix-audio-io".into())
                 .spawn(move || {
-                    let synthetic = input.as_deref() == Some(SYNTHETIC_INPUT);
+                    let synthetic = matches!(input.as_deref(), Some(SYNTHETIC_INPUT | SYNTHETIC_VOICE_INPUT));
                     let tone_stop = Arc::new(AtomicBool::new(false));
                     let (istream, ifmt) = if synthetic {
                         let ts = tone_stop.clone();
-                        let _ = std::thread::Builder::new().name("phoenix-audio-tone".into()).spawn(move || synthetic_tone(cap_tx, ts));
+                        let voice = input.as_deref() == Some(SYNTHETIC_VOICE_INPUT);
+                        let _ = std::thread::Builder::new().name("phoenix-audio-tone".into()).spawn(move || synthetic_source(cap_tx, ts, voice));
                         (None, Some((RATE, 1)))
                     } else {
                         open_input(input.as_deref(), cap_tx).unzip()
@@ -156,13 +160,13 @@ impl AudioEngine {
             eprintln!("voice-audio: engine input={ifmt:?} output={ofmt:?} output_device={output_name:?}");
         }
 
-        if let Some((rate, ch)) = ifmt {
+        if let Some((rate, _)) = ifmt {
             let control = control.clone();
             let stop = stop.clone();
             threads.push(
                 std::thread::Builder::new()
                     .name("phoenix-audio-enc".into())
-                    .spawn(move || encode_loop(control, stop, cap_rx, rate, ch, out_tx))
+                    .spawn(move || encode_loop(control, stop, cap_rx, rate, out_tx, Processor::new(Some(feed), bypass)))
                     .map_err(Error::Io)?,
             );
         } else {
@@ -175,7 +179,7 @@ impl AudioEngine {
             threads.push(
                 std::thread::Builder::new()
                     .name("phoenix-audio-mix".into())
-                    .spawn(move || mix_loop(control, stop, mixer, out_queue, rate, ch))
+                    .spawn(move || mix_loop(control, stop, mixer, out_queue, rate, ch, tap))
                     .map_err(Error::Io)?,
             );
         } else {
@@ -208,16 +212,26 @@ impl Drop for AudioEngine {
 }
 
 pub const SYNTHETIC_INPUT: &str = "phoenix-synthetic-tone";
+pub const SYNTHETIC_VOICE_INPUT: &str = "phoenix-synthetic-noisy-voice";
 
 pub fn synthetic_frame(start: usize, len: usize) -> Vec<f32> {
     (start..start + len).map(|i| (i as f32 * 440.0 * std::f32::consts::TAU / RATE as f32).sin() * 0.03).collect()
 }
 
-fn synthetic_tone(tx: std_mpsc::Sender<Vec<f32>>, stop: Arc<AtomicBool>) {
+fn synthetic_source(tx: std_mpsc::Sender<Vec<f32>>, stop: Arc<AtomicBool>, voice: bool) {
     let mut n = 0usize;
     let mut next = Instant::now();
+    let mut source = voice.then(SyntheticNoisyVoice::new);
     while !stop.load(Ordering::Relaxed) {
-        if tx.send(synthetic_frame(n, FRAME_SAMPLES)).is_err() {
+        let frame = match source.as_mut() {
+            Some(g) => {
+                let mut f = vec![0.0; FRAME_SAMPLES];
+                g.fill(&mut f);
+                f
+            }
+            None => synthetic_frame(n, FRAME_SAMPLES),
+        };
+        if tx.send(frame).is_err() {
             return;
         }
         n += FRAME_SAMPLES;
@@ -297,33 +311,44 @@ fn open_output(name: Option<&str>, q: Arc<Mutex<VecDeque<f32>>>) -> Option<(Stre
 }
 
 pub struct Processor {
-    hp: HighPass,
-    ns: NoiseSuppressor,
-    agc: Agc,
+    chain: InputChain,
     gate: NoiseGate,
+    krisp_gate: KrispGate,
+    bypass: bool,
     ptt_last: Option<Instant>,
 }
 
 impl Default for Processor {
     fn default() -> Self {
-        Self { hp: HighPass::new(80.0, RATE), ns: NoiseSuppressor::default(), agc: Agc::default(), gate: NoiseGate::default(), ptt_last: None }
+        Self::new(None, false)
     }
 }
 
 impl Processor {
+    pub fn new(feed: Option<RenderFeed>, bypass: bool) -> Self {
+        Self { chain: InputChain::new(ChainSettings::OFF, feed), gate: NoiseGate::default(), krisp_gate: KrispGate::new(), bypass, ptt_last: None }
+    }
+
+    pub fn chain(&self) -> &InputChain {
+        &self.chain
+    }
+
     pub fn process(&mut self, control: &AudioControl, frame: &mut [f32]) -> (f32, bool) {
-        if control.noise_suppression() {
-            self.hp.process(frame);
-            self.ns.process(frame);
-        }
         let g = control.input_gain();
         if g != 1.0 {
             frame.iter_mut().for_each(|s| *s *= g);
         }
+        let settings = if self.bypass { ChainSettings::OFF } else { ChainSettings::from_control(control) };
+        self.chain.configure(settings);
+        let krisp_vad = self.chain.process(frame);
         let db = level_db(frame);
         self.gate.automatic = control.gate_automatic();
         self.gate.threshold_db = control.gate_threshold_db();
-        let vad = self.gate.process(db);
+        let level_open = self.gate.process(db);
+        let vad = match krisp_vad {
+            Some(p) if control.vad_use_krisp() && control.gate_automatic() => self.krisp_gate.process(p, KrispGate::threshold(settings.agc)),
+            _ => level_open,
+        };
         let open = if control.push_to_talk() {
             let now = Instant::now();
             if control.ptt_pressed() {
@@ -335,9 +360,6 @@ impl Processor {
         } else {
             vad
         };
-        if control.agc() {
-            self.agc.process(frame, open && vad);
-        }
         (db, open)
     }
 }
@@ -347,8 +369,8 @@ fn encode_loop(
     stop: Arc<AtomicBool>,
     rx: std_mpsc::Receiver<Vec<f32>>,
     rate: u32,
-    _ch: usize,
     out: mpsc::UnboundedSender<AudioOut>,
+    mut proc: Processor,
 ) {
     let Ok(mut enc) = OpusEncoder::new(false, 64_000) else {
         tracing::warn!("opus encoder unavailable");
@@ -358,17 +380,24 @@ fn encode_loop(
         tracing::debug!(error = %e, "opus fec");
     }
     let mut rs = Resampler::new(rate, RATE, 1);
-    let mut proc = Processor::default();
     let mut pending: Vec<f32> = Vec::with_capacity(FRAME_SAMPLES * 4);
+    let log = std::env::var_os("PHOENIX_SOUND_LOG").is_some();
+    let mut last_log = Instant::now();
+    let (mut sent, mut frames, mut in_db_sum) = (0u64, 0u64, 0f64);
     while !stop.load(Ordering::Relaxed) {
         let Ok(chunk) = rx.recv_timeout(Duration::from_millis(200)) else { continue };
         rs.process(&chunk, &mut pending);
         while pending.len() >= FRAME_SAMPLES {
             let mut frame: Vec<f32> = pending.drain(..FRAME_SAMPLES).collect();
+            if log {
+                in_db_sum += f64::from(level_db(&frame));
+            }
             let (db, open) = proc.process(&control, &mut frame);
             control.set_input_level_db(db);
             let send = open && !control.muted() && !control.deafened();
             control.set_transmitting(send);
+            frames += 1;
+            sent += u64::from(send);
             let msg = if !send {
                 AudioOut::End
             } else {
@@ -380,6 +409,23 @@ fn encode_loop(
             if out.send(msg).is_err() {
                 control.set_transmitting(false);
                 return;
+            }
+            if log && last_log.elapsed() >= Duration::from_secs(5) {
+                last_log = Instant::now();
+                let c = proc.chain();
+                let st = c.stats();
+                eprintln!(
+                    "voice-proc: chain={} in_db={:.1} out_db={db:.1} open={sent}/{frames} cpu_avg_us={:.0} cpu_max_us={:.0} load={:.2}% latency_ms={:.1} render_blocks={} erle={:?}",
+                    c.settings().label(),
+                    in_db_sum / frames.max(1) as f64,
+                    st.avg_block_us(),
+                    st.max_block.as_secs_f64() * 1e6,
+                    st.load_pct(),
+                    c.latency_samples() as f64 * 1000.0 / RATE as f64,
+                    st.render_blocks,
+                    c.echo_return_loss_enhancement(),
+                );
+                (sent, frames, in_db_sum) = (0, 0, 0.0);
             }
         }
     }
@@ -498,6 +544,7 @@ fn mix_loop(
     q: Arc<Mutex<VecDeque<f32>>>,
     rate: u32,
     ch: usize,
+    tap: RenderTap,
 ) {
     let mut rs = Resampler::new(RATE, rate, ch);
     let cap = rate as usize * ch * MAX_OUT_MS / 1000;
@@ -513,15 +560,23 @@ fn mix_loop(
         }
         let mut pending = queued;
         while pending < target && !stop.load(Ordering::Relaxed) {
-            let frame = lock(&mixer).mix_frame(&control);
-            let frame = convert_channels(&frame, 2, ch);
+            let mixed = lock(&mixer).mix_frame(&control);
+            let ahead_ms = (pending * 1000 / (rate as usize * ch).max(1)) as u32;
+            let frame = convert_channels(&mixed, 2, ch);
             buf.clear();
             rs.process(&frame, &mut buf);
-            let mut q = lock(&q);
-            if q.len() + buf.len() <= cap {
-                q.extend(buf.iter().copied());
+            let played = {
+                let mut q = lock(&q);
+                let fits = q.len() + buf.len() <= cap;
+                if fits {
+                    q.extend(buf.iter().copied());
+                }
+                pending = q.len();
+                fits
+            };
+            if played {
+                tap.push(&mixed, 2, ahead_ms);
             }
-            pending = q.len();
             if buf.is_empty() {
                 break;
             }

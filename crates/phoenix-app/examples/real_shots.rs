@@ -45,6 +45,14 @@ fn send_allowed(ch: u64) -> bool {
 }
 const VOICE_TEST_CHANNEL: u64 = 1574900893613039696;
 
+fn synthetic_input() -> &'static str {
+    if std::env::var("PHX_VOICE_SOURCE").as_deref() == Ok("voice") {
+        phoenix_voice::audio::device::SYNTHETIC_VOICE_INPUT
+    } else {
+        phoenix_voice::audio::device::SYNTHETIC_INPUT
+    }
+}
+
 fn voice_test_allowed(channel: Option<Id>) -> bool {
     std::env::var_os("PHX_VOICE").is_some() && channel.is_none_or(|c| c.0 == VOICE_TEST_CHANNEL)
 }
@@ -217,8 +225,8 @@ impl Backend for ReadOnly {
             return Box::pin(async { Ok(()) });
         }
         let control = match control {
-            V::SetInputDevice(_) => V::SetInputDevice(Some(phoenix_voice::audio::device::SYNTHETIC_INPUT.into())),
-            V::SetMute(_) => V::SetMute(true),
+            V::SetInputDevice(_) => V::SetInputDevice(Some(synthetic_input().into())),
+            V::SetMute(_) if std::env::var_os("PHX_VOICE_TALK").is_none() => V::SetMute(true),
             V::SetPttKey(_) => return Box::pin(async { Ok(()) }),
             V::SetCameraDevice(_) => V::SetCameraDevice(Some(phoenix_voice::media::camera::TEST_PATTERN.into())),
             V::StartStream { resolution, fps, sound, .. } => V::StartStream { source: phoenix_app::voice::StreamSource::TestPattern, resolution, fps, sound },
@@ -714,6 +722,12 @@ fn main() -> anyhow::Result<()> {
     phoenix_app::perf::start();
     if let Ok(f) = std::env::var("RUST_LOG") {
         let _ = tracing_subscriber::fmt().with_env_filter(phoenix_app::logging::filter_from(Some(&f))).with_writer(std::io::stderr).with_ansi(false).try_init();
+    }
+    if std::env::var_os("PHX_AUDIOPROC_SELFTEST").is_some() {
+        for l in phoenix_voice::audio::processing::self_test_lines() {
+            println!("{l}");
+        }
+        return Ok(());
     }
     let out = std::env::args().nth(1).unwrap_or_else(|| "real.png".into());
     phoenix_app::discord_backend::NO_ACKS.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -2431,9 +2445,19 @@ fn main() -> anyhow::Result<()> {
         cx.update_window(win.into(), |_, _, cx| {
             v.update(cx, |app, cx| {
                 drop(app.backend.voice_control(V::SetInputDevice(None)));
-                drop(app.backend.voice_control(V::SetMute(true)));
+                let talk = std::env::var_os("PHX_VOICE_TALK").is_some();
+                let profile = match std::env::var("PHX_VOICE_PROFILE").as_deref() {
+                    Ok("iso") => Some(phoenix_app::voice::prefs::PROFILE_ISOLATION),
+                    Ok("studio") => Some(phoenix_app::voice::prefs::PROFILE_STUDIO),
+                    Ok("custom") => Some(phoenix_app::voice::prefs::PROFILE_CUSTOM),
+                    _ => None,
+                };
+                if let Some(profile) = profile {
+                    phoenix_app::voice::prefs::update(|p| p.audio_profile = profile, false);
+                }
+                drop(app.backend.voice_control(V::SetMute(!talk)));
                 drop(app.backend.voice_control(V::SetDeaf(deaf)));
-                app.mic_muted = true;
+                app.mic_muted = !talk;
                 app.deafened = deaf;
                 app.select_channel(Id(VOICE_TEST_CHANNEL), cx);
             })

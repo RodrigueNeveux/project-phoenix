@@ -18,7 +18,7 @@ use crate::assets::Icon;
 use crate::theme::{Palette, c, generated::idx, tok};
 use crate::ui::icon;
 use crate::voice::call::{PortalState, manager, portal_state};
-use crate::voice::prefs::{InputMode, VoicePrefs, prefs, update};
+use crate::voice::prefs::{InputMode, PROFILE_CUSTOM, VoicePrefs, prefs, update};
 use crate::voice::{VoiceStatus, ptt};
 
 type Cx<'a> = Context<'a, PhoenixApp>;
@@ -245,6 +245,8 @@ pub(crate) fn slider(
         )
 }
 
+type SetPref = Rc<dyn Fn(&mut VoicePrefs)>;
+
 fn select(
     id: &'static str,
     current: Option<String>,
@@ -252,13 +254,29 @@ fn select(
     f: impl Fn(&mut VoicePrefs, Option<String>) + 'static,
     cx: &mut Cx,
 ) -> Div {
-    let open = OPEN_SELECT.with(Cell::get) == Some(id);
     let default_label: SharedString = match options.first() {
         Some(d) => format!("{}: {d}", crate::t!("voice.system_default")).into(),
         None => crate::t!("voice.default"),
     };
     let label: SharedString = current.clone().map(SharedString::from).unwrap_or_else(|| default_label.clone());
     let f = Rc::new(f);
+    let mut entries: Vec<Option<String>> = vec![None];
+    entries.extend(options.into_iter().map(Some));
+    let entries = entries
+        .into_iter()
+        .map(|opt| {
+            let text: SharedString = opt.clone().map(SharedString::from).unwrap_or_else(|| default_label.clone());
+            let f = f.clone();
+            let selected = opt == current;
+            let set: SetPref = Rc::new(move |p: &mut VoicePrefs| f(p, opt.clone()));
+            (text, selected, set)
+        })
+        .collect();
+    select_box(id, label, entries, cx)
+}
+
+fn select_box(id: &'static str, label: SharedString, entries: Vec<(SharedString, bool, SetPref)>, cx: &mut Cx) -> Div {
+    let open = OPEN_SELECT.with(Cell::get) == Some(id);
     let mut list = div()
         .id(eid(format!("{id}-list")))
         .absolute()
@@ -276,12 +294,7 @@ fn select(
         .occlude()
         .flex()
         .flex_col();
-    let mut entries: Vec<Option<String>> = vec![None];
-    entries.extend(options.into_iter().map(Some));
-    for (ix, opt) in entries.into_iter().enumerate() {
-        let selected = opt == current;
-        let text: SharedString = opt.clone().map(SharedString::from).unwrap_or_else(|| default_label.clone());
-        let f = f.clone();
+    for (ix, (text, selected, f)) in entries.into_iter().enumerate() {
         list = list.child(
             div()
                 .id(eid(format!("{id}-opt-{ix}")))
@@ -299,9 +312,8 @@ fn select(
                 .child(div().flex_1().min_w_0().text_ellipsis().child(text))
                 .on_click(cx.listener(move |_, _, _, cx| {
                     OPEN_SELECT.with(|o| o.set(None));
-                    let v = opt.clone();
                     let f = f.clone();
-                    update(move |p| f(p, v), true);
+                    update(move |p| f(p), true);
                     restart_mic_test();
                     cx.notify();
                 })),
@@ -759,6 +771,8 @@ static LOWER: &[B] = &[
         "sp.vo.adv",
         "sp.vo.adv_d",
         &[
+            B::Custom("voice.agc", agc_row),
+            B::Custom("voice.vad_krisp", vad_krisp_row),
             B::Switch("vo-suggest", "sp.vo.suggest", "sp.vo.suggest_d", Bind::Pref(true)),
             B::Switch("vo-silent", "sp.vo.silent", "sp.vo.silent_d", Bind::Pref(true)),
             B::Switch("vo-switch-warn", "sp.vo.switch_warn", "sp.vo.switch_warn_d", Bind::Pref(true)),
@@ -816,18 +830,7 @@ fn profile_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
             .gap(z(12.))
             .cursor_pointer()
             .on_click(cx.listener(move |_, _, _, cx| {
-                update(
-                    move |p| {
-                        p.audio_profile = i as u32;
-                        if i < 2 {
-                            let on = i == 0;
-                            p.echo_cancellation = on;
-                            p.noise_suppression = on;
-                            p.agc = on;
-                        }
-                    },
-                    true,
-                );
+                update(move |p| p.audio_profile = i as u32, true);
                 cx.notify();
             }))
             .child(crate::ui::controls::radio_indicator(sel))
@@ -842,14 +845,93 @@ fn profile_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
             )
     }));
     let mut col = div().pt(z(19.)).pb(z(15.)).flex().flex_col().child(h5(crate::t!("sp.vo.profile")).pb_0()).child(group);
-    if p.audio_profile == 2 {
+    if p.audio_profile == PROFILE_CUSTOM {
         col = col
             .child(div().mt(z(24.)).child(sensitivity(&p, cx)))
-            .child(div().mt(z(16.)).child(switch_row("echo", crate::t!("voice.echo"), crate::t!("voice.echo_note"), p.echo_cancellation, false, |p| p.echo_cancellation = !p.echo_cancellation, cx)))
-            .child(switch_row("noise", crate::t!("voice.noise"), crate::t!("voice.noise_note"), p.noise_suppression, false, |p| p.noise_suppression = !p.noise_suppression, cx))
-            .child(switch_row("agc", crate::t!("voice.agc"), crate::t!("voice.agc_note"), p.agc, false, |p| p.agc = !p.agc, cx));
+            .child(div().mt(z(16.)).child(switch_row("echo", crate::t!("voice.echo"), "".into(), p.echo_cancellation, false, |p| p.echo_cancellation = !p.echo_cancellation, cx)))
+            .child(noise_row(&p, cx));
     }
     col.into_any_element()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NoiseMode {
+    Krisp,
+    Standard,
+    Off,
+}
+
+impl NoiseMode {
+    pub const ALL: [NoiseMode; 3] = [NoiseMode::Krisp, NoiseMode::Standard, NoiseMode::Off];
+
+    pub fn of(p: &VoicePrefs) -> Self {
+        if p.noise_cancellation {
+            NoiseMode::Krisp
+        } else if p.noise_suppression {
+            NoiseMode::Standard
+        } else {
+            NoiseMode::Off
+        }
+    }
+
+    pub fn apply(self, p: &mut VoicePrefs) {
+        p.noise_cancellation = self == NoiseMode::Krisp;
+        p.noise_suppression = self == NoiseMode::Standard;
+    }
+
+    fn label(self) -> SharedString {
+        crate::t!(match self {
+            NoiseMode::Krisp => "voice.noise_krisp",
+            NoiseMode::Standard => "voice.noise_standard",
+            NoiseMode::Off => "voice.noise_none",
+        })
+    }
+}
+
+fn noise_row(p: &VoicePrefs, cx: &mut Cx) -> Div {
+    let now = NoiseMode::of(p);
+    let entries = NoiseMode::ALL
+        .iter()
+        .map(|m| {
+            let m = *m;
+            let set: SetPref = Rc::new(move |p: &mut VoicePrefs| m.apply(p));
+            (m.label(), m == now, set)
+        })
+        .collect();
+    div()
+        .py(z(10.))
+        .flex()
+        .items_center()
+        .gap(z(16.))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(z(4.))
+                .child(div().text_size(z(16.)).line_height(z(20.)).font_weight(FontWeight::MEDIUM).text_color(c(tok(idx::TEXT_STRONG))).child(crate::t!("voice.noise")))
+                .child(note(crate::t!("voice.noise_select_note"))),
+        )
+        .child(div().w(z(220.)).flex_none().child(select_box("noise-mode", now.label(), entries, cx)))
+}
+
+fn agc_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let p = prefs().lock().clone();
+    if p.audio_profile != PROFILE_CUSTOM {
+        return div().into_any_element();
+    }
+    switch_row("agc", crate::t!("voice.agc"), crate::t!("voice.agc_note"), p.agc, false, |p| p.agc = !p.agc, cx).into_any_element()
+}
+
+fn vad_krisp_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let p = prefs().lock().clone();
+    if p.audio_profile != PROFILE_CUSTOM {
+        return div().into_any_element();
+    }
+    let disabled = p.input_mode != InputMode::VoiceActivity || !p.auto_sensitivity;
+    switch_row("vad-krisp", crate::t!("voice.vad_krisp"), crate::t!("voice.vad_krisp_note"), p.vad_use_krisp, disabled, |p| p.vad_use_krisp = !p.vad_use_krisp, cx)
+        .into_any_element()
 }
 
 fn ptt_row(_: &PhoenixApp, cx: &mut Cx) -> AnyElement {
@@ -1103,5 +1185,22 @@ mod search_tests {
         let vol = crate::t!("voice.output_volume").to_lowercase();
         assert!(super::top_rows(&vol)[1]);
         assert_eq!(super::top_rows("zzzz-nothing"), [false; 3]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn noise_select_maps_to_the_client_flags() {
+        let mut p = VoicePrefs::default();
+        assert_eq!(NoiseMode::of(&p), NoiseMode::Krisp);
+        NoiseMode::Standard.apply(&mut p);
+        assert!(p.noise_suppression && !p.noise_cancellation);
+        assert_eq!(NoiseMode::of(&p), NoiseMode::Standard);
+        NoiseMode::Off.apply(&mut p);
+        assert!(!p.noise_suppression && !p.noise_cancellation);
+        assert_eq!(crate::i18n::t_in("en-US", "voice.noise_none", &[]).as_ref(), "None");
     }
 }
