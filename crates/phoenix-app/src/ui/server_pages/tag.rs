@@ -20,20 +20,28 @@ pub fn valid_tag(s: &str) -> bool {
     (2..=4).contains(&n) && s.chars().all(|c| c.is_alphanumeric())
 }
 
-fn tile(id: impl Into<gpui::ElementId>, selected: bool) -> gpui::Stateful<gpui::Div> {
+fn tile(id: impl Into<gpui::ElementId>, selected: bool, locked: bool) -> gpui::Stateful<gpui::Div> {
+    let border = match (selected, locked) {
+        (true, false) => idx::BRAND_400,
+        (true, true) => idx::BORDER_STRONG,
+        (false, _) => idx::BORDER_SUBTLE,
+    };
     div()
         .id(id.into())
         .size(z(64.))
         .flex_none()
         .rounded(z(4.))
         .border_1()
-        .border_color(t(if selected { idx::BRAND_400 } else { idx::BORDER_SUBTLE }))
-        .hover(move |s| if selected { s } else { s.border_color(t(idx::BORDER_STRONG)) })
+        .border_color(t(border))
+        .when(!locked, |d| d.hover(move |s| if selected { s } else { s.border_color(t(idx::BORDER_STRONG)) }).cursor_pointer())
         .bg(t(idx::BACKGROUND_MOD_MUTED))
         .flex()
         .items_center()
         .justify_center()
-        .cursor_pointer()
+}
+
+pub fn has_tags(features: &[String]) -> bool {
+    features.iter().any(|f| f == "GUILD_TAGS")
 }
 
 fn badge_img(guild: Id, hash: &str, size: f32) -> AnyElement {
@@ -97,6 +105,8 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     let Some(prof) = prof else { return page().child(title(crate::t!("menu.gs.tag"))).child(super::loading()).into_any_element() };
     let tag = prof.get("tag").and_then(Value::as_str).map(str::to_owned);
     let enabled = tag.is_some();
+    let unlocked = has_tags(&app.backend.guild_features(guild));
+    let locked = !unlocked || !enabled;
     let badge = prof.get("badge").and_then(Value::as_u64).map_or(clan_badges::DEFAULT_BADGE, |b| b as u32);
     let hash = str_of(&prof, "badge_hash").to_owned();
     let color = |k: &str| prof.get(k).and_then(Value::as_str).filter(|v| !v.is_empty()).map(str::to_lowercase);
@@ -108,7 +118,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     let mut badges = Vec::new();
     for kind in DISPLAY {
         let sel = kind == badge;
-        let mut tl = tile(("gs2-badge", kind as usize), sel).tooltip(crate::ui::tooltip::tip(crate::t!(clan_badges::label_key(kind))));
+        let mut tl = tile(("gs2-badge", kind as usize), sel, locked).tooltip(crate::ui::tooltip::tip(crate::t!(clan_badges::label_key(kind))));
         match badge_art(kind, None, None, 32.) {
             Some(art) => tl = tl.child(art),
             None if sel && !hash.is_empty() => tl = tl.child(badge_img(guild, &hash, 32.)),
@@ -126,7 +136,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     };
     let mut colors = Vec::new();
     for (i, (p, s)) in PALETTES.iter().copied().enumerate() {
-        let mut choice = tile(("gs2-color", i), preset == Some(i));
+        let mut choice = tile(("gs2-color", i), preset == Some(i), locked);
         if let Some(art) = badge_art(badge, Some(p), Some(s), 32.) {
             choice = choice.child(art);
         } else if let Some([r, g, b]) = super::tag_colors::hex_to_rgb(p) {
@@ -136,7 +146,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         colors.push(choice.on_click(cx.listener(set_colors(Some(p), Some(s)))));
     }
     colors.push(
-        tile("gs2-color-reset", reset)
+        tile("gs2-color-reset", reset, locked)
             .relative()
             .tooltip(crate::ui::tooltip::tip(crate::t!("gs2.tag_color_reset")))
             .children(badge_art(badge, None, None, 32.))
@@ -145,7 +155,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     );
     let (cp, cs) = (pc.unwrap_or(PALETTES[0].0).to_owned(), sc.unwrap_or(PALETTES[0].1).to_owned());
     colors.push(
-        tile("gs2-color-custom", !reset && preset.is_none())
+        tile("gs2-color-custom", !reset && preset.is_none(), locked)
             .relative()
             .child(super::icon("server/dropper", 20., idx::INTERACTIVE_ICON_DEFAULT))
             .children(super::tag_colors::render(guild, badge, cx))
@@ -154,29 +164,38 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                 cx.notify();
             })),
     );
-    let left = div()
-        .w(z(332.))
-        .flex_none()
+    let toggle = if unlocked {
+        div()
+            .mt(z(30.))
+            .px(z(16.))
+            .py(z(20.))
+            .rounded(z(8.))
+            .bg(t(idx::BACKGROUND_MOD_SUBTLE))
+            .flex()
+            .items_center()
+            .justify_between()
+            .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.tag_enable")))
+            .child(switch("gs2-tag-enable", enabled).on_click(cx.listener(move |a, _, _, cx| {
+                let patch = ProfilePatch { tag: Some(if enabled { None } else { Some("TAG".into()) }), ..Default::default() };
+                write(a, ServerCall::SetProfile { guild: sf(guild), patch }, None, cx);
+            })))
+    } else {
+        div().mt(z(24.)).mb(z(8.)).flex().child(
+            crate::ui::controls::button_icon("gs2-tag-unlock", "boost", crate::t!("gs2.tag_unlock"), BtnKind::Expressive).on_click(cx.listener(
+                move |_, _, _, cx| {
+                    crate::actions::close_modal();
+                    crate::ui::boost_layer::open(guild);
+                    cx.notify();
+                },
+            )),
+        )
+    };
+    let form = div()
+        .relative()
         .flex()
         .flex_col()
-        .child(div().mt(z(24.)).child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("gs2.tag_lead"))))
-        .child(
-            div()
-                .mt(z(30.))
-                .px(z(16.))
-                .py(z(20.))
-                .rounded(z(8.))
-                .bg(t(idx::BACKGROUND_MOD_SUBTLE))
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(text(16., 20., FontWeight::SEMIBOLD, idx::TEXT_STRONG, crate::t!("gs2.tag_enable")))
-                .child(switch("gs2-tag-enable", enabled).on_click(cx.listener(move |a, _, _, cx| {
-                    let patch = ProfilePatch { tag: Some(if enabled { None } else { Some("TAG".into()) }), ..Default::default() };
-                    write(a, ServerCall::SetProfile { guild: sf(guild), patch }, None, cx);
-                }))),
-        )
-        .child(div().mt(z(50.)).child(label(crate::t!("gs2.tag_name"))))
+        .when(locked, |d| d.opacity(0.3))
+        .child(div().mt(z(if unlocked { 50. } else { 18. })).child(label(crate::t!("gs2.tag_name"))))
         .child(
             div()
                 .mt(z(8.))
@@ -190,13 +209,13 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
                         .px(z(16.))
                         .rounded(z(8.))
                         .border_1()
-                        .border_color(t(idx::BRAND_400))
+                        .border_color(t(if locked { idx::BORDER_SUBTLE } else { idx::BRAND_400 }))
                         .bg(t(idx::BACKGROUND_BASE_LOWEST))
                         .flex()
                         .items_center()
                         .gap(z(8.))
                         .children(badge_art(badge, pc, sc, 40.).or_else(|| (!hash.is_empty()).then(|| badge_img(guild, &hash, 40.))))
-                        .child(match super::input(guild, "tag", &tag_s, cx) {
+                        .child(match (!locked).then(|| super::input(guild, "tag", &tag_s, cx)).flatten() {
                             Some(e) => div().w(z(84.)).text_size(z(24.)).text_color(t(idx::TEXT_DEFAULT)).child(gpui_component::input::Input::new(&e).appearance(false).bordered(false)).into_any_element(),
                             None => div().text_size(z(24.)).text_color(t(idx::TEXT_DEFAULT)).child(tag_s.clone()).into_any_element(),
                         }),
@@ -208,7 +227,16 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         .child(grid(badges))
         .child(div().mt(z(22.)).flex().justify_center().child(text(14., 18., FontWeight::SEMIBOLD, idx::TEXT_DEFAULT, crate::t!("gs2.tag_all_badges"))))
         .child(div().mt(z(64.)).mb(z(8.)).child(label(crate::t!("gs2.tag_color"))))
-        .child(grid(colors));
+        .child(grid(colors))
+        .when(locked, |d| d.child(div().id("gs2-tag-locked").absolute().inset_0().occlude()));
+    let left = div()
+        .w(z(332.))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .child(div().mt(z(24.)).child(text(14., 18., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("gs2.tag_lead"))))
+        .child(toggle)
+        .child(form);
     let me = app.me.name.clone();
     let tag_el = |hash: &str| (!hash.is_empty()).then(|| badge_img(guild, hash, 12.));
     let right = div()
@@ -226,7 +254,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         .child(sample_message("Lily", crate::t!("gs2.tag_s5"), None, true))
         .child(div().mt(z(32.)).child(text(12., 16., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!("gs2.tag_current"))))
         .child(div().mt(z(13.)).px(z(16.)).child(sample_message(&me, crate::t!("gs2.tag_s6"), Some((tag_s.as_str(), tag_el(&hash))), false)))
-        .child(div().mx(z(16.)).child(button("gs2-tag-use", crate::t!("gs2.tag_use"), BtnKind::Primary).w_full().when(enabled, |b| b.opacity(0.5))));
+        .when(!locked, |d| d.child(div().mx(z(16.)).child(button("gs2-tag-use", crate::t!("gs2.tag_use"), BtnKind::Primary).w_full())));
     let typed = super::value(guild, "tag", cx).filter(|v| *v != tag_s);
     let bar = typed.map(|v| {
         let ok = valid_tag(&v);
@@ -250,5 +278,7 @@ mod tests {
         assert!(!super::valid_tag("GLADOS"));
         assert!(!super::valid_tag("G!"));
         assert_eq!(super::badge_url(crate::model::Id(5), "ab", 16), "https://cdn.discordapp.com/clan-badges/5/ab.png?size=16");
+        assert!(super::has_tags(&["COMMUNITY".into(), "GUILD_TAGS".into()]));
+        assert!(!super::has_tags(&["GUILD_TAGS_BADGE_PACK_PETS".into()]));
     }
 }
