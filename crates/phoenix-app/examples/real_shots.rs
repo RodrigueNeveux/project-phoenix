@@ -1,3 +1,5 @@
+#[path = "common/input_script.rs"]
+mod input_script;
 #[path = "common/switch_bench.rs"]
 mod switch_bench;
 
@@ -2712,6 +2714,14 @@ fn main() -> anyhow::Result<()> {
             });
             println!("key {key}: channel={ch:?} composer={text:?} edit={edit:?} list_top={top:?}");
             shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
+        }
+    }
+    if let Ok(spec) = std::env::var("PHX_SCRIPT") {
+        let script = std::fs::read_to_string(&spec).unwrap_or(spec);
+        let env = input_script::Env { win: win.into(), app: v.clone(), stem: out.trim_end_matches(".png").to_string(), shoot: &shoot };
+        let report = input_script::run(&mut cx, &env, &script)?;
+        if std::env::var_os("PHX_SCRIPT_STRICT").is_some() {
+            anyhow::ensure!(report.ko.is_empty(), "{} QA checks failed", report.ko.len());
         }
     }
     if std::env::var_os("PHX_WRITE").is_some() {

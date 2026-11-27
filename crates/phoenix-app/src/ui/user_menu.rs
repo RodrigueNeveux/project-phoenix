@@ -27,6 +27,10 @@ thread_local! {
     static OPEN: RefCell<Option<Open>> = const { RefCell::new(None) };
 }
 
+pub fn is_open() -> bool {
+    OPEN.with(|o| o.borrow().is_some())
+}
+
 pub fn open(user: Id, guild: Option<Id>, pos: Point<Pixels>, window: &mut Window) {
     OPEN.with(|o| *o.borrow_mut() = Some(Open { user, guild, pos }));
     window.refresh();
