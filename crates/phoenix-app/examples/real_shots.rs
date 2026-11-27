@@ -2318,7 +2318,7 @@ fn main() -> anyhow::Result<()> {
         cx.update_window(win.into(), |_, window, cx| {
             window.dispatch_event(ev, cx);
         })?;
-        pump(&mut cx, 200);
+        pump(&mut cx, std::env::var("PHX_MOUSE_WAIT").ok().and_then(|v| v.parse().ok()).unwrap_or(200));
     }
     if let Some(only) = std::env::var("PHX_ONLY_GUILD").ok().and_then(|v| parse_id(&v)) {
         cx.update(|cx| {
