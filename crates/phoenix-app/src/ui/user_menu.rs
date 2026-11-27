@@ -13,6 +13,7 @@ use crate::{
 
 const MANAGE_ROLES: u64 = 1 << 28;
 const MANAGE_NICKNAMES: u64 = 1 << 27;
+const ROLE_DEFAULT: u32 = 0x99AAB5;
 
 type Act = Rc<dyn Fn(&mut PhoenixApp, &ClickEvent, &mut Window, &mut Context<PhoenixApp>)>;
 
@@ -76,7 +77,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
                 .with_subtext(crate::t!("menu.note_subtext")),
         );
     }
-    let voice = if me { crate::actions::user::VoiceItems::default() } else { crate::actions::user::voice_items(app, u, g, &e) };
+    let voice = crate::actions::user::voice_items(app, u, g, &e);
     items.extend(voice.watch);
     if !me && friend {
         let has = app.nav.relationship(u).is_some_and(|r| r.nickname.is_some());
@@ -84,8 +85,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     }
     let in_voice = app.channels.values().any(|c| c.kind != crate::model::ChannelKind::Category && c.voice_users.contains(&u));
     items.push(MenuItem::Separator);
-    if in_voice && !me {
-        items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
+    if in_voice {
+        let local = crate::ui::voice_panel::user_menu_items(app, u, cx);
+        if me {
+            items.extend(local.into_iter().take(2));
+        } else {
+            items.extend(local);
+        }
     }
     if let Some(gid) = g {
         if me {
@@ -129,12 +135,18 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         roles.sort_by_key(|r| -r.position);
         let rows: Vec<MenuItem> = roles
             .into_iter()
-            .map(|r| {
+            .filter_map(|r| {
                 let e = e.clone();
                 let (role, on) = (r.id, has.contains(&r.id));
-                MenuItem::check(r.name.clone(), on, move |_, _, cx: &mut App| {
+                let locked = !crate::actions::user::can_manage_role(app, gid, r);
+                if locked && !on {
+                    return None;
+                }
+                let row = MenuItem::check(r.name.clone(), on, move |_, _, cx: &mut App| {
                     e.update(cx, |a, cx| a.set_member_role(gid, u, role, !on, cx))
                 })
+                .with_dot(r.color.unwrap_or(ROLE_DEFAULT));
+                Some(if locked { row.as_disabled() } else { row })
             })
             .collect();
         if !rows.is_empty() {
@@ -147,10 +159,6 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             items.push(MenuItem::Separator);
         }
         items.push(mv);
-    }
-    if in_voice && me {
-        items.push(MenuItem::Separator);
-        items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
     }
     let mut moderation = crate::ui::inbox::moderation_items(app, u, g, &e);
     if !voice.mods.is_empty() {

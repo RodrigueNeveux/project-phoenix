@@ -145,9 +145,10 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
     let Some(vc) = app.channels.values().find(|c| c.kind != ChannelKind::Category && c.guild.is_some() && c.voice_users.contains(&user)).map(|c| (c.id, c.guild)) else {
         return out;
     };
+    let me = user == app.me.id;
     let g = guild.or(vc.1);
     let f = crate::ui::voice_panel::flags(user);
-    if f.stream && user != app.me.id {
+    if f.stream && !me {
         out.watch = Some(item(e, crate::t!("voice.watch_stream"), move |a, cx| {
             let key = crate::voice::stream::key(vc.1.map(|g| g.0), vc.0.0, user.0);
             crate::ui::voice_row::watch_from_sidebar(a, key, cx);
@@ -155,8 +156,7 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
     }
     let Some(g) = g else { return out };
     out.mods.extend(crate::ui::stage::user_items(app, vc.0, user, e));
-    let admin = has(app, Some(g), super::ADMINISTRATOR);
-    if admin || has(app, Some(g), MUTE_MEMBERS) {
+    if has(app, Some(g), MUTE_MEMBERS) {
         let on = f.server_mute;
         let e = e.clone();
         out.mods.push(
@@ -166,7 +166,7 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
             .as_danger(),
         );
     }
-    if admin || has(app, Some(g), DEAFEN_MEMBERS) {
+    if has(app, Some(g), DEAFEN_MEMBERS) {
         let on = f.server_deaf;
         let e = e.clone();
         out.mods.push(
@@ -176,7 +176,8 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
             .as_danger(),
         );
     }
-    if admin || has(app, Some(g), MOVE_MEMBERS) {
+    let mover = has(app, Some(g), MOVE_MEMBERS);
+    if me || mover {
         let targets: Vec<MenuItem> = app
             .guild_channels
             .get(&g)
@@ -185,17 +186,64 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
             .filter_map(|id| app.channels.get(id))
             .filter(|c| matches!(c.kind, ChannelKind::Voice | ChannelKind::Stage) && c.id != vc.0)
             .map(|c| {
-                let to = crate::discord_backend::convert::sf(c.id);
-                item(e, c.name.clone(), move |a, cx| a.voice_moderate(g, user, VoiceMod::Move(Some(to)), cx))
+                let to = c.id;
+                if me {
+                    item(e, c.name.clone(), move |a, cx| a.join_voice(Some(to), cx))
+                } else {
+                    let to = sf(to);
+                    item(e, c.name.clone(), move |a, cx| a.voice_moderate(g, user, VoiceMod::Move(Some(to)), cx))
+                }
             })
             .collect();
         if !targets.is_empty() {
             out.move_to = Some(MenuItem::submenu(crate::t!("voice.move_to"), targets));
         }
+    }
+    if mover && !me {
         let e2 = e.clone();
         out.mods.push(MenuItem::danger(crate::t!("menu.disconnect_member"), None, move |_, _, cx: &mut App| {
             e2.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Move(None), cx))
         }));
     }
     out
+}
+
+fn highest_role(app: &PhoenixApp, guild: Id, user: Id) -> Option<i32> {
+    let roles = app.roles.get(&guild);
+    app.members
+        .get(&guild)
+        .and_then(|m| m.iter().find(|m| m.user == user))
+        .map(|m| m.roles.iter().filter_map(|r| roles.and_then(|rs| rs.iter().find(|x| x.id == *r))).map(|r| r.position).max().unwrap_or(0))
+}
+
+fn guild_owner(app: &PhoenixApp, guild: Id) -> Option<Id> {
+    app.guilds.iter().find(|g| g.id == guild).and_then(|g| g.owner)
+}
+
+pub fn can_manage_user(app: &PhoenixApp, guild: Id, user: Id) -> bool {
+    let owner = guild_owner(app, guild);
+    if owner == Some(app.me.id) {
+        return true;
+    }
+    if owner == Some(user) {
+        return false;
+    }
+    match (highest_role(app, guild, app.me.id), highest_role(app, guild, user)) {
+        (Some(mine), Some(theirs)) => mine > theirs,
+        _ => true,
+    }
+}
+
+pub fn can_manage_role(app: &PhoenixApp, guild: Id, role: &crate::model::Role) -> bool {
+    !role.managed && (guild_owner(app, guild) == Some(app.me.id) || highest_role(app, guild, app.me.id).is_none_or(|mine| mine > role.position))
+}
+
+pub fn is_admin(app: &PhoenixApp, guild: Id, user: Id) -> bool {
+    guild_owner(app, guild) == Some(user)
+        || app
+            .guild_channels
+            .get(&guild)
+            .and_then(|v| v.first())
+            .and_then(|ch| app.backend.member_permissions(*ch, user))
+            .is_some_and(|p| p & super::ADMINISTRATOR != 0)
 }

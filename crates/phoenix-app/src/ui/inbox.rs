@@ -445,15 +445,15 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
             e.update(cx, |a, cx| a.open_mod_view(g, user, cx))
         }));
     }
-    if user != app.me.id {
+    if user != app.me.id && crate::actions::user::can_manage_user(app, g, user) {
         let bot = app.users.get(&user).is_some_and(|u| u.bot);
-        if !bot && has_perm(perms, MODERATE_MEMBERS) {
+        if !bot && has_perm(perms, MODERATE_MEMBERS) && !crate::actions::user::is_admin(app, g, user) {
             items.push(item(crate::t!("mod.timeout_user", name = name).to_string(), ModKind::Timeout(TIMEOUTS[0].1)));
         }
         if has_perm(perms, KICK_MEMBERS) {
             items.push(item(crate::t!("mod.kick_user", name = name).to_string(), ModKind::Kick));
         }
-        if has_perm(perms, BAN_MEMBERS) {
+        if !bot && has_perm(perms, BAN_MEMBERS) {
             items.push(item(crate::t!("mod.ban_user", name = name).to_string(), ModKind::Ban(0)));
         }
     }

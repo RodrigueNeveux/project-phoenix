@@ -17,7 +17,17 @@ pub enum MenuItem {
     Separator,
     Custom(AnyElement),
     Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString>, subtext: Option<SharedString>, danger: bool, on_click: Option<Handler> },
-    Check { label: SharedString, checked: bool, radio: bool, subtext: Option<SharedString>, icon: Option<SharedString>, danger: bool, on_click: Handler },
+    Check {
+        label: SharedString,
+        checked: bool,
+        radio: bool,
+        subtext: Option<SharedString>,
+        icon: Option<SharedString>,
+        danger: bool,
+        disabled: bool,
+        dot: Option<u32>,
+        on_click: Handler,
+    },
     Disabled { label: SharedString, icon: Option<SharedString> },
     Leading { label: SharedString, leading: AnyElement, subtext: Option<SharedString>, on_click: Option<Handler> },
 }
@@ -75,12 +85,14 @@ fn nav_of(items: &[MenuItem]) -> Vec<Nav> {
     items
         .iter()
         .map(|i| match i {
+            MenuItem::Check { disabled: true, .. } => Nav::Skip,
             MenuItem::Action { on_click, .. } | MenuItem::Check { on_click, .. } => Nav::Act(on_click.clone()),
             MenuItem::Leading { on_click: Some(h), .. } => Nav::Act(h.clone()),
             MenuItem::Submenu { items, on_click, .. } => Nav::Sub(
                 items
                     .iter()
                     .map(|i| match i {
+                        MenuItem::Check { disabled: true, .. } => None,
                         MenuItem::Action { on_click, .. } | MenuItem::Check { on_click, .. } => {
                             Some(on_click.clone())
                         }
@@ -232,7 +244,7 @@ impl MenuItem {
         checked: bool,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self::Check { label: label.into(), checked, radio: false, subtext: None, icon: None, danger: false, on_click: Rc::new(on_click) }
+        Self::Check { label: label.into(), checked, radio: false, subtext: None, icon: None, danger: false, disabled: false, dot: None, on_click: Rc::new(on_click) }
     }
 
     pub fn radio(
@@ -240,12 +252,26 @@ impl MenuItem {
         checked: bool,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self::Check { label: label.into(), checked, radio: true, subtext: None, icon: None, danger: false, on_click: Rc::new(on_click) }
+        Self::Check { label: label.into(), checked, radio: true, subtext: None, icon: None, danger: false, disabled: false, dot: None, on_click: Rc::new(on_click) }
     }
 
     pub fn as_danger(mut self) -> Self {
         if let Self::Action { danger, .. } | Self::Submenu { danger, .. } | Self::Check { danger, .. } = &mut self {
             *danger = true;
+        }
+        self
+    }
+
+    pub fn as_disabled(mut self) -> Self {
+        if let Self::Check { disabled, .. } = &mut self {
+            *disabled = true;
+        }
+        self
+    }
+
+    pub fn with_dot(mut self, color: u32) -> Self {
+        if let Self::Check { dot, .. } = &mut self {
+            *dot = Some(color);
         }
         self
     }
@@ -487,7 +513,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     )
                     .into_any_element()
             }
-            MenuItem::Check { label, checked, radio, subtext, icon, danger, on_click } => {
+            MenuItem::Check { label, checked, radio, subtext, icon, danger, disabled, dot, on_click } => {
                 let dismiss = dismiss.clone();
                 let mark = if radio {
                     crate::ui::controls::radio_indicator(checked)
@@ -511,14 +537,28 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                             d.child(svg().path(crate::icons::path(CHECK)).size(z(18.)).text_color(gpui::white()))
                         })
                 };
+                let lit = lit && !disabled;
                 row(("menu-check", ix), lit, danger)
+                    .when(disabled, |d| d.opacity(0.5).cursor_default().hover(|s| s.bg(gpui::transparent_black())))
                     .on_hover(move |h, w, _| {
-                        if *h {
+                        if *h && !disabled {
                             if depth == 0 {
                                 set_open_sub(None, w);
                             }
                             set_hl(depth, Some(ix), w);
                         }
+                    })
+                    .when_some(dot, |d, color| {
+                        d.child(
+                            div()
+                                .size(z(20.))
+                                .mr(z(8.))
+                                .flex_none()
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .child(div().size(z(12.)).rounded_full().bg(c(color))),
+                        )
                     })
                     .when_some(icon, |d, path| {
                         let fg = if danger {
@@ -542,6 +582,9 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     }))
                     .child(div().ml(z(8.)).child(mark))
                     .on_click(move |ev, w, cx| {
+                        if disabled {
+                            return;
+                        }
                         on_click(ev, w, cx);
                         if radio {
                             dismiss(w, cx);

@@ -45,3 +45,24 @@ Renders: `PHX_OPEN=guildmenu|chanmenu[:n]|catmenu[:n]|usermenu[:n]|msgmenu int-b
 | item | client | Phoenix | status |
 |---|---|---|---|
 | « Détails du message » | chunk `15299af603b47329.js` `tZ`: with Developer Mode, clipboard support and a right-click on an emoji (with an id) or a sticker, the « Copier l'identifiant du message » row becomes the submenu `IqqJNI` (CircleInformationIcon): Copy Message ID (`zBoHlf`), Copy Emoji / Sticker ID (`Ap2oVy` / `SJ3249`), and with an image Copy / Open Emoji / Sticker Image Link (`cIoudn` / `B1ubHx`, `gDAM2n` / `qAEi+C`, LinkIcon / BrowserIcon); the link group `tJ` is hidden while the submenu shows | `panels::details_items`, target set on right mouse down by the custom emoji cell (`message_ext`) and the sticker attachment (`chat::attachment`), image = CDN emoji `size=44` / sticker URL | ✅ ⚠ the trailing LinkExternalSmall indicator on « Ouvrir » is not drawn (menu rows have no trailing icon) |
+
+## Audit 27/11 (wt/menus-a): message, user, voice participant
+
+Source: live client over CDP on Aperture #général (dumps `menus-a/*.json` in the private dumps folder, read 2026-11-27 ~17h, French locale, Developer Mode on, user is admin), plus the client chunks fetched from the CDN: guild user menu `f405ca3a57e52266.js` (365689), thread user menu `a97a9554a7091bcb.js`, admin items `c183e2b4cdf42732.js` (291247), move `e7bedb588292d24a.js` (252726), local voice items `22322313ab7c958a.js` (198229), volume `99362d2846a238bf.js` (972432), roles `733502a1b0cc89ed.js` (180798), kick/ban rules `1c56c820a070db2e.js` (351001), timeout rule web.js 838111.
+
+| menu | client (27/11) | Phoenix | status |
+|---|---|---|---|
+| own message (image + reactions, admin) | 4 quick reactions / Add Reaction >, View Reactions / Edit, Reply, Forward, Create Thread / Pin, Bookmark, Create Reminder >, Apps >, Mark Unread, Copy Message Link / Remove Reactions > (red), Remove All Reactions (red), Delete (red) / Copy Message ID; no Copy Text or Speak without text, no Report | same builder (`chat/panels.rs` `message_menu`) | ✅ |
+| other's message | … / Reply, Forward, Thread / Copy Text, Pin, Bookmark, Reminder >, Apps >, Mark Unread, Copy Link, Speak / Delete (Manage Messages), Report / Copy ID | same | ✅ |
+| image in a message | message menu + / Copy Image, Save Image / Copy Image Link, Open Image Link | same | ✅ |
+| reminder submenu | in 30 m, in 1 h, in 4 h, Tomorrow at 9:00, Monday at 9:00, Custom... | same | ✅ |
+| other user (chat avatar) | Profile, Mention, Send Message, Call, Add Note (subtext), Add Friend Nickname / Change Nickname, Apps >, Invite to Server >, Remove Friend, Ignore, Block (red) / Roles > / Mod View, Timeout x, Kick x, Ban x (red, `user.username`) / Copy User ID | same | ✅ |
+| own user | Profile, Mention / Per-server Profile, Apps > / Roles > / Mod View / Copy User ID | same | ✅ |
+| Roles submenu | role dot (12 px circle in a 20 px box, mr 8, `roleDotAccessory_M3qk4j`) + checkbox; roles I cannot manage (managed or not below my highest role, unless owner) are hidden, or shown disabled when the member has them | was every role, enabled, no dot | ✅ fixed (`can_manage_role`, `MenuItem::with_dot` / `as_disabled`) |
+| Timeout / Kick / Ban | need `canManageUser` (role hierarchy, never the owner); Timeout also not for bots, the owner or administrators; Ban not for bots; Kick allowed on bots | permission only | ✅ fixed (`can_manage_user`, `is_admin`) |
+| voice participant (sidebar, other, bot) | Profile, Mention, Send Message, Add Note / User Volume (slider, 200 % on desktop) / Mute ☐, Mute Soundboard ☐, Disable Video ☐, Change Nickname, Apps >, Ignore, Block / Roles >, Move To > / Mod View, Server Mute ☐ (red), Server Deafen ☐ (red), Disconnect (red), Kick / Copy ID | same order (`voice_panel::user_menu_items` + `voice_items`) | ✅ |
+| voice participant, self | local items are Mute ☐, Deafen ☐ (no volume, soundboard or video) at the head of the nickname group; Server Mute / Deafen still shown with the permissions; no Disconnect; Move To lists channels I can join and joins them (`selectVoiceChannel`) | self had no voice moderation, no Move To, and an extra "Voice Settings" group | ✅ fixed |
+| Server Mute / Deafen / Disconnect conditions | target in a voice channel; Mute needs MUTE_MEMBERS, Deafen DEAFEN_MEMBERS, Disconnect MOVE_MEMBERS and not self; Move needs MOVE_MEMBERS for others | same, Disconnect no longer offered on self | ✅ |
+| Remove Timeout (`csKeta`) | replaces Timeout when the member is timed out | not drawn: the member model has no timeout date yet | ❌ |
+| "je suis en vocal" variants | not read live: the user was using the client (route changed during the pass, then joined a call), so the test voice channel join was not done; conditions above come from the JS | | ⚠ |
+| DM / group DM rows | not re-read live (needs the @me route); last read 23/11 (`vanilla-menu-dm` / `-group-dm`), DM user menu chunk `9797d9965e471d1d.js` unchanged | | ⚠ |
