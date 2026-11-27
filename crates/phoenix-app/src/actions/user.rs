@@ -64,10 +64,12 @@ impl PhoenixApp {
         if self.voice_channel == Some(channel) {
             self.open_voice_channel(cx);
             crate::ui::call_view::set_chat_open(true);
-            cx.notify();
         } else {
             self.open_channel_chat(channel, cx);
+            crate::ui::call_view::show(channel);
+            crate::ui::call_view::set_chat_open(true);
         }
+        cx.notify();
     }
 
     pub fn open_call_ui(&mut self, user: Id, cx: &mut Context<Self>) {

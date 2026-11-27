@@ -248,10 +248,33 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     if let Some(notice) = blocked_dm_notice(app, cx) {
         return notice;
     }
+    if channel_read_only(app) {
+        return div().id("read-only-composer").flex_none()
+            .mx(z(crate::theme::space::xs()))
+            .mb(z(crate::theme::space::xs()))
+            .min_h(z(56.))
+            .px(z(16.))
+            .py(z(12.))
+            .flex()
+            .items_center()
+            .rounded(z(8.))
+            .border_1()
+            .border_color(super::tk(idx::BORDER_MUTED))
+            .bg(super::tk(idx::CHAT_BACKGROUND_DEFAULT))
+            .text_size(fz(14.))
+            .line_height(fz(20.))
+            .text_color(super::tk(idx::CHANNEL_TEXT_AREA_PLACEHOLDER))
+            .child(div().min_w_0().child(crate::t!("chat.no_permission")))
+            .into_any_element();
+    }
     if let Some(ch) = super::announce::active(app, cx) {
         return super::announce::render(app, ch, window, cx);
     }
     render_text_area(app, window, cx).into_any_element()
+}
+
+pub(crate) fn channel_read_only(app: &PhoenixApp) -> bool {
+    app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|extra| extra.send_blocked)
 }
 
 pub(super) fn placeholder(app: &PhoenixApp) -> SharedString {
@@ -324,10 +347,8 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     let sched = if reply.is_none() { super::scheduled::bar(app, cx) } else { None };
     let has_banner = reply.is_some() || sched.is_some();
     let tray = upload_tray(app, cx);
-    let blocked = app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|x| x.send_blocked);
-    let show_send_button = should_show_send_button(app.prefs.local.flag("send-btn", false), blocked);
+    let show_send_button = should_show_send_button(app.prefs.local.flag("send-btn", false), false);
     let can_send = !placeholder_empty || !app.chat.uploads.is_empty();
-    let placeholder = if blocked { crate::t!("chat.no_permission") } else { placeholder };
     let vbar = super::voice_message::bar(app, window, cx);
     let voice_on = vbar.is_some();
     div()
@@ -387,7 +408,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                             }))
                             .when_some(vbar, |d, bar| d.child(bar))
                             .when(!voice_on, |d| d.child(
-                                div().pl(z(15.)).h(z(56.)).flex().items_center().when(blocked, |d| d.invisible()).child(div().px(z(14.)).child(
+                                div().pl(z(15.)).h(z(56.)).flex().items_center().child(div().px(z(14.)).child(
                                     div()
                                         .relative()
                                         .ml(z(-16.))
@@ -434,8 +455,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                                 .bordered(false)
                                                 .xsmall()
                                                 .text_size(fz(16.))
-                                                .line_height(fz(22.))
-                                                .disabled(blocked),
+                                                .line_height(fz(22.)),
                                         ),
                                     )
                                     .when(placeholder_empty, |d| {
@@ -455,7 +475,6 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                             )
                             .child(
                                 div()
-                                    .when(blocked, |d| d.invisible())
                                     .mr(z(12.))
                                     .h(z(56.))
                                     .flex()

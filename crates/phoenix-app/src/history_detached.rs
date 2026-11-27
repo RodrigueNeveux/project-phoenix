@@ -58,14 +58,33 @@ impl PhoenixApp {
 
     pub fn leave_detached(&mut self, cx: &mut Context<Self>) -> bool {
         let Some(ch) = self.selected_channel else { return false };
-        if !self.messages.get(&ch).is_some_and(|e| e.detached) {
-            return false;
+        let Some(entry) = self.messages.get_mut(&ch).filter(|entry| entry.detached) else { return false };
+        if entry.loading {
+            return true;
         }
-        self.messages.remove(&ch);
-        let e = self.messages.entry(ch).or_default();
-        e.loading = true;
-        self.message_list.reset(1);
-        crate::history_ui::load_first_page(self, ch, cx);
+        entry.loading = true;
+        let fetch = self.backend.load_messages(ch, None, PAGE);
+        cx.spawn(async move |this, cx| {
+            let result = fetch.await;
+            let _ = this.update(cx, |app, cx| {
+                let Some(entry) = app.messages.get_mut(&ch).filter(|entry| entry.detached) else { return };
+                entry.loading = false;
+                if app.selected_channel != Some(ch) {
+                    return;
+                }
+                match result {
+                    Ok(page) => {
+                        app.messages.remove(&ch);
+                        app.insert_history(ch, page, false, cx);
+                        app.message_list.scroll_to_end();
+                        app.chat.at_bottom = true;
+                        app.mark_channel_read(cx);
+                    }
+                    Err(_) => app.parity_toast(crate::t!("chat.history_failed"), cx),
+                }
+            });
+        }).detach();
+        cx.notify();
         true
     }
 
@@ -79,8 +98,20 @@ impl PhoenixApp {
         e.loading = true;
         let fut = self.backend.load_messages_at(ch, HistoryAt::After(last), PAGE);
         cx.spawn(async move |this, cx| {
-            let page = fut.await.unwrap_or_default();
-            let _ = this.update(cx, |a, cx| a.append_newer(ch, page, cx));
+            let result = fut.await;
+            let _ = this.update(cx, |app, cx| {
+                match result {
+                    Ok(page) => app.append_newer(ch, page, cx),
+                    Err(_) => {
+                        if let Some(entry) = app.messages.get_mut(&ch) {
+                            entry.loading = false;
+                        }
+                        if app.selected_channel == Some(ch) {
+                            app.parity_toast(crate::t!("chat.history_failed"), cx);
+                        }
+                    }
+                }
+            });
         })
         .detach();
     }

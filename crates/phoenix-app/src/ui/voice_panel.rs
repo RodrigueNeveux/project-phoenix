@@ -808,7 +808,9 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                         .hover(|s| s.underline())
                                         .on_click(cx.listener(|a, _, _, cx| {
                                             cx.stop_propagation();
-                                            a.open_voice_channel(cx);
+                                            if let Some(id) = a.voice_channel {
+                                                a.open_voice_chat(id, cx);
+                                            }
                                         }))
                                         .child(label),
                                 ),

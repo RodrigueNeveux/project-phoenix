@@ -293,11 +293,17 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/palette.svg" => s!(r#"<path d="M12 3a9 9 0 1 0 0 18c1 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.6-.4-1 0-.8.7-1.4 1.5-1.4H16a5 5 0 0 0 5-5c0-4.4-4-8-9-8z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/>"#),
         "icons/info.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h0"/>"#),
         "icons/warning.svg" => s!(r#"<circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h0"/>"#),
-        "icons/voice-lock.svg" => f!(r#"<path d="M10.4 4.2A1 1 0 0 1 12 5v14a1 1 0 0 1-1.6.8L6.2 16.5H3a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3.2zM16 7.5V6a2.5 2.5 0 0 1 5 0v1.5h.5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-6a.5.5 0 0 1-.5-.5V8a.5.5 0 0 1 .5-.5zm1.5 0h2V6a1 1 0 0 0-2 0z"/>"#),
+        "icons/voice-lock.svg" => s!(r#"<path d="M10 5 5.5 9H2v6h3.5l4.5 4z" fill="black"/><path d="M13 10a4 4 0 0 1 0 5m3-3a7 7 0 0 1-2 6"/><path d="M18 5V4a1.5 1.5 0 0 1 3 0v1"/><rect x="17" y="5" width="5" height="4" rx=".8" fill="black"/>"#),
         "icons/discovery-badge.svg" => f!(r#"<circle cx="12" cy="12" r="11"/>"#),
         "icons/discovery-badge-fg.svg" => f!(r#"<path d="M12 6.5 13.6 10.4 17.5 12 13.6 13.6 12 17.5 10.4 13.6 6.5 12 10.4 10.4z"/>"#),
         "icons/lock-unlocked.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 9.6-2l-1.8.9A3 3 0 0 0 9 7v3h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1z"/>"#),
-        "icons/lock.svg" | "icons/text-lock.svg" | "icons/forum-lock.svg" | "icons/announcement-lock.svg" | "icons/stage-lock.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/>"#),
+        "icons/lock.svg" => f!(r#"<path d="M7 10V7a5 5 0 0 1 10 0v3h1a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V11a1 1 0 0 1 1-1zm2 0h6V7a3 3 0 0 0-6 0z"/>"#),
+        "icons/text-lock.svg" => s!(r#"<path d="m9 3-3 18m9-10-2 10M4 9h9M3 15h16M17 5V4a1.5 1.5 0 0 1 3 0v1"/><rect x="16" y="5" width="5" height="4" rx=".8" fill="black"/>"#),
+        "icons/forum-lock.svg" => s!(r#"<path d="M13 4H5a2 2 0 0 0-2 2v11l4-3h6m-3 3v2h7l4 2v-9M17 5V4a1.5 1.5 0 0 1 3 0v1"/><rect x="16" y="5" width="5" height="4" rx=".8" fill="black"/>"#),
+        "icons/announcement-lock.svg" => s!(r#"<path d="M4 9h4l6-4v14l-6-4H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1zm3 6 1 5m11-6a3 3 0 0 1-2 3m1-12V4a1.5 1.5 0 0 1 3 0v1"/><rect x="17" y="5" width="5" height="4" rx=".8" fill="black"/>"#),
+        "icons/stage-lock.svg" => s!(r#"<circle cx="10" cy="9" r="3"/><path d="M4.5 15a7 7 0 0 1 8-11m2 12-1-1H8l-1 5h6m4-6a7 7 0 0 1-1 2m2-11V4a1.5 1.5 0 0 1 3 0v1"/><rect x="17" y="5" width="5" height="4" rx=".8" fill="black"/>"#),
+        "icons/rules-channel.svg" => s!(r#"<path d="M18 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h11v-3H8a2 2 0 0 0-2 2m12-2V4M8 10l2 2 4-4"/>"#),
+        "icons/rules-lock.svg" => s!(r#"<path d="M13 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h11v-3H8a2 2 0 0 0-2 2m12-2v-5M8 10l2 2 3-3m4-4V4a1.5 1.5 0 0 1 3 0v1"/><rect x="16" y="5" width="5" height="4" rx=".8" fill="black"/>"#),
         "icons/quests.svg" => s!(r#"<path d="M5 4h14v6a7 7 0 0 1-14 0zM9 21h6M12 17v4M8 9h8"/>"#),
         "icons/note.svg" => s!(r#"<path d="M14 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7M7 8h6M7 12h8M7 16h4M19 14v8M15 18h8"/>"#),
         "icons/user-check.svg" => s!(r#"<circle cx="11" cy="7" r="4"/><path d="M3 21a8 8 0 0 1 11-7.4M15 18l2 2 4-4"/>"#),
@@ -353,12 +359,41 @@ fn svg_for(path: &str) -> Option<&'static str> {
     })
 }
 
+pub fn shortcut_icon(name: &'static str, size: f32) -> gpui::Div {
+    use gpui::{ParentElement, Styled};
+    use crate::theme::z;
+
+    gpui::div().size(z(size)).flex_none().flex().items_center().justify_center()
+        .child(gpui::img(gpui::SharedString::from(format!("shortcuts/{name}.png"))).size(z(size * 1.35)).flex_none())
+}
+
+fn shortcut_png(name: &str) -> Option<&'static [u8]> {
+    Some(match name {
+        "friends" => include_bytes!("../assets/shortcuts/friends.png"),
+        "nitro" => include_bytes!("../assets/shortcuts/nitro.png"),
+        "shop" => include_bytes!("../assets/shortcuts/shop.png"),
+        "quests" => include_bytes!("../assets/shortcuts/quests.png"),
+        "threads" => include_bytes!("../assets/shortcuts/threads.png"),
+        "events" => include_bytes!("../assets/shortcuts/events.png"),
+        "boosts" => include_bytes!("../assets/shortcuts/boosts.png"),
+        "welcome-invite" => include_bytes!("../assets/shortcuts/welcome-invite.png"),
+        "welcome-icon" => include_bytes!("../assets/shortcuts/welcome-icon.png"),
+        "welcome-message" => include_bytes!("../assets/shortcuts/welcome-message.png"),
+        "welcome-app" => include_bytes!("../assets/shortcuts/welcome-app.png"),
+        "welcome-boost" => include_bytes!("../assets/shortcuts/welcome-boost.png"),
+        _ => return None,
+    })
+}
+
 pub struct Assets;
 
 impl AssetSource for Assets {
     fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
         if path == "icon.png" {
             return Ok(Some(Cow::Borrowed(APP_ICON_PNG)));
+        }
+        if let Some(bytes) = path.strip_prefix("shortcuts/").and_then(|name| name.strip_suffix(".png")).and_then(shortcut_png) {
+            return Ok(Some(Cow::Borrowed(bytes)));
         }
         if let Some(p) = path.strip_prefix("local/") {
             return Ok(std::fs::read(p).ok().map(Cow::Owned));
@@ -392,7 +427,7 @@ impl AssetSource for Assets {
 const ALL: &[Icon] = &[
     Icon::Hash, Icon::Speaker, Icon::Megaphone, Icon::Forum, Icon::Stage, Icon::Chevron,
     Icon::Plus, Icon::Mic, Icon::MicOff, Icon::Headphones, Icon::HeadphonesOff, Icon::Gear,
-    Icon::Bell, Icon::Pin, Icon::Members, Icon::Search, Icon::Inbox, Icon::Help, Icon::Gift,
+    Icon::Bell, Icon::Pin, Icon::Members, Icon::Search, Icon::Inbox, Icon::Help, Icon::Gift, Icon::Shop,
     Icon::Gif, Icon::Sticker, Icon::Emoji, Icon::PlusCircle, Icon::Compass, Icon::Download,
     Icon::Close, Icon::Threads, Icon::Friends, Icon::Nitro, Icon::Lock, Icon::Reply, Icon::File,
     Icon::Image, Icon::PhoneHangup, Icon::Quests, Icon::Shop, Icon::Envelope, Icon::Clyde,

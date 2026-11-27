@@ -38,6 +38,7 @@ pub mod state;
 pub mod thread_banner;
 pub mod video_player;
 pub mod voice_message;
+pub(crate) mod welcome;
 pub mod blocked;
 pub mod burst_tip;
 pub mod command_msg;
@@ -55,6 +56,13 @@ pub(crate) fn tk(i: usize) -> gpui::Hsla {
 pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>, in_voice_panel: bool) -> impl IntoElement {
     let entity = cx.entity();
     skeleton::set_window_height(f32::from(window.viewport_size().height));
+    if let Some(channel) = app.selected_channel.and_then(|id| app.channels.get(&id))
+        && channel.guild.is_none()
+        && !crate::ui::dm_profile_panel::is_group_dm(app, channel.id)
+        && let Some(&peer) = channel.voice_users.first()
+    {
+        crate::ui::dm_profile_panel::ensure_profile(app, peer, cx);
+    }
     let show_members = app.show_members && app.selected_guild.is_some();
     let show_members = show_members && app.chat.thread.is_none() && !crate::ui::thread_create::is_open(cx);
     let show_members = show_members && !in_voice_panel && !crate::ui::call_view::active(app);
@@ -327,7 +335,12 @@ fn hdr(id: &'static str, path: SharedString, color: gpui::Hsla) -> gpui::Statefu
         "dm-profile" => crate::t!("header.profile_show"),
         _ => crate::t!("header.more"),
     };
-    crate::ui::states::header_button(id, path, selected, label).debug_selector(move || format!("hdr-{id}"))
+    let button = if id == "threads" {
+        crate::ui::states::header_button_with_icon(id, crate::assets::shortcut_icon("threads", 20.), label)
+    } else {
+        crate::ui::states::header_button(id, path, selected, label)
+    };
+    button.debug_selector(move || format!("hdr-{id}"))
 }
 
 thread_local! {
@@ -444,7 +457,11 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>, in_voice_panel: bool) 
                         .h(z(32.))
                         .flex()
                         .items_center()
-                        .map(|d| match crate::ui::sidebar::lock_icon_name(kind).filter(|_| locked && thread_parent.is_none()) {
+                        .map(|d| match crate::ui::sidebar::channel_icon_override(
+                            kind,
+                            ch.is_some_and(|ch| crate::ui::sidebar::is_rules_channel(app, ch)),
+                            locked && thread_parent.is_none(),
+                        ) {
                             Some(n) => d.child(gpui::svg().path(crate::icons::path(n)).size(z(20.)).flex_none().text_color(tk(idx::CHANNEL_ICON))),
                             None => d.child(icon(channel_icon(kind), 20. * crate::theme::zoom(), tk(idx::CHANNEL_ICON))),
                         })
@@ -577,7 +594,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>, in_voice_panel: bool) 
                         })
                 })
                 .when(!is_dm, |d| {
-                    d.when(!parent_is_forum && !is_forum, |d| d.child(hdr_button("threads", Icon::Threads, ic, HDR_ICON).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
+                    d.when(!parent_is_forum && !is_forum, |d| d.child(hdr_named("threads", "threads", ic).on_click(cx.listener(|a, _, _, cx| a.toggle_threads_popout(cx)))))
                         .map(|d| {
                             let slashed = ch.is_some_and(|c| {
                                 thread_info.as_ref().is_some_and(|i| !i.joined || i.member_muted || i.notify_level() != 2)
@@ -672,6 +689,11 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let Some(ch_id) = app.selected_channel else { return div().into_any_element() };
     let Some(entry) = app.messages.get(&ch_id) else { return div().into_any_element() };
     if ix == 0 {
+        if entry.reached_start
+            && let Some(card) = welcome::render(app, entity, ch_id)
+        {
+            return row_wrapper().child(card).into_any_element();
+        }
         return row_wrapper().when(entry.msgs.is_empty() && !entry.reached_start, |d| d.pb(z(20.))).child(intro(app, entity, ch_id, entry.reached_start)).into_any_element();
     }
     let i = ix - 1;
@@ -1453,7 +1475,7 @@ pub(crate) fn message(
     .when(!compact && msg.thread.is_some(), |d| d.child(message_ext::thread_spine(if msg.reply_to.is_some() { 70. } else { 48. })))
     .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
     let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
-    let gap = if !r.group_start { 0. } else if compact { 4. } else { 17. * crate::theme::font_scale() };
+    let gap = if !r.group_start { 0. } else if compact { 4. } else { 16. * crate::theme::font_scale() };
     row_wrapper()
         .when_some(r.day_divider.clone(), |d, label| d.child(dated_divider(label, new_marker)))
         .when(new_marker && r.day_divider.is_none(), |d| d.child(message_ext::new_divider(r.group_start)))
@@ -1915,6 +1937,8 @@ fn attachment_inner(a: &Attachment, cx: &App) -> AnyElement {
                 let alt = alt_text::description(a, false);
                 return div()
                     .mt(z(4.))
+                    .w(z(size.0))
+                    .max_w_full()
                     .relative()
                     .child(attach::video_card(a, size, cx))
                     .children(alt.map(|t| alt_text::video_badge(a.url.clone(), t, attach::video_group(&a.url))))
@@ -1924,6 +1948,8 @@ fn attachment_inner(a: &Attachment, cx: &App) -> AnyElement {
             let alt = alt_text::description(a, false);
             return div()
                 .mt(z(4.))
+                .w(z(size.0))
+                .max_w_full()
                 .relative()
                 .on_mouse_down(gpui::MouseButton::Right, move |_, _, _| panels::set_menu_media(link.clone()))
                 .child({
@@ -1953,7 +1979,8 @@ fn attachment_inner(a: &Attachment, cx: &App) -> AnyElement {
         return div()
             .mt(z(4.))
             .w(z(w))
-            .h(z(h))
+            .max_w_full()
+            .aspect_ratio(w / h.max(1.))
             .rounded(z(8.))
             .bg(c(Palette::BG_SECONDARY))
             .flex()
@@ -2042,7 +2069,12 @@ fn embed_markdown(app: &PhoenixApp, entity: &Entity<PhoenixApp>, src: &str, size
                 match b {
                     RBlock::Heading(..) => el.font_weight(FontWeight::BOLD).text_size(z(size + 2.)),
                     RBlock::Subtext(_) => el.text_size(z(12.)).text_color(c(Palette::TEXT_MUTED)),
-                    RBlock::ListItem { .. } => div().flex().child(div().w(z(16.)).child("\u{2022}")).child(el),
+                    RBlock::ListItem { ordered, depth, .. } => {
+                        let marker = ordered.map_or_else(|| "•".into(), |n| format!("{n}."));
+                        div().flex().pl(z(16. * f32::from(*depth)))
+                            .child(div().flex_none().pr(z(6.)).child(marker))
+                            .child(el.flex_1().min_w_0())
+                    }
                     _ => el,
                 }
                 .into_any_element()
@@ -2125,7 +2157,7 @@ fn embed_text(entity: &Entity<PhoenixApp>, key: Id, bi: usize, t: &RichText, emo
     if t.emoji.is_empty() {
         return div().child(embed_link_text(entity, key, bi, t, 0..t.text.len()));
     }
-    let mut row = div().flex().flex_wrap().items_center();
+    let mut row = div().min_w_0().max_w_full().flex().flex_wrap().items_center();
     let push = |mut row: gpui::Div, range: std::ops::Range<usize>| -> gpui::Div {
         let mut start = range.start;
         for (i, piece) in t.text[range.clone()].split('\n').enumerate() {

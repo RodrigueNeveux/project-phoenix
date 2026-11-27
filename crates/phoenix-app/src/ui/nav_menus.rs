@@ -200,11 +200,19 @@ fn perms(app: &PhoenixApp, g: Id, bit: u64) -> bool {
     crate::ui::inbox::has_perm(app.backend.guild_permissions(g), bit)
 }
 
+fn copy_server_info(app: &PhoenixApp, guild: Id) -> MenuItem {
+    let mut items = vec![copy(crate::t!("menu.copy_server_id"), guild.0.to_string()).with_icon("id")];
+    if let Some(server) = app.guilds.iter().find(|g| g.id == guild) {
+        items.push(copy(crate::t!("menu.copy_server_name"), server.name.to_string()));
+    }
+    MenuItem::submenu(crate::t!("menu.copy_server_info"), items)
+}
+
 pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> Vec<MenuItem> {
     let e = cx.entity();
     let mut items = Vec::new();
     let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
-    let (manage_guild, manage_channels, events) = (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
+    let (_manage_guild, manage_channels, events) = (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
     let community = app.guilds.iter().any(|x| x.id == g && x.community);
     items.push(
         act(&e, crate::t!("settings.page.server_boost"), move |_, _, cx| {
@@ -222,12 +230,10 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     }
     items.push(MenuItem::Separator);
     items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)).with_icon("add-to-dm"));
-    if owner || manage_guild {
-        items.push(act(&e, crate::t!("menu.server_settings"), move |a, window, cx| {
-            a.open_server_settings(g, 0, cx);
-            window.refresh();
-        }).with_icon("gear"));
-    }
+    items.push(act(&e, crate::t!("menu.server_settings"), move |a, window, cx| {
+        a.open_server_settings(g, 0, cx);
+        window.refresh();
+    }));
     if crate::ui::modals::server_settings::visible(app, g, "menu.gs.analytics") {
         let section = crate::ui::modals::server_settings::section_index("menu.gs.analytics");
         items.push(act(&e, crate::t!("menu.gs.analytics"), move |a, _, cx| a.open_server_settings(g, section, cx)).with_icon("picker/trending"));
@@ -300,7 +306,7 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
     }
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
-        items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
+        items.push(copy_server_info(app, g));
     }
     items
 }
@@ -543,7 +549,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             let muted = guild_muted(app, g);
             let hide = app.nav.hide_muted.contains(&g);
             let owner = app.guilds.iter().find(|x| x.id == g).and_then(|x| x.owner) == Some(app.me.id);
-            let (manage_guild, manage_channels, events) =
+            let (_manage_guild, manage_channels, events) =
                 (perms(app, g, MANAGE_GUILD), perms(app, g, MANAGE_CHANNELS), perms(app, g, MANAGE_EVENTS));
             if app.guilds.iter().find(|x| x.id == g).is_some_and(|x| x.unread || x.mentions > 0) {
                 items.push(act(&e, crate::t!("menu.mark_read"), move |a, _, cx| a.mark_nav_read(Target::Guild(g), cx)));
@@ -570,9 +576,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             }));
             items.extend(crate::actions::channel::show_all_item(app, &e, g));
             items.push(MenuItem::Separator);
-            if manage_guild {
-                items.push(crate::actions::channel::server_settings_item(app, &e, g));
-            }
+            items.push(crate::actions::channel::server_settings_item(app, &e, g));
             items.push(act(&e, crate::t!("menu.privacy_settings"), move |a, _, cx| a.open_privacy_settings(g, cx)));
             items.push(act(&e, crate::t!("menu.edit_server_profile"), move |a, _, cx| a.open_server_profile(g, cx)));
             if manage_channels || events {
@@ -605,7 +609,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             }
             if dev {
                 items.push(MenuItem::Separator);
-                items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
+                items.push(copy_server_info(app, g));
             }
         }
         Target::ChannelBell(id) | Target::InboxBell(id) if app.backend.thread_info(id).is_some() => {

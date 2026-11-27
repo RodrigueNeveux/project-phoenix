@@ -53,7 +53,11 @@ pub fn build_rows(app: &mut PhoenixApp) {
         None => {
             let (reqs, spam) = (&app.nav.message_requests, &app.nav.spam_requests);
             let rows: Vec<SidebarRow> =
-                app.dms.iter().filter(|d| !reqs.contains(d) && !spam.contains(d)).map(|id| SidebarRow::Channel(*id)).collect();
+                app.dms.iter().copied()
+                    .filter(|id| !reqs.contains(id) && !spam.contains(id))
+                    .filter(|id| app.channels.get(id).is_some_and(|channel| channel.guild.is_none()))
+                    .map(SidebarRow::Channel)
+                    .collect();
             let mut rows = rows;
             crate::actions::pins::apply(&mut rows);
             app.sidebar_rows = rows;
@@ -974,7 +978,7 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
         )
 }
 
-pub(crate) fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
+fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
     Some(match kind {
         ChannelKind::Text => "text-lock",
         ChannelKind::Voice => "voice-lock",
@@ -985,7 +989,19 @@ pub(crate) fn lock_icon_name(kind: ChannelKind) -> Option<&'static str> {
     })
 }
 
-fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool, bg: gpui::Hsla, hover: Option<SharedString>) -> AnyElement {
+pub(crate) fn channel_icon_override(kind: ChannelKind, rules: bool, locked: bool) -> Option<&'static str> {
+    if rules {
+        Some(if locked { "rules-lock" } else { "rules-channel" })
+    } else {
+        lock_icon_name(kind).filter(|_| locked)
+    }
+}
+
+pub(crate) fn is_rules_channel(app: &PhoenixApp, ch: &crate::model::Channel) -> bool {
+    app.guilds.iter().any(|guild| Some(guild.id) == ch.guild && guild.rules_channel == Some(ch.id))
+}
+
+fn decorated_icon(kind: ChannelKind, rules: bool, color: gpui::Hsla, locked: bool, nsfw: bool, bg: gpui::Hsla, hover: Option<SharedString>) -> AnyElement {
     let hov = move |g: gpui::Svg| match hover.clone() {
         Some(h) => g.group_hover(h, |s| s.text_color(t(idx::INTERACTIVE_TEXT_HOVER))),
         None => g,
@@ -994,7 +1010,7 @@ fn decorated_icon(kind: ChannelKind, color: gpui::Hsla, locked: bool, nsfw: bool
         .relative()
         .size(z(20.))
         .flex_none()
-        .map(|d| match lock_icon_name(kind).filter(|_| locked && !nsfw) {
+        .map(|d| match channel_icon_override(kind, rules, locked) {
             Some(name) => d.child(hov(gpui::svg().path(crate::icons::path(name)).size(z(20.)).flex_none().text_color(color))),
             None => d.child(hov(icon(channel_icon(kind), 20., color))),
         })
@@ -1166,6 +1182,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         });
         decorated_icon(
             ch.kind,
+            is_rules_channel(app, ch),
             col,
             extra.is_some_and(|e| e.locked),
             extra.is_some_and(|e| e.nsfw),
@@ -1268,13 +1285,14 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
     let chat_entity = entity.clone();
     let invite_entity = entity.clone();
     let guild = ch.guild;
-    let invite_hover = (!is_dm).then(|| {
+    let hovered = app.nav.hovered_channel == Some(id);
+    let show_actions = !is_dm && guild.is_some() && (hovered || connected || (selected && !has_info && ch.mentions == 0 && !is_voice));
+    let invite_hover = show_actions.then(|| {
         div()
             .flex()
             .flex_none()
             .my(z(-4.))
             .mr(z(-4.))
-            .when(!selected || has_info, |d| d.hidden().group_hover(group.clone(), |s| s.flex()))
             .when(is_voice, |d| {
                 d.child(
                     div()
@@ -1336,7 +1354,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
         .child(
             div()
                 .id(("chrow", id.0))
-                .group(group)
+                .group(group.clone())
                 .h(z(if is_dm { 48. } else if status_line { space::channels_name_lh() + 24. } else { space::channels_name_lh() + 8. }))
                 .pl(z(10.))
                 .pr(z(if is_dm { 0. } else { 10. }))
@@ -1361,8 +1379,21 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                         if *hovered {
                             e.update(cx, |a, cx| crate::history_ui::hover_channel(a, id, cx));
                         }
-                        if is_dm && crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(4, id.0), *hovered) {
-                            e.update(cx, |_, cx| cx.notify());
+                        if is_dm {
+                            if crate::ui::avatar_deco::set_hover(crate::ui::avatar_deco::hover_key(4, id.0), *hovered) {
+                                e.update(cx, |_, cx| cx.notify());
+                            }
+                        } else {
+                            e.update(cx, |app, cx| {
+                                if *hovered {
+                                    app.nav.hovered_channel = Some(id);
+                                } else if app.nav.hovered_channel == Some(id) {
+                                    app.nav.hovered_channel = None;
+                                } else {
+                                    return;
+                                }
+                                cx.notify();
+                            });
                         }
                     }
                 })
@@ -1500,10 +1531,10 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                             )
                         }),
                 )
-                .when(ch.mentions > 0, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
-                .when(ch.mentions == 0, |d| d.children(invite_hover.map(|h| top_line(h, status_line))))
-                .children(timer.map(|t| top_line(t, status_line)))
-                .children(limit_pill)
+                .when(ch.mentions > 0 && !show_actions, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
+                .children(invite_hover.map(|h| top_line(h, status_line)))
+                .children(timer.filter(|_| !hovered).map(|t| top_line(t, status_line)))
+                .children(limit_pill.filter(|_| !hovered))
                 .children(close)
                 .map(|d| crate::ui::focus_ring::ring_inset_edges(d, crate::ui::states::key(("chrow", id.0)), ROW_RADIUS, 0., 2., 4., 2.)),
         )
@@ -1931,7 +1962,12 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl Int
                 .text_color(t(if on { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNELS_DEFAULT }))
                 .when(on, |d| d.bg(t(idx::INTERACTIVE_BACKGROUND_SELECTED)))
                 .when(!on, |d| d.hover(|s| s.bg(t(idx::INTERACTIVE_BACKGROUND_HOVER)).text_color(t(idx::INTERACTIVE_TEXT_HOVER))))
-                .child(gpui::svg().path(crate::icons::path(glyph)).size(z(20.)).flex_none().text_color(t(if on { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNEL_ICON })))
+                .child(match id {
+                    "g-events" => crate::assets::shortcut_icon("events", 20.).into_any_element(),
+                    "g-boosts" => crate::assets::shortcut_icon("boosts", 20.).into_any_element(),
+                    _ => gpui::svg().path(crate::icons::path(glyph)).size(z(20.)).flex_none()
+                        .text_color(t(if on { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::CHANNEL_ICON })).into_any_element(),
+                })
                 .child(
                     div()
                         .flex_1()

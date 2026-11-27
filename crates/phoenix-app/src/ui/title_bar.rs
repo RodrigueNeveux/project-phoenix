@@ -185,6 +185,14 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                 .flex()
                 .items_center()
                 .gap(z(12.))
+                .when_some(app.voice_channel, |d, channel| d.child(
+                    div().id("title-voice-chat").cursor_pointer()
+                        .child(gpui::svg().path(crate::icons::path("chat")).size(z(18.)).text_color(c(tok(idx::INTERACTIVE_ICON_DEFAULT))))
+                        .tooltip(crate::ui::tooltip::tip(crate::t!("channel.open_chat")))
+                        .on_click(cx.listener(move |app, _, _, cx| {
+                            app.open_voice_chat(channel, cx);
+                        }))
+                ))
                 .when(crate::updater::available_release().is_some(), |d| {
                     d.child(
                         div()

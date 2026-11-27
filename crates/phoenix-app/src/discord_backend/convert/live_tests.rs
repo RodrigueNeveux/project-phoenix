@@ -67,6 +67,29 @@ fn foreign_message_marks_unread_and_everyone_counts_as_mention() {
 }
 
 #[test]
+fn guild_message_without_guild_id_does_not_create_a_dm() {
+    let (cache, mut adapter) = setup();
+    let event = msg(700000000000000060, CH, false, 200000000000000003, false);
+    let out = feed(&cache, &mut adapter, &event);
+
+    assert_eq!(channel_unread(&out, CH), Some((true, 0)));
+    assert!(out.iter().any(|event| matches!(event, AppEvent::GuildUnread { unread: true, .. })));
+    assert!(!out.iter().any(|event| matches!(event, AppEvent::DmUpsert(_) | AppEvent::DmDelete(_))));
+}
+
+#[test]
+fn channel_update_without_guild_id_keeps_its_scope() {
+    let (cache, mut adapter) = setup();
+    let event = parse_dispatch("CHANNEL_UPDATE", &format!(r#"{{"id":"{CH}","type":0,"name":"rules"}}"#));
+    let out = feed(&cache, &mut adapter, &event);
+
+    let stored = cache.channel(api::Snowflake(CH)).unwrap();
+    assert_eq!(stored.guild_id, Some(api::Snowflake(300000000000000001)));
+    assert!(!cache.private_channels().iter().any(|channel| channel.id == stored.id));
+    assert!(!out.iter().any(|event| matches!(event, AppEvent::DmUpsert(_) | AppEvent::DmDelete(_))));
+}
+
+#[test]
 fn every_dm_message_counts_as_a_mention() {
     let (cache, mut a) = setup();
     for (i, n) in [(900000000000000600, 1), (900000000000000601, 2)] {

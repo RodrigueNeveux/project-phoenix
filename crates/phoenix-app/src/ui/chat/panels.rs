@@ -914,8 +914,8 @@ pub fn new_messages_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Optio
 }
 
 pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
-    let scrolled_up = (!app.chat.at_bottom && app.message_list.is_scrolled_to_end() == Some(false))
-        || crate::history_detached::is_detached(app);
+    let detached = crate::history_detached::is_detached(app);
+    let scrolled_up = !app.message_list.is_scrolled_to_end().unwrap_or(app.chat.at_bottom) || detached;
     if !scrolled_up {
         return None;
     }
@@ -931,7 +931,8 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
             .child(
                 div()
                     .id("jump-present")
-                    .min_w(z(284.))
+                    .min_w_0()
+                    .max_w_full()
                     .min_h(z(44.))
                     .py(z(8.))
                     .px(z(12.))
@@ -940,11 +941,11 @@ pub fn jump_bar(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEle
                     .border_color(c(tok(idx::BORDER_NORMAL)))
                     .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
                     .shadow(crate::ui::inbox::shadow_medium())
-                    .cursor_pointer()
                     .flex()
+                    .flex_wrap()
                     .items_center()
+                    .gap(z(4.))
                     .text_color(c(tok(idx::TEXT_DEFAULT)))
-                    .on_click(cx.listener(|a, _, _, cx| a.jump_to_present(cx)))
                     .child(
                         div()
                             .flex_1()

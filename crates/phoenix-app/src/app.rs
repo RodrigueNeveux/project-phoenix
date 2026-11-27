@@ -297,11 +297,27 @@ impl PhoenixApp {
         let message_list = ListState::new(0, ListAlignment::Bottom, px(800.));
         let weak = cx.entity().downgrade();
         message_list.set_scroll_handler(move |ev: &gpui::ListScrollEvent, _w, cx: &mut App| {
-            if ev.visible_range.start == 0 {
-                let _ = weak.update(cx, |this, cx| this.load_older(cx));
-            }
-            let _ = weak.update(cx, |this, cx| this.detached_on_scroll(ev, cx));
-            let _ = weak.update(cx, |this, cx| this.chat_on_scroll(ev, cx));
+            let Some(channel) = weak.upgrade().and_then(|app| app.read(cx).selected_channel) else { return };
+            let event = gpui::ListScrollEvent {
+                visible_range: ev.visible_range.clone(),
+                count: ev.count,
+                is_scrolled: ev.is_scrolled,
+                is_following_tail: ev.is_following_tail,
+            };
+            let weak = weak.clone();
+            // GPUI holds a mutable borrow of the list while dispatching its scroll callback.
+            cx.defer(move |cx| {
+                let _ = weak.update(cx, |this, cx| {
+                    if this.selected_channel != Some(channel) {
+                        return;
+                    }
+                    if event.visible_range.start == 0 {
+                        this.load_older(cx);
+                    }
+                    this.detached_on_scroll(&event, cx);
+                    this.chat_on_scroll(&event, cx);
+                });
+            });
         });
 
         let restore = backend.restore_session();
@@ -576,8 +592,10 @@ impl PhoenixApp {
             crate::ui::voice_effects::prewarm();
         }
         for ch in r.dm_channels {
-            self.dms.push(ch.id);
-            self.channels.insert(ch.id, ch);
+            if ch.guild.is_none() && !self.channels.contains_key(&ch.id) {
+                self.dms.push(ch.id);
+                self.channels.insert(ch.id, ch);
+            }
         }
         self.guild_list.reset(self.guilds.len() + 5);
         self.screen = Screen::Main;
@@ -603,7 +621,7 @@ impl PhoenixApp {
     }
 
     pub(crate) fn guild_target(&self, guild: Option<Id>) -> Option<Id> {
-        self.last_channel.get(&guild).copied().or_else(|| match guild {
+        self.last_channel.get(&guild).copied().filter(|id| self.channels.get(id).is_some_and(|c| c.guild == guild)).or_else(|| match guild {
             Some(g) => self.guild_channels.get(&g).and_then(|l| {
                 l.iter().copied().find(|id| {
                     matches!(self.channels[id].kind, ChannelKind::Text | ChannelKind::Announcement)
@@ -798,6 +816,7 @@ impl PhoenixApp {
         if self.take_echo(&m, cx) {
             return;
         }
+        ui::chat::welcome::record_message(self, &m);
         let ch = m.channel;
         let selected = self.selected_channel == Some(ch);
         let mention = m.content.contains(&format!("<@{}>", self.me.id.0)) && !self.nav.is_blocked(m.author);
@@ -1059,6 +1078,9 @@ impl PhoenixApp {
             }
             AppEvent::DmUpsert(ch) => {
                 let id = ch.id;
+                if ch.guild.is_some() || self.channels.get(&id).is_some_and(|existing| existing.guild.is_some()) {
+                    return;
+                }
                 let keep_unread = self.selected_channel == Some(id);
                 let mut ch = ch;
                 if keep_unread {
@@ -1073,6 +1095,9 @@ impl PhoenixApp {
                 }
             }
             AppEvent::DmDelete(id) => {
+                if self.channels.get(&id).is_some_and(|channel| channel.guild.is_some()) {
+                    return;
+                }
                 self.dms.retain(|d| *d != id);
                 self.channels.remove(&id);
                 if self.selected_guild.is_none() {
@@ -1191,6 +1216,9 @@ impl PhoenixApp {
     }
 
     pub fn submit_composer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing.is_none() && ui::chat::composer::channel_read_only(self) {
+            return;
+        }
         if self.editing.is_none() {
             let announce = ui::chat::announce::is_active(self);
             if announce && !ui::chat::announce::prepare_submit(self, window, cx) {

@@ -8,7 +8,7 @@ use gpui_component::input::{Input, InputEvent, InputState};
 use crate::{
     app::PhoenixApp,
     theme::{Palette, c, ca, generated::idx, tok, z},
-    ui::home::data::{NavRequest, Overlay},
+    ui::home::data::{NavReply, NavRequest, Overlay},
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -247,7 +247,11 @@ pub fn create_guild_body_for_locale(
     _community: Option<bool>,
     is_fr: bool,
 ) -> serde_json::Value {
-    let code = template.unwrap_or(CREATE.code);
+    let Some(code) = template else {
+        let mut body = serde_json::json!({ "name": name.trim() });
+        if let Some(icon) = icon { body["icon"] = serde_json::json!(icon); }
+        return body;
+    };
     let (channels, system_channel_id, roles) = template_spec_payload(code, is_fr);
     let mut obj = serde_json::Map::new();
     obj.insert("name".into(), serde_json::json!(name.trim()));
@@ -325,7 +329,12 @@ impl PhoenixApp {
             |this, res, cx| {
                 this.nav.busy = false;
                 match res {
-                    Ok(_) => {
+                    Ok(reply) => {
+                        if let NavReply::Json(guild) = reply
+                            && let Some(id) = guild.get("id").and_then(serde_json::Value::as_str).and_then(|id| id.parse().ok())
+                        {
+                            crate::ui::chat::welcome::record_creation(this, crate::model::Id(id));
+                        }
                         reset();
                         this.close_overlay(cx);
                     }

@@ -262,7 +262,8 @@ impl PhoenixApp {
     }
 
     pub fn chat_on_scroll(&mut self, ev: &ListScrollEvent, cx: &mut Context<Self>) {
-        let bottom = ev.visible_range.end >= ev.count || ev.is_following_tail;
+        let bottom = !crate::history_detached::is_detached(self)
+            && (ev.is_following_tail || self.message_list.is_scrolled_to_end().unwrap_or(!ev.is_scrolled));
         if bottom != self.chat.at_bottom {
             self.chat.at_bottom = bottom;
             if bottom {
@@ -284,9 +285,6 @@ impl PhoenixApp {
 
     pub fn jump_to_present(&mut self, cx: &mut Context<Self>) {
         if self.leave_detached(cx) {
-            self.chat.at_bottom = true;
-            self.chat.new_messages = None;
-            cx.notify();
             return;
         }
         self.message_list.scroll_to_end();

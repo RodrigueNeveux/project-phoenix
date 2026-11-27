@@ -1,6 +1,6 @@
 use crate::theme::{c, generated::idx, tok, z};
 use crate::ui::Icon;
-use gpui::{Div, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled, div, svg};
+use gpui::{Div, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled, div, svg};
 use gpui::prelude::FluentBuilder as _;
 
 pub fn composer_button(id: &'static str, i: Icon) -> gpui::Stateful<Div> {
@@ -232,9 +232,14 @@ pub fn below_tip(text: gpui::SharedString, button_w: f32, button_h: f32) -> gpui
 }
 
 pub fn header_button(id: &'static str, path: gpui::SharedString, selected: bool, label: gpui::SharedString) -> gpui::Stateful<Div> {
-    let k = key(("hdr-btn", id));
     let rest = c(tok(if selected { idx::ICON_STRONG } else { idx::ICON_MUTED }));
     let hover = c(tok(if selected { idx::ICON_STRONG } else { idx::ICON_SUBTLE }));
+    header_button_with_icon(id, svg().path(path).size(z(20.)).flex_none().text_color(rest)
+        .group_hover(id, move |s| s.text_color(hover)), label)
+}
+
+pub fn header_button_with_icon(id: &'static str, glyph: impl IntoElement, label: gpui::SharedString) -> gpui::Stateful<Div> {
+    let k = key(("hdr-btn", id));
     track(div().id(id), k)
         .group(id)
         .relative()
@@ -244,14 +249,7 @@ pub fn header_button(id: &'static str, path: gpui::SharedString, selected: bool,
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .child(
-            svg()
-                .path(path)
-                .size(z(20.))
-                .flex_none()
-                .text_color(rest)
-                .group_hover(id, move |s| s.text_color(hover)),
-        )
+        .child(glyph)
         .children(hovered(k).then(|| below_tip(label, 32., 32.)))
         .map(|d| crate::ui::focus_ring::ring(d, k, 4.))
 }

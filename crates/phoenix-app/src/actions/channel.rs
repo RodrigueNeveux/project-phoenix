@@ -159,9 +159,16 @@ impl PhoenixApp {
     }
 
     pub fn open_server_settings(&mut self, guild: Id, section: usize, cx: &mut Context<Self>) {
+        if !self.guilds.iter().any(|g| g.id == guild) {
+            return;
+        }
         self.nav.guild_menu = false;
-        open_modal(Modal::ServerSettings(Box::new(server_settings::State::new(guild, section))), None);
-        server_settings::load(self, cx);
+        if let Some(section) = server_settings::available_section(self, guild, section) {
+            open_modal(Modal::ServerSettings(Box::new(server_settings::State::new(guild, section))), None);
+            server_settings::load(self, cx);
+        } else {
+            open_modal(Modal::ServerOverview { guild }, None);
+        }
         cx.notify();
     }
 }
@@ -241,7 +248,7 @@ pub fn favorite_item(app: &PhoenixApp, e: &Ent, channel: Id) -> MenuItem {
 }
 
 pub fn server_settings_item(app: &PhoenixApp, e: &Ent, guild: Id) -> MenuItem {
-    let items = server_settings::SECTIONS.iter().enumerate().filter(|(_, key)| server_settings::visible(app, guild, key))
+    let items: Vec<_> = server_settings::SECTIONS.iter().enumerate().filter(|(_, key)| server_settings::visible(app, guild, key))
         .map(|(section, key)| item(e, server_settings::section_label(key), move |app, cx| {
             if server_settings::opens_app_directory(section) {
                 server_settings::open_app_directory(cx);
@@ -250,11 +257,14 @@ pub fn server_settings_item(app: &PhoenixApp, e: &Ent, guild: Id) -> MenuItem {
             }
         }))
         .collect();
+    if items.is_empty() {
+        return item(e, crate::t!("menu.server_settings"), move |a, cx| a.open_server_settings(guild, 0, cx));
+    }
     let entity = e.clone();
     MenuItem::Submenu {
         label: crate::t!("menu.server_settings"),
         items,
-        icon: Some(crate::icons::path("gear")),
+        icon: None,
         subtext: None,
         on_click: Some(std::rc::Rc::new(move |_, window, cx| {
             entity.update(cx, |app, cx| app.open_server_settings(guild, 0, cx));
