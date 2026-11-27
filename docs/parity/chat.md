@@ -231,3 +231,33 @@ Sources: `web.b63d846b329d6470.js` module 889558 (link click handler `Y`, `Maske
 | trust checkbox | "Toujours faire confiance aux liens de **host**" (`ZgXDsI`, protocol `haA+Xw`); saved to `MaskedLinkStore` in localStorage, not the account | `checkbox_option_el`; saved to the local prefs (`trusted_domains`, `trusted_protocols`) | ✅ |
 | actions | full-width "Retour" (secondary) / "Visiter le site" ("Ouvrir le lien" for a protocol, primary) | same | ✅ |
 
+## Scrolling and scrollbar (2026-11-26 evening)
+
+| item | client reference | Phoenix | status |
+|---|---|---|---|
+| wheel at the bottom of the chat | scrolls | did nothing (bottom-anchored `scroll_by`), fixed in GPUI | ✅ |
+| notch distance | 120 DIPs (80 CSS px at zoom 1.5), Chrome 158 measured | `wheel_line_delta` | ✅ |
+| fast notches | one accelerating animation (10 notches → 1200 px in 300–370 ms) | same retarget curve, no 30 fps throttle when unfocused | ✅ (to confirm on screen) |
+| chat scrollbar thumb | `.auto_tqapBM` without `fade_`: thumb always visible (`scroller_8AE1Qq … auto_tqapBM`, dumps) | was shown only on hover, now always | ✅ |
+| thumb drag | linear, immediate: Δscroll = Δpointer × (content − view) / (track − thumb), measured | `scrollbar::interact` | ✅ |
+| track click | page of 0.875 × view height (490 px for 560), animated ~95 ms; held: repeats after 250 ms every 50 ms until the thumb reaches the pointer (measured, Chrome 158) | same, for every `scrollbar` bar (chat, channels, members, settings, pickers) | ✅ |
+| wheel bursts into an edge | Chromium clamps the target, eases into the edge | stops at the edge on the next frame | ❌ |
+
+## Keyboard page scrolling (2026-11-27)
+
+Sources: `web.b63d846b329d6470.js` module 552049 (`pageup`/`pagedown`, `comboKeysBindGlobal`, dispatch
+`SCROLL_PAGE_UP`/`SCROLL_PAGE_DOWN` to the last subscriber), chunk `ceb73656db6e6af4.js` (the chat
+subscribes and calls `scrollPageUp({animate: !useReducedMotion})`), module 584648 (`scrollPageUp`:
+`to: scrollTop − 0.9 × offsetHeight`, target clamped to `[0, scrollHeight − offsetHeight + 1]`),
+module 354730 + `s()` (scroll spring: tension 200, friction 35, mass 2, clamp, fixed 1/240 s steps,
+accumulator capped at 2 s, stops when it crosses the target or `|a·dt| < 0.001`; a new page keeps the
+velocity and restarts from the current scrollTop).
+
+| item | client | Phoenix | status |
+|---|---|---|---|
+| PageUp / PageDown | 0.9 × the chat height, spring above (about 590 ms for a 540 px page at 60 Hz, half way at 160 ms, no overshoot) | `ui/chat/page_scroll.rs` (same spring, same steps), applied each frame with `ListState::scroll_by_notify` | ✅ JS; unit tests on the curve |
+| from the bottom of the chat | scrolls | did nothing: the GPUI fixes were never in the pinned rev (see `docs/gpui-patches.md`, page scroll) | ✅ |
+| with the composer focused | global binding, scrolls the chat | the textarea ate PageUp (`MovePageUp`); `Composer > Input` bindings now win for PageUp/PageDown/Shift+PageUp/Shift+PageDown | ✅ |
+| reduced motion | no animation | jumps in one frame | ✅ |
+| Ctrl+Home / Ctrl+End | no client keybind (the scroller follows the browser); Ctrl+End = the chat end | Ctrl+Home springs to the top of the loaded history (loads older pages through the scroll handler), Ctrl+End = « Revenir au présent »; in the composer both move the caret, like a textarea | ✅ |
+| PageUp → « Revenir au présent » bar | the bar shows once the chat leaves the bottom | the scroll handler now runs on every step, so `at_bottom` follows | ✅ |

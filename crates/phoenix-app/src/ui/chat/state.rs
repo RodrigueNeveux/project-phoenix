@@ -236,6 +236,7 @@ impl PhoenixApp {
     }
 
     pub fn chat_on_select(&mut self, channel: Id) {
+        super::page_scroll::stop();
         self.messages.retain(|_, e| !e.detached);
         self.chat.edit = None;
         self.chat.menu = None;

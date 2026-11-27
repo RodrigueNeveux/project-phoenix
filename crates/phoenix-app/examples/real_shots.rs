@@ -2635,17 +2635,33 @@ fn main() -> anyhow::Result<()> {
             })?;
             pump(&mut cx, 200);
         }
+        let frames = |cx: &mut HeadlessAppContext, ms: u64| {
+            let t0 = std::time::Instant::now();
+            let mut trace = Vec::new();
+            while t0.elapsed() < Duration::from_millis(ms) {
+                cx.simulate_frame_request(win.into());
+                cx.run_until_parked();
+                let y = cx.update(|cx| v.read(cx).message_list.scroll_px_offset_for_scrollbar().y);
+                trace.push(format!("{}:{:.0}", t0.elapsed().as_millis(), -f32::from(y)));
+                std::thread::sleep(Duration::from_millis(16));
+            }
+            trace.join(" ")
+        };
         for (i, key) in keys.split_whitespace().enumerate() {
             let action: Option<Box<dyn gpui::Action>> = match key {
                 "!pageup" => Some(Box::new(phoenix_app::shortcuts::PageUp)),
                 "!pagedown" => Some(Box::new(phoenix_app::shortcuts::PageDown)),
+                "!top" => Some(Box::new(phoenix_app::shortcuts::ChatTop)),
+                "!bottom" => Some(Box::new(phoenix_app::shortcuts::ChatBottom)),
                 _ => None,
             };
             if let Some(action) = action {
                 cx.update_window(win.into(), |_, window, cx| window.dispatch_action(action, cx))?;
-                pump(&mut cx, 400);
-                let top = cx.update(|cx| v.read(cx).message_list.logical_scroll_top());
-                println!("action {key}: list_top=({}, {})", top.item_ix, f32::from(top.offset_in_item));
+                let trace = frames(&mut cx, 900);
+                pump(&mut cx, 200);
+                let (top, bottom) = cx.update(|cx| (v.read(cx).message_list.logical_scroll_top(), v.read(cx).chat.at_bottom));
+                println!("action {key}: list_top=({}, {}) at_bottom={bottom} trace={trace}", top.item_ix, f32::from(top.offset_in_item));
+                shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
                 continue;
             }
             let Ok(ks) = gpui::Keystroke::parse_with_os(key, gpui::OperatingSystem::Linux) else {
@@ -2655,7 +2671,9 @@ fn main() -> anyhow::Result<()> {
             cx.update_window(win.into(), |_, window, cx| {
                 window.dispatch_keystroke(ks, cx);
             })?;
-            pump(&mut cx, 400);
+            let trace = frames(&mut cx, 900);
+            println!("key {key}: trace={trace}");
+            pump(&mut cx, 200);
             let (ch, text, edit, top) = cx.update(|cx| {
                 let app = v.read(cx);
                 let top = app.message_list.logical_scroll_top();

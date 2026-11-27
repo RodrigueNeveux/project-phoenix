@@ -21,6 +21,63 @@ fn rss_kib() -> u64 {
 
 pub static COUNTER: OnceLock<fn() -> (u64, u64)> = OnceLock::new();
 
+pub type Sampler = (fn(u64), fn() -> Vec<std::backtrace::Backtrace>);
+
+pub static SAMPLER: OnceLock<Sampler> = OnceLock::new();
+
+fn frame_names(bt: &std::backtrace::Backtrace) -> Vec<String> {
+    bt.to_string()
+        .lines()
+        .filter_map(|l| {
+            let (n, name) = l.trim_start().split_once(": ")?;
+            n.parse::<usize>().ok()?;
+            let name = match name.rsplit_once("::h") {
+                Some((head, hash)) if hash.len() == 16 && hash.chars().all(|c| c.is_ascii_hexdigit()) => head,
+                _ => name,
+            };
+            Some(name.to_string())
+        })
+        .collect()
+}
+
+fn plumbing(f: &str) -> bool {
+    let f = f.trim_start_matches('<');
+    ["std::", "core::", "alloc::", "__rust", "frames::", "bench::", "hashbrown::", "smallvec::", "collections::", "_Unwind", "rust_", "unknown"]
+        .iter()
+        .any(|p| f.starts_with(p))
+        || f.contains("Counting")
+}
+
+fn report_sites(sites: &[std::backtrace::Backtrace]) {
+    let mut leaf: std::collections::HashMap<String, usize> = Default::default();
+    let mut app: std::collections::HashMap<String, usize> = Default::default();
+    let mut incl: std::collections::HashMap<String, usize> = Default::default();
+    for bt in sites {
+        let names = frame_names(bt);
+        if let Some(f) = names.iter().find(|f| !plumbing(f)) {
+            *leaf.entry(f.clone()).or_default() += 1;
+        }
+        if let Some(f) = names.iter().find(|f| f.contains("phoenix_app::")) {
+            *app.entry(f.clone()).or_default() += 1;
+        }
+        let mut seen = std::collections::HashSet::new();
+        for f in names.iter().filter(|f| f.contains("phoenix_app::")) {
+            if seen.insert(f.clone()) {
+                *incl.entry(f.clone()).or_default() += 1;
+            }
+        }
+    }
+    let n = sites.len().max(1) as f64;
+    for (label, map) in [("leaf", leaf), ("app", app), ("incl", incl)] {
+        let mut rows: Vec<_> = map.into_iter().collect();
+        rows.sort_by_key(|r| std::cmp::Reverse(r.1));
+        for (f, c) in rows.into_iter().take(40) {
+            println!("alloc_{label} {:5.1}% {c:5} {f}", c as f64 * 100. / n);
+        }
+    }
+    println!("alloc_samples={}", sites.len());
+}
+
 fn counts() -> (u64, u64) {
     COUNTER.get().map_or((0, 0), |f| f())
 }
@@ -193,6 +250,16 @@ pub fn run() -> anyhow::Result<()> {
 
     p.measure("idle", 60, |_, _| {});
     p.measure("scroll_chat_wheel", 300, |p, _| p.input(wheel(700., 400., -120.)));
+    if let (Some(every), Some((start, stop))) = (std::env::var("PHX_ALLOC_SITES").ok().and_then(|v| v.parse::<u64>().ok()), SAMPLER.get()) {
+        start(every.max(1));
+        for _ in 0..120 {
+            p.input(wheel(700., 400., -120.));
+            p.frame();
+        }
+        let sites = stop();
+        report_sites(&sites);
+        return Ok(());
+    }
     let trace = std::env::var_os("PHX_TRACE_SCROLL").is_some();
     let t_trace = Instant::now();
     p.live("scroll_chat_notches", 240, |p, i| {
@@ -202,6 +269,31 @@ pub fn run() -> anyhow::Result<()> {
         if trace && i < 48 {
             let y = p.cx.update(|cx| v.read(cx).message_list.scroll_px_offset_for_scrollbar().y);
             println!("trace t_ms={} y={:.2}", t_trace.elapsed().as_millis(), f32::from(y));
+        }
+    });
+    p.cx.update(|cx| v.read(cx).message_list.scroll_to_end());
+    p.frame();
+    let t_burst = Instant::now();
+    p.live("scroll_chat_burst_from_end", 60, |p, i| {
+        if i < 20 && i % 2 == 0 {
+            p.input(notch(700., 400., 3.));
+        }
+        if trace {
+            let y = p.cx.update(|cx| v.read(cx).message_list.scroll_px_offset_for_scrollbar().y);
+            println!("burst t_ms={} y={:.2}", t_burst.elapsed().as_millis(), f32::from(y));
+        }
+    });
+    p.cx.update(|cx| v.read(cx).message_list.scroll_to_end());
+    p.frame();
+    let t_page = Instant::now();
+    p.live("scroll_chat_page", 120, |p, i| {
+        if i % 40 == 0 {
+            let action: Box<dyn gpui::Action> = if i < 80 { Box::new(phoenix_app::shortcuts::PageUp) } else { Box::new(phoenix_app::shortcuts::PageDown) };
+            p.cx.update_window(p.win, |_, window, cx| window.dispatch_action(action, cx)).ok();
+        }
+        if trace {
+            let y = p.cx.update(|cx| v.read(cx).message_list.scroll_px_offset_for_scrollbar().y);
+            println!("page t_ms={} y={:.2}", t_page.elapsed().as_millis(), f32::from(y));
         }
     });
     let mic = phoenix_app::ui::states::key(("audio-btn", "Mic"));

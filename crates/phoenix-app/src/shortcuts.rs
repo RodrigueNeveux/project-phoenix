@@ -41,6 +41,8 @@ actions!(
         ToggleSticker,
         PageUp,
         PageDown,
+        ChatTop,
+        ChatBottom,
         JumpOldestUnread,
         MarkServerRead,
         CreateGuild,
@@ -150,6 +152,8 @@ pub const QUIT_KEY: &str = if cfg!(target_os = "macos") {
     "ctrl-q"
 };
 
+const COMPOSER: Option<&str> = Some("Composer > Input");
+
 pub fn bind_keys(cx: &mut App) {
     let ctx = Some(CONTEXT);
     cx.on_action(|_: &Quit, cx| escape::quit_app(cx));
@@ -182,8 +186,14 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-e", ToggleEmoji, ctx),
         KeyBinding::new("ctrl-g", ToggleGif, ctx),
         KeyBinding::new("ctrl-s", ToggleSticker, ctx),
+        KeyBinding::new("pageup", PageUp, COMPOSER),
+        KeyBinding::new("pagedown", PageDown, COMPOSER),
+        KeyBinding::new("shift-pageup", JumpOldestUnread, COMPOSER),
+        KeyBinding::new("shift-pagedown", JumpToPresent, COMPOSER),
         KeyBinding::new("pageup", PageUp, ctx),
         KeyBinding::new("pagedown", PageDown, ctx),
+        KeyBinding::new("ctrl-home", ChatTop, ctx),
+        KeyBinding::new("ctrl-end", ChatBottom, ctx),
         KeyBinding::new("shift-pageup", JumpOldestUnread, ctx),
         KeyBinding::new("shift-escape", MarkServerRead, ctx),
         KeyBinding::new("ctrl-shift-n", CreateGuild, ctx),
@@ -423,10 +433,9 @@ impl PhoenixApp {
         }
     }
 
-    fn page(&mut self, up: bool) {
-        let h = self.message_list.viewport_bounds().size.height;
-        let d: Pixels = if h > px(0.) { h - px(60.) } else { px(400.) };
-        self.message_list.scroll_by(if up { -d } else { d });
+    fn page(&mut self, up: bool, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        let reduced = ui::settings::effects::reduced_motion();
+        ui::chat::page_scroll::page(&self.message_list, up, cx.entity_id(), window, reduced);
     }
 
     fn toggle_all_categories(&mut self, cx: &mut Context<Self>) {
@@ -538,13 +547,15 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, window: &gpui::Wind
     .on_action(cx.listener(|a, _: &ToggleEmoji, w, cx| ui::pickers::toggle(a, Tab::Emoji, EmojiTarget::Composer, w, cx)))
     .on_action(cx.listener(|a, _: &ToggleGif, w, cx| ui::pickers::toggle(a, Tab::Gif, EmojiTarget::Composer, w, cx)))
     .on_action(cx.listener(|a, _: &ToggleSticker, w, cx| ui::pickers::toggle(a, Tab::Sticker, EmojiTarget::Composer, w, cx)))
-    .on_action(cx.listener(|a, _: &PageUp, _, cx| {
-        a.page(true);
-        cx.notify();
+    .on_action(cx.listener(|a, _: &PageUp, w, cx| a.page(true, w, cx)))
+    .on_action(cx.listener(|a, _: &PageDown, w, cx| a.page(false, w, cx)))
+    .on_action(cx.listener(|a, _: &ChatTop, w, cx| {
+        let reduced = ui::settings::effects::reduced_motion();
+        ui::chat::page_scroll::to_top(&a.message_list, cx.entity_id(), w, reduced);
     }))
-    .on_action(cx.listener(|a, _: &PageDown, _, cx| {
-        a.page(false);
-        cx.notify();
+    .on_action(cx.listener(|a, _: &ChatBottom, _, cx| {
+        ui::chat::page_scroll::stop();
+        a.jump_to_present(cx);
     }))
     .on_action(cx.listener(|a, _: &JumpOldestUnread, _, cx| {
         if let Some((ch, msg)) = a.chat.unread_marker {

@@ -74,6 +74,11 @@ allocations per frame. A "frame" is refresh + layout + paint
 (`run_until_parked`), without the GPU readback of screenshots.
 Prints one `scenario p50_us p95_us max_us over16 allocs bytes` line each,
 then RSS. See docs/perf.md.
+`scroll_chat_page` sends PageUp, PageUp, PageDown 40 frames apart (`PHX_TRACE_SCROLL=1` prints
+`page t_ms=… y=…` per frame). `PHX_ALLOC_SITES=<n>` replaces the run: it samples one allocation in
+`n` (with its backtrace) over 120 `scroll_chat_wheel` frames, then prints the top 40 sites three
+ways (`alloc_leaf`: first frame outside std/alloc plumbing; `alloc_app`: first `phoenix_app` frame;
+`alloc_incl`: every `phoenix_app` function on the stack) and exits.
 
 ## `gif_mem`
 
@@ -165,7 +170,7 @@ targets the last such message (or `PHX_TARGET=<id>`), `PHX_EDIT_SAVE=1` saves it
 and `PHX_DELETE=1` opens the delete confirmation (`<out>-confirm.png`) and confirms (`<out>-deleted.png`).
 `PHX_KEYS="ctrl-k up escape"` dispatches each keystroke in turn (after focusing the composer with
 `PHX_KEYS_COMPOSER=1`), prints the selected channel, the composer and the edit box, and shoots
-`<out>-k<i>.png`; `!pageup` and `!pagedown` dispatch the actions directly. The read-only backend still refuses every write.
+`<out>-k<i>.png`; `!pageup`, `!pagedown`, `!top` (Ctrl+Home) and `!bottom` (Ctrl+End) dispatch the actions directly. After each step it drives 900 ms of frame requests and prints `trace=<ms>:<scroll top>` for every frame, so the page spring can be read off. The read-only backend still refuses every write.
 These steps (and the edit itself when `PHX_EDIT_SAVE` is set) run after `PHX_SEND`, so one run can send, edit, react and delete the same message.
 
 ## `screenshot`

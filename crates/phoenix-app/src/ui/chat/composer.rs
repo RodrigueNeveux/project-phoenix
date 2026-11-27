@@ -418,7 +418,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     .line_height(fz(22.))
                                     .text_color(c(Palette::TEXT_NORMAL))
                                     .child(
-                                        div().mx(z(-4.)).child(
+                                        div().mx(z(-4.)).key_context("Composer").child(
                                             gpui_component::input::Textarea::new(&app.composer)
                                                 .token(super::rich_input::render_token)
                                                 .context_menu(|_, w, _| {
