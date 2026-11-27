@@ -67,10 +67,6 @@ impl LruImageCache {
         self.items.is_empty()
     }
 
-    pub fn decoded_bytes(&self) -> u64 {
-        self.items.values().filter_map(|e| e.bytes).sum()
-    }
-
     fn evict(&mut self, protected: u64, window: &mut Window, cx: &mut App) {
         let mut entries: Vec<(u64, u64, u64)> = Vec::with_capacity(self.items.len());
         for (k, e) in &mut self.items {
