@@ -25,10 +25,16 @@ impl DiscordBackend {
             let note = async {
                 if with_note { s.rest.get_user_note(sf(user)).await } else { Ok(String::new()) }
             };
-            let (p, note) = tokio::join!(s.rest.get_user_profile(sf(user), guild.map(sf)), note);
+            let badges_path = format!("/users/{}/badges", user.0);
+            let catalog = s.rest.request_json(reqwest::Method::GET, &badges_path, None);
+            let (p, note, catalog) = tokio::join!(s.rest.get_user_profile(sf(user), guild.map(sf)), note, catalog);
             let p = p.map_err(api_err)?;
             inner.emit(AppEvent::Users(vec![convert::user(&p.user)]));
-            Ok(profile_from_api(&p, note.unwrap_or_default()))
+            let mut prof = profile_from_api(&p, note.unwrap_or_default());
+            if let Ok(c) = catalog {
+                crate::presence::apply_badge_catalog(&mut prof.badges, &c, p.extra.get("legacy_username").and_then(serde_json::Value::as_str));
+            }
+            Ok(prof)
         })
     }
 

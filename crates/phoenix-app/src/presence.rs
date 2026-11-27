@@ -250,6 +250,116 @@ pub struct Badge {
     pub description: SharedString,
     pub icon: SharedString,
     pub link: Option<SharedString>,
+    pub tip: Option<BadgeCatalog>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BadgeCatalog {
+    pub eyebrow: Option<SharedString>,
+    pub title: SharedString,
+    pub body: Option<SharedString>,
+    pub static_icon: Option<SharedString>,
+    pub animated_icon: Option<SharedString>,
+    pub nitro: bool,
+}
+
+pub fn catalog_badge_id(legacy: &str) -> Option<u64> {
+    const LEGACY: &[(&str, u64)] = &[
+        ("staff", 22),
+        ("staff_hidden", 22),
+        ("staff_personal", 22),
+        ("premium", 1),
+        ("partner", 2),
+        ("certified_moderator", 3),
+        ("hypesquad", 4),
+        ("hypesquad_house_1", 5),
+        ("hypesquad_house_2", 6),
+        ("hypesquad_house_3", 7),
+        ("bug_hunter_level_1", 8),
+        ("bug_hunter_level_2", 9),
+        ("verified_developer", 10),
+        ("early_supporter", 11),
+        ("legacy_username", 13),
+        ("quest_completed", 14),
+        ("april_fools_2026", 15),
+        ("orb_profile_badge", 16),
+    ];
+    const ENUM: &[&str] = &[
+        "PREMIUM_TENURE",
+        "PARTNER",
+        "CERTIFIED_MODERATOR",
+        "HYPESQUAD",
+        "HYPESQUAD_HOUSE_1",
+        "HYPESQUAD_HOUSE_2",
+        "HYPESQUAD_HOUSE_3",
+        "BUG_HUNTER_LEVEL_1",
+        "BUG_HUNTER_LEVEL_2",
+        "VERIFIED_DEVELOPER",
+        "EARLY_SUPPORTER",
+        "GUILD_BOOSTER",
+        "LEGACY_USERNAME",
+        "QUEST_COMPLETED",
+        "APRIL_FOOLS_2026",
+        "ORB_PROFILE",
+        "GIFTING",
+        "ACCOUNT_AGE",
+        "STREAMING",
+        "GAME_TIME",
+        "GAME_VARIETY",
+        "STAFF",
+        "ORB_VOID",
+    ];
+    if let Some((_, n)) = LEGACY.iter().find(|(k, _)| *k == legacy) {
+        return Some(*n);
+    }
+    if legacy.starts_with("premium_tenure_") && legacy.ends_with("_month_v2") {
+        return Some(1);
+    }
+    if legacy.starts_with("guild_booster_lvl") {
+        return Some(12);
+    }
+    let up = legacy.to_ascii_uppercase();
+    ENUM.iter().position(|e| *e == up).map(|i| i as u64 + 1)
+}
+
+pub fn apply_badge_catalog(badges: &mut [Badge], catalog: &Value, legacy_username: Option<&str>) {
+    let Some(list) = catalog.get("badges").and_then(Value::as_array) else { return };
+    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()).map(|s| SharedString::from(s.to_owned()));
+    for b in badges.iter_mut() {
+        let Some(want) = catalog_badge_id(&b.id) else { continue };
+        let Some(v) = list.iter().find(|v| v.get("badge_id").and_then(Value::as_u64) == Some(want)) else { continue };
+        let tier = v.get("current_tier").and_then(Value::as_str).and_then(|k| {
+            v.get("tiers")?.as_array()?.iter().find(|t| t.get("key").and_then(Value::as_str) == Some(k))
+        });
+        let tier_name = tier.and_then(|t| text(t, "name"));
+        let nitro = want == 1;
+        let name = if nitro { crate::t!("badge.nitro") } else { text(v, "name").unwrap_or_else(|| b.description.clone()) };
+        let (eyebrow, title) = match (nitro, tier_name) {
+            (true, Some(t)) => (None, SharedString::from(format!("{name} {t}"))),
+            (true, None) => (None, name),
+            (false, Some(t)) => (Some(name), t),
+            (false, None) => (None, name),
+        };
+        let obtained = v
+            .get("current_tier")
+            .and_then(Value::as_str)
+            .and_then(|k| v.get("tier_obtained_at")?.get(k)?.as_str())
+            .or_else(|| v.get("obtained_at").and_then(Value::as_str))
+            .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok());
+        let body = if want == 13 {
+            legacy_username.filter(|s| !s.is_empty()).map(|s| SharedString::from(s.to_owned()))
+        } else {
+            text(v, "info_label").or_else(|| obtained.map(|d| crate::t!("badge.unlocked_on", date = crate::i18n::short_date(d.with_timezone(&chrono::Local)))))
+        };
+        b.tip = Some(BadgeCatalog {
+            eyebrow: if want == 13 { None } else { eyebrow },
+            title,
+            body,
+            static_icon: text(v, "complex_icon_static_url").or_else(|| text(v, "simple_icon_url")),
+            animated_icon: text(v, "complex_icon_animated_url"),
+            nitro,
+        });
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -363,6 +473,7 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
                     description: text("description").into(),
                     icon: format!("https://cdn.discordapp.com/badge-icons/{icon}.png").into(),
                     link: b.get("link").and_then(Value::as_str).filter(|l| !l.is_empty()).map(|l| l.to_owned().into()),
+                    tip: None,
                 })
             })
             .collect(),

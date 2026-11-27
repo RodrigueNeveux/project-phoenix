@@ -537,6 +537,21 @@ fn badges(i: &Info) -> Option<Div> {
     })
 }
 
+pub(crate) fn badge_tip(b: &crate::presence::Badge) -> crate::ui::tooltip::BadgeTip {
+    let Some(t) = &b.tip else {
+        return crate::ui::tooltip::BadgeTip { icon: b.icon.clone(), eyebrow: None, title: b.description.clone(), body: None, animated: false, nitro: false };
+    };
+    let animated = t.animated_icon.clone().filter(|_| !crate::ui::settings::effects::reduced_motion());
+    crate::ui::tooltip::BadgeTip {
+        icon: animated.clone().or_else(|| t.static_icon.clone()).unwrap_or_else(|| b.icon.clone()),
+        eyebrow: t.eyebrow.clone(),
+        title: t.title.clone(),
+        body: t.body.clone(),
+        animated: animated.is_some(),
+        nitro: t.nitro,
+    }
+}
+
 pub(crate) fn badge_icon(b: &crate::presence::Badge, n: usize) -> gpui::Stateful<Div> {
     use crate::ui::tooltip::Tipped as _;
     let link = b.link.clone();
@@ -546,7 +561,7 @@ pub(crate) fn badge_icon(b: &crate::presence::Badge, n: usize) -> gpui::Stateful
         .size(z(20.))
         .when(link.is_some(), |d| d.cursor_pointer())
         .child(img(b.icon.clone()).size_full())
-        .tip_badge(crate::ui::tooltip::BadgeTip { icon: b.icon.clone(), eyebrow: None, title: b.description.clone(), body: None })
+        .tip_badge(badge_tip(b))
         .on_click(move |_, _, cx| {
             if let Some(l) = &link {
                 cx.stop_propagation();

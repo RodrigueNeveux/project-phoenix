@@ -91,6 +91,8 @@ pub struct BadgeTip {
     pub eyebrow: Option<SharedString>,
     pub title: SharedString,
     pub body: Option<SharedString>,
+    pub animated: bool,
+    pub nitro: bool,
 }
 
 fn badge_card(b: BadgeTip) -> gpui::Div {
@@ -112,7 +114,15 @@ fn badge_card(b: BadgeTip) -> gpui::Div {
         .flex()
         .flex_col()
         .items_center()
-        .child(div().h(z(64.)).mt(z(16.)).flex().justify_center().child(gpui::img(b.icon).size(z(64.)).object_fit(gpui::ObjectFit::Contain)))
+        .child(
+            div().relative().w_full().h(z(64.)).mt(z(16.)).child(
+                gpui::img(b.icon)
+                    .absolute()
+                    .when(b.animated, |d| d.top(z(-12.8)).left(z(-35.2)).w(z(246.4)).h(z(89.6)))
+                    .when(!b.animated, |d| d.top_0().left_0().size_full())
+                    .object_fit(gpui::ObjectFit::Contain),
+            ),
+        )
         .child(
             div()
                 .mt(z(if b.eyebrow.is_some() { 12. } else { 16. }))
@@ -126,10 +136,11 @@ fn badge_card(b: BadgeTip) -> gpui::Div {
                     div()
                         .w_full()
                         .text_center()
-                        .font_family(crate::fonts::NITRO)
+                        .font_family(crate::fonts::display_family(crate::fonts::NITRO))
                         .text_size(z(16.))
                         .line_height(z(16.))
                         .font_weight(FontWeight::BLACK)
+                        .when(b.nitro, |d| d.italic())
                         .text_color(c(tok(idx::TEXT_STRONG)))
                         .child(SharedString::from(b.title.to_uppercase())),
                 )
