@@ -385,6 +385,9 @@ impl NavPrefs {
     }
 
     pub fn save(&self) {
+        if phoenix_api::rest::guard::agent_session() {
+            return;
+        }
         let Some(p) = Self::path() else { return };
         if let Some(dir) = p.parent() {
             let _ = std::fs::create_dir_all(dir);

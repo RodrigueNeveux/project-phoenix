@@ -2,16 +2,16 @@
 
 Audit du 27/11/2026 sur origin/main `8c7b358b`. Ce document remplace le pourcentage de lignes ✅ comme mesure de l'avancement. Il se refait à la main : chaque état ci-dessous doit citer une preuve, et un état ne monte d'un cran que sur une nouvelle preuve réelle.
 
-<!-- real-progress {"score":61.3,"low":49.1,"high":75.7,"features":122,"verified":31,"unverified":76,"broken":5,"missing":10,"critical":26,"critical_verified":15,"critical_broken":5,"proof_measured":44,"proof_compared":8,"at":"2026-11-27"} -->
+<!-- real-progress {"score":63.0,"low":50.8,"high":77.0,"features":122,"verified":32,"unverified":76,"broken":4,"missing":10,"critical":26,"critical_verified":16,"critical_broken":4,"proof_measured":44,"proof_compared":8,"at":"2026-11-27"} -->
 
 ## Résultat
 
 | mesure | valeur |
 |---|---|
-| **Score réel pondéré** | **61 %** (fourchette 49 à 76 %) |
-| Couverture fonctionnelle | 112 fonctionnalités sur 122 existent dans le code (94 % du poids), mais **31 seulement sont vérifiées en vrai** (37 % du poids) |
+| **Score réel pondéré** | **63 %** (fourchette 51 à 77 %) |
+| Couverture fonctionnelle | 112 fonctionnalités sur 122 existent dans le code (94 % du poids), mais **32 seulement sont vérifiées en vrai** (38 % du poids) |
 | Niveau de preuve des ✅ | **44 %** s'appuient sur une mesure du vrai client, **8 %** ont été comparés à un rendu Phoenix ; 40 % viennent du CSS ou du JS seuls, 8 % d'un test unitaire, 7 % de rien |
-| Parcours critiques | **15 sur 26** prouvés en usage ou en test réel, 5 cassés connus, 6 non prouvés |
+| Parcours critiques | **16 sur 26** prouvés en usage ou en test réel, 4 cassés connus, 6 non prouvés |
 
 L'ancien chiffre (94,2 % : 2287 ✅, 114 ⚠, 26 ❌, 64 ➖ dans `docs/parity/*.md`) mesure autre chose : la part des détails inventoriés qui ont été codés. Il est biaisé pour trois raisons.
 
@@ -85,7 +85,7 @@ Docs les plus faibles : `inventory.md` (« page présente ✅ » sans mesure), `
 | Répondre | critique | non prouvé | aucun envoi de réponse |
 | Pièces jointes (envoi) | critique | prouvé (test réel) | PNG de 3,3 Mo envoyé |
 | Images | critique | prouvé (usage) | ≈ 8 échecs en deux jours, liens expirés |
-| Vidéos | critique | cassé | QA : rien ne se lit après 20 s |
+| Vidéos | critique | prouvé (QA et entrées réelles) | 27/11 sur `79a47024` : clic, lecture (0,4 s puis +4 s), pause, plein écran au bouton, sortie par Échap, en QA d'entrées et en clics X11 réels sous Xvfb ; seek →, 5 s, sous Xvfb |
 | Embeds | important | prouvé (rendus réels) | mosaïque X jamais vue en vrai |
 | MP : liste et ouverture | critique | prouvé | ouverture réelle |
 | MP : envoi | critique | non prouvé | aucun envoi en MP |
@@ -101,7 +101,7 @@ Docs les plus faibles : `inventory.md` (« page présente ✅ » sans mesure), `
 | Paramètres principaux | important | ouverture prouvée, effets non prouvés | panique de Mon compte corrigée sans réouverture |
 | Stabilité en usage long | critique | cassé (mémoire) | 10 h sans plantage, mais RSS de 423 à 875 Mio, correctif non remesuré |
 
-Le build de l'utilisateur au moment de l'audit (`766fa7ba`) ne contient ni les correctifs de défilement ni le lecteur vidéo. Les plaintes sur ces deux points portent donc sur un build plus ancien, mais la QA du 27/11 montre que la vidéo et le saut au présent échouent aussi sur main.
+Le build de l'utilisateur au moment de l'audit (`766fa7ba`) ne contient ni les correctifs de défilement ni le lecteur vidéo. Les plaintes sur ces deux points portent donc sur un build plus ancien, mais la QA du 27/11 montrait que la vidéo et le saut au présent échouaient aussi sur main. Reprise le même jour : le saut au présent passe depuis 8c7b358b, et la vidéo se lisait déjà ; c'est la QA qui ne faisait pas tourner ses minuteries (voir `docs/qa.md`).
 
 ## Les manques les plus lourds
 
@@ -109,12 +109,11 @@ Triés par impact (poids × distance à « vérifiée en vrai ») :
 
 1. Vocal : entendre les autres (cassé)
 2. Vocal : changer de salon (cassé)
-3. Lecture vidéo (cassée)
-4. Statut propre visible des autres (correctif jamais vérifié)
-5. Stabilité : fuite mémoire (correctif non remesuré)
-6. Correcteur orthographique (absent)
-7. Suppression de bruit et annulation d'écho (absentes)
-8. Salons Stage, activités, liens `discord://`, lecteur d'écran (absents)
+3. Statut propre visible des autres (correctif jamais vérifié)
+4. Stabilité : fuite mémoire (correctif non remesuré)
+5. Correcteur orthographique (absent)
+6. Suppression de bruit et annulation d'écho (absentes)
+7. Salons Stage, activités, liens `discord://`, lecteur d'écran (absents)
 
 Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, envoyer en MP, historique ancien, non-lus et pastilles, login interactif. Le backlog de travail tiré de cette liste est tenu hors du dépôt.
 
@@ -170,7 +169,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 29 | Markdown (titres, listes, citations, spoilers, code coloré) | important | vérifiée en vrai | real-glitches.md : glitchs relevés sur des écrans réels puis corrigés |
 | 30 | Mentions, émojis personnalisés et animés, horodatages | important | vérifiée en vrai | rendus réels comparés (real-compare.md) |
 | 31 | Images et mosaïques | critique | vérifiée en vrai | usage réel : environ 8 échecs en 2 jours (liens expirés), rendus réels |
-| 32 | Lecture vidéo (lecture, seek, plein écran) | critique | cassée connue | QA run1 et run2 27/11 : lecture KO (`video_t=-1` après 20 s), seek KO |
+| 32 | Lecture vidéo (lecture, seek, plein écran) | critique | vérifiée en vrai | 27/11 : la lecture marchait, la QA ne faisait pas avancer l'horloge de ses minuteries (corrigé) et tapait les touches du lecteur DVP ; QA d'entrées sur `79a47024` : lecture, pause, plein écran, Échap ; sous Xvfb (binaire complet, clics X11) : lecture, pause, seek → de 5 s, plein écran ; Échap ne quittait pas le plein écran, corrigé (c0e116b4). Image figée sur l'ancienne position après un seek en pause |
 | 33 | Embeds (liens, YouTube, X, riches) | important | vérifiée en vrai | rendus réels ; mosaïque X jamais vue sur un vrai post |
 | 34 | Fichiers et audio joints (lecture audio) | important | présente, non vérifiée | `media/audio_file.rs`, lecture jamais prouvée |
 | 35 | Messages vocaux (lecture et enregistrement) | important | présente, non vérifiée | voice-messages.md : CSS et JS, aucune lecture réelle |
