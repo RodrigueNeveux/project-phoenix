@@ -423,3 +423,36 @@ The UI is shown once the open channel has its page after READY; the cached
 session itself is on screen from 1.15 s under the connecting screen. The
 headless example runs every GPUI task on one thread, so the app itself
 should be faster than these numbers.
+
+## Allocations per scroll frame (target 2), 2026-11-27
+
+`int-bin/frames 2000` (mock, headless 1280×800, dev profile, under `phoenix-nice`), before at
+`fdffabf2`, two runs:
+
+| scenario | allocs / frame | bytes / frame | p50 / p95 |
+|---|---|---|---|
+| `idle` | 7,241 / 7,241 | 3.30 MB | 10.3 / 15.0 ms |
+| `scroll_chat_wheel` | 26,064 / 26,055 | 11.2 MB | 40.5 / 53.7 ms |
+| `scroll_chat_fast` | 22,608 / 22,325 | 9.2 MB | 32.6 / 46.0 ms |
+| `hover_messages` | 13,086 / 12,392 | 5.5 MB | 14.7 / 31.5 ms |
+| `scroll_members` | 12,864 / 12,864 | 5.8 MB | 16.9 / 21.0 ms |
+
+Where they come from: `PHX_ALLOC_SITES=97 frames 2000` (one allocation in 97 with its
+backtrace, 120 `scroll_chat_wheel` frames at `d23e86fb`, 33,779 samples):
+- GPUI layout is the largest part: taffy flexbox 17.7 %, block 9.1 %, `new_with_children`
+  5.8 %, absolute (`oof`) 3.9 %; then `Interactivity::new` 7.7 %, mouse listeners about 9 %,
+  `TextStyle::default` 2.1 %, element ids 2.3 %, tab stops 2.6 %. All of it scales with the
+  number of elements, so the lever is building fewer of them.
+- Building the view: 11.6 % of the samples are under `PhoenixApp::render`, 11.1 % under the chat
+  rows, and 7.2 % under `message_ext::toolbar` alone: every visible message built its hover
+  toolbar (7 to 9 buttons, each with an icon, a tooltip and listeners) and kept it invisible.
+- Smaller ones: the guild rail cloned the whole `NotifyPrefs` once per guild per frame
+  (`guild_media`, 3.5 % on the mock, more on a real account with many overrides),
+  `icons::path` formatted the same `icons/<name>.svg` string on every call (1.1 %), every
+  Unicode emoji rebuilt its Twemoji URL and code points (`twemoji_url` 1.3 %).
+
+Changes: the toolbar is only built for the hovered message, the one with an open menu and the
+keyboard-selected one (it keeps its `invisible` + group-hover style, so a stale hover only costs
+the build); `guild_media` returns early, before reading the notification settings, when no
+channel of the guild has voice users and the guild has no live stage or event; `icons::path`
+and the Twemoji URL are memoised per thread (the emoji table is capped at 8,192 entries).

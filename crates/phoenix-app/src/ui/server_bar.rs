@@ -471,7 +471,6 @@ pub fn media_state(here: Option<Here>, guild_muted: bool, presences: &[Presence]
 
 pub fn guild_media(app: &PhoenixApp, g: &Guild) -> MediaState {
     let Some(chans) = app.guild_channels.get(&g.id) else { return MediaState::default() };
-    let prefs = app.backend.notify_prefs();
     let flags = crate::ui::voice_panel::flags;
     if let Some(v) = app.voice_channel.filter(|v| chans.contains(v)) {
         let users = app.channels.get(&v).map(|c| c.voice_users.as_slice()).unwrap_or_default();
@@ -483,6 +482,12 @@ pub fn guild_media(app: &PhoenixApp, g: &Guild) -> MediaState {
         let stage = app.channels.get(&v).is_some_and(|c| c.kind == crate::model::ChannelKind::Stage);
         return media_state(Some(here), false, &[]).with_live(&crate::guild_live::get(g.id.0), false, Some((v.0, stage)), |_| true);
     }
+    let live = crate::guild_live::get(g.id.0);
+    let quiet = live.stages.is_empty() && live.events.is_empty();
+    if quiet && chans.iter().filter_map(|c| app.channels.get(c)).all(|ch| ch.voice_users.is_empty()) {
+        return MediaState::default();
+    }
+    let prefs = app.backend.notify_prefs();
     let guild_muted = prefs.as_ref().is_some_and(|p| p.is_guild_muted(Some(g.id.0)));
     let mut presences = Vec::new();
     for ch in chans.iter().filter_map(|c| app.channels.get(c)) {
@@ -497,7 +502,7 @@ pub fn guild_media(app: &PhoenixApp, g: &Guild) -> MediaState {
         }
     }
     let visible = |c: u64| chans.contains(&crate::model::Id(c));
-    media_state(None, guild_muted, &presences).with_live(&crate::guild_live::get(g.id.0), guild_muted, None, visible)
+    media_state(None, guild_muted, &presences).with_live(&live, guild_muted, None, visible)
 }
 
 pub fn folder_media(app: &PhoenixApp, guilds: &[&Guild]) -> MediaState {

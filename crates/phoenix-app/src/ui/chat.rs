@@ -1275,6 +1275,9 @@ pub(crate) fn message(
             })
     });
 
+    let show_toolbar = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, id.0))
+        || app.chat.menu.is_some_and(|m| m.msg == id)
+        || crate::shortcuts::message::focused().is_some_and(|f| f.1 == id);
     let base = div()
         .id(("msg", id.0))
         .group("msg")
@@ -1451,7 +1454,7 @@ pub(crate) fn message(
             .child(content)
     }
     .when(!compact && msg.thread.is_some(), |d| d.child(message_ext::thread_spine(if msg.reply_to.is_some() { 70. } else { 48. })))
-    .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
+    .when(show_toolbar, |d| d.child(message_ext::toolbar(app, entity, msg, app.chat.shift_held)));
     let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
     let gap = if !r.group_start { 0. } else if compact { 4. } else { 17. * crate::theme::font_scale() };
     row_wrapper()

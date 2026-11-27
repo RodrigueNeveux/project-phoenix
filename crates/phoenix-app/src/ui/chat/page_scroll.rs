@@ -29,11 +29,6 @@ impl Spring {
         self.target = target;
     }
 
-    pub fn shift(&mut self, by: f64) {
-        self.from += by;
-        self.target += by;
-    }
-
     fn integrate(&self, vel: f64, from: f64) -> (f64, f64, f64) {
         let accel = (-TENSION * (from - self.target) - FRICTION * vel) / MASS;
         let vel = vel + accel * STEP;
@@ -67,9 +62,16 @@ impl Spring {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Goal {
+    By,
+    Top,
+}
+
 struct Run {
     list: ListState,
     view: EntityId,
+    goal: Goal,
     spring: Spring,
     shown: f64,
 }
@@ -82,46 +84,61 @@ fn top_of(list: &ListState) -> f64 {
     -f64::from(f32::from(list.scroll_px_offset_for_scrollbar().y))
 }
 
-fn max_of(list: &ListState) -> f64 {
-    f64::from(f32::from(list.max_offset_for_scrollbar().y))
+fn below_of(list: &ListState) -> f64 {
+    (f64::from(f32::from(list.max_offset_for_scrollbar().y)) - top_of(list)).max(0.)
 }
 
 pub fn page(list: &ListState, up: bool, view: EntityId, window: &mut Window, reduced: bool) {
     let h = f32::from(list.viewport_bounds().size.height);
     let d = f64::from(if h > 0. { h * PAGE_FRACTION } else { 400. });
-    let top = top_of(list);
-    scroll_to(list, if up { top - d } else { top + d }, view, window, reduced);
+    if list.max_offset_for_scrollbar().y <= px(0.) {
+        return;
+    }
+    let by = if up {
+        let top = list.logical_scroll_top();
+        if top.item_ix == 0 && top.offset_in_item < px(0.5) {
+            return;
+        }
+        -d
+    } else {
+        if list.is_scrolled_to_end() == Some(true) {
+            return;
+        }
+        let below = below_of(list);
+        if below > 1. { d.min(below) } else { d }
+    };
+    start(list, Goal::By, by, view, window, reduced);
 }
 
 pub fn to_top(list: &ListState, view: EntityId, window: &mut Window, reduced: bool) {
-    scroll_to(list, 0., view, window, reduced);
+    start(list, Goal::Top, -top_of(list), view, window, reduced);
 }
 
-pub fn scroll_to(list: &ListState, to: f64, view: EntityId, window: &mut Window, reduced: bool) {
-    let top = top_of(list);
-    let target = to.clamp(0., max_of(list).max(0.));
+fn start(list: &ListState, goal: Goal, by: f64, view: EntityId, window: &mut Window, reduced: bool) {
     if reduced {
         stop();
         let list = list.clone();
-        window.on_next_frame(move |window, cx| list.scroll_by_notify(px((target - top) as f32), view, window, cx));
+        window.on_next_frame(move |window, cx| {
+            list.scroll_by_notify(px(by as f32), view, window, cx);
+            if goal == Goal::Top {
+                list.scroll_to(gpui::ListOffset { item_ix: 0, offset_in_item: px(0.) });
+            }
+        });
         return;
     }
-    let start = RUN.with(|r| {
+    let idle = RUN.with(|r| {
         let mut r = r.borrow_mut();
+        let idle = r.is_none();
         match r.as_mut().filter(|run| run.view == view) {
             Some(run) => {
-                run.spring.retarget(top, target);
-                run.shown = top;
-                false
+                run.goal = goal;
+                run.spring.retarget(run.shown, run.shown + by);
             }
-            None => {
-                let idle = r.is_none();
-                *r = Some(Run { list: list.clone(), view, spring: Spring::new(top, target), shown: top });
-                idle
-            }
+            None => *r = Some(Run { list: list.clone(), view, goal, spring: Spring::new(0., by), shown: 0. }),
         }
+        idle
     });
-    if start {
+    if idle {
         window.on_next_frame(step);
     }
 }
@@ -132,16 +149,16 @@ pub fn stop() {
 
 fn step(window: &mut Window, cx: &mut App) {
     let now = Instant::now();
-    let Some((list, view, delta, done)) = RUN.with(|r| {
+    let Some((list, view, delta, done, goal)) = RUN.with(|r| {
         let mut r = r.borrow_mut();
         let run = r.as_mut()?;
-        let actual = top_of(&run.list);
-        run.spring.shift(actual - run.shown);
-        run.shown = actual;
+        if run.goal == Goal::Top {
+            run.spring.target = run.shown - top_of(&run.list);
+        }
         let (pos, done) = run.spring.advance(now);
         let delta = pos - run.shown;
         run.shown = pos;
-        let out = (run.list.clone(), run.view, delta, done);
+        let out = (run.list.clone(), run.view, delta, done, run.goal);
         if done {
             *r = None;
         }
@@ -152,6 +169,9 @@ fn step(window: &mut Window, cx: &mut App) {
     list.scroll_by_notify(px(delta as f32), view, window, cx);
     if !done {
         window.on_next_frame(step);
+    } else if goal == Goal::Top && top_of(&list) > 0.5 {
+        list.scroll_to(gpui::ListOffset { item_ix: 0, offset_in_item: px(0.) });
+        cx.notify(view);
     }
 }
 
@@ -209,12 +229,5 @@ mod tests {
             f.advance(t0 + Duration::from_millis(116)).0
         };
         assert!(q - p > fresh - p, "{q} {fresh} {p}");
-    }
-
-    #[test]
-    fn content_moving_underneath_shifts_the_whole_run() {
-        let mut s = Spring::new(100., 200.);
-        s.shift(50.);
-        assert_eq!((s.from, s.target), (150., 250.));
     }
 }
