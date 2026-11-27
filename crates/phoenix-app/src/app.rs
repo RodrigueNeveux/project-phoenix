@@ -808,6 +808,7 @@ impl PhoenixApp {
                 self.message_list.reset(len + 1);
             }
         }
+        self.resume_pending_jump(ch, cx);
         cx.notify();
     }
 

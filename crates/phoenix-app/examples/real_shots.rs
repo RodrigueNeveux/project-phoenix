@@ -61,6 +61,48 @@ const SEND_PREFIX: &str = "[Test Phoenix] envoyé depuis le client Rust (Phoenix
 const TEST_MARK: &str = "[Test Phoenix]";
 
 static WRITABLE: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+static TEST_THREADS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+fn sandbox_writes() -> bool {
+    std::env::var_os("PHX_WRITE").is_some()
+}
+
+fn in_sandbox(ch: Id) -> bool {
+    ch.0 == SANDBOX_CHANNEL || TEST_THREADS.lock().is_ok_and(|t| t.contains(&ch.0))
+}
+
+fn sandbox_interaction(req: &phoenix_app::commands::ParityRequest) -> bool {
+    use phoenix_app::commands::ParityRequest as P;
+    if !sandbox_writes() {
+        return false;
+    }
+    match req {
+        P::RunCommand { channel, .. } | P::Autocomplete { channel, .. } | P::Component { channel, .. } | P::ModalSubmit { channel, .. } => in_sandbox(*channel),
+        P::VotePoll { channel, .. } => in_sandbox(*channel),
+        P::CreatePoll { channel, question, .. } => in_sandbox(*channel) && question.starts_with(TEST_MARK),
+        _ => false,
+    }
+}
+
+fn sandbox_action(req: &phoenix_app::actions::ActionRequest) -> bool {
+    use phoenix_api::rest::guild_manage::AdminCall;
+    use phoenix_app::actions::ActionRequest as A;
+    if !sandbox_writes() {
+        return false;
+    }
+    match req {
+        A::CreateThread { channel, name, .. } | A::CreateStandaloneThread { channel, name, .. } => channel.0 == SANDBOX_CHANNEL && name.starts_with(TEST_MARK),
+        A::Admin(AdminCall::ScheduleMessage { channel, message, .. }) => {
+            channel.0 == SANDBOX_CHANNEL && message["content"].as_str().is_some_and(|c| c.starts_with(TEST_MARK))
+        }
+        _ => false,
+    }
+}
+
+fn picked_gif(content: &str) -> bool {
+    let c = content.trim();
+    !c.contains(char::is_whitespace) && c.starts_with("https://") && (c.contains("tenor") || c.contains("giphy") || c.ends_with(".gif"))
+}
 
 fn sandbox_write(ch: Id, msg: Id) -> bool {
     std::env::var_os("PHX_WRITE").is_some() && ch.0 == SANDBOX_CHANNEL && WRITABLE.lock().is_ok_and(|w| w.contains(&msg.0))
@@ -148,8 +190,19 @@ impl Backend for ReadOnly {
     fn load_messages_at(&self, channel: Id, at: phoenix_app::backend::HistoryAt, limit: u32) -> BoxFuture<Vec<Message>> {
         self.0.load_messages_at(channel, at, limit)
     }
-    fn send_message(&self, _: Id, _: String, _: Option<Id>) -> BoxFuture<Message> {
-        denied()
+    fn send_message(&self, ch: Id, content: String, reply: Option<Id>) -> BoxFuture<Message> {
+        if !sandbox_writes() || !in_sandbox(ch) {
+            return denied();
+        }
+        let content = if content.starts_with(TEST_MARK) {
+            content
+        } else if picked_gif(&content) {
+            format!("{SEND_PREFIX}GIF du sélecteur\n{}", content.trim())
+        } else {
+            return denied();
+        };
+        eprintln!("write: send in {ch:?} ({} chars, reply={reply:?})", content.chars().count());
+        self.0.send_message(ch, content, reply)
     }
     fn send_message_ex(
         &self,
@@ -160,7 +213,9 @@ impl Backend for ReadOnly {
         nonce: u64,
         progress: Option<phoenix_app::backend::UploadProgress>,
     ) -> BoxFuture<Message> {
-        if std::env::var_os("PHX_SEND").is_none() || !send_allowed(ch.0) || !content.starts_with(SEND_PREFIX) || reply.is_some() {
+        let allowed = send_allowed(ch.0) || in_sandbox(ch);
+        let enabled = std::env::var_os("PHX_SEND").is_some() || (sandbox_writes() && in_sandbox(ch));
+        if !enabled || !allowed || !content.starts_with(SEND_PREFIX) || (reply.is_some() && !in_sandbox(ch)) {
             return denied();
         }
         let hold = std::env::var("PHX_SEND_HOLD").ok().and_then(|v| v.parse().ok()).unwrap_or(4000u64);
@@ -175,13 +230,13 @@ impl Backend for ReadOnly {
             let _ = rx.await;
             eprintln!("send released after {hold} ms (fail={fail:?})");
             match fail {
-                None => real.send_message_ex(ch, content, None, files, nonce, progress).await,
+                None => real.send_message_ex(ch, content, reply, files, nonce, progress).await,
                 Some(_) => Err(BackendError::rejected("HTTP 400 (simulated locally, not sent)")),
             }
         })
     }
     fn preupload(&self, ch: Id, key: u64, filename: String, bytes: Arc<Vec<u8>>) {
-        if std::env::var_os("PHX_SEND").is_some() && send_allowed(ch.0) {
+        if (std::env::var_os("PHX_SEND").is_some() && send_allowed(ch.0)) || (sandbox_writes() && in_sandbox(ch)) {
             eprintln!("preupload started: {filename} ({} bytes)", bytes.len());
             self.0.preupload(ch, key, filename, bytes);
         }
@@ -451,12 +506,31 @@ impl Backend for ReadOnly {
     fn action(&self, req: phoenix_app::actions::ActionRequest) -> BoxFuture<phoenix_app::actions::ActionReply> {
         if phoenix_app::actions::guard::read_only_action(&req) {
             self.0.action(req)
+        } else if sandbox_action(&req) {
+            eprintln!("write: sandbox action {req:?}");
+            let fut = self.0.action(req);
+            Box::pin(async move {
+                let r = fut.await;
+                if let Ok(phoenix_app::actions::ActionReply::Channel(id)) = &r
+                    && let Ok(mut t) = TEST_THREADS.lock()
+                {
+                    t.push(id.0);
+                }
+                r
+            })
         } else {
             eprintln!("real_shots: write refused: {req:?}");
             denied()
         }
     }
     fn parity(&self, req: phoenix_app::commands::ParityRequest) -> BoxFuture<phoenix_app::commands::ParityReply> {
+        if sandbox_interaction(&req) {
+            eprintln!("write: sandbox {req:?}");
+            return self.0.parity(req);
+        }
+        if matches!(req, phoenix_app::commands::ParityRequest::Commands { .. }) {
+            return self.0.parity(req);
+        }
         if !phoenix_app::actions::guard::read_only_parity(&req) {
             return denied();
         }

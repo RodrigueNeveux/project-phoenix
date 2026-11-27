@@ -387,6 +387,7 @@ fn insert_older(app: &mut PhoenixApp, ch: Id, page: Vec<Message>, mut rendered: 
             app.message_list.splice(n + 1..n + 2, 1);
         }
     }
+    app.resume_pending_jump(ch, cx);
     cx.notify();
 }
 
@@ -403,6 +404,7 @@ fn insert_first_page(app: &mut PhoenixApp, ch: Id, page: Vec<Message>, rendered:
     if app.selected_channel == Some(ch) {
         app.message_list.reset(len + 1);
     }
+    app.resume_pending_jump(ch, cx);
     cx.notify();
 }
 

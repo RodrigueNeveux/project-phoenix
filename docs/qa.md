@@ -72,6 +72,8 @@ or edge instead of the centre, `#n` picks list item `n` (`#-1` = last), and
 | `hold shift\|ctrl\|alt\|none` | modifiers for the following mouse events |
 | `action pageup\|pagedown\|top\|bottom` | dispatch the action itself (no key) |
 | `select <channel id>` | setup only: open a channel without clicking |
+| `text <text>` | insert text in the composer (one input change, like a paste or an IME commit; `\n` = new line) |
+| `clip_image <file>` | put a PNG or JPEG on the offscreen window's clipboard (never the user's), for `key ctrl-v` |
 | `region <name> x,y,w,h` | a screen rectangle for `px:<name>` |
 | `shot <name>` | capture `<out>-<name>.png` |
 | `print <probe>...`, `mark <probe>...` | print, or remember for `changed` / `up` / `down` |
@@ -90,3 +92,19 @@ bottom), `chat_max`,
 `ac` (autocomplete rows), `video_t` (current time of the clicked video, -1
 when none), `fullscreen`, `px:<region>` (hash of the region's pixels, for
 "the video frame changes"), `at:<point>` (prints where a point resolves).
+
+More probes: `flash` (message being highlighted after a jump), `replying`, `messages` (loaded
+messages), `reached_start`, `oldest`, `last`, `last_mine`, `last_reply`, `last_files`,
+`last_embeds`, `last_thread`, `last_app` (application of the last message), `last_text` (sandbox
+channel only), `sending`, `uploads`, `chat_error`, `typing` (typing users in the open channel),
+`typing_any`, `typing_label`, `unread_guilds`, `mention_total`, `unreads` (`guild:mentions` of every
+unread guild), `search` (loaded results, -1 when closed), `picker` (open picker tab), `audio_t`
+(position of the audio or voice message being played, -1 when none), `theme`, `zoom`, `font`,
+`notify_on`, `notify_sounds`, `settings_error`.
+
+Writes from a script: with `PHX_WRITE=1`, `real_shots` sends, replies, uploads, creates threads
+and polls (text or question starting with `[Test Phoenix]`), schedules messages, votes, and runs
+application commands and components, ONLY in the sandbox channel `1574797385463496724` and in the
+threads it created there. A GIF picked in the picker is sent there with the test prefix in front of
+its link. Everything else stays refused. Run setting changes with `XDG_CONFIG_HOME` pointing at a
+copy of the config, so the local preferences of the user's Phoenix are never rewritten.

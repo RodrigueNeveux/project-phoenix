@@ -6,6 +6,12 @@ use gpui::{
 };
 use phoenix_app::app::PhoenixApp;
 
+const SANDBOX: u64 = 1574797385463496724;
+
+fn last(a: &PhoenixApp) -> Option<&phoenix_app::model::Message> {
+    a.selected_channel.and_then(|c| a.messages.get(&c)).and_then(|e| e.msgs.last())
+}
+
 pub struct Env<'a> {
     pub win: AnyWindowHandle,
     pub app: Entity<PhoenixApp>,
@@ -279,6 +285,47 @@ impl Run<'_, '_> {
                     .to_string(),
                 "video_t" => phoenix_app::ui::chat::video_player::shot_time(cx).map_or_else(|| "-1".into(), |t| format!("{t:.2}")),
                 "fullscreen" => b(phoenix_app::ui::chat::video_player::fullscreen_layer(cx).is_some()),
+                "flash" => a.chat.flash.map_or_else(|| "-".into(), |m| m.0.to_string()),
+                "replying" => a.replying_to.map_or_else(|| "-".into(), |m| m.0.to_string()),
+                "messages" => a.selected_channel.and_then(|c| a.messages.get(&c)).map_or(0, |e| e.msgs.len()).to_string(),
+                "reached_start" => b(a.selected_channel.and_then(|c| a.messages.get(&c)).is_some_and(|e| e.reached_start)),
+                "oldest" => a.selected_channel.and_then(|c| a.messages.get(&c)).and_then(|e| e.msgs.first()).map_or_else(|| "-".into(), |m| m.id.0.to_string()),
+                "last" => last(a).map_or_else(|| "-".into(), |m| m.id.0.to_string()),
+                "last_mine" => b(last(a).is_some_and(|m| m.author == a.me.id)),
+                "last_reply" => last(a).and_then(|m| m.reply_to).map_or_else(|| "-".into(), |m| m.0.to_string()),
+                "last_files" => last(a).map_or(0, |m| m.attachments.len()).to_string(),
+                "last_embeds" => last(a).map_or(0, |m| m.embeds.len()).to_string(),
+                "last_thread" => b(last(a).is_some_and(|m| m.thread.is_some())),
+                "last_app" => last(a).and_then(|m| m.application_id).map_or_else(|| "-".into(), |m| m.0.to_string()),
+                "last_text" => last(a).filter(|m| m.channel.0 == SANDBOX).map_or_else(|| "-".into(), |m| m.content.chars().take(90).collect()),
+                "sending" => a.chat.sending.len().to_string(),
+                "uploads" => a.chat.uploads.len().to_string(),
+                "chat_error" => a.chat.error.as_ref().map_or_else(|| "-".into(), ToString::to_string),
+                "typing" => a.selected_channel.and_then(|c| a.typing.get(&c)).map_or(0, Vec::len).to_string(),
+                "typing_any" => a.typing.values().map(Vec::len).sum::<usize>().to_string(),
+                "typing_label" => a.typing_label.as_ref().map_or_else(|| "-".into(), ToString::to_string),
+                "unread_guilds" => a.guilds.iter().filter(|g| g.unread).count().to_string(),
+                "mention_total" => a.guilds.iter().map(|g| g.mentions).sum::<u32>().to_string(),
+                "unreads" => a
+                    .guilds
+                    .iter()
+                    .filter(|g| g.unread || g.mentions > 0)
+                    .map(|g| format!("{}:{}", g.id.0, g.mentions))
+                    .collect::<Vec<_>>()
+                    .join(","),
+                "search" => cx
+                    .try_global::<phoenix_app::ui::search::Search>()
+                    .and_then(|s| s.0.as_ref())
+                    .map_or(-1, |s| s.page.as_ref().map_or(0, |p| p.messages.len() as i64))
+                    .to_string(),
+                "picker" => phoenix_app::ui::pickers::open_tab(cx).map_or_else(|| "-".into(), |(t, _)| format!("{t:?}")),
+                "audio_t" => phoenix_app::ui::chat::voice_message::playback(cx).map_or_else(|| "-1".into(), |t| format!("{t:.2}")),
+                "theme" => format!("{:?}", a.prefs.synced.theme),
+                "notify_on" => b(phoenix_app::notifications::enabled()),
+                "notify_sounds" => b(a.prefs.local.notification_sounds),
+                "zoom" => a.prefs.local.zoom.to_string(),
+                "font" => format!("{:.0}", a.prefs.local.font_size),
+                "settings_error" => a.settings.as_ref().and_then(|s| s.error.as_ref()).map_or_else(|| "-".into(), ToString::to_string),
                 _ => anyhow::bail!("unknown probe {name}"),
             })
         })
@@ -481,6 +528,27 @@ impl Run<'_, '_> {
                     (ok, detail) = self.check(cx, &args[1..])?;
                 }
                 self.verdict(ok, format!("{detail} after {} ms", t0.elapsed().as_millis()));
+            }
+            "text" => {
+                let text = rest.replace("\\n", "\n");
+                let v = self.env.app.clone();
+                cx.update_window(self.env.win, |_, window, cx| {
+                    v.update(cx, |app, cx| {
+                        app.composer.update(cx, |s, cx| {
+                            s.focus(window, cx);
+                            s.insert(text.clone(), window, cx);
+                        });
+                        phoenix_app::ui::chat::rich_input::sync(app, cx);
+                        cx.notify();
+                    })
+                })?;
+                self.frames(cx, 200);
+            }
+            "clip_image" => {
+                let bytes = std::fs::read(rest)?;
+                let format = if rest.ends_with(".jpg") || rest.ends_with(".jpeg") { gpui::ImageFormat::Jpeg } else { gpui::ImageFormat::Png };
+                let item = gpui::ClipboardItem { entries: vec![gpui::ClipboardEntry::Image(gpui::Image::from_bytes(format, bytes))] };
+                cx.update(|cx| cx.write_to_clipboard(item));
             }
             "select" => {
                 let id = phoenix_app::model::Id(rest.parse()?);

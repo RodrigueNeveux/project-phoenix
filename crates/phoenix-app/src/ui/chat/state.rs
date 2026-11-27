@@ -107,6 +107,7 @@ pub struct ChatState {
     pub error: Option<SharedString>,
     pub shift_held: bool,
     pub flash: Option<Id>,
+    pub pending_jump: Option<(Id, Id)>,
     pub hidden_open: std::collections::HashSet<Id>,
     pub quick_reactions: Option<Vec<QuickReaction>>,
     next_key: u64,
@@ -148,6 +149,7 @@ impl Default for ChatState {
             error: None,
             shift_held: false,
             flash: None,
+            pending_jump: None,
             hidden_open: Default::default(),
             quick_reactions: None,
             next_key: 0,
@@ -607,14 +609,32 @@ impl PhoenixApp {
         cx.notify();
     }
 
+    pub(crate) fn resume_pending_jump(&mut self, channel: Id, cx: &mut Context<Self>) {
+        if self.selected_channel != Some(channel) {
+            return;
+        }
+        if let Some((c, id)) = self.chat.pending_jump.take()
+            && c == channel
+        {
+            self.jump_reveal(c, id, JUMP_MAX_PAGES, cx);
+        }
+    }
+
     fn jump_reveal(&mut self, channel: Id, id: Id, pages: u32, cx: &mut Context<Self>) {
-        let Some(e) = self.messages.get_mut(&channel) else { return };
+        self.chat.pending_jump = None;
+        let Some(e) = self.messages.get_mut(&channel) else {
+            self.chat.pending_jump = Some((channel, id));
+            return;
+        };
         if let Some(ix) = e.msgs.iter().position(|m| m.id == id) {
             self.message_list.scroll_to_reveal_item(ix + 1);
             self.flash_message(id, cx);
             return;
         }
         if e.loading || !e.loaded_once {
+            if pages == JUMP_MAX_PAGES {
+                self.chat.pending_jump = Some((channel, id));
+            }
             return;
         }
         if e.msgs.first().is_some_and(|m| m.id.0 < id.0) {

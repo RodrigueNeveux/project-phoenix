@@ -2234,6 +2234,10 @@ pub fn attachment_view(cx: &App, url: &str) -> AttachmentView {
     AttachmentView { current, duration, playing: v.playing, ended }
 }
 
+pub fn playback(cx: &App) -> Option<f32> {
+    cx.try_global::<Store>()?.playing.as_ref().map(Playing::position)
+}
+
 pub fn attachment_icon(v: &AttachmentView) -> &'static str {
     if v.playing {
         "pause"
