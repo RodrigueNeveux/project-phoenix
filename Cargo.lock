@@ -6490,6 +6490,7 @@ dependencies = [
  "gpui-pre-platform",
  "image",
  "keyring",
+ "libc",
  "memchr",
  "notify-rust",
  "parking_lot 0.13.0",

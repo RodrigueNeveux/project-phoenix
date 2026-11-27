@@ -641,6 +641,7 @@ impl PhoenixApp {
 
     pub fn select_guild(&mut self, guild: Option<Id>, cx: &mut Context<Self>) {
         crate::ui::discovery::close();
+        crate::memory::release_soon();
         self.selected_guild = guild;
         self.favorites_view = false;
         self.rebuild_sidebar();
@@ -707,6 +708,7 @@ impl PhoenixApp {
 
     pub fn select_channel(&mut self, id: Id, cx: &mut Context<Self>) {
         self.refuse_trap_in_agent_session(id);
+        crate::memory::release_soon();
         let Some(ch) = self.channels.get(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
             if ch.guild.is_some_and(ui::join_flow::is_lurking) {

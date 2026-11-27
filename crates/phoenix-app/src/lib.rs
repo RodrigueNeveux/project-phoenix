@@ -22,6 +22,7 @@ pub mod logging;
 pub mod markdown;
 pub mod member_index;
 pub mod media;
+pub mod memory;
 pub mod demo_media;
 pub mod mock;
 pub mod mock_showcase;
@@ -100,6 +101,7 @@ pub fn init_deferred(cx: &mut App) {
 }
 
 fn init_base(cx: &mut App) {
+    memory::init();
     gpui_component::init(cx);
     gpui::set_smooth_wheel_scroll(std::env::var_os("PHX_INSTANT_WHEEL").is_none());
     Theme::change(ThemeMode::Dark, None, cx);
