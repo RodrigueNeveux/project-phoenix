@@ -242,6 +242,10 @@ impl GuardedWrite {
         write(Method::POST, "/users/@me/mfa/webauthn/credentials", Some(json!({})))
     }
 
+    pub fn create_guild(body: Value) -> Self {
+        write(Method::POST, "/guilds", Some(body))
+    }
+
     pub fn join_guild(guild: u64) -> Self {
         write(Method::PUT, format!("/guilds/{guild}/members/@me"), None)
     }

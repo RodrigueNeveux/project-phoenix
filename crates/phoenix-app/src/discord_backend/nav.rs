@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 
 use super::convert::{self, id, sf};
 use crate::{
+    actions::guard::GuardedWrite,
     backend::{AppEvent, BackendError},
     model::{self, Id, ImageRef},
     ui::home::data::{
@@ -493,6 +494,14 @@ fn api_err(e: phoenix_api::Error) -> BackendError {
     })
 }
 
+fn template_refused(e: &phoenix_api::Error) -> bool {
+    matches!(e, phoenix_api::Error::Api { status: 403, body, .. } if body.code == 10008)
+}
+
+fn create_guild_err(e: phoenix_api::Error) -> BackendError {
+    if e.is_write_blocked() { BackendError(crate::t!("acct.blocked").to_string()) } else { api_err(e) }
+}
+
 fn invite_preview(v: &Value) -> InvitePreview {
     let s = |v: Option<&Value>| v.and_then(Value::as_str).map(str::to_owned);
     let g = v.get("guild");
@@ -642,13 +651,15 @@ pub async fn request(rest: RestClient, req: NavRequest) -> Result<NavReply, Back
             NavReply::Done
         }
         NavRequest::CreateGuild { name, icon, template, community } => {
-            let body = crate::ui::add_server::create_guild_body(
-                &name,
-                icon.as_deref(),
-                template.as_deref(),
-                community,
-            );
-            call(Method::POST, "/guilds".into(), Some(body)).await?;
+            let body = crate::ui::add_server::create_guild_body(&name, icon.as_deref(), template.as_deref(), community);
+            match rest.guarded_write(&GuardedWrite::create_guild(body)).await {
+                Ok(_) => {}
+                Err(e) if template_refused(&e) => {
+                    let plain = crate::ui::add_server::plain_create_guild_body(&name, icon.as_deref());
+                    rest.guarded_write(&GuardedWrite::create_guild(plain)).await.map_err(create_guild_err)?;
+                }
+                Err(e) => return Err(create_guild_err(e)),
+            }
             NavReply::Done
         }
         NavRequest::FetchOnboarding(g) => {
@@ -875,6 +886,20 @@ mod rel_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_unknown_message_refusal_falls_back_to_the_plain_body() {
+        let api = |status: u16, code: u32| phoenix_api::Error::Api {
+            status,
+            body: Box::new(phoenix_api::error::ApiErrorBody { code, ..Default::default() }),
+            raw: String::new(),
+        };
+        assert!(template_refused(&api(403, 10008)));
+        assert!(!template_refused(&api(403, 50013)));
+        assert!(!template_refused(&api(400, 10008)));
+        assert!(!template_refused(&phoenix_api::rest::guard::blocked(&Method::POST, "/guilds")));
+        assert_eq!(create_guild_err(phoenix_api::rest::guard::blocked(&Method::POST, "/guilds")).0, crate::t!("acct.blocked").to_string());
+    }
 
     #[test]
     fn unnamed_group_names_use_friend_nicknames() {

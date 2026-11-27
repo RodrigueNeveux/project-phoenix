@@ -989,11 +989,25 @@ mod tests {
         assert_eq!(school_en["system_channel_id"], "11");
 
         let minimal = create_guild_body_for_locale("Friends", None, None, None, false);
-        assert_eq!(minimal["name"], "Friends");
-        assert_eq!(minimal["channels"], serde_json::json!([]));
-        assert_eq!(minimal["system_channel_id"], serde_json::Value::Null);
-        assert!(minimal.get("roles").is_none());
-        assert_eq!(minimal["guild_template_code"], CREATE.code);
+        assert_eq!(
+            minimal,
+            serde_json::json!({
+                "name": "Friends",
+                "icon": null,
+                "channels": [],
+                "system_channel_id": null,
+                "guild_template_code": "2TffvPucqHkN",
+            })
+        );
+    }
+
+    #[test]
+    fn create_guild_goes_through_the_write_guard() {
+        let w = crate::actions::guard::GuardedWrite::create_guild(create_guild_body_for_locale("Lab", None, None, None, true));
+        assert_eq!((w.method.as_str(), w.path.as_str()), ("POST", "/guilds"));
+        assert_eq!(w.body.as_ref().and_then(|b| b.get("guild_template_code")), Some(&serde_json::json!(CREATE.code)));
+        assert!(!crate::actions::guard::read_only_write(&w));
+        assert!(w.refusal().is_write_blocked());
     }
 
     #[test]
