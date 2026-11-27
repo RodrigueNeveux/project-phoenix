@@ -40,8 +40,15 @@ pub fn run(cx: &mut HeadlessAppContext, env: &Env, script: &str) -> anyhow::Resu
         mouse: point(px(1.), px(1.)),
         report: Report::default(),
     };
+    let (scale, zoom, vp) = cx.update_window(env.win, |_, window, _| (window.scale_factor(), window.page_zoom(), window.viewport_size()))?;
+    println!("QA before scale={scale} zoom={zoom} viewport={vp:?}");
+    let scale = std::env::var("PHX_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(scale);
     cx.update_window(env.win, |_, window, _| window.activate_window())?;
     r.frames(cx, 300);
+    cx.update_window(env.win, |_, window, _| window.set_scale_factor(scale))?;
+    r.frames(cx, 200);
+    let (zoom, vp) = cx.update_window(env.win, |_, window, _| (window.page_zoom(), window.viewport_size()))?;
+    println!("QA window scale={scale} zoom={zoom} viewport={vp:?}");
     for (n, line) in script.lines().flat_map(|l| l.split(';')).map(str::trim).enumerate() {
         if line.is_empty() || line.starts_with('#') {
             continue;
@@ -229,6 +236,10 @@ impl Run<'_, '_> {
         if let Some(r) = name.strip_prefix("px:") {
             return self.region_hash(cx, r);
         }
+        if let Some(at) = name.strip_prefix("at:") {
+            let p = self.point(cx, at)?;
+            return Ok(format!("{:.0},{:.0}", f32::from(p.x), f32::from(p.y)));
+        }
         let v = self.env.app.clone();
         cx.update(|cx| {
             let a = v.read(cx);
@@ -237,6 +248,7 @@ impl Run<'_, '_> {
             Ok(match name {
                 "chat_y" => y(a.message_list.scroll_px_offset_for_scrollbar()),
                 "chat_max" => format!("{:.1}", f32::from(a.message_list.max_offset_for_scrollbar().y)),
+                "chat_end" => format!("{:.1}", f32::from(a.message_list.max_offset_for_scrollbar().y) + f32::from(a.message_list.scroll_px_offset_for_scrollbar().y)),
                 "chat_item" => a.message_list.logical_scroll_top().item_ix.to_string(),
                 "chat_items" => a.message_list.item_count().to_string(),
                 "at_bottom" => b(a.chat.at_bottom),

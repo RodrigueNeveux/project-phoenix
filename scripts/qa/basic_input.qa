@@ -1,42 +1,44 @@
 step Chat : molette vers le haut
 wait 1500
-mark chat_y at_bottom chat_items
+mark chat_end at_bottom chat_items
+print chat_y chat_max at:@chat.tl at:@chat.br
 shot 01-start
 wheel @chat 5
 wait 500
-expect chat_y down 150
+expect chat_end up 150
 expect at_bottom == 0
 shot 02-wheel-up
 step Chat : molette vers le bas
-mark chat_y
+mark chat_end
 wheel @chat -3
 wait 500
-expect chat_y up 80
+expect chat_end down 80
 step Chat : pavé tactile (pixels)
-mark chat_y
+mark chat_end
 touchpad @chat 600 30
 wait 400
-expect chat_y down 300
-mark chat_y
+expect chat_end up 300
+mark chat_end
 touchpad @chat -300 15
 wait 400
-expect chat_y up 150
+expect chat_end down 150
 shot 03-touchpad
 step Chat : PageUp puis PageDown
 click 700,760
-mark chat_y
+mark chat_end
 key pageup
 wait 900
-expect chat_y down 200
-mark chat_y
+expect chat_end up 200
+mark chat_end
 key pagedown
 wait 900
-expect chat_y up 200
+expect chat_end down 200
 step Chat : Revenir au présent
 wheel @chat 30
 wait 1500
 expect at_bottom == 0
 shot 04-jump-bar
+print at:@chat.b+-8,-42 at:@chat.tl at:@chat.br
 click @chat.b+-8,-42
 wait 1500
 expect at_bottom == 1

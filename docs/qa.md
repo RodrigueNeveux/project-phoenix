@@ -58,10 +58,11 @@ Operators: `== != < > <= >=`, `~` (contains), `changed` / `same` (against the
 mark), `up` / `down` (greater / smaller than the mark by more than the value,
 0.5 by default).
 
-Probes: `chat_y` (px from the top of the message list), `chat_max`,
+Probes: `chat_y` (px from the top of the message list), `chat_end` (px above the
+bottom), `chat_max`,
 `chat_item`, `chat_items`, `at_bottom`, `sidebar_y`, `members_y`, `guilds_y`,
 `settings`, `settings_y`, `channel`, `guild`, `msgmenu`, `navmenu`,
 `usermenu`, `menus`, `popout`, `profile`, `modal`, `switcher`, `composer`,
 `ac` (autocomplete rows), `video_t` (current time of the clicked video, -1
 when none), `fullscreen`, `px:<region>` (hash of the region's pixels, for
-"the video frame changes").
+"the video frame changes"), `at:<point>` (prints where a point resolves).
