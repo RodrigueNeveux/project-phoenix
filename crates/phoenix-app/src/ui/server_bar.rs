@@ -476,7 +476,7 @@ pub fn media_state(here: Option<Here>, guild_muted: bool, presences: &[Presence]
     MediaState {
         audio: presences.iter().any(|p| seen(&p)),
         video: presences.iter().filter(seen).any(|p| p.flags.video),
-        screenshare: presences.iter().any(|p| !p.hidden_user && !p.channel_muted && p.flags.stream),
+        screenshare: false,
         connected: false,
         ..Default::default()
     }
@@ -592,11 +592,11 @@ pub fn rail_dm_ids(
 
 pub fn dm_media_state(here: bool, tracked: bool, self_stream: bool, users: &[crate::model::VoiceFlags]) -> MediaState {
     let in_call = here || !users.is_empty();
-    let video_mode = tracked && (self_stream || users.iter().any(|f| f.video || f.stream));
+    let video_mode = tracked && (self_stream || users.iter().any(|f| f.video));
     MediaState {
         audio: in_call && !video_mode,
         video: in_call && video_mode,
-        screenshare: self_stream || users.iter().any(|f| f.stream),
+        screenshare: self_stream,
         connected: here,
         ..Default::default()
     }
@@ -1209,7 +1209,7 @@ mod media_tests {
         assert_eq!(dm_media_state(false, false, false, &[voice]).icon(), Some("speaker"));
         assert_eq!(dm_media_state(false, false, false, &[cam]).icon(), Some("speaker"));
         assert_eq!(dm_media_state(false, true, false, &[cam]).icon(), Some("video-call"));
-        assert_eq!(dm_media_state(false, false, false, &[live]).icon(), Some("golive/screen"));
+        assert_eq!(dm_media_state(false, false, false, &[live]).icon(), Some("speaker"));
         let here = dm_media_state(true, true, false, &[]);
         assert_eq!(here, MediaState { audio: true, connected: true, ..Default::default() });
         assert_eq!(dm_media_state(true, true, true, &[voice]).icon(), Some("golive/screen"));
@@ -1217,17 +1217,18 @@ mod media_tests {
     }
 
     #[test]
-    fn one_streamer_is_enough_for_the_screen_badge() {
+    fn remote_streamer_does_not_show_the_screen_badge() {
         let s = media_state(None, false, &[p(false, false), p(true, false), p(false, false)]);
-        assert_eq!(s, MediaState { audio: true, video: false, screenshare: true, connected: false, ..Default::default() });
-        assert_eq!(s.icon(), Some("golive/screen"));
+        assert_eq!(s, MediaState { audio: true, video: false, screenshare: false, connected: false, ..Default::default() });
+        assert_eq!(s.icon(), Some("speaker"));
     }
 
     #[test]
     fn icon_priority_is_screen_then_video_then_voice() {
         assert_eq!(media_state(None, false, &[p(false, true)]).icon(), Some("video-call"));
         assert_eq!(media_state(None, false, &[p(false, false)]).icon(), Some("speaker"));
-        assert_eq!(media_state(None, false, &[p(true, true)]).icon(), Some("golive/screen"));
+        assert_eq!(media_state(None, false, &[p(true, true)]).icon(), Some("video-call"));
+        assert_eq!(media_state(Some(Here { channel_has_video: true, self_stream: true }), false, &[]).icon(), Some("golive/screen"));
         assert_eq!(media_state(None, false, &[]).icon(), None);
     }
 
@@ -1240,7 +1241,7 @@ mod media_tests {
         assert_eq!(base.with_live(&live, false, None, |_| true).icon(), Some("calendar"));
         live.events.clear();
         assert_eq!(base.with_live(&live, false, None, |_| true).icon(), Some("stage"));
-        assert_eq!(base.with_live(&live, false, None, |c| c != 10).icon(), Some("golive/screen"));
+        assert_eq!(base.with_live(&live, false, None, |c| c != 10).icon(), Some("video-call"));
         assert_eq!(MediaState::default().with_live(&live, true, None, |_| true).icon(), None);
         live.events.insert(3, Some(50));
         let here = media_state(Some(Here { channel_has_video: false, self_stream: false }), false, &[]);
@@ -1284,6 +1285,6 @@ mod media_tests {
         let afk = Presence { eligible: false, ..p(false, true) };
         assert_eq!(media_state(None, false, &[afk]).icon(), None);
         let afk_stream = Presence { eligible: false, ..p(true, false) };
-        assert_eq!(media_state(None, false, &[afk_stream]).icon(), Some("golive/screen"));
+        assert_eq!(media_state(None, false, &[afk_stream]).icon(), None);
     }
 }
