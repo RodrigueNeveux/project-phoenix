@@ -247,11 +247,7 @@ pub fn create_guild_body_for_locale(
     _community: Option<bool>,
     is_fr: bool,
 ) -> serde_json::Value {
-    let Some(code) = template else {
-        let mut body = serde_json::json!({ "name": name.trim() });
-        if let Some(icon) = icon { body["icon"] = serde_json::json!(icon); }
-        return body;
-    };
+    let code = template.unwrap_or(CREATE.code);
     let (channels, system_channel_id, roles) = template_spec_payload(code, is_fr);
     let mut obj = serde_json::Map::new();
     obj.insert("name".into(), serde_json::json!(name.trim()));
