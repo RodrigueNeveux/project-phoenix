@@ -494,3 +494,69 @@ cost because the pointer sits on the chat: each frame a new message comes under 
 state changes and the toolbar is built for it; the rest is GPUI layout of the visible rows.
 Next step for this target: fewer elements per row (the reply and author lines, the per-row
 tooltips and listeners), measured with `PHX_ALLOC_SITES`.
+
+## Memory: what the system monitor counts, and where it goes (2026-11-28)
+
+### What KDE shows
+
+Plasma's system monitor reads `/proc/<pid>/smaps_rollup` (libprocesscore) and its
+Memory column is the private memory of the process, `Private_Clean + Private_Dirty`
+(USS). For Discord it sums every process of the app. So the comparison that matches
+what the user sees is USS summed over the process tree, and PSS is the fairer one
+(shared Chromium pages counted once).
+
+### The user's processes, read-only from `/proc`
+
+Phoenix is the release build in `~/.local/opt/discord-phoenix-main`, one process, 36
+threads. Discord is 1.0.171, 9 processes + crashpad.
+
+| | Phoenix, 12 min | Phoenix, 28 min | Discord (sum) |
+|---|---|---|---|
+| RSS | 772 MiB | 830 MiB | 1,706 MiB |
+| PSS | 691 MiB | 744 MiB | 1,422 MiB |
+| USS (KDE "Memory") | 682 MiB | 738 MiB | 1,307 MiB |
+
+Phoenix split by mapping (28 min): anonymous memory 576 MiB (glibc arenas 497 +
+`[heap]` 79), binary 63 MiB (file-backed, clean), system fonts mapped by fontdb 56 MiB,
+shared libraries 21 MiB PSS (of which NVIDIA 15), `/dev/nvidiactl` 14 MiB. There is no
+`/dev/nvidia*` VRAM mapping in RSS: GPU textures live in VRAM and are not counted. So
+almost everything is the Rust heap.
+
+### Where the heap goes
+
+Session: `int-bin/real_shots` (dev build) on the real account, read-only, offscreen,
+`HOME` and the XDG dirs on a scratch copy of the media cache, `PHX_SCALE=1.5`,
+`PHX_SWITCH_BENCH=10` (10 servers, 10 channels, 10 DMs, two passes).
+
+| | RSS | PSS | anonymous |
+|---|---|---|---|
+| ready (t = 24 s) | 870 MiB | 760 MiB | 589 MiB |
+| after 15 switches | 1,150 MiB | 1,038 MiB | 857 MiB |
+| after 60 switches (peak) | 2,132 MiB | 2,016 MiB | 1,837 MiB |
+
+`malloc_stats()` (gdb, mid-run): 1,302 MB taken from the system, 818 MB in use. The main
+arena alone held 966 MB for 589 MB of live data. One `malloc_trim(0)` brought RSS from
+1,518 to 1,115 MiB: **400 MiB were freed memory that glibc never gave back**.
+
+Live heap by allocation site, sampled with an `LD_PRELOAD` malloc tracer (one sample
+per 128 KiB allocated, stacks symbolised with `addr2line`), after 58 switches:
+
+| site | live |
+|---|---|
+| profile effects (`profile_fx::decode`, APNG, every frame at 450×880, 36–91 MiB each, up to 4 kept) | 290 MiB |
+| GIF frames decoded by GPUI (`decode_gif_image`, all frames, GPUI asset cache) | 216 MiB |
+| GPUI layout: taffy `SlotMap` capacity (158 MiB) + element arena chunks (134 MiB) | 292 MiB |
+| atlas upload buffers (`WgpuAtlasTextures::insert`; headless only, the window flushes them every frame) | 152 MiB |
+| static images decoded by GPUI (`decode_static_image`; avatars 128², banners up to 877²) | 143 MiB |
+| fallback fonts read into the heap (`fonts::built::load` 58 MiB, renamed faces 54 MiB) | 112 MiB |
+| WebP frames, nameplates, Lottie sheets | 55 MiB |
+| messages, users, READY data, i18n tables | < 40 MiB |
+
+Not a problem: messages of visited channels, members and presences, the READY JSON
+(not kept), tokio/rayon thread stacks (36 threads, stacks are virtual and mostly
+untouched), audio buffers.
+
+The layout memory is a high-water mark: GPUI's list `measure_all()` lays out every
+message of the channel in one frame when the list is reset, and neither taffy's node
+storage nor the element arena shrink afterwards. Fixing it means changing GPUI's
+list (measure across frames) or the message list, so it is left for later.
