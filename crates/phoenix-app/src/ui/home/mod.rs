@@ -5,7 +5,7 @@ pub mod nitro;
 pub mod requests;
 pub mod topic;
 
-use gpui::{AnyElement, Context, IntoElement, SharedString, Window};
+use gpui::{AnyElement, Context, IntoElement, ParentElement, SharedString, Styled, Window, div};
 
 use crate::{
     app::PhoenixApp,
@@ -17,8 +17,7 @@ use crate::{
 pub fn main_pane(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let page = page_content(app, window, cx);
     if crate::theme::frame_borders() {
-        use gpui::{ParentElement, Styled};
-        return gpui::div()
+        return div()
             .flex_1()
             .min_w_0()
             .h_full()
@@ -43,6 +42,16 @@ fn page_content(app: &mut PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
     }
     if let Some(page) = crate::ui::community::render(app, window, cx) {
         return page;
+    }
+    if app.selected_channel.is_none() && app.selected_guild.is_some_and(crate::ui::join_flow::is_lurking) {
+        return div()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p(crate::theme::z(16.))
+            .child(crate::t!("join_flow.preview_no_channels"))
+            .into_any_element();
     }
     if app.selected_guild.is_none() && app.nav.home == HomeView::Shop {
         return crate::ui::shop_page::render(app, window, cx);
@@ -96,6 +105,7 @@ impl PhoenixApp {
         for (g, c) in p.last_channel {
             self.last_channel.insert(g.map(Id), Id(c));
         }
+        self.nav.scroll_positions.extend(p.scroll_positions);
         self.collapsed.extend(p.collapsed.into_iter().map(Id));
         self.nav.expanded_folders.extend(p.folders);
         self.nav.hide_muted.extend(p.hide_muted.into_iter().map(Id));
@@ -129,7 +139,9 @@ impl PhoenixApp {
         folders.sort();
         let mut hide: Vec<u64> = self.nav.hide_muted.iter().map(|i| i.0).collect();
         hide.sort();
-        NavPrefs { last_channel: last, collapsed, folders, hide_muted: hide }.save();
+        let mut scroll_positions: Vec<_> = self.nav.scroll_positions.iter().map(|(channel, position)| (*channel, *position)).collect();
+        scroll_positions.sort_by_key(|(channel, _)| *channel);
+        NavPrefs { last_channel: last, scroll_positions, collapsed, folders, hide_muted: hide }.save();
     }
 
     pub fn toggle_category_saved(&mut self, id: Id, cx: &mut Context<Self>) {
@@ -141,6 +153,7 @@ impl PhoenixApp {
         if self.selected_guild.is_some() {
             self.select_guild(None, cx);
         }
+        self.remember_chat_position();
         self.nav.home = view;
         self.selected_channel = None;
         self.last_channel.remove(&None);

@@ -90,6 +90,22 @@ fn channel_update_without_guild_id_keeps_its_scope() {
 }
 
 #[test]
+fn guild_channels_exclude_masked_entries_until_discord_reveals_them() {
+    let (cache, mut adapter) = setup();
+    let update = |name: &str, flags: u64| {
+        parse_dispatch("CHANNEL_UPDATE", &format!(r#"{{"id":"{CH}","type":0,"name":"{name}","flags":{flags}}}"#))
+    };
+    let names = |events: Vec<AppEvent>| {
+        events.into_iter().find_map(|event| match event {
+            AppEvent::GuildChannels { channels, .. } => Some(channels.into_iter().filter(|channel| channel.id == Id(CH)).map(|channel| channel.name).collect::<Vec<_>>()),
+            _ => None,
+        }).unwrap()
+    };
+    assert!(names(feed(&cache, &mut adapter, &update("__hidden__", 1 << 17))).is_empty());
+    assert_eq!(names(feed(&cache, &mut adapter, &update("welcome", 0))), vec![SharedString::from("welcome")]);
+}
+
+#[test]
 fn every_dm_message_counts_as_a_mention() {
     let (cache, mut a) = setup();
     for (i, n) in [(900000000000000600, 1), (900000000000000601, 2)] {

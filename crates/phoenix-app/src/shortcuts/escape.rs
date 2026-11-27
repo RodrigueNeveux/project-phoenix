@@ -28,10 +28,10 @@ fn close_modals(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
     if app.chat.confirm_delete.take().is_some() {
         return true;
     }
-    if crate::actions::with_modal(|m| m.take().is_some()) {
+    if ui::server_pages::with(|s| matches!(s.modal, Some((_, "delete")))) && ui::server_pages::escape() {
         return true;
     }
-    if ui::server_pages::escape() {
+    if crate::actions::with_modal(|m| m.take().is_some()) || ui::server_pages::escape() {
         return true;
     }
     if app.parity.modal.take().is_some() || app.parity.moderation.take().is_some() || app.parity.group_dm.take().is_some() {
@@ -60,7 +60,10 @@ fn close_modals(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
 }
 
 fn close_popouts(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
-    if app.people.any_overlay() || app.people.tag_popout.is_some() {
+    if app.people.tag_popout.take().is_some() {
+        return true;
+    }
+    if app.people.any_overlay() {
         app.people.close_overlays();
         return true;
     }
@@ -178,6 +181,7 @@ impl PhoenixApp {
         if QUITTING.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.persist_chat_position();
         let leave = self.voice_channel.take().map(|_| {
             crate::voice::soundboard::stop_all();
             self.backend.join_voice(None)

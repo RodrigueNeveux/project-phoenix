@@ -901,10 +901,14 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                         None => a.stub(&stub, cx),
                     })
                 })
-                .child({
-                    let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
-                    let hover = hero.is_some() && !selected;
-                    icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover("quests-row", |s| s.text_color(t(idx::ICON_STRONG))))
+                .child(match i {
+                    // The user's own drawings for the home shortcuts (assets/shortcuts).
+                    Icon::Friends | Icon::Nitro | Icon::Shop | Icon::Quests => crate::assets::shortcut_icon(id, 20.).into_any_element(),
+                    _ => {
+                        let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
+                        let hover = hero.is_some() && !selected;
+                        icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover("quests-row", |s| s.text_color(t(idx::ICON_STRONG)))).into_any_element()
+                    }
                 })
                 .child(div().flex_1().min_w_0().text_ellipsis().child(label))
                 .when(quest.onboarding, |d| d.child(text_badge(crate::t!("dm.quests_new"), idx::BADGE_PRIMARY_BACKGROUND, idx::BADGE_PRIMARY_TEXT)))
@@ -1531,7 +1535,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                             )
                         }),
                 )
-                .when(ch.mentions > 0 && !show_actions, |d| d.child(badge(ch.mentions).bg(c(Palette::NOTIFICATION))))
+                .when(ch.mentions > 0, |d| d.child(mention_badge(ch.mentions)))
                 .children(invite_hover.map(|h| top_line(h, status_line)))
                 .children(timer.filter(|_| !hovered).map(|t| top_line(t, status_line)))
                 .children(limit_pill.filter(|_| !hovered))
@@ -1616,9 +1620,14 @@ fn thread_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEleme
                     crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Thread(id), ev.position, w)
                 })
                 .child(div().flex_1().min_w_0().text_ellipsis().child(crate::ui::emoji_text::label(th.name.clone(), 14.)))
-                .when(mentions > 0, |d| d.child(badge(mentions).bg(c(Palette::NOTIFICATION)))),
+                .when(mentions > 0, |d| d.child(mention_badge(mentions))),
         )
         .into_any_element()
+}
+
+fn mention_badge(mentions: u32) -> gpui::Stateful<gpui::Div> {
+    let label = if mentions == 1 { crate::t!("channels.mention_bar_one") } else { crate::t!("channels.mention_bar", count = mentions) };
+    badge(mentions).id("mention-count").flex_none().bg(c(Palette::NOTIFICATION)).tip(label)
 }
 
 pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {

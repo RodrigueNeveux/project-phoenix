@@ -329,6 +329,9 @@ pub fn load_first_page(app: &PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
                 }
                 insert_first_page(a, id, msgs, rendered, cx);
                 crate::commands::state::apply_read_mark(a, id);
+                if loaded {
+                    a.restore_chat_position(id, cx);
+                }
             });
             return;
         }
@@ -339,6 +342,9 @@ pub fn load_first_page(app: &PhoenixApp, id: Id, cx: &mut Context<PhoenixApp>) {
             }
             insert_first_page(a, id, msgs, rendered, cx);
             crate::commands::state::apply_read_mark(a, id);
+            if loaded {
+                a.restore_chat_position(id, cx);
+            }
         });
     })
     .detach();

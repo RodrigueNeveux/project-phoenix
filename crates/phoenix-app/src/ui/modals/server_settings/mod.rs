@@ -108,6 +108,7 @@ pub fn section_label(key: &str) -> SharedString {
 
 pub fn visible_for(perms: u64, owner: bool, community: bool, key: &str) -> bool {
     use crate::actions::{ADMINISTRATOR, MANAGE_GUILD, MANAGE_ROLES, MODERATE_MEMBERS};
+    if !SECTIONS.contains(&key) { return false; }
     if key == "menu.gs.delete" { return owner; }
     if owner || perms & ADMINISTRATOR != 0 {
         return community || !matches!(key, "menu.gs.onboarding" | "menu.gs.analytics" | "menu.gs.discovery");
@@ -125,10 +126,8 @@ pub fn visible_for(perms: u64, owner: bool, community: bool, key: &str) -> bool 
 }
 
 pub fn visible(app: &PhoenixApp, guild: Id, key: &str) -> bool {
-    let g = app.guilds.iter().find(|g| g.id == guild);
-    let owner = g.and_then(|g| g.owner) == Some(app.me.id);
-    let community = g.is_some_and(|g| g.community);
-    visible_for(app.backend.guild_permissions(guild), owner, community, key)
+    let Some(g) = app.guilds.iter().find(|g| g.id == guild) else { return false };
+    visible_for(app.backend.guild_permissions(guild), g.owner == Some(app.me.id), g.community, key)
 }
 
 pub(crate) fn available_section(app: &PhoenixApp, guild: Id, preferred: usize) -> Option<usize> {
@@ -326,9 +325,9 @@ pub fn call_for(key: &str, guild: Id, s: &State) -> Option<AdminCall> {
 }
 
 pub fn load(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
-    let Some(todo) = with_state(|s| {
+    let Some((guild, todo)) = with_state(|s| {
         if !visible(a, s.guild, s.key()) {
-            return Vec::new();
+            return (s.guild, Vec::new());
         }
         let extra: &[&'static str] = if s.key() == "menu.gs.access" { access::extra_needs(s) } else { &[] };
         let keys: Vec<&'static str> = needs(s.key()).iter().chain(extra).copied().filter(|k| !s.data.contains_key(k) && !s.pending.contains(k)).collect();
@@ -339,15 +338,17 @@ pub fn load(a: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
                 out.push((k, c));
             }
         }
-        out
+        (s.guild, out)
     }) else {
         return;
     };
     for (k, call) in todo {
         a.admin(call, cx, move |a, r, cx| {
             with_state(|s| {
-                s.pending.remove(k);
-                s.data.insert(k, r.unwrap_or(Value::Null));
+                if s.guild == guild {
+                    s.pending.remove(k);
+                    s.data.insert(k, r.unwrap_or(Value::Null));
+                }
             });
             load(a, cx);
             cx.notify();
@@ -612,6 +613,19 @@ pub fn overview(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> An
 
 pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyElement {
     if !visible(app, s.guild, s.key()) {
+        let guild = s.guild;
+        let entity = cx.entity();
+        cx.defer(move |cx| entity.update(cx, |app, cx| {
+            let still_selected = with_state(|state| state.guild == guild && !visible(app, guild, state.key())) == Some(true);
+            if still_selected {
+                if app.guilds.iter().any(|g| g.id == guild) {
+                    app.open_server_settings(guild, 0, cx);
+                } else {
+                    crate::actions::close_modal();
+                    cx.notify();
+                }
+            }
+        }));
         return overview(app, s.guild, cx);
     }
     let pick_fn: settings_layout::Pick = Rc::new(pick);

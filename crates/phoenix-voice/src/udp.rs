@@ -22,7 +22,11 @@ pub fn qos() -> bool {
 }
 
 fn mark_priority(socket: &UdpSocket, v4: bool) {
+    // Tokio only offers the IPv6 traffic class on Unix; Windows keeps IPv6 voice unmarked.
+    #[cfg(unix)]
     let r = if v4 { socket.set_tos_v4(DSCP_EF_TOS) } else { socket.set_tclass_v6(DSCP_EF_TOS) };
+    #[cfg(not(unix))]
+    let r = if v4 { socket.set_tos_v4(DSCP_EF_TOS) } else { Ok(()) };
     if let Err(e) = r {
         tracing::warn!("voice QoS marking failed: {e}");
     }

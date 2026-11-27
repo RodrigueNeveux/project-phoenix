@@ -506,6 +506,8 @@ impl PhoenixApp {
         self.selected_guild = None;
         self.selected_channel = None;
         self.last_channel.clear();
+        self.nav.scroll_positions.clear();
+        self.nav.prefs_loaded = false;
         self.sidebar_rows.clear();
         self.member_rows.clear();
         self.typing.clear();
@@ -522,6 +524,7 @@ impl PhoenixApp {
     }
 
     pub fn logout(&mut self, cx: &mut Context<Self>) {
+        self.persist_chat_position();
         let fut = self.backend.logout();
         cx.spawn(async move |_, _| {
             let _ = fut.await;
@@ -535,6 +538,7 @@ impl PhoenixApp {
     }
 
     pub fn apply_ready(&mut self, r: ReadyData, cx: &mut Context<Self>) {
+        self.persist_chat_position();
         let mine = self.people.activities.remove(&r.me.id);
         let known_presences = std::mem::take(&mut self.presences);
         let known_activities = std::mem::take(&mut self.people.activities);
@@ -616,19 +620,29 @@ impl PhoenixApp {
         self.nav_home_target(guild, target.is_some());
         if let Some(t) = target {
             self.open_channel_chat(t, cx);
+        } else {
+            self.remember_chat_position();
+            self.selected_channel = None;
+            self.message_list.reset(0);
+            self.save_nav_prefs();
         }
         cx.notify();
     }
 
     pub(crate) fn guild_target(&self, guild: Option<Id>) -> Option<Id> {
+        if let Some(g) = guild.filter(|g| ui::join_flow::is_lurking(*g)) {
+            return self.guild_channels.get(&g)?.iter().copied().find(|id| {
+                self.channels.get(id).is_some_and(|c| matches!(c.kind, ChannelKind::Text | ChannelKind::Announcement | ChannelKind::Forum))
+            });
+        }
         self.last_channel.get(&guild).copied().filter(|id| self.channels.get(id).is_some_and(|c| c.guild == guild)).or_else(|| match guild {
             Some(g) => self.guild_channels.get(&g).and_then(|l| {
                 l.iter().copied().find(|id| {
                     matches!(self.channels[id].kind, ChannelKind::Text | ChannelKind::Announcement)
-                        && self.channels[id].name.as_ref() == "general"
+                        && matches!(self.channels[id].name.to_lowercase().as_str(), "general" | "général")
                 })
                 .or_else(|| {
-                    l.iter().copied().find(|id| self.channels[id].kind == ChannelKind::Text)
+                    l.iter().copied().find(|id| matches!(self.channels[id].kind, ChannelKind::Text | ChannelKind::Announcement | ChannelKind::Forum))
                 })
             }),
             None => None,
@@ -646,6 +660,10 @@ impl PhoenixApp {
     pub fn select_channel(&mut self, id: Id, cx: &mut Context<Self>) {
         let Some(ch) = self.channels.get(&id) else { return };
         if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) {
+            if ch.guild.is_some_and(ui::join_flow::is_lurking) {
+                self.open_channel_chat(id, cx);
+                return;
+            }
             if self.voice_switch_needs_confirm(id) {
                 self.confirm_voice_switch(id, cx);
                 return;
@@ -678,6 +696,7 @@ impl PhoenixApp {
     }
 
     pub fn open_channel_chat(&mut self, id: Id, cx: &mut Context<Self>) {
+        self.remember_chat_position();
         crate::ui::discovery::close();
         crate::ui::favorites::on_channel_opened(self, id);
         crate::commands::state::remember_read_mark(self, id);
@@ -694,8 +713,10 @@ impl PhoenixApp {
         self.selected_channel = Some(id);
         crate::notifications::clear(id.0);
         crate::ui::chat::voice_message::on_channel_change(self, cx);
-        self.last_channel.insert(guild, id);
-        self.nav_channel_selected(guild);
+        if !guild.is_some_and(ui::join_flow::is_lurking) {
+            self.last_channel.insert(guild, id);
+            self.nav_channel_selected(guild);
+        }
         self.replying_to = None;
         self.editing = None;
         self.chat_on_select(id);
@@ -721,6 +742,7 @@ impl PhoenixApp {
         }
         if cached {
             crate::commands::state::apply_read_mark(self, id);
+            self.restore_chat_position(id, cx);
             if stale {
                 self.backend.prefetch_messages(id);
             }
@@ -1035,9 +1057,7 @@ impl PhoenixApp {
             }
             AppEvent::GuildChannels { guild, channels } => {
                 self.set_guild_channels(guild, channels);
-                if self.selected_guild == Some(guild) {
-                    self.rebuild_sidebar();
-                }
+                self.refresh_selected_guild_channels(guild, cx);
             }
             AppEvent::GuildRoles { guild, roles } => {
                 self.roles.insert(guild, roles);
@@ -1062,11 +1082,11 @@ impl PhoenixApp {
                 }
                 self.roles.insert(gid, roles);
                 self.set_guild_channels(gid, channels);
-                if self.selected_guild == Some(gid) {
-                    self.rebuild_sidebar();
-                }
+                self.refresh_selected_guild_channels(gid, cx);
             }
             AppEvent::GuildDelete(gid) => {
+                let was_preview = ui::join_flow::is_lurking(gid);
+                ui::join_flow::clear_lurking(gid);
                 self.guilds.retain(|g| g.id != gid);
                 self.guild_list.reset(self.guilds.len() + 5);
                 self.set_guild_channels(gid, Vec::new());
@@ -1074,6 +1094,9 @@ impl PhoenixApp {
                 self.members.remove(&gid);
                 if self.selected_guild == Some(gid) {
                     self.select_guild(None, cx);
+                    if was_preview {
+                        ui::discovery::open(ui::discovery::Tab::Servers);
+                    }
                 }
             }
             AppEvent::DmUpsert(ch) => {
@@ -1133,6 +1156,20 @@ impl PhoenixApp {
         }
         crate::sounds::watch::watch(self);
         cx.notify();
+    }
+
+    fn refresh_selected_guild_channels(&mut self, guild: Id, cx: &mut Context<Self>) {
+        if self.selected_guild != Some(guild) {
+            return;
+        }
+        if ui::join_flow::is_lurking(guild) && self.selected_channel.is_none() && ui::discovery::current().is_none() {
+            if let Some(channel) = self.guild_target(Some(guild)) {
+                self.open_channel_chat(channel, cx);
+            } else {
+                self.message_list.reset(0);
+            }
+        }
+        self.rebuild_sidebar();
     }
 
     fn set_guild_channels(&mut self, guild: Id, channels: Vec<crate::model::Channel>) {
@@ -1526,7 +1563,9 @@ impl Render for PhoenixApp {
             Screen::Main => {
                 let title = ui::title_bar::render(self, window, cx).into_any_element();
                 let rail = ui::server_bar::render(self, cx).into_any_element();
-                let notice = crate::streamer::notice(self, cx).or_else(|| ui::view_as::notice(self, cx));
+                let notice = ui::join_flow::lurker_banner(self, cx)
+                    .or_else(|| crate::streamer::notice(self, cx))
+                    .or_else(|| ui::view_as::notice(self, cx));
                 let shift = notice.is_some();
                 let below_notice = |el: gpui::AnyElement, grow: bool| {
                     if !shift {

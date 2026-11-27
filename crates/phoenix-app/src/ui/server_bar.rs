@@ -168,26 +168,34 @@ const RAIL_UNDER_PANELS: f32 = 26.;
 fn offscreen_unread(h: &gpui::ScrollHandle, spans: &[Span]) -> (Option<usize>, Option<usize>, u32, u32) {
     let view = h.bounds();
     let (mut above, mut below, mut ma, mut mb) = (None, None, 0, 0);
+    let (mut mention_above, mut mention_below) = (None, None);
     if view.size.height <= px(0.) {
         return (above, below, ma, mb);
     }
-    for s in spans.iter().filter(|s| s.mentions > 0) {
+    for s in spans {
         let Some(b) = h.bounds_for_item(s.ix) else { continue };
         let top = b.top() + z(s.y);
         if top + z(s.h) <= view.top() {
             above = Some(s.ix);
             ma += s.mentions;
+            if s.mentions > 0 { mention_above = Some(s.ix); }
         } else if top >= view.bottom() + z(RAIL_UNDER_PANELS) {
             below.get_or_insert(s.ix);
             mb += s.mentions;
+            if s.mentions > 0 { mention_below.get_or_insert(s.ix); }
         }
     }
-    (above, below, ma, mb)
+    (mention_above.or(above), mention_below.or(below), ma, mb)
 }
 
 fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool, mentions: u32) -> AnyElement {
     use crate::theme::{generated::idx, tok};
     let h = h.clone();
+    let label = match mentions {
+        0 => crate::t!("rail.unread_new"),
+        1 => crate::t!("channels.mention_bar_one"),
+        count => crate::t!("channels.mention_bar", count = count),
+    };
     div()
         .absolute()
         .left_0()
@@ -230,7 +238,10 @@ fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool, mentions: u32) -> An
                     h.scroll_to_item(ix);
                     w.refresh();
                 })
-                .child(crate::t!("rail.unread_new").to_uppercase()),
+                .px(z(4.))
+                .text_ellipsis()
+                .overflow_hidden()
+                .child(label),
         )
         .into_any_element()
 }

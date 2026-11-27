@@ -1,9 +1,10 @@
-use gpui::{Context, ListScrollEvent};
+use gpui::{Context, ListOffset, ListScrollEvent, px};
 
 use crate::{
     app::PhoenixApp,
     backend::HistoryAt,
     model::{Id, Message},
+    ui::home::data::ScrollPosition,
 };
 
 const PAGE: u32 = 50;
@@ -13,7 +14,52 @@ pub fn is_detached(app: &PhoenixApp) -> bool {
 }
 
 impl PhoenixApp {
+    pub fn persist_chat_position(&mut self) {
+        if self.selected_channel.is_some() {
+            self.remember_chat_position();
+            self.save_nav_prefs();
+        }
+    }
+
+    pub fn remember_chat_position(&mut self) {
+        let Some(channel) = self.selected_channel else { return };
+        if self.channels.get(&channel).and_then(|ch| ch.guild).is_some_and(crate::ui::join_flow::is_lurking) {
+            return;
+        }
+        let Some(entry) = self.messages.get(&channel).filter(|e| e.loaded_once && !e.msgs.is_empty()) else { return };
+        if self.message_list.viewport_bounds().size.height <= px(0.) {
+            return;
+        }
+        let top = self.message_list.logical_scroll_top();
+        if !entry.detached && (top.item_ix >= self.message_list.item_count() || self.message_list.is_scrolled_to_end() == Some(true)) {
+            self.nav.scroll_positions.remove(&channel);
+            return;
+        }
+        let Some(message) = entry.msgs.get(top.item_ix.saturating_sub(1)) else { return };
+        let offset = if top.item_ix == 0 { 0 } else { f32::from(top.offset_in_item).round().max(0.) as u32 };
+        self.nav.scroll_positions.insert(channel, ScrollPosition { message: message.id, offset });
+    }
+
+    pub fn restore_chat_position(&mut self, channel: Id, cx: &mut Context<Self>) {
+        if self.selected_channel != Some(channel) {
+            return;
+        }
+        let Some(position) = self.nav.scroll_positions.get(&channel).copied() else { return };
+        let Some(entry) = self.messages.get(&channel) else { return };
+        let row = entry.index_of(position.message).map(|i| i + 1);
+        if let Some(item_ix) = row {
+            self.message_list.scroll_to(ListOffset { item_ix, offset_in_item: px(position.offset as f32) });
+            self.chat.at_bottom = false;
+        } else if !entry.reached_start {
+            self.request_around(channel, position.message, Some(position.offset), cx);
+        }
+    }
+
     pub fn jump_around(&mut self, channel: Id, id: Id, cx: &mut Context<Self>) {
+        self.request_around(channel, id, None, cx);
+    }
+
+    fn request_around(&mut self, channel: Id, id: Id, offset: Option<u32>, cx: &mut Context<Self>) {
         let Some(e) = self.messages.get_mut(&channel) else { return };
         if e.loading {
             return;
@@ -30,10 +76,17 @@ impl PhoenixApp {
                     return;
                 }
                 let found = page.iter().position(|m| m.id == id);
+                if offset.is_some() && (found.is_none() || !a.chat.at_bottom) {
+                    return;
+                }
                 a.set_detached_page(channel, page);
                 if let Some(ix) = found {
-                    a.message_list.scroll_to_reveal_item(ix + 1);
-                    a.flash_message(id, cx);
+                    if let Some(offset) = offset {
+                        a.message_list.scroll_to(ListOffset { item_ix: ix + 1, offset_in_item: px(offset as f32) });
+                    } else {
+                        a.message_list.scroll_to_reveal_item(ix + 1);
+                        a.flash_message(id, cx);
+                    }
                 }
                 cx.notify();
             });

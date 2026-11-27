@@ -24,7 +24,7 @@ fn message_key(guild: Id) -> String {
 }
 
 fn invite_key(guild: Id) -> String {
-    format!("server-welcome-invite-{}", guild.0)
+    format!("server-welcome-invite-sent-{}", guild.0)
 }
 
 fn primary_channel(app: &PhoenixApp, guild: &Guild) -> Option<Id> {
@@ -139,7 +139,7 @@ pub fn record_invite(app: &mut PhoenixApp, guild: Id) {
     }
 }
 
-pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id) -> Option<Div> {
+pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id, panel_height: gpui::Pixels) -> Option<Div> {
     let guild = owner_guild(app, ch)?;
     let g = guild.id;
     if !app.prefs.local.ui.contains_key(&channel_key(g)) {
@@ -169,8 +169,33 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id) -> Option<D
             .backend
             .guild_boosts(g)
             .is_some_and(|(count, _)| count > 0);
-    if invited && icon_set && sent && app_added && boosted {
+    let completed = [invited, icon_set, sent, app_added, boosted].into_iter().filter(|done| *done).count();
+    if completed == 5 {
         return None;
+    }
+    let expanded = app.nav.welcome_expanded.get(&g).copied().unwrap_or_else(|| {
+        app.messages.get(&ch).is_some_and(|entry| entry.loaded_once && entry.msgs.is_empty())
+    });
+    let toggle = entity.clone();
+    let header = div()
+        .id("nsw-toggle")
+        .px(z(16.))
+        .py(z(8.))
+        .flex()
+        .items_center()
+        .gap(z(8.))
+        .cursor_pointer()
+        .hover(|s| s.bg(tk(idx::BACKGROUND_MOD_SUBTLE)))
+        .on_click(move |_, _, cx| toggle.update(cx, |app, cx| {
+            app.nav.welcome_expanded.insert(g, !expanded);
+            cx.notify();
+        }))
+        .child(div().flex_1().text_sm().font_weight(FontWeight::SEMIBOLD).child(crate::t!("chat.new_server_checklist")))
+        .child(div().text_sm().text_color(tk(idx::TEXT_MUTED)).child(crate::t!("chat.new_server_progress", count = completed)))
+        .child(gpui::svg().path(crate::icons::path(if expanded { "settings/chevron-down" } else { "chevron-right" })).size(z(16.)).text_color(tk(idx::ICON_MUTED)));
+    let panel = div().flex_none().flex().flex_col().border_b_1().border_color(tk(idx::BORDER_SUBTLE)).child(header);
+    if !expanded {
+        return Some(panel);
     }
     let step = |id: &'static str, asset: &'static str, label: SharedString, done: bool| {
         div()
@@ -260,8 +285,10 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id) -> Option<D
         .on_click(link.into_iter().collect(), |_, _, cx| {
             cx.open_url("https://support.discord.com/hc/fr/articles/360045138571")
         });
-    Some(
-        div()
+    Some(panel.child(
+        div().id("nsw-checklist")
+            .max_h(panel_height)
+            .overflow_y_scroll()
             .w_full()
             .pt(z(32.))
             .pb(z(16.))
@@ -386,7 +413,7 @@ pub fn render(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: Id) -> Option<D
                             ),
                     ),
             ),
-    )
+    ))
 }
 
 #[cfg(test)]
@@ -433,7 +460,7 @@ mod tests {
                 };
                 observe_history(app, general, &[message]);
                 assert!(app.prefs.local.flag(&message_key(guild), false));
-                assert!(render(app, &cx.entity(), general).is_some());
+                assert!(render(app, &cx.entity(), general, z(300.)).is_some());
 
                 let saved = crate::ui::settings::LocalPrefs::load();
                 assert_eq!(saved.ui.get(&channel_key(guild)), Some(&general.0));
@@ -469,11 +496,11 @@ mod tests {
                 let entity = cx.entity();
 
                 observe_history(app, other, &[]);
-                assert!(render(app, &entity, other).is_none());
-                assert!(render(app, &entity, general).is_none());
+                assert!(render(app, &entity, other, z(300.)).is_none());
+                assert!(render(app, &entity, general, z(300.)).is_none());
 
                 observe_history(app, general, &[]);
-                assert!(render(app, &entity, general).is_some());
+                assert!(render(app, &entity, general, z(300.)).is_some());
                 assert!(!app.prefs.local.flag(&message_key(guild), false));
 
                 let mut message = Message {
@@ -488,8 +515,8 @@ mod tests {
                 message.send_state = SendState::Sent;
                 record_message(app, &message);
                 assert!(app.prefs.local.flag(&message_key(guild), false));
-                assert!(render(app, &entity, general).is_some());
-                assert!(render(app, &entity, other).is_none());
+                assert!(render(app, &entity, general, z(300.)).is_some());
+                assert!(render(app, &entity, other, z(300.)).is_none());
             })
             .unwrap();
     }

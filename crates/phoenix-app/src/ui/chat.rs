@@ -103,10 +103,10 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                             a.add_paths(paths.paths().to_vec(), cx)
                         }))
                         .children(thread_banner::render(app, cx))
-                        .children(crate::ui::join_flow::lurker_banner(app, cx))
                         .children(crate::ui::join_flow::verification_banner(app, cx))
                         .children(discovery_notice(app, cx))
                         .children(crate::ui::join_flow::nsfw_gate(app, cx))
+                        .children(app.selected_channel.and_then(|channel| welcome::render(app, &cx.entity(), channel, window.viewport_size().height * 0.42)))
                         .child(
                             div()
                                 .flex_1()
@@ -689,11 +689,6 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
     let Some(ch_id) = app.selected_channel else { return div().into_any_element() };
     let Some(entry) = app.messages.get(&ch_id) else { return div().into_any_element() };
     if ix == 0 {
-        if entry.reached_start
-            && let Some(card) = welcome::render(app, entity, ch_id)
-        {
-            return row_wrapper().child(card).into_any_element();
-        }
         return row_wrapper().when(entry.msgs.is_empty() && !entry.reached_start, |d| d.pb(z(20.))).child(intro(app, entity, ch_id, entry.reached_start)).into_any_element();
     }
     let i = ix - 1;

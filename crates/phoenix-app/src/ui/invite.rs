@@ -168,7 +168,11 @@ impl PhoenixApp {
 
     pub fn leave_guild(&mut self, guild: Id, cx: &mut Context<Self>) {
         self.close_overlay(cx);
-        self.nav_request(NavRequest::LeaveGuild(guild), cx, move |this, res, cx| {
+        if crate::ui::join_flow::is_lurking(guild) {
+            crate::ui::join_flow::finish_lurking(self, guild, false, cx);
+            return;
+        }
+        self.nav_request(NavRequest::LeaveGuild { guild, lurking: false }, cx, move |this, res, cx| {
             if res.is_ok() && this.guilds.iter().any(|g| g.id == guild) {
                 this.handle_event(crate::backend::AppEvent::GuildDelete(guild), cx);
             }
@@ -371,8 +375,6 @@ fn invite_dialog(app: &PhoenixApp, dialog: &InviteDialog, cx: &mut Context<Phoen
                     {
                         cx.write_to_clipboard(gpui::ClipboardItem::new_string(link.to_string()));
                         dialog.copied = true;
-                        let guild = dialog.guild;
-                        crate::ui::chat::welcome::record_invite(app, guild);
                         cx.notify();
                     }
                 }))).when(!can_send, |b| b.opacity(0.55))))

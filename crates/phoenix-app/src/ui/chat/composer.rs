@@ -274,7 +274,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
 }
 
 pub(crate) fn channel_read_only(app: &PhoenixApp) -> bool {
-    app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|extra| extra.send_blocked)
+    app.selected_guild.is_some_and(crate::ui::join_flow::is_lurking)
+        || app.selected_channel.and_then(|c| app.nav.extras.get(&c)).is_some_and(|extra| extra.send_blocked)
 }
 
 pub(super) fn placeholder(app: &PhoenixApp) -> SharedString {

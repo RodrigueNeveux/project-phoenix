@@ -26,7 +26,12 @@ impl DiscordBackend {
                 if with_note { s.rest.get_user_note(sf(user)).await } else { Ok(String::new()) }
             };
             let (p, note) = tokio::join!(s.rest.get_user_profile(sf(user), guild.map(sf)), note);
-            let p = p.map_err(api_err)?;
+            let mut p = p.map_err(api_err)?;
+            if p.mutual_friends.is_empty() && p.mutual_friends_count.is_some_and(|count| count > 0)
+                && let Ok(friends) = s.rest.get_mutual_friends(sf(user)).await
+            {
+                p.mutual_friends = friends;
+            }
             inner.emit(AppEvent::Users(vec![convert::user(&p.user)]));
             Ok(profile_from_api(&p, note.unwrap_or_default()))
         })
