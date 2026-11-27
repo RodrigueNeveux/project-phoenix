@@ -87,7 +87,7 @@ pub fn popout_anchor(user: Id, fallback: Point<Pixels>) -> Point<Pixels> {
     }
 }
 
-pub fn options_button(user: Id, guild: Option<Id>, in_call: bool) -> AnyElement {
+pub fn options_button(user: Id, guild: Option<Id>, _in_call: bool) -> AnyElement {
     div()
         .id(("voice-user-options", user.0))
         .size(z(24.))
@@ -106,11 +106,7 @@ pub fn options_button(user: Id, guild: Option<Id>, in_call: bool) -> AnyElement 
         )
         .on_click(move |ev, window, cx| {
             cx.stop_propagation();
-            if in_call {
-                crate::ui::voice_panel::open_user_menu(user, ev.position(), cx);
-            } else {
-                crate::ui::user_menu::open(user, guild, ev.position(), window);
-            }
+            crate::ui::user_menu::open(user, guild, ev.position(), window);
         })
         .into_any_element()
 }

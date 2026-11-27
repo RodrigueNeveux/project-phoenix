@@ -446,7 +446,8 @@ pub fn moderation_items(app: &PhoenixApp, user: Id, guild: Option<Id>, entity: &
         }));
     }
     if user != app.me.id {
-        if has_perm(perms, MODERATE_MEMBERS) {
+        let bot = app.users.get(&user).is_some_and(|u| u.bot);
+        if !bot && has_perm(perms, MODERATE_MEMBERS) {
             items.push(item(crate::t!("mod.timeout_user", name = name).to_string(), ModKind::Timeout(TIMEOUTS[0].1)));
         }
         if has_perm(perms, KICK_MEMBERS) {

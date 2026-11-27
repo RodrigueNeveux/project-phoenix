@@ -159,16 +159,22 @@ pub fn voice_items(app: &PhoenixApp, user: Id, guild: Option<Id>, e: &Ent) -> Vo
     if admin || has(app, Some(g), MUTE_MEMBERS) {
         let on = f.server_mute;
         let e = e.clone();
-        out.mods.push(MenuItem::check(crate::t!("voice.server_mute"), on, move |_, _, cx: &mut App| {
-            e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Mute(!on), cx))
-        }));
+        out.mods.push(
+            MenuItem::check(crate::t!("voice.server_mute"), on, move |_, _, cx: &mut App| {
+                e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Mute(!on), cx))
+            })
+            .as_danger(),
+        );
     }
     if admin || has(app, Some(g), DEAFEN_MEMBERS) {
         let on = f.server_deaf;
         let e = e.clone();
-        out.mods.push(MenuItem::check(crate::t!("voice.server_deafen"), on, move |_, _, cx: &mut App| {
-            e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Deafen(!on), cx))
-        }));
+        out.mods.push(
+            MenuItem::check(crate::t!("voice.server_deafen"), on, move |_, _, cx: &mut App| {
+                e.update(cx, |a, cx| a.voice_moderate(g, user, VoiceMod::Deafen(!on), cx))
+            })
+            .as_danger(),
+        );
     }
     if admin || has(app, Some(g), MOVE_MEMBERS) {
         let targets: Vec<MenuItem> = app

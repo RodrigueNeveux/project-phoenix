@@ -326,6 +326,7 @@ fn device_submenu(kind: Audio, devices: Vec<String>) -> MenuItem {
         items: list,
         icon: None,
         subtext: Some(current.map(Into::into).unwrap_or_else(|| crate::t!("voice.default"))),
+        danger: false,
         on_click: None,
     }
 }
@@ -341,7 +342,7 @@ fn profile_submenu() -> MenuItem {
             })
         })
         .collect();
-    MenuItem::Submenu { label: crate::t!("voice.input_profile_menu"), items, icon: None, subtext: Some(crate::t!(PROFILES[now as usize])), on_click: None }
+    MenuItem::Submenu { label: crate::t!("voice.input_profile_menu"), items, icon: None, subtext: Some(crate::t!(PROFILES[now as usize])), danger: false, on_click: None }
 }
 
 fn volume_row(kind: Audio, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -1051,12 +1052,7 @@ pub fn voice_user_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, user: Id) -
         )
         .on_mouse_down(MouseButton::Right, move |ev, window, cx| {
             cx.stop_propagation();
-            if in_call {
-                USER_MENU.with(|m| m.set(Some((user, ev.position))));
-                e.update(cx, |_, cx| cx.notify());
-            } else {
-                crate::ui::user_menu::open(user, guild, ev.position, window);
-            }
+            crate::ui::user_menu::open(user, guild, ev.position, window);
         })
         .into_any_element()
 }
@@ -1170,6 +1166,36 @@ pub fn user_menu_items(app: &PhoenixApp, user: Id, cx: &mut Context<PhoenixApp>)
                 |p| {
                     let u = p.users.entry(user.0).or_default();
                     u.muted = !u.muted;
+                },
+                true,
+            );
+        },
+        cx,
+    )));
+    items.push(MenuItem::Custom(check_row(
+        "vm-user-sb-mute",
+        crate::t!("voice.mute_soundboard"),
+        ua.soundboard_muted,
+        move |_| {
+            update(
+                |p| {
+                    let u = p.users.entry(user.0).or_default();
+                    u.soundboard_muted = !u.soundboard_muted;
+                },
+                true,
+            );
+        },
+        cx,
+    )));
+    items.push(MenuItem::Custom(check_row(
+        "vm-user-video-off",
+        crate::t!("voice.disable_video"),
+        ua.video_disabled,
+        move |_| {
+            update(
+                |p| {
+                    let u = p.users.entry(user.0).or_default();
+                    u.video_disabled = !u.video_disabled;
                 },
                 true,
             );

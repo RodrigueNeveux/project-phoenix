@@ -780,6 +780,23 @@ pub fn open_user(
     }
 }
 
+pub fn open_author_menu(entity: &Entity<PhoenixApp>, msg: &Message) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut App) + 'static {
+    open_user_menu(entity, msg.author, msg.channel)
+}
+
+pub fn open_user_menu(
+    entity: &Entity<PhoenixApp>,
+    user: crate::model::Id,
+    ch: crate::model::Id,
+) -> impl Fn(&gpui::MouseDownEvent, &mut Window, &mut App) + 'static {
+    let e = entity.clone();
+    move |ev, w, cx| {
+        cx.stop_propagation();
+        let guild = e.read(cx).channels.get(&ch).and_then(|c| c.guild);
+        crate::ui::user_menu::open(user, guild, ev.position, w);
+    }
+}
+
 pub(crate) fn words(text: &str, range: std::ops::Range<usize>) -> Vec<std::ops::Range<usize>> {
     let mut out = Vec::new();
     let mut start = range.start;

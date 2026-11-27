@@ -256,6 +256,7 @@ pub fn server_settings_item(app: &PhoenixApp, e: &Ent, guild: Id) -> MenuItem {
         items,
         icon: Some(crate::icons::path("gear")),
         subtext: None,
+        danger: false,
         on_click: Some(std::rc::Rc::new(move |_, window, cx| {
             entity.update(cx, |app, cx| app.open_server_settings(guild, 0, cx));
             window.refresh();

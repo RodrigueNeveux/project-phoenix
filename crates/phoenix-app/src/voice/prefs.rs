@@ -19,11 +19,13 @@ pub enum InputMode {
 pub struct UserAudio {
     pub volume: u32,
     pub muted: bool,
+    pub soundboard_muted: bool,
+    pub video_disabled: bool,
 }
 
 impl Default for UserAudio {
     fn default() -> Self {
-        Self { volume: 100, muted: false }
+        Self { volume: 100, muted: false, soundboard_muted: false, video_disabled: false }
     }
 }
 
@@ -115,7 +117,9 @@ impl VoicePrefs {
                         let id = k.parse().ok()?;
                         let volume = u.get("volume").and_then(Value::as_u64).unwrap_or(100).min(200) as u32;
                         let muted = u.get("muted").and_then(Value::as_bool).unwrap_or(false);
-                        Some((id, UserAudio { volume, muted }))
+                        let soundboard_muted = u.get("soundboard_muted").and_then(Value::as_bool).unwrap_or(false);
+                        let video_disabled = u.get("video_disabled").and_then(Value::as_bool).unwrap_or(false);
+                        Some((id, UserAudio { volume, muted, soundboard_muted, video_disabled }))
                     })
                     .collect()
             })
@@ -150,7 +154,17 @@ impl VoicePrefs {
             .users
             .iter()
             .filter(|(_, u)| **u != UserAudio::default())
-            .map(|(id, u)| (id.to_string(), json!({ "volume": u.volume, "muted": u.muted })))
+            .map(|(id, u)| {
+                (
+                    id.to_string(),
+                    json!({
+                        "volume": u.volume,
+                        "muted": u.muted,
+                        "soundboard_muted": u.soundboard_muted,
+                        "video_disabled": u.video_disabled
+                    }),
+                )
+            })
             .collect();
         json!({
             "input_device": self.input_device,
@@ -306,15 +320,15 @@ mod tests {
     #[test]
     fn roundtrip_and_clamp() {
         let mut p = VoicePrefs { input_volume: 40, input_mode: InputMode::PushToTalk, ptt_key: Some("ctrl-a".into()), ..Default::default() };
-        p.users.insert(9, UserAudio { volume: 150, muted: true });
+        p.users.insert(9, UserAudio { volume: 150, muted: true, ..Default::default() });
         assert_eq!(VoicePrefs::from_json(&p.to_json()), p);
         let c = VoicePrefs::from_json(&json!({"output_volume": 900, "sensitivity_db": -500}));
         assert_eq!((c.output_volume, c.sensitivity_db), (200, -100.));
         assert_eq!(p.user_gain(Id(9)), 0.);
         assert_eq!(p.user_gain(Id(1)), 1.);
-        p.users.insert(9, UserAudio { volume: 50, muted: false });
+        p.users.insert(9, UserAudio { volume: 50, muted: false, ..Default::default() });
         assert!((p.user_gain(Id(9)) - 0.5f32.powf(2.8)).abs() < 1e-6);
-        p.users.insert(9, UserAudio { volume: 200, muted: false });
+        p.users.insert(9, UserAudio { volume: 200, muted: false, ..Default::default() });
         assert!((p.user_gain(Id(9)) - 10f32.powf(0.3)).abs() < 1e-5);
         assert_eq!(amplitude(0.), 0.);
         assert!((amplitude(100.) - 1.).abs() < 1e-6);

@@ -363,6 +363,7 @@ fn event_menu(app: &PhoenixApp, guild: Id, e: &GuildEvent) -> Vec<crate::ui::con
             label: crate::t!("events.add_to_calendar"),
             icon: None,
             subtext: None,
+            danger: false,
             on_click: Some(std::rc::Rc::new(move |_: &gpui::ClickEvent, _: &mut Window, cx: &mut App| save_ics(text.clone(), cx))),
             items: vec![
                 MenuItem::action(crate::t!("events.calendar_google"), None, move |_, _, cx| cx.open_url(&g)),

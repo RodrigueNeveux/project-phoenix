@@ -16,8 +16,8 @@ pub enum MenuItem {
     Action { label: SharedString, icon: Option<SharedString>, subtext: Option<SharedString>, danger: bool, on_click: Handler },
     Separator,
     Custom(AnyElement),
-    Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString>, subtext: Option<SharedString>, on_click: Option<Handler> },
-    Check { label: SharedString, checked: bool, radio: bool, subtext: Option<SharedString>, icon: Option<SharedString>, on_click: Handler },
+    Submenu { label: SharedString, items: Vec<MenuItem>, icon: Option<SharedString>, subtext: Option<SharedString>, danger: bool, on_click: Option<Handler> },
+    Check { label: SharedString, checked: bool, radio: bool, subtext: Option<SharedString>, icon: Option<SharedString>, danger: bool, on_click: Handler },
     Disabled { label: SharedString, icon: Option<SharedString> },
     Leading { label: SharedString, leading: AnyElement, subtext: Option<SharedString>, on_click: Option<Handler> },
 }
@@ -232,7 +232,7 @@ impl MenuItem {
         checked: bool,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self::Check { label: label.into(), checked, radio: false, subtext: None, icon: None, on_click: Rc::new(on_click) }
+        Self::Check { label: label.into(), checked, radio: false, subtext: None, icon: None, danger: false, on_click: Rc::new(on_click) }
     }
 
     pub fn radio(
@@ -240,7 +240,14 @@ impl MenuItem {
         checked: bool,
         on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> Self {
-        Self::Check { label: label.into(), checked, radio: true, subtext: None, icon: None, on_click: Rc::new(on_click) }
+        Self::Check { label: label.into(), checked, radio: true, subtext: None, icon: None, danger: false, on_click: Rc::new(on_click) }
+    }
+
+    pub fn as_danger(mut self) -> Self {
+        if let Self::Action { danger, .. } | Self::Submenu { danger, .. } | Self::Check { danger, .. } = &mut self {
+            *danger = true;
+        }
+        self
     }
 
     pub fn with_subtext(mut self, text: impl Into<SharedString>) -> Self {
@@ -274,11 +281,11 @@ impl MenuItem {
     }
 
     pub fn submenu(label: impl Into<SharedString>, items: Vec<MenuItem>) -> Self {
-        Self::Submenu { label: label.into(), items, icon: None, subtext: None, on_click: None }
+        Self::Submenu { label: label.into(), items, icon: None, subtext: None, danger: false, on_click: None }
     }
 
     pub fn submenu_with_icon(label: impl Into<SharedString>, icon: &str, items: Vec<MenuItem>) -> Self {
-        Self::Submenu { label: label.into(), items, icon: Some(crate::icons::path(icon)), subtext: None, on_click: None }
+        Self::Submenu { label: label.into(), items, icon: Some(crate::icons::path(icon)), subtext: None, danger: false, on_click: None }
     }
 }
 
@@ -409,7 +416,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
         list = list.child(match item {
             MenuItem::Separator => div().flex_none().my(z(8.)).h(z(1.)).bg(c(tok(idx::BORDER_SUBTLE))).into_any_element(),
             MenuItem::Custom(el) => el,
-            MenuItem::Submenu { label, items, icon, subtext, on_click } => {
+            MenuItem::Submenu { label, items, icon, subtext, danger, on_click } => {
                 let open = open_sub == Some(ix);
                 if open {
                     let flip = sub_flips(PLACED.with(std::cell::Cell::get));
@@ -427,7 +434,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                     );
                 }
                 let dismiss_row = dismiss.clone();
-                row(("menu-sub", ix), open || lit, false)
+                row(("menu-sub", ix), open || lit, danger)
                     .on_click(move |ev, w, cx| {
                         if let Some(action) = &on_click {
                             action(ev, w, cx);
@@ -444,7 +451,13 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         }
                     })
                     .when_some(icon, |d, path| {
-                        let fg = if open || lit { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT };
+                        let fg = if danger {
+                            idx::TEXT_FEEDBACK_CRITICAL
+                        } else if open || lit {
+                            idx::INTERACTIVE_TEXT_ACTIVE
+                        } else {
+                            idx::INTERACTIVE_TEXT_DEFAULT
+                        };
                         d.child(svg().path(path).mr(z(8.)).size(z(20.)).flex_none().text_color(c(tok(fg))))
                     })
                     .child(div().flex_1().min_w_0().flex().flex_col().child(label_box(label)).when_some(subtext, |d, s| {
@@ -464,11 +477,17 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                             .ml(z(8.))
                             .size(z(20.))
                             .flex_none()
-                            .text_color(if open || lit { gpui::white() } else { c(tok(idx::TEXT_MUTED)) }),
+                            .text_color(if open || lit {
+                                gpui::white()
+                            } else if danger {
+                                c(tok(idx::TEXT_FEEDBACK_CRITICAL))
+                            } else {
+                                c(tok(idx::TEXT_MUTED))
+                            }),
                     )
                     .into_any_element()
             }
-            MenuItem::Check { label, checked, radio, subtext, icon, on_click } => {
+            MenuItem::Check { label, checked, radio, subtext, icon, danger, on_click } => {
                 let dismiss = dismiss.clone();
                 let mark = if radio {
                     crate::ui::controls::radio_indicator(checked)
@@ -492,7 +511,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                             d.child(svg().path(crate::icons::path(CHECK)).size(z(18.)).text_color(gpui::white()))
                         })
                 };
-                row(("menu-check", ix), lit, false)
+                row(("menu-check", ix), lit, danger)
                     .on_hover(move |h, w, _| {
                         if *h {
                             if depth == 0 {
@@ -502,7 +521,13 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                         }
                     })
                     .when_some(icon, |d, path| {
-                        let fg = if lit { idx::INTERACTIVE_TEXT_ACTIVE } else { idx::INTERACTIVE_TEXT_DEFAULT };
+                        let fg = if danger {
+                            idx::TEXT_FEEDBACK_CRITICAL
+                        } else if lit {
+                            idx::INTERACTIVE_TEXT_ACTIVE
+                        } else {
+                            idx::INTERACTIVE_TEXT_DEFAULT
+                        };
                         d.child(svg().path(path).mr(z(8.)).size(z(20.)).flex_none().text_color(c(tok(fg))))
                     })
                     .child(div().flex_1().min_w_0().flex().flex_col().child(label_box(label)).when_some(subtext, |d, s| {

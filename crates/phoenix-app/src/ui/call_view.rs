@@ -1339,6 +1339,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade:
     let white = t(idx::WHITE);
 
     let owner = tile.user;
+    let tile_guild = app.selected_guild;
     let base = if tile.stream && !me {
         base.on_mouse_down(
             gpui::MouseButton::Right,
@@ -1348,7 +1349,13 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade:
             }),
         )
     } else {
-        base
+        base.on_mouse_down(
+            gpui::MouseButton::Right,
+            move |ev: &gpui::MouseDownEvent, window, cx| {
+                cx.stop_propagation();
+                crate::ui::user_menu::open(owner, tile_guild, ev.position, window);
+            },
+        )
     };
     let inner = if tile.stream {
         let skey = stream_key(app, tile.user);
@@ -1518,9 +1525,9 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade:
                                     .bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT))
                                     .hover(|s| s.bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_HOVER)))
                                     .child(named("more-horizontal", 16., t(idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT)))
-                                    .on_click(move |ev, _, cx| {
+                                    .on_click(move |ev, window, cx| {
                                         cx.stop_propagation();
-                                        crate::ui::voice_panel::open_user_menu(user, ev.position(), cx);
+                                        crate::ui::user_menu::open(user, tile_guild, ev.position(), window);
                                     }),
                             )
                         }),

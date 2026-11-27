@@ -1187,7 +1187,10 @@ pub(crate) fn message(
                 )
                 .id(("reply-author", msg.id.0))
                 .when_some(ru.as_deref().map(|u| u.id), |d, uid| {
-                    d.cursor_pointer().hover(|s| s.underline()).on_click(message_ext::open_user(entity, uid, msg.channel))
+                    d.cursor_pointer()
+                        .hover(|s| s.underline())
+                        .on_click(message_ext::open_user(entity, uid, msg.channel))
+                        .on_mouse_down(gpui::MouseButton::Right, message_ext::open_user_menu(entity, uid, msg.channel))
                 })
                 .child({
                     let hovered = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, msg.id.0));
@@ -1273,6 +1276,7 @@ pub(crate) fn message(
             .cursor_pointer()
             .hover(|s| s.underline())
             .on_click(message_ext::open_author(entity, msg))
+            .on_mouse_down(gpui::MouseButton::Right, message_ext::open_author_menu(entity, msg))
             .children(role_dot.map(|(col, gradient)| {
                 let hovered = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, msg.id.0));
                 div().flex_none().mr(z(4.)).child(crate::ui::role_dot::role_dot(("msg-role-dot", id.0), col, gradient, hovered, fz(20.)))
@@ -1356,6 +1360,7 @@ pub(crate) fn message(
                                 .cursor_pointer()
                                 .rounded_full()
                                 .on_click(message_ext::open_author(entity, msg))
+            .on_mouse_down(gpui::MouseButton::Right, message_ext::open_author_menu(entity, msg))
                                 .child(avatar(author, 16. * crate::theme::font_scale())),
                         )
                     })
@@ -1397,6 +1402,7 @@ pub(crate) fn message(
                         })
                         .active(|s| s.mt(z(1.)))
                         .on_click(message_ext::open_author(entity, msg))
+            .on_mouse_down(gpui::MouseButton::Right, message_ext::open_author_menu(entity, msg))
                         .child(crate::ui::avatar_hover(author, msg_avatar(), crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, id.0))))
                         .when_some(author.and_then(|u| u.decoration.clone()), |d, deco| {
                             let s = msg_avatar() * 1.2;
@@ -1675,9 +1681,16 @@ fn rich_k(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited:
             }
         })
         .line_height(lh)
-        .on_mouse_down(gpui::MouseButton::Right, move |_, _, _| {
-            if let Some(url) = mention::hovered_link(msg, bi, 0) {
-                panels::set_menu_link(url);
+        .on_mouse_down(gpui::MouseButton::Right, {
+            let re = entity.clone();
+            move |ev, w, cx| {
+                if let Some(u) = mention::hovered_user(msg, bi, 0) {
+                    cx.stop_propagation();
+                    let g = re.read(cx).selected_guild;
+                    crate::ui::user_menu::open(Id(u), g, ev.position, w);
+                } else if let Some(url) = mention::hovered_link(msg, bi, 0) {
+                    panels::set_menu_link(url);
+                }
             }
         })
         .child(

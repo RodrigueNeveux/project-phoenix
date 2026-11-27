@@ -82,7 +82,11 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         let has = app.nav.relationship(u).is_some_and(|r| r.nickname.is_some());
         items.push(act(crate::ui::modals::nickname::friend_title(has), Rc::new(move |a, _, _, cx| a.open_friend_nickname(u, cx))));
     }
+    let in_voice = app.channels.values().any(|c| c.kind != crate::model::ChannelKind::Category && c.voice_users.contains(&u));
     items.push(MenuItem::Separator);
+    if in_voice && !me {
+        items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
+    }
     if let Some(gid) = g {
         if me {
             items.push(act(crate::t!("menu.edit_server_profile"), Rc::new(move |a, _, _, cx| a.open_server_profile(gid, cx))));
@@ -144,8 +148,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         }
         items.push(mv);
     }
-    let in_call = app.voice_channel.is_some_and(|v| app.channels.get(&v).is_some_and(|c| c.voice_users.contains(&u)));
-    if in_call {
+    if in_voice && me {
         items.push(MenuItem::Separator);
         items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
     }
