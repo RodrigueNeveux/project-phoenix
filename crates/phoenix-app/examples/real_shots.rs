@@ -803,6 +803,8 @@ fn main() -> anyhow::Result<()> {
         }
         return Ok(());
     }
+    let writes = ["PHX_WRITE", "PHX_SEND", "PHX_VOICE"].iter().any(|k| std::env::var_os(k).is_some());
+    anyhow::ensure!(!writes || phoenix_api::rest::guard::agent_session(), "PHX_WRITE, PHX_SEND and PHX_VOICE need PHX_AGENT=1 so the REST client keeps writes inside the test channels");
     let out = std::env::args().nth(1).unwrap_or_else(|| "real.png".into());
     phoenix_app::discord_backend::NO_ACKS.store(true, std::sync::atomic::Ordering::Relaxed);
     phoenix_app::ui::title_bar::FORCE_CLIENT_DECORATIONS.store(true, std::sync::atomic::Ordering::Relaxed);

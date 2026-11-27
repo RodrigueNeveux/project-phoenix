@@ -1,4 +1,5 @@
 pub mod guard;
+pub mod agent_scope;
 pub mod form;
 pub mod auth;
 pub mod profile;
@@ -296,6 +297,18 @@ impl RestClient {
     }
 
     async fn raw_with(&self, method: Method, path: &str, body: Body, failed: u32, extra: Option<(&'static str, String)>) -> Result<(StatusCode, Vec<u8>)> {
+        let scoped = agent_scope::scoped(guard::agent_session(), &self.inner.base);
+        if scoped {
+            let sent = match &body {
+                Body::Json(v) => Some(v),
+                Body::Multipart { payload, .. } => Some(payload),
+                Body::None | Body::Form(_) => None,
+            };
+            if let Some(err) = agent_scope::refusal(&method, path, sent) {
+                tracing::warn!(%method, path, "agent session: write refused");
+                return Err(err);
+            }
+        }
         let route = route_key(method.as_str(), path);
         let major = major_param(path).to_owned();
         let url = format!("{}{}", self.inner.base, path);
@@ -372,6 +385,9 @@ impl RestClient {
                     return Err(Error::CaptchaRequired { sitekey: body.captcha_sitekey.clone(), body: Box::new(body) });
                 }
                 return Err(Error::Api { status: status.as_u16(), body: Box::new(body), raw });
+            }
+            if scoped {
+                agent_scope::observe(&method, path, &bytes);
             }
             return Ok((status, bytes));
         }

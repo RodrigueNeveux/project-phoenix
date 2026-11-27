@@ -17,6 +17,33 @@ PHX_CHANNEL=1574797385463496724 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_in
 flock /tmp/phoenix-render.lock phoenix-nice ~/discord-phoenix/int-bin/real_shots qa.png
 ```
 
+## Writes from agent sessions
+
+With `PHX_AGENT=1`, every REST call that is not a GET goes through
+`phoenix_api::rest::agent_scope` before it leaves the process (examples and the
+full app alike). The allow list is closed:
+
+- #phoenix (`1574797385463496724`): new messages, edits and deletes of a message,
+  reactions, pins, polls, typing, attachment slots, threads created from it, and a
+  PATCH of the channel itself that only sets `rate_limit_per_user` and/or `topic`.
+- threads that this process created in #phoenix: messages, join, archive/lock.
+- #général (`1403447573389381652`): new messages and attachment slots only.
+- the test voice channel: `send-soundboard-sound`, plus the stream preview of a
+  stream in that channel.
+- interactions and scheduled messages whose `channel_id` is #phoenix.
+- the POST routes that only read (member search, message search tabs).
+
+Everything else is refused with `write blocked`, in particular `DELETE` or any
+other PATCH of `/channels/{id}` itself, every guild, role, member, webhook,
+invite and permission route, and every `/users/@me` setting. `real_shots`
+refuses to start with `PHX_WRITE`, `PHX_SEND` or `PHX_VOICE` unless
+`PHX_AGENT=1` is set. Requests to a loopback base (unit tests) are not scoped.
+
+The test channel #phoenix was deleted on 27/11 at 19:35 from the account. No
+agent process could send that request at that time (the only `real_shots` run
+was a read-only one still loading), but nothing in Phoenix itself refused it
+either; this scope closes that.
+
 Without `PHX_NO_SCROLL`, `PHX_MEMBERS` and `PHX_IN_VOICE`, `real_shots` copies the
 sidebar scroll, the member list toggle and the voice panel from the official client
 over CDP. The 27/11 runs inherited a hidden member list that way (`members item #2 is
