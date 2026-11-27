@@ -28,6 +28,7 @@ pub mod forward;
 pub mod message_ext;
 pub mod mosaic;
 pub mod panels;
+pub mod page_scroll;
 pub mod pending;
 pub mod rich_input;
 pub mod scheduled;
@@ -104,7 +105,6 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                 .min_h_0()
                                 .relative()
                                 .pr(z(16.))
-                                .group(scrollbar::AUTO_HOVER_GROUP)
                                 .child(
                                     list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                                         .size_full(),
