@@ -29,7 +29,7 @@ fn parse_clock(s: &str) -> Option<f64> {
 }
 
 fn dims(line: &str) -> Option<(u32, u32)> {
-    line.split(|c: char| c == ',' || c == ' ').find_map(|tok| {
+    line.split([',', ' ']).find_map(|tok| {
         let (a, b) = tok.split_once('x')?;
         if a.len() < 2 || b.len() < 2 || !a.bytes().all(|c| c.is_ascii_digit()) || !b.bytes().all(|c| c.is_ascii_digit()) {
             return None;

@@ -812,7 +812,7 @@ const SEEK_DIGITS: &str = "M169.545 229.312v7.919l14.838-10.253v46.348h7.669v-55
 const SEEK_ARC: &str = "M137.108 31.459a160.22 160.22 0 0 0-30.316-2.894c-88.439 0-160.24 71.801-160.24 160.241 0 88.439 71.801 160.24 160.24 160.24 88.499 0 160.241-71.742 160.241-160.24h-31.365c0 71.176-57.699 128.876-128.876 128.876-71.128 0-128.876-57.748-128.876-128.876 0-71.129 57.748-128.877 128.876-128.877 8.183 0 16.347.78 24.382 2.328l5.934-30.798Z";
 const SEEK_HEAD: &str = "M144.616 190.007V96.608l197.822 69.184-197.822 69.185v-44.97Z";
 
-pub fn svg(path: &str) -> Option<String> {
+pub fn icon_svg(path: &str) -> Option<String> {
     let name = path.strip_prefix("icons/dvp/")?.strip_suffix(".svg")?;
     if name == "seek-back" || name == "seek-forward" {
         let back = name == "seek-back";
@@ -1830,11 +1830,11 @@ mod tests {
         assert_eq!(volume_icon_path(1.).as_ref(), "icons/dvp/volume-10-10-10-0.svg");
         assert_eq!(volume_icon_path(0.5).as_ref(), "icons/dvp/volume-10-5-0-0.svg");
         assert_eq!(volume_icon_path(0.).as_ref(), "icons/dvp/volume-0-0-0-1.svg");
-        let v = svg("icons/dvp/volume-10-5-0-0.svg").unwrap();
+        let v = icon_svg("icons/dvp/volume-10-5-0-0.svg").unwrap();
         assert!(v.contains(r#"stroke-opacity="0.5" d="M17.5 12Q17.5 8.5 15 6.5""#));
         assert!(v.contains(r#"stroke-opacity="0" d="m15 9 6 6m-6 0 6-6""#));
-        assert!(svg("icons/dvp/seek-back.svg").unwrap().contains("scale(.19361)"));
-        assert!(svg("icons/dvp/volume-1-2.svg").is_none());
-        assert!(svg("icons/other.svg").is_none());
+        assert!(icon_svg("icons/dvp/seek-back.svg").unwrap().contains("scale(.19361)"));
+        assert!(icon_svg("icons/dvp/volume-1-2.svg").is_none());
+        assert!(icon_svg("icons/other.svg").is_none());
     }
 }
