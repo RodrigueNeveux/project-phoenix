@@ -1356,12 +1356,12 @@ pub(crate) fn message(
             accessories.extend(msg.embeds.iter().filter_map(|e| e.title.clone().or_else(|| e.description.clone())));
             let content = crate::richtext::plain_text(&r.parsed);
             let label = crate::ui::a11y::message(&crate::ui::a11y::MessageParts {
-                author: &*a11y_name,
+                author: &a11y_name,
                 replied_author: replied.as_deref(),
                 content: &content,
                 edited: msg.edited,
                 accessories: &accessories,
-                time: if r.group_start { &*r.time_full } else { &*r.time_short },
+                time: if r.group_start { &r.time_full } else { &r.time_short },
             });
             let d = d.role(gpui::Role::Article).aria_label(label);
             if crate::shortcuts::message::focused().is_some_and(|f| f.1 == id) { d.aria_active_descendant() } else { d }
