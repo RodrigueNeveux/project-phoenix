@@ -27,6 +27,7 @@ Renders: `PHX_OPEN=guildmenu|chanmenu[:n]|catmenu[:n]|usermenu[:n]|msgmenu int-b
 | rows | item_M3qk4j | 34 (text) / 36 (icon) / 52 (subtext), padding 8, 14/18 medium, icon 20 + mr 8 | ✅ |
 | edge nudging | web.*.js nudgeTopAlignment | 12px window margin, max-height = window − top − 12 (was 16) | ✅ |
 | keyboard | web.*.js list navigators | Up/Down wrap, Home/End, Right/Left submenu, Enter/Space, Esc | ✅ (type-ahead not seen in the client) |
+| submenu placement | web.*.js `MenuSubmenuItem` (`Ow` layer: `placement` from the parent context, default `right-start`, `spacing` -4, `viewportPadding` 48, `shiftPadding` 8, `crossAccessFlip` false) | opens on the right of the menu, overlapping it by 4 px; when it does not fit on the right within 48 px of the window edge and the left has more room, it opens on the left (`left-start`), its right edge 4 px inside the menu. Before 27/11 Phoenix only snapped it back into the window, so near the right edge (member list menus) it covered the menu it came from (seen on the real platform under Xvfb) | ✅ `context_menu::sub_flips`, test `a_member_menu_submenu_at_the_right_edge_opens_on_the_left_of_the_menu` |
 
 ## Button pass (wt/btn-home, 26/11)
 

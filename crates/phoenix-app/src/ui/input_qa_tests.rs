@@ -121,3 +121,42 @@ fn typing_a_mention_opens_the_autocomplete(cx: &mut TestAppContext) {
     let rows = qa.vcx.update(|_, cx| cx.try_global::<crate::ui::autocomplete::Autocomplete>().and_then(|s| s.active.as_ref()).map_or(0, |s| s.items.len()));
     assert!(rows > 0, "typing @ in the composer did not open the mention autocomplete");
 }
+
+#[gpui::test]
+fn a_member_menu_submenu_at_the_right_edge_opens_on_the_left_of_the_menu(cx: &mut TestAppContext) {
+    let mut qa = setup(cx);
+    let n = qa.read(|a| a.member_list.item_count());
+    let mut opened = false;
+    for i in 0..n {
+        let Some(row) = qa.read(|a| a.member_list.bounds_for_item(i)) else { continue };
+        qa.press(row, MouseButton::Right);
+        if crate::ui::user_menu::is_open() {
+            opened = true;
+            break;
+        }
+    }
+    assert!(opened, "a right click on the member list opened no user menu");
+    qa.vcx.refresh().unwrap();
+    qa.vcx.run_until_parked();
+    let (root, _, view_w) = crate::ui::context_menu::debug_panels();
+    assert!(root[2] > view_w - 320., "the member menu is not at the right edge: {root:?} in {view_w}");
+    let mut sub = None;
+    let mut y = root[1] + 12.;
+    while y < root[3] - 8. && sub.is_none() {
+        let at = qa.device(point(px((root[0] + root[2]) / 2.), px(y)));
+        qa.vcx.simulate_mouse_move(at, None::<MouseButton>, Modifiers::none());
+        qa.vcx.run_until_parked();
+        for _ in 0..2 {
+            qa.vcx.refresh().unwrap();
+            qa.vcx.run_until_parked();
+        }
+        let (_, s, _) = crate::ui::context_menu::debug_panels();
+        if s[2] > s[0] {
+            sub = Some(s);
+        }
+        y += 16.;
+    }
+    let sub = sub.expect("hovering the member menu rows opened no submenu");
+    assert!(sub[2] <= root[0] + 4.5, "the submenu {sub:?} covers the menu {root:?} instead of opening on its left");
+    assert!(sub[0] >= 0., "the submenu {sub:?} left the window");
+}

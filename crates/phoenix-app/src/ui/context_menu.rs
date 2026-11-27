@@ -62,6 +62,7 @@ fn reset_state() {
     OPEN_SUB.with(|c| c.set(None));
     HL_ROOT.with(|c| c.set(None));
     HL_SUB.with(|c| c.set(None));
+    PLACED.with(|c| c.set(Placed { sub: [0.; 4], ..c.get() }));
 }
 
 enum Nav {
@@ -291,8 +292,55 @@ const SUB_OVERLAP: f32 = 4.;
 const CHEVRON: &str = "chevron-right";
 const CHECK: &str = "check";
 
+const FLIP_PAD: f32 = 48.;
+
 thread_local! {
     static VIEW_H: std::cell::Cell<f32> = const { std::cell::Cell::new(700.) };
+    static PLACED: std::cell::Cell<Placed> = const { std::cell::Cell::new(Placed { root: [0.; 4], sub: [0.; 4], view_w: 0. }) };
+}
+
+#[derive(Clone, Copy)]
+struct Placed {
+    root: [f32; 4],
+    sub: [f32; 4],
+    view_w: f32,
+}
+
+fn sub_flips(p: Placed) -> bool {
+    let w = if p.sub[2] > p.sub[0] { p.sub[2] - p.sub[0] } else { MENU_MIN_W };
+    let right = p.view_w - FLIP_PAD - (p.root[2] - SUB_OVERLAP);
+    let left = p.root[0] + SUB_OVERLAP - FLIP_PAD;
+    p.view_w > 0. && w > right && left > right
+}
+
+fn measure(depth: u8) -> impl IntoElement {
+    gpui::canvas(
+        move |b, w, _| {
+            let k = f32::from(z(1.)).max(0.01);
+            let edges = [b.left(), b.top(), b.right(), b.bottom()].map(|v| f32::from(v) / k);
+            let before = PLACED.with(std::cell::Cell::get);
+            let mut p = before;
+            if depth == 0 {
+                p.root = edges;
+                p.view_w = f32::from(w.viewport_size().width) / k;
+            } else {
+                p.sub = edges;
+            }
+            PLACED.with(|c| c.set(p));
+            if sub_flips(p) != sub_flips(before) {
+                w.on_next_frame(|w, _| w.refresh());
+            }
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .inset_0()
+}
+
+#[doc(hidden)]
+pub fn debug_panels() -> ([f32; 4], [f32; 4], f32) {
+    let p = PLACED.with(std::cell::Cell::get);
+    (p.root, p.sub, p.view_w)
 }
 
 fn row_h(item: &MenuItem) -> f32 {
@@ -364,13 +412,18 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
             MenuItem::Submenu { label, items, icon, subtext, on_click } => {
                 let open = open_sub == Some(ix);
                 if open {
+                    let flip = sub_flips(PLACED.with(std::cell::Cell::get));
                     sub_panel = Some(
                         div()
                             .absolute()
                             .top(z(top))
-                            .left_full()
-                            .ml(z(-SUB_OVERLAP))
-                            .child(gpui::anchored().snap_to_window_with_margin(z(VIEWPORT_PAD)).child(panel_at("context-submenu", 1, items, dismiss.clone()))),
+                            .map(|d| if flip { d.right(gpui::relative(1.)).mr(z(-SUB_OVERLAP)) } else { d.left_full().ml(z(-SUB_OVERLAP)) })
+                            .child(
+                                gpui::anchored()
+                                    .anchor(if flip { gpui::Anchor::TopRight } else { gpui::Anchor::TopLeft })
+                                    .snap_to_window_with_margin(z(VIEWPORT_PAD))
+                                    .child(panel_at("context-submenu", 1, items, dismiss.clone())),
+                            ),
                     );
                 }
                 let dismiss_row = dismiss.clone();
@@ -608,6 +661,7 @@ fn panel_at(id: &'static str, depth: u8, items: Vec<MenuItem>, dismiss: Dismiss)
                 .child(list)
                 .children(crate::ui::chat::scrollbar::bar_for(id, crate::ui::chat::scrollbar::Bar::Thin)),
         )
+        .child(measure(depth))
         .children(sub_panel)
 }
 
