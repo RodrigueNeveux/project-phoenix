@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gpui::{Bounds, Modifiers, MouseButton, Pixels, Point, TestAppContext, VisualTestContext, WindowHandle, point};
+use gpui::{Bounds, Modifiers, MouseButton, Pixels, Point, TestAppContext, VisualTestContext, WindowHandle, point, px};
 
 use crate::{
     app::{PhoenixApp, SidebarRow},
@@ -54,14 +54,18 @@ impl Qa {
         point(at.x * k, at.y * k)
     }
 
-    fn press(&mut self, b: Bounds<Pixels>, button: MouseButton) {
-        let at = self.device(b.center());
+    fn press_at(&mut self, at: Point<Pixels>, button: MouseButton) {
+        let at = self.device(at);
         self.vcx.simulate_mouse_move(at, None::<MouseButton>, Modifiers::none());
         self.vcx.run_until_parked();
         self.vcx.simulate_mouse_down(at, button, Modifiers::none());
         self.vcx.run_until_parked();
         self.vcx.simulate_mouse_up(at, button, Modifiers::none());
         self.vcx.run_until_parked();
+    }
+
+    fn press(&mut self, b: Bounds<Pixels>, button: MouseButton) {
+        self.press_at(b.center(), button);
     }
 
     fn keys(&mut self, keys: &str) {
@@ -75,7 +79,7 @@ fn right_click_on_a_message_opens_its_menu_and_escape_closes_it(cx: &mut TestApp
     let mut qa = setup(cx);
     let chat = qa.read(|a| a.message_list.viewport_bounds());
     assert!(f32::from(chat.size.height) > 0., "the message list is laid out");
-    qa.press(chat, MouseButton::Right);
+    qa.press_at(point(chat.center().x, chat.bottom() - px(36.)), MouseButton::Right);
     assert!(qa.read(|a| a.chat.menu.is_some()), "a right click on a message did not open its menu");
     qa.keys("escape");
     assert!(qa.read(|a| a.chat.menu.is_none()), "Esc did not close the message menu");
