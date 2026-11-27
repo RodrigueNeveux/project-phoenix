@@ -215,6 +215,7 @@ pub struct ViewerImage {
     pub width: u32,
     pub height: u32,
     pub author: Option<ViewerAuthor>,
+    pub video: Option<SharedString>,
 }
 
 #[derive(Clone, Debug)]

@@ -99,6 +99,7 @@ pub const COMPACT_MAX_W: f32 = 400.;
 pub const TINY_MAX_W: f32 = 240.;
 pub const RATES: [f64; 7] = [0.5, 0.75, 1., 1.25, 1.5, 1.75, 2.];
 const IDLE_HIDE: Duration = Duration::from_secs(3);
+const LEGACY_IDLE_FULLSCREEN: Duration = Duration::from_secs(1);
 const OFFSCREEN: Duration = Duration::from_millis(300);
 const VOLUME_HIDE: Duration = Duration::from_millis(150);
 const POP_MS: f32 = 1000.;
@@ -185,11 +186,34 @@ pub struct Spring {
     at: Option<Instant>,
     tension: f32,
     friction: f32,
+    clamp: bool,
 }
 
 impl Spring {
     pub const fn new(v: f32, tension: f32, friction: f32) -> Self {
-        Self { from: v, to: v, at: None, tension, friction }
+        Self { from: v, to: v, at: None, tension, friction, clamp: true }
+    }
+
+    pub const fn unclamped(self) -> Self {
+        Self { clamp: false, ..self }
+    }
+
+    pub fn free(tension: f32, friction: f32, t: f32) -> f32 {
+        let w = tension.sqrt();
+        let zeta = friction / (2. * w);
+        if t * zeta * w > 12. {
+            return 1.;
+        }
+        if zeta >= 1. {
+            let root = w * (zeta * zeta - 1.).sqrt();
+            let (r1, r2) = (-zeta * w + root, -zeta * w - root);
+            if (r2 - r1).abs() < 1e-6 {
+                return 1. - (1. + w * t) * (-w * t).exp();
+            }
+            return 1. - (r2 * (r1 * t).exp() - r1 * (r2 * t).exp()) / (r2 - r1);
+        }
+        let wd = w * (1. - zeta * zeta).sqrt();
+        1. - (-zeta * w * t).exp() * ((wd * t).cos() + zeta * w / wd * (wd * t).sin())
     }
 
     pub fn progress(tension: f32, friction: f32, t: f32) -> f32 {
@@ -209,12 +233,14 @@ impl Spring {
 
     pub fn value(&self, now: Instant) -> f32 {
         let Some(at) = self.at else { return self.to };
-        let p = Self::progress(self.tension, self.friction, now.saturating_duration_since(at).as_secs_f32());
+        let t = now.saturating_duration_since(at).as_secs_f32();
+        let p = if self.clamp { Self::progress(self.tension, self.friction, t) } else { Self::free(self.tension, self.friction, t) };
         self.from + (self.to - self.from) * p
     }
 
     pub fn moving(&self, now: Instant) -> bool {
-        self.at.is_some() && (self.value(now) - self.to).abs() > 1e-4
+        let Some(at) = self.at else { return false };
+        if self.clamp { (self.value(now) - self.to).abs() > 1e-4 } else { now.saturating_duration_since(at) < Duration::from_millis(1200) }
     }
 
     pub fn set(&mut self, to: f32, now: Instant, immediate: bool) {
@@ -267,6 +293,9 @@ struct Player {
     speed_closed: Option<Instant>,
     volume_drag: Option<Bounds<Pixels>>,
     measured: Option<f32>,
+    clicked: bool,
+    focus: Option<gpui::FocusHandle>,
+    legacy_bar: Spring,
 }
 
 impl Player {
@@ -299,6 +328,9 @@ impl Player {
             speed_closed: None,
             volume_drag: None,
             measured: None,
+            clicked: false,
+            focus: None,
+            legacy_bar: Spring::new(0., 200., 14.).unclamped(),
         }
     }
 
@@ -342,6 +374,7 @@ struct Store {
     entered_fullscreen: bool,
     fs_width: f32,
     focus: Option<gpui::FocusHandle>,
+    silent: bool,
     retired: (Images, Images),
 }
 
@@ -360,7 +393,24 @@ fn volume(cx: &App) -> f32 {
 fn effective_volume(cx: &App, key: &SharedString) -> f32 {
     let st = cx.try_global::<Store>();
     let looped = st.and_then(|s| s.players.get(key)).is_some_and(|p| p.looped);
-    if looped || st.is_some_and(|s| s.muted) { 0. } else { volume(cx) }
+    if looped || st.is_some_and(|s| s.silent) {
+        0.
+    } else if !dvp_enabled() {
+        super::voice_message::media_key_volume(cx, &legacy_volume_key(key))
+    } else if st.is_some_and(|s| s.muted) {
+        0.
+    } else {
+        volume(cx)
+    }
+}
+
+pub fn dvp_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("PHOENIX_DVP").is_some_and(|v| v != "0"))
+}
+
+pub fn legacy_volume_key(key: &SharedString) -> SharedString {
+    format!("video-attachment:{key}").into()
 }
 
 pub fn supported() -> bool {
@@ -502,15 +552,17 @@ fn restart_session(cx: &mut App, key: &SharedString) {
 pub fn toggle(cx: &mut App, key: &SharedString) {
     let Some(p) = store(cx).players.get_mut(key) else { return };
     p.active = true;
+    let pop = dvp_enabled() || p.clicked;
+    p.clicked = true;
     match p.state {
         State::Ended => {
             p.position = 0.;
             p.session = None;
             p.started = false;
-            set_state(cx, key, State::Playing, true);
+            set_state(cx, key, State::Playing, pop);
         }
         State::Playing => set_state(cx, key, State::Paused, true),
-        State::Paused => set_state(cx, key, State::Playing, true),
+        State::Paused => set_state(cx, key, State::Playing, pop),
     }
     fetch(cx, key);
     ensure_ticker(cx);
@@ -634,6 +686,7 @@ fn ensure_ticker(cx: &mut App) {
 
 fn spawn_session(cx: &mut App, key: &SharedString) {
     let vol = effective_volume(cx, key);
+    let silent = store(cx).silent;
     let Some(p) = store(cx).players.get_mut(key) else { return };
     let Load::Ready(path, probe) = &p.load else { return };
     let (path, probe) = (path.clone(), *probe);
@@ -650,7 +703,7 @@ fn spawn_session(cx: &mut App, key: &SharedString) {
                     fps: video_file::output_fps(probe.fps),
                     max,
                     looped,
-                    audio: probe.audio,
+                    audio: probe.audio && !silent,
                     volume: vol,
                 })
             })
@@ -698,9 +751,17 @@ fn tick(cx: &mut App) -> bool {
             dirty = true;
             continue;
         }
+        let vol = effective_volume(cx, &key);
         let Some(p) = store(cx).players.get_mut(&key) else { continue };
         let target = p.controls_target(now);
         p.controls.set(if target { 1. } else { 0. }, now, reduced);
+        let idle = if fullscreen.as_ref() == Some(&key) { LEGACY_IDLE_FULLSCREEN } else { IDLE_HIDE };
+        let hide = p.state == State::Playing && p.seek.is_none() && (!p.hovered || now.duration_since(p.moved) > idle);
+        p.legacy_bar.set(if hide { 1. } else { 0. }, now, p.state != State::Playing || reduced);
+        if p.legacy_bar.moving(now) || (p.state == State::Playing && p.hovered) {
+            busy = true;
+            dirty = dirty || p.legacy_bar.moving(now);
+        }
         if p.volume_hide_at.is_some_and(|t| now >= t) {
             p.volume_hide_at = None;
             p.volume_hover = false;
@@ -742,6 +803,7 @@ fn tick(cx: &mut App) -> bool {
             }
             continue;
         };
+        s.set_volume(vol);
         let mut fresh = None;
         let mut started = p.started;
         if !started {
@@ -872,6 +934,38 @@ struct Track {
     dragging: bool,
     visible: bool,
     shift: f32,
+    legacy: bool,
+}
+
+fn paint_legacy_track(window: &mut Window, b: Bounds<Pixels>, t: &Track) {
+    let h6 = f32::from(z(6.));
+    let edge = f32::from(z(3.));
+    let w = f32::from(b.size.width);
+    let y = f32::from(b.origin.y) + (f32::from(b.size.height) - h6) / 2.;
+    let x0 = f32::from(b.origin.x);
+    let base = tk(idx::PRIMARY_300);
+    let bar = Bounds::new(gpui::point(px(x0 - edge), px(y)), gpui::size(px(w + 2. * edge), px(h6)));
+    let lit = t.hover.is_some() || t.dragging;
+    if lit {
+        let sh = Bounds::new(gpui::point(bar.origin.x, bar.origin.y + z(1.)), bar.size);
+        window.paint_quad(gpui::fill(sh, tk(idx::OPACITY_BLACK_28)).corner_radii(px(edge)));
+    }
+    window.paint_quad(gpui::fill(bar, Hsla { a: base.a * 0.3, ..base }).corner_radii(px(edge)));
+    if t.duration.is_some() {
+        window.paint_quad(gpui::fill(bar, Hsla { a: 0.3, ..gpui::white() }).corner_radii(px(edge)));
+    }
+    if let Some(hf) = t.hover.filter(|_| !t.dragging) {
+        let pv = Bounds::new(bar.origin, gpui::size(px(w * hf + 2. * edge), px(h6)));
+        window.paint_quad(gpui::fill(pv, Hsla { a: 0.3, ..gpui::white() }).corner_radii(px(edge)));
+    }
+    let prog = Bounds::new(bar.origin, gpui::size(px(w * t.frac + 2. * edge), px(h6)));
+    window.paint_quad(gpui::fill(prog, tk(idx::BRAND_500)).corner_radii(px(edge)));
+    if lit {
+        let d = f32::from(z(10.));
+        let gx = x0 + w * t.frac;
+        let gb = Bounds::new(gpui::point(px(gx - d / 2.), px(y + h6 / 2. - d / 2.)), gpui::size(px(d), px(d)));
+        window.paint_quad(gpui::fill(gb, tk(idx::BRAND_560)).corner_radii(px(d / 2.)));
+    }
 }
 
 fn timeline(t: Track) -> gpui::Canvas<Hitbox> {
@@ -880,19 +974,22 @@ fn timeline(t: Track) -> gpui::Canvas<Hitbox> {
         move |b, hitbox, window, cx| {
             let cfg = t.cfg;
             let lit = t.hover.is_some() || t.dragging;
+            if t.legacy {
+                paint_legacy_track(window, b, &t);
+            }
             let h = f32::from(z(if lit { cfg.timeline_hover_h } else { cfg.timeline_h }));
             let w = f32::from(b.size.width);
             let x0 = f32::from(b.origin.x);
             let y = f32::from(b.origin.y) + (f32::from(b.size.height) - h) / 2. + f32::from(z(t.shift));
             let r = px(h / 2.);
-            let fade = |col: Hsla| Hsla { a: col.a * if t.visible { 1. } else { 0. }, ..col };
+            let fade = |col: Hsla| Hsla { a: col.a * if t.visible && !t.legacy { 1. } else { 0. }, ..col };
             let bar = Bounds::new(gpui::point(px(x0), px(y)), gpui::size(px(w), px(h)));
             window.paint_quad(gpui::fill(bar, fade(tk(idx::OPACITY_BLURPLE_16))).corner_radii(r));
             if t.duration.is_some() {
                 window.paint_quad(gpui::fill(bar, fade(tk(idx::OPACITY_BLURPLE_16))).corner_radii(r));
             }
             let fw = (w * t.frac).max(0.);
-            if fw > 0. {
+            if fw > 0. && !t.legacy {
                 let fill = Bounds::new(bar.origin, gpui::size(px(fw), px(h)));
                 window.paint_quad(
                     gpui::fill(
@@ -902,7 +999,7 @@ fn timeline(t: Track) -> gpui::Canvas<Hitbox> {
                     .corner_radii(r),
                 );
             }
-            if t.duration.is_some_and(|d| d > 0.) {
+            if t.duration.is_some_and(|d| d > 0.) && !t.legacy {
                 let scale = if t.dragging { 1.3 } else if lit { 1.15 } else { 1. };
                 let d = f32::from(z(cfg.playhead)) * scale;
                 let cx0 = x0 + fw;
@@ -1124,6 +1221,8 @@ struct View {
     dragging: bool,
     fullscreen: bool,
     speed_open: bool,
+    viewer: Option<crate::media::ViewerImage>,
+    tiny: bool,
 }
 
 fn volume_group(v: &View, cx: &App) -> AnyElement {
@@ -1383,6 +1482,13 @@ fn controls(v: &View, cx: &App) -> AnyElement {
         .gap(z(cfg.gap))
         .when_some(cfg.trailing_w, |d, w| d.w(z(w)))
         .when(v.plan.speed, |d| d.child(speed_button(v)))
+        .when_some(v.viewer.clone().filter(|_| !v.tiny && !v.fullscreen), |d, viewer| {
+            let k = key.clone();
+            d.child(button(format!("dvp-viewer-{key}"), crate::icons::path("media/window-top"), &cfg, crate::t!("video.open_viewer")).on_click(move |_, window, cx| {
+                open_in_viewer(cx, &k, viewer.clone());
+                window.refresh();
+            }))
+        })
         .child(button(format!("dvp-fs-{key}"), fs_icon, &cfg, crate::t!("video.fullscreen")).on_click(move |_, window, cx| {
             let on = cx.try_global::<Store>().and_then(|s| s.fullscreen.clone()).is_none();
             set_fullscreen(cx, window, on.then(|| kfs.clone()));
@@ -1407,7 +1513,7 @@ fn controls(v: &View, cx: &App) -> AnyElement {
         .opacity(v.controls)
         .cursor_pointer()
         .child(
-            timeline(Track { key: key.clone(), frac, duration: v.duration, cfg, hover: v.hover, dragging: v.dragging, visible: v.controls > 0.01, shift })
+            timeline(Track { key: key.clone(), frac, duration: v.duration, cfg, hover: v.hover, dragging: v.dragging, visible: v.controls > 0.01, shift, legacy: false })
                 .size_full(),
         )
         .child(div().absolute().left_0().right_0().top(z((hitbox_h - cfg.timeline_h) / 2. + shift)).children(tooltip));
@@ -1572,6 +1678,7 @@ pub struct Spec {
     pub portrait: bool,
     pub width: f32,
     pub radius: f32,
+    pub viewer: Option<crate::media::ViewerImage>,
 }
 
 fn view(cx: &App, key: &SharedString, cfg: Config, plan: Plan, fullscreen: bool) -> Option<View> {
@@ -1592,6 +1699,8 @@ fn view(cx: &App, key: &SharedString, cfg: Config, plan: Plan, fullscreen: bool)
         dragging: p.seek.is_some(),
         fullscreen,
         speed_open: p.speed_open,
+        viewer: None,
+        tiny: false,
     })
 }
 
@@ -1610,7 +1719,7 @@ fn frame_layer(cx: &App, key: &SharedString, poster: Option<SharedString>, activ
     }
 }
 
-pub fn attachment(spec: Spec, cx: &App) -> AnyElement {
+fn dvp_attachment(spec: Spec, cx: &App) -> AnyElement {
     let key = spec.key.clone();
     let st = cx.try_global::<Store>();
     let p = st.and_then(|s| s.players.get(&key));
@@ -1619,12 +1728,13 @@ pub fn attachment(spec: Spec, cx: &App) -> AnyElement {
     let duration = p.and_then(Player::duration).unwrap_or(0.);
     let width = p.and_then(|p| p.measured).unwrap_or(spec.width);
     let plan = plan(spec.layout, spec.portrait, width, duration, false);
-    let v = view(cx, &key, ATTACHMENT, plan, false);
+    let v = view(cx, &key, ATTACHMENT, plan, false).map(|v| View { viewer: spec.viewer.clone(), tiny: width < TINY_MAX_W, ..v });
     let now = Instant::now();
     let pop = p.and_then(|p| p.pop).map(|(t, s)| (s, now.duration_since(t).as_secs_f32() * 1000.));
     let loading = p.is_some_and(Player::loading);
     let failed = p.is_some_and(|p| matches!(p.load, Load::Failed));
-    let (k_hover, k_move, k_click) = (key.clone(), key.clone(), key.clone());
+    let (k_hover, k_move, k_click, k_key) = (key.clone(), key.clone(), key.clone(), key.clone());
+    let focus = p.and_then(|p| p.focus.clone());
     let src = spec.src.clone();
     let clip = div()
         .absolute()
@@ -1639,6 +1749,13 @@ pub fn attachment(spec: Spec, cx: &App) -> AnyElement {
         .when_some(pop.filter(|_| active), |d, (s, t)| d.child(play_pop(s, t)));
     div()
         .id(ElementId::Name(format!("dvp-{key}").into()))
+        .when_some(focus, |d, h| d.track_focus(&h))
+        .on_key_down(move |e: &KeyDownEvent, window, cx| {
+            if handle_key(cx, window, &k_key, e.keystroke.key.as_str()) {
+                cx.stop_propagation();
+                window.refresh();
+            }
+        })
         .group("dvp-inactive")
         .relative()
         .size_full()
@@ -1671,6 +1788,7 @@ pub fn attachment(spec: Spec, cx: &App) -> AnyElement {
                 return;
             }
             ensure(cx, &k_click, &src, false);
+            focus_player(cx, window, &k_click);
             toggle(cx, &k_click);
             window.refresh();
         })
@@ -1689,7 +1807,7 @@ pub fn gifv(key: SharedString, src: SharedString, poster: SharedString, plays: b
         .into_any_element()
 }
 
-pub fn fullscreen_layer(cx: &App) -> Option<AnyElement> {
+fn dvp_fullscreen_layer(cx: &App) -> Option<AnyElement> {
     let key = cx.try_global::<Store>()?.fullscreen.clone()?;
     let p = cx.try_global::<Store>()?.players.get(&key)?;
     let portrait = p.probe().is_some_and(|pr| pr.height > pr.width);
@@ -1761,6 +1879,422 @@ pub fn fullscreen_layer(cx: &App) -> Option<AnyElement> {
     let window_w = cx.try_global::<Store>().map_or(1280., |s| s.fs_width);
     Some(body(plan(Layout::Single, portrait, window_w, duration, true), cx).into_any_element())
 }
+
+pub fn attachment(spec: Spec, cx: &App) -> AnyElement {
+    if dvp_enabled() { dvp_attachment(spec, cx) } else { legacy_attachment(spec, cx) }
+}
+
+pub fn fullscreen_layer(cx: &App) -> Option<AnyElement> {
+    if dvp_enabled() { dvp_fullscreen_layer(cx) } else { legacy_fullscreen_layer(cx) }
+}
+
+fn focus_player(cx: &mut App, window: &mut Window, key: &SharedString) {
+    let existing = cx.try_global::<Store>().and_then(|s| s.players.get(key)).and_then(|p| p.focus.clone());
+    let h = existing.unwrap_or_else(|| {
+        let h = cx.focus_handle();
+        if let Some(p) = store(cx).players.get_mut(key) {
+            p.focus = Some(h.clone());
+        }
+        h
+    });
+    window.focus(&h, cx);
+}
+
+pub fn handle_key(cx: &mut App, window: &mut Window, key: &SharedString, pressed: &str) -> bool {
+    let Some(p) = cx.try_global::<Store>().and_then(|s| s.players.get(key)) else { return false };
+    let (cur, duration) = (p.current(), p.duration().unwrap_or(0.));
+    if dvp_enabled() {
+        match pressed {
+            "space" | "k" => toggle(cx, key),
+            "j" | "left" => skip(cx, key, -10.),
+            "l" | "right" => skip(cx, key, 10.),
+            "m" => toggle_mute(cx),
+            "f" => {
+                let on = cx.try_global::<Store>().and_then(|s| s.fullscreen.clone()).is_none();
+                set_fullscreen(cx, window, on.then(|| key.clone()));
+            }
+            "escape" if cx.try_global::<Store>().is_some_and(|s| s.fullscreen.is_some()) => set_fullscreen(cx, window, None),
+            _ => return false,
+        }
+        return true;
+    }
+    match pressed {
+        "space" => toggle(cx, key),
+        "left" => seek_keep(cx, key, (cur - 5.).max(0.)),
+        "right" => seek_keep(cx, key, (cur + 5.).min(duration)),
+        "escape" if cx.try_global::<Store>().is_some_and(|s| s.fullscreen.is_some()) => set_fullscreen(cx, window, None),
+        d if d.len() == 1 && d.as_bytes()[0].is_ascii_digit() => {
+            let n = f64::from(d.as_bytes()[0] - b'0');
+            seek_keep(cx, key, duration * n / 10.);
+            if cx.try_global::<Store>().and_then(|s| s.players.get(key)).is_some_and(|p| p.state != State::Playing) {
+                toggle(cx, key);
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
+fn seek_keep(cx: &mut App, key: &SharedString, secs: f64) {
+    let playing = cx.try_global::<Store>().and_then(|s| s.players.get(key)).is_some_and(|p| p.state == State::Playing);
+    seek_to(cx, key, secs);
+    if playing && let Some(p) = store(cx).players.get_mut(key) {
+        p.state = State::Playing;
+    }
+}
+
+fn legacy_button(id: String, icon_path: SharedString, tip: SharedString) -> gpui::Stateful<gpui::Div> {
+    let group = SharedString::from(id);
+    div()
+        .id(ElementId::Name(group.clone()))
+        .group(group.clone())
+        .flex_none()
+        .size(z(32.))
+        .p(z(4.))
+        .cursor_pointer()
+        .active(|s| s.mt(z(1.)).mb(z(-1.)))
+        .tooltip(crate::ui::tooltip::tip(tip))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(
+            svg()
+                .path(icon_path)
+                .flex_none()
+                .size(z(24.))
+                .text_color(tk(idx::INTERACTIVE_TEXT_ACTIVE))
+                .group_hover(group, |s| s.text_color(gpui::white())),
+        )
+}
+
+pub fn legacy_time(secs: Option<f64>) -> String {
+    secs.map_or_else(
+        || "-:--".to_owned(),
+        |t| {
+            let n = t.max(0.) as u64;
+            format!("{}:{:02}", n / 60, n % 60)
+        },
+    )
+}
+
+pub fn legacy_time_pair(current: Option<f64>, duration: Option<f64>) -> (String, String) {
+    let d = legacy_time(duration);
+    let c = legacy_time(current);
+    let width = d.chars().count();
+    (format!("{c:0>width$}"), d)
+}
+
+struct LegacyBar {
+    key: SharedString,
+    state: State,
+    current: f64,
+    duration: Option<f64>,
+    offset: f32,
+    width: f32,
+    hover: Option<f32>,
+    dragging: bool,
+    fullscreen: bool,
+}
+
+fn legacy_controls(b: LegacyBar, cx: &App) -> AnyElement {
+    let key = b.key.clone();
+    let (icon_name, tip) = match b.state {
+        State::Playing => ("pause", crate::t!("video.pause")),
+        State::Ended => ("media/replay", crate::t!("video.replay")),
+        State::Paused => ("play", crate::t!("video.play")),
+    };
+    let k = key.clone();
+    let play = legacy_button(format!("lvplay-{key}"), crate::icons::path(icon_name), tip).mr(z(8.)).on_click(move |_, window, cx| {
+        toggle(cx, &k);
+        window.refresh();
+    });
+    let (cur, dur) = legacy_time_pair(b.duration.map(|_| b.current.floor()), b.duration.map(f64::floor));
+    let time = div()
+        .flex_none()
+        .whitespace_nowrap()
+        .m(z(4.))
+        .h(z(12.))
+        .flex()
+        .font_family(crate::theme::FONT_MONO())
+        .text_size(z(12.))
+        .line_height(z(12.))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(gpui::white())
+        .child(cur)
+        .child(div().mx(z(2.)).child("/"))
+        .child(dur);
+    let frac = match b.duration {
+        Some(d) if d > 0. => (b.current / d).clamp(0., 1.) as f32,
+        _ => 0.,
+    };
+    let bubble = match (if b.dragging { Some(frac) } else { b.hover }, b.duration) {
+        (Some(f), Some(d)) => Some(super::voice_message::track_bubble(legacy_time(Some(f64::from(f) * d)), f)),
+        _ => None,
+    };
+    let track = div()
+        .relative()
+        .flex_1()
+        .min_w_0()
+        .h(z(32.))
+        .mx(z(7.))
+        .cursor_pointer()
+        .child(
+            timeline(Track {
+                key: key.clone(),
+                frac,
+                duration: b.duration,
+                cfg: ATTACHMENT,
+                hover: b.hover,
+                dragging: b.dragging,
+                visible: true,
+                shift: 0.,
+                legacy: true,
+            })
+            .size_full(),
+        )
+        .child(div().absolute().left_0().right_0().top(z(13.)).children(bubble));
+    let volume = super::voice_message::media_volume_control(legacy_volume_key(&key), format!("lv{key}"), 32., 24., cx);
+    let kfs = key.clone();
+    let fs_icon = crate::icons::path(if b.fullscreen { "call/fullscreen-exit" } else { "call/fullscreen" });
+    let fullscreen = legacy_button(format!("lvfs-{key}"), fs_icon, crate::t!("video.fullscreen")).rounded(z(8.)).on_click(move |_, window, cx| {
+        let on = cx.try_global::<Store>().and_then(|s| s.fullscreen.clone()).is_none();
+        set_fullscreen(cx, window, on.then(|| kfs.clone()));
+    });
+    div()
+        .absolute()
+        .left_0()
+        .right_0()
+        .bottom(z(-10. - b.offset * 42.))
+        .h(z(42.))
+        .pb(z(10.))
+        .bg(tk(idx::OPACITY_BLACK_60))
+        .flex()
+        .items_center()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(play)
+        .when(b.fullscreen || b.width > 250., |d| d.child(time))
+        .child(track)
+        .child(volume)
+        .child(fullscreen)
+        .into_any_element()
+}
+
+fn legacy_pop(state: State, t: f32) -> AnyElement {
+    let opacity = 0.8 * (if t < 200. { t / 200. } else { (1. - (t - 200.) / 200.).max(0.) });
+    let scale = 1. + 1.5 * Spring::free(200., 80., t / 1000.);
+    let path = crate::icons::path(if state == State::Playing { "play" } else { "pause" });
+    div()
+        .absolute()
+        .inset_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(
+            div()
+                .size(z(48. * scale))
+                .rounded_full()
+                .opacity(opacity)
+                .bg(tk(idx::OPACITY_BLACK_60))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(icon(path, 24. * scale)),
+        )
+        .into_any_element()
+}
+
+fn legacy_bar_for(cx: &App, key: &SharedString, width: f32, fullscreen: bool) -> Option<LegacyBar> {
+    let p = cx.try_global::<Store>()?.players.get(key)?;
+    p.clicked.then(|| LegacyBar {
+        key: key.clone(),
+        state: p.state,
+        current: p.current(),
+        duration: p.duration(),
+        offset: p.legacy_bar.value(Instant::now()),
+        width,
+        hover: p.track_hover,
+        dragging: p.seek.is_some(),
+        fullscreen,
+    })
+}
+
+fn legacy_surface(key: SharedString, src: SharedString, fullscreen: bool, cx: &App) -> gpui::Stateful<gpui::Div> {
+    let focus = cx.try_global::<Store>().and_then(|s| s.players.get(&key)).and_then(|p| p.focus.clone());
+    let (k_hover, k_move, k_click, k_key) = (key.clone(), key.clone(), key.clone(), key.clone());
+    let failed = cx.try_global::<Store>().and_then(|s| s.players.get(&key)).is_some_and(|p| matches!(p.load, Load::Failed));
+    div()
+        .id(ElementId::Name(format!("{}-{key}", if fullscreen { "lvfs" } else { "lv" }).into()))
+        .when_some(focus.filter(|_| !fullscreen), |d, h| d.track_focus(&h))
+        .on_hover(move |over, window, cx| {
+            if let Some(p) = store(cx).players.get_mut(&k_hover) {
+                p.hovered = *over;
+                p.moved = Instant::now();
+                if !*over {
+                    p.track_hover = None;
+                }
+            }
+            ensure_ticker(cx);
+            window.refresh();
+        })
+        .on_mouse_move(move |_, _, cx| {
+            if let Some(p) = store(cx).players.get_mut(&k_move) {
+                p.hovered = true;
+                p.moved = Instant::now();
+            }
+            ensure_ticker(cx);
+        })
+        .on_key_down(move |e: &KeyDownEvent, window, cx| {
+            if handle_key(cx, window, &k_key, e.keystroke.key.as_str()) {
+                cx.stop_propagation();
+                window.refresh();
+            }
+        })
+        .on_click(move |_, window, cx| {
+            if failed {
+                cx.open_url(&src);
+                return;
+            }
+            ensure(cx, &k_click, &src, false);
+            if !fullscreen {
+                focus_player(cx, window, &k_click);
+            }
+            toggle(cx, &k_click);
+            window.refresh();
+        })
+}
+
+fn legacy_attachment(spec: Spec, cx: &App) -> AnyElement {
+    let key = spec.key.clone();
+    let st = cx.try_global::<Store>();
+    let p = st.and_then(|s| s.players.get(&key));
+    let fs_here = st.and_then(|s| s.fullscreen.as_ref()) == Some(&key);
+    let clicked = p.is_some_and(|p| p.clicked) && !fs_here;
+    let width = p.and_then(|p| p.measured).unwrap_or(spec.width);
+    let now = Instant::now();
+    let pop = p.and_then(|p| p.pop).map(|(t, s)| (s, now.duration_since(t).as_secs_f32() * 1000.));
+    let show_frame = clicked && p.is_some_and(|p| p.image.is_some());
+    let bar = legacy_bar_for(cx, &key, width, false).filter(|_| clicked);
+    legacy_surface(key.clone(), spec.src.clone(), false, cx)
+        .group("dvp-inactive")
+        .relative()
+        .size_full()
+        .rounded(z(spec.radius))
+        .overflow_hidden()
+        .bg(tk(idx::BACKGROUND_BASE_LOWER))
+        .cursor_pointer()
+        .child(tracker(key.clone(), spec.src.clone(), false, None, false).absolute().inset_0())
+        .child(frame_layer(cx, &key, (!show_frame).then(|| spec.poster.clone()), show_frame))
+        .when(!clicked, |d| d.child(inactive_button()))
+        .when_some(bar, |d, b| d.child(legacy_controls(b, cx)))
+        .when_some(pop.filter(|(_, t)| clicked && *t < 450.), |d, (s, t)| d.child(legacy_pop(s, t)))
+        .into_any_element()
+}
+
+fn legacy_fullscreen_layer(cx: &App) -> Option<AnyElement> {
+    let st = cx.try_global::<Store>()?;
+    let key = st.fullscreen.clone()?;
+    let p = st.players.get(&key)?;
+    let src = p.src.clone();
+    let focus = st.focus.clone();
+    let now = Instant::now();
+    let pop = p.pop.map(|(t, s)| (s, now.duration_since(t).as_secs_f32() * 1000.));
+    let bar = legacy_bar_for(cx, &key, st.fs_width, true);
+    Some(
+        legacy_surface(key.clone(), src.clone(), true, cx)
+            .absolute()
+            .inset_0()
+            .occlude()
+            .when_some(focus, |d, h| d.track_focus(&h))
+            .bg(gpui::black())
+            .overflow_hidden()
+            .child(tracker(key.clone(), src, false, None, true).absolute().inset_0())
+            .child(frame_layer(cx, &key, None, true))
+            .when_some(bar, |d, b| d.child(legacy_controls(b, cx)))
+            .when_some(pop.filter(|(_, t)| *t < 450.), |d, (s, t)| d.child(legacy_pop(s, t)))
+            .into_any_element(),
+    )
+}
+
+pub fn viewer_key(key: &str) -> SharedString {
+    format!("viewer:{key}").into()
+}
+
+pub fn open_in_viewer(cx: &mut App, key: &SharedString, mut viewer: crate::media::ViewerImage) {
+    let Some(p) = cx.try_global::<Store>().and_then(|s| s.players.get(key)) else { return };
+    let (src, at) = (p.src.clone(), if p.state == State::Ended { 0. } else { p.current() });
+    if p.state == State::Playing {
+        set_state(cx, key, State::Paused, false);
+    }
+    let vk = viewer_key(key);
+    let mut player = Player::new(src, false);
+    player.position = at;
+    player.active = true;
+    player.clicked = true;
+    store(cx).players.insert(vk.clone(), player);
+    viewer.video = Some(key.clone());
+    crate::media::open_viewer(viewer, cx);
+    set_state(cx, &vk, State::Playing, false);
+    fetch(cx, &vk);
+}
+
+pub fn viewer_element(key: &SharedString, poster: SharedString, (w, h): (f32, f32), portrait: bool, cx: &App) -> AnyElement {
+    let vk = viewer_key(key);
+    let src = cx.try_global::<Store>().and_then(|s| s.players.get(&vk)).map_or_else(|| key.clone(), |p| p.src.clone());
+    div()
+        .w(px(w))
+        .h(px(h))
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .child(attachment(Spec { key: vk, src, poster, layout: Layout::Single, portrait, width: w / f32::from(z(1.)).max(0.01), radius: 8., viewer: None }, cx))
+        .into_any_element()
+}
+
+pub fn shot(spec: &str, window: &mut Window, cx: &mut App) {
+    let now = Instant::now();
+    store(cx).silent = true;
+    let keys: Vec<SharedString> = store(cx).players.iter().filter(|(_, p)| !p.looped && p.painted.is_some()).map(|(k, _)| k.clone()).collect();
+    for key in keys {
+        match spec {
+            "play" => {
+                if let Some(p) = store(cx).players.get_mut(&key) {
+                    p.hovered = true;
+                    p.moved = now;
+                }
+                if cx.try_global::<Store>().and_then(|s| s.players.get(&key)).is_some_and(|p| p.state != State::Playing) {
+                    toggle(cx, &key);
+                }
+            }
+            "pause" => {
+                if cx.try_global::<Store>().and_then(|s| s.players.get(&key)).is_some_and(|p| p.state == State::Playing) {
+                    toggle(cx, &key);
+                }
+            }
+            "hover" => {
+                if let Some(p) = store(cx).players.get_mut(&key) {
+                    p.hovered = true;
+                    p.moved = now;
+                }
+            }
+            "fullscreen" => {
+                set_fullscreen(cx, window, Some(key.clone()));
+                break;
+            }
+            "exit" => {
+                set_fullscreen(cx, window, None);
+                break;
+            }
+            _ => {
+                if let Some(t) = spec.strip_prefix("seek=").and_then(|v| v.parse::<f64>().ok()) {
+                    seek_keep(cx, &key, t);
+                }
+            }
+        }
+    }
+    ensure_ticker(cx);
+    window.refresh();
+}
+
+pub fn shot_time(cx: &App) -> Option<f64> {
+    cx.try_global::<Store>()?.players.values().filter(|p| !p.looped && p.clicked).map(Player::current).reduce(f64::max)
+}
+
 
 #[cfg(test)]
 mod tests {

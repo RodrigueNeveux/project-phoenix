@@ -2393,6 +2393,32 @@ fn main() -> anyhow::Result<()> {
         println!("wrote {path} ({}x{})", img.width(), img.height());
         Ok(())
     };
+    if let Ok(seq) = std::env::var("PHX_VIDEO") {
+        for step in seq.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(ms) = step.strip_prefix("wait=").and_then(|v| v.parse::<u64>().ok()) {
+                pump(&mut cx, ms);
+            } else if let Some(t) = step.strip_prefix("until=").and_then(|v| v.parse::<f64>().ok()) {
+                let start = std::time::Instant::now();
+                while start.elapsed() < Duration::from_secs(30) {
+                    let now = cx.update(|cx| phoenix_app::ui::chat::video_player::shot_time(cx)).unwrap_or(0.);
+                    if now >= t {
+                        break;
+                    }
+                    pump(&mut cx, 50);
+                }
+            } else if let Some(name) = step.strip_prefix("shot=") {
+                let path = format!("{}-{name}.png", out.trim_end_matches(".png"));
+                cx.update_window(win.into(), |_, window, cx| phoenix_app::ui::chat::video_player::shot("hover", window, cx))?;
+                pump(&mut cx, 300);
+                shoot(&mut cx, &path)?;
+            } else {
+                cx.update_window(win.into(), |_, window, cx| phoenix_app::ui::chat::video_player::shot(step, window, cx))?;
+                pump(&mut cx, 200);
+            }
+            let t = cx.update(|cx| phoenix_app::ui::chat::video_player::shot_time(cx));
+            println!("video step {step}: t={t:?}");
+        }
+    }
     let voice_test = std::env::var_os("PHX_VOICE").is_some();
     if voice_test {
         use phoenix_app::voice::VoiceControl as V;

@@ -146,15 +146,10 @@ pub fn render(window: &mut Window, cx: &mut App) -> Option<AnyElement> {
                 media::close_viewer(cx);
             })
             .child(top_bar)
-            .child(
-                div().flex_1().min_h_0().flex().items_center().justify_center().child(
-                    img(v.url.clone())
-                        .id("image-viewer-img")
-                        .w(px(w))
-                        .h(px(h))
-                        .on_click(|_, _, cx| cx.stop_propagation()),
-                ),
-            )
+            .child(div().flex_1().min_h_0().flex().items_center().justify_center().child(match v.video.as_ref() {
+                Some(key) => crate::ui::chat::video_player::viewer_element(key, v.url.clone(), (w, h), v.height > v.width, cx),
+                None => img(v.url.clone()).id("image-viewer-img").w(px(w)).h(px(h)).on_click(|_, _, cx| cx.stop_propagation()).into_any_element(),
+            }))
             .into_any_element(),
     )
 }

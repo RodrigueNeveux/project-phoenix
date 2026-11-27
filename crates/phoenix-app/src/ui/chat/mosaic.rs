@@ -38,9 +38,11 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         width: a.width,
         height: a.height,
         author: media::current_author(),
+        video: None,
     };
     let video = a.kind == AttachmentKind::Video;
     let original_src = viewer.original.clone();
+    let player_viewer = viewer.clone();
     let player = video && super::video_player::supported() && super::attach::loadable(&original_src);
     let alt = super::alt_text::description(a, spoiler);
     let group = super::attach::video_group(&a.url);
@@ -106,6 +108,7 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
                         portrait: a.height > a.width,
                         width: MAX_W / 2.,
                         radius: 0.,
+                        viewer: Some(player_viewer.clone()),
                     },
                     cx,
                 )),
