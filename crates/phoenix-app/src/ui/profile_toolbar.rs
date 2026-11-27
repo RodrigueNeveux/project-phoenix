@@ -708,10 +708,11 @@ pub fn status(
     let interacting = interaction(uid, layout);
     let hover_since = if interacting.is_some() { None } else { crate::ui::states::state(ck).filter(|s| s.0).map(|s| s.1) };
     let open_since = pinned(uid, layout).or(hover_since).filter(|_| can_expand);
-    let mk = |t: &SharedString| crate::ui::emoji_text::status_wrapped(t.clone(), 14. * crate::theme::zoom());
+    let mk = |t: &SharedString| crate::ui::emoji_text::status_wrapped(t.clone(), true);
+    let mk_probe = |t: &SharedString| crate::ui::emoji_text::status_wrapped(t.clone(), false);
     let open_clamp = if unclamped { 1000 } else { OPEN_CLAMP };
-    let probe_clamped = div().absolute().top_0().left_0().w_full().invisible().line_clamp(2).child(mk(&text)).child(measure_height(uid, layout, false));
-    let probe_full = div().absolute().top_0().left_0().w_full().invisible().line_clamp(open_clamp).child(mk(&text)).child(measure_height(uid, layout, true));
+    let probe_clamped = div().absolute().top_0().left_0().w_full().invisible().line_clamp(2).child(mk_probe(&text)).child(measure_height(uid, layout, false));
+    let probe_full = div().absolute().top_0().left_0().w_full().invisible().line_clamp(open_clamp).child(mk_probe(&text)).child(measure_height(uid, layout, true));
     let target = expand_target(fh, cap, unclamped);
     let fold_key = (uid.0, layout);
     let delay = delay_ms(EXPAND_DELAY_MS);

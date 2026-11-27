@@ -135,7 +135,22 @@ pub fn voice_status(
     row.into_any_element()
 }
 
-pub fn status_wrapped(text: SharedString, _font_px: f32) -> AnyElement {
+pub fn emoji_tip(token: &str) -> SharedString {
+    if let Some(c) = crate::media::emoji::parse_custom(token) {
+        return format!(":{}:", c.name).into();
+    }
+    match crate::ui::pickers::emoji::index_of(token).or_else(|| crate::ui::pickers::emoji::index_of(token.trim_end_matches('\u{fe0f}'))) {
+        Some(ix) => format!(":{}:", crate::ui::pickers::emoji::shortcode(ix)).into(),
+        None => SharedString::from(token.to_owned()),
+    }
+}
+
+fn tipped(el: gpui::Div, token: &str, delay: u64, tips: bool) -> gpui::Div {
+    use crate::ui::tooltip::Tipped as _;
+    if tips { el.tip_delayed(crate::ui::tooltip::Body::Plain(emoji_tip(token)), crate::ui::tooltip::Side::Top, delay) } else { el }
+}
+
+pub fn status_wrapped(text: SharedString, tips: bool) -> AnyElement {
     let ranges = crate::richtext::emoji_ranges(&text);
     if ranges.is_empty() {
         return text.into_any_element();
@@ -145,12 +160,8 @@ pub fn status_wrapped(text: SharedString, _font_px: f32) -> AnyElement {
         && text[..ranges[0].0.start].trim().is_empty()
         && text[ranges[0].0.end..].trim().is_empty();
     if emoji_only {
-        return div()
-            .flex()
-            .items_center()
-            .justify_center()
-            .child(crate::media::emoji::emoji_element(&ranges[0].1, 32. * zoom))
-            .into_any_element();
+        let e = div().flex_none().child(crate::media::emoji::emoji_element(&ranges[0].1, 32. * zoom));
+        return div().flex().items_center().justify_center().child(tipped(e, &ranges[0].1, 300, tips)).into_any_element();
     }
     let mut row = div().flex().flex_wrap().items_center();
     let mut at = 0;
@@ -161,7 +172,8 @@ pub fn status_wrapped(text: SharedString, _font_px: f32) -> AnyElement {
     };
     for (r, tok) in &ranges {
         row = words(row, at..r.start);
-        row = row.child(div().flex_none().mr(gpui::px(4. * zoom)).child(crate::media::emoji::emoji_element(tok, 16. * zoom)));
+        let e = div().flex_none().mr(gpui::px(4. * zoom)).child(crate::media::emoji::emoji_element(tok, 16. * zoom));
+        row = row.child(tipped(e, tok, 300, tips));
         at = r.end;
     }
     words(row, at..text.len()).into_any_element()

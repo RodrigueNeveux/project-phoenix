@@ -1022,7 +1022,13 @@ fn sub_text(in_voice: bool, voice_icon: &'static str, bot: bool, sub: Option<Sub
             row = row.child(div().flex_none().font_weight(FontWeight::NORMAL).text_color(c(Palette::TEXT_NORMAL)).child("•"));
         }
         if let Some(e) = emoji {
-            row = row.child(status_emoji(&e, 14.).debug_selector(|| "status-emoji".to_owned()));
+            use crate::ui::tooltip::Tipped as _;
+            let el = status_emoji(&e, 14.).debug_selector(|| "status-emoji".to_owned());
+            row = row.child(if state.is_none() {
+                el.tip_delayed(crate::ui::tooltip::Body::Plain(crate::ui::emoji_text::emoji_tip(&e)), crate::ui::tooltip::Side::Top, 150)
+            } else {
+                el
+            });
         }
         if let Some(t) = state {
             row = row.child(text_el(t).debug_selector(|| "status-text".to_owned()));
