@@ -739,7 +739,7 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
     let color = t(fg);
     let ping: SharedString = match (v.ping_ms, &v.last_error) {
         (_, Some(e)) if matches!(v.status, VoiceStatus::Failed | VoiceStatus::NoRoute) => e.clone().into(),
-        (Some(p), _) => if v.e2ee { crate::t!("voice.ping_e2ee", p = p) } else { crate::t!("voice.ping", p = p) },
+        (Some(p), _) => crate::t!("voice.ping", p = p),
         (None, _) => crate::t!("voice.waiting_server"),
     };
     let noise = prefs().lock().noise_suppression;
@@ -801,23 +801,6 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                                 .text_ellipsis()
                                                 .child(title),
                                         )
-                                        .when(v.e2ee, |d| {
-                                            d.child(
-                                                div()
-                                                    .id("voice-e2ee")
-                                                    .cursor_pointer()
-                                                    .child(asset_icon(SHIELD, 12., t(idx::TEXT_FEEDBACK_POSITIVE)))
-                                                    .tooltip(|window, cx| {
-                                                        gpui_component::tooltip::Tooltip::new(crate::t!("voice.e2ee"))
-                                                            .build(window, cx)
-                                                    })
-                                                    .on_click(cx.listener(|_, _, _, cx| {
-                                                        cx.stop_propagation();
-                                                        POPOUT.with(|p| p.set(Some(Tab::Privacy)));
-                                                        cx.notify();
-                                                    })),
-                                            )
-                                        }),
                                 )
                                 .child(
                                     div()
