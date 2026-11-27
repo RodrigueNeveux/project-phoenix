@@ -272,7 +272,7 @@ pub fn channel(kind: Kind, name: &str, info: &ChannelInfo) -> SharedString {
                 l.push(crate::t!("a11y.unread").to_string());
             }
             if !info.voice_users.is_empty() {
-                l.push(info.voice_users.iter().take(3).map(|s| s.as_ref()).collect::<Vec<_>>().join(", "));
+                l.push(info.voice_users.iter().take(3).map(|s| &**s).collect::<Vec<&str>>().join(", "));
                 let more = info.voice_users.len().saturating_sub(3) as u32;
                 if more > 0 {
                     l.push(crate::t!(plural("a11y.voice_overflow_one", "a11y.voice_overflow_other", more), n = more).to_string());
@@ -323,7 +323,7 @@ pub fn message(p: &MessageParts) -> SharedString {
             out.push(')');
         }
     }
-    let acc: Vec<&str> = p.accessories.iter().map(|s| s.as_ref()).filter(|s| !s.is_empty()).collect();
+    let acc: Vec<&str> = p.accessories.iter().map(|s| &**s).filter(|s| !s.is_empty()).collect();
     if !acc.is_empty() {
         out.push(' ');
         out.push_str(&acc.join(" "));
@@ -393,37 +393,37 @@ mod tests {
     #[test]
     fn guild_labels_follow_the_client_order() {
         let none = MediaState::default();
-        assert_eq!(guild("Aperture", 0, false, none).as_ref(), "Aperture");
-        assert_eq!(guild("Aperture", 0, true, none).as_ref(), "Unread messages, Aperture");
-        assert_eq!(guild("Aperture", 1, true, none).as_ref(), "1 mention, Aperture");
-        assert_eq!(guild("Aperture", 3, false, none).as_ref(), "3 mentions, Aperture");
+        assert_eq!(&*guild("Aperture", 0, false, none), "Aperture");
+        assert_eq!(&*guild("Aperture", 0, true, none), "Unread messages, Aperture");
+        assert_eq!(&*guild("Aperture", 1, true, none), "1 mention, Aperture");
+        assert_eq!(&*guild("Aperture", 3, false, none), "3 mentions, Aperture");
         let voice = MediaState { audio: true, ..Default::default() };
-        assert_eq!(guild("Aperture", 0, true, voice).as_ref(), "Unread messages, Aperture, Voice call active");
+        assert_eq!(&*guild("Aperture", 0, true, voice), "Unread messages, Aperture, Voice call active");
         let both = MediaState { audio: true, active_event: true, ..Default::default() };
-        assert_eq!(guild("A", 0, false, both).as_ref(), "A, Scheduled event Voice call active");
-        assert_eq!(folder("Work", 0).as_ref(), "Work, folder");
-        assert_eq!(folder("Work", 2).as_ref(), "Work, folder , 2 unread mentions");
+        assert_eq!(&*guild("A", 0, false, both), "A, Scheduled event Voice call active");
+        assert_eq!(&*folder("Work", 0), "Work, folder");
+        assert_eq!(&*folder("Work", 2), "Work, folder , 2 unread mentions");
     }
 
     #[test]
     fn channel_labels_match_the_sidebar_links() {
         let plain = ChannelInfo::default();
-        assert_eq!(channel(Kind::Text, "general", &plain).as_ref(), "general (text channel)");
+        assert_eq!(&*channel(Kind::Text, "general", &plain), "general (text channel)");
         let unread = ChannelInfo { unread: true, ..Default::default() };
-        assert_eq!(channel(Kind::Text, "general", &unread).as_ref(), "unread, general (text channel)");
+        assert_eq!(&*channel(Kind::Text, "general", &unread), "unread, general (text channel)");
         let pinged = ChannelInfo { unread: true, mentions: 2, ..Default::default() };
-        assert_eq!(channel(Kind::Announcement, "news", &pinged).as_ref(), "2 mentions, news (announcement channel)");
+        assert_eq!(&*channel(Kind::Announcement, "news", &pinged), "2 mentions, news (announcement channel)");
         let locked = ChannelInfo { unread: true, locked: true, nsfw: true, ..Default::default() };
-        assert_eq!(channel(Kind::Text, "x", &locked).as_ref(), "unread, x (text channel), age-restricted, Private Channel (locked)");
+        assert_eq!(&*channel(Kind::Text, "x", &locked), "unread, x (text channel), age-restricted, Private Channel (locked)");
         let call = ChannelInfo {
             voice_users: ["a", "b", "c", "d", "e"].iter().map(|s| SharedString::from(*s)).collect(),
             ..Default::default()
         };
-        assert_eq!(channel(Kind::Voice, "vc", &call).as_ref(), "vc (voice channel), a, b, c, and 2 others");
+        assert_eq!(&*channel(Kind::Voice, "vc", &call), "vc (voice channel), a, b, c, and 2 others");
         let group = ChannelInfo { members: 3, ..Default::default() };
-        assert_eq!(channel(Kind::GroupDm, "pals", &group).as_ref(), "pals (group message), 3 Members");
-        assert_eq!(channel(Kind::Dm, "bob", &ChannelInfo { mentions: 1, ..Default::default() }).as_ref(), "1 mention, bob (direct message)");
-        assert_eq!(category("Info").as_ref(), "Info (category)");
+        assert_eq!(&*channel(Kind::GroupDm, "pals", &group), "pals (group message), 3 Members");
+        assert_eq!(&*channel(Kind::Dm, "bob", &ChannelInfo { mentions: 1, ..Default::default() }), "1 mention, bob (direct message)");
+        assert_eq!(&*category("Info"), "Info (category)");
         assert_eq!(Kind::of(ChannelKind::Text, true, true), Kind::GroupDm);
         assert_eq!(Kind::of(ChannelKind::Voice, false, false), Kind::Voice);
     }
@@ -432,18 +432,18 @@ mod tests {
     fn message_labels_read_author_content_then_time() {
         let none: [SharedString; 0] = [];
         let p = MessageParts { author: "Yohan", replied_author: None, content: "salut", edited: false, accessories: &none, time: "14:03" };
-        assert_eq!(message(&p).as_ref(), "Yohan , salut , 14:03");
+        assert_eq!(&*message(&p), "Yohan , salut , 14:03");
         let acc = [SharedString::from("Image")];
         let p = MessageParts { author: "Yohan", replied_author: Some("Bob"), content: "", edited: false, accessories: &acc, time: "Today at 14:03" };
-        assert_eq!(message(&p).as_ref(), "Yohan replying to Bob , Image , Today at 14:03");
+        assert_eq!(&*message(&p), "Yohan replying to Bob , Image , Today at 14:03");
         let p = MessageParts { author: "A", replied_author: None, content: "fixed", edited: true, accessories: &none, time: "" };
-        assert_eq!(message(&p).as_ref(), "A , fixed (edited)");
+        assert_eq!(&*message(&p), "A , fixed (edited)");
     }
 
     #[test]
     fn reaction_buttons_name_the_emoji_and_count() {
-        assert_eq!(reaction("❤️", 10, false).as_ref(), "heart, 10 reactions, press to react");
-        assert_eq!(reaction("<:uwu_thumb_up:123>", 1, true).as_ref(), "uwu thumb up, 1 reaction, press to remove your reaction");
+        assert_eq!(&*reaction("❤️", 10, false), "heart, 10 reactions, press to react");
+        assert_eq!(&*reaction("<:uwu_thumb_up:123>", 1, true), "uwu thumb up, 1 reaction, press to remove your reaction");
     }
 
     #[test]
