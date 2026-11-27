@@ -94,3 +94,14 @@ message, `K`), as another account → `Notify("Discord Phoenix", 0, "discord-pho
 {desktop-entry, category=im.received, suppress-sound, urgency=1, image-data 128×128 RGBA circle}, -1)`;
 the fake server's `ActivationToken` + `ActionInvoked` came back as a click on #phoenix with the
 token, then `CloseNotification(1)` when the channel was opened. ✅
+
+Run of 2026-11-27 09:10 (`PROBE_SEND=1 scripts/notify/real_test.sh`, the probe sends its own
+`[Test Phoenix]` message in #phoenix that mentions us): READY summary pending 0 + game 0, no
+restricted schedule; the 9 cues (`message1`, `message3`, `discodo`, voice cues, `call_ringing`) load
+and decode; the message is not shown as us (own message), shown as another account (#phoenix at
+"all messages"), and with the author swapped to another account (mention of us) the popup is shown
+with the `message1` cue; title `⁨Yohan⁩ (⁨#〢💬・phoenix⁩, ⁨📝 ─ ☲☲ Communautaire ☲☲⁩)`, body with
+the mention rendered `⁨@Yohan⁩`, round avatar; the fake server's click came back as
+`Channel(#phoenix)` with its activation token. ✅ The same morning the rail of a `real_shots` render
+matched the official client's rail read over CDP (same folders, no mention badge, no Home badge,
+voice icons on the same servers).
