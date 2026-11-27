@@ -276,6 +276,7 @@ mod.kick_body: "Veux-tu vraiment expulser @{name} de {guild} ? Ce membre pourra 
 mod.delete_history: "SUPPRIMER L'HISTORIQUE DES MESSAGES"
 mod.ban_title: "Bannir « {name} »"
 mod.ban: "Bannir"
+common.create: "Créer"
 mod.ban_body: "Veux-tu vraiment bannir @{name} de {guild} ?"
 groupdm.none: "Aucun ami trouvé qui ne soit pas déjà dans ce MP."
 groupdm.create_group: "Créer un groupe privé"

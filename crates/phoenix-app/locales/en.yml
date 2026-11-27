@@ -276,6 +276,7 @@ mod.kick_body: "Are you sure you want to kick @{name} from {guild}? They will be
 mod.delete_history: "DELETE MESSAGE HISTORY"
 mod.ban_title: "Ban '{name}'"
 mod.ban: "Ban"
+common.create: "Create"
 mod.ban_body: "Are you sure you want to ban @{name} from {guild}?"
 groupdm.none: "No friends found that are not already in this DM."
 groupdm.create_group: "Create Group DM"
