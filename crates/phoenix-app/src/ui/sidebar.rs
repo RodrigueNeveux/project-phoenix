@@ -901,10 +901,14 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                         None => a.stub(&stub, cx),
                     })
                 })
-                .child({
-                    let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
-                    let hover = hero.is_some() && !selected;
-                    icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover("quests-row", |s| s.text_color(t(idx::ICON_STRONG))))
+                .child(match i {
+                    // The user's own drawings for the home shortcuts (assets/shortcuts).
+                    Icon::Friends | Icon::Nitro | Icon::Shop | Icon::Quests => crate::assets::shortcut_icon(id, 20.).into_any_element(),
+                    _ => {
+                        let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
+                        let hover = hero.is_some() && !selected;
+                        icon(i, 20. * crate::theme::zoom(), t(base)).when(hover, |s| s.group_hover("quests-row", |s| s.text_color(t(idx::ICON_STRONG)))).into_any_element()
+                    }
                 })
                 .child(div().flex_1().min_w_0().text_ellipsis().child(label))
                 .when(quest.onboarding, |d| d.child(text_badge(crate::t!("dm.quests_new"), idx::BADGE_PRIMARY_BACKGROUND, idx::BADGE_PRIMARY_TEXT)))
