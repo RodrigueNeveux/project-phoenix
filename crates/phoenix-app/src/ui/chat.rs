@@ -942,8 +942,8 @@ pub(crate) fn server_tag_chip(tag: &(SharedString, Option<SharedString>), in_rep
         .child(tag.0.clone())
 }
 
-pub(crate) fn role_icon(url: SharedString) -> gpui::Img {
-    img(url).flex_none().size(z(20.)).ml(z(4.)).object_fit(gpui::ObjectFit::Contain)
+pub(crate) fn role_icon((url, name): (SharedString, SharedString)) -> gpui::Div {
+    div().flex_none().size(z(20.)).ml(z(4.)).child(img(url).size_full().object_fit(gpui::ObjectFit::Contain)).tip(name)
 }
 
 fn new_member_badge(id: Id) -> gpui::Stateful<gpui::Div> {

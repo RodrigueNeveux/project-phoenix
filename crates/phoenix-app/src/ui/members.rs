@@ -768,18 +768,26 @@ pub fn member_row_in(
                                 })
                                 .when(user.is_some_and(|u| u.bot), |d| d.child(bot_tag_px(user.is_some_and(|u| u.verified_bot))))
                                 .when(owner, |d| {
-                                    d.child(gpui::svg().path(crate::icons::path("crown")).size(z(14.)).flex_none().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
-                                })
-                                .when(mem.premium_since.is_some(), |d| {
+                                    use crate::ui::tooltip::Tipped as _;
                                     d.child(
-                                        gpui::svg()
-                                            .path(crate::icons::path("chat/boost"))
-                                            .size(z(14.))
+                                        div()
                                             .flex_none()
+                                            .size(z(14.))
+                                            .child(gpui::svg().path(crate::icons::path("crown")).size_full().text_color(c(tok(idx::TEXT_FEEDBACK_WARNING))))
+                                            .tip(crate::t!("members.owner_tip")),
+                                    )
+                                })
+                                .when_some(mem.premium_since, |d, since| {
+                                    use crate::ui::tooltip::Tipped as _;
+                                    d.child(
+                                        div()
+                                            .flex_none()
+                                            .size(z(14.))
                                             .ml(z(3.))
                                             .relative()
                                             .top(z(1.))
-                                            .text_color(c(tok(idx::GUILD_BOOSTING_PINK))),
+                                            .child(gpui::svg().path(crate::icons::path("chat/boost")).size_full().text_color(c(tok(idx::GUILD_BOOSTING_PINK))))
+                                            .tip(crate::t!("members.boosting_since", date = crate::presence::format_date(since))),
                                     )
                                 }),
                         )

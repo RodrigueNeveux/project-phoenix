@@ -1122,7 +1122,7 @@ pub(super) fn badges_row(p: Option<&Profile>) -> Option<Div> {
             .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
             .border_1()
             .border_color(c(tok(idx::BORDER_MUTED)))
-            .children(b.iter().map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none()))
+            .children(b.iter().enumerate().map(|(n, b)| crate::ui::profile::badge_icon(b, n)))
     })
 }
 

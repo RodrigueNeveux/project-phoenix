@@ -235,13 +235,21 @@ pub struct Profile {
     pub mutual_friends_count: usize,
     pub mutual_friends: Vec<crate::model::User>,
     pub mutual_guild_ids: Vec<Id>,
-    pub badges: Vec<(SharedString, SharedString)>,
+    pub badges: Vec<Badge>,
     pub theme: Option<(u32, u32)>,
     pub effect_sku: Option<u64>,
     pub frame_sku: Option<u64>,
     pub look_skus: Vec<u64>,
     pub discriminator: Option<SharedString>,
     pub connections: Vec<Connection>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Badge {
+    pub id: SharedString,
+    pub description: SharedString,
+    pub icon: SharedString,
+    pub link: Option<SharedString>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -349,8 +357,13 @@ pub fn profile_from_api(p: &phoenix_api::rest::profile::UserProfile, note: Strin
             .iter()
             .filter_map(|b| {
                 let icon = b.get("icon")?.as_str()?;
-                let desc = b.get("description").and_then(Value::as_str).unwrap_or_default();
-                Some((desc.to_owned().into(), format!("https://cdn.discordapp.com/badge-icons/{icon}.png").into()))
+                let text = |k: &str| b.get(k).and_then(Value::as_str).unwrap_or_default().to_owned();
+                Some(Badge {
+                    id: text("id").into(),
+                    description: text("description").into(),
+                    icon: format!("https://cdn.discordapp.com/badge-icons/{icon}.png").into(),
+                    link: b.get("link").and_then(Value::as_str).filter(|l| !l.is_empty()).map(|l| l.to_owned().into()),
+                })
             })
             .collect(),
         theme: [p.guild_member_profile.as_ref(), p.user_profile.as_ref()]

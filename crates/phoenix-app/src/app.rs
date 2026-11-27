@@ -1430,13 +1430,14 @@ impl PhoenixApp {
         self.author_role_style_in(self.selected_guild, user)
     }
 
-    pub fn author_role_icon_in(&self, guild: Option<Id>, user: Id) -> Option<SharedString> {
+    pub fn author_role_icon_in(&self, guild: Option<Id>, user: Id) -> Option<(SharedString, SharedString)> {
         let g = guild?;
         let m = crate::member_index::find(self.members.get(&g)?, g, user)?;
-        self.roles.get(&g)?.iter().filter(|r| m.roles.contains(&r.id) && r.icon.is_some()).max_by_key(|r| r.position)?.icon.clone()
+        let r = self.roles.get(&g)?.iter().filter(|r| m.roles.contains(&r.id) && r.icon.is_some()).max_by_key(|r| r.position)?;
+        Some((r.icon.clone()?, r.name.clone()))
     }
 
-    pub fn author_role_icon(&self, user: Id) -> Option<SharedString> {
+    pub fn author_role_icon(&self, user: Id) -> Option<(SharedString, SharedString)> {
         self.author_role_icon_in(self.selected_guild, user)
     }
 

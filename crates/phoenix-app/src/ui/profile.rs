@@ -317,6 +317,7 @@ pub(crate) fn activity_block(a: &Activity, big: bool, bot: bool) -> Option<AnyEl
 }
 
 pub(crate) fn member_since_row(app: &PhoenixApp, p: &Profile, guild: Option<Id>) -> Div {
+    use crate::ui::tooltip::Tipped as _;
     div()
         .flex()
         .items_center()
@@ -329,12 +330,18 @@ pub(crate) fn member_since_row(app: &PhoenixApp, p: &Profile, guild: Option<Id>)
                 .flex()
                 .items_center()
                 .gap(z(4.))
-                .child(gpui::svg().path(crate::icons::path("discord-logo")).size(z(16.)).flex_none().text_color(c(tok(idx::TEXT_SUBTLE))))
+                .child(
+                    div()
+                        .flex_none()
+                        .size(z(16.))
+                        .child(gpui::svg().path(crate::icons::path("discord-logo")).size_full().text_color(c(tok(idx::TEXT_SUBTLE))))
+                        .tip(crate::t!("profile.since_discord")),
+                )
                 .child(format_date(p.created)),
         )
         .when_some(p.joined, |d, j| {
             let gicon = guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)).map(|g| {
-                crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16.)
+                div().flex_none().child(crate::ui::invite::guild_icon(Some(&g.icon), &g.name, 16.)).tip(g.name.clone())
             });
             d.child(div().size(z(4.)).rounded_full().bg(c(tok(idx::TEXT_DEFAULT))))
                 .child(div().flex().items_center().gap(z(4.)).children(gicon).child(format_date(j)))
@@ -522,11 +529,30 @@ fn badges(i: &Info) -> Option<Div> {
                 let (shown, hidden) = crate::ui::profile_bio::split_badges(b, i.user.as_deref().is_some_and(|u| u.bot));
                 shown
                     .iter()
-                    .map(|(_, icon)| img(icon.clone()).size(z(20.)).flex_none().into_any_element())
+                    .enumerate()
+                    .map(|(n, b)| badge_icon(b, n).into_any_element())
                     .chain((hidden > 0).then(|| crate::ui::profile_bio::overflow_slot(hidden).into_any_element()))
                     .collect::<Vec<_>>()
             })
     })
+}
+
+pub(crate) fn badge_icon(b: &crate::presence::Badge, n: usize) -> gpui::Stateful<Div> {
+    use crate::ui::tooltip::Tipped as _;
+    let link = b.link.clone();
+    div()
+        .id(("profile-badge", n as u64))
+        .flex_none()
+        .size(z(20.))
+        .when(link.is_some(), |d| d.cursor_pointer())
+        .child(img(b.icon.clone()).size_full())
+        .tip_badge(crate::ui::tooltip::BadgeTip { icon: b.icon.clone(), eyebrow: None, title: b.description.clone(), body: None })
+        .on_click(move |_, _, cx| {
+            if let Some(l) = &link {
+                cx.stop_propagation();
+                cx.open_url(l);
+            }
+        })
 }
 
 pub(crate) fn name_block(i: &Info, big: bool, trailing: Option<AnyElement>) -> Div {
