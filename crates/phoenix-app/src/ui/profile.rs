@@ -361,7 +361,19 @@ fn connections_section(list: &[crate::presence::Connection]) -> Option<Div> {
                 .flex()
                 .items_center()
                 .gap(z(8.))
-                .child(div().flex_none().size(z(24.)).rounded(z(8.)).bg(gpui::white()).flex().items_center().justify_center().children(icon))
+                .child({
+                    use crate::ui::tooltip::Tipped as _;
+                    div()
+                        .flex_none()
+                        .size(z(24.))
+                        .rounded(z(8.))
+                        .bg(gpui::white())
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .children(icon)
+                        .tip(SharedString::from(crate::ui::settings::connections::platform_label(&a.kind).to_string()))
+                })
                 .child(
                     div()
                         .min_w_0()
