@@ -33,6 +33,7 @@ thread_local! {
     static POPOUT: Cell<Option<Tab>> = const { Cell::new(None) };
     static AUDIO_MENU: RefCell<Option<AudioMenu>> = const { RefCell::new(None) };
     static AUDIO_FULL: Cell<bool> = const { Cell::new(false) };
+    static AUDIO_GROUP: Cell<[Option<gpui::Bounds<Pixels>>; 2]> = const { Cell::new([None; 2]) };
     static CAMERA_MENU: RefCell<Option<(Point<Pixels>, Vec<String>)>> = const { RefCell::new(None) };
     static CAMERA_PICK: RefCell<Option<String>> = const { RefCell::new(None) };
     static FLAGS: RefCell<HashMap<Id, VoiceFlags>> = RefCell::new(HashMap::new());
@@ -235,9 +236,24 @@ pub fn audio_button(
     };
     div()
         .group(group.clone())
+        .relative()
         .flex()
         .flex_none()
         .gap(z(1.))
+        .child(
+            gpui::canvas(
+                move |b, _, _| {
+                    AUDIO_GROUP.with(|g| {
+                        let mut all = g.get();
+                        all[kind as usize] = Some(b);
+                        g.set(all);
+                    })
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_full(),
+        )
         .child(
             base(crate::ui::states::track(div().id(SharedString::from(format!("audio-btn-{kind:?}"))), hk))
                 .w(z(32.))
@@ -251,17 +267,20 @@ pub fn audio_button(
                 .w(z(16.))
                 .rounded_r(z(8.))
                 .when(open && !red, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))
-                .child(icon(
-                    Icon::Chevron,
-                    16. * crate::theme::zoom(),
-                    t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE }),
-                ))
+                .child(
+                    gpui::svg()
+                        .path(crate::icons::path(if open { "chevron-up" } else { "chevron" }))
+                        .size(z(16.))
+                        .flex_none()
+                        .text_color(t(if red { idx::ICON_FEEDBACK_CRITICAL } else { idx::ICON_SUBTLE })),
+                )
                 .tip(match kind {
                     Audio::Mic => crate::t!("voice.input_options"),
                     Audio::Deafen => crate::t!("voice.output_options"),
                 })
                 .on_click(cx.listener(move |_, ev: &gpui::ClickEvent, _, cx| {
-                    toggle_audio_menu(kind, ev.position());
+                    let at = AUDIO_GROUP.with(|g| g.get()[kind as usize]).map_or(ev.position(), |b| gpui::point(b.origin.x, b.origin.y - z(4.)));
+                    toggle_audio_menu(kind, at);
                     cx.notify();
                 })),
         )
@@ -522,7 +541,7 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, deafened: b
     if full {
         return context_menu::render_anchored(pos - gpui::point(px(0.), px(8.)), gpui::Anchor::BottomCenter, items, dismiss);
     }
-    context_menu::render(pos - gpui::point(px(0.), px(200.)), items, dismiss)
+    context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
 }
 
 pub fn ptt_toggled(on: bool) -> crate::voice::prefs::InputMode {
