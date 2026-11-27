@@ -329,7 +329,34 @@ pub fn is_main_window(window: &gpui::Window) -> bool {
     with(|s| s.window) == Some(window.window_handle())
 }
 
-pub const HELP_CENTER_URL: &str = "https://support.discord.com";
+pub const SUPPORT_GUILD: Id = Id(1_574_895_284_901_777_448);
+pub const SUPPORT_CHANNEL: Id = Id(1_574_895_979_386_380_461);
+pub const SUPPORT_INVITE: &str = "https://discord.gg/uF3wtckHkN";
+
+pub fn support_is_joined(mut guilds: impl Iterator<Item = Id>) -> bool {
+    guilds.any(|g| g == SUPPORT_GUILD)
+}
+
+impl PhoenixApp {
+    pub fn open_support(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        if support_is_joined(self.guilds.iter().map(|g| g.id)) {
+            self.go_to_invite(SUPPORT_GUILD, Some(SUPPORT_CHANNEL), cx);
+            return;
+        }
+        self.open_add_server(window, cx);
+        ui::add_server::set_step(ui::add_server::Step::Join);
+        if let Some(input) = self.nav.invite_input.clone() {
+            input.update(cx, |s, cx| {
+                s.set_value(SUPPORT_INVITE, window, cx);
+                s.focus(window, cx);
+            });
+            self.preview_invite(cx);
+        } else {
+            cx.open_url(SUPPORT_INVITE);
+        }
+        cx.notify();
+    }
+}
 
 pub fn open_help() {
     with(|s| s.help_open = true);
@@ -580,7 +607,7 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, window: &gpui::Wind
             crate::ui::pickers::soundboard::toggle(a, w, cx);
         }
     }))
-    .on_action(cx.listener(|_, _: &GetHelp, _, cx| cx.open_url(HELP_CENTER_URL)))
+    .on_action(cx.listener(|a, _: &GetHelp, w, cx| a.open_support(w, cx)))
     .on_action(cx.listener(|a, _: &QuickSwitcherAlt, w, cx| a.open_switcher(w, cx)))
     .on_action(cx.listener(|a, _: &JumpToPresent, w, cx| {
         a.escape_stack(w, cx);
@@ -835,6 +862,14 @@ pub fn render_help(_app: &PhoenixApp, window: &mut gpui::Window, cx: &mut Contex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn support_goes_to_the_channel_only_for_members() {
+        assert!(support_is_joined([Id(1), SUPPORT_GUILD].into_iter()));
+        assert!(!support_is_joined([Id(1), Id(2)].into_iter()));
+        assert!(!support_is_joined(std::iter::empty()));
+        assert_eq!(crate::ui::home::data::invite_code(SUPPORT_INVITE).as_deref(), Some("uF3wtckHkN"));
+    }
 
     #[test]
     fn zoom_steps_follow_the_client() {

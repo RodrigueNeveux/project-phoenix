@@ -1044,7 +1044,8 @@ fn main() -> anyhow::Result<()> {
                     "saved" => T::Saved,
                     "reminders" => T::Reminders,
                     "scheduled" => T::Scheduled,
-                    _ => T::Mentions,
+                    "mentions" => T::Mentions,
+                    _ => T::default(),
                 };
                 app.parity.inbox.open = false;
                 app.toggle_inbox(cx);
@@ -1064,6 +1065,9 @@ fn main() -> anyhow::Result<()> {
                 cx.notify();
             })
         })?;
+    }
+    if std::env::var("PHX_VIEW").as_deref() == Ok("support") {
+        cx.update_window(win.into(), |_, window, cx| v.update(cx, |app, cx| app.open_support(window, cx)))?;
     }
     cx.update_window(win.into(), |_, window, cx| {
         window.resize(size(px(w), px(h)));

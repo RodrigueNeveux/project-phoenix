@@ -151,8 +151,8 @@ pub fn from_gateway(ev: &GatewayEvent) -> Option<ParityEvent> {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum InboxTab {
-    #[default]
     Mentions,
+    #[default]
     Unreads,
     Saved,
     Reminders,

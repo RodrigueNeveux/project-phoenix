@@ -2419,6 +2419,13 @@ mod tests {
     }
 
     #[test]
+    fn opens_on_the_unreads_tab() {
+        let i = crate::commands::state::InboxState::default();
+        assert_eq!(i.tab, crate::commands::state::InboxTab::Unreads);
+        assert_eq!(TABS[0].0, crate::commands::state::InboxTab::Unreads);
+    }
+
+    #[test]
     fn facepile_pill() {
         assert_eq!(facepile_more(3, 3), None);
         assert_eq!(facepile_more(3, 0), None);

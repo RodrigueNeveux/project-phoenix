@@ -209,8 +209,8 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                             .rounded(z(m::TITLE_BAR_ITEM_RADIUS))
                             .occlude()
                             .cursor_pointer()
-                            .hover(|s| s.bg(c(tok(idx::BACKGROUND_FEEDBACK_POSITIVE))))
-                            .child(icon(Icon::Download, 18. * zoom(), c(tok(idx::ICON_FEEDBACK_POSITIVE))))
+                            .hover(|s| s.bg(c(tok(idx::BACKGROUND_FEEDBACK_WARNING))))
+                            .child(icon(Icon::Download, 18. * zoom(), c(tok(idx::ICON_FEEDBACK_WARNING))))
                             .tip(crate::t!("update.titlebar_tip"))
                             .on_click(cx.listener(|_, _, w, cx| {
                                 crate::actions::open_modal(crate::ui::modals::Modal::Update, Some(w));
@@ -222,7 +222,7 @@ pub fn render(app: &PhoenixApp, window: &gpui::Window, cx: &mut Context<PhoenixA
                     bar_button("title-inbox", Icon::Inbox, app.parity.inbox.open, crate::t!("inbox.title"))
                         .on_click(cx.listener(|a, _, _, cx| a.toggle_inbox(cx))),
                 )
-                .child(bar_button("title-help", Icon::Help, false, crate::t!("title.help")).on_click(|_, _, cx| cx.open_url(crate::shortcuts::HELP_CENTER_URL)))
+                .child(bar_button("title-help", Icon::Help, false, crate::t!("title.support")).on_click(cx.listener(|a, _, w, cx| a.open_support(w, cx))))
                 .when(client_decorated(window), |d| d.child(win_buttons(cx))),
         )
 }
