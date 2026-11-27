@@ -1,0 +1,49 @@
+name: Go Live platform checks
+
+on:
+  push:
+    branches: [ci-go-live-dave-and-cursor]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  test:
+    name: Go Live on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: 330221232e8673901789565642cca32b62e5f8c1
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libxcb1-dev libfontconfig-dev libssl-dev libasound2-dev libopus-dev pkg-config ffmpeg
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: |
+          brew install autoconf automake libtool
+          command -v ffmpeg >/dev/null || brew install ffmpeg
+      - uses: Swatinem/rust-cache@v2.9.3
+        with:
+          cache-on-failure: true
+      - name: Verify H.264 test dependencies
+        run: |
+          ffmpeg -hide_banner -decoders | grep -E '[[:space:]]h264[[:space:]]'
+          ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc=s=320x180:r=10 -pix_fmt yuv420p -c:v libx264 -frames:v 12 -f null -
+      - run: cargo test --locked -p phoenix-voice --lib
+      - run: cargo check --locked -p phoenix-app --bin discord-phoenix
+
