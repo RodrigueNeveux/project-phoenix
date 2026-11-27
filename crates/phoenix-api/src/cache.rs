@@ -9,6 +9,7 @@ use crate::gateway::GatewayEvent;
 use crate::models::*;
 
 pub const DEFAULT_MESSAGE_CAP: usize = 200;
+pub const MESSAGE_CHANNEL_CAP: usize = 96;
 
 #[derive(Default)]
 struct State {
@@ -46,6 +47,16 @@ impl Default for Cache {
 impl std::fmt::Debug for Cache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Cache").field("version", &self.version()).finish_non_exhaustive()
+    }
+}
+
+fn trim_message_channels(messages: &mut HashMap<ChannelId, VecDeque<Arc<Message>>>, keep: ChannelId) {
+    if messages.len() <= MESSAGE_CHANNEL_CAP {
+        return;
+    }
+    let oldest = messages.iter().filter(|(c, _)| **c != keep).min_by_key(|(_, q)| q.back().map(|m| m.id)).map(|(c, _)| *c);
+    if let Some(c) = oldest {
+        messages.remove(&c);
     }
 }
 
@@ -192,6 +203,7 @@ impl Cache {
         while q.len() > cap {
             q.pop_front();
         }
+        trim_message_channels(&mut s.messages, channel);
         drop(s);
         self.bump();
     }
@@ -454,10 +466,12 @@ impl Cache {
                 {
                     q.remove(i);
                 }
+                let channel = m.channel_id;
                 upsert_message(q, m);
                 while q.len() > cap {
                     q.pop_front();
                 }
+                trim_message_channels(&mut s.messages, channel);
             }
             GatewayEvent::MessageUpdate(v) => {
                 let (Some(cid), Some(mid)) = (snowflake_field(v, "channel_id"), snowflake_field(v, "id")) else { return false };

@@ -151,17 +151,20 @@ pub fn load(dir: &Path, fontconfig: u64) -> Option<Loaded> {
     let build = dir.join(&m.build);
     let mut blobs = Vec::with_capacity(m.blobs.len());
     for o in &m.blobs {
-        let b = match o {
-            Origin::Built { file, len } => {
-                let b = std::fs::read(build.join(file)).ok()?;
-                if b.len() as u64 != *len {
-                    return None;
-                }
-                b
-            }
-            Origin::Source(p) => std::fs::read(p).ok()?,
+        let path = match o {
+            Origin::Built { file, .. } => build.join(file),
+            Origin::Source(p) => Path::new(p).to_path_buf(),
         };
-        blobs.push(Cow::Owned(b));
+        if let Origin::Built { len, .. } = o
+            && std::fs::metadata(&path).ok()?.len() != *len
+        {
+            return None;
+        }
+        let b: Cow<'static, [u8]> = match crate::memory::map_file(&path) {
+            Some(m) => Cow::Borrowed(m),
+            None => Cow::Owned(std::fs::read(&path).ok()?),
+        };
+        blobs.push(b);
     }
     Some(Loaded { chain: m.chain, web_noto: m.web_noto, blobs })
 }

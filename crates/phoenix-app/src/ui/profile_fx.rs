@@ -12,6 +12,7 @@ use crate::{app::PhoenixApp, ui::settings::collectibles::{Anchor, Collectible, F
 
 const MAX_W: u32 = 450;
 const MAX_ANIMS: usize = 4;
+const IDLE_DROP: Duration = Duration::from_secs(3);
 const INTRO_MS: u64 = 500;
 
 #[derive(Default)]
@@ -72,6 +73,20 @@ fn decode(bytes: &[u8], still: bool) -> anyhow::Result<RenderImage> {
         })
         .collect::<Vec<_>>();
     Ok(RenderImage::new(frames))
+}
+
+pub fn sweep(cx: &mut App) {
+    let Some(s) = cx.try_global::<Store>() else { return };
+    if !s.anims.values().any(|(_, t)| t.elapsed() > IDLE_DROP) {
+        return;
+    }
+    let s = cx.global_mut::<Store>();
+    let stale: Vec<SharedString> = s.anims.iter().filter(|(_, (_, t))| t.elapsed() > IDLE_DROP).map(|(k, _)| k.clone()).collect();
+    let dropped: Vec<Arc<RenderImage>> = stale.iter().filter_map(|k| s.anims.remove(k)?.0).collect();
+    for img in dropped {
+        cx.drop_image(img, None);
+    }
+    crate::memory::release_soon();
 }
 
 fn anim(src: &SharedString, still: bool, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderImage>> {

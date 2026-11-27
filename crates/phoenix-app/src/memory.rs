@@ -78,6 +78,27 @@ fn trim() {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn map_file(path: &std::path::Path) -> Option<&'static [u8]> {
+    use std::os::fd::AsRawFd;
+    let file = std::fs::File::open(path).ok()?;
+    let len = usize::try_from(file.metadata().ok()?.len()).ok().filter(|l| *l > 0)?;
+    // SAFETY: a read-only private mapping of a file we just opened; the mapping is never unmapped,
+    // so the slice stays valid for the rest of the process even after the descriptor is closed.
+    unsafe {
+        let ptr = libc::mmap(std::ptr::null_mut(), len, libc::PROT_READ, libc::MAP_PRIVATE, file.as_raw_fd(), 0);
+        if ptr == libc::MAP_FAILED {
+            return None;
+        }
+        Some(std::slice::from_raw_parts(ptr.cast::<u8>(), len))
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn map_file(_: &std::path::Path) -> Option<&'static [u8]> {
+    None
+}
+
 #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
 fn tune() {}
 
