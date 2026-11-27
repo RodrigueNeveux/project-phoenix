@@ -1292,6 +1292,9 @@ pub(crate) fn message(
             })
     });
 
+    let show_toolbar = crate::ui::avatar_deco::hovered(crate::ui::avatar_deco::hover_key(2, id.0))
+        || app.chat.menu.is_some_and(|m| m.msg == id)
+        || crate::shortcuts::message::focused().is_some_and(|f| f.1 == id);
     let base = div()
         .id(("msg", id.0))
         .group("msg")
@@ -1468,7 +1471,7 @@ pub(crate) fn message(
             .child(content)
     }
     .when(!compact && msg.thread.is_some(), |d| d.child(message_ext::thread_spine(if msg.reply_to.is_some() { 70. } else { 48. })))
-    .child(message_ext::toolbar(app, entity, msg, app.chat.shift_held));
+    .when(show_toolbar, |d| d.child(message_ext::toolbar(app, entity, msg, app.chat.shift_held)));
     let new_marker = app.chat.unread_marker.is_some_and(|(_, m)| m == id);
     let gap = if !r.group_start { 0. } else if compact { 4. } else { 16. * crate::theme::font_scale() };
     row_wrapper()
@@ -1806,6 +1809,7 @@ pub(crate) fn media_image_with(
         width: ow,
         height: oh,
         author: media::current_author(),
+        video: None,
     };
     let mut im = img(src.clone());
     if let Some(cache) = media::lru::chat() {
@@ -2179,6 +2183,37 @@ fn embed_text(entity: &Entity<PhoenixApp>, key: Id, bi: usize, t: &RichText, emo
     push(row, last..t.text.len())
 }
 
+pub fn is_direct_video(url: &str) -> bool {
+    let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
+    url.starts_with("https://") && [".mp4", ".webm", ".mov", ".m4v"].iter().any(|x| path.ends_with(x))
+}
+
+fn direct_video(e: &Embed) -> Option<crate::model::EmbedMedia> {
+    e.video.clone().filter(|v| e.kind.as_deref() == Some("video") && is_direct_video(&v.url) && video_player::supported())
+}
+
+fn embed_player(v: &crate::model::EmbedMedia, poster: SharedString, size: (f32, f32), cx: &App) -> AnyElement {
+    div()
+        .mt(z(8.))
+        .w(z(size.0))
+        .max_w_full()
+        .aspect_ratio(size.0 / size.1.max(1.))
+        .child(video_player::attachment(
+            video_player::Spec {
+                key: v.url.clone(),
+                src: v.url.clone(),
+                poster,
+                layout: video_player::Layout::Single,
+                portrait: v.height > v.width,
+                width: size.0,
+                radius: 4.,
+                viewer: None,
+            },
+            cx,
+        ))
+        .into_any_element()
+}
+
 pub(crate) fn embed(app: &PhoenixApp, entity: &Entity<PhoenixApp>, e: &Embed, cx: &App) -> AnyElement {
     let has_text = e.title.is_some() || e.description.is_some() || e.author.is_some() || !e.fields.is_empty();
     let media_only = e.kind.as_deref() == Some("gifv") || (e.kind.as_deref() == Some("image") && !has_text);
@@ -2399,6 +2434,10 @@ pub(crate) fn embed(app: &PhoenixApp, entity: &Entity<PhoenixApp>, e: &Embed, cx
                             };
                             let size = media::fit(sw, sh, mw, mh);
                             let original = m.url.clone();
+                            if let Some(v) = direct_video(e) {
+                                let poster = media::video_poster(&m.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
+                                return d.child(embed_player(&v, poster, size, cx));
+                            }
                             let video = (e.kind.as_deref() == Some("video")).then(|| e.url.clone().unwrap_or_else(|| m.url.clone()));
                             d.child(
                                 div()
@@ -2407,6 +2446,11 @@ pub(crate) fn embed(app: &PhoenixApp, entity: &Entity<PhoenixApp>, e: &Embed, cx
                                     .child(media_image(&m.url, original, "".into(), (m.width, m.height), size).rounded(z(4.)))
                                     .children(video.map(attach::video_embed_actions)),
                             )
+                        })
+                        .when_some(direct_video(e).filter(|_| e.image.is_none() && e.thumbnail.is_none()), |d, v| {
+                            let (mw, mh) = embed_rules::media_max(e);
+                            let size = media::fit(v.width, v.height, mw, mh);
+                            d.child(embed_player(&v, media::video_poster(&v.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32), size, cx))
                         })
                         .when(gallery.len() >= 2, |d| {
                             let refs: Vec<&crate::model::Attachment> = gallery.iter().collect();

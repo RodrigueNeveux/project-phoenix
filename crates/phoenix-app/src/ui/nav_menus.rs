@@ -35,6 +35,10 @@ thread_local! {
     static LEVELS: RefCell<HashMap<Scope, u8>> = RefCell::new(HashMap::new());
 }
 
+pub fn is_open() -> bool {
+    OPEN.with(|o| o.borrow().is_some())
+}
+
 pub fn open(target: Target, pos: Point<Pixels>, window: &mut Window) {
     OPEN.with(|o| *o.borrow_mut() = Some((target, pos)));
     window.refresh();

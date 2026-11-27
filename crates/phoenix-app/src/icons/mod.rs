@@ -16,8 +16,19 @@ use parking_lot::RwLock;
 
 pub use names::MAP as NAMES;
 
+thread_local! {
+    static PATHS: std::cell::RefCell<HashMap<Box<str>, SharedString>> = std::cell::RefCell::new(HashMap::new());
+}
+
 pub fn path(name: &str) -> SharedString {
-    format!("icons/{name}.svg").into()
+    PATHS.with(|m| {
+        if let Some(p) = m.borrow().get(name) {
+            return p.clone();
+        }
+        let p: SharedString = format!("icons/{name}.svg").into();
+        m.borrow_mut().insert(name.into(), p.clone());
+        p
+    })
 }
 
 fn store() -> &'static RwLock<HashMap<String, Arc<[u8]>>> {

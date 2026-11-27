@@ -120,6 +120,16 @@ fn item_ex(title: SharedString, desc: Option<AnyElement>, trailing: Option<AnyEl
         }))
 }
 
+fn select_width(opts: &[SharedString], cx: &gpui::App) -> f32 {
+    let ts = cx.text_system();
+    let font = ts.resolve_font(&crate::richtext::ui_font());
+    let longest = opts
+        .iter()
+        .map(|o| o.chars().map(|ch| ts.advance(font, gpui::px(16.), ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum::<f32>())
+        .fold(0., f32::max);
+    (longest + 16. + 24. + 8.).max(200.) + 48.
+}
+
 fn get_bool(app: &PhoenixApp, id: &str, b: Bind) -> bool {
     match b {
         Bind::Ui(d) => app.settings.as_ref().and_then(|s| s.toggles.get(id).copied()).unwrap_or(d),
@@ -266,25 +276,26 @@ fn dropdown_with(
             .border_1()
             .border_color(c(tok(idx::BORDER_SUBTLE)))
             .bg(c(tok(idx::BACKGROUND_SURFACE_HIGHER)))
-            .shadow_lg()
+            .shadow(vec![gpui::BoxShadow { color: gpui::hsla(0., 0., 0., 0.16), offset: gpui::point(z(0.), z(2.)), blur_radius: z(8.), spread_radius: z(0.), inset: false }])
             .occlude()
             .children(opts.into_iter().enumerate().map(|(i, o)| {
                 let f = on_pick.clone();
                 div()
                     .id(eid(format!("sel-{id}-{i}")))
                     .h(z(40.))
-                    .px(z(8.))
+                    .pl(z(8.))
+                    .pr(z(4.))
+                    .gap(z(4.))
                     .rounded(z(4.))
                     .flex()
                     .items_center()
                     .justify_between()
                     .cursor_pointer()
-                    .when(i == cur, |d| d.bg(c(tok(idx::INTERACTIVE_BACKGROUND_SELECTED))))
-                    .hover(|s| s.bg(c(tok(idx::INTERACTIVE_BACKGROUND_HOVER))))
+                    .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_NORMAL))))
                     .on_click(cx.listener(move |a, _, _, cx| f(a, i, cx)))
                     .child(div().text_size(z(16.)).line_height(z(20.)).text_color(c(tok(idx::TEXT_STRONG))).child(o))
                     .when(i == cur, |d| {
-                        d.child(gpui::svg().path(crate::icons::path("check")).size(z(16.)).text_color(c(tok(idx::CONTROL_BRAND_FOREGROUND_NEW))))
+                        d.child(gpui::svg().path(crate::icons::path("check")).size(z(20.)).flex_none().text_color(c(tok(idx::TEXT_STRONG))))
                     })
             }));
         wrap = wrap.child(gpui::deferred(list).with_priority(2));
@@ -532,9 +543,10 @@ fn render_block(app: &PhoenixApp, b: &'static B, out: &mut Vec<AnyElement>, cx: 
             let cur = get_pick(app, id, *p);
             let (id, p) = (*id, *p);
             let opts: Vec<SharedString> = opts.iter().map(|o| tr(o)).collect();
-            let dd = dropdown(app, id, opts, cur, 280., move |a, i, cx| set_pick(a, id, p, i, cx), cx);
+            let width = select_width(&opts, cx);
+            let dd = dropdown(app, id, opts, cur, width, move |a, i, cx| set_pick(a, id, p, i, cx), cx);
             let desc = (!d.is_empty()).then(|| desc_text(tr(d)).into_any_element());
-            out.push(item(tr(t), desc, Some(dd), false).into_any_element());
+            out.push(item(tr(t), desc, Some(dd), false).gap(z(24.)).into_any_element());
         }
         B::Action(t, d, label, danger) => {
             let kind = BtnKind::Secondary;
@@ -1260,7 +1272,7 @@ static NOTIF: &[B] = &[
 
 fn theme_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
     let theme = crate::theme::active();
-    let gradient = super::client_preset(&app.prefs).is_some();
+    let gradient = super::client_source(&app.prefs).is_some();
     div()
         .flex()
         .flex_col()
@@ -1298,7 +1310,7 @@ fn theme_row(app: &PhoenixApp, cx: &mut Context<'_, PhoenixApp>) -> AnyElement {
 }
 
 fn pick_theme(app: &mut PhoenixApp, t: AppTheme, cx: &mut Cx) {
-    if super::client_preset(&app.prefs).is_some() {
+    if super::client_source(&app.prefs).is_some() {
         update_local(app, |p| {
             p.ui.insert(super::LOCAL_CLIENT_THEME.into(), 0);
         }, cx);
@@ -1390,7 +1402,8 @@ fn time_left_label(t: TimeLeft) -> SharedString {
     }
 }
 
-fn limited_theme(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
+fn limited_theme(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
+    let selected = super::client_preset(&app.prefs).is_some_and(|p| p.id == crate::theme::client_theme::VICE_CITY.id);
     let end = if app.backend.premium_tier2() { LIMITED_THEME_END_NITRO } else { LIMITED_THEME_END_ALL };
     let left = limited_time_left(chrono::Utc::now().timestamp_millis(), end).map(time_left_label);
     div()
@@ -1438,6 +1451,7 @@ fn limited_theme(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
             div().pt(z(20.)).child(
                 div()
                     .id("theme-vice-city")
+                    .relative()
                     .size(z(48.))
                     .rounded(z(8.))
                     .cursor_pointer()
@@ -1448,7 +1462,14 @@ fn limited_theme(app: &PhoenixApp, _: &mut Cx) -> AnyElement {
                             .rounded(z(8.))
                             .bg(gpui::linear_gradient(135., gpui::linear_color_stop(gpui::rgba(0xaf01f380), 0.33), gpui::linear_color_stop(gpui::rgba(0xff669880), 0.67)))
                             .child(div().size_full().rounded(z(8.)).bg(gpui::rgba(0x00000033))),
-                    ),
+                    )
+                    .when(selected, |d| d.child(selected_ring()))
+                    .hover(|s| s.opacity(0.9))
+                    .on_click(cx.listener(|a, _, _, cx| {
+                        update_local(a, |p| {
+                            p.ui.insert(super::LOCAL_CLIENT_THEME.into(), u64::from(crate::theme::client_theme::VICE_CITY.id) + 1);
+                        }, cx)
+                    })),
             ),
         )
         .into_any_element()
@@ -2298,6 +2319,22 @@ const THEME_SWATCHES: [(f32, u32, f32, u32, f32); 22] = [
     (180., 0x2c3fe7, 0.11, 0x261d83, 0.65),
 ];
 
+fn selected_ring() -> gpui::Div {
+    div().absolute().top(z(-2.)).left(z(-2.)).size(z(52.)).child(div().size_full().rounded(z(8.)).border(z(4.)).border_color(c(tok(idx::BRAND_500)))).child(
+        div()
+            .absolute()
+            .top(z(-4.))
+            .right(z(-4.))
+            .size(z(20.))
+            .rounded_full()
+            .bg(c(tok(idx::BRAND_500)))
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(gpui::svg().path(crate::icons::path("check")).size(z(14.)).text_color(gpui::white())),
+    )
+}
+
 fn nitro_themes(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
     let current = super::client_preset(&app.prefs).map(|p| p.id);
     let tile = |i: usize, (ang, a, pa, b, pb): (f32, u32, f32, u32, f32)| {
@@ -2315,21 +2352,7 @@ fn nitro_themes(app: &PhoenixApp, cx: &mut Cx) -> AnyElement {
             .size(z(48.))
             .cursor_pointer()
             .child(face)
-            .when(selected, |d| {
-                d.child(div().absolute().top(z(-2.)).left(z(-2.)).size(z(52.)).rounded(z(8.)).border(z(4.)).border_color(c(tok(idx::BRAND_500)))).child(
-                    div()
-                        .absolute()
-                        .top(z(-6.))
-                        .right(z(-6.))
-                        .size(z(20.))
-                        .rounded_full()
-                        .bg(c(tok(idx::BRAND_500)))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .child(gpui::svg().path(crate::icons::path("check")).size(z(14.)).text_color(gpui::white())),
-                )
-            })
+            .when(selected, |d| d.child(selected_ring()))
             .hover(|s| s.opacity(0.9))
             .when_some(preset, |d, id| {
                 d.on_click(cx.listener(move |a, _, _, cx| {

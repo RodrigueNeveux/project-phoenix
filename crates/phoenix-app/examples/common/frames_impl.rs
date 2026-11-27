@@ -284,18 +284,29 @@ pub fn run() -> anyhow::Result<()> {
         }
     });
     p.cx.update(|cx| v.read(cx).message_list.scroll_to_end());
+    p.cx.update_window(p.win, |_, window, cx| {
+        window.activate_window();
+        v.update(cx, |app, cx| app.composer.update(cx, |s, cx| s.focus(window, cx)))
+    })
+    .ok();
     p.frame();
     let t_page = Instant::now();
     p.live("scroll_chat_page", 120, |p, i| {
         if i % 40 == 0 {
-            let action: Box<dyn gpui::Action> = if i < 80 { Box::new(phoenix_app::shortcuts::PageUp) } else { Box::new(phoenix_app::shortcuts::PageDown) };
-            p.cx.update_window(p.win, |_, window, cx| window.dispatch_action(action, cx)).ok();
+            let key = if i < 80 { "pageup" } else { "pagedown" };
+            if let Ok(ks) = gpui::Keystroke::parse(key) {
+                p.cx.update_window(p.win, |_, window, cx| {
+                    window.dispatch_keystroke(ks, cx);
+                })
+                .ok();
+            }
         }
         if trace {
             let y = p.cx.update(|cx| v.read(cx).message_list.scroll_px_offset_for_scrollbar().y);
             println!("page t_ms={} y={:.2}", t_page.elapsed().as_millis(), f32::from(y));
         }
     });
+    p.cx.update_window(p.win, |_, window, cx| window.blur(cx)).ok();
     let mic = phoenix_app::ui::states::key(("audio-btn", "Mic"));
     let hover = |p: &mut Probe, over: bool| {
         phoenix_app::ui::states::set_hover(mic, over);

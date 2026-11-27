@@ -258,6 +258,7 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("shield", &["ShieldIcon"]),
     ("settings-info", &["SettingsInfoIcon"]),
     ("media/retry", &["RetryIcon"]),
+    ("media/window-top", &["WindowTopOutlineIcon"]),
     ("media/speedometer", &["SpeedometerIcon"]),
     ("media/replay", &["path:M12,5 L12,1 L7,6 L12,11"]),
     ("mod/robot", &["RobotIcon"]),

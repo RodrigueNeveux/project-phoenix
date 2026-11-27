@@ -137,6 +137,7 @@ fn svg_for(path: &str) -> Option<&'static str> {
         "icons/connection-unknown.svg" => s!(r#"<path d="M4 14a6 6 0 0 1 6 6M4 20h.01M18 14v3M18 20h.01"/>"#),
         "icons/shield.svg" => s!(r#"<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6z"/>"#),
         "icons/settings-info.svg" => s!(r#"<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>"#),
+        "icons/media/window-top.svg" => s!(r#"<path d="M4 5h16v14H4zM4 9h16"/>"#),
         "icons/media/retry.svg" => s!(r#"<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>"#),
         "icons/media/speedometer.svg" => s!(r#"<path d="M4.9 18A9 9 0 1 1 19.1 18M12 13l4-5"/>"#),
         "icons/media/replay.svg" => f!(r#"<path d="M12 5V1L7 6l5 5V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/>"#),
@@ -361,28 +362,19 @@ fn svg_for(path: &str) -> Option<&'static str> {
 
 pub fn shortcut_icon(name: &'static str, size: f32) -> gpui::Div {
     use gpui::{ParentElement, Styled};
-    use crate::theme::z;
+    use crate::theme::{c, generated::idx, tok, z};
 
+    let icon = match name {
+        "events" => "calendar",
+        "boosts" | "welcome-boost" => "boost",
+        "welcome-invite" => "invite",
+        "welcome-icon" => "image-plus",
+        "welcome-message" => "chat",
+        "welcome-app" => "game-controller",
+        other => other,
+    };
     gpui::div().size(z(size)).flex_none().flex().items_center().justify_center()
-        .child(gpui::img(gpui::SharedString::from(format!("shortcuts/{name}.png"))).size(z(size * 1.35)).flex_none())
-}
-
-fn shortcut_png(name: &str) -> Option<&'static [u8]> {
-    Some(match name {
-        "friends" => include_bytes!("../assets/shortcuts/friends.png"),
-        "nitro" => include_bytes!("../assets/shortcuts/nitro.png"),
-        "shop" => include_bytes!("../assets/shortcuts/shop.png"),
-        "quests" => include_bytes!("../assets/shortcuts/quests.png"),
-        "threads" => include_bytes!("../assets/shortcuts/threads.png"),
-        "events" => include_bytes!("../assets/shortcuts/events.png"),
-        "boosts" => include_bytes!("../assets/shortcuts/boosts.png"),
-        "welcome-invite" => include_bytes!("../assets/shortcuts/welcome-invite.png"),
-        "welcome-icon" => include_bytes!("../assets/shortcuts/welcome-icon.png"),
-        "welcome-message" => include_bytes!("../assets/shortcuts/welcome-message.png"),
-        "welcome-app" => include_bytes!("../assets/shortcuts/welcome-app.png"),
-        "welcome-boost" => include_bytes!("../assets/shortcuts/welcome-boost.png"),
-        _ => return None,
-    })
+        .child(gpui::svg().path(crate::icons::path(icon)).size(z(size)).flex_none().text_color(c(tok(idx::ICON_MUTED))))
 }
 
 pub struct Assets;
@@ -391,9 +383,6 @@ impl AssetSource for Assets {
     fn load(&self, path: &str) -> gpui::Result<Option<Cow<'static, [u8]>>> {
         if path == "icon.png" {
             return Ok(Some(Cow::Borrowed(APP_ICON_PNG)));
-        }
-        if let Some(bytes) = path.strip_prefix("shortcuts/").and_then(|name| name.strip_suffix(".png")).and_then(shortcut_png) {
-            return Ok(Some(Cow::Borrowed(bytes)));
         }
         if let Some(p) = path.strip_prefix("local/") {
             return Ok(std::fs::read(p).ok().map(Cow::Owned));

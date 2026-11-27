@@ -727,6 +727,7 @@ fn thumbnail(th: &api::Thumbnail, msg: Id, ix: usize, cx: &App) -> AnyElement {
         width: a.width,
         height: a.height,
         author: crate::media::current_author(),
+        video: None,
     };
     let image = a.kind == crate::model::AttachmentKind::Image;
     div()

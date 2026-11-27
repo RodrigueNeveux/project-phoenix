@@ -57,6 +57,10 @@ pub fn sync_motion(animate_emoji: bool, focused: bool) {
     WINDOW_FOCUSED.store(focused, Ordering::Relaxed);
 }
 
+pub fn window_focused() -> bool {
+    WINDOW_FOCUSED.load(Ordering::Relaxed)
+}
+
 pub fn animate_emoji() -> bool {
     ANIMATE_EMOJI.load(Ordering::Relaxed)
 }
@@ -214,12 +218,33 @@ pub fn emoji_element_hover(token: &str, size: f32) -> AnyElement {
     emoji_element_with(token, size, false)
 }
 
+type UnicodeEntry = (Option<SharedString>, SharedString);
+
+thread_local! {
+    static UNICODE: std::cell::RefCell<std::collections::HashMap<Box<str>, UnicodeEntry>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+const UNICODE_CACHE_MAX: usize = 8192;
+
+fn unicode_url_and_text(token: &str) -> UnicodeEntry {
+    UNICODE.with(|m| {
+        if let Some(v) = m.borrow().get(token) {
+            return v.clone();
+        }
+        let v = (twemoji_url(token), SharedString::from(token.to_owned()));
+        let mut m = m.borrow_mut();
+        if m.len() < UNICODE_CACHE_MAX {
+            m.insert(token.into(), v.clone());
+        }
+        v
+    })
+}
+
 fn emoji_element_with(token: &str, size: f32, auto: bool) -> AnyElement {
     if let Some(e) = parse_custom(token) {
         return CustomEmojiImage::new(e, size, auto).into_any_element();
     }
-    let url = twemoji_url(token);
-    let text: SharedString = token.to_owned().into();
+    let (url, text) = unicode_url_and_text(token);
     match url {
         Some(u) => {
             let fb = text.clone();

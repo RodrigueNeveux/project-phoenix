@@ -1,0 +1,167 @@
+step Chat : molette vers le haut
+wait 1500
+mark chat_end at_bottom chat_items
+print chat_y chat_max at:@chat.tl at:@chat.br
+shot 01-start
+wheel @chat 5
+wait 500
+expect chat_end up 150
+expect at_bottom == 0
+shot 02-wheel-up
+step Chat : molette vers le bas
+mark chat_end
+wheel @chat -3
+wait 500
+expect chat_end down 80
+step Chat : pavé tactile (pixels)
+mark chat_end
+touchpad @chat 600 30
+wait 400
+expect chat_end up 300
+mark chat_end
+touchpad @chat -300 15
+wait 400
+expect chat_end down 150
+shot 03-touchpad
+step Chat : PageUp puis PageDown
+click 700,760
+mark chat_end
+key pageup
+wait 900
+expect chat_end up 200
+mark chat_end
+key pagedown
+wait 900
+expect chat_end down 200
+step Chat : Revenir au présent
+wheel @chat 30
+wait 1500
+expect at_bottom == 0
+shot 04-jump-bar
+print at:@chat.b+-8,-42 at:@chat.tl at:@chat.br
+click @chat.b+-8,-42
+wait 1500
+expect at_bottom == 1
+shot 05-present
+step Vidéo : lecture au clic
+region video 470,440,530,240
+mark px:video
+click 737,555
+until 20000 video_t > 0.3
+mark video_t px:video
+wait 1500
+expect video_t up 0.8
+expect px:video changed
+shot 06-video-playing
+step Vidéo : pause au clic
+click 737,555
+wait 300
+mark video_t px:video
+wait 1200
+expect video_t same
+expect px:video same
+shot 07-video-paused
+step Vidéo : seek au clavier
+mark video_t
+key l
+wait 300
+expect video_t up 5
+step Vidéo : plein écran
+key f
+wait 600
+expect fullscreen == 1
+shot 08-video-fullscreen
+key escape
+wait 600
+expect fullscreen == 0
+step Menu contextuel d'un message
+click @chat#-2 right
+wait 300
+expect msgmenu == 1
+shot 09-msgmenu
+key escape
+wait 200
+expect msgmenu == 0
+step Menu contextuel d'un salon
+click 210,622 right
+wait 300
+expect navmenu == 1
+shot 10-chanmenu
+key escape
+wait 200
+expect navmenu == 0
+step Popout de profil (liste des membres)
+click @members#2
+wait 800
+expect popout == 1
+shot 11-popout
+key escape
+wait 300
+expect popout == 0
+step Menu utilisateur puis modale de profil
+click @members#2 right
+wait 300
+expect usermenu == 1
+shot 12-usermenu
+key escape
+wait 200
+expect usermenu == 0
+step Sélecteur rapide (Ctrl+K)
+key ctrl-k
+wait 400
+expect switcher == 1
+shot 13-switcher
+key escape
+wait 300
+expect switcher == 0
+step Composer : frappe et auto-complétion
+click 700,760
+type Bonjour @y
+wait 400
+expect composer ~ Bonjour @y
+expect ac > 0
+shot 14-autocomplete
+key escape
+wait 200
+expect ac == 0
+key ctrl-a backspace
+wait 200
+expect composer ==
+step Liste des salons : molette
+mark sidebar_y
+wheel @sidebar -3
+wait 400
+expect sidebar_y up 40
+shot 15-sidebar
+step Liste des membres : molette
+mark members_y
+wheel @members -3
+wait 400
+expect members_y up 40
+shot 16-members
+step Paramètres : ouvrir et défiler
+click 341,761
+wait 1000
+expect settings == 1
+mark settings_y
+wheel @settings -5
+wait 500
+expect settings_y up 80
+shot 17-settings
+key escape
+wait 600
+expect settings == 0
+step Changer de salon au clic
+wheel @sidebar 10
+wait 300
+mark channel
+click 210,622
+wait 2000
+expect channel changed
+shot 18-channel
+step Changer de serveur au clic
+mark guild
+click 40,525
+wait 3000
+expect guild changed
+shot 19-guild

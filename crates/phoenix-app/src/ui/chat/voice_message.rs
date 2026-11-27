@@ -2250,16 +2250,20 @@ pub fn attachment_toggle(url: &SharedString, cx: &mut App) {
 }
 
 fn control(id: String, icon: &'static str) -> gpui::Stateful<gpui::Div> {
+    control_sized(id, icon, 24., 16.)
+}
+
+fn control_sized(id: String, icon: &'static str, size: f32, glyph: f32) -> gpui::Stateful<gpui::Div> {
     let group = SharedString::from(id);
     div()
         .id(gpui::ElementId::Name(group.clone()))
         .group(group.clone())
         .flex_none()
-        .size(z(24.))
+        .size(z(size))
         .p(z(4.))
         .cursor_pointer()
         .active(|s| s.mt(z(1.)).mb(z(-1.)))
-        .child(svg().path(crate::icons::path(icon)).flex_none().size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))).group_hover(group, |s| s.text_color(gpui::white())))
+        .child(svg().path(crate::icons::path(icon)).flex_none().size(z(glyph)).text_color(c(tok(idx::INTERACTIVE_TEXT_ACTIVE))).group_hover(group, |s| s.text_color(gpui::white())))
 }
 
 fn attachment_track(key: SharedString, frac: f32, duration: Option<f32>, cx: &App) -> gpui::Canvas<Hitbox> {
@@ -2337,7 +2341,7 @@ fn attachment_track(key: SharedString, frac: f32, duration: Option<f32>, cx: &Ap
     )
 }
 
-fn track_bubble(text: String, frac: f32) -> AnyElement {
+pub fn track_bubble(text: String, frac: f32) -> AnyElement {
     div()
         .absolute()
         .top(z(-28.))
@@ -2384,6 +2388,45 @@ fn track_bubble(text: String, frac: f32) -> AnyElement {
         .into_any_element()
 }
 
+pub fn media_key_volume(cx: &App, key: &SharedString) -> f32 {
+    cx.try_global::<Store>().map_or(1., |s| effective_volume(s, key))
+}
+
+pub fn media_volume_control(key: SharedString, id: String, size: f32, glyph: f32, cx: &App) -> AnyElement {
+    let muted = cx.try_global::<Store>().is_some_and(|s| s.muted.contains(&key));
+    let slider = slider_value(cx, &key);
+    let vol_open = cx.try_global::<Store>().is_some_and(|s| {
+        let open = s.vol_open.as_ref() == Some(&key) && s.vol_hide_at.is_none_or(|t| Instant::now() < t);
+        open || s.vol_drag.as_ref().is_some_and(|(k, _)| *k == key) || s.vol_keys.as_ref() == Some(&key)
+    });
+    let (k_mute, k_enter, k_keys) = (key.clone(), key.clone(), key.clone());
+    div()
+        .id(gpui::ElementId::Name(format!("{id}-vol").into()))
+        .relative()
+        .flex_none()
+        .size(z(size))
+        .child(control_sized(format!("{id}-volbtn"), volume_icon(muted, slider), size, glyph).on_click(move |_, window, cx| {
+            toggle_mute(&k_mute, cx);
+            window.refresh();
+        }))
+        .on_hover(move |over, window, cx| {
+            vol_hover(&k_enter, Some(*over), None, cx);
+            window.refresh();
+        })
+        .on_key_down(move |e: &KeyDownEvent, window, cx| {
+            let k = e.keystroke.key.as_str();
+            if k == "up" || k == "down" {
+                cx.stop_propagation();
+                let cur = slider_value(cx, &k_keys);
+                let next = if k == "up" { (cur + 0.05).min(1.) } else { (cur - 0.05).max(0.) };
+                set_slider(&k_keys, next, cx);
+                window.refresh();
+            }
+        })
+        .when(vol_open, |d| d.child(volume_slider(key, ATTACHMENT_SLIDER_LEFT, cx)))
+        .into_any_element()
+}
+
 pub fn attachment_controls(url: &SharedString, cx: &App) -> AnyElement {
     let key = attachment_key(url);
     let v = attachment_view(cx, url);
@@ -2398,13 +2441,7 @@ pub fn attachment_controls(url: &SharedString, cx: &App) -> AnyElement {
         (Some(f), Some(d)) => Some((crate::media::audio_file::format_time(f64::from(f * d)), f)),
         _ => None,
     };
-    let muted = cx.try_global::<Store>().is_some_and(|s| s.muted.contains(&key));
-    let slider = slider_value(cx, &key);
-    let vol_open = cx.try_global::<Store>().is_some_and(|s| {
-        let open = s.vol_open.as_ref() == Some(&key) && s.vol_hide_at.is_none_or(|t| Instant::now() < t);
-        open || s.vol_drag.as_ref().is_some_and(|(k, _)| *k == key) || s.vol_keys.as_ref() == Some(&key)
-    });
-    let (u1, k_mute, k_enter, k_keys) = (url.clone(), key.clone(), key.clone(), key.clone());
+    let u1 = url.clone();
     let play = control(format!("aplay-{url}"), attachment_icon(&v)).on_click(move |_, window, cx| {
         attachment_toggle(&u1, cx);
         window.refresh();
@@ -2431,30 +2468,7 @@ pub fn attachment_controls(url: &SharedString, cx: &App) -> AnyElement {
         .cursor_pointer()
         .child(attachment_track(key.clone(), frac, v.duration, cx).size_full())
         .children(bubble.map(|(t, f)| track_bubble(t, f)));
-    let vol = div()
-        .id(gpui::ElementId::Name(format!("avol-{url}").into()))
-        .relative()
-        .flex_none()
-        .size(z(24.))
-        .child(control(format!("avolbtn-{url}"), volume_icon(muted, slider)).on_click(move |_, window, cx| {
-            toggle_mute(&k_mute, cx);
-            window.refresh();
-        }))
-        .on_hover(move |over, window, cx| {
-            vol_hover(&k_enter, Some(*over), None, cx);
-            window.refresh();
-        })
-        .on_key_down(move |e: &KeyDownEvent, window, cx| {
-            let k = e.keystroke.key.as_str();
-            if k == "up" || k == "down" {
-                cx.stop_propagation();
-                let cur = slider_value(cx, &k_keys);
-                let next = if k == "up" { (cur + 0.05).min(1.) } else { (cur - 0.05).max(0.) };
-                set_slider(&k_keys, next, cx);
-                window.refresh();
-            }
-        })
-        .when(vol_open, |d| d.child(volume_slider(key.clone(), ATTACHMENT_SLIDER_LEFT, cx)));
+    let vol = media_volume_control(key.clone(), format!("a{url}"), 24., 16., cx);
     div()
         .id(gpui::ElementId::Name(format!("acontrols-{url}").into()))
         .mt(z(4.))

@@ -58,6 +58,9 @@ pub enum MemberRow {
     Member(usize),
 }
 
+const MAX_CACHED_CHANNELS: usize = 32;
+const MAX_BG_CHANNEL_MSGS: usize = 200;
+
 #[derive(Default)]
 pub struct ChannelMessages {
     pub msgs: Vec<Message>,
@@ -66,6 +69,7 @@ pub struct ChannelMessages {
     pub loaded_once: bool,
     pub reached_start: bool,
     pub detached: bool,
+    pub last_used: u64,
 }
 
 impl ChannelMessages {
@@ -305,7 +309,6 @@ impl PhoenixApp {
                 is_following_tail: ev.is_following_tail,
             };
             let weak = weak.clone();
-            // GPUI holds a mutable borrow of the list while dispatching its scroll callback.
             cx.defer(move |cx| {
                 let _ = weak.update(cx, |this, cx| {
                     if this.selected_channel != Some(channel) {
@@ -722,8 +725,22 @@ impl PhoenixApp {
         self.chat_on_select(id);
         self.update_typing_label();
         self.backend.select_channel(id).detach_ok();
+        let tick = self.messages.values().map(|e| e.last_used).max().unwrap_or(0) + 1;
         let entry = self.messages.entry(id).or_default();
+        entry.last_used = tick;
         self.message_list.reset(entry.msgs.len() + 1);
+        if self.messages.len() > MAX_CACHED_CHANNELS {
+            let evict = self
+                .messages
+                .iter()
+                .filter(|(k, e)| **k != id && !e.loading)
+                .min_by_key(|(_, e)| e.last_used)
+                .map(|(k, _)| *k);
+            if let Some(old) = evict {
+                self.messages.remove(&old);
+            }
+        }
+        let entry = self.messages.entry(id).or_default();
         crate::perf::channel_opened(id.0);
         let cached = entry.loaded_once;
         let now = chrono::Utc::now().timestamp();
@@ -869,6 +886,12 @@ impl PhoenixApp {
         let (own, ts) = (m.author == self.me.id, m.timestamp);
         entry.msgs.push(m);
         entry.rendered.push(r);
+        if !selected && entry.msgs.len() > MAX_BG_CHANNEL_MSGS {
+            let drop_n = entry.msgs.len() - MAX_BG_CHANNEL_MSGS;
+            entry.msgs.drain(..drop_n);
+            entry.rendered.drain(..drop_n);
+            entry.reached_start = false;
+        }
         let len = entry.msgs.len();
         self.messages.insert(ch, entry);
         if selected {
@@ -1042,6 +1065,7 @@ impl PhoenixApp {
                     });
                 }
                 match &e {
+                    crate::voice::VoiceUiEvent::SpeakingFlags { user, flags } => crate::voice::priority::on_flags(self, *user, *flags),
                     crate::voice::VoiceUiEvent::CameraFailed(f) => crate::ui::voice_panel::media_failure_modal(f, false),
                     crate::voice::VoiceUiEvent::ScreenFailed(f) => crate::ui::voice_panel::media_failure_modal(f, true),
                     _ => {}

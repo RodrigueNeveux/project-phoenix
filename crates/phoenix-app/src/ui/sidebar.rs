@@ -902,7 +902,6 @@ fn dm_top(entity: &Entity<PhoenixApp>, cx: &App) -> impl IntoElement {
                     })
                 })
                 .child(match i {
-                    // The user's own drawings for the home shortcuts (assets/shortcuts).
                     Icon::Friends | Icon::Nitro | Icon::Shop | Icon::Quests => crate::assets::shortcut_icon(id, 20.).into_any_element(),
                     _ => {
                         let base = if selected || strong { idx::ICON_STRONG } else { idx::ICON_MUTED };
@@ -1130,12 +1129,15 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                     pic.into_any_element()
                 }
             }
-            _ if !ex.members.is_empty() => crate::ui::group_dm::group_avatar_with_status(
-                app,
-                id,
-                32. * crate::theme::zoom(),
-                if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_TERTIARY) },
-            ),
+            _ if !ex.members.is_empty() => {
+                let size = 32. * crate::theme::zoom();
+                let ring = if selected { t(idx::INTERACTIVE_BACKGROUND_SELECTED) } else { c(Palette::BG_TERTIARY) };
+                if app.typing.get(&id).is_some_and(|v| v.iter().any(|(who, _)| *who != app.me.id)) {
+                    crate::ui::typing_cutout(crate::ui::group_dm::group_avatar(app, id, size, ring), size, crate::model::Presence::Online).into_any_element()
+                } else {
+                    crate::ui::group_dm::group_avatar_with_status(app, id, size, ring)
+                }
+            }
             _ => div()
                 .size(z(32.))
                 .flex_none()
@@ -1508,7 +1510,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                     })
                                     .map(|d| match text {
                                         Some(st) => d.child(
-                                            div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::ui::emoji_text::markup_label(st.into(), 12.)),
+                                            div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::ui::emoji_text::voice_status(app, entity, id, &st, 12.)),
                                         ),
                                         None => d
                                             .child(div().min_w_0().text_ellipsis().whitespace_nowrap().child(crate::t!("voice.set_status")))
@@ -1658,10 +1660,12 @@ fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEleme
         .rounded(z(8.))
         .border_1()
         .border_color(t(idx::BORDER_MUTED))
-        .bg(crate::theme::client_theme::surface(crate::theme::client_theme::Level::Highest, Some(crate::theme::client_theme::Level::AppFrame), crate::theme::tok(idx::BACKGROUND_BASE_LOW)))
+        .bg(crate::theme::client_theme::fixed_bg(crate::theme::tok(idx::BACKGROUND_BASE_LOW)))
         .overflow_hidden()
+        .relative()
         .flex()
         .flex_col()
+        .children(crate::theme::client_theme::fixed_layer(crate::theme::client_theme::Level::Highest, z(7.)))
         .when(app.voice_channel.is_some(), |d| d.child(crate::ui::voice_panel::voice_panel(app, cx)))
         .child(user_panel(app, cx))
 }
@@ -2058,8 +2062,6 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl Int
         .child(div().h(z(12.)))
 }
 
-/// Height of a DM row. Measured against the official client at the default density: rows sit
-/// 44 px apart (42 + 2 px of padding), the same as the user's client next to Phoenix.
 fn dm_row_h() -> f32 {
     space::channels_name_lh() + 18.
 }

@@ -297,6 +297,31 @@ fn pins_popout_closes_like_the_client(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
+fn account_popout_closes_like_the_client(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let open = |h: &mut Harness| {
+        h.act(|a, w, cx| {
+            a.people.close_overlays();
+            a.toggle_status_picker(w, cx);
+        });
+        assert!(h.read(|a| a.people.status_picker));
+    };
+
+    open(&mut h);
+    let vp = h.vcx.update(|w, _| w.viewport_size());
+    h.click(point(vp.width / 2., vp.height / 2.));
+    assert!(!h.read(|a| a.people.status_picker), "press outside did not close the account popout");
+
+    open(&mut h);
+    h.escape();
+    assert!(!h.read(|a| a.people.status_picker), "Esc did not close the account popout");
+
+    open(&mut h);
+    h.act(|a, w, cx| a.toggle_status_picker(w, cx));
+    assert!(!h.read(|a| a.people.status_picker), "the trigger did not close the account popout");
+}
+
+#[gpui::test]
 fn one_header_popout_at_a_time(cx: &mut TestAppContext) {
     let mut h = setup(cx);
     h.act(|a, _, cx| a.toggle_inbox(cx));
@@ -635,4 +660,44 @@ fn own_full_profile_is_the_editor_from_every_entry_point(cx: &mut TestAppContext
         assert_eq!(modal, Some(other), "{name}: someone else's full profile did not open");
         assert!(!editor, "{name}: someone else's full profile opened the editor");
     }
+}
+
+#[gpui::test]
+fn wheel_and_touchpad_scroll_the_chat_from_its_bottom(cx: &mut TestAppContext) {
+    let mut h = setup(cx);
+    let from_end = |h: &mut Harness| {
+        h.read(|a| f32::from(a.message_list.max_offset_for_scrollbar().y) + f32::from(a.message_list.scroll_px_offset_for_scrollbar().y))
+    };
+    let (max, open_top, count, anchor) = h.read(|a| {
+        let l = &a.message_list;
+        (f32::from(l.max_offset_for_scrollbar().y), -f32::from(l.scroll_px_offset_for_scrollbar().y), l.item_count(), l.logical_scroll_top().item_ix)
+    });
+    assert!(max > 200., "the mock chat must have room to scroll, max offset {max}");
+    assert_eq!((open_top, anchor), (max, count), "the chat must open at its bottom");
+    let chat = h.read(|a| a.message_list.viewport_bounds());
+    let at = h.device(chat.center());
+    h.vcx.simulate_mouse_move(at, None::<gpui::MouseButton>, Modifiers::none());
+    h.vcx.run_until_parked();
+
+    h.vcx.simulate_event(gpui::ScrollEvent { position: at, delta: gpui::ScrollDelta::Pixels(point(px(0.), px(120.))), ..Default::default() });
+    h.vcx.run_until_parked();
+    let after = from_end(&mut h);
+    assert!(after > 100. && after < 140., "a 120 px touchpad scroll left the chat {after} px from its end");
+    assert!(h.read(|a| a.message_list.logical_scroll_top().item_ix) < count, "the chat went back to its end");
+
+    h.act(|a, _, _| a.message_list.scroll_to_end());
+    assert!(from_end(&mut h) < 0.5);
+    h.vcx.simulate_event(gpui::ScrollEvent { position: at, delta: gpui::ScrollDelta::Lines(point(0., 3.)), ..Default::default() });
+    h.vcx.run_until_parked();
+    for _ in 0..25 {
+        std::thread::sleep(std::time::Duration::from_millis(12));
+        h.vcx.executor().advance_clock(std::time::Duration::from_millis(16));
+        h.vcx.update(|w, cx| {
+            w.simulate_next_frame(cx);
+        });
+        h.vcx.run_until_parked();
+    }
+    let after = from_end(&mut h);
+    assert!(after > 40., "a wheel notch left the chat {after} px from its end");
+    assert!(!h.read(|a| a.chat.at_bottom), "the jump to present bar must follow the wheel");
 }

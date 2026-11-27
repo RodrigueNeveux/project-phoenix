@@ -83,7 +83,6 @@ fn save_progress(app: &mut PhoenixApp, entries: impl IntoIterator<Item = (String
     }
 }
 
-/// Recover onboarding for recent servers that already have history and no saved checklist.
 fn recently_created(guild: Id, now: SystemTime) -> bool {
     const RECOVERY_WINDOW: Duration = Duration::from_secs(30 * 24 * 60 * 60);
     let created = phoenix_api::models::Snowflake(guild.0).created_at();

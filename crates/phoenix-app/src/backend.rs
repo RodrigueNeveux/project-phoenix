@@ -279,6 +279,9 @@ pub trait Backend: Send + Sync + 'static {
     fn member_can_view(&self, _channel: Id, _user: Id) -> bool {
         true
     }
+    fn member_permissions(&self, _channel: Id, _user: Id) -> Option<u64> {
+        None
+    }
     fn premium_group_member(&self) -> bool {
         false
     }
@@ -337,6 +340,9 @@ pub trait Backend: Send + Sync + 'static {
         Box::pin(async { Ok(Vec::new()) })
     }
     fn game_widgets(&self, _user: Id) -> BoxFuture<Vec<crate::ui::profile_games::GameWidget>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+    fn games(&self, _ids: Vec<u64>) -> BoxFuture<Vec<crate::ui::profile_games::Game>> {
         Box::pin(async { Ok(Vec::new()) })
     }
     fn recent_activity(&self, _user: Id) -> BoxFuture<Vec<crate::ui::settings::profile_activity::RecentGame>> {

@@ -279,6 +279,15 @@ pub fn video_card(a: &Attachment, (w, h): (f32, f32), cx: &App) -> AnyElement {
             portrait: a.height > a.width,
             width: w,
             radius: 8.,
+            viewer: Some(media::ViewerImage {
+                url: media::resized(&a.url, a.width.min(2048), a.height.min(2048)),
+                original: a.original.clone(),
+                filename: a.filename.clone(),
+                width: a.width,
+                height: a.height,
+                author: media::current_author(),
+                video: None,
+            }),
         };
         return div()
             .id(gpui::ElementId::Name(group.clone()))

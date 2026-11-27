@@ -173,6 +173,11 @@ and `PHX_DELETE=1` opens the delete confirmation (`<out>-confirm.png`) and confi
 `<out>-k<i>.png`; `!pageup`, `!pagedown`, `!top` (Ctrl+Home) and `!bottom` (Ctrl+End) dispatch the actions directly. After each step it drives 900 ms of frame requests and prints `trace=<ms>:<scroll top>` for every frame, so the page spring can be read off. The read-only backend still refuses every write.
 These steps (and the edit itself when `PHX_EDIT_SAVE` is set) run after `PHX_SEND`, so one run can send, edit, react and delete the same message.
 
+`PHX_SCRIPT=<file or inline script>` drives the offscreen window with real input events, the way the
+platform delivers them (`window.dispatch_event`), and checks measurable state between steps. One command
+per line (or `;`-separated); see `scripts/qa/basic_input.qa` and `docs/qa.md`. `PHX_SCRIPT_STRICT=1`
+makes the run fail when a check fails. Every check prints `QA OK|KO [step] ...`, then `QA summary ok=N ko=M`.
+
 ## `screenshot`
 
 Offscreen render of the main window to a PNG (no on-screen window).

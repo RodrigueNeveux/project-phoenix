@@ -1,3 +1,5 @@
+#[path = "common/input_script.rs"]
+mod input_script;
 #[path = "common/switch_bench.rs"]
 mod switch_bench;
 
@@ -2210,7 +2212,7 @@ fn main() -> anyhow::Result<()> {
             v.update(cx, |app, cx| {
                 let sec = app.selected_guild.map(|g| app.security_state(g));
                 if which == "widget-add" {
-                    phoenix_app::ui::settings::widget_add::open();
+                    phoenix_app::ui::settings::widget_add::open(app, cx);
                 }
                 if let Some(rest) = which.strip_prefix("role-") {
                     use phoenix_app::ui::modals::server_settings::roles::{Editor, IconTab, Tab};
@@ -2393,6 +2395,32 @@ fn main() -> anyhow::Result<()> {
         println!("wrote {path} ({}x{})", img.width(), img.height());
         Ok(())
     };
+    if let Ok(seq) = std::env::var("PHX_VIDEO") {
+        for step in seq.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            if let Some(ms) = step.strip_prefix("wait=").and_then(|v| v.parse::<u64>().ok()) {
+                pump(&mut cx, ms);
+            } else if let Some(t) = step.strip_prefix("until=").and_then(|v| v.parse::<f64>().ok()) {
+                let start = std::time::Instant::now();
+                while start.elapsed() < Duration::from_secs(30) {
+                    let now = cx.update(|cx| phoenix_app::ui::chat::video_player::shot_time(cx)).unwrap_or(0.);
+                    if now >= t {
+                        break;
+                    }
+                    pump(&mut cx, 50);
+                }
+            } else if let Some(name) = step.strip_prefix("shot=") {
+                let path = format!("{}-{name}.png", out.trim_end_matches(".png"));
+                cx.update_window(win.into(), |_, window, cx| phoenix_app::ui::chat::video_player::shot("hover", window, cx))?;
+                pump(&mut cx, 300);
+                shoot(&mut cx, &path)?;
+            } else {
+                cx.update_window(win.into(), |_, window, cx| phoenix_app::ui::chat::video_player::shot(step, window, cx))?;
+                pump(&mut cx, 200);
+            }
+            let t = cx.update(|cx| phoenix_app::ui::chat::video_player::shot_time(cx));
+            println!("video step {step}: t={t:?}");
+        }
+    }
     let voice_test = std::env::var_os("PHX_VOICE").is_some();
     if voice_test {
         use phoenix_app::voice::VoiceControl as V;
@@ -2648,6 +2676,40 @@ fn main() -> anyhow::Result<()> {
             trace.join(" ")
         };
         for (i, key) in keys.split_whitespace().enumerate() {
+            let wheel = match key {
+                "~wheel" => Some(gpui::ScrollDelta::Lines(gpui::point(0., 3.))),
+                "~wheeldown" => Some(gpui::ScrollDelta::Lines(gpui::point(0., -3.))),
+                "~pad" => Some(gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(120.)))),
+                "~paddown" => Some(gpui::ScrollDelta::Pixels(gpui::point(px(0.), px(-120.)))),
+                _ => None,
+            };
+            if let Some(delta) = wheel {
+                let chat = cx.update(|cx| v.read(cx).message_list.viewport_bounds());
+                cx.update_window(win.into(), |_, window, cx| {
+                    let k = window.page_zoom();
+                    let c = chat.center();
+                    let position = gpui::point(c.x * k, c.y * k);
+                    window.dispatch_event(
+                        gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent { position, pressed_button: None, modifiers: gpui::Modifiers::default() }),
+                        cx,
+                    );
+                    window.dispatch_event(
+                        gpui::PlatformInput::Scroll(gpui::ScrollEvent {
+                            position,
+                            delta,
+                            modifiers: gpui::Modifiers::default(),
+                            touch_phase: gpui::TouchPhase::Moved,
+                            source: gpui::ScrollSource::Pointer,
+                        }),
+                        cx,
+                    );
+                })?;
+                let trace = frames(&mut cx, 600);
+                let (top, bottom) = cx.update(|cx| (v.read(cx).message_list.logical_scroll_top(), v.read(cx).chat.at_bottom));
+                println!("wheel {key}: list_top=({}, {}) at_bottom={bottom} trace={trace}", top.item_ix, f32::from(top.offset_in_item));
+                shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
+                continue;
+            }
             let action: Option<Box<dyn gpui::Action>> = match key {
                 "!pageup" => Some(Box::new(phoenix_app::shortcuts::PageUp)),
                 "!pagedown" => Some(Box::new(phoenix_app::shortcuts::PageDown)),
@@ -2686,6 +2748,14 @@ fn main() -> anyhow::Result<()> {
             });
             println!("key {key}: channel={ch:?} composer={text:?} edit={edit:?} list_top={top:?}");
             shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
+        }
+    }
+    if let Ok(spec) = std::env::var("PHX_SCRIPT") {
+        let script = std::fs::read_to_string(&spec).unwrap_or(spec);
+        let env = input_script::Env { win: win.into(), app: v.clone(), stem: out.trim_end_matches(".png").to_string(), shoot: &shoot };
+        let report = input_script::run(&mut cx, &env, &script)?;
+        if std::env::var_os("PHX_SCRIPT_STRICT").is_some() {
+            anyhow::ensure!(report.ko.is_empty(), "{} QA checks failed", report.ko.len());
         }
     }
     if std::env::var_os("PHX_WRITE").is_some() {
