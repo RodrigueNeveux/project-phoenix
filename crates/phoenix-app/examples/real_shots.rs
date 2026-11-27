@@ -2644,11 +2644,17 @@ fn main() -> anyhow::Result<()> {
                 window.dispatch_keystroke(ks, cx);
             })?;
             pump(&mut cx, 400);
-            let (ch, text, edit) = cx.update(|cx| {
+            let (ch, text, edit, top) = cx.update(|cx| {
                 let app = v.read(cx);
-                (app.selected_channel, app.composer.read(cx).value().to_string(), app.chat.edit.as_ref().map(|e| e.input.read(cx).value().to_string()))
+                let top = app.message_list.logical_scroll_top();
+                (
+                    app.selected_channel,
+                    app.composer.read(cx).value().to_string(),
+                    app.chat.edit.as_ref().map(|e| e.input.read(cx).value().to_string()),
+                    (top.item_ix, f32::from(top.offset_in_item)),
+                )
             });
-            println!("key {key}: channel={ch:?} composer={text:?} edit={edit:?}");
+            println!("key {key}: channel={ch:?} composer={text:?} edit={edit:?} list_top={top:?}");
             shoot(&mut cx, &format!("{stem}-k{i}.png"))?;
         }
     }
