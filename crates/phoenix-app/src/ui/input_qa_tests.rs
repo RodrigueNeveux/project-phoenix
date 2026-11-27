@@ -34,7 +34,7 @@ fn setup(cx: &mut TestAppContext) -> Qa {
     let mut qa = Qa { window, vcx };
     qa.vcx.update(|_, cx| crate::app::bind_keys(cx));
     qa.act(|a, w, cx| a.composer.update(cx, |s, cx| s.focus(w, cx)));
-    qa.vcx.refresh();
+    qa.vcx.refresh().unwrap();
     qa.vcx.run_until_parked();
     qa
 }
