@@ -1674,6 +1674,7 @@ impl Focusable for PhoenixApp {
 
 impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::media::lru::next_frame();
         crate::perf::on_render(self.selected_channel.map(|c| c.0), self.selected_channel.and_then(|c| self.messages.get(&c)).is_some_and(|e| e.loaded_once));
         ui::context_menu::begin_frame();
         ui::a11y::sync(window);
@@ -1751,7 +1752,7 @@ impl Render for PhoenixApp {
         let (sx, sy) = ui::shake::offset(window, crate::ui::settings::effects::reduced_motion()).unwrap_or((0., 0.));
         let body = div().size_full().relative().left(px(sx)).top(px(sy)).child(body).into_any_element();
         let boot = ui::boot::render(self, window, cx);
-        div()
+        let root = div()
             .id("phoenix-root")
             .when(ui::a11y::on(), |d| d.role(gpui::Role::Application).aria_label("Discord"))
             .key_context(CONTEXT)
@@ -1820,7 +1821,8 @@ impl Render for PhoenixApp {
             .when(self.screen == Screen::Login && !self.boot.showing(), |d| d.child(ui::title_bar::login_bar(window, cx)))
             .children(ui::window_chrome::resize_handles(window))
             .children(ui::incoming_call::render(self, cx))
-            .when(ui::a11y::on(), |d| d.child(ui::a11y::announcer()))
+            .when(ui::a11y::on(), |d| d.child(ui::a11y::announcer()));
+        crate::media::lru::scope(root)
     }
 }
 
