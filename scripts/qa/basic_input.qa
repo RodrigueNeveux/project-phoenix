@@ -75,7 +75,7 @@ key escape
 wait 600
 expect fullscreen == 0
 step Menu contextuel d'un message
-click @chat#-2 right
+click @chat.b+0,-60 right
 wait 300
 expect msgmenu == 1
 shot 09-msgmenu

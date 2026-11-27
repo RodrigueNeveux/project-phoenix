@@ -11,10 +11,29 @@ input handler both see them). Between steps it reads app state and compares.
 
 ```sh
 cd /mnt/windata/project-phoenix/compare/qa-input
-PHX_AGENT=1 PHX_W=1280 PHX_H=800 PHX_SCALE=1.5 PHX_GUILD=1369382919948210248 \
-PHX_CHANNEL=1403447573389381652 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_input.qa \
+PHX_AGENT=1 PHX_NO_SCROLL=1 PHX_MEMBERS=true PHX_IN_VOICE=false \
+PHX_W=1280 PHX_H=800 PHX_SCALE=1.5 PHX_GUILD=1369382919948210248 \
+PHX_CHANNEL=1574797385463496724 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_input.qa \
 flock /tmp/phoenix-render.lock phoenix-nice ~/discord-phoenix/int-bin/real_shots qa.png
 ```
+
+Without `PHX_NO_SCROLL`, `PHX_MEMBERS` and `PHX_IN_VOICE`, `real_shots` copies the
+sidebar scroll, the member list toggle and the voice panel from the official client
+over CDP. The 27/11 runs inherited a hidden member list that way (`members item #2 is
+not laid out`, `members_y` stuck at 0) and a scrolled sidebar (channel click on the
+wrong row), so the scenario pins them.
+
+The offscreen window runs on GPUI's test dispatcher, whose timers only fire when its
+clock moves. `wait`, `until` and every step that drives frames advance that clock by
+the real time spent, so timer-driven code (the video ticker, hover delays, springs
+scheduled with `timer`) runs as on the desktop. Before 27/11 it did not: the video
+started (`video_t=0.00`) but its ticker never ran between screenshots, which only
+moved because each shot advances the clock by 4 s.
+
+A bottom-aligned list that sits at its end anchors past its last item, and GPUI's
+`ListState::bounds_for_item` then returns `None` for every row (`chat item #108 is
+not laid out`). Point at the newest message from the list edge (`@chat.b+0,-60`)
+instead of `@chat#-2` while the chat is at the bottom.
 
 Every check prints `QA OK [step] ...` or `QA KO [step] ...`, then
 `QA summary ok=N ko=M` and the list of shots (`qa-<name>.png`).

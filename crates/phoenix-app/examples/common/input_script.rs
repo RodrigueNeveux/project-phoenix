@@ -100,7 +100,11 @@ fn corner(b: Bounds<Pixels>, c: &str) -> Point<Pixels> {
 impl Run<'_, '_> {
     fn frames(&mut self, cx: &mut HeadlessAppContext, ms: u64) {
         let t0 = std::time::Instant::now();
+        let mut last = t0;
         loop {
+            let now = std::time::Instant::now();
+            cx.advance_clock(now - last);
+            last = now;
             cx.simulate_frame_request(self.env.win);
             cx.run_until_parked();
             if t0.elapsed() >= Duration::from_millis(ms) {
