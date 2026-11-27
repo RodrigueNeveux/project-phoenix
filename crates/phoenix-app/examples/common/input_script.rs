@@ -159,7 +159,9 @@ impl Run<'_, '_> {
                 None => (a, None),
             };
             let (a, c) = a.split_once('.').unwrap_or((a, "c"));
-            corner(self.anchor(cx, a, item)?, c)
+            let p = corner(self.anchor(cx, a, item)?, c);
+            let k = cx.update_window(self.env.win, |_, window, _| window.page_zoom())?;
+            point(p.x * k, p.y * k)
         } else {
             let (x, y) = base.split_once(',').ok_or_else(|| anyhow::anyhow!("bad point {spec}"))?;
             point(px(x.parse()?), px(y.parse()?))
