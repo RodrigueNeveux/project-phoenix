@@ -71,8 +71,8 @@ impl Qa {
 #[gpui::test]
 fn right_click_on_a_message_opens_its_menu_and_escape_closes_it(cx: &mut TestAppContext) {
     let mut qa = setup(cx);
-    let last = qa.read(|a| a.message_list.item_count().checked_sub(1).and_then(|ix| a.message_list.bounds_for_item(ix)));
-    let row = last.expect("the last message is laid out");
+    let last = qa.read(|a| (1..a.message_list.item_count()).rev().find_map(|ix| a.message_list.bounds_for_item(ix)));
+    let row = last.expect("a message row is laid out");
     qa.press(row, MouseButton::Right);
     assert!(qa.read(|a| a.chat.menu.is_some()), "a right click on a message did not open its menu");
     qa.keys("escape");
