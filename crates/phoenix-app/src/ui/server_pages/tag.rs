@@ -112,7 +112,7 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
         match badge_art(kind, None, None, 32.) {
             Some(art) => tl = tl.child(art),
             None if sel && !hash.is_empty() => tl = tl.child(badge_img(guild, &hash, 32.)),
-            None => {}
+            None => tl = tl.child(text(12., 14., FontWeight::MEDIUM, idx::TEXT_DEFAULT, crate::t!(clan_badges::label_key(kind)))),
         }
         badges.push(tl.on_click(cx.listener(move |a, _, _, cx| {
             write(a, ServerCall::SetProfile { guild: sf(guild), patch: ProfilePatch { badge: Some(kind), ..Default::default() } }, None, cx);
@@ -126,7 +126,14 @@ pub fn render(app: &PhoenixApp, guild: Id, cx: &mut Context<PhoenixApp>) -> AnyE
     };
     let mut colors = Vec::new();
     for (i, (p, s)) in PALETTES.iter().copied().enumerate() {
-        colors.push(tile(("gs2-color", i), preset == Some(i)).children(badge_art(badge, Some(p), Some(s), 32.)).on_click(cx.listener(set_colors(Some(p), Some(s)))));
+        let mut choice = tile(("gs2-color", i), preset == Some(i));
+        if let Some(art) = badge_art(badge, Some(p), Some(s), 32.) {
+            choice = choice.child(art);
+        } else if let Some([r, g, b]) = super::tag_colors::hex_to_rgb(p) {
+            let color = u32::from_be_bytes([0, r, g, b]);
+            choice = choice.child(div().size(z(24.)).rounded_full().bg(gpui::rgb(color)));
+        }
+        colors.push(choice.on_click(cx.listener(set_colors(Some(p), Some(s)))));
     }
     colors.push(
         tile("gs2-color-reset", reset)
