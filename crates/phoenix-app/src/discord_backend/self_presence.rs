@@ -268,6 +268,9 @@ pub(super) fn watch_idle(inner: &Arc<super::Inner>, afk_timeout: Option<u32>) {
                     && let Some(s) = inner.session.lock().clone()
                 {
                     send(&s);
+                    if which == 0 && idle {
+                        super::idle_unsubscribe(&s);
+                    }
                 }
             }),
         );
