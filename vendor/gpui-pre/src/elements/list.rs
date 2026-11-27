@@ -567,7 +567,12 @@ impl ListState {
         let mut cursor = state.items.cursor::<ListItemSummary>(());
         cursor.seek(&Count(current_offset.item_ix), Bias::Right);
 
-        let start_pixel_offset = cursor.start().height + current_offset.offset_in_item;
+        // PHOENIX PATCH (page scroll): a bottom-aligned list at its end anchors past the
+        // last item, so start from the clamped top the user actually sees, otherwise a
+        // PageUp shorter than the viewport stays below the maximum and does nothing.
+        let viewport = state.last_layout_bounds.map_or(px(0.), |b| b.size.height);
+        let max_top = (state.items.summary().height - viewport).max(px(0.));
+        let start_pixel_offset = (cursor.start().height + current_offset.offset_in_item).min(max_top);
         let new_pixel_offset = (start_pixel_offset + distance).max(px(0.));
         if new_pixel_offset > start_pixel_offset {
             cursor.seek_forward(&Height(new_pixel_offset), Bias::Right);
@@ -1901,6 +1906,35 @@ mod test {
         // Scroll position should stay at the top of the list
         assert_eq!(state.logical_scroll_top().item_ix, 0);
         assert_eq!(state.logical_scroll_top().offset_in_item, px(0.));
+    }
+
+    #[gpui::test]
+    fn test_scroll_by_from_the_end_of_a_bottom_aligned_list(cx: &mut TestAppContext) {
+        let cx = cx.add_empty_window();
+
+        let state = ListState::new(10, crate::ListAlignment::Bottom, px(10.)).measure_all();
+
+        struct TestView(ListState);
+        impl Render for TestView {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                list(self.0.clone(), |_, _, _| {
+                    div().h(px(20.)).w_full().into_any()
+                })
+                .w_full()
+                .h_full()
+            }
+        }
+
+        cx.draw(point(px(0.), px(0.)), size(px(100.), px(100.)), |_, cx| {
+            cx.new(|_| TestView(state.clone())).into_any_element()
+        });
+
+        // PHOENIX PATCH (page scroll): 200px of items in a 100px viewport show items 5..10,
+        // so a 30px PageUp lands 70px from the top, not 30px above the past-the-end anchor.
+        state.scroll_by(px(-30.));
+        let offset = state.logical_scroll_top();
+        assert_eq!(offset.item_ix, 3);
+        assert_eq!(offset.offset_in_item, px(10.));
     }
 
     #[gpui::test]
