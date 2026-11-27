@@ -599,6 +599,34 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn badge_catalog_gives_the_nitro_tier_title_and_info_label() {
+        let mut badges = vec![
+            Badge { id: "premium".into(), description: "Abonné depuis le 31 déc. 2025".into(), icon: "p.png".into(), link: None, tip: None },
+            Badge { id: "hypesquad_house_1".into(), description: "HypeSquad Bravery".into(), icon: "h.png".into(), link: None, tip: None },
+            Badge { id: "unknown_badge".into(), description: "x".into(), icon: "x.png".into(), link: None, tip: None },
+        ];
+        let catalog = json!({"badges": [
+            {"badge_id": 1, "name": "Nitro", "info_label": "Abonné depuis 31/12/2025", "current_tier": "gold",
+             "tiers": [{"key": "gold", "name": "Or"}], "complex_icon_static_url": "s.svg", "complex_icon_animated_url": "a.png"},
+            {"badge_id": 5, "name": "HypeSquad Bravery", "complex_icon_static_url": "b.svg"}
+        ]});
+        apply_badge_catalog(&mut badges, &catalog, None);
+        let nitro = badges[0].tip.as_ref().unwrap();
+        assert_eq!(nitro.title.as_ref(), "Nitro Or");
+        assert_eq!(nitro.eyebrow, None);
+        assert_eq!(nitro.body.as_deref(), Some("Abonné depuis 31/12/2025"));
+        assert_eq!(nitro.animated_icon.as_deref(), Some("a.png"));
+        assert!(nitro.nitro);
+        let house = badges[1].tip.as_ref().unwrap();
+        assert_eq!(house.title.as_ref(), "HypeSquad Bravery");
+        assert!(!house.nitro);
+        assert!(badges[2].tip.is_none());
+        assert_eq!(catalog_badge_id("premium_tenure_24_month_v2"), Some(1));
+        assert_eq!(catalog_badge_id("guild_booster_lvl3"), Some(12));
+        assert_eq!(catalog_badge_id("account_age"), Some(18));
+    }
+
+    #[test]
     fn shop_this_look_reads_decoration_nameplate_effect_and_frame() {
         let p: phoenix_api::rest::profile::UserProfile = serde_json::from_value(json!({
             "user": {"id": "5", "username": "a", "avatar_decoration_data": {"asset": "x", "sku_id": "11"},
