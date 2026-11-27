@@ -45,7 +45,17 @@ pub(crate) fn ensure_profile(app: &PhoenixApp, uid: Id, cx: &mut Context<Phoenix
     }
     let fut = app.backend.user_profile(uid, None);
     cx.spawn(async move |this, cx| {
-        let Ok(p) = fut.await else { return };
+        let p = match fut.await {
+            Ok(p) => p,
+            Err(e) => {
+                // Let the next render ask again instead of leaving the mutuals empty for good.
+                tracing::warn!(user = uid.0, "profile request failed: {}", e.0);
+                cx.background_executor().timer(std::time::Duration::from_secs(30)).await;
+                REQUESTED.with(|r| r.borrow_mut().remove(&uid));
+                let _ = this.update(cx, |_, cx| cx.notify());
+                return;
+            }
+        };
         let _ = this.update(cx, |a, cx| {
             a.people.profiles.insert(uid, p);
             cx.notify();
