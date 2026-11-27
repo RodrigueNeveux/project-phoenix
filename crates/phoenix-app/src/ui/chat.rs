@@ -35,6 +35,7 @@ pub mod scrollbar;
 pub mod alt_text;
 pub mod state;
 pub mod thread_banner;
+pub mod video_player;
 pub mod voice_message;
 pub mod blocked;
 pub mod burst_tip;
@@ -2162,6 +2163,27 @@ pub(crate) fn embed(app: &PhoenixApp, entity: &Entity<PhoenixApp>, e: &Embed, cx
         let animated = (gifv && media::gif_plays(&original))
             .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url, size.0)))
             .flatten();
+        if animated.is_none()
+            && gifv
+            && video_player::supported()
+            && let Some(v) = e.video.as_ref().filter(|v| v.url.starts_with("https://"))
+        {
+            let poster = media::video_poster(&m.url, (size.0 * 2.) as u32, (size.1 * 2.) as u32);
+            let plays = media::gif_plays(&original);
+            return div()
+                .mt(z(4.))
+                .child(media::gif_hover(
+                    original,
+                    div()
+                        .w(z(size.0))
+                        .max_w_full()
+                        .aspect_ratio(size.0 / size.1.max(1.))
+                        .rounded(z(8.))
+                        .overflow_hidden()
+                        .child(video_player::gifv(v.url.clone(), v.url.clone(), poster, plays, cx)),
+                ))
+                .into_any_element();
+        }
         let Some(src) = animated else {
             let still = media_image(&m.url, original.clone(), "".into(), (m.width, m.height), size);
             return div().mt(z(4.)).child(media::gif_hover(original, still)).into_any_element();

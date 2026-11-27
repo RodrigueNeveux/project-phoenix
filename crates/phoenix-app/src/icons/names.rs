@@ -257,6 +257,8 @@ pub const MAP: &[(&str, &[&str])] = &[
     ("mod/chat-warning", &["ChatWarningIcon"]),
     ("shield", &["ShieldIcon"]),
     ("settings-info", &["SettingsInfoIcon"]),
+    ("media/retry", &["RetryIcon"]),
+    ("media/speedometer", &["SpeedometerIcon"]),
     ("media/replay", &["path:M12,5 L12,1 L7,6 L12,11"]),
     ("mod/robot", &["RobotIcon"]),
     ("settings/nitro-wordmark", &["path:M98.8266537 8.64800265L97.5788372"]),

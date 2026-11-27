@@ -849,6 +849,16 @@ fn set_slider(key: &SharedString, value: f32, cx: &mut App) {
     persist_volume(cx);
 }
 
+pub fn media_volume(cx: &App) -> f32 {
+    cx.try_global::<Store>().map_or(1., |s| s.volume.clamp(0., 1.))
+}
+
+pub fn set_media_volume(v: f32, cx: &mut App) {
+    store(cx).volume = v.clamp(0., 1.);
+    apply_volume(cx);
+    persist_volume(cx);
+}
+
 fn slider_value(cx: &App, key: &SharedString) -> f32 {
     cx.try_global::<Store>().map_or(1., |s| if s.muted.contains(key) { 0. } else { perceptual(s.volume) })
 }

@@ -40,6 +40,8 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         author: media::current_author(),
     };
     let video = a.kind == AttachmentKind::Video;
+    let original_src = viewer.original.clone();
+    let player = video && super::video_player::supported() && super::attach::loadable(&original_src);
     let alt = super::alt_text::description(a, spoiler);
     let group = super::attach::video_group(&a.url);
     let alt_key = a.url.clone();
@@ -75,7 +77,9 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
                     if spoiler {
                         media::reveal(key.clone(), cx);
                     } else if video {
-                        cx.open_url(&original);
+                        if !player {
+                            cx.open_url(&original);
+                        }
                     } else {
                         media::open_viewer(viewer.clone(), cx);
                     }
@@ -91,7 +95,23 @@ fn cell(a: &Attachment, k: Corners, cx: &App) -> gpui::Div {
         .children(alt.map(|t| {
             if video { super::alt_text::video_badge(alt_key, t, group.clone()) } else { super::alt_text::badge(alt_key, t) }
         }))
-        .when(video && !spoiler, |d| {
+        .when(video && !spoiler && player, |d| {
+            d.child(
+                div().absolute().inset_0().child(super::video_player::attachment(
+                    super::video_player::Spec {
+                        key: a.url.clone(),
+                        src: original_src.clone(),
+                        poster: src.clone(),
+                        layout: super::video_player::Layout::Tile,
+                        portrait: a.height > a.width,
+                        width: MAX_W / 2.,
+                        radius: 0.,
+                    },
+                    cx,
+                )),
+            )
+        })
+        .when(video && !spoiler && !player, |d| {
             d.child(
                 div().absolute().inset_0().flex().items_center().justify_center().child(
                     div()

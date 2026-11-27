@@ -4,6 +4,7 @@ pub mod emoji;
 pub mod emoji_seqs;
 pub mod lottie;
 pub mod lru;
+pub mod video_file;
 
 use std::collections::HashSet;
 

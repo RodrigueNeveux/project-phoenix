@@ -364,6 +364,9 @@ impl AssetSource for Assets {
         if let Some(svg) = crate::ui::squircle::svg(path) {
             return Ok(Some(Cow::Owned(svg.into_bytes())));
         }
+        if let Some(svg) = crate::ui::chat::video_player::svg(path) {
+            return Ok(Some(Cow::Owned(svg.into_bytes())));
+        }
         if let Some(svg) = crate::ui::status_svg::svg(path) {
             return Ok(Some(Cow::Owned(svg.into_bytes())));
         }

@@ -266,10 +266,30 @@ pub fn video_group(url: &str) -> SharedString {
     format!("video-{url}").into()
 }
 
-pub fn video_card(a: &Attachment, (w, h): (f32, f32), _cx: &App) -> AnyElement {
+pub fn video_card(a: &Attachment, (w, h): (f32, f32), cx: &App) -> AnyElement {
     let poster = media::video_poster(&a.url, (w * 2.) as u32, (h * 2.) as u32);
     let original = if a.original.is_empty() { a.url.clone() } else { a.original.clone() };
     let group = video_group(&a.url);
+    if super::video_player::supported() && loadable(&original) {
+        let spec = super::video_player::Spec {
+            key: a.url.clone(),
+            src: original,
+            poster,
+            layout: super::video_player::Layout::Single,
+            portrait: a.height > a.width,
+            width: w,
+            radius: 8.,
+        };
+        return div()
+            .id(gpui::ElementId::Name(group.clone()))
+            .group(group)
+            .relative()
+            .w(z(w))
+            .max_w_full()
+            .aspect_ratio(w / h.max(1.))
+            .child(super::video_player::attachment(spec, cx))
+            .into_any_element();
+    }
     div()
         .id(gpui::ElementId::Name(group.clone()))
         .group(group.clone())
