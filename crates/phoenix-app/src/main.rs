@@ -11,43 +11,68 @@ fn main() {
     phoenix_app::perf::start();
     phoenix_app::autostart::refresh();
     let mock = std::env::var("PHOENIX_MOCK").is_ok_and(|v| !v.is_empty() && v != "0");
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == phoenix_app::deeplink::REGISTER_FLAG) {
+        if let Err(e) = phoenix_app::deeplink::register_protocol() {
+            eprintln!("could not register discord:// links: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+    let link = phoenix_app::deeplink::Message { token: phoenix_app::deeplink::launch_token(), url: phoenix_app::deeplink::url_from_args(&args) };
+    let single = !mock && !phoenix_app::deeplink::multi_instance(&args);
+    if single && phoenix_app::deeplink::ipc::forward(&link) {
+        return;
+    }
+    let (links, incoming) = phoenix_app::deeplink::channel();
+    if single {
+        phoenix_app::deeplink::ipc::listen(links.clone());
+    }
+    if link.url.is_some() {
+        let _ = links.unbounded_send(phoenix_app::deeplink::Message { token: None, url: link.url });
+    }
     phoenix_app::splash::preload();
-    gpui_platform::application()
-        .with_assets(Assets)
-        .run(move |cx| {
-            phoenix_app::init_deferred(cx);
-            phoenix_app::ui::boot::enable();
-            phoenix_app::sounds::init();
-            let splash = phoenix_app::splash::open(cx);
-            phoenix_app::perf::mark("splash_opened");
-            let backend: Arc<dyn Backend> = if mock {
-                cx.set_http_client(phoenix_app::demo_media::client());
-                Arc::new(MockBackend::new())
-            } else {
-                let b = DiscordBackend::new();
-                cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(b.http_client())));
-                Arc::new(b)
-            };
-            cx.spawn(async move |cx| {
-                let started = std::time::Instant::now();
-                while !phoenix_app::fonts::fallback::ready() && started.elapsed() < SPLASH_MAX {
-                    cx.background_executor().timer(std::time::Duration::from_millis(16)).await;
+    let app = gpui_platform::application().with_assets(Assets);
+    app.on_open_urls(move |urls| {
+        for url in urls {
+            let _ = links.unbounded_send(phoenix_app::deeplink::Message { token: None, url: Some(url) });
+        }
+    });
+    app.run(move |cx| {
+        phoenix_app::init_deferred(cx);
+        phoenix_app::deeplink::serve(incoming, cx);
+        phoenix_app::ui::boot::enable();
+        phoenix_app::sounds::init();
+        let splash = phoenix_app::splash::open(cx);
+        phoenix_app::perf::mark("splash_opened");
+        let backend: Arc<dyn Backend> = if mock {
+            cx.set_http_client(phoenix_app::demo_media::client());
+            Arc::new(MockBackend::new())
+        } else {
+            let b = DiscordBackend::new();
+            cx.set_http_client(Arc::new(phoenix_app::media::cache::CachingHttpClient::new(b.http_client())));
+            Arc::new(b)
+        };
+        cx.spawn(async move |cx| {
+            let started = std::time::Instant::now();
+            while !phoenix_app::fonts::fallback::ready() && started.elapsed() < SPLASH_MAX {
+                cx.background_executor().timer(std::time::Duration::from_millis(16)).await;
+            }
+            cx.update(|cx| {
+                if let Some(s) = splash {
+                    phoenix_app::splash::set_status(s, phoenix_app::splash::Status::Starting, cx);
                 }
-                cx.update(|cx| {
-                    if let Some(s) = splash {
-                        phoenix_app::splash::set_status(s, phoenix_app::splash::Status::Starting, cx);
-                    }
-                    let main = phoenix_app::open_main_window(backend, cx);
-                    phoenix_app::perf::mark("main_window_opened");
-                    bench_hooks(main, cx);
-                    if let Some(s) = splash {
-                        phoenix_app::splash::close(s, cx);
-                    }
-                    cx.activate(true);
-                });
-            })
-            .detach();
-        });
+                let main = phoenix_app::open_main_window(backend, cx);
+                phoenix_app::perf::mark("main_window_opened");
+                bench_hooks(main, cx);
+                if let Some(s) = splash {
+                    phoenix_app::splash::close(s, cx);
+                }
+                cx.activate(true);
+            });
+        })
+        .detach();
+    });
 }
 
 const SPLASH_MAX: std::time::Duration = std::time::Duration::from_secs(3);

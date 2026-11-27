@@ -9,4 +9,5 @@ Icon=io.github.RoxasYTB.DiscordPhoenix
 Terminal=false
 Categories=Network;InstantMessaging;Chat;
 Keywords=chat;voice;messaging;
+MimeType=x-scheme-handler/discord;
 StartupWMClass=discord-phoenix

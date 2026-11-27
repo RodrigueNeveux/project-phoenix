@@ -1,0 +1,11 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Classes\discord]
+@="URL:Discord Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\discord\DefaultIcon]
+@="\"@EXE@\",0"
+
+[HKEY_CURRENT_USER\Software\Classes\discord\shell\open\command]
+@="\"@EXE@\" --url -- \"%1\""

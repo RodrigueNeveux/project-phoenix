@@ -14,6 +14,14 @@
   <key>LSMinimumSystemVersion</key><string>11.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.social-networking</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>Discord Phoenix link</string>
+      <key>CFBundleURLSchemes</key>
+      <array><string>discord</string></array>
+    </dict>
+  </array>
   <key>NSMicrophoneUsageDescription</key><string>Discord Phoenix needs microphone access for voice channels and calls.</string>
   <key>NSCameraUsageDescription</key><string>Discord Phoenix needs camera access for video calls.</string>
   <key>NSHumanReadableCopyright</key><string>MIT OR Apache-2.0. Not affiliated with Discord Inc.</string>

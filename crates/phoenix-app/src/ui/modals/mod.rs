@@ -1,3 +1,4 @@
+pub mod accept_invite;
 pub mod account_edit;
 pub mod accounts;
 pub mod app_install;
@@ -118,6 +119,7 @@ pub enum Modal {
     CreatePoll(poll_create::State),
     GoLive(go_live::State),
     LeaveLink(leave_link::State),
+    AcceptInvite(Box<accept_invite::State>),
     ReportRaid(report_raid::State),
     GuildTagAdopt(Id),
     Follow(follow::State),
@@ -277,6 +279,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             Modal::CreatePoll(s) => poll_create::render(app, s, cx),
             Modal::GoLive(s) => go_live::render(app, s, cx),
             Modal::LeaveLink(s) => leave_link::render(s, cx),
+            Modal::AcceptInvite(s) => accept_invite::render(app, s, cx),
             Modal::AppInstall(s) => app_install::render(app, s, cx),
             Modal::ReportRaid(s) => report_raid::render(s, cx),
             Modal::GuildTagAdopt(g) => guild_tag::render(app, *g, cx),

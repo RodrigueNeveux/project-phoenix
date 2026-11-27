@@ -5,6 +5,7 @@ pub mod auth;
 pub mod autostart;
 pub mod backend;
 pub mod commands;
+pub mod deeplink;
 pub mod diagnostics;
 pub mod discord_backend;
 pub mod grouping;
@@ -113,6 +114,7 @@ pub fn open_main_window(backend: Arc<dyn backend::Backend>, cx: &mut App) -> Opt
         window.set_window_title("Discord Phoenix");
         let view = cx.new(|cx| app::PhoenixApp::new(backend, window, cx));
         tray::set_target(cx, view.downgrade());
+        deeplink::set_target(view.downgrade(), cx);
         streamer::watch(view.downgrade(), cx);
         tts::enable_output();
         let weak = view.downgrade();

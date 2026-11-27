@@ -68,6 +68,10 @@ pub fn dm_with_stranger(app: &PhoenixApp) -> bool {
 }
 
 pub fn click(app: &mut PhoenixApp, text: &str, url: &str, window: &mut gpui::Window, cx: &mut Context<PhoenixApp>) {
+    if app.open_in_app_link(url, cx) {
+        window.refresh();
+        return;
+    }
     if trusted(app, text, url) {
         cx.open_url(url);
         return;
