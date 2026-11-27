@@ -44,9 +44,9 @@ wait 1500
 expect at_bottom == 1
 shot 05-present
 step Vidéo : lecture au clic
-region video 470,440,530,240
+region video 470,440,480,240
 mark px:video
-click 737,555
+click 714,560
 until 20000 video_t > 0.3
 mark video_t px:video
 wait 1500
@@ -54,7 +54,7 @@ expect video_t up 0.8
 expect px:video changed
 shot 06-video-playing
 step Vidéo : pause au clic
-click 737,555
+click 714,560
 wait 300
 mark video_t px:video
 wait 1200
@@ -63,11 +63,11 @@ expect px:video same
 shot 07-video-paused
 step Vidéo : seek au clavier
 mark video_t
-key l
+key right
 wait 300
-expect video_t up 5
+expect video_t up 4
 step Vidéo : plein écran
-key f
+click 948,694
 wait 600
 expect fullscreen == 1
 shot 08-video-fullscreen

@@ -30,6 +30,11 @@ scheduled with `timer`) runs as on the desktop. Before 27/11 it did not: the vid
 started (`video_t=0.00`) but its ticker never ran between screenshots, which only
 moved because each shot advances the clock by 4 s.
 
+The attachment player is the legacy one unless `PHOENIX_DVP=1`: Space plays or
+pauses, ←/→ seek 5 s, digits jump to a tenth, fullscreen is the bar button and Esc
+leaves it. `l`, `j`, `k`, `f` and `m` exist only in the DVP player, so the scenario
+uses `key right` and clicks the fullscreen button.
+
 A bottom-aligned list that sits at its end anchors past its last item, and GPUI's
 `ListState::bounds_for_item` then returns `None` for every row (`chat item #108 is
 not laid out`). Point at the newest message from the list edge (`@chat.b+0,-60`)

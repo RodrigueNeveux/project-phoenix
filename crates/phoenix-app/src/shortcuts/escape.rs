@@ -75,6 +75,9 @@ fn close_popouts(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) -> bool {
 
 impl PhoenixApp {
     pub fn escape_stack(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if ui::chat::video_player::exit_fullscreen(window, cx) {
+            return;
+        }
         if crate::media::close_viewer(cx) {
             return;
         }

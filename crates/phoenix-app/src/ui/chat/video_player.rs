@@ -2292,6 +2292,14 @@ pub fn shot(spec: &str, window: &mut Window, cx: &mut App) {
     window.refresh();
 }
 
+pub fn exit_fullscreen(window: &mut Window, cx: &mut App) -> bool {
+    if cx.try_global::<Store>().is_none_or(|s| s.fullscreen.is_none()) {
+        return false;
+    }
+    set_fullscreen(cx, window, None);
+    true
+}
+
 pub fn shot_time(cx: &App) -> Option<f64> {
     cx.try_global::<Store>()?.players.values().filter(|p| !p.looped && p.clicked).map(Player::current).reduce(f64::max)
 }
