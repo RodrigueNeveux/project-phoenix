@@ -118,7 +118,13 @@ fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedStr
         .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
         .when(crate::theme::high_contrast(), hc_outline)
         .cursor_pointer()
-        .when_some(preview, |d, u| d.child(img(u.clone()).id(crate::media::anim_id(&u)).absolute().inset_0().size_full().object_fit(ObjectFit::Cover)))
+        .when_some(preview, |d, u| {
+            let mut im = img(u.clone());
+            if let Some(cache) = crate::media::lru::chat() {
+                im = im.image_cache(&cache);
+            }
+            d.child(im.id(crate::media::anim_id(&u)).absolute().inset_0().size_full().object_fit(ObjectFit::Cover))
+        })
         .child(div().absolute().inset_0().rounded(px(4.)).bg(fade).hover(|s| s.bg(fade.opacity(0.5))))
         .child(
             div()
@@ -230,7 +236,13 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                         let item = item.clone();
                         with_app(cx, w, move |a, w, cx| send(a, &item, w, cx));
                     })
-                    .child(img(gif.preview.clone()).id(crate::media::anim_id(&gif.preview)).size_full().object_fit(ObjectFit::Cover))
+                    .child({
+                        let mut im = img(gif.preview.clone());
+                        if let Some(cache) = crate::media::lru::chat() {
+                            im = im.image_cache(&cache);
+                        }
+                        im.id(crate::media::anim_id(&gif.preview)).size_full().object_fit(ObjectFit::Cover)
+                    })
                     .into_any_element(),
             );
         }

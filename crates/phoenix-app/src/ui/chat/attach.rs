@@ -62,10 +62,11 @@ fn hover_download(group: SharedString, url: SharedString) -> AnyElement {
         .into_any_element()
 }
 
-const FILE_RULES: [(&str, &[&str]); 9] = [
+const FILE_RULES: [(&str, &[&str]); 12] = [
     ("acrobat", &["pdf"]),
     ("sketch", &["sketch"]),
     ("ai", &["ai"]),
+    ("ps", &["psd"]),
     ("archive", &["rar", "zip", "7z", "tar", "tar.gz"]),
     (
         "code",
@@ -78,6 +79,8 @@ const FILE_RULES: [(&str, &[&str]); 9] = [
     ("spreadsheet", &["xls", "xlsx", "numbers", "csv"]),
     ("webcode", &["html", "xhtml", "htm", "xml", "xsd", "css", "styl"]),
     ("audio", &["mp3", "ogg", "opus", "wav", "aiff", "flac"]),
+    ("video", &["mp4", "webm", "mov", "mkv", "avi", "m4v", "ogv"]),
+    ("image", &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "avif", "heic", "ico", "tiff"]),
 ];
 
 pub fn file_class(filename: &str) -> &'static str {
@@ -100,6 +103,7 @@ pub fn file_icon_url(class: &str) -> &'static str {
         "audio" => "https://discord.com/assets/a6db1d05d35f13d0.svg",
         "code" => "https://discord.com/assets/f4bad77442422ded.svg",
         "document" => "https://discord.com/assets/9ebe3ef63aafee84.svg",
+        "image" => "https://discord.com/assets/5dea307a4037ec4e.svg",
         "ps" => "https://discord.com/assets/1084490cf680dd7c.svg",
         "sketch" => "https://discord.com/assets/c9f0992f0ab98d49.svg",
         "spreadsheet" => "https://discord.com/assets/b8ca4488a6d443bc.svg",
@@ -422,7 +426,7 @@ pub fn upload_progress_card(
             .shadow(crate::ui::inbox::low_shadow())
             .flex()
             .items_center()
-            .child(named_icon("file", 40., tk(idx::TEXT_LINK)).w(z(30.)).h(z(40.)).mr(z(8.)))
+            .child(img(SharedString::new_static(file_icon_url(s.icon_class))).flex_none().w(z(30.)).h(z(40.)).mr(z(8.)))
             .child(
                 div()
                     .flex_1()
@@ -464,7 +468,8 @@ pub fn upload_progress_card(
                         .flex_none()
                         .cursor_pointer()
                         .text_color(tk(idx::INTERACTIVE_TEXT_DEFAULT))
-                        .child(named_icon("close", 24., tk(idx::INTERACTIVE_TEXT_DEFAULT)))
+                        .hover(|s| s.text_color(tk(idx::INTERACTIVE_TEXT_HOVER)))
+                        .child(svg().path(crate::icons::path("close")).flex_none().size(z(24.)))
                         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.cancel_upload(key, cx))),
                 )
             })
@@ -488,9 +493,12 @@ mod tests {
         assert_eq!(super::file_class("data.csv"), "spreadsheet");
         assert_eq!(super::file_class("page.html"), "webcode");
         assert_eq!(super::file_class("song.flac"), "audio");
-        assert_eq!(super::file_class("photo.png"), "unknown");
+        assert_eq!(super::file_class("clip.mp4"), "video");
+        assert_eq!(super::file_class("art.psd"), "ps");
+        assert_eq!(super::file_class("photo.png"), "image");
         assert_eq!(super::file_class("README"), "unknown");
         assert!(super::file_icon_url("acrobat").ends_with("a42338c030af6d9c.svg"));
+        assert!(super::file_icon_url("image").ends_with("5dea307a4037ec4e.svg"));
         assert!(super::file_icon_url("unknown").ends_with("94660b205108a49f.svg"));
     }
 

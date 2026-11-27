@@ -2217,11 +2217,7 @@ pub(crate) fn embed(app: &PhoenixApp, entity: &Entity<PhoenixApp>, e: &Embed, cx
         let size = media::fit(m.width, m.height, media::MAX_W, max_h);
         let original = e.url.clone().unwrap_or_else(|| m.url.clone());
         let gifv = e.kind.as_deref() == Some("gifv");
-        let animated = (gifv && media::gif_plays(&original))
-            .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url, size.0)))
-            .flatten();
-        if animated.is_none()
-            && gifv
+        if gifv
             && video_player::supported()
             && let Some(v) = e.video.as_ref().filter(|v| v.url.starts_with("https://"))
         {
@@ -2241,6 +2237,9 @@ pub(crate) fn embed(app: &PhoenixApp, entity: &Entity<PhoenixApp>, e: &Embed, cx
                 ))
                 .into_any_element();
         }
+        let animated = (gifv && media::gif_plays(&original))
+            .then(|| e.video.iter().chain(e.thumbnail.iter()).find_map(|v| media::gifv_animated(&v.url, size.0)))
+            .flatten();
         let Some(src) = animated else {
             let still = media_image(&m.url, original.clone(), "".into(), (m.width, m.height), size);
             return div().mt(z(4.)).child(media::gif_hover(original, still)).into_any_element();

@@ -112,34 +112,41 @@ pub fn avatar_image(url: SharedString, size: f32) -> AnyElement {
     if !is_animated(&url) {
         return img(url).size(px(size)).rounded_full().flex_none().into_any_element();
     }
-    let group = SharedString::new_static("phoenix-avatar");
+    let hovered = emoji::window_focused() && HOVERED_AVATAR.with(|h| h.borrow().as_ref() == Some(&url));
+    let src = if hovered { url.clone() } else { static_variant(&url) };
+    let mut im = img(src);
+    if hovered && let Some(cache) = lru::chat() {
+        im = im.image_cache(&cache);
+    }
+    let key = url.clone();
     div()
-        .relative()
+        .id(gpui::ElementId::Name(format!("avatar-hover-{url}").into()))
         .flex_none()
         .size(px(size))
-        .group(group.clone())
-        .child(img(static_variant(&url)).size(px(size)).rounded_full())
-        .child(
-            img(url.clone())
-                .id(anim_id(&url))
-                .absolute()
-                .top_0()
-                .left_0()
-                .size(px(size))
-                .rounded_full()
-                .invisible()
-                .group_hover(group, |s| s.visible()),
-        )
+        .child(im.id(anim_id(&url)).size(px(size)).rounded_full())
+        .on_hover(move |h, window, _| {
+            let changed = HOVERED_AVATAR.with(|cur| {
+                let mut cur = cur.borrow_mut();
+                let next = if *h { Some(key.clone()) } else if cur.as_ref() == Some(&key) { None } else { cur.clone() };
+                let changed = *cur != next;
+                *cur = next;
+                changed
+            });
+            if changed {
+                window.refresh();
+            }
+        })
         .into_any_element()
 }
 
 thread_local! {
+    static HOVERED_AVATAR: std::cell::RefCell<Option<SharedString>> = const { std::cell::RefCell::new(None) };
     static HOVERED_GIF: std::cell::RefCell<Option<SharedString>> = const { std::cell::RefCell::new(None) };
     static HOVERED_STICKER: std::cell::RefCell<Option<SharedString>> = const { std::cell::RefCell::new(None) };
 }
 
 pub fn gif_plays(key: &SharedString) -> bool {
-    crate::ui::settings::effects::gif_autoplay() || HOVERED_GIF.with(|h| h.borrow().as_ref() == Some(key))
+    emoji::window_focused() && (crate::ui::settings::effects::gif_autoplay() || HOVERED_GIF.with(|h| h.borrow().as_ref() == Some(key)))
 }
 
 pub fn gif_hover(key: SharedString, child: impl IntoElement) -> gpui::Stateful<gpui::Div> {
@@ -158,9 +165,10 @@ pub fn gif_hover(key: SharedString, child: impl IntoElement) -> gpui::Stateful<g
 }
 
 pub fn sticker_plays(key: &SharedString) -> bool {
-    crate::ui::settings::effects::sticker_autoplay()
-        || (crate::ui::settings::effects::sticker_hover_plays()
-            && HOVERED_STICKER.with(|h| h.borrow().as_ref() == Some(key)))
+    emoji::window_focused()
+        && (crate::ui::settings::effects::sticker_autoplay()
+            || (crate::ui::settings::effects::sticker_hover_plays()
+                && HOVERED_STICKER.with(|h| h.borrow().as_ref() == Some(key))))
 }
 
 pub fn sticker_hover(key: SharedString, child: impl IntoElement) -> gpui::Stateful<gpui::Div> {

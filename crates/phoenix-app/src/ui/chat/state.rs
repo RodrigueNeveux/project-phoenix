@@ -56,6 +56,7 @@ pub struct Sending {
     pub key: u64,
     pub channel: Id,
     pub label: SharedString,
+    pub icon_class: &'static str,
     pub size: u64,
     pub started: Instant,
     pub sent: Arc<std::sync::atomic::AtomicU64>,
@@ -987,12 +988,12 @@ impl PhoenixApp {
         self.chat.next_key += 1;
         if !files.is_empty() {
             let size = files.iter().map(|f| f.bytes.len() as u64).sum();
-            let label: SharedString = if files.len() == 1 {
-                files[0].filename.clone().into()
+            let (label, icon_class): (SharedString, &'static str) = if files.len() == 1 {
+                (files[0].filename.clone().into(), super::attach::file_class(&files[0].filename))
             } else {
-                crate::t!("chat.n_files", n = files.len())
+                (crate::t!("chat.n_files", n = files.len()), "unknown")
             };
-            self.chat.sending.push(Sending { key, channel: ch, label, size, started: Instant::now(), sent: Arc::new(0.into()), cancel: Arc::default(), nonce: None });
+            self.chat.sending.push(Sending { key, channel: ch, label, icon_class, size, started: Instant::now(), sent: Arc::new(0.into()), cancel: Arc::default(), nonce: None });
         }
         let upload = (!files.is_empty()).then_some(key);
         let nonce = self.send_optimistic(ch, text, reply, files, upload, cx);
