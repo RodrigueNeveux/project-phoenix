@@ -396,11 +396,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }
     if details.is_none() && let Some(url) = MENU_LINK.with(|m| m.borrow().1.clone()) {
         items.push(MenuItem::Separator);
-        let u = url.clone();
-        items.push(MenuItem::action(crate::t!("menu.copy_link"), Some(crate::icons::path("chat/link")), move |_, _, cx| {
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string(u.to_string()))
-        }));
-        items.push(MenuItem::action(crate::t!("msg.open_link"), Some(crate::icons::path("menu/open-link")), move |_, _, cx| cx.open_url(&url)));
+        items.extend(crate::ui::extra_menus::native_link_items(&e, url));
     }
     let ed = e.clone();
     let dismiss: context_menu::Dismiss = Rc::new(move |_, cx| {

@@ -74,9 +74,8 @@ pub fn link_keys(url: &str) -> (&'static str, &'static str) {
 }
 
 pub fn image_items(e: &Ent, url: SharedString) -> Vec<MenuItem> {
-    let (ci, si, cl) = (url.clone(), url.clone(), url.clone());
+    let (ci, si) = (url.clone(), url.clone());
     let (ec, es) = (e.clone(), e.clone());
-    let (copy_key, open_key) = link_keys(&url);
     vec![
         MenuItem::action(crate::t!("msg.copy_image"), Some(crate::icons::path("image")), move |_, _, cx: &mut App| {
             let u = ci.clone();
@@ -87,11 +86,39 @@ pub fn image_items(e: &Ent, url: SharedString) -> Vec<MenuItem> {
             es.update(cx, |a, cx| a.save_image(u, cx))
         }),
         MenuItem::Separator,
-        MenuItem::action(crate::t!(copy_key), Some(crate::icons::path("chat/link")), move |_, _, cx: &mut App| {
-            cx.write_to_clipboard(ClipboardItem::new_string(cl.to_string()))
-        }),
-        MenuItem::action(crate::t!(open_key), Some(crate::icons::path("menu/open-link")), move |_, _, cx: &mut App| cx.open_url(&url)),
     ]
+    .into_iter()
+    .chain(native_link_items(e, url))
+    .collect()
+}
+
+pub fn contact_of(url: &str) -> Option<(&str, &str)> {
+    let (scheme, rest) = url.split_once(':')?;
+    let scheme = ["tel", "sms", "mailto"].into_iter().find(|s| s.eq_ignore_ascii_case(scheme))?;
+    let addr = rest.split(['?', ';']).next().filter(|a| !a.is_empty())?;
+    Some((scheme, addr))
+}
+
+pub fn native_link_items(e: &Ent, url: SharedString) -> Vec<MenuItem> {
+    let (copy_key, open_key) = link_keys(&url);
+    let copy_toast = |label: SharedString, icon: Option<SharedString>, text: String| {
+        let e = e.clone();
+        MenuItem::action(label, icon, move |_, _, cx: &mut App| {
+            cx.write_to_clipboard(ClipboardItem::new_string(text.clone()));
+            e.update(cx, |a, cx| a.parity_toast(crate::t!("viewer.link_copied"), cx));
+        })
+    };
+    let mut items = vec![copy_toast(crate::t!(copy_key), Some(crate::icons::path("chat/link")), url.to_string())];
+    if let Some((scheme, addr)) = contact_of(&url) {
+        let key = if scheme == "mailto" { "msg.copy_email" } else { "msg.copy_phone" };
+        items.push(copy_toast(crate::t!(key), None, addr.to_owned()));
+        if scheme == "tel" {
+            let sms = format!("sms:{}", &url[4..]);
+            items.push(MenuItem::action(crate::t!("msg.send_sms"), None, move |_, _, cx: &mut App| cx.open_url(&sms)));
+        }
+    }
+    items.push(MenuItem::action(crate::t!(open_key), Some(crate::icons::path("menu/open-link")), move |_, _, cx: &mut App| cx.open_url(&url)));
+    items
 }
 
 pub fn wishlist_add_items(e: &Ent) -> Vec<MenuItem> {
@@ -864,6 +891,9 @@ mod tests {
         assert_eq!(link_keys("https://cdn.discordapp.com/avatars/1/a_b.gif?size=128"), ("viewer.copy_link", "msg.open_media_link"));
         assert_eq!(link_keys("https://media.tenor.com/x.png"), ("viewer.copy_link", "msg.open_media_link"));
         assert_eq!(link_keys("https://discord.com/x"), ("menu.copy_link", "msg.open_link"));
+        assert_eq!(contact_of("mailto:a@b.fr?subject=x"), Some(("mailto", "a@b.fr")));
+        assert_eq!(contact_of("tel:+33123;ext=2"), Some(("tel", "+33123")));
+        assert_eq!(contact_of("https://discord.com"), None);
     }
 
     #[test]

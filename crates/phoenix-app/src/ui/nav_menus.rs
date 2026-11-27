@@ -33,6 +33,7 @@ thread_local! {
     static OPEN: RefCell<Option<(Target, Point<Pixels>)>> = const { RefCell::new(None) };
     static MUTED_GUILDS: RefCell<HashMap<Id, bool>> = RefCell::new(HashMap::new());
     static LEVELS: RefCell<HashMap<Scope, u8>> = RefCell::new(HashMap::new());
+    static GUILD_FLAGS: RefCell<HashMap<(Id, usize), bool>> = RefCell::new(HashMap::new());
 }
 
 pub fn is_open() -> bool {
@@ -122,7 +123,12 @@ fn mute_item(e: &Ent, label: gpui::SharedString, unmute: gpui::SharedString, mut
             MenuItem::action(crate::t!(l), None, move |_, _, cx: &mut App| e.update(cx, |a, cx| a.set_nav_mute(guild, channel, true, secs, cx)))
         })
         .collect();
-    MenuItem::submenu(label, items)
+    let mut item = MenuItem::submenu(label, items);
+    if let MenuItem::Submenu { on_click, .. } = &mut item {
+        let e = e.clone();
+        *on_click = Some(Rc::new(move |_, _, cx: &mut App| e.update(cx, |a, cx| a.set_nav_mute(guild, channel, true, None, cx))));
+    }
+    item
 }
 
 fn level_code(l: crate::notifications::Level) -> u8 {
@@ -156,7 +162,9 @@ fn notify_radios(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<I
         .with(|l| l.borrow().get(&(guild, channel)).copied())
         .or_else(|| stored_level(app, guild, channel))
         .unwrap_or(default);
-    let mut opts: Vec<(&str, u8)> = vec![("menu.notify.all", 0), ("menu.notify.mentions", 1), ("menu.notify.nothing", 2)];
+    let stage = channel.and_then(|c| app.channels.get(&c)).is_some_and(|c| c.kind == ChannelKind::Stage);
+    let mut opts: Vec<(&str, u8)> =
+        if stage { vec![("menu.notify.stage_all", 1), ("menu.notify.nothing", 2)] } else { vec![("menu.notify.all", 0), ("menu.notify.mentions", 1), ("menu.notify.nothing", 2)] };
     if let Some(ch) = channel {
         let in_category = app.channels.get(&ch).and_then(|c| c.parent).is_some();
         opts.insert(0, (if in_category { "menu.notify.default_category" } else { "menu.notify.default" }, 3));
@@ -175,10 +183,6 @@ fn notify_radios(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<I
         .collect()
 }
 
-fn notify_item(app: &PhoenixApp, e: &Ent, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
-    MenuItem::submenu(crate::t!("menu.notify_settings"), notify_radios(app, e, guild, channel))
-}
-
 fn level_label(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> gpui::SharedString {
     let level = |c: Option<Id>| LEVELS.with(|l| l.borrow().get(&(guild, c)).copied()).or_else(|| stored_level(app, guild, c));
     let parent = channel.and_then(|c| app.channels.get(&c)).and_then(|c| c.parent);
@@ -193,6 +197,76 @@ fn level_label(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> gpui
         0 => "menu.notify.all",
         2 => "menu.notify.nothing",
         _ => "menu.notify.mentions",
+    })
+}
+
+fn forum_posts_item(app: &PhoenixApp, e: &Ent, g: Id, ch: Id) -> MenuItem {
+    let parent = app.channels.get(&ch).and_then(|c| c.parent).map(|p| p.0);
+    let prefs = app.backend.notify_prefs();
+    let flags = prefs.as_ref().and_then(|p| p.guilds.get(&g.0)).and_then(|gp| gp.channels.get(&ch.0)).map_or(0, |c| c.flags);
+    let stored = prefs.as_ref().is_some_and(|p| p.new_forum_threads_created(Some(g.0), ch.0, parent));
+    let on = GUILD_FLAGS.with(|f| f.borrow().get(&(ch, FORUM_POSTS)).copied()).unwrap_or(stored);
+    let e = e.clone();
+    MenuItem::check(crate::t!("menu.notify.new_posts"), on, move |_, _, cx: &mut App| {
+        use crate::notifications::{NEW_FORUM_THREADS_OFF, NEW_FORUM_THREADS_ON};
+        let (set, clear) = if on { (NEW_FORUM_THREADS_OFF, NEW_FORUM_THREADS_ON) } else { (NEW_FORUM_THREADS_ON, NEW_FORUM_THREADS_OFF) };
+        GUILD_FLAGS.with(|f| f.borrow_mut().insert((ch, FORUM_POSTS), !on));
+        let fields = serde_json::json!({ "channel_overrides": { ch.0.to_string(): { "flags": (flags & !clear) | set } } });
+        e.update(cx, |a, cx| a.nav_request(NavRequest::GuildNotify { guild: g, fields }, cx, |_, _, _| {}))
+    })
+}
+
+const FORUM_POSTS: usize = usize::MAX;
+
+fn guild_flag_item(e: &Ent, g: Id, i: usize, on: bool) -> MenuItem {
+    let on = GUILD_FLAGS.with(|f| f.borrow().get(&(g, i)).copied()).unwrap_or(on);
+    let e = e.clone();
+    MenuItem::check(crate::t!(crate::ui::modals::guild_notify::FLAGS[i].0), on, move |_, _, cx: &mut App| {
+        let Some(fields) = crate::ui::modals::guild_notify::flag_fields(i, !on) else { return };
+        GUILD_FLAGS.with(|f| f.borrow_mut().insert((g, i), !on));
+        e.update(cx, |a, cx| a.nav_request(NavRequest::GuildNotify { guild: g, fields }, cx, |_, _, _| {}))
+    })
+}
+
+fn guild_notify_items(app: &PhoenixApp, e: &Ent, g: Id) -> Vec<MenuItem> {
+    let p = app.backend.notify_prefs().map(|p| p.guild(Some(g.0))).unwrap_or_default();
+    let mut items = notify_radios(app, e, Some(g), None);
+    items.push(MenuItem::Separator);
+    for (i, on) in [(2, p.suppress_everyone), (3, p.suppress_roles), (4, p.highlights_off), (5, p.mute_events)] {
+        items.push(guild_flag_item(e, g, i, on));
+    }
+    items.push(MenuItem::Separator);
+    items.push(guild_flag_item(e, g, 6, p.mobile_push));
+    items
+}
+
+fn guild_icon_hash(app: &PhoenixApp, g: Id) -> Option<String> {
+    let crate::model::ImageRef::Url(url) = &app.guilds.iter().find(|x| x.id == g)?.icon else { return None };
+    let rest = url.split_once(&format!("/icons/{}/", g.0))?.1;
+    Some(rest.split(['.', '?']).next()?.to_owned()).filter(|h| !h.is_empty())
+}
+
+fn server_asset_link(kind: &str, g: Id, hash: &str, size: u32) -> String {
+    let animated = if hash.starts_with("a_") { "&animated=true" } else { "" };
+    format!("https://cdn.discordapp.com/{kind}/{}/{hash}.webp?size={size}{animated}", g.0)
+}
+
+fn copy_server_info(app: &PhoenixApp, g: Id, icons: bool) -> Option<MenuItem> {
+    if !app.prefs.synced.developer_mode {
+        return None;
+    }
+    let icon = |item: MenuItem, name: &str| if icons { item.with_icon(name) } else { item };
+    let mut sub = vec![icon(copy(crate::t!("menu.copy_server_id"), g.0.to_string()), "id")];
+    if let Some(h) = guild_icon_hash(app, g) {
+        sub.push(icon(copy(crate::t!("menu.copy_server_icon_link"), server_asset_link("icons", g, &h, 1024)), "link"));
+    }
+    if let Some(h) = app.nav.banners.get(&g) {
+        sub.push(icon(copy(crate::t!("menu.copy_server_banner_link"), server_asset_link("banners", g, h, 480)), "link"));
+    }
+    Some(if icons {
+        MenuItem::submenu_with_icon(crate::t!("menu.copy_server_info"), "info", sub)
+    } else {
+        MenuItem::submenu(crate::t!("menu.copy_server_info"), sub)
     })
 }
 
@@ -314,9 +388,9 @@ pub fn guild_dropdown(app: &PhoenixApp, g: Id, cx: &mut Context<PhoenixApp>) -> 
         items.push(MenuItem::Separator);
         items.extend(danger);
     }
-    if app.prefs.synced.developer_mode {
+    if let Some(info) = copy_server_info(app, g, true) {
         items.push(MenuItem::Separator);
-        items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
+        items.push(info);
     }
     items
 }
@@ -366,14 +440,9 @@ fn rail_move(app: &PhoenixApp, e: &Ent, item: crate::ui::modals::gdm::RailRef) -
         items.push(MenuItem::Separator);
     }
     let (fl, ll) = if in_folder { ("menu.move_first_folder", "menu.move_last_folder") } else { ("menu.move_first", "menu.move_last") };
-    if !(first && last) {
-        items.push(place(fl, first, Dest::First));
-        items.push(place(ll, last, Dest::Last));
-    }
-    if matches!(items.last(), Some(MenuItem::Separator)) {
-        items.pop();
-    }
-    (!items.is_empty()).then(|| MenuItem::submenu(crate::t!("menu.move_to"), items))
+    items.push(place(fl, first, Dest::First));
+    items.push(place(ll, last, Dest::Last));
+    Some(MenuItem::submenu(crate::t!("menu.move_to"), items))
 }
 
 pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
@@ -403,6 +472,8 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             if let Some(g) = guild {
                 let cat = ch.kind == ChannelKind::Category;
                 let voice = matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage);
+                let stage = ch.kind == ChannelKind::Stage;
+                let forum = ch.kind == ChannelKind::Forum;
                 let manage = perms(app, g, MANAGE_CHANNELS);
                 if cat {
                     let collapsed = app.collapsed.contains(&id);
@@ -437,7 +508,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                 } else {
                     items.push(crate::actions::channel::favorite_item(app, &e, id));
                     items.push(MenuItem::Separator);
-                    let invite = if voice { "menu.invite_voice_channel" } else { "menu.invite_channel" };
+                    let invite = if voice && !stage { "menu.invite_voice_channel" } else { "menu.invite_channel" };
                     items.push(act(&e, crate::t!(invite), move |a, _, cx| a.open_invite_people(g, cx)));
                     items.push(crate::actions::channel::pin_item(&e, id, false));
                     items.push(copy(crate::t!("menu.copy_link"), format!("https://discord.com/channels/{}/{}", g.0, id.0)));
@@ -462,8 +533,12 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                     (crate::t!("menu.mute_channel"), crate::t!("menu.unmute_channel"))
                 };
                 items.push(mute_item(&e, mute, unmute, muted, guild, Some(id)));
-                if !voice {
-                    items.push(notify_item(app, &e, guild, Some(id)).with_subtext(level_label(app, guild, Some(id))));
+                if !voice || stage {
+                    let mut radios = notify_radios(app, &e, guild, Some(id));
+                    if forum {
+                        radios.splice(0..0, [forum_posts_item(app, &e, g, id), MenuItem::Separator]);
+                    }
+                    items.push(MenuItem::submenu(crate::t!("menu.notify_settings"), radios).with_subtext(level_label(app, guild, Some(id))));
                 }
                 if manage {
                     items.push(MenuItem::Separator);
@@ -483,12 +558,14 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                         items.push(act(&e, crate::t!("menu.edit_channel"), move |a, _, cx| a.open_channel_settings(id, cx)));
                         items.push(act(&e, crate::t!("menu.clone_channel"), move |a, _, cx| a.open_clone_channel(g, id, cx)));
                         let parent = app.channels.get(&id).and_then(|c| c.parent);
-                        let (create, kind) = if voice {
-                            ("menu.create_voice_channel", ChannelKind::Voice)
-                        } else {
-                            ("menu.create_text_channel", ChannelKind::Text)
+                        let create = match ch.kind {
+                            ChannelKind::Text => Some(("menu.create_text_channel", ChannelKind::Text)),
+                            ChannelKind::Voice => Some(("menu.create_voice_channel", ChannelKind::Voice)),
+                            _ => None,
                         };
-                        items.push(act(&e, crate::t!(create), move |a, _, cx| a.open_create_channel(g, parent, kind, cx)));
+                        if let Some((create, kind)) = create {
+                            items.push(act(&e, crate::t!(create), move |a, _, cx| a.open_create_channel(g, parent, kind, cx)));
+                        }
                         items.push(MenuItem::danger(crate::t!("menu.delete_channel"), None, {
                             let e = e.clone();
                             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_delete_channel(id, cx))
@@ -578,7 +655,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             items.push(MenuItem::Separator);
             items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), muted, Some(g), None));
             let en = e.clone();
-            let mut notify = notify_item(app, &e, Some(g), None).with_subtext(level_label(app, Some(g), None));
+            let mut notify = MenuItem::submenu(crate::t!("menu.notify_settings"), guild_notify_items(app, &e, g)).with_subtext(level_label(app, Some(g), None));
             if let MenuItem::Submenu { on_click, .. } = &mut notify {
                 *on_click = Some(Rc::new(move |_, _, cx: &mut App| {
                     en.update(cx, |a, cx| {
@@ -631,21 +708,15 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                     move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_security_actions(g, cx))
                 }));
             }
-            if crate::ui::modals::report_raid::visible(app, g) {
-                items.push(MenuItem::danger(crate::t!("menu.report_raid"), None, {
-                    let e = e.clone();
-                    move |_, _, cx: &mut App| e.update(cx, |a, cx| a.open_report_raid(g, cx))
-                }));
-            }
             if !owner {
                 items.push(MenuItem::danger(crate::t!("menu.leave_server"), None, {
                     let e = e.clone();
                     move |_, _, cx: &mut App| e.update(cx, |a, cx| a.show_overlay(Overlay::LeaveGuild(g), cx))
                 }));
             }
-            if dev {
+            if let Some(info) = copy_server_info(app, g, false) {
                 items.push(MenuItem::Separator);
-                items.push(copy(crate::t!("menu.copy_server_id"), g.0.to_string()).with_icon("id"));
+                items.push(info);
             }
         }
         Target::ChannelBell(id) | Target::InboxBell(id) if app.backend.thread_info(id).is_some() => {
@@ -762,5 +833,16 @@ impl PhoenixApp {
         self.rebuild_sidebar();
         self.nav_request(NavRequest::Mute { guild, channel, muted, secs }, cx, |_, _, _| {});
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn server_asset_links_match_the_client_cdn_format() {
+        assert_eq!(server_asset_link("icons", Id(7), "abc", 1024), "https://cdn.discordapp.com/icons/7/abc.webp?size=1024");
+        assert_eq!(server_asset_link("banners", Id(7), "a_f", 480), "https://cdn.discordapp.com/banners/7/a_f.webp?size=480&animated=true");
     }
 }

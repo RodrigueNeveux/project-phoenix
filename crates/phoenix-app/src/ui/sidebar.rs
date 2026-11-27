@@ -393,6 +393,10 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .justify_between()
                         .gap(z(4.))
                         .when(banner.is_none(), |d| d.border_b_1().border_color(t(idx::BORDER_SUBTLE)))
+                        .on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {
+                            cx.stop_propagation();
+                            crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Guild(crate::model::Id(gid)), ev.position, w)
+                        })
                         .child(
                             div()
                                 .id("guild-header")
