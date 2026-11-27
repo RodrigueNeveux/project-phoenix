@@ -96,6 +96,7 @@ pub struct BadgeTip {
 }
 
 fn badge_card(b: BadgeTip) -> gpui::Div {
+    use gpui::StyledImage as _;
     let subtle = |t: SharedString| {
         div()
             .w_full()
