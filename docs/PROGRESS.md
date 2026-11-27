@@ -2,16 +2,16 @@
 
 Audit du 27/11/2026 sur origin/main `8c7b358b`. Ce document remplace le pourcentage de lignes ✅ comme mesure de l'avancement. Il se refait à la main : chaque état ci-dessous doit citer une preuve, et un état ne monte d'un cran que sur une nouvelle preuve réelle.
 
-<!-- real-progress {"score":57.8,"low":45.6,"high":73.1,"features":122,"verified":27,"unverified":76,"broken":9,"missing":10,"critical":26,"critical_verified":14,"critical_broken":6,"proof_measured":44,"proof_compared":8,"at":"2026-11-27"} -->
+<!-- real-progress {"score":61.3,"low":49.1,"high":75.7,"features":122,"verified":31,"unverified":76,"broken":5,"missing":10,"critical":26,"critical_verified":15,"critical_broken":5,"proof_measured":44,"proof_compared":8,"at":"2026-11-27"} -->
 
 ## Résultat
 
 | mesure | valeur |
 |---|---|
-| **Score réel pondéré** | **58 %** (fourchette 46 à 73 %) |
-| Couverture fonctionnelle | 112 fonctionnalités sur 122 existent dans le code (94 % du poids), mais **27 seulement sont vérifiées en vrai** (33 % du poids) |
+| **Score réel pondéré** | **61 %** (fourchette 49 à 76 %) |
+| Couverture fonctionnelle | 112 fonctionnalités sur 122 existent dans le code (94 % du poids), mais **31 seulement sont vérifiées en vrai** (37 % du poids) |
 | Niveau de preuve des ✅ | **44 %** s'appuient sur une mesure du vrai client, **8 %** ont été comparés à un rendu Phoenix ; 40 % viennent du CSS ou du JS seuls, 8 % d'un test unitaire, 7 % de rien |
-| Parcours critiques | **14 sur 26** prouvés en usage ou en test réel, 6 cassés connus, 6 non prouvés |
+| Parcours critiques | **15 sur 26** prouvés en usage ou en test réel, 5 cassés connus, 6 non prouvés |
 
 L'ancien chiffre (94,2 % : 2287 ✅, 114 ⚠, 26 ❌, 64 ➖ dans `docs/parity/*.md`) mesure autre chose : la part des détails inventoriés qui ont été codés. Il est biaisé pour trois raisons.
 
@@ -79,9 +79,9 @@ Docs les plus faibles : `inventory.md` (« page présente ✅ » sans mesure), `
 | Statut propre visible des autres | critique | cassé, correctif non prouvé | hors ligne pour tous jusqu'au 26/11 |
 | Lire et défiler un salon | critique | prouvé (QA) | QA run2 OK ; run1 KO ; le build de l'utilisateur n'a pas encore le correctif |
 | Charger l'historique ancien | critique | non prouvé | jamais testé jusqu'à la pagination |
-| Revenir au présent | important | cassé | QA KO deux fois le 27/11 |
+| Revenir au présent | important | prouvé (QA) | QA d'entrées du 27/11 sur `29718d29` : barre affichée après 30 crans, clic, `at_bottom == 1` (deux runs) |
 | Envoyer, éditer, supprimer, réagir | critique | prouvé (test réel) | salon de test, 26/11 |
-| Menu contextuel d'un message | critique | cassé | QA KO deux fois le 27/11 |
+| Menu contextuel d'un message | critique | prouvé (entrées réelles) | 27/11 : clic droit X11 réel (Xvfb, `xdotool`) sur le texte et sur une vidéo de #phoenix, menu ouvert, Échap le ferme ; les KO de la QA venaient de son ancre `@chat#-2`, sans ligne quand la liste est au bas |
 | Répondre | critique | non prouvé | aucun envoi de réponse |
 | Pièces jointes (envoi) | critique | prouvé (test réel) | PNG de 3,3 Mo envoyé |
 | Images | critique | prouvé (usage) | ≈ 8 échecs en deux jours, liens expirés |
@@ -110,14 +110,11 @@ Triés par impact (poids × distance à « vérifiée en vrai ») :
 1. Vocal : entendre les autres (cassé)
 2. Vocal : changer de salon (cassé)
 3. Lecture vidéo (cassée)
-4. Menu contextuel d'un message (cassé)
-5. Statut propre visible des autres (correctif jamais vérifié)
-6. Stabilité : fuite mémoire (correctif non remesuré)
-7. Liste des membres : défilement et clic (cassés)
-8. Revenir au présent (cassé)
-9. Correcteur orthographique (absent)
-10. Suppression de bruit et annulation d'écho (absentes)
-11. Salons Stage, activités, liens `discord://`, lecteur d'écran (absents)
+4. Statut propre visible des autres (correctif jamais vérifié)
+5. Stabilité : fuite mémoire (correctif non remesuré)
+6. Correcteur orthographique (absent)
+7. Suppression de bruit et annulation d'écho (absentes)
+8. Salons Stage, activités, liens `discord://`, lecteur d'écran (absents)
 
 Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, envoyer en MP, historique ancien, non-lus et pastilles, login interactif. Le backlog de travail tiré de cette liste est tenu hors du dépôt.
 
@@ -167,7 +164,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 23 | Afficher les messages d'un salon (groupage, auteurs, dates) | critique | vérifiée en vrai | real-compare.md et real-glitches.md : environ 30 écrans réels comparés |
 | 24 | Défilement (molette, pavé tactile, PageUp/PageDown) | critique | vérifiée en vrai | QA run2 27/11 13:45 OK ; run1 12:14 KO ; le build de l'utilisateur (766fa7ba) n'a pas encore ces correctifs |
 | 25 | Charger l'historique plus ancien | critique | présente, non vérifiée | aucune étape QA ne remonte jusqu'à la pagination |
-| 26 | Revenir au présent (barre de saut) | important | cassée connue | QA run1 et run2 du 27/11 : `at_bottom` KO deux fois ; 8c7b358b non retesté |
+| 26 | Revenir au présent (barre de saut) | important | vérifiée en vrai | QA d'entrées du 27/11 sur `29718d29` (après 8c7b358b) : 30 crans de molette, barre « Tu consultes d'anciens messages », clic, `at_bottom == 1`, deux runs |
 | 27 | Sauter à un message (réponse, lien, épingle, résultat) | important | présente, non vérifiée | code présent, non testé en réel |
 | 28 | Indicateur de frappe | important | présente, non vérifiée | typing.md : valeurs CSS, jamais vu avec un vrai tiers qui écrit |
 | 29 | Markdown (titres, listes, citations, spoilers, code coloré) | important | vérifiée en vrai | real-glitches.md : glitchs relevés sur des écrans réels puis corrigés |
@@ -180,7 +177,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 36 | Messages système, bannières de fil, annonces | détail | présente, non vérifiée | rendus, pas de comparaison dédiée |
 | 37 | Composants d'application (boutons, menus, conteneurs v2) | important | présente, non vérifiée | affichage présent, interactions jamais envoyées |
 | 38 | Stickers (affichage) | détail | présente, non vérifiée | 404 de stickers dans phoenix.log |
-| 39 | Super réactions (affichage, animation) | détail | cassée connue | plantage le 26/11 14:20, corrigé par 80f8c2ca, jamais revu en réel |
+| 39 | Super réactions (affichage, animation) | détail | vérifiée en vrai | 27/11 : survol à la souris (QA d'entrées) de la pilule Super d'un vrai message de #annonces : info-bulle « … a utilisé la super réaction », effet joué, aucun plantage |
 | 40 | Sondages (affichage, vote, création) | important | présente, non vérifiée | rendus et tests ; vote réel non tracé dans le changelog |
 | 41 | Utilisateurs bloqués ou ignorés (messages masqués) | détail | présente, non vérifiée | `chat/blocked.rs` |
 
@@ -192,7 +189,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 43 | Auto-complétion (mentions, émojis, salons, commandes) | important | vérifiée en vrai | QA 27/11 : « Composer : frappe et auto-complétion » OK |
 | 44 | Éditer un message | critique | vérifiée en vrai | édition réelle sur le salon de test (26/11 19:55) |
 | 45 | Supprimer un message | critique | vérifiée en vrai | suppression réelle avec confirmation (26/11 19:55) |
-| 46 | Menu contextuel d'un message (clic droit) | critique | cassée connue | QA run1 et run2 27/11 : `msgmenu == 1` KO |
+| 46 | Menu contextuel d'un message (clic droit) | critique | vérifiée en vrai | 27/11 : clic droit X11 réel sous Xvfb (binaire complet, vrai compte, #phoenix) sur un texte et sur une vidéo, Échap ferme ; le KO de la QA était son ancre `@chat#-2` (`bounds_for_item` sans ligne pour une liste au bas), corrigée dans le scénario |
 | 47 | Réagir (ajouter, retirer) | critique | vérifiée en vrai | 👍 ajouté puis retiré en réel (26/11 19:55) |
 | 48 | Répondre à un message | critique | présente, non vérifiée | aucun envoi réel de réponse tracé |
 | 49 | Envoyer des pièces jointes (bouton +, glisser, préupload) | critique | vérifiée en vrai | PNG de 3,3 Mo envoyé en réel (25/11, 26/11) |
@@ -265,7 +262,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 
 | # | fonctionnalité | poids | état | preuve |
 |---|---|---|---|---|
-| 89 | Liste des membres (défilement, clic) | important | cassée connue | QA run2 27/11 : molette KO, élément #2 non placé, popout et menu KO depuis la liste |
+| 89 | Liste des membres (défilement, clic) | important | vérifiée en vrai | 27/11 : QA d'entrées avec la liste affichée (molette, popout au clic, menu au clic droit OK) et entrées X11 réelles sous Xvfb (molette, popout, menu) ; les KO venaient de la QA, qui recopiait la liste masquée du client officiel ; sous-menu du menu membre qui couvrait le menu corrigé (289a08d8) |
 | 90 | Popout et profil complet, notes | important | vérifiée en vrai | QA : « Menu utilisateur puis modale de profil » OK (run1) ; rendus réels |
 | 91 | Éditer son profil (avatar, bannière, bio, décorations) | important | présente, non vérifiée | écritures bloquées, jamais exécutées |
 | 92 | Bloquer, ignorer, signaler | détail | présente, non vérifiée | confirmation présente, jamais exécuté |
