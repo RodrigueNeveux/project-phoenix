@@ -19,6 +19,7 @@ use crate::model::{Id, VoiceFlags};
 use crate::icons::lottie_icons::Lottie;
 use crate::ui::context_menu::{self, MenuItem};
 use crate::ui::icon;
+use crate::ui::settings::voice::{NoiseMode, quick_mic_test, stop_quick_mic_test};
 use crate::voice::prefs::{prefs, update};
 use crate::voice::{Quality, VoiceStatus};
 
@@ -31,6 +32,8 @@ enum Tab {
 thread_local! {
     static USER_MENU: Cell<Option<(Id, Point<Pixels>)>> = const { Cell::new(None) };
     static POPOUT: Cell<Option<Tab>> = const { Cell::new(None) };
+    static NOISE_POPOUT: Cell<Option<Id>> = const { Cell::new(None) };
+    static NOISE_ANCHOR: Cell<Option<gpui::Bounds<Pixels>>> = const { Cell::new(None) };
     static AUDIO_MENU: RefCell<Option<AudioMenu>> = const { RefCell::new(None) };
     static AUDIO_FULL: Cell<bool> = const { Cell::new(false) };
     static AUDIO_GROUP: Cell<[Option<gpui::Bounds<Pixels>>; 2]> = const { Cell::new([None; 2]) };
@@ -66,10 +69,12 @@ const ACTIVITY: &str = "icons/voice/activity.svg";
 const SHIELD: &str = "icons/voice/shield.svg";
 const NOISE: &str = "icons/voice/noise.svg";
 const NOISE_OFF: &str = "icons/voice/noise-off.svg";
+const KRISP_WORDMARK: &str = "icons/voice/krisp-wordmark.svg";
 const VIDEO: &str = "icons/voice/video-small.svg";
 
 pub fn svg_asset(path: &str) -> Option<&'static str> {
     Some(match path {
+        KRISP_WORDMARK => include_str!("../../assets/krisp-wordmark.svg"),
         CAMERA => concat!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="black">"#,
             r#"<path d="M4 5h11a2 2 0 0 1 2 2v2.4l3.6-2.6A1 1 0 0 1 22 7.6v8.8a1 1 0 0 1-1.4.8L17 14.6V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z"/>"#,
@@ -542,10 +547,10 @@ fn audio_menu(kind: Audio, pos: Point<Pixels>, devices: Vec<String>, deafened: b
     context_menu::render_anchored(pos, gpui::Anchor::BottomLeft, items, dismiss)
 }
 
-pub fn toggle_noise_cancellation(p: &mut crate::voice::prefs::VoicePrefs) {
+fn toggle_advanced_noise_suppression(p: &mut crate::voice::prefs::VoicePrefs) {
     if p.audio_profile == crate::voice::prefs::PROFILE_CUSTOM {
-        p.noise_cancellation = !p.noise_cancellation;
-        p.noise_suppression = !p.noise_cancellation;
+        let next = if NoiseMode::effective(p) == NoiseMode::Rnnoise { NoiseMode::Standard } else { NoiseMode::Rnnoise };
+        next.apply(p);
     }
 }
 
@@ -793,10 +798,9 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
         (Some(p), _) => crate::t!("voice.ping", p = p),
         (None, _) => crate::t!("voice.waiting_server"),
     };
-    let (noise, noise_profile) = {
-        let p = prefs().lock();
-        (p.processing().noise_cancellation, p.audio_profile)
-    };
+    let noise = NoiseMode::effective(&prefs().lock()) == NoiseMode::Rnnoise;
+    let noise_available = voice_status_has_noise_popout(app);
+    let noise_open = noise_popout_open(app);
     let enlarge = enlarge_targets(app, cx);
     let bx = panel_box(enlarge);
     div()
@@ -887,16 +891,34 @@ pub fn voice_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoE
                                 }),
                                 false,
                             )
-                            .tip(match noise_profile {
-                                crate::voice::prefs::PROFILE_ISOLATION => crate::t!("voice.noise_by_iso"),
-                                PROFILE_STUDIO => crate::t!("voice.noise_by_studio"),
-                                _ if noise => crate::t!("voice.noise_off"),
-                                _ => crate::t!("voice.noise_on"),
+                            .when(noise_available, |button| {
+                                button
+                                    .role(gpui::Role::Button)
+                                    .aria_label(crate::t!("voice.noise"))
+                                    .aria_expanded(noise_open)
+                                    .child(
+                                        gpui::canvas(
+                                            |bounds, window, _| {
+                                                let previous = NOISE_ANCHOR.with(|anchor| anchor.replace(Some(bounds)));
+                                                if previous != Some(bounds) && NOISE_POPOUT.with(Cell::get).is_some() {
+                                                    window.on_next_frame(|window, _| window.refresh());
+                                                }
+                                            },
+                                            |_, _, _, _| {},
+                                        )
+                                        .absolute()
+                                        .size_full(),
+                                    )
+                                    .tip(crate::t!("voice.noise"))
+                                    .on_click(cx.listener(|app, _, _, cx| {
+                                        if !close_noise_popout() && voice_status_has_noise_popout(app) {
+                                            POPOUT.with(|open| open.set(None));
+                                            NOISE_POPOUT.with(|open| open.set(app.voice_channel));
+                                        }
+                                        cx.notify();
+                                    }))
                             })
-                            .on_click(cx.listener(|_, _, _, cx| {
-                                update(toggle_noise_cancellation, true);
-                                cx.notify();
-                            })),
+                            .when(!noise_available, |button| button.cursor(gpui::CursorStyle::OperationNotAllowed)),
                         )
                         .child(
                             panel_button(
@@ -1343,6 +1365,161 @@ fn connection_body(v: &crate::voice::VoiceUi) -> AnyElement {
         .into_any_element()
 }
 
+fn voice_status_has_noise_popout(app: &PhoenixApp) -> bool {
+    app.voice_channel.is_some() && app.voice.status == VoiceStatus::Connected && app.settings.is_none()
+}
+
+pub(crate) fn noise_popout_open(app: &PhoenixApp) -> bool {
+    voice_status_has_noise_popout(app) && NOISE_POPOUT.with(Cell::get) == app.voice_channel
+}
+
+fn close_noise_popout() -> bool {
+    let was_open = NOISE_POPOUT.with(|open| open.take().is_some());
+    if was_open {
+        stop_quick_mic_test();
+    }
+    was_open
+}
+
+fn noise_popout(anchor: gpui::Bounds<Pixels>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    use crate::voice::prefs::{PROFILE_CUSTOM, PROFILE_ISOLATION};
+
+    let (mode, profile) = {
+        let p = prefs().lock();
+        (NoiseMode::effective(&p), p.audio_profile)
+    };
+    let on = mode == NoiseMode::Rnnoise;
+    let editable = profile == PROFILE_CUSTOM;
+    let switch_description = match profile {
+        PROFILE_ISOLATION => crate::t!("voice.noise_by_iso"),
+        PROFILE_STUDIO => crate::t!("voice.noise_by_studio"),
+        _ => crate::t!("voice.noise_quick_switch_note"),
+    };
+    let chrome = div()
+        .id("voice-noise-popout")
+        .w(z(276.))
+        .p(z(16.))
+        .rounded(z(8.))
+        .bg(c(Palette::BG_FLOATING))
+        .shadow_lg()
+        .occlude()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+        .flex()
+        .flex_col()
+        .gap(z(8.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(z(8.))
+                .child(
+                    div()
+                        .flex_1()
+                        .text_size(z(14.))
+                        .line_height(z(20.))
+                        .font_weight(FontWeight::SEMIBOLD)
+                        .text_color(t(idx::TEXT_STRONG))
+                        .when(!editable, |d| d.opacity(0.5))
+                        .child(crate::t!("voice.noise")),
+                )
+                .child(
+                    crate::ui::controls::switch("voice-noise-switch", on)
+                        .role(gpui::Role::Switch)
+                        .aria_label(crate::t!("voice.noise_krisp"))
+                        .aria_description(switch_description.clone())
+                        .aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
+                        .tip(switch_description)
+                        .when(!editable, |switch| switch.opacity(0.5).cursor(gpui::CursorStyle::OperationNotAllowed))
+                        .when(editable, |switch| {
+                            crate::ui::focus_ring::ring(switch, crate::ui::states::key("voice-noise-switch"), 16.)
+                                .on_click(cx.listener(|_, _, _, cx| {
+                                    update(toggle_advanced_noise_suppression, true);
+                                    cx.notify();
+                                }))
+                        }),
+                ),
+        )
+        .child(
+            div()
+                .text_size(z(14.))
+                .line_height(z(18.))
+                .child(crate::t!("voice.noise_quick_intro")),
+        )
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .gap(z(12.))
+                .child(div().text_size(z(14.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).child(crate::t!("voice.quick_mic_title")))
+                .child(quick_mic_test(cx)),
+        )
+        .child(
+            div()
+                .pt(z(4.))
+                .flex()
+                .flex_col()
+                .gap(z(4.))
+                .child(div().text_size(z(14.)).line_height(z(20.)).font_weight(FontWeight::SEMIBOLD).child(crate::t!("voice.noise_quick_mode")))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .child(
+                            div()
+                                .id("voice-noise-wordmark")
+                                .flex()
+                                .items_center()
+                                .h(z(24.))
+                                .aria_label(crate::t!("voice.noise_krisp"))
+                                .aria_description(crate::t!("voice.noise_krisp_engine"))
+                                .child(svg().path(KRISP_WORDMARK).w(z(42.)).h(z(20.)).text_color(t(idx::TEXT_STRONG)))
+                                .tip(crate::t!("voice.noise_krisp_engine")),
+                        )
+                        .child(
+                            crate::ui::focus_ring::ring(div().id("voice-noise-learn-more"), crate::ui::states::key("voice-noise-learn-more"), 4.)
+                                .role(gpui::Role::Link)
+                                .text_size(z(13.))
+                                .line_height(z(18.))
+                                .text_color(t(idx::TEXT_LINK))
+                                .cursor_pointer()
+                                .hover(|d| d.underline())
+                                .child(crate::t!("voice.noise_quick_learn"))
+                                .on_click(|_, _, cx| cx.open_url("https://krisp.ai/discord/")),
+                        ),
+                ),
+        );
+    let close = cx.listener(|_, _, _, cx| {
+        close_noise_popout();
+        cx.notify();
+    });
+    gpui::deferred(
+        div()
+            .id("voice-noise-backdrop")
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .occlude()
+            .on_mouse_down(MouseButton::Left, close)
+            .on_mouse_down(MouseButton::Right, cx.listener(|_, _, _, cx| {
+                close_noise_popout();
+                cx.notify();
+            }))
+            .child(
+                gpui::anchored()
+                    .attach(anchor, gpui::Anchor::TopCenter)
+                    .anchor(gpui::Anchor::BottomCenter)
+                    .offset(gpui::point(px(0.), z(-8.)))
+                    .snap_to_window_with_margin(z(8.))
+                    .child(chrome),
+            ),
+    )
+    .with_priority(4)
+    .into_any_element()
+}
+
 fn popout(app: &PhoenixApp, tab: Tab, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let tab_button = |id: &'static str, label: SharedString, t: Tab, cx: &mut Context<PhoenixApp>| {
         let sel = t == tab;
@@ -1420,6 +1597,13 @@ pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Phoenix
     if let Some((pos, cams)) = CAMERA_MENU.with(|m| m.borrow().clone()) {
         out.push(camera_menu(pos, cams, cx));
     }
+    if noise_popout_open(app) {
+        if let Some(anchor) = NOISE_ANCHOR.with(Cell::get) {
+            out.push(noise_popout(anchor, cx));
+        }
+    } else {
+        close_noise_popout();
+    }
     if app.voice_channel.is_none() {
         USER_MENU.with(|m| m.set(None));
         POPOUT.with(|p| p.set(None));
@@ -1435,7 +1619,7 @@ pub fn overlays(app: &PhoenixApp, _window: &mut Window, cx: &mut Context<Phoenix
 }
 
 pub fn close_popout() -> bool {
-    POPOUT.with(|p| p.take().is_some()) || USER_MENU.with(|m| m.take().is_some())
+    close_noise_popout() || POPOUT.with(|p| p.take().is_some()) || USER_MENU.with(|m| m.take().is_some())
 }
 
 pub fn open_user_menu(user: Id, pos: Point<Pixels>, cx: &mut App) {
@@ -1523,16 +1707,23 @@ mod tests {
     }
 
     #[test]
-    fn noise_button_toggles_krisp_only_in_the_custom_profile() {
+    fn noise_switch_toggles_the_advanced_filter_only_in_custom() {
         use crate::voice::prefs::{PROFILE_CUSTOM, PROFILE_ISOLATION, VoicePrefs};
-        let mut p = VoicePrefs { audio_profile: PROFILE_CUSTOM, ..Default::default() };
-        toggle_noise_cancellation(&mut p);
-        assert!(!p.noise_cancellation && p.noise_suppression);
-        toggle_noise_cancellation(&mut p);
-        assert!(p.noise_cancellation && !p.noise_suppression);
-        let mut iso = VoicePrefs { audio_profile: PROFILE_ISOLATION, ..Default::default() };
-        toggle_noise_cancellation(&mut iso);
-        assert!(iso.noise_cancellation && iso.processing().noise_cancellation);
-        assert_eq!(crate::i18n::t_in("fr", "voice.noise_by_iso", &[]).as_ref(), "L'annulation de bruit est enabled par le profil d'entrée Voice Isolation.");
+        for mode in [NoiseMode::Standard, NoiseMode::Off] {
+            let mut p = VoicePrefs { audio_profile: PROFILE_CUSTOM, ..Default::default() };
+            mode.apply(&mut p);
+            toggle_advanced_noise_suppression(&mut p);
+            assert_eq!(NoiseMode::effective(&p), NoiseMode::Rnnoise);
+            toggle_advanced_noise_suppression(&mut p);
+            assert_eq!(NoiseMode::effective(&p), NoiseMode::Standard);
+        }
+        for (profile, expected) in [(PROFILE_ISOLATION, NoiseMode::Rnnoise), (PROFILE_STUDIO, NoiseMode::Off)] {
+            let mut p = VoicePrefs { audio_profile: profile, ..Default::default() };
+            NoiseMode::Standard.apply(&mut p);
+            let before = p.clone();
+            toggle_advanced_noise_suppression(&mut p);
+            assert_eq!(NoiseMode::effective(&p), expected);
+            assert!(p == before);
+        }
     }
 }

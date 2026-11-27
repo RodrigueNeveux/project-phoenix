@@ -298,7 +298,7 @@ Before, every end of the voice connection showed « Aucun chemin de connexion »
 
 | item | client | Phoenix | status |
 |---|---|---|---|
-| Krisp button at rest | `Tz` (web f7cab82d chunk) plays `t = noiseCancellationActive ? "disable" : "enable"` on the `Lottie_HoverOnOff_NoiseSuppression` Lottie; its `slash` precomp (ip −22, st −22, bar layers 23–69 and 69–1331) is hidden at frame 0 (`disable` start, Krisp on) and drawn at frame 100 (`enable` start, Krisp off), same layout as the mic Lottie | Lottie unchanged; without the Lottie the fallback is `WaveformIcon` when on and `WaveformSlashIcon` (`voice/noise-off`) when off. `WaveformSlashIcon` alone is the client's error state (disabled button) | ✅ |
+| Noise suppression button | `Tz` (web f7cab82d chunk) plays `t = noiseCancellationActive ? "disable" : "enable"` on the `Lottie_HoverOnOff_NoiseSuppression` Lottie. The slash is hidden when Krisp is on. | The waveform indicates whether the advanced filter is active. The button opens the noise suppression panel and mic test. | ✅ |
 | no camera | `8jSzSe` "Camera Unavailable" / `bhqSWl` "Uh oh, we can't detect any camera." / `BddRzS` "Okay" confirm modal | `media_failure_modal`: missing V4L2 node, empty DirectShow list, or no frame within 8 s | ✅ |
 | camera start error | `z+mxvo` "Failed to start camera" | same title, the error (or FFmpeg missing) as body | ✅ |
 | Go Live error | `GFr0GR` "Screen Sharing Unavailable" | modal when FFmpeg is missing or the capture fails to open | ✅ |

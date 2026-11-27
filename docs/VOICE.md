@@ -11,12 +11,12 @@ microphone (cpal / PulseAudio) → `audio::device::encode_loop` (input volume, `
 Every 20 ms Opus frame goes through `InputChain` as two 10 ms blocks of 480 samples at 48 kHz mono, in this order:
 
 1. high-pass filter + echo cancellation + "Standard" noise suppression: one `sonora::AudioProcessing` (pure Rust port of the WebRTC audio processing module, AEC3, NS level High, internal rate 48 kHz). Built only when echo cancellation or a noise suppressor is on.
-2. "Krisp" noise suppression: `nnnoiseless` (pure Rust RNNoise). Its voice probability feeds the Advanced Voice Activity gate.
+2. RNNoise suppression: `nnnoiseless` (pure Rust RNNoise). Its voice probability feeds the Advanced Voice Activity gate.
 3. Automatic gain control: a second `sonora::AudioProcessing` with only AGC2 (adaptive digital, default WebRTC parameters, limiter), so it runs after RNNoise like the client's chain runs AGC last.
 
 The echo reference is the mixer output: `mix_loop` pushes each 20 ms frame it actually queues to the speakers into a `RenderTap` (bounded channel, mono downmix), with the queue length ahead of it in ms; the encode thread drains it before each capture block (`process_render_f32`) and sets the stream delay to that queue length + 10 ms. AEC3 also estimates the delay itself. Soundboard sounds and notification sounds (separate streams in `effects.rs`) are not part of the reference.
 
-Latency added (cross-correlation in the self-test): Off 0 ms, Standard 6.9 ms (WebRTC NS overlap + band split), Krisp 10.9 ms (RNNoise overlap-add of one block), echo cancellation adds about 4 ms on top (14.9 ms for AEC3 + RNNoise + AGC2, the Voice Isolation chain).
+Latency added (cross-correlation in the self-test): Off 0 ms, Standard 6.9 ms (WebRTC NS overlap + band split), RNNoise 10.9 ms (overlap-add of one block), echo cancellation adds about 4 ms on top (14.9 ms for AEC3 + RNNoise + AGC2, the Voice Isolation chain).
 
 Measured on 79a47024 (`PHX_AUDIOPROC_SELFTEST=1 int-bin/real_shots`, dev build with dependencies at opt-level 2, synthetic voice at −19 dBFS in pink + white noise at −33 dBFS):
 
@@ -24,7 +24,7 @@ Measured on 79a47024 (`PHX_AUDIOPROC_SELFTEST=1 int-bin/real_shots`, dev build w
 |---|---|---|---|---|
 | off | 0.0 dB | 0.0 dB | 0 ms | 0 µs |
 | Standard (WebRTC NS) | 17.2 dB | 16.0 dB | 6.9 ms | 28 µs (0.3 % of a core) |
-| Krisp (RNNoise) | 24.8 dB | 24.1 dB | 10.9 ms | 114 µs (1.1 %) |
+| RNNoise | 24.8 dB | 24.1 dB | 10.9 ms | 114 µs (1.1 %) |
 | AEC3 + RNNoise + AGC2 | 23.5 dB | 23.0 dB | 14.9 ms | 177 µs (1.8 %) |
 | AEC3 + NS + AGC2 | 16.1 dB | 19.3 dB | 10.9 ms | 97 µs (1.0 %) |
 
@@ -40,19 +40,19 @@ Same fields and same override table as the client (`web.b63d846b329d6470.js`, de
 |---|---|---|---|---|
 | echo cancellation | on | on | off | stored |
 | noise suppression (Standard) | off | off | off | stored |
-| noise cancellation (Krisp) | on | on | off | stored |
+| noise cancellation (RNNoise) | on | on | off | stored |
 | automatic gain control | on | on | off | stored |
 | sensitivity | auto | auto | manual −84 dB | stored |
 | Advanced Voice Activity (`vadUseKrisp`) | on | on | off | stored |
 | input mode | stored | stored | voice activity | stored |
 
-`VoicePrefs::processing()` applies the table, `controls()` sends the result. Choosing a profile no longer overwrites the stored values (the client keeps them for Custom). The Custom block shows the client's controls: echo cancellation switch, the Noise Suppression select (Krisp / Standard / None, `r6` in `52b6e35ba37f71f0.js`, `setNoiseCancellation` + `setNoiseSuppression`), and in the advanced section Automatic Gain Control (`rD`) and Advanced Voice Activity (`rV`, disabled outside voice activity with automatic sensitivity). The noise button of the voice panel toggles Krisp like the client's popout switch (`setNoiseCancellation(!t)`, which also sets Standard to the opposite) and does nothing outside Custom, where its tooltip gives the client's `/tqmfM` text. Old `voice.json` files: `noise_suppression` without `noise_cancellation` becomes the Krisp flag.
+`VoicePrefs::processing()` applies the table and `controls()` sends the result. Each preset overrides the effective processing while Custom keeps its saved values. Custom offers an echo cancellation switch and a noise suppression selector with Krisp (RNNoise), Standard (WebRTC) and None. Automatic Gain Control and Advanced Voice Activity are in the advanced section. Advanced Voice Activity requires voice activity mode with automatic sensitivity. In old `voice.json` files, `noise_suppression` without `noise_cancellation` maps to RNNoise.
 
-Advanced Voice Activity: with Krisp on, automatic sensitivity and `vad_use_krisp`, the gate opens when the RNNoise voice probability of a frame reaches 0.8 (0.5 without AGC, the client's `vadKrispActivationThreshold` rule) and stays open 12 frames (the client's `vadTrailing` 25 × 10 ms ≈ 240 ms). Otherwise the level gate (`dsp::NoiseGate`) decides.
+The waveform button opens noise suppression controls while connected. In Custom, switching the advanced filter on selects RNNoise and switching it off selects Standard. The settings selector also offers None. Voice Isolation locks the switch on, and Studio locks it off. The mic test plays the processed microphone locally and pauses call audio in both directions for the duration of the test. Closing the panel also stops its test.
 
-### Krisp versus RNNoise
+With RNNoise, automatic sensitivity and `vad_use_krisp` enabled, the gate opens at a voice probability of 0.8, or 0.5 with AGC off, and stays open for 12 frames (240 ms). Other configurations use the level gate (`dsp::NoiseGate`).
 
-Krisp is a proprietary model shipped inside Discord's native voice module; it cannot be reused. Phoenix runs RNNoise (Xiph, BSD, 2017) in its place under the "Krisp" label of the select, so the UI keeps the client's options. Differences to expect: RNNoise is a small GRU on 22 bands with a pitch filter, it removes steady noise (fans, hum, hiss, traffic) well but lets more transient noise through (keyboard clicks, dishes, a dog) and can colour voices slightly; Krisp also removes background voices and transients. The Krisp logo and the "Powered by Krisp" text are not shown.
+The interface uses the Krisp label and wordmark for the corresponding mode. Phoenix runs the local RNNoise model from Xiph in that mode. It reduces steady background sounds such as fans and hum. Brief sounds such as keyboard clicks can still be audible. Discord uses the proprietary Krisp model. [Krisp wordmark source](https://krisp.ai/wp-content/themes/krisp-v4/imgs/img_logo_main.svg)
 
 ### Measuring
 
