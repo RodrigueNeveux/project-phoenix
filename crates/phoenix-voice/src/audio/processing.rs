@@ -212,7 +212,7 @@ impl InputChain {
     pub fn process(&mut self, frame: &mut [f32]) -> Option<f32> {
         let start = Instant::now();
         let mut vad: Option<f32> = None;
-        for block in frame.chunks_exact_mut(BLOCK) {
+        for block in frame.as_chunks_mut::<BLOCK>().0 {
             if let Some(p) = self.process_block(block) {
                 vad = Some(vad.map_or(p, |v| v.max(p)));
             }
@@ -569,7 +569,7 @@ pub fn noise_report(settings: ChainSettings, seconds: usize) -> ModeReport {
     let input: Vec<f32> = speech.iter().zip(&noise).map(|(s, n)| s + n).collect();
     let mut chain = InputChain::new(settings, None);
     let mut out = input.clone();
-    for frame in out.chunks_exact_mut(BLOCK * 2) {
+    for frame in out.as_chunks_mut::<{ BLOCK * 2 }>().0 {
         chain.process(frame);
     }
     let window = RATE as usize..RATE as usize * 3;
@@ -613,7 +613,7 @@ pub fn echo_report(seconds: usize, delay_ms: u32) -> EchoReport {
     let mut chain = InputChain::new(ChainSettings { echo_cancellation: true, ..ChainSettings::OFF }, Some(feed));
     chain.set_capture_delay_ms(delay_ms);
     let mut out = input.clone();
-    for (i, frame) in out.chunks_exact_mut(BLOCK).enumerate() {
+    for (i, frame) in out.as_chunks_mut::<BLOCK>().0.iter_mut().enumerate() {
         tap.push(&far[i * BLOCK..(i + 1) * BLOCK], 1, 0);
         chain.process(frame);
     }
