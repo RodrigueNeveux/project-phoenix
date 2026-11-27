@@ -31,6 +31,10 @@ pub fn is_open() -> bool {
     OPEN.with(|o| o.borrow().is_some())
 }
 
+pub fn close() -> bool {
+    OPEN.with(|open| open.borrow_mut().take().is_some())
+}
+
 pub fn open(user: Id, guild: Option<Id>, pos: Point<Pixels>, window: &mut Window) {
     OPEN.with(|o| *o.borrow_mut() = Some(Open { user, guild, pos }));
     window.refresh();
@@ -86,6 +90,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
     items.push(MenuItem::Separator);
     if in_voice && !me {
         items.extend(crate::ui::voice_panel::user_menu_items(app, u, cx));
+        items.push(MenuItem::Separator);
     }
     if let Some(gid) = g {
         if me {
@@ -122,14 +127,18 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
             move |_, _, cx: &mut App| e.update(cx, |a, cx| a.confirm_block(u, cx))
         }));
     }
-    if let Some(gid) = g.filter(|gid| crate::ui::inbox::has_perm(app.backend.guild_permissions(*gid), MANAGE_ROLES)) {
+    if let Some(gid) = g {
+        let manage = crate::ui::inbox::has_perm(app.backend.guild_permissions(gid), MANAGE_ROLES);
         let has: Vec<crate::model::Id> =
             app.members.get(&gid).and_then(|m| m.iter().find(|m| m.user == u)).map(|m| m.roles.clone()).unwrap_or_default();
-        let mut roles: Vec<&crate::model::Role> = app.roles.get(&gid).into_iter().flatten().filter(|r| r.id != gid).collect();
+        let mut roles: Vec<&crate::model::Role> = app.roles.get(&gid).into_iter().flatten().filter(|r| r.id != gid && (manage || has.contains(&r.id))).collect();
         roles.sort_by_key(|r| -r.position);
         let rows: Vec<MenuItem> = roles
             .into_iter()
             .map(|r| {
+                if !manage {
+                    return MenuItem::disabled(r.name.clone(), None);
+                }
                 let e = e.clone();
                 let (role, on) = (r.id, has.contains(&r.id));
                 MenuItem::check(r.name.clone(), on, move |_, _, cx: &mut App| {
