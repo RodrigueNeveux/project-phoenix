@@ -945,7 +945,6 @@ fn top_bar(app: &PhoenixApp, name: SharedString, cx: &mut Context<PhoenixApp>) -
         .child(
             div()
                 .when(stage.is_none(), |d| d.flex_1())
-                .when(stage.is_some(), |d| d.flex_shrink())
                 .min_w_0()
                 .text_size(z(16.))
                 .line_height(z(20.))
