@@ -260,6 +260,14 @@ pub fn audio_button(
                 .rounded_l(z(8.))
                 .child(lottie_glyph(hk, lottie, red, red, || panel_glyph(i, red)))
                 .tip(tip)
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |_, ev: &gpui::MouseDownEvent, _, cx| {
+                        let at = AUDIO_GROUP.with(|g| g.get()[kind as usize]).map_or(ev.position, |b| gpui::point(b.origin.x, b.origin.y - z(4.)));
+                        toggle_audio_menu(kind, at);
+                        cx.notify();
+                    }),
+                )
                 .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx))),
         )
         .child(
@@ -597,6 +605,13 @@ fn camera_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
             asset_icon(if on { CAMERA } else { "icons/call/camera-off.svg" }, 20. * crate::theme::zoom(), fg).into_any_element()
         }))
         .tip(if on { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") })
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(|_, ev: &gpui::MouseDownEvent, _, cx| {
+                toggle_camera_menu(ev.position);
+                cx.notify();
+            }),
+        )
         .on_click(cx.listener(move |a, _, _, cx| {
             drop(a.backend.voice_control(crate::voice::VoiceControl::SetCamera(!on)));
             cx.notify();
@@ -628,6 +643,15 @@ fn screen_button(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoEle
             asset_icon(SCREEN, 20. * crate::theme::zoom(), fg).into_any_element()
         }))
         .tip(crate::ui::go_live::label(app))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |_, _, _, cx| {
+                if on {
+                    crate::ui::call_menus::toggle(crate::ui::call_menus::TrayMenu::Streams);
+                    cx.notify();
+                }
+            }),
+        )
         .on_click(cx.listener(|a, _, _, cx| crate::ui::go_live::toggle(a, cx)))
 }
 

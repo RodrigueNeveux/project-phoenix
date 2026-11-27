@@ -589,7 +589,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
         .child(div().flex_1().min_h_0())
         .child(div().flex_none().flex().flex_col().relative().top(z(CONTROLS_SLIDE * (1. - fade))).opacity(fade).child(match crate::ui::stage::bottom(app, ch_id, cx) {
             Some(b) => b,
-            None => bottom_controls(app, collapse(gw), cx).into_any_element(),
+            None => bottom_controls(app, collapse(gw), window.is_fullscreen(), cx).into_any_element(),
         }))
         .relative()
         .children(toasts);
@@ -692,7 +692,7 @@ pub fn render_private(app: &PhoenixApp, header: gpui::Div, window: &mut Window, 
         .on_mouse_move(cx.listener(|_, _, _, cx| woke(cx)))
         .child(header)
         .child(body)
-        .when(!popped, |d| d.child(bottom_controls(app, collapse(w + 16.), cx)));
+        .when(!popped, |d| d.child(bottom_controls(app, collapse(w + 16.), window.is_fullscreen(), cx)));
     Some(
         div()
             .id("dm-call")
@@ -1379,7 +1379,7 @@ fn solo_tile(w: f32, h: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
                         .flex()
                         .gap(z(8.))
                         .child(solo_button("call-solo-invite", "invite", crate::t!("call.invite_voice")).on_click(cx.listener(|a, _, _, cx| invite(a, cx))))
-                        .child(solo_button("call-solo-activity", "apps", crate::t!("call.choose_activity"))),
+                        .child(solo_button("call-solo-activity", "apps", crate::t!("call.choose_activity")).on_click(cx.listener(|a, _, _, cx| a.stub(&crate::t!("call.choose_activity"), cx)))),
                 ),
         )
         .into_any_element()
@@ -1757,6 +1757,7 @@ fn render_tile(app: &PhoenixApp, tile: &Tile, w: f32, h: f32, rule_w: f32, fade:
                                     .opacity(fade)
                                     .bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_DEFAULT))
                                     .hover(|s| s.bg(t(idx::CONTROL_OVERLAY_SECONDARY_BACKGROUND_HOVER)))
+                                    .tip(crate::t!("call.more"))
                                     .child(named("more-horizontal", 16., t(idx::CONTROL_OVERLAY_SECONDARY_TEXT_DEFAULT)))
                                     .on_click(move |ev, window, cx| {
                                         cx.stop_propagation();
@@ -1815,13 +1816,35 @@ pub(crate) fn center_button_ex(
     on_click: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static,
     cx: &mut Context<PhoenixApp>,
 ) -> AnyElement {
+    center_button_full(id, icon, look, caret, on_caret, None, active, tip, on_click, cx)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn center_button_full(
+    id: &'static str,
+    icon: impl IntoElement,
+    look: Look,
+    caret: bool,
+    on_caret: Option<CaretClick>,
+    caret_tip: Option<SharedString>,
+    active: bool,
+    tip: SharedString,
+    on_click: impl Fn(&mut PhoenixApp, &mut Context<PhoenixApp>) + 'static,
+    cx: &mut Context<PhoenixApp>,
+) -> AnyElement {
     let (bg, hover) = match look {
         Look::Dark => (gpui::transparent_black(), t(idx::BACKGROUND_MOD_MUTED)),
         Look::Red => (t(idx::OPACITY_RED_12), t(idx::OPACITY_RED_16)),
         Look::Green => (t(idx::OPACITY_GREEN_12), t(idx::OPACITY_GREEN_24)),
     };
+    let caret_color = match look {
+        Look::Red => t(idx::RED_400),
+        Look::Green => t(idx::GREEN_300),
+        Look::Dark => t(idx::WHITE),
+    };
     let bg = if active { hover } else { bg };
     let group: SharedString = format!("{id}-grp").into();
+    let right_caret = caret.then(|| on_caret.clone()).flatten();
     let btn = crate::ui::states::track(div().id(id), call_key(id))
         .size(z(40.))
         .flex_none()
@@ -1835,6 +1858,12 @@ pub(crate) fn center_button_ex(
         .cursor_pointer()
         .tip(tip)
         .child(icon)
+        .when_some(right_caret, |d, f| {
+            d.on_mouse_down(
+                gpui::MouseButton::Right,
+                cx.listener(move |a, ev: &gpui::MouseDownEvent, _, cx| f(a, ev.position, cx)),
+            )
+        })
         .on_click(cx.listener(move |a, _, _, cx| on_click(a, cx)));
     let mut wrap = div().group(group.clone()).flex().items_center().child(btn);
     if caret {
@@ -1850,8 +1879,9 @@ pub(crate) fn center_button_ex(
                 .bg(bg)
                 .group_hover(group, |s| s.bg(hover))
                 .cursor_pointer()
-                .child(crate::ui::icon(crate::assets::Icon::Chevron, 16. * crate::theme::zoom(), t(idx::WHITE)))
+                .child(named(if active { "chevron-up" } else { "chevron" }, 16., caret_color))
                 .id(SharedString::from(format!("{id}-caret")))
+                .when_some(caret_tip, |d, tip| d.tip(tip))
                 .when_some(on_caret, |d, f| d.on_click(cx.listener(move |a, ev: &gpui::ClickEvent, _, cx| f(a, ev.position(), cx)))),
         );
     }
@@ -1891,7 +1921,7 @@ pub(crate) fn tray_icon(id: &'static str, icon: gpui::Svg, tip: SharedString) ->
         .child(icon)
 }
 
-fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
+fn bottom_controls(app: &PhoenixApp, level: Collapse, fullscreen: bool, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let white = t(idx::WHITE);
     let tray = t(idx::INTERACTIVE_TEXT_DEFAULT);
     let muted = app.mic_muted || app.deafened;
@@ -1932,7 +1962,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                 .gap(z(12.))
                 .child(
                     section()
-                        .child(center_button_ex(
+                        .child(center_button_full(
                             "call-mic",
                             anim("call-mic", crate::icons::lottie_icons::Lottie::Mute, muted, icon_color(mic_look), crate::ui::icon(mic_i, 20. * crate::theme::zoom(), icon_color(mic_look))),
                             mic_look,
@@ -1941,6 +1971,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                                 crate::ui::voice_panel::toggle_call_audio_menu(pos);
                                 cx.notify();
                             })),
+                            Some(crate::t!("call.mic_options")),
                             crate::ui::voice_panel::audio_menu_open(crate::ui::voice_panel::Audio::Mic),
                             if muted { crate::t!("voice.unmute") } else { crate::t!("voice.mute") },
                             |a, cx| {
@@ -1950,7 +1981,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             },
                             cx,
                         ))
-                        .child(center_button_ex(
+                        .child(center_button_full(
                             "call-camera",
                             anim(
                                 "call-camera",
@@ -1965,6 +1996,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                                 crate::ui::voice_panel::toggle_camera_menu(pos);
                                 cx.notify();
                             })),
+                            Some(crate::t!("call.camera_options")),
                             crate::ui::voice_panel::camera_menu_open(),
                             if me.video { crate::t!("voice.camera_off") } else { crate::t!("voice.camera_on") },
                             |a, cx| {
@@ -1980,7 +2012,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                         .child(
                             div()
                                 .relative()
-                                .child(center_button_ex(
+                                .child(center_button_full(
                                     "call-screen",
                                     anim("call-screen", crate::icons::lottie_icons::Lottie::Stream, live, icon_color(screen_look), glyph("icons/voice/screen.svg", 20., icon_color(screen_look))),
                                     screen_look,
@@ -1989,6 +2021,7 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                                         crate::ui::call_menus::toggle(crate::ui::call_menus::TrayMenu::Streams);
                                         cx.notify();
                                     })),
+                                    Some(crate::t!("call.screen_options")),
                                     open_menu == Some(crate::ui::call_menus::TrayMenu::Streams),
                                     crate::ui::go_live::label(app),
                                     crate::ui::go_live::toggle,
@@ -2002,7 +2035,10 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                             Look::Dark,
                             false,
                             crate::t!("voice.start_activity"),
-                            |_, _| crate::ui::hover_icon::clicked(call_key("call-activity")),
+                            |a, cx| {
+                                crate::ui::hover_icon::clicked(call_key("call-activity"));
+                                a.stub(&crate::t!("voice.start_activity"), cx);
+                            },
                             cx,
                         ))
                         .child(crate::ui::pickers::soundboard::call_button(app, cx))
@@ -2062,8 +2098,12 @@ fn bottom_controls(app: &PhoenixApp, level: Collapse, cx: &mut Context<PhoenixAp
                     })),
                 )
                 .child(
-                    tray_icon("call-fullscreen", glyph(FULLSCREEN, 24., tray), crate::t!("call.fullscreen"))
-                        .on_click(cx.listener(|_, _, w, _| w.toggle_fullscreen())),
+                    tray_icon(
+                        "call-fullscreen",
+                        glyph(if fullscreen { "icons/call/fullscreen-exit.svg" } else { FULLSCREEN }, 24., tray),
+                        if fullscreen { crate::t!("call.exit_fullscreen") } else { crate::t!("call.fullscreen") },
+                    )
+                    .on_click(cx.listener(|_, _, w, _| w.toggle_fullscreen())),
                 ),
         )
 }

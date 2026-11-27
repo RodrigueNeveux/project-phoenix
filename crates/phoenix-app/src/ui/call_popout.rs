@@ -402,8 +402,8 @@ impl gpui::Render for CallPopoutView {
                             .bg(t(idx::BACKGROUND_SURFACE_HIGH))
                             .hover(|s| s.bg(t(idx::BACKGROUND_MOD_MUTED)))
                             .cursor_pointer()
-                            .tip(crate::t!("call.fullscreen"))
-                            .child(svg().path("icons/call/fullscreen.svg").size(z(20.)).text_color(white))
+                            .tip(if window.is_fullscreen() { crate::t!("call.exit_fullscreen") } else { crate::t!("call.fullscreen") })
+                            .child(svg().path(if window.is_fullscreen() { "icons/call/fullscreen-exit.svg" } else { "icons/call/fullscreen.svg" }).size(z(20.)).text_color(white))
                             .on_click(cx.listener(|_, _, w, _| w.toggle_fullscreen())),
                     ),
             )
