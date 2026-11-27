@@ -443,15 +443,19 @@ impl PhoenixApp {
             return;
         }
         self.replace_message(m, cx);
+        let spoken = reaction_name(&emoji);
         let r = Reaction { emoji, count: 0, me: add, emoji_id, ..Default::default() };
         let fut = self.backend.set_reaction(channel, msg, r, add);
         cx.spawn(async move |this, cx| {
-            if let Err(e) = fut.await {
-                let _ = this.update(cx, |this, cx| {
-                    this.chat.error = Some(e.0.into());
-                    cx.notify();
-                });
-            }
+            let res = fut.await;
+            let _ = this.update(cx, |this, cx| {
+                match res {
+                    Err(e) => this.chat.error = Some(e.0.into()),
+                    Ok(_) if add => crate::ui::a11y::announce(crate::t!("a11y.reaction_added", name = spoken), false),
+                    Ok(_) => crate::ui::a11y::announce(crate::t!("a11y.reaction_removed", name = spoken), false),
+                }
+                cx.notify();
+            });
         })
         .detach();
     }
@@ -491,6 +495,7 @@ impl PhoenixApp {
         }
         if skip_confirm {
             self.backend.delete_message(channel, id).detach_ok_chat();
+            crate::ui::a11y::announce(crate::t!("a11y.message_deleted"), false);
         } else {
             self.chat.confirm_delete = Some((channel, id));
         }
@@ -500,6 +505,7 @@ impl PhoenixApp {
     pub fn confirm_delete(&mut self, cx: &mut Context<Self>) {
         if let Some((channel, id)) = self.chat.confirm_delete.take() {
             self.backend.delete_message(channel, id).detach_ok_chat();
+            crate::ui::a11y::announce(crate::t!("a11y.message_deleted"), false);
         }
         cx.notify();
     }

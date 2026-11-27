@@ -180,7 +180,10 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
             let _ = weak.update(cx, |_, cx| cx.notify());
         }
     });
-    div()
+    crate::ui::a11y::named(div().id("channels-nav"), gpui::Role::Navigation, || match app.selected_guild.and_then(|g| app.guilds.iter().find(|x| x.id == g)) {
+        Some(g) => crate::t!("a11y.guild_nav", name = g.name),
+        None => crate::t!("a11y.direct_messages"),
+    })
         .w(z(crate::ui::sidebar_resize::width() + m::sidebar_extra_w()))
         .flex_none()
         .h_full()
@@ -192,7 +195,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
         .relative()
         .child(header(app, cx))
         .child(
-            div()
+            crate::ui::a11y::named(div().id("channels-list"), gpui::Role::List, || crate::t!("a11y.channels"))
                 .flex_1()
                 .min_h_0()
                 .relative()
@@ -402,8 +405,8 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                             crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Guild(crate::model::Id(gid)), ev.position, w)
                         })
                         .child(
-                            div()
-                                .id("guild-header")
+                            crate::ui::a11y::named(div().id("guild-header"), gpui::Role::Button, || crate::t!("a11y.guild_actions", name = g.name))
+                                .when(crate::ui::a11y::on(), |d| d.aria_expanded(menu_open))
                                 .h(z(32.))
                                 .min_w_0()
                                 .px(z(10.))
@@ -464,8 +467,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                 .child(icon(if menu_open { Icon::Close } else { Icon::Chevron }, 16. * crate::theme::zoom(), fg)),
                         )
                         .child(
-                            div()
-                                .id("guild-invite")
+                            crate::ui::a11y::named(div().id("guild-invite"), gpui::Role::Button, || crate::t!("a11y.invite_server"))
                                 .tooltip(crate::ui::tooltip::tip(crate::t!("menu.invite")))
                                 .on_click(cx.listener(move |a, _, _, cx| a.open_invite_people(Id(gid), cx)))
                                 .size(z(32.))
@@ -525,8 +527,8 @@ fn category_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyEle
     let e = entity.clone();
     let muted = ch.muted && !fav_cat;
     let rest = if muted { idx::TEXT_MUTED } else { idx::CHANNELS_DEFAULT };
-    div()
-        .id(("cat", id.0))
+    crate::ui::a11y::named(div().id(("cat", id.0)), gpui::Role::Button, || crate::ui::a11y::category(&ch.name))
+        .when(crate::ui::a11y::on(), |d| d.aria_expanded(!collapsed))
         .group("cat")
         .pt(z(space::category_before()))
         .pl(z(20.))
@@ -1363,8 +1365,18 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                 .when(unread && !selected, |d| d.bg(t(idx::INTERACTIVE_TEXT_ACTIVE))),
         )
         .child(
-            div()
-                .id(("chrow", id.0))
+            crate::ui::a11y::named(div().id(("chrow", id.0)), if matches!(ch.kind, ChannelKind::Voice | ChannelKind::Stage) { gpui::Role::Button } else { gpui::Role::Link }, || {
+                let info = crate::ui::a11y::ChannelInfo {
+                    unread,
+                    mentions: ch.mentions,
+                    locked: extra.is_some_and(|e| e.locked),
+                    nsfw: extra.is_some_and(|e| e.nsfw),
+                    voice_users: if is_dm { Vec::new() } else { ch.voice_users.iter().map(|u| voice_user_name(app, *u)).collect() },
+                    members: extra.map(|e| e.recipients as u32 + 1).unwrap_or(1),
+                };
+                crate::ui::a11y::channel(crate::ui::a11y::Kind::of(ch.kind, is_dm, is_group), &name, &info)
+            })
+                .when(crate::ui::a11y::on(), |d| d.aria_selected(selected))
                 .group(group)
                 .h(z(if is_dm { dm_row_h() } else if status_line { space::channels_name_lh() + 24. } else { space::channels_name_lh() + 8. }))
                 .pl(z(10.))
@@ -1648,7 +1660,7 @@ pub fn panels(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
 }
 
 fn panels_card(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElement {
-    div()
+    crate::ui::a11y::named(div().id("user-area"), gpui::Role::Region, || crate::t!("a11y.user_area"))
         .flex_none()
         .m(z(10.))
         .rounded(z(8.))
@@ -1687,8 +1699,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
             |d, l| d.child(l),
         )
         .child(
-            div()
-                .id("me")
+            crate::ui::a11y::named(div().id("me"), gpui::Role::Button, || crate::t!("a11y.manage_profile"))
                 .flex_1()
                 .min_w(z(112.))
                 .ml(z(-6.))
@@ -1816,6 +1827,7 @@ fn user_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                         false,
                     )
                         .tip(crate::t!("settings.user_settings"))
+                        .map(|d| crate::ui::a11y::named(d, gpui::Role::Button, || crate::t!("a11y.user_settings")))
                         .on_click(cx.listener(|a, _, _, cx| crate::ui::settings::open(a, cx))),
                 ),
         )

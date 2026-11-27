@@ -361,6 +361,7 @@ fn normal_pill(entity: &Entity<PhoenixApp>, msg: &Message, ix: usize, r: &crate:
     let emoji_el = div().my(z(2.)).child(crate::media::emoji::emoji_element(&r.emoji, 20.));
     let fade_key = crate::ui::states::key(("reaction", msg.id.0, ix));
     crate::ui::states::track(div().id(("reaction", ix)), fade_key)
+        .map(|d| crate::ui::a11y::named(d, gpui::Role::Button, || crate::ui::a11y::reaction(&r.emoji, r.count, r.me)))
         .relative()
         .py(z(2.))
         .px(z(6.))

@@ -335,7 +335,9 @@ impl App {
     }
 
     pub fn parity_toast(&mut self, msg: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.parity.toast = Some(msg.into());
+        let msg: SharedString = msg.into();
+        crate::ui::a11y::announce(msg.clone(), false);
+        self.parity.toast = Some(msg);
         cx.notify();
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(std::time::Duration::from_secs(4)).await;

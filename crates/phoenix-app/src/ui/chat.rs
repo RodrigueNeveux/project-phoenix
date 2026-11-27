@@ -70,7 +70,8 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
     let search_results = crate::ui::search::results_shown(cx);
     app.backend.set_members_shown(app.show_members && app.chat.thread.is_none() && !search_results);
     let mod_view = crate::ui::mod_view::render(app, window, cx);
-    let main = div()
+    let a11y_channel = || app.selected_channel.and_then(|c| app.channels.get(&c)).map(|c| c.name.clone()).unwrap_or_default();
+    let main = crate::ui::a11y::named(div().id("chat-main"), gpui::Role::Main, || crate::t!("a11y.channel_main", name = a11y_channel()))
         .flex_1()
         .min_w_0()
         .h_full()
@@ -110,7 +111,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                         .children(crate::ui::join_flow::nsfw_gate(app, cx))
                         .children(app.selected_channel.and_then(|channel| welcome::render(app, &cx.entity(), channel, window.viewport_size().height * 0.42)))
                         .child(
-                            div()
+                            crate::ui::a11y::named(div().id("chat-messages"), gpui::Role::List, || crate::t!("a11y.messages_in", name = a11y_channel()))
                                 .flex_1()
                                 .min_h_0()
                                 .relative()
@@ -1311,6 +1312,7 @@ pub(crate) fn message(
 
     let reply = reply.or_else(|| msg.interaction.as_ref().filter(|_| msg.reply_to.is_none()).map(|cu| command_msg::header(app, entity, msg, cu, compact, cx)));
 
+    let a11y_name = name.clone();
     let author_name = (compact || r.group_start).then(|| {
         let role_dot = app.author_role_dot(msg.author);
         crate::fonts::styled_name(div(), author, false)
@@ -1341,6 +1343,29 @@ pub(crate) fn message(
         || crate::shortcuts::message::focused().is_some_and(|f| f.1 == id);
     let base = div()
         .id(("msg", id.0))
+        .when(crate::ui::a11y::on(), |d| {
+            let replied = msg.reply_to.map(|rid| match entry.index_of(rid) {
+                Some(p) => {
+                    let a = entry.msgs[p].author;
+                    entry.msgs[p].author_nick.clone().or_else(|| app.member_nick(a)).or_else(|| app.member_user(app.selected_guild, a).map(|u| u.display_name.clone()))
+                }
+                None => msg.reply_preview.as_ref().and_then(|(a, nick, _)| nick.clone().or_else(|| app.member_nick(*a)).or_else(|| app.member_user(app.selected_guild, *a).map(|u| u.display_name.clone()))),
+            });
+            let replied = replied.flatten();
+            let mut accessories: Vec<SharedString> = msg.attachments.iter().map(crate::ui::a11y::attachment).collect();
+            accessories.extend(msg.embeds.iter().filter_map(|e| e.title.clone().or_else(|| e.description.clone())));
+            let content = crate::richtext::plain_text(&r.parsed);
+            let label = crate::ui::a11y::message(&crate::ui::a11y::MessageParts {
+                author: &*a11y_name,
+                replied_author: replied.as_deref(),
+                content: &content,
+                edited: msg.edited,
+                accessories: &accessories,
+                time: if r.group_start { &*r.time_full } else { &*r.time_short },
+            });
+            let d = d.role(gpui::Role::Article).aria_label(label);
+            if crate::shortcuts::message::focused().is_some_and(|f| f.1 == id) { d.aria_active_descendant() } else { d }
+        })
         .group("msg")
         .on_hover({
             let e = entity.clone();

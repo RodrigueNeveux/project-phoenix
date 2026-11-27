@@ -32,6 +32,8 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpu
     div()
         .id(id)
         .debug_selector(move || id.to_owned())
+        .role(gpui::Role::Button)
+        .aria_label(tip.clone())
         .size(z(24.))
         .flex_none()
         .flex()
@@ -48,6 +50,8 @@ fn bar_button(id: &'static str, i: Icon, active: bool, tip: SharedString) -> gpu
 fn nav_arrow(id: &'static str, name: &'static str, back: bool, enabled: bool) -> gpui::Stateful<gpui::Div> {
     let d = div()
         .id(id)
+        .role(gpui::Role::Button)
+        .aria_label(if back { crate::t!("a11y.back") } else { crate::t!("a11y.forward") })
         .w(z(26.))
         .h(z(24.))
         .flex_none()
@@ -244,8 +248,15 @@ pub fn login_bar(window: &gpui::Window, cx: &mut Context<PhoenixApp>) -> impl In
 fn win_buttons(cx: &mut Context<PhoenixApp>) -> impl IntoElement {
     let btn = |id: &'static str, area: gpui::WindowControlArea| {
         let close = area == gpui::WindowControlArea::Close;
+        let label = match area {
+            gpui::WindowControlArea::Min => crate::t!("a11y.minimize"),
+            gpui::WindowControlArea::Max => crate::t!("a11y.maximize"),
+            _ => crate::t!("a11y.close"),
+        };
         div()
             .id(id)
+            .role(gpui::Role::Button)
+            .aria_label(label)
             .group(id)
             .when(cfg!(windows), |d| d.window_control_area(area))
             .size(z(m::TITLE_BAR_H))

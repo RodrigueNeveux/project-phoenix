@@ -426,6 +426,7 @@ fn render_text_area(app: &PhoenixApp, window: &mut Window, cx: &mut Context<Phoe
                                     .child(
                                         div().mx(z(-4.)).key_context("Composer").child(
                                             gpui_component::input::Textarea::new(&app.composer)
+                                                .aria_label(placeholder.clone())
                                                 .token(super::rich_input::render_token)
                                                 .context_menu({
                                                     let area = app.composer.clone();

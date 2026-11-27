@@ -184,7 +184,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .border_l_1()
         .border_color(c(Palette::DIVIDER))
         .child(
-            div()
+            crate::ui::a11y::named(div().id("member-list"), gpui::Role::List, || crate::t!("a11y.members"))
                 .flex_1()
                 .min_h_0()
                 .w(z(m::member_list_w()))
@@ -623,6 +623,7 @@ pub fn member_row_in(
     let has_plate = user.is_some_and(|u| u.nameplate.is_some());
     div().py(z(1.)).child(div()
         .id(("member", mem.user.0))
+        .when(crate::ui::a11y::on(), |d| d.role(gpui::Role::ListItem).aria_label(name.clone()))
         .on_hover({
             let e = e.clone();
             move |h, _, cx| {

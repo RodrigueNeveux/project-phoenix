@@ -286,6 +286,24 @@ pub fn build(
     (parsed, blocks, mentions_me, preview.into(), preview_mentions)
 }
 
+pub fn plain_text(parsed: &[Block]) -> String {
+    let mut text = String::new();
+    for (n, b) in parsed.iter().enumerate() {
+        if n > 0 {
+            text.push(' ');
+        }
+        match b {
+            Block::Code { code, .. } => text.push_str(code),
+            b => {
+                if let Some(i) = b.inline() {
+                    text.push_str(&i.text);
+                }
+            }
+        }
+    }
+    text.replace('\n', " ")
+}
+
 pub fn preview_with_mentions(parsed: &[Block]) -> (String, Vec<Range<usize>>) {
     let mut text = String::new();
     let mut mentions = Vec::new();

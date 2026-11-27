@@ -268,6 +268,14 @@ pub fn audio_button(
         )
         .child(
             base(crate::ui::states::track(div().id(SharedString::from(format!("audio-btn-{kind:?}"))), hk))
+                .when(crate::ui::a11y::on(), |d| {
+                    d.role(gpui::Role::Switch)
+                        .aria_label(match kind {
+                            Audio::Mic => crate::t!("a11y.mute"),
+                            Audio::Deafen => crate::t!("a11y.deafen"),
+                        })
+                        .aria_toggled(if red { gpui::Toggled::True } else { gpui::Toggled::False })
+                })
                 .w(z(32.))
                 .rounded_l(z(8.))
                 .child(lottie_glyph(hk, lottie, red, red, || panel_glyph(i, red)))
@@ -284,6 +292,12 @@ pub fn audio_button(
         )
         .child(
             base(div().id(SharedString::from(format!("audio-chev-{kind:?}"))))
+                .when(crate::ui::a11y::on(), |d| {
+                    d.role(gpui::Role::Button).aria_label(match kind {
+                        Audio::Mic => crate::t!("voice.input_options"),
+                        Audio::Deafen => crate::t!("voice.output_options"),
+                    })
+                })
                 .w(z(16.))
                 .rounded_r(z(8.))
                 .when(open && !red, |d| d.bg(t(idx::BACKGROUND_MOD_MUTED)))

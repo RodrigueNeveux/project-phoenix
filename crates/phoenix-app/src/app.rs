@@ -958,6 +958,14 @@ impl PhoenixApp {
         }
     }
 
+    fn announce_mention(&self, channel: Id) {
+        let Some(ch) = self.channels.get(&channel) else { return };
+        let dm = ch.guild.is_none();
+        let group = self.nav.extras.get(&channel).is_some_and(|e| e.recipients > 1 || e.group_icon.is_some());
+        let info = ui::a11y::ChannelInfo { unread: ch.unread, mentions: ch.mentions.max(1), ..Default::default() };
+        ui::a11y::announce(ui::a11y::channel(ui::a11y::Kind::of(ch.kind, dm, group), &ch.name, &info), false);
+    }
+
     pub fn handle_event(&mut self, ev: AppEvent, cx: &mut Context<Self>) {
         match ev {
             AppEvent::Ready => {
@@ -967,7 +975,13 @@ impl PhoenixApp {
             }
             AppEvent::MessageCreate(m) => {
                 ui::call_toasts::on_message(self, &m, cx);
-                self.append_message(m, cx)
+                let me = self.me.id.0;
+                let pings = m.mention_everyone || m.content.contains(&format!("<@{me}>")) || m.content.contains(&format!("<@!{me}>"));
+                let mention = (m.author != self.me.id && self.selected_channel != Some(m.channel) && !self.nav.is_blocked(m.author)).then_some((m.channel, pings));
+                self.append_message(m, cx);
+                if let Some((channel, true)) = mention.filter(|_| ui::a11y::on()) {
+                    self.announce_mention(channel);
+                }
             }
             AppEvent::MessageUpdate(m) => self.replace_message(m, cx),
             AppEvent::BurstReaction { channel, msg, emoji, emoji_id, colors } => {
@@ -1623,6 +1637,7 @@ impl Render for PhoenixApp {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         crate::perf::on_render(self.selected_channel.map(|c| c.0), self.selected_channel.and_then(|c| self.messages.get(&c)).is_some_and(|e| e.loaded_once));
         ui::context_menu::begin_frame();
+        ui::a11y::sync(window);
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);
         crate::sounds::set_focused(window.is_window_active());
@@ -1699,6 +1714,7 @@ impl Render for PhoenixApp {
         let boot = ui::boot::render(self, window, cx);
         div()
             .id("phoenix-root")
+            .when(ui::a11y::on(), |d| d.role(gpui::Role::Application).aria_label("Discord"))
             .key_context(CONTEXT)
             .track_focus(&self.focus)
             .on_action(cx.listener(|this, _: &QuickSwitcher, w, cx| this.open_switcher(w, cx)))
@@ -1765,6 +1781,7 @@ impl Render for PhoenixApp {
             .when(self.screen == Screen::Login && !self.boot.showing(), |d| d.child(ui::title_bar::login_bar(window, cx)))
             .children(ui::window_chrome::resize_handles(window))
             .children(ui::incoming_call::render(self, cx))
+            .when(ui::a11y::on(), |d| d.child(ui::a11y::announcer()))
     }
 }
 

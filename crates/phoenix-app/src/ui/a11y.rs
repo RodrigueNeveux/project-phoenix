@@ -21,9 +21,12 @@ pub fn on() -> bool {
     ACTIVE.with(Cell::get)
 }
 
-#[cfg(test)]
-pub fn force(active: bool) {
-    ACTIVE.with(|a| a.set(active));
+pub fn named<E: StatefulInteractiveElement>(el: E, role: Role, label: impl FnOnce() -> SharedString) -> E {
+    if on() { el.role(role).aria_label(label()) } else { el }
+}
+
+pub fn role<E: StatefulInteractiveElement>(el: E, role: Role) -> E {
+    if on() { el.role(role) } else { el }
 }
 
 pub struct Live<E> {

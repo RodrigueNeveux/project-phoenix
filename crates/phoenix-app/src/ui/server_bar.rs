@@ -73,8 +73,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     }
     let entity = cx.entity();
     let scroll = RAIL_SCROLL.with(|h| h.clone());
-    let mut col = div()
-        .id("guild-rail")
+    let mut col = crate::ui::a11y::role(div().id("guild-rail"), gpui::Role::Tree)
         .size_full()
         .overflow_y_scroll()
         .track_scroll(&scroll)
@@ -134,7 +133,7 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                 })
         });
     let (above, below, m_above, m_below) = offscreen_unread(&scroll, &spans);
-    div()
+    crate::ui::a11y::named(div().id("servers-nav"), gpui::Role::Navigation, || crate::t!("a11y.servers_sidebar"))
         .w(z(m::server_bar_w()))
         .flex_none()
         .h_full()
@@ -768,7 +767,9 @@ fn unread_dm_items(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> Vec<AnyElem
             let u = ch.voice_users.first().and_then(|u| app.users.get(u));
             let name = u.map(|u| u.display_name.clone()).unwrap_or_else(|| ch.name.clone());
             let e = entity.clone();
-            row(("rail-dm", id.0), key, entity)
+            crate::ui::a11y::named(row(("rail-dm", id.0), key, entity), gpui::Role::TreeItem, || {
+                crate::ui::a11y::channel(crate::ui::a11y::Kind::Dm, &name, &crate::ui::a11y::ChannelInfo { mentions: ch.mentions, unread: ch.unread, ..Default::default() })
+            })
                 .on_click(move |_, _, cx| {
                     e.update(cx, |a, cx| {
                         a.select_guild(None, cx);
@@ -833,7 +834,8 @@ fn home(app: &PhoenixApp, entity: &Entity<PhoenixApp>) -> AnyElement {
     let hover = hovered(HOME_KEY);
     let pending = app.nav.pending_requests() + app.nav.message_requests.len() as u32;
     let e = entity.clone();
-    row("home", HOME_KEY, entity)
+    crate::ui::a11y::named(row("home", HOME_KEY, entity), gpui::Role::TreeItem, || crate::t!("a11y.direct_messages"))
+        .when(crate::ui::a11y::on(), |d| d.aria_selected(selected))
         .on_click(move |_, _, cx| e.update(cx, on_home_click))
         .child(pill(HOME_KEY, selected, hover, false))
         .child(masked(
@@ -1087,6 +1089,8 @@ fn guild(app: &PhoenixApp, entity: &Entity<PhoenixApp>, g: &Guild, folder: Optio
         .text_color(if active && !has_icon { gpui::white() } else { c(Palette::TEXT_NORMAL) })
         .child(guild_inner(g, ICON));
     drop_target(row(("guild", id.0), id.0, entity), RailNode::Guild(id), folder, last, entity)
+        .map(|d| crate::ui::a11y::named(d, gpui::Role::TreeItem, || crate::ui::a11y::guild(&g.name, g.mentions, g.unread, guild_media(app, g))))
+        .when(crate::ui::a11y::on(), |d| d.aria_selected(selected).aria_level(if folder.is_some() { 2 } else { 1 }))
         .on_click(move |_, _, cx| e.update(cx, |app, cx| app.select_guild(Some(id), cx)))
         .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
             crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Guild(id), ev.position, w)
@@ -1174,6 +1178,8 @@ fn folder(
     let drag = DraggedGuild { node: RailNode::Folder(id), icon: ImageRef::Default(0), acronym: SharedString::default(), folder: Some(color) };
     let header = drop_target(row(("folder", id), key, entity), RailNode::Folder(id), None, false, entity)
         .on_drag(drag, |d: &DraggedGuild, _, _, cx: &mut App| start_drag(d, cx))
+        .map(|d| crate::ui::a11y::named(d, gpui::Role::TreeItem, || crate::ui::a11y::folder(&name, mentions)))
+        .when(crate::ui::a11y::on(), |d| d.aria_expanded(open).aria_level(1))
         .h(z(FOLDER))
         .on_click(move |_, _, cx| e.update(cx, |a, cx| a.toggle_folder(id, cx)))
         .on_mouse_down(gpui::MouseButton::Right, move |ev, w, _| {
@@ -1236,7 +1242,7 @@ fn action(entity: &Entity<PhoenixApp>, id: &'static str, i: Icon, label: SharedS
     let key = if id == "add-server" { ADD_KEY } else { DISCOVER_KEY };
     let hover = hovered(key);
     let selected = key == DISCOVER_KEY && crate::ui::discovery::current().is_some();
-    row(id, key, entity)
+    crate::ui::a11y::named(row(id, key, entity), gpui::Role::Button, || label.clone())
         .child(pill(key, selected, hover, false))
         .child(
             div()
