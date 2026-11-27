@@ -74,6 +74,7 @@ pub fn voice_list_card(app: &PhoenixApp, entity: &Entity<PhoenixApp>, ch: &Chann
         .justify_between()
         .gap(z(space::sm()))
         .p(z(space::md()))
+        .rounded_t(z(7.))
         .bg(tk(idx::BACKGROUND_MOD_MUTED))
         .child(
             div()
@@ -493,9 +494,9 @@ pub fn event_card(app: &PhoenixApp, entity: &Entity<PhoenixApp>, p: &Rc<InvitePr
                     .mx(z(-16.))
                     .mb(z(16.))
                     .h(z(176.))
-                    .rounded_t(z(4.))
+                    .rounded_t(z(7.))
                     .overflow_hidden()
-                    .child(img(ImageSource::from(url)).size_full().object_fit(gpui::ObjectFit::Cover)),
+                    .child(img(ImageSource::from(url)).size_full().rounded_t(z(7.)).object_fit(gpui::ObjectFit::Cover)),
             )
         })
         .child(event_header(e, p.event_creator.as_ref()))

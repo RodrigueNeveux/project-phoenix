@@ -805,6 +805,7 @@ fn profile_card(
             gid.0
         ))))
         .size_full()
+        .rounded_t(z(15.))
         .object_fit(gpui::ObjectFit::Cover)
         .into_any_element(),
         None => img(ImageSource::Render(baked_banner(banner_color(
@@ -812,6 +813,7 @@ fn profile_card(
             prof.brand_color_primary.as_deref().and_then(parse_hex),
         ))))
         .size_full()
+        .rounded_t(z(15.))
         .into_any_element(),
     };
     let tag = prof.tag.clone().map(|tag| {
@@ -934,6 +936,7 @@ fn profile_card(
                 .h(z(72.))
                 .w_full()
                 .flex_none()
+                .rounded_t(z(15.))
                 .overflow_hidden()
                 .child(banner),
         )
@@ -1040,6 +1043,7 @@ fn profile_card(
         })
         .child(
             div()
+                .rounded_b(z(15.))
                 .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
                 .when(!expanded, |d| d.pt(z(8.)))
                 .child(button_row),
@@ -1190,12 +1194,13 @@ fn legacy_guild_card(
                     .mt(z(-16.))
                     .mx(z(-16.))
                     .mb(z(16.))
-                    .rounded_t(z(8.))
+                    .rounded_t(z(7.))
                     .overflow_hidden()
                     .bg(tk(idx::BACKGROUND_MOD_SUBTLE))
                     .child(
                         img(ImageSource::from(s))
                             .size_full()
+                            .rounded_t(z(7.))
                             .object_fit(gpui::ObjectFit::Cover),
                     ),
             )
