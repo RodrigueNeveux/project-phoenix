@@ -1,0 +1,35 @@
+name: PR 18 platform tests
+
+on:
+  push:
+    branches: [ci-pr-18-platforms]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_TEST_DEBUG: '0'
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  test:
+    name: Workspace tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: c0f9ab2a8ee91f5911181f81d40c5e07ea4d87a7
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libxcb1-dev libfontconfig1-dev libssl-dev libasound2-dev pkg-config
+      - run: cargo test --workspace --locked
