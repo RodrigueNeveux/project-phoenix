@@ -303,7 +303,13 @@ fn hdr_button(id: &'static str, i: Icon, color: gpui::Hsla, size: f32) -> gpui::
 }
 
 fn pin_button(app: &PhoenixApp, color: gpui::Hsla) -> gpui::Stateful<gpui::Div> {
-    let b = hdr_button("pin", Icon::Pin, color, HDR_ICON);
+    let b = hdr_button("pin", Icon::Pin, color, HDR_ICON).child(
+        gpui::canvas(|b, window, _| crate::ui::inbox::note_pin_button(b, window.viewport_size()), |_, _, _, _| {})
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
+    );
     let unread = app.selected_channel.is_some_and(|c| app.backend.has_unread_pins(c)) && app.chat.pins.is_none();
     b.when(unread, |b| {
         b.child(
@@ -750,7 +756,7 @@ fn row(entity: &Entity<PhoenixApp>, ix: usize, cx: &mut App) -> AnyElement {
         }
     };
     if i + 1 == entry.msgs.len() {
-        return row_wrapper().pb(z(20.)).child(el).into_any_element();
+        return row_wrapper().pb(z(24.)).child(el).into_any_element();
     }
     el
 }

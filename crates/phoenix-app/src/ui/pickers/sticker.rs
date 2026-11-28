@@ -41,7 +41,7 @@ fn send(app: &mut PhoenixApp, id: crate::model::Id, window: &mut gpui::Window, c
 
 pub(crate) fn sticker_graphic(s: &StickerData, size: f32) -> AnyElement {
     match sticker_url(s.id.0, s.format) {
-        Some(u) => img(u).size(px(size)).flex_none().into_any_element(),
+        Some(u) => img(u).size(px(size)).flex_none().object_fit(gpui::ObjectFit::Contain).into_any_element(),
         None => {
             let name = s.name.clone();
             crate::media::lottie::image(crate::media::lottie::url(s.id.0), (size * 2.) as u32, true)
@@ -99,6 +99,7 @@ fn cell(s: &StickerData, section: SharedString, inspected: bool, locked: bool) -
                 .when(locked, |d| d.opacity(if crate::theme::is_light() { 0.4 } else { 0.3 }))
                 .child(sticker_graphic(s, CELL - 2.)),
         )
+        .when(inspected, |d| d.child(div().absolute().inset_0().rounded(px(12.)).border_2().border_color(tk(idx::INTERACTIVE_TEXT_HOVER))))
         .into_any_element()
 }
 
@@ -200,7 +201,13 @@ pub fn render_body(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement
     }
     let shortcut = crate::ui::icon(crate::assets::Icon::Sticker, 24., tk(idx::INTERACTIVE_TEXT_DEFAULT));
     let footer = match inspected {
-        Some((d, from)) => grid::inspector(Some(sticker_graphic(&d, 28.)), Some(d.name.clone()), Some(from), Some(sticker_graphic(&d, 32.))),
+        Some((d, from)) => {
+            let trailing = match app.guilds.iter().find(|g| Some(g.id) == d.guild) {
+                Some(g) => grid::rail_guild_icon(&g.icon, &g.acronym),
+                None => sticker_graphic(&d, 32.),
+            };
+            grid::inspector(Some(sticker_graphic(&d, 28.)), Some(d.name.clone()), Some(from), Some(div().ml(px(8.)).flex_none().child(trailing).into_any_element()))
+        }
         None => grid::inspector(None, None, None, None),
     };
     div()

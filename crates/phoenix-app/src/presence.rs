@@ -510,6 +510,7 @@ pub struct Popout {
     pub user: Id,
     pub guild: Option<Id>,
     pub at: Point<Pixels>,
+    pub anchor: Option<gpui::Bounds<Pixels>>,
     pub note: Entity<InputState>,
     pub _sub: gpui::Subscription,
 }

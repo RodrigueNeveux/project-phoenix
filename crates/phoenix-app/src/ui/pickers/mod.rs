@@ -754,7 +754,7 @@ pub(crate) fn search_box(input: &Entity<InputState>) -> gpui::Div {
         .text_size(px(16.))
         .text_color(tk(idx::TEXT_DEFAULT))
         .child(div().size(px(30.)).flex_none().flex().items_center().justify_center().child(icon(Icon::Search, 16., tk(idx::TEXT_DEFAULT))))
-        .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false)))
+        .child(div().flex_1().min_w_0().child(Input::new(input).appearance(false).bordered(false).px(px(0.)).text_size(px(16.)).line_height(px(20.))))
 }
 
 fn add_emoji_button() -> impl IntoElement {

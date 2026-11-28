@@ -626,6 +626,13 @@ pub fn member_row_in(
     let has_plate = user.is_some_and(|u| u.nameplate.is_some());
     div().py(z(1.)).child(div()
         .id(("member", mem.user.0))
+        .child(
+            gpui::canvas(move |b, _, _| crate::ui::profile::note_row_anchor(uid, b), |_, _, _, _| {})
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full(),
+        )
         .when(crate::ui::a11y::on(), |d| {
             let status = if streaming {
                 crate::t!("activity.live")

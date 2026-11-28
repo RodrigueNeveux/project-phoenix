@@ -1677,6 +1677,22 @@ pub fn loading_spinner(empty: bool) -> AnyElement {
     crate::ui::spinner::centered(if empty { 120. } else { 32. })
 }
 
+thread_local! {
+    static PIN_BUTTON: std::cell::Cell<Option<(gpui::Bounds<gpui::Pixels>, gpui::Size<gpui::Pixels>)>> = const { std::cell::Cell::new(None) };
+}
+
+pub(crate) fn note_pin_button(b: gpui::Bounds<gpui::Pixels>, viewport: gpui::Size<gpui::Pixels>) {
+    PIN_BUTTON.with(|c| c.set(Some((b, viewport))));
+}
+
+fn pin_button_right() -> Option<gpui::Pixels> {
+    PIN_BUTTON.with(|c| c.get()).map(|(b, vp)| (vp.width - b.right()).max(gpui::px(0.)))
+}
+
+fn pins_max_h() -> gpui::DefiniteLength {
+    PIN_BUTTON.with(|c| c.get()).map_or(gpui::relative(0.8), |(_, vp)| (vp.height * 0.8).into())
+}
+
 pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
     let p = app.chat.pins.as_ref()?;
     let ch = p.channel;
@@ -1753,18 +1769,18 @@ pub fn pins_popout(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<Any
                 ),
         );
     }
-    let right = if is_dm { hdr_right(2.) } else { hdr_right(1.) };
+    let right = pin_button_right().unwrap_or_else(|| z(if is_dm { hdr_right(2.) } else { hdr_right(1.) }));
     Some(gpui::deferred(
         div()
             .id("pins-popout")
             .debug_selector(|| "pins-popout".into())
                 .map(|d| close_on_press_outside(d, cx))
             .absolute()
-            .top(z(m::HEADER_H - 3.))
-            .right(z(right))
+            .top(z(m::HEADER_H))
+            .right(right)
             .w(z(420.))
             .min_h(z(200.))
-            .max_h(gpui::relative(0.8))
+            .max_h(pins_max_h())
             .rounded(z(8.))
             .bg(tk(idx::BACKGROUND_SURFACE_HIGH))
             .shadow(popout_shadow())

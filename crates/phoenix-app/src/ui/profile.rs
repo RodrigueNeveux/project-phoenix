@@ -14,7 +14,33 @@ use crate::{
 };
 
 const POPOUT_W: f32 = 300.;
-const POPOUT_H: f32 = 540.;
+const POPOUT_EDGE: f32 = 12.;
+const POPOUT_SPACING: f32 = 16.;
+
+thread_local! {
+    static ROW_ANCHORS: std::cell::RefCell<std::collections::HashMap<u64, gpui::Bounds<Pixels>>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+pub(crate) fn note_row_anchor(user: Id, b: gpui::Bounds<Pixels>) {
+    ROW_ANCHORS.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() > 512 {
+            m.clear();
+        }
+        m.insert(user.0, b);
+    });
+}
+
+fn row_anchor(user: Id) -> Option<gpui::Bounds<Pixels>> {
+    ROW_ANCHORS.with(|m| m.borrow().get(&user.0).copied())
+}
+
+pub(crate) fn popout_origin(at: Point<Pixels>, anchor: Option<gpui::Bounds<Pixels>>) -> (Pixels, Pixels) {
+    match anchor {
+        Some(b) => ((b.left() - px(POPOUT_W + POPOUT_SPACING)).max(px(POPOUT_EDGE)), b.top().max(px(0.))),
+        None => ((at.x - px(POPOUT_W + POPOUT_SPACING)).max(z(8.)), (at.y - z(50.)).max(z(8.))),
+    }
+}
 const MODAL_W: f32 = 962.;
 const MODAL_H: f32 = 800.;
 pub(crate) const EDIT_PANEL_INNER: f32 = 240.;
@@ -81,7 +107,8 @@ impl PhoenixApp {
             }
         });
         self.people.status_picker = false;
-        self.people.popout = Some(Popout { user, guild, at, note: note.clone(), _sub: sub });
+        let anchor = row_anchor(user).filter(|b| b.contains(&at));
+        self.people.popout = Some(Popout { user, guild, at, anchor, note: note.clone(), _sub: sub });
         let fut = self.backend.user_profile(user, guild);
         cx.spawn_in(window, async move |this, cx| {
             let Ok(p) = fut.await else { return };
@@ -159,24 +186,26 @@ pub fn overlays(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixA
     );
     let vp = window.viewport_size();
     if let Some(p) = &app.people.popout {
-        let x = (p.at.x - px(POPOUT_W + 16.)).max(z(8.));
-        let y = (p.at.y - z(50.)).min(vp.height - px(POPOUT_H + 8.)).max(z(8.));
-        out.push(crate::ui::popout_motion::popout(
-            gpui::ElementId::NamedInteger("profile-popout-pt".into(), p.user.0),
-            crate::ui::popout_motion::Kind::Translate,
-            crate::ui::popout_motion::side_of(f32::from(p.at.x), f32::from(x)),
-            div()
-                .id("profile-popout")
-                .absolute()
-                .left(x)
-                .top(y)
-                .w(px(POPOUT_W + if app.people.profiles.get(&p.user).is_some_and(|x| x.theme.is_some()) { 4. } else { 0. }))
-                .max_h(vp.height - y - px(10.))
-                .flex()
-                .flex_col()
-                .occlude()
-                .child(popout_card(app, p.user, p.guild, Some(&p.note), cx)),
-        ));
+        let (x, y) = popout_origin(p.at, p.anchor);
+        out.push(
+            gpui::anchored()
+                .position(gpui::point(x, y))
+                .snap_to_window_with_margin(px(POPOUT_EDGE))
+                .child(crate::ui::popout_motion::popout(
+                    gpui::ElementId::NamedInteger("profile-popout-pt".into(), p.user.0),
+                    crate::ui::popout_motion::Kind::Translate,
+                    crate::ui::popout_motion::side_of(f32::from(p.at.x), f32::from(x)),
+                    div()
+                        .id("profile-popout")
+                        .w(px(POPOUT_W + if app.people.profiles.get(&p.user).is_some_and(|x| x.theme.is_some()) { 4. } else { 0. }))
+                        .max_h(vp.height - px(20.))
+                        .flex()
+                        .flex_col()
+                        .occlude()
+                        .child(popout_card(app, p.user, p.guild, Some(&p.note), cx)),
+                ))
+                .into_any_element(),
+        );
     }
     if let Some(u) = app.people.modal.filter(|u| app.users.get(u).is_some_and(|u| u.bot)) {
         let w = px(crate::ui::profile_bot::W).min(vp.width);
@@ -1980,6 +2009,20 @@ mod modal_box_tests {
         assert_eq!(modal_box(1536., 500., false).h, 550.);
         assert_eq!(modal_profile_w(1536., true), 400.);
         assert_eq!(modal_profile_w(700., false), 318.5);
+    }
+}
+
+#[cfg(test)]
+mod popout_origin_tests {
+    use super::popout_origin;
+    use gpui::{Bounds, point, px, size};
+
+    #[test]
+    fn member_popout_sits_left_of_the_row_at_its_top_like_the_client_layer() {
+        let row = Bounds { origin: point(px(1020.), px(318.)), size: size(px(244.), px(44.)) };
+        assert_eq!(popout_origin(point(px(1100.), px(340.)), Some(row)), (px(704.), px(318.)));
+        let left = Bounds { origin: point(px(200.), px(40.)), size: size(px(244.), px(44.)) };
+        assert_eq!(popout_origin(point(px(210.), px(50.)), Some(left)).0, px(12.));
     }
 }
 

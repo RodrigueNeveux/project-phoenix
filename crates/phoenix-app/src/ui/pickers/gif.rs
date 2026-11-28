@@ -137,7 +137,7 @@ fn tile(id: (&'static str, usize), name: SharedString, preview: Option<SharedStr
             if let Some(cache) = crate::media::lru::chat() {
                 im = im.image_cache(&cache);
             }
-            d.child(im.id(crate::media::anim_id(&u)).absolute().inset_0().size_full().object_fit(ObjectFit::Cover))
+            d.child(im.id(crate::media::anim_id(&u)).absolute().inset_0().size_full().rounded(px(5.)).object_fit(ObjectFit::Cover))
         })
         .child(div().absolute().inset_0().rounded(px(4.)).bg(fade).hover(|s| s.bg(fade.opacity(0.5))))
         .child(
@@ -255,7 +255,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                         if let Some(cache) = crate::media::lru::chat() {
                             im = im.image_cache(&cache);
                         }
-                        im.id(crate::media::anim_id(&gif.preview)).size_full().object_fit(ObjectFit::Cover)
+                        im.id(crate::media::anim_id(&gif.preview)).size_full().rounded(px(5.)).object_fit(ObjectFit::Cover)
                     })
                     .into_any_element(),
             );
