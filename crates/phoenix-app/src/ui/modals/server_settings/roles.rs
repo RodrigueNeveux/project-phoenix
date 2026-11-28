@@ -429,9 +429,11 @@ pub fn menu_items(app: &PhoenixApp, e: &Entity<PhoenixApp>, guild: crate::model:
     }
     if editable {
         let ee = e.clone();
-        groups.push(vec![MenuItem::danger(crate::t!("common.delete"), Some(crate::icons::path("chat/trash")), move |_, _, cx: &mut gpui::App| {
-            let w = crate::actions::guard::GuardedWrite::delete_role(guild.0, role);
-            ee.update(cx, |a, cx| a.blocked_write(w, cx))
+        let name = kit::s(&r, "name");
+        groups.push(vec![MenuItem::danger(crate::t!("common.delete"), Some(crate::icons::path("chat/trash")), move |_, w, cx: &mut gpui::App| {
+            super::ask(delete_confirm(guild.0, role, &name));
+            ee.update(cx, |_, cx| cx.notify());
+            w.refresh();
         })]);
     }
     let mut out = Vec::new();
@@ -442,6 +444,19 @@ pub fn menu_items(app: &PhoenixApp, e: &Entity<PhoenixApp>, guild: crate::model:
         out.extend(g);
     }
     out
+}
+
+pub fn delete_confirm(guild: u64, role: u64, name: &str) -> super::Confirm {
+    let body = crate::t!("gs.role.delete_body", name = name).to_string();
+    let bold = body.find(name).map(|i| i..i + name.len());
+    super::Confirm {
+        title: crate::t!("gs.role.delete_title"),
+        body: body.into(),
+        bold,
+        confirm: crate::t!("common.delete"),
+        danger: true,
+        write: crate::actions::guard::GuardedWrite::delete_role(guild, role),
+    }
 }
 
 fn open_role_menu(guild: crate::model::Id, role: u64, pos: gpui::Point<gpui::Pixels>, w: &mut gpui::Window) {
@@ -1862,6 +1877,17 @@ mod tests {
         let w = phoenix_api::rest::guild_manage::build(&links_write(5, &e).unwrap());
         assert_eq!((w.method.as_str(), w.path.as_str(), w.body), ("PUT", "/guilds/5/roles/6/connections/configuration", Some(two)));
         assert!(!crate::actions::guard::read_only_action(&crate::actions::ActionRequest::Admin(links_write(5, &e).unwrap())));
+    }
+
+    #[test]
+    fn role_menu_delete_asks_first_and_managed_roles_stay_locked() {
+        let c = super::delete_confirm(5, 6, "Modo");
+        assert_eq!(c.write, crate::actions::guard::GuardedWrite::delete_role(5, 6));
+        assert_eq!(c.bold.map(|r| &c.body[r]), Some("Modo"));
+        assert!(c.danger);
+        assert!(super::managed_role(&serde_json::json!({ "managed": true })));
+        assert!(!super::managed_role(&serde_json::json!({ "managed": true, "tags": { "guild_connections": null } })));
+        assert!(!super::managed_role(&serde_json::json!({ "name": "x" })));
     }
 
     #[test]

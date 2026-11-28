@@ -3678,6 +3678,8 @@ gs.role.view_as_desc: "Cette option te permet de tester les différentes actions
 gs.role.duplicate: "Dupliquer le rôle"
 gs.role.copy_of: "Copie de {name}"
 gs.role.copy_id: "Copier l'identifiant du rôle"
+gs.role.delete_title: "Supprimer le rôle"
+gs.role.delete_body: "Tu es sûr(e) de vouloir supprimer le rôle {name} ? Cette action est irréversible."
 gs.roles.count: "Rôles – {n}"
 gs.roles.create: "Création de rôle"
 gs.roles.default: "Permissions par défaut"

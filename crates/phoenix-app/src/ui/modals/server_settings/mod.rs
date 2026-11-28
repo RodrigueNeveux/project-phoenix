@@ -207,7 +207,48 @@ pub struct State {
     pub role_remove: Option<u64>,
     pub ban_open: Option<u64>,
     pub security: Option<super::privacy::Security>,
+    pub confirm: Option<Confirm>,
     pub subs: Vec<gpui::Subscription>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Confirm {
+    pub title: SharedString,
+    pub body: SharedString,
+    pub bold: Option<std::ops::Range<usize>>,
+    pub confirm: SharedString,
+    pub danger: bool,
+    pub write: crate::actions::guard::GuardedWrite,
+}
+
+pub fn ask(c: Confirm) {
+    with_state(|s| s.confirm = Some(c));
+}
+
+fn confirm_modal(c: &Confirm, cx: &mut Context<PhoenixApp>) -> AnyElement {
+    let styled = gpui::StyledText::new(c.body.clone()).with_highlights(
+        c.bold.clone().map(|r| (r, gpui::HighlightStyle { font_weight: Some(gpui::FontWeight::SEMIBOLD), ..Default::default() })),
+    );
+    let close: crate::ui::modal::Action = Rc::new(|w, _| {
+        with_state(|s| s.confirm = None);
+        w.refresh();
+    });
+    let e = cx.entity();
+    let write = c.write.clone();
+    let ok: crate::ui::modal::Action = Rc::new(move |w, cx| {
+        with_state(|s| s.confirm = None);
+        let w2 = write.clone();
+        e.update(cx, |a, cx| a.blocked_write(w2, cx));
+        w.refresh();
+    });
+    crate::ui::modal::confirm(crate::ui::modal::Confirm {
+        title: c.title.clone(),
+        body: vec![styled.into_any_element()],
+        confirm_label: c.confirm.clone(),
+        danger: c.danger,
+        on_confirm: ok,
+        on_cancel: close,
+    })
 }
 
 impl State {
@@ -237,6 +278,7 @@ impl State {
             role_remove: None,
             ban_open: None,
             security: None,
+            confirm: None,
             subs: Vec::new(),
         }
     }
@@ -633,6 +675,7 @@ pub fn render(app: &PhoenixApp, s: &State, cx: &mut Context<PhoenixApp>) -> AnyE
         .children(s.ban_open.and_then(|u| people::ban_modal(s, u, cx)).map(|m| gpui::deferred(m).with_priority(25)))
         .children(s.role_add.as_ref().map(|a| gpui::deferred(roles::add_members_modal(app, s, a, cx)).with_priority(25)))
         .children(s.role_remove.and_then(|u| roles::remove_member_modal(app, s, u, cx)).map(|m| gpui::deferred(m).with_priority(25)))
+        .children(s.confirm.as_ref().map(|c| gpui::deferred(confirm_modal(c, cx)).with_priority(26)))
         .children(s.security.as_ref().map(|sec| {
             let e = cx.entity();
             let close: crate::ui::modal::Action = Rc::new(move |_, cx| {

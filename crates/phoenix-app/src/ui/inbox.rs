@@ -2313,8 +2313,13 @@ pub(crate) fn thread_browser_row(app: &PhoenixApp, t: &crate::model::Channel, pa
         }
         None => div().flex().items_center().child(crate::t!("threads.no_recent")).child(div().flex_none().w(z(20.)).flex().justify_center().child("•")).child(when),
     };
+    let menu_id = t.id;
     div()
         .id(("thread-row", t.id.0))
+        .on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {
+            cx.stop_propagation();
+            crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Thread(menu_id), ev.position, w)
+        })
         .flex_none()
         .h(z(72.))
         .mb(z(8.))

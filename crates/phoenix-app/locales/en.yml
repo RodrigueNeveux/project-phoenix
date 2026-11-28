@@ -3678,6 +3678,8 @@ gs.role.view_as_desc: "This will let you test what actions this role can take an
 gs.role.duplicate: "Duplicate Role"
 gs.role.copy_of: "{name} copy"
 gs.role.copy_id: "Copy Role ID"
+gs.role.delete_title: "Delete Role"
+gs.role.delete_body: "Are you sure you want to delete the {name} role? This action cannot be undone."
 gs.roles.count: "Roles – {n}"
 gs.roles.create: "Create Role"
 gs.roles.default: "Default Permissions"

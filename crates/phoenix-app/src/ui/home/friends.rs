@@ -701,6 +701,10 @@ fn friend_row(app: &PhoenixApp, r: &Relationship, cx: &mut Context<PhoenixApp>) 
         .cursor_pointer()
         .hover(|s| s.bg(c(tok(idx::BACKGROUND_MOD_SUBTLE))))
         .on_click(cx.listener(move |a, _, _, cx| if pending { a.open_profile_modal(user, cx) } else { a.open_dm_with(user, cx) }))
+        .on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {
+            cx.stop_propagation();
+            crate::ui::user_menu::open(user, None, ev.position, w);
+        })
         .child(div().mr(z(12.)).child(if pending && p == Presence::Offline {
             div()
                 .relative()
