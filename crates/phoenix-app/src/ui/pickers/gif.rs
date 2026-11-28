@@ -270,6 +270,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
     };
     crate::ui::chat::scrollbar::host(crate::ui::chat::scrollbar::Bar::ThinFade)
         .size_full()
+        .bg(c(tok(idx::BACKGROUND_BASE_LOWER)))
         .child(div().id("gif-scroll").size_full().overflow_y_scroll().track_scroll(&crate::ui::chat::scrollbar::handle("gif-scroll")).p(px(PAD)).child(content))
         .children(crate::ui::chat::scrollbar::bar_for("gif-scroll", crate::ui::chat::scrollbar::Bar::ThinFade))
         .into_any_element()
