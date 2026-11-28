@@ -159,6 +159,7 @@ fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: 
     };
     let fut = app.backend.nav(req);
     let key = link.clone();
+    let code = link.code.clone();
     let entity = entity.clone();
     cx.spawn(async move |cx| {
         let st = match fut.await {
@@ -173,16 +174,17 @@ fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: 
                 && let Some(ImageRef::Url(u)) = &p.guild_icon
             {
                 let e = entity.clone();
+                let code = code.clone();
                 crate::ui::avatar_color::ensure_with(u, cx, move |cx| {
                     e.update(cx, |a, cx| {
-                        a.message_list.remeasure();
+                        crate::ui::chat::rows::refresh_containing(a, &code);
                         cx.notify();
                     })
                 });
             }
             CACHE.with(|c| c.borrow_mut().insert(key, st));
             entity.update(cx, |a, cx| {
-                a.message_list.remeasure();
+                crate::ui::chat::rows::refresh_containing(a, &code);
                 cx.notify();
             });
         });
@@ -190,7 +192,7 @@ fn ensure(app: &PhoenixApp, entity: &Entity<PhoenixApp>, link: &InviteLink, cx: 
             cx.background_executor().timer(d).await;
             cx.update(|cx| {
                 entity.update(cx, |a, cx| {
-                    a.message_list.remeasure();
+                    crate::ui::chat::rows::refresh_containing(a, &code);
                     cx.notify();
                 })
             });
@@ -912,9 +914,10 @@ fn profile_card(
             let changed = MEASURED.with(|m| m.borrow_mut().insert(probe_key.clone(), h)) != Some(h);
             if changed {
                 let e = probe_entity.clone();
+                let k = probe_key.clone();
                 cx.defer(move |cx| {
                     e.update(cx, |a, cx| {
-                        a.message_list.remeasure();
+                        crate::ui::chat::rows::refresh_containing(a, &k);
                         cx.notify();
                     })
                 });
@@ -1060,7 +1063,7 @@ fn profile_card(
                         .on_click(move |_, _, cx| {
                             EXPANDED.with(|e| e.borrow_mut().remove(&toggle_key));
                             toggle.update(cx, |a, cx| {
-                                a.message_list.remeasure();
+                                crate::ui::chat::rows::refresh_containing(a, &toggle_key);
                                 cx.notify();
                             });
                         }),
@@ -1074,7 +1077,7 @@ fn profile_card(
             .on_click(move |_, _, cx| {
                 EXPANDED.with(|e| e.borrow_mut().insert(toggle_key.clone()));
                 toggle.update(cx, |a, cx| {
-                    a.message_list.remeasure();
+                    crate::ui::chat::rows::refresh_containing(a, &toggle_key);
                     cx.notify();
                 });
             })

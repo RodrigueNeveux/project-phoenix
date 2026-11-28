@@ -28,6 +28,15 @@ pub fn refresh(list: &ListState, ix: usize) {
     list.remeasure_items(ix..ix + 1);
 }
 
+pub fn refresh_containing(app: &PhoenixApp, needle: &str) {
+    let Some(entry) = app.selected_channel.and_then(|c| app.messages.get(&c)) else { return };
+    for (ix, m) in entry.msgs.iter().enumerate() {
+        if m.content.contains(needle) {
+            app.message_list.remeasure_items(ix + 1..ix + 2);
+        }
+    }
+}
+
 pub fn prepend(list: &ListState, channel: Id, n: usize, len: usize) {
     let top = list.logical_scroll_top();
     let keep = (n > 0 && n < len && top.item_ix == 0).then(|| {

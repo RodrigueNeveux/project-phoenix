@@ -91,13 +91,13 @@ impl RenderOnce for CustomEmojiImage {
         let retry = move |src: Option<SharedString>| {
             let text = text.clone();
             move || match src.clone() {
-                Some(u) => img(u).size(px(size)).flex_none().with_fallback(text.clone()).into_any_element(),
+                Some(u) => super::lru::cached(img(u)).size(px(size)).flex_none().with_fallback(text.clone()).into_any_element(),
                 None => text(),
             }
         };
         if !emoji.animated {
             let fallback = retry(emoji.unsized_url(false));
-            return img(emoji.url(px_size)).size(px(size)).flex_none().with_fallback(fallback).into_any_element();
+            return super::lru::cached(img(emoji.url(px_size))).size(px(size)).flex_none().with_fallback(fallback).into_any_element();
         }
         let key = ("phx-emoji", emoji.id as usize);
         let hovered = window.use_keyed_state(key, cx, |_, _| false);
@@ -116,7 +116,7 @@ impl RenderOnce for CustomEmojiImage {
                     }
                 })
             })
-            .child(img(src.clone()).id(gpui::ElementId::Name(src)).size(px(size)).with_fallback(fallback))
+            .child(super::lru::cached(img(src.clone())).id(gpui::ElementId::Name(src)).size(px(size)).with_fallback(fallback))
             .into_any_element()
     }
 }
@@ -248,7 +248,7 @@ fn emoji_element_with(token: &str, size: f32, auto: bool) -> AnyElement {
     match url {
         Some(u) => {
             let fb = text.clone();
-            img(u)
+            super::lru::cached(img(u))
                 .size(px(size))
                 .flex_none()
                 .with_fallback(move || div().text_size(px(size * 0.9)).child(fb.clone()).into_any_element())

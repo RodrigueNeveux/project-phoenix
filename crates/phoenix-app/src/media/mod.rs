@@ -122,7 +122,7 @@ pub fn with_cdn_size(url: &str, size: u32) -> SharedString {
 
 pub fn avatar_image(url: SharedString, size: f32) -> AnyElement {
     if !is_animated(&url) {
-        return img(url).size(px(size)).rounded_full().flex_none().into_any_element();
+        return lru::cached(img(url)).size(px(size)).rounded_full().flex_none().into_any_element();
     }
     let hovered = emoji::window_focused() && HOVERED_AVATAR.with(|h| h.borrow().as_ref() == Some(&url));
     let src = if hovered { url.clone() } else { static_variant(&url) };
