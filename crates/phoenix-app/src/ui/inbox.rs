@@ -502,6 +502,10 @@ pub fn shadow_high() -> Vec<gpui::BoxShadow> {
     shadow_tok(&shadow::SHADOW_HIGH)
 }
 
+pub fn shadow_border() -> Vec<gpui::BoxShadow> {
+    shadow_tok(&shadow::SHADOW_BORDER)
+}
+
 pub fn popout_shadow() -> Vec<gpui::BoxShadow> {
     let mut v = shadow_tok(&shadow::SHADOW_BORDER);
     v.extend(shadow_tok(&shadow::SHADOW_HIGH));

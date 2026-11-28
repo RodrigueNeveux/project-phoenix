@@ -576,6 +576,7 @@ fn panel(app: &PhoenixApp, uid: Id, cx: &mut Context<PhoenixApp>) -> AnyElement 
         .p(z(2.))
         .rounded(z(8.))
         .overflow_hidden()
+        .when(frame.is_none(), |d| d.shadow(crate::ui::inbox::shadow_border()))
         .when(theme.is_none(), |d| d.bg(c(card_bg)))
         .when_some(theme, |d, t| d.children(theme_backdrop(t, 72.)))
         .child(
