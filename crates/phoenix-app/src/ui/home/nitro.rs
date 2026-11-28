@@ -19,6 +19,7 @@ pub const CARD_W: f32 = 330.;
 pub const CARD_H: f32 = 380.;
 pub const MAX_CARDS: usize = 6;
 const SCROLL_GUTTER: f32 = 16.;
+const HERO_GRADIENT_H: f32 = 984.;
 
 thread_local! {
     static PAGE_W: std::cell::Cell<f32> = const { std::cell::Cell::new(0.) };
@@ -334,6 +335,20 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
                 .track_scroll(&crate::ui::chat::scrollbar::handle("nitro-scroll"))
                 .flex()
                 .flex_col()
+                .relative()
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .w_full()
+                        .h(z(HERO_GRADIENT_H))
+                        .bg(gpui::linear_gradient(
+                            160.,
+                            gpui::linear_color_stop(c(tok(idx::BACKGROUND_BRAND)).opacity(0.55), 0.),
+                            gpui::linear_color_stop(gpui::black(), 1.),
+                        )),
+                )
                 .child(
                     gpui::canvas(|b, _, _| PAGE_W.with(|w| w.set(f32::from(b.size.width) / crate::theme::zoom() - SCROLL_GUTTER)), |_, _, _, _| {})
                         .w_full()
@@ -341,11 +356,6 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
                 )
                 .child(
                     div()
-                        .bg(gpui::linear_gradient(
-                            160.,
-                            gpui::linear_color_stop(c(tok(idx::BACKGROUND_BRAND)).opacity(0.55), 0.),
-                            gpui::linear_color_stop(gpui::black(), 1.),
-                        ))
                         .flex()
                         .flex_col()
                         .child(nav)
