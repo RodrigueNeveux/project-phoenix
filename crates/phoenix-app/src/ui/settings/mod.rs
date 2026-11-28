@@ -7,6 +7,7 @@ pub mod connections;
 pub mod billing;
 mod boost;
 mod gift;
+mod games;
 mod nitro;
 mod pages;
 pub mod subscriptions;
@@ -167,6 +168,7 @@ pub struct LocalPrefs {
     pub trusted_protocols: std::collections::BTreeSet<String>,
     pub collapsed_in_inbox: std::collections::BTreeSet<u64>,
     pub keybinds: Vec<crate::keybinds::Keybind>,
+    pub registered_games: std::collections::BTreeSet<String>,
 }
 
 impl Default for LocalPrefs {
@@ -186,6 +188,7 @@ impl Default for LocalPrefs {
             trusted_protocols: Default::default(),
             collapsed_in_inbox: Default::default(),
             keybinds: Vec::new(),
+            registered_games: Default::default(),
         }
     }
 }
@@ -231,6 +234,7 @@ impl LocalPrefs {
                 .and_then(Value::as_object)
                 .map(|o| o.iter().filter_map(|(k, v)| Some((k.clone(), v.as_u64()?))).collect())
                 .unwrap_or_default(),
+            registered_games: strings(v, "registered_games"),
             trusted_domains: strings(v, "trusted_domains"),
             trusted_protocols: strings(v, "trusted_protocols"),
             collapsed_in_inbox: v
@@ -253,6 +257,7 @@ impl LocalPrefs {
             "minimize_to_tray": self.minimize_to_tray,
             "beta_channel": self.beta_channel,
             "ui": self.ui,
+            "registered_games": self.registered_games,
             "trusted_domains": self.trusted_domains,
             "trusted_protocols": self.trusted_protocols,
             "collapsed_in_inbox": self.collapsed_in_inbox,
@@ -430,6 +435,9 @@ pub struct SettingsState {
     pub scroll: gpui::ScrollHandle,
     pub nested: Option<nested::Nested>,
     pub active_section: usize,
+    pub running_game_apps: Option<Result<Vec<String>, ()>>,
+    pub scanning_games: bool,
+    pub game_picker_open: bool,
 }
 
 pub fn open(app: &mut PhoenixApp, cx: &mut Context<PhoenixApp>) {
