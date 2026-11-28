@@ -157,6 +157,21 @@ impl GuardedWrite {
         )
     }
 
+    pub fn duplicate_role(guild: u64, name: &str, role: &Value) -> Self {
+        let mut body = Map::new();
+        body.insert("name".into(), json!(name));
+        for k in ["color", "colors", "permissions", "hoist", "mentionable", "icon", "unicode_emoji", "description"] {
+            if let Some(v) = role.get(k).filter(|v| !v.is_null()) {
+                body.insert(k.into(), v.clone());
+            }
+        }
+        write(Method::POST, format!("/guilds/{guild}/roles"), Some(Value::Object(body)))
+    }
+
+    pub fn delete_role(guild: u64, role: u64) -> Self {
+        write(Method::DELETE, format!("/guilds/{guild}/roles/{role}"), None)
+    }
+
     pub fn prune(guild: u64, days: u32, roles: &[u64]) -> Self {
         let roles: Vec<String> = roles.iter().map(u64::to_string).collect();
         write(Method::POST, format!("/guilds/{guild}/prune"), Some(json!({ "days": days, "compute_prune_count": false, "include_roles": roles })))
@@ -498,6 +513,11 @@ mod tests {
         let role = GuardedWrite::create_role(5, "nouveau rôle");
         assert_eq!(role.path, "/guilds/5/roles");
         assert_eq!(role.body.unwrap()["permissions"], json!("0"));
+        let dup = GuardedWrite::duplicate_role(5, "Copie de Modo", &json!({ "id": "6", "name": "Modo", "color": 255, "hoist": true, "icon": null, "permissions": "8" }));
+        assert_eq!((dup.method, dup.path.as_str()), (Method::POST, "/guilds/5/roles"));
+        assert_eq!(dup.body, Some(json!({ "name": "Copie de Modo", "color": 255, "hoist": true, "permissions": "8" })));
+        let del = GuardedWrite::delete_role(5, 6);
+        assert_eq!((del.method, del.path.as_str(), del.body), (Method::DELETE, "/guilds/5/roles/6", None));
         let pr = GuardedWrite::prune(5, 30, &[6, 7]);
         assert_eq!(pr.body, Some(json!({ "days": 30, "compute_prune_count": false, "include_roles": ["6", "7"] })));
         let hook = GuardedWrite::create_webhook(6, "Spidey Bot");

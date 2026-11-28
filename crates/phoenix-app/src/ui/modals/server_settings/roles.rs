@@ -383,6 +383,71 @@ pub fn locked(app: &PhoenixApp, s: &State, r: &Value) -> bool {
     !owner && r.get("position").and_then(Value::as_i64).unwrap_or(0) >= my_top(app, s)
 }
 
+pub fn managed_role(r: &Value) -> bool {
+    let linked = r.get("tags").and_then(|t| t.get("guild_connections")).is_some_and(Value::is_null);
+    r.get("managed").and_then(Value::as_bool).unwrap_or(false) && !linked
+}
+
+pub fn menu_items(app: &PhoenixApp, e: &Entity<PhoenixApp>, guild: crate::model::Id, role: u64) -> Vec<crate::ui::context_menu::MenuItem> {
+    use crate::ui::context_menu::MenuItem;
+    let Some((r, names, lock)) = with_state(|s| {
+        let r = s.list("roles").iter().find(|r| kit::n(r, "id") == role)?.clone();
+        let names: Vec<String> = s.list("roles").iter().map(|r| kit::s(r, "name")).collect();
+        let lock = locked(app, s, &r);
+        Some((r, names, lock))
+    })
+    .flatten() else {
+        return Vec::new();
+    };
+    let editable = !lock && !managed_role(&r) && role != guild.0;
+    let mut groups: Vec<Vec<MenuItem>> = Vec::new();
+    if editable {
+        let mut name = kit::s(&r, "name");
+        loop {
+            name = crate::t!("gs.role.copy_of", name = name).to_string();
+            if !names.contains(&name) {
+                break;
+            }
+        }
+        let (ee, body) = (e.clone(), r.clone());
+        groups.push(vec![MenuItem::action(crate::t!("gs.role.duplicate"), Some(crate::icons::path("chat/copy")), move |_, _, cx: &mut gpui::App| {
+            let w = crate::actions::guard::GuardedWrite::duplicate_role(guild.0, &name, &body);
+            ee.update(cx, |a, cx| a.blocked_write(w, cx))
+        })]);
+    }
+    let owner = app.guilds.iter().find(|g| g.id == guild).and_then(|g| g.owner) == Some(app.me.id);
+    if owner || crate::actions::has(app, Some(guild), 1 << 3) {
+        let ee = e.clone();
+        groups.push(vec![MenuItem::action(crate::t!("gs.role.view_as"), Some(crate::icons::path("chat/arrow-right")), move |_, _, cx: &mut gpui::App| {
+            ee.update(cx, |a, cx| crate::ui::view_as::start(a, guild, crate::model::Id(role), cx))
+        })]);
+    }
+    if app.prefs.synced.developer_mode {
+        groups.push(vec![MenuItem::action(crate::t!("gs.role.copy_id"), Some(crate::icons::path("id")), move |_, _, cx: &mut gpui::App| {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(role.to_string()))
+        })]);
+    }
+    if editable {
+        let ee = e.clone();
+        groups.push(vec![MenuItem::danger(crate::t!("common.delete"), Some(crate::icons::path("chat/trash")), move |_, _, cx: &mut gpui::App| {
+            let w = crate::actions::guard::GuardedWrite::delete_role(guild.0, role);
+            ee.update(cx, |a, cx| a.blocked_write(w, cx))
+        })]);
+    }
+    let mut out = Vec::new();
+    for g in groups {
+        if !out.is_empty() {
+            out.push(MenuItem::Separator);
+        }
+        out.extend(g);
+    }
+    out
+}
+
+fn open_role_menu(guild: crate::model::Id, role: u64, pos: gpui::Point<gpui::Pixels>, w: &mut gpui::Window) {
+    crate::ui::extra_menus::open(crate::ui::extra_menus::Target::Role { guild, role }, pos, w);
+}
+
 fn hsla(v: u32) -> Hsla {
     c(v)
 }
@@ -750,8 +815,15 @@ pub fn list(app: &PhoenixApp, s: &State, cx: &mut Cx) -> AnyElement {
                     .justify_end()
                     .gap(z(8.))
                     .child(kit::icon_btn(("ss-role-edit", id as usize), if lock { "chat/eye" } else { "pen" }, 40., 20., false))
-                    .child(kit::icon_btn(("ss-role-more", id as usize), "more-horizontal", 40., 20., false)),
+                    .child(kit::icon_btn(("ss-role-more", id as usize), "more-horizontal", 40., 20., false).on_click(move |ev, w, cx| {
+                        cx.stop_propagation();
+                        open_role_menu(crate::model::Id(guild), id, ev.position(), w)
+                    })),
             )
+            .on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {
+                cx.stop_propagation();
+                open_role_menu(crate::model::Id(guild), id, ev.position, w)
+            })
             .on_mouse_move(cx.listener(move |_, _, _, cx| {
                 let changed = with_state(|s| match s.drag.as_mut() {
                     Some(d) if d.over != i => {
@@ -803,6 +875,7 @@ fn side(app: &PhoenixApp, s: &State, cur: u64, cx: &mut Cx) -> AnyElement {
     if let Some(e) = s.list("roles").iter().find(|r| kit::n(r, "id") == s.guild.0) {
         all.push(e.clone());
     }
+    let guild = s.guild;
     for r in all {
         let id = kit::n(&r, "id");
         let on = id == cur;
@@ -825,6 +898,10 @@ fn side(app: &PhoenixApp, s: &State, cur: u64, cx: &mut Cx) -> AnyElement {
                 .child(div().mx(z(4.)).child(circle(&colors_of(&r), 12.)))
                 .when(lock, |d| d.child(gpui::svg().path(crate::icons::path("lock")).flex_none().size(z(16.)).text_color(c(tok(idx::TEXT_SUBTLE)))))
                 .child(text(kit::s(&r, "name"), 14., 18., FontWeight::MEDIUM, idx::TEXT_STRONG).truncate().min_w_0())
+                .on_mouse_down(gpui::MouseButton::Right, move |ev, w, cx| {
+                    cx.stop_propagation();
+                    open_role_menu(guild, id, ev.position, w)
+                })
                 .on_click(cx.listener(move |a, _, _, cx| {
                     if !on {
                         open_editor(id, everyone, false, a, cx)

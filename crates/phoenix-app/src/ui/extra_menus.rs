@@ -32,6 +32,7 @@ pub enum Target {
     QuestMore(Box<crate::ui::quests_page::Quest>),
     SecurityKey { id: String, name: SharedString, last: bool },
     BoostBar(Id),
+    Role { guild: Id, role: u64 },
 }
 
 pub const NITRO_SKU: &str = "521847234246082599";
@@ -570,6 +571,13 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyEleme
         Target::QuestMore(q) => quest_items(&e, q),
         Target::SecurityKey { id, name, last } => security_key_items(&e, id.clone(), name.clone(), *last),
         Target::BoostBar(g) => boost_bar_items(app, &e, *g),
+        Target::Role { guild, role } => {
+            let items = crate::ui::modals::server_settings::roles::menu_items(app, &e, *guild, *role);
+            if items.is_empty() {
+                return None;
+            }
+            items
+        }
     };
     let dismiss: context_menu::Dismiss = Rc::new(|w, _| {
         close();
