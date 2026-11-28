@@ -142,3 +142,15 @@ Members table in Server Settings uses a home-made Copy ID / Kick / Ban menu, not
 | confirm above Server Settings | role delete: generic confirm (module 314116) « Supprimer le rôle » / « Tu es sûr(e) de vouloir supprimer le rôle **{name}** ? Cette action est irréversible. » (`YWISbQ`, `9+nrUS`) | `server_settings::Confirm` + `ask()`, drawn above the settings (priority 26); any settings page can use it for a guarded write | ✅ |
 
 Still not done: stream tile menu, search results, reply previews and composer attachments menus, the members / emoji / webhooks / invites / bans rows in Server Settings, Discover cards (`guild-entry-context`), quests and shop.
+
+### Part C, second night batch (28/11)
+
+| item | client | Phoenix | status |
+|---|---|---|---|
+| drag autoscroll | the browser scrolls the list while a selection is dragged past its top or bottom | `selection::autoscroll_step`: half the distance past the edge, capped at 40 px per frame, repeated with `request_animation_frame` while the button is held; the focus follows the first or last visible line | ✅ |
+| search result | `352c24d0008cdd8c.js` `handleContextMenu` → chunk 480419 module 847342 (navId `message`): Copy / Search with Google (with a selection) / Pin or Unpin, Mark Unread, Copy Message Link, Delete / link items / Copy Message ID, Copy Author ID (`Muw4wm`, Developer Mode) | `extra_menus::search_result_items`, same type rules as the message menu | ✅ ⚠ link group not drawn |
+| stream / call tiles | user menu | `call_view` tiles already open `user_menu` (Part A) | ✅ |
+| `guild-entry-context` | Student Hub directory entries (`283354`: Edit entry, Remove, Copy Server ID), not the Discover cards; Discover cards have no context menu | none | n/a |
+| shop and quests | `full-profile-shop-this-look`, `wishlist-overflow-menu`, quest « … » menus | `ShopLook`, `WishlistMore`, `QuestMore` | ✅ (existing) |
+
+Still not done: the members table of Server Settings (client `member-safety-guild-member-*-menu`), and the emoji, webhook, invite and ban rows (their client menus were not read), reply previews and composer attachments.
