@@ -10,7 +10,7 @@ use std::{
 
 use gpui::{AnyElement, App, AppContext, Entity, Global, ImageCache, ImageCacheError, ImageCacheItem, IntoElement, ParentElement, RenderImage, Resource, Styled, WeakEntity, Window, hash};
 
-pub const BUDGET_BYTES: u64 = 128 * 1024 * 1024;
+pub const BUDGET_BYTES: u64 = 192 * 1024 * 1024;
 const KEEP_FRAMES: u64 = 2;
 const KEEP_FOR: Duration = Duration::from_secs(5);
 const MAX_FAILED_ITEMS: usize = 512;
