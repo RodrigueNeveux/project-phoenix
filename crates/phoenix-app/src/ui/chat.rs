@@ -2021,7 +2021,7 @@ pub(crate) fn attachment(a: &Attachment, cx: &App) -> AnyElement {
     let el = attachment_inner(a, cx);
     match (&a.kind, panels::sticker_id(&a.url)) {
         (AttachmentKind::Sticker(_), Some(id)) => {
-            let t = panels::MenuItemTarget { sticker: true, id, image: Some(a.url.clone()) };
+            let t = panels::MenuItemTarget { sticker: true, id, image: Some(a.url.clone()), fav: None };
             div().on_mouse_down(gpui::MouseButton::Right, move |_, _, _| panels::set_menu_item(t.clone())).child(el).into_any_element()
         }
         _ => el,

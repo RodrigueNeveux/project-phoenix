@@ -63,6 +63,7 @@ pub struct Frecency {
     pub emojis: Vec<SharedString>,
     pub reactions: Vec<SharedString>,
     pub favorite_emojis: Vec<SharedString>,
+    pub favorite_stickers: Vec<u64>,
     pub stickers: Vec<Id>,
     pub favorite_gifs: Vec<GifItem>,
     pub applications: Vec<u64>,

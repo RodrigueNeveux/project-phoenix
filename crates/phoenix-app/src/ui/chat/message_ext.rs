@@ -1074,7 +1074,10 @@ pub fn rich_with_emoji_scaled(
             last = r.end;
             continue;
         }
-        let target = crate::media::emoji::parse_custom(token).map(|e| super::panels::MenuItemTarget { sticker: false, id: e.id, image: Some(e.url(44)) });
+        let target = match crate::media::emoji::parse_custom(token) {
+            Some(e) => Some(super::panels::MenuItemTarget { sticker: false, id: e.id, image: Some(e.url(44)), fav: None }),
+            None => super::panels::unicode_fav_key(token).map(|k| super::panels::MenuItemTarget { sticker: false, id: 0, image: None, fav: Some(k) }),
+        };
         row = row.child(
             div()
                 .mx(z(1.))

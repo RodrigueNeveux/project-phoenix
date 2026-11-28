@@ -50,6 +50,8 @@ pub enum ActionRequest {
     Admin(phoenix_api::rest::guild_manage::AdminCall),
     AdminMfa(phoenix_api::rest::guild_manage::AdminCall, phoenix_api::rest::guild_manage::AdminMfaMethod, crate::discord_backend::store::Secret),
     SaveFolders(Vec<crate::ui::home::data::GuildFolder>),
+    FavoriteEmoji { key: String, on: bool },
+    FavoriteSticker { id: u64, on: bool },
     Stage(phoenix_api::rest::stage::StageCall),
 }
 

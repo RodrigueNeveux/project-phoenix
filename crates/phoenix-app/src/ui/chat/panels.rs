@@ -51,6 +51,73 @@ pub struct MenuItemTarget {
     pub sticker: bool,
     pub id: u64,
     pub image: Option<SharedString>,
+    pub fav: Option<SharedString>,
+}
+
+pub fn unicode_fav_key(glyph: &str) -> Option<SharedString> {
+    let base: String = glyph.chars().filter(|c| !('\u{1F3FB}'..='\u{1F3FF}').contains(c)).collect();
+    let ix = crate::ui::pickers::emoji::index_of(&base).or_else(|| crate::ui::pickers::emoji::index_of(base.trim_end_matches('\u{FE0F}')))?;
+    Some(crate::ui::pickers::emoji::shortcode(ix).into())
+}
+
+fn favorite_item(e: &Entity<PhoenixApp>, t: &MenuItemTarget, cx: &gpui::App) -> Option<context_menu::MenuItem> {
+    let f = cx.try_global::<crate::ui::pickers::Pickers>().and_then(|p| p.frecency.as_ref())?;
+    let (on, label_on, label_off, req) = if t.sticker {
+        let on = f.favorite_stickers.contains(&t.id);
+        (on, "msg.sticker_unfavorite", "msg.sticker_favorite", crate::actions::ActionRequest::FavoriteSticker { id: t.id, on: !on })
+    } else {
+        let key: SharedString = t.fav.clone().or_else(|| (t.id != 0).then(|| t.id.to_string().into()))?;
+        let on = f.favorite_emojis.contains(&key);
+        (on, "msg.emoji_unfavorite", "msg.emoji_favorite", crate::actions::ActionRequest::FavoriteEmoji { key: key.to_string(), on: !on })
+    };
+    let ee = e.clone();
+    let label = if on { crate::t!(label_on) } else { crate::t!(label_off) };
+    let icon = crate::icons::path(if on { "star-outline" } else { "star" });
+    Some(context_menu::MenuItem::action(label, Some(icon), move |_, _, cx| {
+        let req = req.clone();
+        ee.update(cx, |a, cx| {
+            a.chat.menu = None;
+            a.set_favorite_expression(req, cx)
+        })
+    }))
+}
+
+fn apply_favorite(req: &crate::actions::ActionRequest, undo: bool, cx: &mut gpui::App) {
+    if !cx.has_global::<crate::ui::pickers::Pickers>() {
+        return;
+    }
+    let Some(f) = cx.global_mut::<crate::ui::pickers::Pickers>().frecency.as_mut() else { return };
+    match req {
+        crate::actions::ActionRequest::FavoriteEmoji { key, on } => {
+            let key: SharedString = key.clone().into();
+            f.favorite_emojis.retain(|k| *k != key);
+            if *on != undo {
+                f.favorite_emojis.push(key);
+            }
+        }
+        crate::actions::ActionRequest::FavoriteSticker { id, on } => {
+            f.favorite_stickers.retain(|k| k != id);
+            if *on != undo {
+                f.favorite_stickers.push(*id);
+            }
+        }
+        _ => {}
+    }
+}
+
+impl PhoenixApp {
+    pub(crate) fn set_favorite_expression(&mut self, req: crate::actions::ActionRequest, cx: &mut Context<Self>) {
+        apply_favorite(&req, false, cx);
+        let back = req.clone();
+        self.action(req, cx, move |a, r, cx| {
+            if let Err(e) = r {
+                apply_favorite(&back, true, cx);
+                a.parity_toast(e.0, cx);
+            }
+            cx.notify();
+        });
+        cx.notify();
+    }
 }
 
 thread_local! {
@@ -466,7 +533,9 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
         }
         items.push(MenuItem::submenu_with_icon(crate::t!("msg.view_interaction_info"), "info", sub));
     }
-    let details = MENU_ITEM.with(|m| m.borrow().1.clone()).filter(|_| app.prefs.synced.developer_mode);
+    let target = MENU_ITEM.with(|m| m.borrow().1.clone());
+    let favorite = target.as_ref().and_then(|t| favorite_item(&e, t, cx));
+    let details = target.filter(|t| t.id != 0 && app.prefs.synced.developer_mode);
     if app.prefs.synced.developer_mode {
         items.push(MenuItem::Separator);
         match &details {
@@ -475,6 +544,10 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(id.0.to_string()))
             })),
         }
+    }
+    if let Some(fav) = favorite {
+        items.push(MenuItem::Separator);
+        items.push(fav);
     }
     if let Some(url) = voice_file {
         items.push(MenuItem::Separator);

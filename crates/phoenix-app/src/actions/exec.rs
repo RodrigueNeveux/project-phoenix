@@ -61,6 +61,14 @@ pub(crate) async fn request_with(allowed: bool, rest: RestClient, req: ActionReq
             Err(phoenix_api::Error::Api { body, .. }) if matches!(body.code, 60008 | 60011 | 50035) => ActionReply::AdminMfaRejected,
             Err(err) => ActionReply::AdminMfaRequired(phoenix_api::rest::guild_manage::admin_mfa_methods(&err).ok_or_else(|| e(err))?),
         },
+        R::FavoriteEmoji { key, on } => {
+            rest.set_favorite_emoji(key, on).await.map_err(e)?;
+            ActionReply::Done
+        }
+        R::FavoriteSticker { id, on } => {
+            rest.set_favorite_sticker(id, on).await.map_err(e)?;
+            ActionReply::Done
+        }
         R::SaveFolders(folders) => {
             rest.save_guild_folders(&folder_protos(&folders)).await.map_err(e)?;
             ActionReply::Done

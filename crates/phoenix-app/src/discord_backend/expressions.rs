@@ -119,6 +119,7 @@ pub(super) async fn frecency(s: Arc<Session>) -> Result<crate::ui::pickers::type
         emojis: f.emojis_ranked_at(&order, now).into_iter().map(Into::into).collect(),
         reactions: f.reactions_ranked_at(&order, now).into_iter().map(Into::into).collect(),
         favorite_emojis: f.favorite_emoji_keys().into_iter().map(Into::into).collect(),
+        favorite_stickers: f.favorite_sticker_ids(),
         stickers: f.stickers_ranked_at(&order, now).into_iter().map(Id).collect(),
         favorite_gifs: f
             .favorite_gifs()

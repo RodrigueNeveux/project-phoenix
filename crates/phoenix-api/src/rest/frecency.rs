@@ -98,6 +98,45 @@ pub struct FrecencyUserSettings {
     pub favorite_emojis: Option<FavoriteEmojis>,
     #[prost(message, optional, tag = "13")]
     pub emoji_reaction_frecency: Option<EmojiFrecency>,
+    #[prost(message, optional, tag = "3")]
+    pub favorite_stickers: Option<FavoriteStickers>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct FavoriteStickers {
+    #[prost(fixed64, repeated, tag = "1")]
+    pub sticker_ids: Vec<u64>,
+}
+
+pub const FAVORITE_STICKERS_TAG: u32 = 3;
+pub const FAVORITE_EMOJIS_TAG: u32 = 5;
+
+fn last_field(raw: &[u8], tag: u32) -> Option<&[u8]> {
+    super::settings::fields(raw).into_iter().rev().find(|f| f.0 == tag && f.1 == 2).map(|f| f.3)
+}
+
+pub fn with_favorite_emoji(raw: &[u8], key: &str, on: bool) -> Vec<u8> {
+    let mut fav: FavoriteEmojis = last_field(raw, FAVORITE_EMOJIS_TAG).and_then(|b| prost::Message::decode(b).ok()).unwrap_or_default();
+    if fav.emojis.iter().any(|k| k == key) == on {
+        return raw.to_vec();
+    }
+    fav.emojis.retain(|k| k != key);
+    if on {
+        fav.emojis.push(key.to_owned());
+    }
+    super::settings::replace_field(raw, FAVORITE_EMOJIS_TAG, &prost::Message::encode_to_vec(&fav))
+}
+
+pub fn with_favorite_sticker(raw: &[u8], id: u64, on: bool) -> Vec<u8> {
+    let mut fav: FavoriteStickers = last_field(raw, FAVORITE_STICKERS_TAG).and_then(|b| prost::Message::decode(b).ok()).unwrap_or_default();
+    if fav.sticker_ids.contains(&id) == on {
+        return raw.to_vec();
+    }
+    fav.sticker_ids.retain(|k| *k != id);
+    if on {
+        fav.sticker_ids.push(id);
+    }
+    super::settings::replace_field(raw, FAVORITE_STICKERS_TAG, &prost::Message::encode_to_vec(&fav))
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -317,6 +356,10 @@ impl FrecencyUserSettings {
         rank_like_client(&keys, |k| map.get(k), now_ms)
     }
 
+    pub fn favorite_sticker_ids(&self) -> Vec<u64> {
+        self.favorite_stickers.as_ref().map(|f| f.sticker_ids.clone()).unwrap_or_default()
+    }
+
     pub fn favorite_emoji_keys(&self) -> Vec<String> {
         self.favorite_emojis.as_ref().map(|f| f.emojis.clone()).unwrap_or_default()
     }
@@ -358,6 +401,28 @@ impl RestClient {
         FrecencyUserSettings::decode_base64(&b.settings)
     }
 
+    pub async fn edit_frecency_proto(&self, edit: impl FnOnce(Vec<u8>) -> Vec<u8>) -> Result<Vec<u8>> {
+        let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/2", Body::None).await?;
+        let before = STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("frecency base64: {e}")))?;
+        let after = edit(before.clone());
+        let delta = super::settings::proto_delta(&before, &after);
+        if delta.is_empty() {
+            return Ok(before);
+        }
+        let b: ProtoBody = self
+            .call(Method::PATCH, "/users/@me/settings-proto/2", Body::Json(serde_json::json!({ "settings": STANDARD.encode(delta) })))
+            .await?;
+        STANDARD.decode(b.settings.trim()).map_err(|e| Error::Protocol(format!("frecency base64: {e}")))
+    }
+
+    pub async fn set_favorite_emoji(&self, key: String, on: bool) -> Result<Vec<u8>> {
+        self.edit_frecency_proto(move |raw| with_favorite_emoji(&raw, &key, on)).await
+    }
+
+    pub async fn set_favorite_sticker(&self, id: u64, on: bool) -> Result<Vec<u8>> {
+        self.edit_frecency_proto(move |raw| with_favorite_sticker(&raw, id, on)).await
+    }
+
     pub async fn get_frecency_settings_ordered(&self) -> Result<(FrecencyUserSettings, FrecencyOrder)> {
         let b: ProtoBody = self.call(Method::GET, "/users/@me/settings-proto/2", Body::None).await?;
         FrecencyUserSettings::decode_base64_ordered(&b.settings)
@@ -367,6 +432,28 @@ impl RestClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn favorite_emoji_and_sticker_edits_keep_the_other_fields() {
+        let base = FrecencyUserSettings {
+            favorite_emojis: Some(FavoriteEmojis { emojis: vec!["smile".into()] }),
+            sticker_frecency: Some(StickerFrecency::default()),
+            ..Default::default()
+        };
+        let raw = prost::Message::encode_to_vec(&base);
+        let added = with_favorite_emoji(&raw, "1424806138028888325", true);
+        let got: FrecencyUserSettings = prost::Message::decode(added.as_slice()).unwrap();
+        assert_eq!(got.favorite_emojis.unwrap().emojis, vec!["smile".to_string(), "1424806138028888325".to_string()]);
+        assert!(got.sticker_frecency.is_some());
+        assert_eq!(with_favorite_emoji(&raw, "smile", true), raw);
+        let removed: FrecencyUserSettings = prost::Message::decode(with_favorite_emoji(&raw, "smile", false).as_slice()).unwrap();
+        assert!(removed.favorite_emojis.unwrap_or_default().emojis.is_empty());
+        let st: FrecencyUserSettings = prost::Message::decode(with_favorite_sticker(&raw, 749054660769218631, true).as_slice()).unwrap();
+        assert_eq!(st.favorite_stickers.unwrap().sticker_ids, vec![749054660769218631]);
+        let delta = super::super::settings::proto_delta(&raw, &with_favorite_sticker(&raw, 7, true));
+        let only: FrecencyUserSettings = prost::Message::decode(delta.as_slice()).unwrap();
+        assert!(only.favorite_emojis.is_none() && only.favorite_stickers.is_some());
+    }
 
     #[test]
     fn ranks_and_roundtrips() {
