@@ -1,4 +1,8 @@
-use std::cell::Cell;
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use gpui::{AnyElement, App, AvailableSpace, Bounds, Entity, IntoElement, ListOffset, ListState, Pixels, Styled, canvas, px, size};
 
@@ -13,7 +17,16 @@ struct Keep {
     y: f32,
 }
 
+const ESTIMATE: f32 = 56.;
+const MEASURE_BUDGET: Duration = Duration::from_millis(3);
+const HEIGHTS_CAP: usize = 20_000;
+
+type HeightKey = (u64, u32, u32);
+
 thread_local! {
+    static HEIGHTS: RefCell<HashMap<HeightKey, f32>> = RefCell::new(HashMap::new());
+    static HINTED: Cell<(u64, u32, usize)> = const { Cell::new((0, 0, usize::MAX)) };
+    static PENDING: RefCell<Vec<std::ops::Range<usize>>> = const { RefCell::new(Vec::new()) };
     static KEEP: Cell<Option<Keep>> = const { Cell::new(None) };
     static TOP_ROW: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
     static TOP_ROW_SHOWN: Cell<Option<Bounds<Pixels>>> = const { Cell::new(None) };
@@ -21,6 +34,7 @@ thread_local! {
 
 pub fn insert(list: &ListState, at: usize, n: usize) {
     list.splice(at..at, n);
+    PENDING.with_borrow_mut(|p| p.push(at..at + n));
     list.remeasure_items(0..0);
 }
 
@@ -48,12 +62,114 @@ pub fn prepend(list: &ListState, channel: Id, n: usize, len: usize) {
     });
     if n > 0 {
         list.splice(1..1, n);
+        PENDING.with_borrow_mut(|p| p.push(1..1 + n));
     }
     list.remeasure_items(0..1);
     if n > 0 && n < len {
         list.remeasure_items(n + 1..n + 2);
     }
     KEEP.set(keep.map(|y| Keep { channel, item: n + 1, y }));
+}
+
+pub fn measure_everything() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("PHX_MEASURE_ALL").is_some_and(|v| !v.is_empty() && v != "0"))
+}
+
+fn row_key(app: &PhoenixApp, channel: Id, ix: usize) -> Option<u64> {
+    if ix == 0 {
+        return Some(!channel.0);
+    }
+    app.messages.get(&channel)?.msgs.get(ix - 1).map(|m| m.id.0)
+}
+
+fn set_hint(list: &ListState, ix: usize, height: f32) {
+    list.splice(ix..ix + 1, 1);
+    let _ = list.clone().with_uniform_item_height(px(height));
+}
+
+fn cached(key: Option<u64>, width: u32, generation: u32) -> Option<f32> {
+    HEIGHTS.with_borrow(|h| h.get(&(key?, width, generation)).copied())
+}
+
+fn remember(key: Option<u64>, width: u32, generation: u32, height: f32) {
+    let Some(key) = key else { return };
+    HEIGHTS.with_borrow_mut(|h| {
+        if h.len() >= HEIGHTS_CAP {
+            h.clear();
+        }
+        h.insert((key, width, generation), height);
+    });
+}
+
+pub fn measure_ahead(entity: Entity<PhoenixApp>, render: RenderRow) -> AnyElement {
+    canvas(
+        move |_, window, cx| {
+            if measure_everything() {
+                return;
+            }
+            let (list, channel) = {
+                let app = entity.read(cx);
+                (app.message_list.clone(), app.selected_channel)
+            };
+            let Some(channel) = channel else { return };
+            let view = list.viewport_bounds();
+            if view.size.width <= px(0.) {
+                return;
+            }
+            let width = f32::from(view.size.width).round() as u32;
+            let generation = crate::theme::style_generation();
+            let count = list.item_count();
+            let top = list.logical_scroll_top();
+            let keys: Vec<Option<u64>> = {
+                let app = entity.read(cx);
+                (0..count).map(|ix| row_key(app, channel, ix)).collect()
+            };
+            for (ix, key) in keys.iter().enumerate().skip(top.item_ix) {
+                if let Some(b) = list.bounds_for_item(ix) {
+                    remember(*key, width, generation, f32::from(b.size.height));
+                }
+            }
+            let pending = PENDING.take();
+            let (seen_channel, seen_width, seen_count) = HINTED.get();
+            let full = seen_channel != channel.0 || seen_width != width || (seen_count != count && pending.is_empty());
+            if full || !pending.is_empty() || seen_count != count {
+                HINTED.set((channel.0, width, count));
+                let ranges = if full { vec![0..count] } else { pending };
+                for ix in ranges.into_iter().flatten().filter(|ix| *ix < count) {
+                    if ix != top.item_ix
+                        && list.bounds_for_item(ix).is_none()
+                        && let Some(h) = cached(keys[ix], width, generation)
+                    {
+                        set_hint(&list, ix, h);
+                    }
+                }
+                let _ = list.clone().with_uniform_item_height(px(ESTIMATE));
+            }
+            let mut order: Vec<usize> = (0..count).filter(|ix| keys[*ix].is_some() && cached(keys[*ix], width, generation).is_none()).collect();
+            if order.is_empty() {
+                return;
+            }
+            order.sort_by_key(|ix| ix.abs_diff(top.item_ix));
+            let space = size(AvailableSpace::Definite(view.size.width), AvailableSpace::MinContent);
+            let started = Instant::now();
+            for ix in order.iter().copied() {
+                if started.elapsed() > MEASURE_BUDGET {
+                    break;
+                }
+                let h = f32::from(render(&entity, ix, cx).layout_as_root(space, window, cx).height);
+                remember(keys[ix], width, generation, h);
+                if ix != top.item_ix && list.bounds_for_item(ix).is_none() {
+                    set_hint(&list, ix, h);
+                }
+            }
+            window.request_animation_frame();
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .size_0()
+    .into_any_element()
 }
 
 pub fn top_row_probe() -> AnyElement {

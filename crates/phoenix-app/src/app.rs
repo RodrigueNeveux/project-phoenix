@@ -335,7 +335,8 @@ impl PhoenixApp {
             .detach();
         }
 
-        let message_list = ListState::new(0, ListAlignment::Bottom, px(800.)).measure_all();
+        let message_list = ListState::new(0, ListAlignment::Bottom, px(800.));
+        let message_list = if ui::chat::rows::measure_everything() { message_list.measure_all() } else { message_list };
         let weak = cx.entity().downgrade();
         message_list.set_scroll_handler(move |ev: &gpui::ListScrollEvent, _w, cx: &mut App| {
             if ev.visible_range.start == 0 {

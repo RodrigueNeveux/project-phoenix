@@ -117,6 +117,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                 .relative()
                                 .pr(z(16.))
                                 .child(rows::keep_anchor(entity.clone(), row))
+                                .child(rows::measure_ahead(entity.clone(), row))
                                 .child(
                                     list(app.message_list.clone(), move |ix, _w, cx| row(&entity, ix, cx))
                                         .size_full(),
