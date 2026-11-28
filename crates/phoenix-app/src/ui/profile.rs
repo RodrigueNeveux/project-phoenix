@@ -257,7 +257,7 @@ pub(crate) fn section_title(t: SharedString) -> Div {
         .child(t)
 }
 
-fn activity_header(a: &Activity) -> Option<SharedString> {
+pub(crate) fn activity_header(a: &Activity) -> Option<SharedString> {
     Some(match a.kind {
         ActivityKind::Custom => return None,
         ActivityKind::Playing => crate::t!("activity.playing"),
@@ -566,8 +566,7 @@ fn badges(i: &Info) -> Option<Div> {
             .items_center()
             .gap(z(2.))
             .my(z(1.))
-            .px(z(3.))
-            .py(z(1.))
+            .px(z(2.))
             .rounded(z(8.))
             .bg(c(tok(idx::BACKGROUND_MOD_SUBTLE)))
             .border_1()

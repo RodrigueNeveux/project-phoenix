@@ -72,6 +72,7 @@ pub fn members_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
     let key = |u: &Id| app.users.get(u).map(|u| u.name.to_lowercase()).unwrap_or_default();
     ids.sort_by_key(key);
     let entity = cx.entity();
+    let can_invite = ids.len() <= crate::ui::inbox::GROUP_DM_MAX;
     let header: SharedString = crate::t!("members.group_header", n = ids.len());
     let rows = ids.iter().map(|u| {
         let mem = Member {
@@ -104,10 +105,46 @@ pub fn members_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
                     .flex()
                     .flex_col()
                     .overflow_y_scroll()
+                    .pr(z(8.))
                     .pb(z(10.))
                     .child(crate::ui::members::header(header))
-                    .children(rows),
+                    .children(rows)
+                    .children(can_invite.then(|| invite_button(ch, entity.clone()))),
             )
             .into_any_element(),
+    )
+}
+
+fn invite_button(ch: Id, entity: gpui::Entity<PhoenixApp>) -> impl IntoElement {
+    let fg = c(Palette::TEXT_HEADER);
+    div().pt(z(16.)).pl(z(16.)).child(
+        div()
+            .id(("group-invite", ch.0))
+            .w_full()
+            .h(z(39.))
+            .px(z(15.))
+            .rounded(z(8.))
+            .bg(c(crate::theme::tok(crate::theme::generated::idx::BACKGROUND_MOD_SUBTLE)))
+            .border_1()
+            .border_color(c(Palette::DIVIDER))
+            .hover(|s| s.bg(c(Palette::BG_MOD_SELECTED)))
+            .cursor_pointer()
+            .flex()
+            .items_center()
+            .justify_center()
+            .gap(z(4.))
+            .on_click(move |_, _, cx| entity.update(cx, |a, cx| a.open_add_to_dm(ch, cx)))
+            .child(gpui::svg().path(crate::icons::path("add-to-dm")).size(z(20.)).flex_none().text_color(fg))
+            .child(
+                div()
+                    .min_w_0()
+                    .text_size(z(16.))
+                    .line_height(z(20.))
+                    .font_weight(gpui::FontWeight::MEDIUM)
+                    .text_color(fg)
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .child(crate::t!("groupdm.title_group")),
+            ),
     )
 }

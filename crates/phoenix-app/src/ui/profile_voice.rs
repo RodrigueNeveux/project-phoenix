@@ -66,6 +66,7 @@ pub struct Colors {
     pub card: Hsla,
     pub themed: bool,
     pub popout: bool,
+    pub header_size: f32,
 }
 
 impl Colors {
@@ -77,7 +78,12 @@ impl Colors {
             card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
             themed,
             popout: true,
+            header_size: 12.,
         }
+    }
+
+    pub fn sidebar(themed: bool) -> Self {
+        Self { header_size: 14., ..Self::popout(themed) }
     }
 
     pub fn modal(themed: bool) -> Self {
@@ -88,6 +94,7 @@ impl Colors {
             card: c(tok(idx::USER_PROFILE_OVERLAY_BACKGROUND)),
             themed,
             popout: false,
+            header_size: 12.,
         }
     }
 }
@@ -162,8 +169,8 @@ pub fn card(app: &PhoenixApp, user: Id, col: Colors, entity: Entity<PhoenixApp>)
         .flex()
         .items_center()
         .gap(z(4.))
-        .text_size(z(12.))
-        .line_height(z(16.))
+        .text_size(z(col.header_size))
+        .line_height(z(col.header_size + 4.))
         .font_weight(FontWeight::MEDIUM)
         .text_color(col.header)
         .child(crate::t!("members.in_voice"))

@@ -387,7 +387,7 @@ impl PhoenixApp {
     }
 }
 
-fn shadow_low() -> Vec<gpui::BoxShadow> {
+pub(crate) fn shadow_low() -> Vec<gpui::BoxShadow> {
     vec![gpui::BoxShadow {
         color: gpui::hsla(0., 0., 0., 0.14),
         offset: gpui::point(z(0.), z(1.)),
