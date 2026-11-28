@@ -135,7 +135,7 @@ pub fn measure_ahead(entity: Entity<PhoenixApp>, render: RenderRow) -> AnyElemen
             let full = seen_channel != channel.0 || seen_width != width || (seen_count != count && pending.is_empty());
             if full || !pending.is_empty() || seen_count != count {
                 HINTED.set((channel.0, width, count));
-                let ranges = if full { vec![0..count] } else { pending };
+                let ranges: Vec<std::ops::Range<usize>> = if full { std::iter::once(0..count).collect() } else { pending };
                 for ix in ranges.into_iter().flatten().filter(|ix| *ix < count) {
                     if ix != top.item_ix
                         && list.bounds_for_item(ix).is_none()
