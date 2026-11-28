@@ -1679,6 +1679,7 @@ impl Render for PhoenixApp {
         ui::profile_fx::sweep(cx);
         crate::perf::on_render(self.selected_channel.map(|c| c.0), self.selected_channel.and_then(|c| self.messages.get(&c)).is_some_and(|e| e.loaded_once));
         ui::context_menu::begin_frame();
+        ui::chat::selection::begin_frame(self.selected_channel.map(|c| c.0));
         ui::a11y::sync(window);
         crate::auth::ensure_qr(self, cx);
         crate::theme::sync(&self.prefs, window, cx);

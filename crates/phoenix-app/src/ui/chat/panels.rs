@@ -235,7 +235,18 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 }),
         ));
     }
-    let mut items = vec![MenuItem::Custom(strip.into_any_element())];
+    let mut items = Vec::new();
+    if let Some(sel) = super::selection::selected_text() {
+        items.push(MenuItem::action(crate::t!("ta.copy"), None, |_, _, cx| {
+            super::selection::copy(cx);
+        }).with_shortcut("Ctrl+C"));
+        items.push(MenuItem::Separator);
+        let url = super::selection::google_url(&sel);
+        items.push(MenuItem::action(crate::t!("msg.search_google"), Some(crate::icons::path("search")), move |_, _, cx| cx.open_url(&url)));
+        items.push(MenuItem::Separator);
+    } else {
+        items.push(MenuItem::Custom(strip.into_any_element()));
+    }
     let mut frequent: Vec<MenuItem> = crate::ui::pickers::grid::build(app, "", true, cx)
         .items
         .into_iter()

@@ -33,6 +33,7 @@ pub mod pending;
 pub mod rich_input;
 pub mod rows;
 pub mod scheduled;
+pub mod selection;
 pub mod scrollbar;
 pub mod alt_text;
 pub mod state;
@@ -116,6 +117,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                 .min_h_0()
                                 .relative()
                                 .pr(z(16.))
+                                .on_mouse_down(gpui::MouseButton::Left, selection::on_down)
                                 .child(rows::keep_anchor(entity.clone(), row))
                                 .child(rows::measure_ahead(entity.clone(), row))
                                 .child(
@@ -123,6 +125,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                         .size_full(),
                                 )
                                 .child(rows::load_when_visible(cx.entity()))
+                                .child(selection::listener())
                                 .children(scrollbar::auto_scrollbar(&app.message_list))
                                 .children(panels::new_messages_bar(app, cx))
                                 .children(panels::jump_bar(app, cx)),
@@ -1747,7 +1750,10 @@ fn rich_k(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited:
     let (text, runs) = if edited.is_some() { with_edited(t) } else { (t.text.clone(), t.runs.clone()) };
     let runs = mention::hovered_runs(msg, bi, 0, &t.click_ranges, &t.click_targets, &runs).unwrap_or(runs);
     let runs = mention::anchor_runs(msg, bi, 0, &runs).unwrap_or(runs);
+    selection::note(msg.0, bi, t.text.clone(), &[]);
+    let runs = selection::highlight(msg.0, bi, 0, t.text.len(), runs);
     let styled = StyledText::new(text).with_runs(runs);
+    let probe = selection::probe(styled.layout().clone(), msg.0, bi, 0, t.text.len());
     let overlay = edited.map(|_| edited_overlay(styled.layout().clone(), t.text.len() + edited_gap()));
     let lh = gpui::relative(1.375);
     let edited_tip = edited.map(|at| {
@@ -1761,9 +1767,10 @@ fn rich_k(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited:
                 .relative()
                 .line_height(lh)
                 .child(InteractiveText::new(("rt", (msg.0 << 8) | bi as u64), styled).tooltip(tip))
+                .child(probe)
                 .children(overlay)
                 .into_any_element(),
-            None => div().line_height(lh).child(styled).into_any_element(),
+            None => div().line_height(lh).child(styled).child(probe).into_any_element(),
         };
     }
     let targets = t.click_targets.clone();
@@ -1826,6 +1833,7 @@ fn rich_k(entity: &Entity<PhoenixApp>, msg: Id, bi: usize, t: &RichText, edited:
                 },
             ),
         )
+        .child(probe)
         .children(overlay)
         .into_any_element()
 }

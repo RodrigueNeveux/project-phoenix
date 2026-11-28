@@ -528,6 +528,17 @@ pub fn handlers(app: &PhoenixApp, root: Stateful<gpui::Div>, window: &gpui::Wind
                 cx.stop_propagation();
                 return;
             }
+            let ks = &ev.keystroke;
+            if is_main_window(window)
+                && ks.key == "c"
+                && (ks.modifiers.control || ks.modifiers.platform)
+                && !ks.modifiers.shift
+                && !ks.modifiers.alt
+                && ui::chat::selection::copy(cx)
+            {
+                cx.stop_propagation();
+                return;
+            }
             let Some(app) = weak.upgrade() else { return };
             app.update(cx, |app, cx| {
                 if app.shortcut_keystroke(&ev.keystroke, window, cx) {

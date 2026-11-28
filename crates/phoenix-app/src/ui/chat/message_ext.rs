@@ -905,6 +905,7 @@ pub fn rich_with_emoji_scaled(
     k: f32,
 ) -> AnyElement {
     let jumbo = crate::richtext::is_jumbo_text(t);
+    super::selection::note(msg.0, bi, t.text.clone(), &t.emoji);
     let k = k * crate::theme::font_scale();
     let size = k * if jumbo { 48. } else { 22. };
     let mut row = div().flex().flex_wrap().items_center().text_size(z(16. * k)).line_height(z(22. * k));
@@ -952,6 +953,7 @@ pub fn rich_with_emoji_scaled(
                 r.background_color = None;
             }
         }
+        let seg_runs = super::selection::highlight(msg.0, bi, range.start, range.len(), seg_runs);
         let mut ranges = Vec::new();
         let mut targets = Vec::new();
         for (cr, tg) in t.click_ranges.iter().zip(t.click_targets.iter()) {
@@ -970,7 +972,9 @@ pub fn rich_with_emoji_scaled(
             Some((open, close)) => code_box(open, close, k, child),
         };
         if ranges.is_empty() {
-            let el = cell(gpui::StyledText::new(text).with_runs(seg_runs).into_any_element()).into_any_element();
+            let st = gpui::StyledText::new(text).with_runs(seg_runs);
+            let probe = super::selection::probe(st.layout().clone(), msg.0, bi, range.start, range.len());
+            let el = cell(div().child(st).child(probe).into_any_element()).into_any_element();
             return row.child(pill(el, &range, part));
         }
         let sd = *seg as u64;
@@ -988,6 +992,7 @@ pub fn rich_with_emoji_scaled(
             .collect();
         let full = t.text.clone();
         let styled = gpui::StyledText::new(text).with_runs(seg_runs);
+        let probe = super::selection::probe(styled.layout().clone(), msg.0, bi, range.start, range.len());
         let e = entity.clone();
         let te = entity.clone();
         let (hr, ht) = (ranges.clone(), targets.clone());
@@ -1013,7 +1018,8 @@ pub fn rich_with_emoji_scaled(
                     crate::richtext::ClickTarget::Mention(m) => super::mention::click(&e, m, w, cx),
                 },
             );
-        let el = cell(super::mention::leave_guard(("rte-leave", rte), msg, bi, Some(sd), range.clone(), inner).into_any_element()).into_any_element();
+        let guarded = super::mention::leave_guard(("rte-leave", rte), msg, bi, Some(sd), range.clone(), inner);
+        let el = cell(div().child(guarded).child(probe).into_any_element()).into_any_element();
         row.child(pill(el, &range, part))
     };
     let bounds: Vec<usize> = mentions.iter().flat_map(|(r, _)| [r.start, r.end]).collect();
@@ -1073,6 +1079,7 @@ pub fn rich_with_emoji_scaled(
             div()
                 .mx(z(1.))
                 .when(jumbo, |d| d.py(z(4.)))
+                .when(super::selection::covers(msg.0, bi, r), |d| d.bg(super::selection::selection_bg()))
                 .when_some(target, |d, t| d.on_mouse_down(gpui::MouseButton::Right, move |_, _, _| super::panels::set_menu_item(t.clone())))
                 .child(crate::media::emoji::emoji_element(token, size)),
         );
