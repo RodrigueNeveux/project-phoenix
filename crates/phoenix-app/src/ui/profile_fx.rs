@@ -81,7 +81,7 @@ fn decode(bytes: &[u8], still: bool) -> anyhow::Result<RenderImage> {
     } else {
         dec.apng()?.into_frames().collect_frames()?
     };
-    Ok(RenderImage::new(frames.into_iter().map(prepare).collect()))
+    Ok(RenderImage::new(frames.into_iter().map(prepare).collect::<Vec<_>>()))
 }
 
 fn prepare(f: image::Frame) -> image::Frame {
@@ -193,6 +193,29 @@ fn stream_frame(src: &SharedString, at: Option<u64>, cx: &mut Context<PhoenixApp
         cx.drop_image(img, None);
     }
     out
+}
+
+pub fn sweep(cx: &mut App) {
+    let Some(s) = cx.try_global::<Store>() else { return };
+    let idle = |t: &Instant| t.elapsed() > IDLE_DROP;
+    if !s.anims.values().any(|(_, t)| idle(t)) && !s.streams.values().any(|(_, t)| idle(t)) && !s.bytes.values().any(|(_, t)| idle(t)) {
+        return;
+    }
+    let s = cx.global_mut::<Store>();
+    s.bytes.retain(|_, (b, t)| matches!(b, Bytes::Loading) || !idle(t));
+    let stale: Vec<SharedString> = s.anims.iter().filter(|(_, (_, t))| idle(t)).map(|(k, _)| k.clone()).collect();
+    let mut dropped: Vec<Arc<RenderImage>> = stale.iter().filter_map(|k| s.anims.remove(k)?.0).collect();
+    let stale: Vec<SharedString> = s.streams.iter().filter(|(_, (_, t))| idle(t)).map(|(k, _)| k.clone()).collect();
+    for k in &stale {
+        if let Some((st, _)) = s.streams.remove(k) {
+            dropped.extend(st.shown.map(|(_, _, i)| i));
+            dropped.extend(st.stale);
+        }
+    }
+    for img in dropped {
+        cx.drop_image(img, None);
+    }
+    crate::memory::release_soon();
 }
 
 fn anim(src: &SharedString, still: bool, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderImage>> {
