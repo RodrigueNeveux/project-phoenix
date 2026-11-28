@@ -129,3 +129,16 @@ Sources: every `navId:"…"` in the client JS (cache `current-client/js*`, the 5
 ### Still missing (not in Phoenix at all, or no menu)
 
 Members table in Server Settings uses a home-made Copy ID / Kick / Ban menu, not the client `member-safety-guild-member-*-menu`; server emoji, webhooks, invites and bans rows, the threads list popout, search results, reply previews, composer attachments, call tiles of a stream, friends pending requests, quests, shop and Discover cards have no context menu in Phoenix yet (Discover: `guild-entry-context`). The emoji/sticker favorite row needs the frecency write.
+
+### Part C, night batch (28/11)
+
+| item | client | Phoenix | status |
+|---|---|---|---|
+| message text selection | DOM selection; `::selection` is not styled, so the UA colour `Highlight` = `rgba(0, 65, 198, 0.8)` (computed live 28/11), text colour unchanged | `ui/chat/selection.rs`: drag, double click (word), triple click (line), Shift+click (extend), across messages in reading order; Ctrl+C copies (custom emoji become `:name:`); a left press outside the message list clears it; highlight only changes run backgrounds, so the list layout and the scrollbar do not move; links, mentions and pills keep their clicks | ✅ ⚠ no autoscroll while dragging past the list edge; usernames and embeds are not selectable |
+| message menu with a selection | `15299af603b47329.js` `tA`/`tm` (modules 373963, 826308): « Copier » (Ctrl+C) / « Rechercher avec Google » (`google.com/search?q=`), quick reactions hidden | `panels::message_menu` | ✅ |
+| favorite emoji / sticker | module 253925: « Ajouter l'émoji aux favoris » / « Enlever l'émoji des favoris » (`nNsr67`/`Ay49KA`), sticker `kWmiPW`/`XhzKyF`, StarIcon / StarOutlineIcon; key = emoji id, or the base name of a Unicode emoji (module 554375 `C`); stored in `FrecencyUserSettings` field 5 `favorite_emojis` and field 3 `favorite_stickers` (`sticker_ids`, packed fixed64) | `frecency::with_favorite_emoji` / `with_favorite_sticker`, `RestClient::edit_frecency_proto` (GET then PATCH `/users/@me/settings-proto/2` with the changed fields only), `ActionRequest::FavoriteEmoji` / `FavoriteSticker`, optimistic update rolled back on error | ✅ coded and tested, never run: agent sessions refuse the PATCH (`agent_scope` test) |
+| friends list row | user menu on right click | `home/friends.rs` row opens `user_menu` (friends and pending requests) | ✅ ⚠ not re-read live (Friends page not opened) |
+| threads browser row | `9cf96fa6a4624cbd.js`: `onContextMenu` on each row opens the thread menu | `inbox::thread_browser_row` opens `nav_menus::Target::Thread` | ✅ |
+| confirm above Server Settings | role delete: generic confirm (module 314116) « Supprimer le rôle » / « Tu es sûr(e) de vouloir supprimer le rôle **{name}** ? Cette action est irréversible. » (`YWISbQ`, `9+nrUS`) | `server_settings::Confirm` + `ask()`, drawn above the settings (priority 26); any settings page can use it for a guarded write | ✅ |
+
+Still not done: stream tile menu, search results, reply previews and composer attachments menus, the members / emoji / webhooks / invites / bans rows in Server Settings, Discover cards (`guild-entry-context`), quests and shop.
