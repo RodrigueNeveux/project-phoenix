@@ -127,7 +127,7 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
         }
         3 | 4 => {
             if let Some(name) = items.get(1).and_then(Value::as_str)
-                && let Some(val) = find_arg(args, name)
+                && let Some(val) = if kind == 4 { args.iter().rev().find(|&&(k, _)| k == name).map(|&(_, v)| v) } else { find_arg(args, name) }
             {
                 out.push_str(val);
             }
@@ -185,6 +185,14 @@ fn eval_typed(locale: &str, kind: u64, items: &[Value], args: &[(&str, &str)], p
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn date_and_time_of_one_timestamp_take_their_own_args() {
+        let ast = json!(["Programmation d'un message pour le ", [3, "timestamp", "::MMMMd"], " à ", [4, "timestamp", "short"]]);
+        let mapping = Mapping { hash: "MQcRX/", upper: false, flat: false, bold: false, args: vec![("date", "timestamp"), ("time", "timestamp")] };
+        let out = render("fr", &ast, &[("date", "28 novembre"), ("time", "09:00")], &mapping);
+        assert_eq!(out, "Programmation d'un message pour le 28 novembre à 09:00");
+    }
 
     #[test]
     fn evaluates_icu_plural_and_hooks() {
