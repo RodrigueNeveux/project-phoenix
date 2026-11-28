@@ -91,6 +91,7 @@ enum Cmd {
     ToggleMute,
     ToggleDeafen,
     VoiceSettings,
+    CheckUpdates,
     Acknowledgements,
 }
 
@@ -114,6 +115,7 @@ struct Labels {
     server_muted: String,
     server_deafened: String,
     voice_settings: String,
+    check_updates: String,
     acknowledgements: String,
     quit: String,
 }
@@ -189,6 +191,7 @@ pub fn spawn(cx: &mut App) {
         server_muted: crate::t!("tray.server_muted").to_string(),
         server_deafened: crate::t!("tray.server_deafened").to_string(),
         voice_settings: crate::t!("tray.voice_settings").to_string(),
+        check_updates: crate::t!("tray.check_updates").to_string(),
         acknowledgements: crate::t!("tray.acknowledgements").to_string(),
         quit: crate::t!("tray.quit").to_string(),
     };
@@ -252,6 +255,14 @@ fn handle(cmd: Cmd, cx: &mut App) {
         Cmd::Quit => crate::shortcuts::escape::quit_app(cx),
         Cmd::Open => activate(cx),
         Cmd::Acknowledgements => cx.open_url("https://discord.com/acknowledgements"),
+        Cmd::CheckUpdates => {
+            if let Some(t) = target {
+                t.update(cx, |a, cx| {
+                    let include_beta = a.prefs.local.beta_channel;
+                    crate::updater::spawn_check(include_beta, cx);
+                });
+            }
+        }
         Cmd::ToggleMute | Cmd::ToggleDeafen => {
             if let Some(t) = target {
                 t.update(cx, |a, cx| {
@@ -408,6 +419,7 @@ const ID_SEP_META: i32 = 6;
 const ID_ACK: i32 = 7;
 const ID_SEP_QUIT: i32 = 8;
 const ID_QUIT: i32 = 9;
+const ID_UPDATES: i32 = 10;
 
 type Props = HashMap<String, zbus::zvariant::OwnedValue>;
 
@@ -450,7 +462,7 @@ pub fn menu_ids(state: &TrayState) -> Vec<i32> {
     if state.connected {
         ids.extend([ID_SEP_VOICE, ID_MUTE, ID_DEAFEN, ID_VOICE_SETTINGS]);
     }
-    ids.extend([ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
+    ids.extend([ID_SEP_META, ID_UPDATES, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
     ids
 }
 
@@ -485,6 +497,7 @@ impl Menu {
                 check(label, self.state.deafened || self.state.server_deaf, enabled)
             }
             ID_VOICE_SETTINGS => props(&[("label", Value::from(self.labels.voice_settings.as_str()))]),
+            ID_UPDATES => props(&[("label", Value::from(self.labels.check_updates.as_str()))]),
             ID_ACK => props(&[("label", Value::from(self.labels.acknowledgements.as_str()))]),
             ID_QUIT => props(&[("label", Value::from(self.labels.quit.as_str()))]),
             _ => props(&[("children-display", Value::from("submenu"))]),
@@ -523,6 +536,7 @@ impl Menu {
             ID_MUTE => Cmd::ToggleMute,
             ID_DEAFEN => Cmd::ToggleDeafen,
             ID_VOICE_SETTINGS => Cmd::VoiceSettings,
+            ID_UPDATES => Cmd::CheckUpdates,
             ID_ACK => Cmd::Acknowledgements,
             ID_QUIT => Cmd::Quit,
             _ => return,
@@ -592,9 +606,9 @@ mod tests {
     #[test]
     fn menu_shows_voice_rows_only_when_connected() {
         let idle = menu_ids(&TrayState::default());
-        assert_eq!(idle, vec![ID_OPEN, ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
+        assert_eq!(idle, vec![ID_OPEN, ID_SEP_META, ID_UPDATES, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
         let call = menu_ids(&TrayState { connected: true, ..Default::default() });
-        assert_eq!(call, vec![ID_OPEN, ID_SEP_VOICE, ID_MUTE, ID_DEAFEN, ID_VOICE_SETTINGS, ID_SEP_META, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
+        assert_eq!(call, vec![ID_OPEN, ID_SEP_VOICE, ID_MUTE, ID_DEAFEN, ID_VOICE_SETTINGS, ID_SEP_META, ID_UPDATES, ID_ACK, ID_SEP_QUIT, ID_QUIT]);
     }
 
     #[test]
