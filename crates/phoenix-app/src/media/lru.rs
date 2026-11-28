@@ -5,12 +5,14 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
+    time::{Duration, Instant},
 };
 
 use gpui::{AnyElement, App, AppContext, Entity, Global, ImageCache, ImageCacheError, ImageCacheItem, IntoElement, ParentElement, RenderImage, Resource, Styled, WeakEntity, Window, hash};
 
 pub const BUDGET_BYTES: u64 = 128 * 1024 * 1024;
 const KEEP_FRAMES: u64 = 2;
+const KEEP_FOR: Duration = Duration::from_secs(5);
 const MAX_FAILED_ITEMS: usize = 512;
 const SWEEP_EVERY: u64 = 64;
 
@@ -27,6 +29,7 @@ fn frame() -> u64 {
 struct Entry {
     item: ImageCacheItem,
     frame: u64,
+    used: Instant,
     bytes: Option<u64>,
 }
 
@@ -69,6 +72,7 @@ impl LruImageCache {
 
     fn evict(&mut self, protected: u64, window: &mut Window, cx: &mut App) {
         let mut entries: Vec<(u64, u64, u64)> = Vec::with_capacity(self.items.len());
+        let now = frame();
         for (k, e) in &mut self.items {
             if e.bytes.is_none()
                 && let Some(Ok(img)) = e.item.get()
@@ -76,10 +80,11 @@ impl LruImageCache {
                 e.bytes = Some(bytes_of(&img));
             }
             if let Some(b) = e.bytes {
-                entries.push((e.frame, *k, b));
+                let last = if e.used.elapsed() < KEEP_FOR { now } else { e.frame };
+                entries.push((last, *k, b));
             }
         }
-        let victims = select_evictions(&mut entries, self.budget, frame(), KEEP_FRAMES, protected);
+        let victims = select_evictions(&mut entries, self.budget, now, KEEP_FRAMES, protected);
         for k in victims {
             if let Some(e) = self.items.remove(&k)
                 && let Some(Ok(img)) = e.item.get()
@@ -122,8 +127,9 @@ impl ImageCache for LruImageCache {
         let now = frame();
         let key = hash(resource);
         let inserted = !self.items.contains_key(&key);
-        let entry = self.items.entry(key).or_insert_with(|| Entry { item: ImageCacheItem::new(resource, cx), frame: now, bytes: None });
+        let entry = self.items.entry(key).or_insert_with(|| Entry { item: ImageCacheItem::new(resource, cx), frame: now, used: Instant::now(), bytes: None });
         entry.frame = now;
+        entry.used = Instant::now();
         let out = entry.item.use_image(window);
         if inserted || self.loads.is_multiple_of(SWEEP_EVERY) {
             self.evict(key, window, cx);

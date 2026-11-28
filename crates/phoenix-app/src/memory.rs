@@ -1,4 +1,4 @@
-use std::sync::{Condvar, Mutex, Once, OnceLock};
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 const SETTLE: Duration = Duration::from_secs(2);
@@ -22,11 +22,7 @@ fn trimmer() -> &'static Trimmer {
 }
 
 pub fn init() {
-    static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
-        tune();
-        trimmer();
-    });
+    trimmer();
 }
 
 pub fn release_soon() {
@@ -62,15 +58,6 @@ fn run() {
 }
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
-fn tune() {
-    // SAFETY: mallopt only changes glibc allocator parameters and is safe to call at any time.
-    unsafe {
-        libc::mallopt(libc::M_MMAP_THRESHOLD, 256 * 1024);
-        libc::mallopt(libc::M_TRIM_THRESHOLD, 8 * 1024 * 1024);
-    }
-}
-
-#[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn trim() {
     // SAFETY: malloc_trim only returns free heap pages to the kernel.
     unsafe {
@@ -97,9 +84,6 @@ pub fn map_file(path: &std::path::Path) -> Option<&'static [u8]> {
 pub fn map_file(_: &std::path::Path) -> Option<&'static [u8]> {
     None
 }
-
-#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
-fn tune() {}
 
 #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
 fn trim() {}
