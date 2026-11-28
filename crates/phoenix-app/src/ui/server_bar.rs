@@ -87,26 +87,24 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
     let fav_n = usize::from(fav.is_some());
     col = col.children(fav);
     let dms = unread_dm_items(app, &entity);
-    let base = 2 + fav_n + dms.len();
+    let dm_n = dms.len();
+    let base = 2 + fav_n + dm_n;
     col = col.children(dms).child(separator());
-    let mut spans: Vec<Span> = Vec::new();
-    let is_unread = |g: &Guild| g.unread || g.mentions > 0;
+    let mut slots: Vec<Option<Jump>> = vec![None; 1 + dm_n];
     for (i, item) in rail(app).into_iter().enumerate() {
+        let ix = base + i;
         match &item {
-            RailItem::Guild(g) if is_unread(g) => spans.push(Span { ix: base + i, y: 0., h: ICON, mentions: g.mentions }),
-            RailItem::Folder { guilds, open: false, .. } if guilds.iter().any(|g| is_unread(g)) => spans.push(Span {
-                ix: base + i,
-                y: 0.,
-                h: FOLDER,
-                mentions: guilds.iter().map(|g| g.mentions).sum(),
-            }),
+            RailItem::Guild(g) => slots.push((g.mentions > 0).then_some(Jump { ix, y: 0., h: ICON })),
+            RailItem::Folder { guilds, open: false, .. } => {
+                slots.push(guilds.iter().any(|g| g.mentions > 0).then_some(Jump { ix, y: 0., h: FOLDER }))
+            }
             RailItem::Folder { guilds, open: true, .. } => {
-                for (k, g) in guilds.iter().enumerate().filter(|(_, g)| is_unread(g)) {
+                slots.push(None);
+                for (k, g) in guilds.iter().enumerate() {
                     let y = FOLDER + gap() - FOLDER_PAD + k as f32 * (ICON + gap());
-                    spans.push(Span { ix: base + i, y, h: ICON, mentions: g.mentions });
+                    slots.push((g.mentions > 0).then_some(Jump { ix, y, h: ICON }));
                 }
             }
-            _ => {}
         }
         col = match item {
             RailItem::Guild(g) => col.child(guild(app, &entity, g, None, false)),
@@ -132,7 +130,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
                     })
                 })
         });
-    let (above, below, m_above, m_below) = offscreen_unread(&scroll, &spans);
+    slots.extend([None; TRAILING_SLOTS]);
+    let (top_bar, bottom_bar) = unread_bars(&scroll, &slots, cx);
     crate::ui::a11y::named(div().id("servers-nav"), gpui::Role::Navigation, || crate::t!("a11y.servers_sidebar"))
         .w(z(m::server_bar_w()))
         .flex_none()
@@ -142,8 +141,8 @@ pub fn render(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> impl IntoElemen
         .group(crate::ui::chat::scrollbar::THIN_FADE_GROUP)
         .child(col)
         .children(crate::ui::chat::scrollbar::thin_fade_scrollbar_div(&scroll))
-        .children(above.map(|ix| unread_bar(&scroll, ix, true, m_above)))
-        .children(below.map(|ix| unread_bar(&scroll, ix, false, m_below)))
+        .children(top_bar)
+        .children(bottom_bar)
 }
 
 thread_local! {
@@ -155,83 +154,275 @@ pub fn scroll_rail_to(y: f32) {
     RAIL_SCROLL.with(|h| h.set_offset(gpui::point(gpui::px(0.), gpui::px(-y.max(0.)))));
 }
 
-struct Span {
-    ix: usize,
-    y: f32,
-    h: f32,
-    mentions: u32,
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Jump {
+    pub ix: usize,
+    pub y: f32,
+    pub h: f32,
 }
 
+const TRAILING_SLOTS: usize = 3;
 const RAIL_UNDER_PANELS: f32 = 26.;
+const RAIL_TOP_INSET: f32 = 12.;
+const BADGE_SIZE: f32 = 16.;
+const BOTTOM_INSET: f32 = 16.;
+const JUMP_PADDING: f32 = 24.;
+const BAR_H: f32 = 24.;
+const BAR_TRAVEL: f32 = 1.8;
+const BAR_TENSION: f32 = 300.;
+const BAR_FRICTION: f32 = 10.;
+const BAR_IN_DELAY: Duration = Duration::from_millis(100);
+const BAR_HIDE_AFTER: Duration = Duration::from_millis(200);
+const CALC_DEBOUNCE: Duration = Duration::from_millis(200);
+const SCROLL_DEBOUNCE: Duration = Duration::from_millis(400);
 
-fn offscreen_unread(h: &gpui::ScrollHandle, spans: &[Span]) -> (Option<usize>, Option<usize>, u32, u32) {
-    let view = h.bounds();
-    let (mut above, mut below, mut ma, mut mb) = (None, None, 0, 0);
-    if view.size.height <= px(0.) {
-        return (above, below, ma, mb);
+pub fn slot_visible(o: usize, bottom: bool, scroll_top: f32, view_h: f32, gap: f32) -> bool {
+    let stride = ICON + gap;
+    let pos = stride * o as f32 + RAIL_TOP_INSET + 2. + gap;
+    if bottom {
+        pos + stride + (stride - BADGE_SIZE) <= scroll_top + view_h + RAIL_UNDER_PANELS - BOTTOM_INSET
+    } else {
+        pos >= scroll_top
     }
-    for s in spans.iter().filter(|s| s.mentions > 0) {
-        let Some(b) = h.bounds_for_item(s.ix) else { continue };
-        let top = b.top() + z(s.y);
-        if top + z(s.h) <= view.top() {
-            above = Some(s.ix);
-            ma += s.mentions;
-        } else if top >= view.bottom() + z(RAIL_UNDER_PANELS) {
-            below.get_or_insert(s.ix);
-            mb += s.mentions;
+}
+
+pub fn hidden_mention<T: Copy>(slots: &[Option<T>], bottom: bool, visible: impl Fn(usize) -> bool) -> Option<T> {
+    let order: Box<dyn Iterator<Item = usize>> = if bottom { Box::new((0..slots.len()).rev()) } else { Box::new(0..slots.len()) };
+    for o in order {
+        if visible(o) {
+            return None;
+        }
+        if let Some(j) = slots[o] {
+            return Some(j);
         }
     }
-    (above, below, ma, mb)
+    None
 }
 
-fn unread_bar(h: &gpui::ScrollHandle, ix: usize, top: bool, mentions: u32) -> AnyElement {
-    use crate::theme::{generated::idx, tok};
-    let h = h.clone();
-    div()
-        .absolute()
-        .left_0()
-        .right_0()
-        .when(top, |d| d.top_0().p(z(8.)))
-        .when(!top, |d| d.bottom_0().pt(z(8.)).px(z(8.)))
-        .child(
-            div()
-                .id(if top { "rail-unread-top" } else { "rail-unread-bottom" })
-                .h(z(24.))
-                .rounded(z(12.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .cursor_pointer()
-                .map(|d| {
-                    if mentions > 0 {
-                        d.bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
-                            .border_1()
-                            .border_color(c(tok(idx::BORDER_SUBTLE)))
-                            .shadow(crate::ui::inbox::shadow_medium())
-                    } else {
-                        d.bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
-                            .border_1()
-                            .border_color(c(tok(idx::BORDER_NORMAL)))
-                            .shadow(vec![gpui::BoxShadow {
-                                color: c(tok(idx::OPACITY_BLACK_24)),
-                                offset: point(px(0.), z(2.)),
-                                blur_radius: z(6.),
-                                spread_radius: px(0.),
-                                inset: false,
-                            }])
-                    }
-                })
-                .text_size(z(12.))
-                .line_height(z(16.))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(c(tok(if mentions > 0 { idx::TEXT_OVERLAY_LIGHT } else { idx::TEXT_STRONG })))
-                .on_click(move |_, w, _| {
-                    h.scroll_to_item(ix);
-                    w.refresh();
-                })
-                .child(crate::t!("rail.unread_new").to_uppercase()),
-        )
-        .into_any_element()
+pub fn into_view(start: f32, end: f32, scroll_top: f32, size: f32) -> Option<f32> {
+    let (start, end) = (start - JUMP_PADDING, end + JUMP_PADDING);
+    if start >= scroll_top && end <= scroll_top + size {
+        None
+    } else if start < scroll_top {
+        Some(start)
+    } else {
+        Some(end - size)
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+struct Bar {
+    shown: Option<Jump>,
+    toggled: Option<Instant>,
+    from: f32,
+    animate: bool,
+    want: Option<Option<Jump>>,
+    want_at: Option<Instant>,
+}
+
+impl Bar {
+    fn target(&self) -> f32 {
+        if self.shown.is_some() { 0. } else { 1. }
+    }
+
+    fn delay(&self) -> Duration {
+        if self.shown.is_some() { BAR_IN_DELAY } else { Duration::ZERO }
+    }
+
+    fn hidden_at(&self, now: Instant) -> f32 {
+        let Some(at) = self.toggled.filter(|_| self.animate) else { return self.target() };
+        let t = now.saturating_duration_since(at).saturating_sub(self.delay()).as_secs_f32();
+        self.from + (self.target() - self.from) * gpui::spring_progress(bar_spring(), t)
+    }
+}
+
+fn bar_spring() -> gpui::SpringConfig {
+    crate::ui::popout_motion::origami(BAR_TENSION, BAR_FRICTION)
+}
+
+struct RailBars {
+    top: Bar,
+    bottom: Bar,
+    offset: f32,
+    moved: Option<Instant>,
+    wake: Option<Instant>,
+}
+
+thread_local! {
+    static BARS: RefCell<RailBars> =
+        RefCell::new(RailBars { top: Bar::default(), bottom: Bar::default(), offset: 0., moved: None, wake: None });
+    static RAIL_JUMP: RefCell<Option<(crate::ui::chat::page_scroll::Spring, f32)>> = const { RefCell::new(None) };
+}
+
+fn settle(bar: &mut Bar, want: Option<Jump>, moved: Option<Instant>, now: Instant) -> Option<Instant> {
+    if want == bar.shown {
+        bar.want = None;
+        bar.want_at = None;
+        return None;
+    }
+    if bar.want != Some(want) {
+        bar.want = Some(want);
+        bar.want_at = Some(now);
+    }
+    let ready = [bar.want_at.map(|t| t + CALC_DEBOUNCE), moved.map(|t| t + SCROLL_DEBOUNCE)].into_iter().flatten().max().unwrap_or(now);
+    if now < ready {
+        return Some(ready);
+    }
+    if want.is_some() != bar.shown.is_some() {
+        bar.from = bar.hidden_at(now);
+        bar.toggled = Some(now);
+        bar.animate = crate::media::emoji::window_focused() && !crate::ui::settings::effects::reduced_motion();
+    }
+    bar.shown = want;
+    bar.want = None;
+    bar.want_at = None;
+    None
+}
+
+fn unread_bars(h: &gpui::ScrollHandle, slots: &[Option<Jump>], cx: &mut Context<PhoenixApp>) -> (Option<AnyElement>, Option<AnyElement>) {
+    let view = h.bounds();
+    let zf = f32::from(z(1.));
+    let now = Instant::now();
+    let scroll_top = -f32::from(h.offset().y) / zf;
+    let view_h = f32::from(view.size.height) / zf;
+    let measured = view.size.height > px(0.);
+    let g = gap();
+    let want = |bottom: bool| {
+        measured.then(|| hidden_mention(slots, bottom, |o| slot_visible(o, bottom, scroll_top, view_h, g))).flatten()
+    };
+    let (want_top, want_bottom) = (want(false), want(true));
+    let (top, bottom, wake) = BARS.with_borrow_mut(|b| {
+        if (b.offset - scroll_top).abs() > 0.01 {
+            b.offset = scroll_top;
+            b.moved = Some(now);
+        }
+        let moved = b.moved;
+        let wake = [settle(&mut b.top, want_top, moved, now), settle(&mut b.bottom, want_bottom, moved, now)].into_iter().flatten().min();
+        let wake = wake.filter(|w| b.wake.is_none_or(|old| old <= now || *w < old));
+        if wake.is_some() {
+            b.wake = wake;
+        }
+        (b.top, b.bottom, wake)
+    });
+    if let Some(at) = wake {
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(at.saturating_duration_since(Instant::now()) + Duration::from_millis(5)).await;
+            let _ = this.update(cx, |_, cx| cx.notify());
+        })
+        .detach();
+    }
+    (unread_bar(h, &top, true, now), unread_bar(h, &bottom, false, now))
+}
+
+fn unread_bar(h: &gpui::ScrollHandle, bar: &Bar, top: bool, now: Instant) -> Option<AnyElement> {
+    let gone = bar.toggled.is_none_or(|at| now.saturating_duration_since(at) >= BAR_HIDE_AFTER);
+    if bar.shown.is_none() && gone {
+        return None;
+    }
+    let travel = if top { -BAR_H * BAR_TRAVEL } else { BAR_H * BAR_TRAVEL };
+    let transition = bar.toggled.filter(|_| bar.animate).map(|at| {
+        gpui::Transition::spring(bar_spring())
+            .start(at)
+            .delay(bar.delay())
+            .translate(point(px(0.), z(travel * bar.from)), point(px(0.), z(travel * bar.target())))
+            .keep_masks()
+    });
+    let still = (!bar.animate).then(|| z(travel * bar.target()));
+    let mention = bar.shown.is_some();
+    let id = if top { "rail-unread-top" } else { "rail-unread-bottom" };
+    let pill = div()
+        .id(id)
+        .relative()
+        .when_some(still, |d, y| d.top(y))
+        .h(z(BAR_H))
+        .rounded(z(12.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .border_1()
+        .map(|d| {
+            if mention {
+                d.bg(c(tok(idx::BACKGROUND_FEEDBACK_NOTIFICATION)))
+                    .border_color(c(tok(idx::BORDER_SUBTLE)))
+                    .shadow(crate::ui::inbox::shadow_medium())
+            } else {
+                d.bg(c(tok(idx::BACKGROUND_SURFACE_HIGHEST)))
+                    .border_color(c(tok(idx::BORDER_NORMAL)))
+                    .shadow(vec![gpui::BoxShadow {
+                        color: c(tok(idx::OPACITY_BLACK_24)),
+                        offset: point(px(0.), z(2.)),
+                        blur_radius: z(6.),
+                        spread_radius: px(0.),
+                        inset: false,
+                    }])
+            }
+        })
+        .text_size(z(12.))
+        .line_height(z(16.))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(c(tok(if mention { idx::TEXT_OVERLAY_LIGHT } else { idx::TEXT_STRONG })))
+        .child(crate::t!("rail.unread_new").to_uppercase())
+        .when_some(bar.shown, |d, j| {
+            let h = h.clone();
+            d.cursor_pointer()
+                .active(|s| s.top(z(1.)).bg(c(tok(idx::RED_430))))
+                .on_click(move |_, w, _| jump_to(&h, j, w))
+        });
+    Some(
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .overflow_hidden()
+            .when(top, |d| d.top_0().p(z(8.)))
+            .when(!top, |d| d.bottom_0().pt(z(8.)).px(z(8.)))
+            .child(pill.present_transition(if top { "rail-unread-top-slide" } else { "rail-unread-bottom-slide" }, transition))
+            .into_any_element(),
+    )
+}
+
+fn jump_to(h: &gpui::ScrollHandle, j: Jump, window: &mut Window) {
+    let Some(b) = h.bounds_for_item(j.ix) else { return };
+    let zf = f32::from(z(1.));
+    let view = h.bounds();
+    let scroll_top = -f32::from(h.offset().y) / zf;
+    let size = f32::from(view.size.height) / zf + RAIL_UNDER_PANELS;
+    let start = f32::from(b.top() - view.top()) / zf + scroll_top + j.y;
+    let Some(to) = into_view(start, start + j.h, scroll_top, size) else { return };
+    let to = to.clamp(0., f32::from(h.max_offset().y) / zf);
+    let idle = RAIL_JUMP.with_borrow_mut(|r| {
+        let idle = r.is_none();
+        *r = Some((crate::ui::chat::page_scroll::Spring::new(f64::from(scroll_top), f64::from(to)), scroll_top));
+        idle
+    });
+    if idle {
+        window.on_next_frame(jump_frame);
+    }
+}
+
+fn jump_frame(window: &mut Window, _: &mut App) {
+    let handle = RAIL_SCROLL.with(|h| h.clone());
+    let zf = f32::from(z(1.));
+    let now_top = -f32::from(handle.offset().y) / zf;
+    let next = RAIL_JUMP.with_borrow_mut(|r| {
+        let (spring, shown) = r.as_mut()?;
+        if (now_top - *shown).abs() > 1. {
+            *r = None;
+            return None;
+        }
+        let (pos, done) = spring.advance(Instant::now());
+        *shown = pos as f32;
+        if done {
+            *r = None;
+        }
+        Some((pos as f32, done))
+    });
+    let Some((pos, done)) = next else { return };
+    handle.set_offset(point(px(0.), -z(pos)));
+    window.refresh();
+    if !done {
+        window.on_next_frame(jump_frame);
+    }
 }
 
 const ICON: f32 = 40.;
@@ -1491,5 +1682,80 @@ mod media_tests {
         );
         assert_eq!(s.voice, vec![Id(4)]);
         assert_eq!(s.stream, vec![Id(5)]);
+    }
+}
+
+#[cfg(test)]
+mod unread_bar_tests {
+    use super::*;
+
+    fn j(ix: usize) -> Option<Jump> {
+        Some(Jump { ix, y: 0., h: ICON })
+    }
+
+    #[test]
+    fn bottom_bar_hides_once_the_mentioned_slot_is_in_the_client_band() {
+        let view_h = 512. - RAIL_UNDER_PANELS;
+        assert!(!slot_visible(8, true, 0., view_h, 10.));
+        assert!(!slot_visible(8, true, 11.33, view_h, 10.));
+        assert!(slot_visible(8, true, 12., view_h, 10.));
+        assert!(slot_visible(8, true, 40., view_h, 10.));
+    }
+
+    #[test]
+    fn top_bar_counts_a_slot_as_hidden_as_soon_as_its_top_leaves() {
+        assert!(slot_visible(2, false, 124., 400., 10.));
+        assert!(!slot_visible(2, false, 124.5, 400., 10.));
+        assert!(slot_visible(0, false, 0., 400., 8.));
+    }
+
+    #[test]
+    fn the_walk_stops_at_the_first_visible_slot_from_the_edge() {
+        let slots = [None, j(3), None, None, j(6), None, None, None];
+        assert_eq!(hidden_mention(&slots, false, |o| o >= 2), j(3));
+        assert_eq!(hidden_mention(&slots, false, |o| o >= 1), None);
+        assert_eq!(hidden_mention(&slots, true, |o| o <= 3), j(6));
+        assert_eq!(hidden_mention(&slots, true, |o| o <= 4), None);
+        assert_eq!(hidden_mention(&slots, true, |_| false), j(6));
+        assert_eq!(hidden_mention(&slots, false, |_| false), j(3));
+    }
+
+    #[test]
+    fn jump_scrolls_the_node_into_view_with_the_client_padding() {
+        assert_eq!(into_view(100., 140., 0., 400.), None);
+        assert_eq!(into_view(500., 540., 0., 400.), Some(164.));
+        assert_eq!(into_view(10., 50., 100., 400.), Some(-14.));
+        assert_eq!(into_view(20., 60., 0., 400.), Some(-4.));
+    }
+
+    #[test]
+    fn a_new_target_waits_for_the_scroll_and_calc_debounces() {
+        let t0 = Instant::now();
+        let mut bar = Bar::default();
+        let wake = settle(&mut bar, j(4), Some(t0), t0);
+        assert_eq!(wake, Some(t0 + SCROLL_DEBOUNCE));
+        assert_eq!(bar.shown, None);
+        assert_eq!(settle(&mut bar, j(4), Some(t0), t0 + Duration::from_millis(399)), Some(t0 + SCROLL_DEBOUNCE));
+        assert_eq!(settle(&mut bar, j(4), Some(t0), t0 + SCROLL_DEBOUNCE), None);
+        assert_eq!(bar.shown, j(4));
+        assert_eq!(bar.toggled, Some(t0 + SCROLL_DEBOUNCE));
+        let t1 = t0 + Duration::from_secs(2);
+        assert_eq!(settle(&mut bar, None, Some(t0), t1), Some(t1 + CALC_DEBOUNCE));
+        assert_eq!(settle(&mut bar, j(4), Some(t0), t1 + Duration::from_millis(50)), None);
+        assert_eq!(bar.shown, j(4));
+        assert_eq!(bar.want, None);
+    }
+
+    #[test]
+    fn the_bar_spring_is_the_origami_tension_300_friction_10() {
+        let s = bar_spring();
+        assert!((s.stiffness - 1171.4).abs() < 0.1);
+        assert!((s.damping - 31.).abs() < 1e-3);
+        let mut bar = Bar { animate: true, toggled: Some(Instant::now()), ..Bar::default() };
+        assert!(bar.hidden_at(Instant::now() + Duration::from_secs(3)) > 0.999);
+        bar.shown = j(1);
+        bar.from = 1.;
+        let at = bar.toggled.unwrap_or_else(Instant::now);
+        assert!((bar.hidden_at(at + Duration::from_millis(90)) - 1.).abs() < 1e-6);
     }
 }
