@@ -382,7 +382,8 @@ impl PhoenixApp {
         }
         let unchanged = self.find_msg(channel, id).is_some_and(|m| m.content.as_ref() == text);
         if !unchanged {
-            if let Some(mut m) = self.find_msg(channel, id).cloned() {
+            let original = self.find_msg(channel, id).cloned();
+            if let Some(mut m) = original.clone() {
                 m.content = text.clone().into();
                 m.edited = true;
                 m.edited_at = chrono::Utc::now().timestamp();
@@ -393,7 +394,12 @@ impl PhoenixApp {
                 let res = fut.await;
                 let _ = this.update(cx, |this, cx| match res {
                     Ok(m) => this.replace_message(m, cx),
-                    Err(e) => this.chat.error = Some(e.0.into()),
+                    Err(e) => {
+                        if let Some(m) = original {
+                            this.replace_message(m, cx);
+                        }
+                        this.chat.error = Some(e.0.into());
+                    }
                 });
             })
             .detach();
