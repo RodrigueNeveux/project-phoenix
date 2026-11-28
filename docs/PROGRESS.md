@@ -2,14 +2,16 @@
 
 Audit du 27/11/2026 sur origin/main `8c7b358b`. Ce document remplace le pourcentage de lignes ✅ comme mesure de l'avancement. Il se refait à la main : chaque état ci-dessous doit citer une preuve, et un état ne monte d'un cran que sur une nouvelle preuve réelle.
 
-<!-- real-progress {"score":72.6,"low":63.7,"high":82.9,"features":122,"verified":46,"unverified":65,"broken":3,"missing":8,"critical":26,"critical_verified":22,"critical_broken":3,"proof_measured":44,"proof_compared":8,"at":"2026-11-27"} -->
+Mise à jour du 28/11 (QA de nuit) : le salon de test #phoenix, supprimé le 27/11, a été recréé à l'identique (`1576039645127385188`). Toute la QA d'entrées de `docs/qa.md` repasse (39/39), et sept fonctionnalités passent « vérifiées en vrai » sur des écritures réelles dans ce salon, contrôlées en GET : sondages (création et vote), GIF, transfert, fils, sondages et messages programmés, épingles, message vocal (tonalité générée) et raccourcis clavier.
+
+<!-- real-progress {"score":74.6,"low":66.6,"high":83.9,"features":122,"verified":53,"unverified":58,"broken":3,"missing":8,"critical":26,"critical_verified":22,"critical_broken":3,"proof_measured":44,"proof_compared":8,"at":"2026-11-28"} -->
 
 ## Résultat
 
 | mesure | valeur |
 |---|---|
-| **Score réel pondéré** | **73 %** (fourchette 64 à 83 %) |
-| Couverture fonctionnelle | 114 fonctionnalités sur 122 existent dans le code (96 % du poids), mais **46 seulement sont vérifiées en vrai** (55 % du poids) |
+| **Score réel pondéré** | **75 %** (fourchette 67 à 84 %), 73 % le 27/11 |
+| Couverture fonctionnelle | 114 fonctionnalités sur 122 existent dans le code (96 % du poids), mais **53 seulement sont vérifiées en vrai** (59 % du poids ; 46 le 27/11) |
 | Niveau de preuve des ✅ | **44 %** s'appuient sur une mesure du vrai client, **8 %** ont été comparés à un rendu Phoenix ; 40 % viennent du CSS ou du JS seuls, 8 % d'un test unitaire, 7 % de rien |
 | Parcours critiques | **22 sur 26** prouvés en usage ou en test réel, 3 cassés connus, 1 non prouvés |
 
@@ -90,7 +92,7 @@ Docs les plus faibles : `inventory.md` (« page présente ✅ » sans mesure), `
 | MP : liste et ouverture | critique | prouvé | ouverture réelle |
 | MP : envoi | critique | non prouvé | aucun envoi en MP |
 | Notifications de bureau | critique | prouvé (test réel) | popup, son, clic (27/11) |
-| Non-lus et pastilles | critique | prouvé (QA) | pastille de mention d'un MP réel identique au client ; non-lus de serveur pas vus |
+| Non-lus et pastilles | critique | prouvé (QA) | pastille de mention d'un MP réel identique au client ; non-lus de serveur identiques au client (28/11) |
 | Recherche | important | prouvé (rendus réels) | résultats réels affichés |
 | Vocal : rejoindre | critique | prouvé (usage) | appel réel du 27/11, DAVE, rtp_audio 31 018 |
 | Vocal : entendre | critique | prouvé (usage) | « je les entends » (27/11 15 h), level_db -14 à -30 |
@@ -145,7 +147,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 |---|---|---|---|---|
 | 11 | Rail des serveurs, dossiers, changer de serveur | critique | vérifiée en vrai | QA d'entrées 27/11 : « Changer de serveur au clic » OK |
 | 12 | Liste des salons (catégories, repli, défilement, clic) | critique | vérifiée en vrai | QA 27/11 : « Changer de salon au clic » et « Liste des salons : molette » OK |
-| 13 | Non-lus, pastilles de mention, marquer comme lu | critique | vérifiée en vrai | pastille de mention réelle : MP d'un tiers reçu pendant un rendu real_shots (27/11 15h30), badge « 1 » sur l'avatar du MP dans le rail, identique au client au même instant ; aucune pastille de non-lu de serveur vue (aucun message non lu pendant 4 min d'attente) ; marquer comme lu non exécuté (ack interdit) |
+| 13 | Non-lus, pastilles de mention, marquer comme lu | critique | vérifiée en vrai | pastille de mention réelle : MP d'un tiers reçu pendant un rendu real_shots (27/11 15h30), badge « 1 » sur l'avatar du MP dans le rail, identique au client au même instant ; non-lus de serveur : QA du 28/11, `unreads` = Aperture Sciences et le serveur du projet, les deux mêmes serveurs que « Messages non lus » dans la barre du client au même moment ; marquer comme lu non exécuté (ack interdit) |
 | 14 | Sélecteur rapide Ctrl+K | important | vérifiée en vrai | QA 27/11 OK |
 | 15 | Réorganiser serveurs et salons (glisser-déposer) | détail | présente, non vérifiée | `rail_dnd.rs`, `channel_dnd.rs`, écritures jamais exécutées |
 | 16 | Favoris | détail | présente, non vérifiée | `favorites.rs`, rendus démo et réels, écritures non exécutées |
@@ -177,7 +179,7 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 37 | Composants d'application (boutons, menus, conteneurs v2) | important | présente, non vérifiée | affichage présent, interactions jamais envoyées |
 | 38 | Stickers (affichage) | détail | présente, non vérifiée | 404 de stickers dans phoenix.log |
 | 39 | Super réactions (affichage, animation) | détail | vérifiée en vrai | 27/11 : survol à la souris (QA d'entrées) de la pilule Super d'un vrai message de #annonces : info-bulle « … a utilisé la super réaction », effet joué, aucun plantage |
-| 40 | Sondages (affichage, vote, création) | important | présente, non vérifiée | rendus et tests ; vote réel non tracé dans le changelog |
+| 40 | Sondages (affichage, vote, création) | important | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : sondage créé depuis le menu + (question, deux réponses, Post), vote « Oui » au clic puis Voter, `me_voted` et 1 vote côté serveur |
 | 41 | Utilisateurs bloqués ou ignorés (messages masqués) | détail | présente, non vérifiée | `chat/blocked.rs` |
 
 ### Écriture
@@ -194,15 +196,15 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 49 | Envoyer des pièces jointes (bouton +, glisser, préupload) | critique | vérifiée en vrai | PNG de 3,3 Mo envoyé en réel (25/11, 26/11) |
 | 50 | Coller une image du presse-papiers | important | vérifiée en vrai | QA 27/11 (81187596) : PNG mis dans le presse-papiers de la fenêtre hors écran, Ctrl+V, plateau à 1 fichier, envoi réel 1575933511121240205 (1 pièce jointe, GET) |
 | 51 | Sélecteur d'émojis | important | vérifiée en vrai | QA 27/11 (81187596) : bouton émoji, clic sur :MISKINE:, `<:MISKINE:…>` inséré dans le compositeur, envoi réel 1575934849825382454 |
-| 52 | GIF (Tenor) et favoris | important | présente, non vérifiée | `pickers/gif.rs`, aucun envoi réel ; QA 27/11 : vraies catégories Klipy affichées, l'envoi d'un GIF bloque le rendu hors écran (backlog) |
+| 52 | GIF (Tenor) et favoris | important | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : bouton GIF, catégorie « hello » (Klipy), clic sur un GIF, message envoyé avec le lien et son embed (1576046090493497344) ; favoris non testés |
 | 53 | Envoyer un sticker | détail | présente, non vérifiée | `pickers/sticker.rs` |
 | 54 | Commandes slash d'applications | important | vérifiée en vrai | QA 27/11 (81187596) : `/ping` liste French.gg, upbot, FlaviBot, Rythm ; Bas, Entrée, Entrée lance /ping d'upbot dans #phoenix (RunCommand), réponse du bot reçue (application 799368668349726751) |
-| 55 | Transférer un message | détail | présente, non vérifiée | `modals/forward.rs` |
-| 56 | Créer un fil, un sondage, un message programmé, un rappel | important | présente, non vérifiée | code présent, rien d'exécuté en réel hors salon de test |
-| 57 | Épingles (voir, épingler) | détail | présente, non vérifiée | `actions/pins.rs` |
+| 55 | Transférer un message | détail | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : touche F sur un message, recherche « phoenix », case du salon, Envoyer ; message transféré avec snapshot (flags 16384) |
+| 56 | Créer un fil, un sondage, un message programmé, un rappel | important | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : fil depuis le menu + et depuis le menu contextuel (premier message et réponse dans le fil), sondage, message programmé « Aujourd'hui à 9 h » présent dans `/users/@me/scheduled-messages` ; rappels non testés ; le fil créé depuis le menu + ne s'ouvrait pas et la bannière affichait la date à la place de l'heure (corrigés, à reprouver) |
+| 57 | Épingles (voir, épingler) | détail | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : touche P sur un message, épinglé côté serveur, notice système, Ctrl+P liste 1 épingle ; notice mal espacée en français (« yohanépingléun message », corrigée) |
 | 58 | Correcteur orthographique | important | absente | inventory.md : pas de correcteur (pas de suggestions ni de dictionnaire) |
 | 59 | Salons d'annonces : publier, suivre | détail | présente, non vérifiée | `chat/announce.rs`, `modals/follow.rs` |
-| 60 | Message vocal : enregistrer et envoyer | détail | présente, non vérifiée | `chat/voice_message.rs`, jamais envoyé |
+| 60 | Message vocal : enregistrer et envoyer | détail | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : Alt+R avec `PHOENIX_VOICE_MESSAGE_TONE=3` (tonalité 440 Hz générée, jamais le micro), Entrée, message vocal envoyé (flags 8192, 1 fichier) |
 
 ### Fils et forums
 
@@ -313,5 +315,5 @@ Puis les critiques jamais prouvées : rejoindre et parler en vocal, répondre, e
 | 118 | Stabilité en usage long (mémoire, plantages) | critique | cassée connue | fuite mesurée : RSS de 423 à 875 Mio (perf.md) ; correctif 9bc58282 non remesuré ; 2 paniques le 26/11 |
 | 119 | Performance et démarrage | important | présente, non vérifiée | CPU au repos de 0,45 % en release (25/11) ; pas de mesure de démarrage comparée |
 | 120 | Lecteur d'écran | important | absente | aucune intégration AT-SPI ou accesskit |
-| 121 | Raccourcis clavier | important | présente, non vérifiée | shortcuts.md, tests ; seul Ctrl+K est prouvé |
+| 121 | Raccourcis clavier | important | vérifiée en vrai | QA d'entrées du 28/11 sur le nouveau #phoenix (`1576039645127385188`, int-bin `6d24e386`/`eb489280`), vérifié en GET : Ctrl+I, Ctrl+P, Ctrl+U, Ctrl+/, Ctrl+S, Alt+haut/bas, Alt+gauche/droite, Ctrl+Alt+haut/bas, Ctrl+K, Ctrl+= et Ctrl+0 (config isolée) ; Ctrl+E et Ctrl+G n'ouvraient rien depuis le compositeur (corrigé, à reprouver) |
 | 122 | Synthèse vocale (/tts) | détail | présente, non vérifiée | `tts.rs` |
