@@ -1171,7 +1171,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Cx) -> Option<AnyE
         .child(
             div()
                 .mx_auto()
-                .my(z(64.))
+                .py(z(64.))
                 .w_full()
                 .max_w(z(728.))
                 .px(z(16.))
