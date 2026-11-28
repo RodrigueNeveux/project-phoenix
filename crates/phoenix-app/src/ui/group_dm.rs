@@ -117,7 +117,7 @@ pub fn members_panel(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<A
 
 fn invite_button(ch: Id, entity: gpui::Entity<PhoenixApp>) -> impl IntoElement {
     let fg = c(Palette::TEXT_HEADER);
-    div().pt(z(16.)).pl(z(16.)).child(
+    div().pt(z(16.)).pl(z(16.)).pr(z(8.)).child(
         div()
             .id(("group-invite", ch.0))
             .w_full()
