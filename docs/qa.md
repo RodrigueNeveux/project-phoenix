@@ -152,7 +152,7 @@ when none), `fullscreen`, `px:<region>` (hash of the region's pixels, for
 "the video frame changes"), `at:<point>` (prints where a point resolves).
 
 More probes: `flash` (message being highlighted after a jump), `replying`, `messages` (loaded
-messages), `reached_start`, `oldest`, `last`, `last_mine`, `last_reply`, `last_files`, `last_reactions` (own reactions), `last_burst` (own super reactions), `last_pinned`, `last_edited`, `last_forward`, `last_flags`,
+messages), `reached_start`, `oldest`, `last`, `last_mine`, `last_reply`, `last_files`, `last_reactions` (own reactions), `last_burst` (own super reactions), `last_pinned`, `last_edited`, `last_forward`, `last_flags`, `inbox`, `threads_panel`, `pins` (loaded pins, -1 closed, -2 loading), `members_shown`, `help`,
 `last_embeds`, `last_thread`, `last_app` (application of the last message), `last_text` (sandbox
 channel only), `sending`, `uploads`, `chat_error`, `typing` (typing users in the open channel),
 `typing_any`, `typing_label`, `unread_guilds`, `mention_total`, `unreads` (`guild:mentions` of every
