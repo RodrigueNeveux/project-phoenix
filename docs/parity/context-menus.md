@@ -82,3 +82,50 @@ Source: live client over CDP on Aperture #général (dumps `menus-a/*.json` in t
 | voice local checkboxes (Mute, Deafen, Soundboard, Disable Video) | the common menu checkbox (`checkboxIndicator_vTUVyc`: 20 px, radius 4, 1 px `--checkbox-border-default` on `--checkbox-background-default`, selected `--checkbox-background-selected-default` + 18 px white check), label in the item colour | were custom rows from `voice_panel::check_row` (18 px box, white dot, blurple hover); now `MenuItem::check` like every other menu checkbox | ✅ |
 | "je suis en vocal" variants | not read live: the user was using the client (route changed during the pass, then joined a call), so the test voice channel join was not done; conditions above come from the JS | | ⚠ |
 | DM / group DM rows | not re-read live (needs the @me route); last read 23/11 (`vanilla-menu-dm` / `-group-dm`), DM user menu chunk `9797d9965e471d1d.js` unchanged | | ⚠ |
+
+## Part C (28/11, wt/menus-c): inventory and what was still missing
+
+Sources: every `navId:"…"` in the client JS (cache `current-client/js*`, the 58 chunks of `menus-b/livejs`, and the 325 scripts loaded by the live client on 28/11, saved privately in `dumps/menus-c-js`), the desktop core `core.asar` (tray), and a CDP pass on Aperture #général (French, Developer Mode, admin) with `menus-c/run.sh` (`drv.mjs`, no write seen: `writes: []`).
+
+### Inventory: right-click menus of the client and their Phoenix counterpart
+
+| client navId | opened from | Phoenix | status |
+|---|---|---|---|
+| `user-context` | avatars, names, mentions, member list, voice rows, call tiles, DM rows | `user_menu` | ✅ live 28/11 on a `<@id>` mention and a bot in the member list: same rows, same order |
+| `message` | message, image, link, emoji, sticker | `chat/panels.rs` `message_menu` | ✅ with the type rules below |
+| `channel-context` / `thread-context` / `guild-context` / `gdm-context` / `favorites-channel-list-context` | channel list, rail, DM list | `nav_menus` | ✅ (Part A and B) |
+| `textarea-context` | composer | `extra_menus::textarea_items` | ✅ |
+| `image-context` / `image-menu` | profile images, viewer | `extra_menus::image_items` / `viewer_items` | ✅ |
+| `friend-row` | friends list row | `extra_menus::friend_row_items` | ✅ |
+| `audio-device-context` / `video-device-context` | mic / camera chevrons | `voice_panel::device_submenu` | ✅ |
+| `guild-settings-role-context` | role row, its « … » button and the role side list in Server Settings > Roles (`916d0bef82cfb632.js`, menu `b1c598c00601cb65.js` 396704) | was missing (the « … » button did nothing) | ✅ fixed: Duplicate Role (not on locked, managed or @everyone roles; name « Copie de {name} » repeated until unique, `775dKw`), View Server As Role (owner or admin), Copy Role ID (Developer Mode), Delete (danger); each in its own group. Writes go through the guard (`GuardedWrite::duplicate_role` / `delete_role`) and are refused |
+| `search-results` | not a menu: the keyboard list navigator of the search panel | | n/a |
+| `mentions-filter`, `recents-notifications`, `recents-thread-notifications` | inbox popouts (filter and bell), not right-click | bell done in Part B | ✅ |
+| `favorite-guild-header-context`, `favorite-guild-header-add-context`, `favorite-server-context` | Favorites server header | `Target::Favorites` / `FavoritesAdd` | ✅ |
+| `guild-entry-context` | Discovery server card (`77dbf0aa7a4e1cdc.js`) | none | ❌ not done |
+| `activity-shelf-item-context` | activity shelf | none | ❌ (activity launcher must not be opened in the client: it writes settings) |
+| `content-inventory-context`, `user-profile-widget-context-menu`, `subscription-context`, `guild-product-context`, `progress-bar-context`, `avatar-edit-context`, `banner-edit-context` | Active Now feed, profile widgets, Nitro subscription, server shop product, quest progress, profile editor | partly (`EditProfile`, `QuestMore`) | ❌ the others not done |
+| `overlay-channel-context`, `2025-11-mana-context-menu`, `2026-09-server-tooltip-notification-context` | in-game overlay, design-system demo, server tooltip experiment | | n/a |
+
+### Rows not read live in A and B
+
+| element | how it was checked | result |
+|---|---|---|
+| user mention | CDP 28/11, `.mention[role=button]` in #général | `user-context`, identical to the chat avatar menu ✅ |
+| member list (member, bot, role group header) | CDP 28/11 | member and bot: `user-context` ✅ (bot: no Call, no friend rows, Watch Stream when it streams, no Kick/Ban when its role is above mine); group header: no menu ✅ |
+| bot, system and pinned message | JS `15299af603b47329.js` and the sets of module 448761 | Reply only for `REPLYABLE` (0, 7, 19, 20, 23, 24, 25, 32 to 42, 45, 46, 69), Forward only for `FORWARDABLE` (0, 19, 20, 23, 35) and never on a voice message, Create Thread and Pin only for `USER_MESSAGE` (0, 19, 20, 23, 26, 41, 45, 47, 68), Delete never for `UNDELETABLE` (1 to 5, 21, 35, 56, 57, 64, 68), Report never for type 67; join messages (type 7) get « Configurer » (`NpHUi1`, opens Server Settings > Engagement, Manage Server); pinned: Unpin label. Phoenix hid all of Edit/Reply/Forward/Thread/Pin on every non-default message and allowed Delete/Report everywhere | ✅ fixed (`panels::type_rules`, `wire_type`) |
+| voice message | same chunk, `tq` | « Sauvegarder le fichier » (`vbAEaA`, DownloadIcon) in the media group | ✅ added (saves the first attachment) |
+| sticker, custom emoji, Unicode emoji | same chunk, `tX` = module 253925 | the message menu plus « Ajouter aux favoris » / « Retirer des favoris » (`XhzKyF`) for emoji (custom or Unicode, by `data-name`) and stickers; Developer Mode details as in Part A | ⚠ favorite row not done: Phoenix has no write path for favorite emoji (frecency settings proto) |
+| video | same chunk `tV` | « Stats for Nerds » is staff-only (hard-coded English) | n/a |
+| text selection in a message | same chunk `tA`/`tm` (modules 373963, 826308) | Copy (Ctrl+C) / Search with Google, quick reactions hidden | ❌ Phoenix messages have no text selection yet |
+| inbox Mentions, Bookmarks, Reminders tabs | JS: only popouts (`mentions-filter`, bell) | no right-click | ✅ (not opened live to keep the user's tab) |
+| DM list and group DM | `fd04ebd43cae1b56.js` (`gdm-context`), DM user menu `9797d9965e471d1d.js` | group DM: Mark As Read / Open in New Tab (tabs experiment only), Pin, Favorites > / Invites (owner), Edit Group / activity join rows (only with an activity) / Mute > / Leave / Copy ID | ✅ same order (route not changed to @me) |
+| muted category collapses | `27a3efd351a1f2d2.js`: muting a category, by the row or by a duration, dispatches `CATEGORY_COLLAPSE` | Phoenix kept it open | ✅ fixed (`set_nav_mute` collapses and saves) |
+| « Rétablir les notifications » subtext | module 145408 `M`: « Muet jusqu'au {endTime} » (`j7h4AJ`, `toLocaleString` month/day/hour/minute) under every Unmute row (channel, category, DM, server) | was drawn only for threads | ✅ fixed (`nav_menus::mute_end`) |
+| « Montrer tous les salons » | server menu checkbox (Part B) | | ✅ |
+| tray | `core.asar` `systemTray`: Open / (running games) / Mute ☐, Deafen ☐, Voice Settings (in a call) / Check For Updates… (not on macOS), Acknowledgements / Quit | Check For Updates was missing | ✅ added (« Rechercher les mises à jour… », `PhnOeM`, runs the updater check); the running-games group is not done (Phoenix launches no games) |
+| title bar | the client's Linux title bar has no context menu (only `webContents` « context-menu » for spellcheck) | none | ✅ |
+
+### Still missing (not in Phoenix at all, or no menu)
+
+Members table in Server Settings uses a home-made Copy ID / Kick / Ban menu, not the client `member-safety-guild-member-*-menu`; server emoji, webhooks, invites and bans rows, the threads list popout, search results, reply previews, composer attachments, call tiles of a stream, friends pending requests, quests, shop and Discover cards have no context menu in Phoenix yet (Discover: `guild-entry-context`). The emoji/sticker favorite row needs the frecency write.
