@@ -160,6 +160,13 @@ mod tests {
     }
 
     #[test]
+    fn favorite_expression_writes_are_refused_to_agents() {
+        assert!(!ok(Method::PATCH, "/users/@me/settings-proto/2"));
+        assert!(!ok(Method::PATCH, "/users/@me/settings-proto/1"));
+        assert!(ok(Method::GET, "/users/@me/settings-proto/2"));
+    }
+
+    #[test]
     fn deleting_or_editing_the_sandbox_channel_itself_is_refused() {
         let s = format!("/channels/{SANDBOX}");
         assert!(!ok(Method::DELETE, &s));
