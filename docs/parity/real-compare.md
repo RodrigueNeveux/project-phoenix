@@ -819,3 +819,47 @@ account: same positions on both sides. They are not switched off when the experi
 - The three window sizes were rendered without the client's live state (sidebar width, folders, voice) when the CDP pause was on, so their
   fixed region scores (rail + channels 20–22 %, user panel 12–16 %, member list 12–16 %) mostly measure that, not a layout gap. At the client size
   with the live state the same regions score 11.7 / 9.3 / 8.5 %.
+
+## Visual sweep (2026-11-28 night, wt/visual-sweep): pixel compare at the live window size
+
+Method: the client is captured at its own window size, never emulated (1280×700 CSS at devicePixelRatio 1.5, Onyx,
+FR, page zoom 125 %), with the driver `~/discord-phoenix-ref/vsweep/{vsweep.mjs,run.py}` (a copy of the sweep 5 driver
+without `Emulation.setDeviceMetricsOverride`). Every pass runs under the CDP lock with `Network.enable` and a `Fetch`
+block on `*/ack`, `settings-proto` and `migrate-command-scope`; the only non-GET requests seen were `POST /science`, plus
+`POST /guilds/:id/members-search` once when the server settings « Membres » entry opened the member-safety route (that
+page was dropped). From 02:30 the client window stopped painting (`requestAnimationFrame` stalled, screen off):
+`Page.captureScreenshot` still renders a frame, but `Input.dispatchMouseEvent` hangs, so the later passes click with
+`element.click()` in the page (`FAKE_INPUT=1`) and force frames with tiny screenshots before the capture.
+Phoenix is `int-bin/real_shots` at the same size and dpr, from the saved client state (route, scroll anchors,
+sidebar width, folders, member list, theme). Score = `compare.py` `mismatch_pct` (share of pixels off by more than
+24/255). Images stay in `/mnt/windata/project-phoenix/compare/vsweep/` (private).
+
+Caveats: the voice panel is absent or « Déconnecté » in real_shots while the client sits in a call (fixed in
+real_shots by 8cc805f7, after these scores), and the messages region also counts messages that arrived between
+the capture and the render.
+
+| View (1280×700) | Region scored | Before (int-bin eb489280) | After (a2cae139) | Overall before → after | Fix |
+|---|---|---|---|---|---|
+| #général chat | messages | 9.8 | 6.6 | 6.5 → 5.9 | last message keeps the 24 px the 40 px `scrollerSpacer_` leaves above the composer (it overlaps the form by 16) |
+| Member profile popout | popout | 32.8 | 7.6 | 13.8 → 6.8 | popout left of the clicked `member_` row (x = row − 16 − 300) at its top, nudged into the window like `nudgeTopAlignment` (top = vh − ceil(h) − 12 when it overflows), real height instead of a fixed 540 |
+| Pinned messages | popout | 15.3 | 6.5 | 8.9 → 6.5 | right edge on the pin button (was 10 px off), top on the header bottom, max height 80vh (was 80 % of the chat column) |
+| GIF picker | popout | 12.6 | 12.7 | 7.4 → 8.1 | search text 16 px with no inner padding, tiles rounded 5 (`result_H8nOze`); body background `container_rfDq2B` = `--background-base-lower` follows (b835ca7a) |
+| Emoji picker | popout | 12.3 | 12.3 | 7.3 → 7.7 | same search fix; the Nitro rail item (« Voir les émojis Nitro ») shows for Nitro users too (3e66fbc1, not in this int-bin) |
+| Sticker picker | popout | 8.1 | — | 6.2 | inspected sticker ring (`stickerInspected_5z8c5P:before`, 2 px `--interactive-text-hover`, r12), stickers keep their aspect, inspector shows the server icon (module 22fbc347793fb277 `tl`) |
+| Threads | popout | 7.4 | — | 4.9 | — |
+| « + » menu | popout | 8.0 | — | 5.8 | — |
+| Inbox, unreads | popout | 14.6 | — | 10.2 | tab « Messages marqués » = `2pAkDA` (was the « Sauvegardé » string), day divider pill (`divider_4TfzT5` + `content_4TfzT5`, black pill, margins 16), 8 px stable scrollbar gutter (3e66fbc1) |
+| Friends (Pending), DM list, Active Now | overall | 8.3 | — | 8.3 | DM rows 38/42/48 by density (`layout_TBNqol`), plated close space only while hovered or selected (`eZ = nameplate && (selected‖hover‖focus)`), Active Now title margin collapsed into the 12 px card margin, timer « 1 j / 7 m » (`XIGt+W`, `rhY1Rs`, `GBLpQ8`) |
+| Discover | overall | 8.3 | — | 8.3 | — (card banner crop differs) |
+| Nitro home | overall | 16.5 | — | 16.5 | greeting by hour (`Bonjour,` 5–16 h, `Bonsoir,` otherwise), hero padding 80/64, 2 or 3 columns from the container queries |
+| Quests | overall | 40.4 | — | 40.4 | — (the client hero is a sponsored quest, Phoenix the Orbs promo) |
+| Shop | overall | 23.2 | — | 23.2 | — (Dark Mode Friday sale, countdown and discounted prices missing) |
+
+### Still open, by visibility
+
+- Quests: the hero is the sponsored quest from the quest placement API (DUNE trailer, « Sponsorisée »); Phoenix shows the static Orbs banner.
+- Shop: sale state (countdown card « Profite de -25 % », « RÉDUCTION DE 25 % » badges, struck prices), header search with rotating suggestions (`collectibles_search_bar` experiment, chunk 6b4565136c5e825f).
+- Nitro home: flying Wumpus video + trinkets, page gradient image, tenure reward card first.
+- Gift inventory: the banner art is a Lottie (`animatedGraphic_J9WkLo`, `aspect-ratio-6/4`); Phoenix draws a gift glyph.
+- Emoji picker: the client hides the Project Phoenix server section (cause not traced: roles or availability of its emojis).
+- Profile popout: the message field ellipsizes earlier in the client (reserved space before the emoji button).
