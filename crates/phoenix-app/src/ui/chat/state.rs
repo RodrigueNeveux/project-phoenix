@@ -547,6 +547,28 @@ impl PhoenixApp {
         self.backend.set_pinned(channel, id, pinned).detach_ok_chat();
     }
 
+    pub fn set_pinned_by_id(&mut self, channel: Id, id: Id, pinned: bool, cx: &mut Context<Self>) {
+        if self.find_msg(channel, id).is_some_and(|m| m.pinned != pinned) {
+            self.toggle_pin(channel, id, cx);
+            return;
+        }
+        self.backend.set_pinned(channel, id, pinned).detach_ok_chat();
+        cx.notify();
+    }
+
+    pub fn mark_unread_by_id(&mut self, channel: Id, id: Id, cx: &mut Context<Self>) {
+        if self.find_msg(channel, id).is_some() {
+            self.mark_unread_from(channel, id, cx);
+            return;
+        }
+        if let Some(c) = self.channels.get_mut(&channel) {
+            c.unread = true;
+        }
+        self.backend.mark_unread(channel, Id(id.0.saturating_sub(1))).detach_ok_chat();
+        self.rebuild_sidebar();
+        cx.notify();
+    }
+
     pub fn unpin_from_popout(&mut self, channel: Id, id: Id, cx: &mut Context<Self>) {
         if let Some(p) = self.chat.pins.as_mut() {
             p.msgs.retain(|x| x.id != id);
