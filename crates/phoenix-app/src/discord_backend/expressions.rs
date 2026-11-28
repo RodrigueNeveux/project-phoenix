@@ -17,8 +17,10 @@ use crate::{
 
 pub(super) fn guild_emojis(s: &Session, guild: Id) -> Vec<GuildEmoji> {
     let Some(g) = s.cache.guild(sf(guild)) else { return Vec::new() };
+    let my_roles = s.cache.current_user().and_then(|u| s.cache.member(sf(guild), u.id)).map(|m| m.roles.clone());
     g.emojis
         .iter()
+        .filter(|e| usable(&e.roles, my_roles.as_deref()))
         .filter_map(|e| {
             Some(GuildEmoji {
                 id: convert::id(e.id?),
@@ -29,6 +31,10 @@ pub(super) fn guild_emojis(s: &Session, guild: Id) -> Vec<GuildEmoji> {
             })
         })
         .collect()
+}
+
+fn usable<R: PartialEq>(required: &[R], mine: Option<&[R]>) -> bool {
+    required.is_empty() || mine.is_some_and(|m| m.iter().any(|r| required.contains(r)))
 }
 
 fn sticker_format(n: u8) -> StickerFormat {
@@ -216,4 +222,17 @@ fn search_thread(c: &phoenix_api::models::Channel) -> Option<crate::model::Chann
         mentions: 0,
         voice_users: Vec::new(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::usable;
+
+    #[test]
+    fn role_locked_emojis_need_one_of_their_roles_like_the_emoji_store() {
+        assert!(usable::<u64>(&[], None));
+        assert!(!usable(&[7u64], None));
+        assert!(!usable(&[7u64], Some(&[1, 2])));
+        assert!(usable(&[7u64, 9], Some(&[9])));
+    }
 }
