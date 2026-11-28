@@ -60,10 +60,7 @@ impl Chat {
         self.read(|a| {
             let ix = a.messages[&ch].index_of(id)? + 1;
             let view = a.message_list.viewport_bounds();
-            a.message_list
-                .bounds_for_item(ix)
-                .map(|b| f32::from(b.top() - view.top()))
-                .or_else(|| a.message_list.bounds_for_item(ix - 1).map(|b| f32::from(b.bottom() - view.top())))
+            a.message_list.bounds_for_item(ix).map(|b| f32::from(b.top() - view.top()))
         })
     }
 }

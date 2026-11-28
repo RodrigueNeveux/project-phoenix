@@ -73,7 +73,7 @@ pub fn prepend(list: &ListState, channel: Id, n: usize, len: usize) {
 
 pub fn measure_everything() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("PHX_MEASURE_ALL").is_some_and(|v| !v.is_empty() && v != "0"))
+    *ON.get_or_init(|| !std::env::var_os("PHX_MEASURE_ROWS").is_some_and(|v| !v.is_empty() && v != "0"))
 }
 
 fn row_key(app: &PhoenixApp, channel: Id, ix: usize) -> Option<u64> {
