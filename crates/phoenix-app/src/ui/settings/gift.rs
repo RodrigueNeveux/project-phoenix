@@ -379,7 +379,8 @@ fn squad_card(sq: &super::subscriptions::Squad) -> AnyElement {
                 .text_color(c(tok(idx::TEXT_MUTED)))
                 .child(gpui::StyledText::new(full).with_highlights(hl)),
         )
-        .child(div().mt(z(12.)).child(controls::button(eid("squad-leave"), tr("sp.su.leave"), BtnKind::Secondary)));
+        .child(div().mt(z(12.)).child(controls::button(eid("squad-leave"), tr("sp.su.leave"), BtnKind::Secondary)
+            .on_click(|_, _, cx| cx.open_url(super::subscriptions::DISCORD_SUBSCRIPTIONS))));
     let rows = sq.members.iter().map(|m| {
         let mut name: String = m.user.display_name.to_string();
         if m.me {
