@@ -5,7 +5,7 @@ use phoenix_api::{ClientProperties, RestClient};
 use phoenix_app::discord_backend::store::{KeyringStore, TokenStore};
 use phoenix_app::media::audio_file;
 
-const SANDBOX: u64 = 1574797385463496724;
+const SANDBOX: u64 = 1576039645127385188;
 const TEST_MESSAGE: u64 = 1575263335010799749;
 
 fn main() -> anyhow::Result<()> {

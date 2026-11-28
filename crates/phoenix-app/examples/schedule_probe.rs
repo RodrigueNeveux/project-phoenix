@@ -10,7 +10,7 @@ use phoenix_app::{
 };
 
 const TEST_GUILD: u64 = 1369382919948210248;
-const SANDBOX: u64 = 1574797385463496724;
+const SANDBOX: u64 = 1576039645127385188;
 
 fn main() -> anyhow::Result<()> {
     let what = std::env::args().nth(1).unwrap_or_else(|| "message programmé".into());

@@ -9,7 +9,7 @@ use phoenix_app::discord_backend::store::{KeyringStore, TokenStore};
 
 const TEST_GUILD: u64 = 1369382919948210248;
 const GENERAL: (u64, &str) = (1403447573389381652, "général");
-const SANDBOX: (u64, &str) = (1574797385463496724, "phoenix");
+const SANDBOX: (u64, &str) = (1576039645127385188, "phoenix");
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();

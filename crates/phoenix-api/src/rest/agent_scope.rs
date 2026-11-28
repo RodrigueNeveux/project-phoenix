@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::error::Error;
 
-pub const SANDBOX: u64 = 1574797385463496724;
+pub const SANDBOX: u64 = 1576039645127385188;
 pub const GENERAL: u64 = 1403447573389381652;
 pub const VOICE: u64 = 1574900893613039696;
 
@@ -300,7 +300,7 @@ mod tests {
         assert!(allows(&Method::POST, "/users/@me/scheduled-messages", Some(&json!({ "channel_id": SANDBOX }))));
         assert!(!allows(&Method::POST, "/users/@me/scheduled-messages", Some(&json!({ "channel_id": "1" }))));
         assert!(!ok(Method::PATCH, "/users/@me/scheduled-messages/9"));
-        observe(&Method::POST, "/users/@me/scheduled-messages", br#"{"id":"1575000000000000009","channel_id":"1574797385463496724"}"#);
+        observe(&Method::POST, "/users/@me/scheduled-messages", br#"{"id":"1575000000000000009","channel_id":"1576039645127385188"}"#);
         assert!(ok(Method::PATCH, "/users/@me/scheduled-messages/1575000000000000009"));
         assert!(ok(Method::DELETE, "/users/@me/scheduled-messages/1575000000000000009"));
         assert!(ok(Method::POST, "/users/@me/scheduled-messages/1575000000000000009/send"));
@@ -314,7 +314,7 @@ mod tests {
     fn threads_created_in_the_sandbox_get_message_rights_but_cannot_be_deleted() {
         let t = 1575000000000000001u64;
         assert!(!ok(Method::POST, &format!("/channels/{t}/messages")));
-        observe(&Method::POST, &format!("/channels/{SANDBOX}/messages/42/threads"), br#"{"id":"1575000000000000001","parent_id":"1574797385463496724"}"#);
+        observe(&Method::POST, &format!("/channels/{SANDBOX}/messages/42/threads"), br#"{"id":"1575000000000000001","parent_id":"1576039645127385188"}"#);
         assert!(ok(Method::POST, &format!("/channels/{t}/messages")));
         assert!(ok(Method::POST, &format!("/channels/{t}/thread-members/@me")));
         assert!(allows(&Method::PATCH, &format!("/channels/{t}"), Some(&json!({ "archived": true }))));

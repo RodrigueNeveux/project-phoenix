@@ -13,7 +13,7 @@ input handler both see them). Between steps it reads app state and compares.
 cd /mnt/windata/project-phoenix/compare/qa-input
 PHX_AGENT=1 PHX_NO_SCROLL=1 PHX_MEMBERS=true PHX_IN_VOICE=false PHX_FOLDERS=0 \
 PHX_W=1280 PHX_H=800 PHX_SCALE=1.5 PHX_GUILD=1369382919948210248 \
-PHX_CHANNEL=1574797385463496724 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_input.qa \
+PHX_CHANNEL=1576039645127385188 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_input.qa \
 flock /tmp/phoenix-render.lock phoenix-nice ~/discord-phoenix/int-bin/real_shots qa.png
 ```
 
@@ -23,7 +23,7 @@ With `PHX_AGENT=1`, every REST call that is not a GET goes through
 `phoenix_api::rest::agent_scope` before it leaves the process (examples and the
 full app alike). The allow list is closed:
 
-- #phoenix (`1574797385463496724`): new messages, edits and deletes of a message,
+- #phoenix (`1576039645127385188`): new messages, edits and deletes of a message,
   reactions, pins, polls, typing, attachment slots, threads created from it, and a
   PATCH of the channel itself that only sets `rate_limit_per_user` and/or `topic`.
 - threads that this process created in #phoenix: messages, join, archive/lock.
@@ -53,7 +53,10 @@ sessions never send acks.
 The test channel #phoenix was deleted on 27/11 at 19:35 from the account. No
 agent process could send that request at that time (the only `real_shots` run
 was a read-only one still loading), but nothing in Phoenix itself refused it
-either; this scope closes that.
+either; this scope closes that. It was recreated on 28/11 with the same name, category and
+private overwrites as the test voice channel: `〢💬・phoenix`, id `1576039645127385188`. It starts
+empty, so the scroll steps run in #général (read-only) and the video step uses a test clip
+uploaded to the new channel.
 
 Without `PHX_NO_SCROLL`, `PHX_MEMBERS` and `PHX_IN_VOICE`, `real_shots` copies the
 sidebar scroll, the member list toggle and the voice panel from the official client
@@ -159,7 +162,7 @@ unread guild), `search` (loaded results, -1 when closed), `picker` (open picker 
 
 Writes from a script: with `PHX_WRITE=1`, `real_shots` sends, replies, uploads, creates threads
 and polls (text or question starting with `[Test Phoenix]`), schedules messages, votes, and runs
-application commands and components, ONLY in the sandbox channel `1574797385463496724` and in the
+application commands and components, ONLY in the sandbox channel `1576039645127385188` and in the
 threads it created there. A GIF picked in the picker is sent there with the test prefix in front of
 its link. Everything else stays refused. Run setting changes with `XDG_CONFIG_HOME` pointing at a
 copy of the config, so the local preferences of the user's Phoenix are never rewritten.

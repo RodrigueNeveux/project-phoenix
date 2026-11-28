@@ -163,7 +163,7 @@ with a local 400 instead of sending (nothing leaves the machine).
 so the `@`, `#` and `:` autocompletes open; `PHX_AC_ACCEPT=<n>` shoots `<out>-ac.png`, then accepts
 row n and prints the resulting text.
 `PHX_WRITE=1` allows edits, deletions and reactions, ONLY in the sandbox channel `SANDBOX_CHANNEL`
-(`1574797385463496724`) and ONLY on our own messages that start with `[Test Phoenix]`: the backend
+(`1576039645127385188`) and ONLY on our own messages that start with `[Test Phoenix]`: the backend
 refuses any other channel or message id (hard-coded guard `sandbox_write`). With it, `PHX_EDIT`
 targets the last such message (or `PHX_TARGET=<id>`), `PHX_EDIT_SAVE=1` saves it (`<out>-edited.png`),
 `PHX_REACT=<emoji>` or `<name>:<id>` reacts (`<out>-reacted.png`, `PHX_UNREACT=1` removes it again),

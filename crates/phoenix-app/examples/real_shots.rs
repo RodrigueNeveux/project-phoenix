@@ -38,7 +38,7 @@ fn denied<T: Send + 'static>() -> BoxFuture<T> {
 }
 
 const SEND_TEST_CHANNEL: u64 = 1403447573389381652;
-const SANDBOX_CHANNEL: u64 = 1574797385463496724;
+const SANDBOX_CHANNEL: u64 = 1576039645127385188;
 
 fn send_allowed(ch: u64) -> bool {
     ch == SEND_TEST_CHANNEL || ch == SANDBOX_CHANNEL

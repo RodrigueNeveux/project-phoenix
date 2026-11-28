@@ -6,7 +6,7 @@ use gpui::{
 };
 use phoenix_app::app::PhoenixApp;
 
-const SANDBOX: u64 = 1574797385463496724;
+const SANDBOX: u64 = 1576039645127385188;
 
 pub const SETTLE_BUDGET: Duration = Duration::from_millis(1500);
 

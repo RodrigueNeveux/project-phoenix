@@ -12,7 +12,7 @@ use phoenix_voice::audio::{
 };
 
 const TEST_GUILD: u64 = 1369382919948210248;
-const SANDBOX: (u64, &str) = (1574797385463496724, "phoenix");
+const SANDBOX: (u64, &str) = (1576039645127385188, "phoenix");
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
