@@ -383,6 +383,24 @@ impl AssetSource for Assets {
         if path == "icon.png" {
             return Ok(Some(Cow::Borrowed(APP_ICON_PNG)));
         }
+        let gift_badge: Option<&'static [u8]> = match path {
+            "gifting-badge-1.png" => Some(include_bytes!("../assets/gifting-badge-1.png")),
+            "gifting-badge-2.png" => Some(include_bytes!("../assets/gifting-badge-2.png")),
+            "gifting-badge-3.png" => Some(include_bytes!("../assets/gifting-badge-3.png")),
+            "gifting-badge-4.png" => Some(include_bytes!("../assets/gifting-badge-4.png")),
+            "gifting-badge-5.png" => Some(include_bytes!("../assets/gifting-badge-5.png")),
+            "gifting-badge-6.png" => Some(include_bytes!("../assets/gifting-badge-6.png")),
+            _ => None,
+        };
+        if let Some(badge) = gift_badge {
+            return Ok(Some(Cow::Borrowed(badge)));
+        }
+        if path == "nitro-gifting-offer.webp" {
+            return Ok(Some(Cow::Borrowed(include_bytes!("../assets/nitro-gifting-offer.webp"))));
+        }
+        if path == "nitro-member-gradient.svg" {
+            return Ok(Some(Cow::Borrowed(br##"<svg xmlns="http://www.w3.org/2000/svg" width="696" height="461"><defs><linearGradient id="nitro"><stop stop-color="#8645bd"/><stop offset=".52" stop-color="#af3daf"/><stop offset="1" stop-color="#a85d86"/></linearGradient></defs><rect width="696" height="461" rx="16" fill="url(#nitro)"/></svg>"##)));
+        }
         if let Some(p) = path.strip_prefix("local/") {
             return Ok(std::fs::read(p).ok().map(Cow::Owned));
         }
