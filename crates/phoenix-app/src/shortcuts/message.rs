@@ -198,6 +198,10 @@ impl PhoenixApp {
         if crate::ui::easter::on_key(self, ks, cx) {
             return true;
         }
+        if self.chat.confirm_delete.is_some() && ks.key == "enter" && !ks.modifiers.modified() {
+            self.confirm_delete(cx);
+            return true;
+        }
         let m = ks.modifiers;
         let in_composer = composer_focused(self, window, cx);
         let in_text = in_composer || text_field_focused(window);
