@@ -211,6 +211,18 @@ pub fn elapsed(start_ms: i64, now_s: i64) -> String {
     }
 }
 
+pub fn since_short(start_ms: i64, now_s: i64) -> String {
+    let s = (now_s - start_ms / 1000).max(0);
+    match s {
+        0..60 => crate::t!("time.since_m", n = 1).to_string(),
+        60..3600 => crate::t!("time.since_m", n = s / 60).to_string(),
+        3600..86_400 => crate::t!("time.since_h", n = s / 3600).to_string(),
+        86_400..2_592_000 => crate::t!("time.since_d", n = s / 86_400).to_string(),
+        2_592_000..31_104_000 => crate::t!("time.since_mo", n = s / 2_592_000).to_string(),
+        _ => crate::t!("time.since_y", n = s / 31_104_000).to_string(),
+    }
+}
+
 fn feed_cards(app: &PhoenixApp, g: Id) -> Vec<crate::commands::InventoryEntry> {
     let is_member = |u: Id| {
         app.members.get(&g).is_some_and(|ms| ms.iter().any(|m| m.user == u))

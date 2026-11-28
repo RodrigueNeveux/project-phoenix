@@ -1234,7 +1234,8 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
             .justify_end()
             .items_center()
             .pl(z(4.))
-            .when(plated, |d| d.min_w(z(32.)))
+            .when(plated && selected, |d| d.min_w(z(32.)))
+            .when(plated && !selected, |d| d.group_hover(group.clone(), |s| s.min_w(z(32.))))
             .child(
                 div()
                     .id(("dm-close", id.0))
@@ -1434,7 +1435,7 @@ fn channel_row(app: &PhoenixApp, entity: &Entity<PhoenixApp>, id: Id) -> AnyElem
                                 offset: 32. + 12. - 5.,
                                 fallback: 220.,
                             };
-                            crate::ui::nameplate::layer_with_fade(u, 48., crate::ui::nameplate::Place::Channel, !selected, selected, fade)
+                            crate::ui::nameplate::layer_with_fade(u, dm_row_h(), crate::ui::nameplate::Place::Channel, !selected, selected, fade)
                         }),
                     |d, l| {
                         d.child(
@@ -2075,5 +2076,5 @@ fn guild_top(app: &PhoenixApp, entity: Entity<PhoenixApp>, cx: &App) -> impl Int
 }
 
 fn dm_row_h() -> f32 {
-    space::channels_name_lh() + 18.
+    [38., 42., 48.][crate::theme::density() as usize]
 }

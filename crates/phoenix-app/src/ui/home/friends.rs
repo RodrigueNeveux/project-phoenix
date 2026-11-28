@@ -1453,7 +1453,6 @@ fn active_now_column(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> gpui::St
         .flex_col()
         .child(
             div()
-                .mb(z(9.))
                 .text_size(z(20.))
                 .line_height(z(24.))
                 .font_weight(FontWeight::SEMIBOLD)
@@ -1525,7 +1524,7 @@ fn now_card(app: &PhoenixApp, card_info: NowCard, cx: &mut Context<PhoenixApp>) 
     let first_act = first.and_then(|g| activity_of(app, g));
     let line = header_line(&card_info);
     let timer = || match (first, first_act.and_then(|a| a.start)) {
-        (Some(g), Some(st)) => format!("{} - {}", g.game.name, crate::ui::members::elapsed(st, now)).into(),
+        (Some(g), Some(st)) => format!("{} - {}", g.game.name, crate::ui::members::since_short(st, now)).into(),
         (Some(g), None) => g.game.name.clone(),
         _ => SharedString::default(),
     };
