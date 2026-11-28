@@ -335,7 +335,7 @@ fn widget_card(app: &PhoenixApp, uid: Id, themed: bool, cx: &mut Context<Phoenix
         .map(|b| b.on_click(move |_, _, cx| e.update(cx, |a, cx| a.open_profile_modal(uid, cx))).into_any_element())
 }
 
-fn blocked_notice(app: &PhoenixApp, uid: Id, blocked: bool, ignored: bool, cx: &mut Context<PhoenixApp>) -> Option<Div> {
+fn blocked_notice(app: &PhoenixApp, uid: Id, blocked: bool, ignored: bool, cx: &mut Context<PhoenixApp>) -> Option<gpui::Stateful<Div>> {
     let incoming = app.nav.relationship(uid).is_some_and(|r| r.kind == crate::ui::home::data::RelationshipKind::Incoming);
     let shown = blocked || (ignored && !incoming);
     if !shown {
