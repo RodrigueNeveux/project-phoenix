@@ -366,6 +366,14 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
         .into_any_element()
 }
 
+pub(crate) fn greeting(hour: u32) -> SharedString {
+    match hour {
+        5..12 => crate::t!("nitro.hello_morning"),
+        12..17 => crate::t!("nitro.hello_afternoon"),
+        _ => crate::t!("nitro.hello_evening"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,13 +396,5 @@ mod tests {
         let card = (w.unwrap() - 24. * (cols - 1) as f32) / cols as f32;
         assert!((card - 396.835).abs() < 0.01);
         assert_eq!(grid_columns(1600.).1, Some(1200.));
-    }
-}
-
-pub(crate) fn greeting(hour: u32) -> SharedString {
-    match hour {
-        5..12 => crate::t!("nitro.hello_morning"),
-        12..17 => crate::t!("nitro.hello_afternoon"),
-        _ => crate::t!("nitro.hello_evening"),
     }
 }
