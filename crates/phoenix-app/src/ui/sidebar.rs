@@ -268,7 +268,7 @@ fn favorites_header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
                         .text_ellipsis()
                         .child(crate::t!("fav.title")),
                 )
-                .child(icon(if menu_open { Icon::Close } else { Icon::Chevron }, 16. * crate::theme::zoom(), fg)),
+                .child(icon(Icon::Chevron, 16. * crate::theme::zoom(), fg).when(menu_open, |i| i.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))))),
         )
         .child(
             div()
@@ -464,7 +464,7 @@ fn header(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElement {
                                         .child(g.name.clone()),
                                         ),
                                 )
-                                .child(icon(if menu_open { Icon::Close } else { Icon::Chevron }, 16. * crate::theme::zoom(), fg)),
+                                .child(icon(Icon::Chevron, 16. * crate::theme::zoom(), fg).when(menu_open, |i| i.with_transformation(gpui::Transformation::rotate(gpui::radians(std::f32::consts::PI))))),
                         )
                         .child(
                             crate::ui::a11y::named(div().id("guild-invite"), gpui::Role::Button, || crate::t!("a11y.invite_server"))
