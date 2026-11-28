@@ -10,7 +10,7 @@ use gpui_component::Root;
 use phoenix_app::{
     app::PhoenixApp,
     assets::Assets,
-    backend::{AppEvent, Backend, BackendError, BoxFuture, Credentials, EventSink, ReadyData, Upload},
+    backend::{AppEvent, Backend, BackendError, BoxFuture, Credentials, EventSink, ReadyData, Upload, VoiceUpload},
     discord_backend::{
         DiscordBackend,
         store::{KeyringStore, Secret, TokenStore},
@@ -92,6 +92,9 @@ fn sandbox_action(req: &phoenix_app::actions::ActionRequest) -> bool {
     }
     match req {
         A::CreateThread { channel, name, .. } | A::CreateStandaloneThread { channel, name, .. } => channel.0 == SANDBOX_CHANNEL && name.starts_with(TEST_MARK),
+        A::Forward { from, msg, to, comment, .. } => {
+            sandbox_write(*from, *msg) && !to.is_empty() && to.iter().all(|c| c.0 == SANDBOX_CHANNEL) && (comment.trim().is_empty() || comment.starts_with(TEST_MARK))
+        }
         A::Admin(AdminCall::ScheduleMessage { channel, message, .. }) => {
             channel.0 == SANDBOX_CHANNEL && message["content"].as_str().is_some_and(|c| c.starts_with(TEST_MARK))
         }
@@ -101,7 +104,19 @@ fn sandbox_action(req: &phoenix_app::actions::ActionRequest) -> bool {
 
 
 fn sandbox_write(ch: Id, msg: Id) -> bool {
-    std::env::var_os("PHX_WRITE").is_some() && ch.0 == SANDBOX_CHANNEL && WRITABLE.lock().is_ok_and(|w| w.contains(&msg.0))
+    sandbox_writes() && in_sandbox(ch) && WRITABLE.lock().is_ok_and(|w| w.contains(&msg.0))
+}
+
+fn keep_writable(fut: BoxFuture<Message>) -> BoxFuture<Message> {
+    Box::pin(async move {
+        let m = fut.await?;
+        if let Ok(mut w) = WRITABLE.lock()
+            && !w.contains(&m.id.0)
+        {
+            w.push(m.id.0);
+        }
+        Ok(m)
+    })
 }
 
 fn writable_target(app: &PhoenixApp) -> Option<(Id, Id)> {
@@ -198,7 +213,7 @@ impl Backend for ReadOnly {
             return denied();
         };
         eprintln!("write: send in {ch:?} ({} chars, reply={reply:?})", content.chars().count());
-        self.0.send_message(ch, content, reply)
+        keep_writable(self.0.send_message(ch, content, reply))
     }
     fn send_message_ex(
         &self,
@@ -226,7 +241,7 @@ impl Backend for ReadOnly {
             let _ = rx.await;
             eprintln!("send released after {hold} ms (fail={fail:?})");
             match fail {
-                None => real.send_message_ex(ch, content, reply, files, nonce, progress).await,
+                None => keep_writable(real.send_message_ex(ch, content, reply, files, nonce, progress)).await,
                 Some(_) => Err(BackendError::rejected("HTTP 400 (simulated locally, not sent)")),
             }
         })
@@ -334,8 +349,19 @@ impl Backend for ReadOnly {
         eprintln!("write: reaction {} add={add} on {msg:?}", r.emoji);
         self.0.set_reaction(ch, msg, r, add)
     }
-    fn set_pinned(&self, _: Id, _: Id, _: bool) -> BoxFuture<()> {
-        denied()
+    fn set_pinned(&self, ch: Id, msg: Id, pinned: bool) -> BoxFuture<()> {
+        if !sandbox_write(ch, msg) {
+            return denied();
+        }
+        eprintln!("write: pinned={pinned} on {msg:?}");
+        self.0.set_pinned(ch, msg, pinned)
+    }
+    fn send_voice_message(&self, ch: Id, voice: VoiceUpload, reply: Option<(Id, bool)>, nonce: u64) -> BoxFuture<Message> {
+        if !sandbox_writes() || !in_sandbox(ch) || std::env::var_os("PHOENIX_VOICE_MESSAGE_TONE").is_none() {
+            return denied();
+        }
+        eprintln!("write: voice message in {ch:?}");
+        keep_writable(self.0.send_voice_message(ch, voice, reply, nonce))
     }
     fn mark_unread(&self, _: Id, _: Id) -> BoxFuture<()> {
         denied()

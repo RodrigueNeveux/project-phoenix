@@ -152,7 +152,7 @@ when none), `fullscreen`, `px:<region>` (hash of the region's pixels, for
 "the video frame changes"), `at:<point>` (prints where a point resolves).
 
 More probes: `flash` (message being highlighted after a jump), `replying`, `messages` (loaded
-messages), `reached_start`, `oldest`, `last`, `last_mine`, `last_reply`, `last_files`,
+messages), `reached_start`, `oldest`, `last`, `last_mine`, `last_reply`, `last_files`, `last_reactions` (own reactions), `last_burst` (own super reactions), `last_pinned`, `last_edited`, `last_forward`, `last_flags`,
 `last_embeds`, `last_thread`, `last_app` (application of the last message), `last_text` (sandbox
 channel only), `sending`, `uploads`, `chat_error`, `typing` (typing users in the open channel),
 `typing_any`, `typing_label`, `unread_guilds`, `mention_total`, `unreads` (`guild:mentions` of every
@@ -164,5 +164,5 @@ Writes from a script: with `PHX_WRITE=1`, `real_shots` sends, replies, uploads, 
 and polls (text or question starting with `[Test Phoenix]`), schedules messages, votes, and runs
 application commands and components, ONLY in the sandbox channel `1576039645127385188` and in the
 threads it created there. A GIF picked in the picker is sent there with the test prefix in front of
-its link. Everything else stays refused. Run setting changes with `XDG_CONFIG_HOME` pointing at a
+its link. With `PHX_WRITE=1` the messages this run sent can also be edited, deleted, reacted to (super reactions included), pinned and forwarded to the sandbox itself; voice messages go out only with `PHOENIX_VOICE_MESSAGE_TONE=<secs>` set, so the recorder takes a generated 440 Hz tone and never the microphone. Everything else stays refused. Run setting changes with `XDG_CONFIG_HOME` pointing at a
 copy of the config, so the local preferences of the user's Phoenix are never rewritten.
