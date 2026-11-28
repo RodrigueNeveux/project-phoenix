@@ -855,6 +855,63 @@ the capture and the render.
 | Quests | overall | 40.4 | — | 40.4 | — (the client hero is a sponsored quest, Phoenix the Orbs promo) |
 | Shop | overall | 23.2 | — | 23.2 | — (Dark Mode Friday sale, countdown and discounted prices missing) |
 
+### Settings, server settings, store pages and popouts (same night, 1280×700)
+
+User settings (one pass per page, opened and closed, no write): « content » is the page, « nav » the sidebar. The nav
+scores mostly measure its scroll position: the driver scrolls the clicked entry into view, Phoenix reveals it
+itself, so only the content column is a fair score.
+
+| Page | Content | Nav | Overall |
+|---|---|---|---|
+| Compte | 1.0 | 2.4 | 1.2 |
+| Données et confidentialité | 5.1 | 15.9 | 6.6 |
+| Permissions de messagerie | 4.3 | 19.9 | 6.7 |
+| Notifications | 2.8 | 14.1 | 4.6 |
+| Nitro | 3.4 | 14.9 | 5.1 |
+| Boost de serveur | 4.6 | 14.8 | 6.0 |
+| Abonnements | 2.4 | 15.3 | 4.5 |
+| Inventaire des cadeaux | 5.7 | 17.5 | 7.2 |
+| Facturation | 1.9 | 18.0 | 4.6 |
+| Voix & Vidéo | 7.2 | 17.2 | 8.3 |
+| Apparence | 4.1 | 17.3 | 6.1 |
+| Accessibilité | 5.0 | 17.5 | 6.8 |
+| Système | 3.9 | 17.5 | 6.0 |
+| Langue et heure | 1.7 | 18.5 | 4.6 |
+| Jeux enregistrés | 3.3 | 18.3 | 5.7 |
+| Confidentialité des activités | 3.9 | 23.3 | 7.0 |
+
+Server settings of Aperture Sciences (read only; « Participation » never opened, « Membres » dropped because it
+opens the member-safety route and sends `POST members-search`):
+
+| Page | Content | Nav | Overall |
+|---|---|---|---|
+| Profil du serveur | 10.0 | 1.8 | 7.6 |
+| Tag du serveur | 11.2 | 1.8 | 8.5 |
+| Avantages de boost | 8.9 | 1.8 | 6.8 |
+| Émoji | 2.8 | 1.9 | 2.6 |
+| Autocollants | 13.8 | 1.9 | 10.3 |
+| Soundboard | 4.3 | 1.9 | 3.6 |
+| Rôles | 5.9 | 1.8 | 4.7 |
+| Invitations | 4.9 | 1.8 | 4.0 |
+| Accès | 17.1 | 1.8 | 12.7 (client content scrolled to « Profil ») |
+| Intégrations | 5.9 | 9.4 | 6.9 |
+| Configuration de Sécurité | 1.1 | 9.3 | 3.5 |
+| Logs du serveur | — | — | — |
+| Bannissements | 4.5 | 9.7 | 6.0 |
+| Vue d'ensemble de la communauté | 9.1 | 8.8 | 9.0 |
+| Processus d'accueil | 7.1 | 8.9 | 7.6 |
+| Analyses de serveur | 8.9 | 9.4 | 9.1 |
+| Présence sur internet | 4.2 | 10.0 | 5.9 |
+| Modèle de serveur | 7.1 | 9.8 | 7.9 |
+
+Store pages, recaptured at 12:05 with the client painting again (int-bin a4e9db40, overall mismatch): Découvrir 8.3 → 8.2,
+Quêtes 40.4 → 35.7, Boutique 23.2 → 20.8, Nitro 16.5 → 14.6 (2 columns of 396.83 now, greeting and display name font
+match; the gradient image now spreads behind the page, c2f99694).
+
+Popouts: server menu 11.7 (header chevron turns up while open instead of a cross, fixed after the score), status /
+account popout 17.6 (voice card server name now one line with an ellipsis; the « … » menu of the voice section is still
+missing), poll creation modal: overall 5.2 (its box was not detected by the scorer).
+
 ### Still open, by visibility
 
 - Quests: the hero is the sponsored quest from the quest placement API (DUNE trailer, « Sponsorisée »); Phoenix shows the static Orbs banner.
@@ -863,3 +920,6 @@ the capture and the render.
 - Gift inventory: the banner art is a Lottie (`animatedGraphic_J9WkLo`, `aspect-ratio-6/4`); Phoenix draws a gift glyph.
 - Emoji picker: the client hides the Project Phoenix server section (cause not traced: roles or availability of its emojis).
 - Profile popout: the message field ellipsizes earlier in the client (reserved space before the emoji button).
+- Server menu: « Montrer tous les salons » is checked in the client and unchecked in Phoenix.
+- Account popout: « … » button of the voice section.
+- Gift inventory banner: the bullet text wraps one word earlier (icon widths 9.91 vs 12).
