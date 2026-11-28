@@ -109,12 +109,26 @@ fn copy(label: gpui::SharedString, text: String) -> MenuItem {
     MenuItem::action(label, None, move |_, _, cx: &mut App| cx.write_to_clipboard(ClipboardItem::new_string(text.clone())))
 }
 
-fn mute_item(e: &Ent, label: gpui::SharedString, unmute: gpui::SharedString, muted: bool, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
+fn mute_end(app: &PhoenixApp, guild: Option<Id>, channel: Option<Id>) -> Option<i64> {
+    let p = app.backend.notify_prefs()?;
+    let g = p.guilds.get(&guild.map_or(0, |g| g.0))?;
+    let until = match channel {
+        Some(ch) => g.channels.get(&ch.0)?.until,
+        None => g.until,
+    }?;
+    (until > chrono::Utc::now().timestamp_millis()).then_some(until)
+}
+
+fn mute_item(app: &PhoenixApp, e: &Ent, label: gpui::SharedString, unmute: gpui::SharedString, muted: bool, guild: Option<Id>, channel: Option<Id>) -> MenuItem {
     if muted {
         let e = e.clone();
-        return MenuItem::action(unmute, None, move |_, _, cx: &mut App| {
+        let item = MenuItem::action(unmute, None, move |_, _, cx: &mut App| {
             e.update(cx, |a, cx| a.set_nav_mute(guild, channel, false, None, cx))
         });
+        return match mute_end(app, guild, channel).and_then(crate::ui::thread_menu::muted_until) {
+            Some(sub) => item.with_subtext(sub),
+            None => item,
+        };
     }
     let items = DURATIONS
         .iter()
@@ -532,7 +546,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                 } else {
                     (crate::t!("menu.mute_channel"), crate::t!("menu.unmute_channel"))
                 };
-                items.push(mute_item(&e, mute, unmute, muted, guild, Some(id)));
+                items.push(mute_item(app, &e, mute, unmute, muted, guild, Some(id)));
                 if !voice || stage {
                     let mut radios = notify_radios(app, &e, guild, Some(id));
                     if forum {
@@ -589,7 +603,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                     }
                     items.push(act(&e, crate::t!("menu.edit_group"), move |a, _, cx| a.open_edit_group(id, cx)));
                     items.push(MenuItem::Separator);
-                    items.push(mute_item(&e, crate::t!("menu.mute_conversation"), crate::t!("menu.unmute_conversation"), muted, None, Some(id)));
+                    items.push(mute_item(app, &e, crate::t!("menu.mute_conversation"), crate::t!("menu.unmute_conversation"), muted, None, Some(id)));
                     items.push(MenuItem::Separator);
                     items.push(MenuItem::danger(crate::t!("menu.leave_group"), None, {
                         let e = e.clone();
@@ -629,7 +643,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
                     }
                     items.push(MenuItem::Separator);
                     let who = format!("@{}", ch.name);
-                    items.push(mute_item(&e, crate::t!("menu.mute_who", who = who), crate::t!("menu.unmute_who", who = who), muted, None, Some(id)));
+                    items.push(mute_item(app, &e, crate::t!("menu.mute_who", who = who), crate::t!("menu.unmute_who", who = who), muted, None, Some(id)));
                 }
                 if dev {
                     items.push(MenuItem::Separator);
@@ -653,7 +667,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             items.push(MenuItem::Separator);
             items.push(act(&e, crate::t!("menu.invite_to_server"), move |a, _, cx| a.open_invite_people(g, cx)));
             items.push(MenuItem::Separator);
-            items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), muted, Some(g), None));
+            items.push(mute_item(app, &e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), muted, Some(g), None));
             let en = e.clone();
             let mut notify = MenuItem::submenu(crate::t!("menu.notify_settings"), guild_notify_items(app, &e, g)).with_subtext(level_label(app, Some(g), None));
             if let MenuItem::Submenu { on_click, .. } = &mut notify {
@@ -738,6 +752,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             let guild = ch.guild;
             let muted = ch.muted;
             items.push(mute_item(
+                app,
                 &e,
                 crate::t!("menu.mute_channel"),
                 crate::t!("menu.unmute_channel"),
@@ -747,7 +762,7 @@ fn render_target(app: &PhoenixApp, target: Target, pos: Point<Pixels>, cx: &mut 
             ));
             items.push(MenuItem::Separator);
             if let (Target::InboxBell(_), Some(g)) = (target, guild) {
-                items.push(mute_item(&e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), guild_muted(app, g), Some(g), None));
+                items.push(mute_item(app, &e, crate::t!("menu.mute_server"), crate::t!("menu.unmute_server"), guild_muted(app, g), Some(g), None));
                 items.push(MenuItem::Separator);
             }
             items.extend(notify_radios(app, &e, guild, Some(id)));
@@ -825,8 +840,13 @@ impl PhoenixApp {
     pub(crate) fn set_nav_mute(&mut self, guild: Option<Id>, channel: Option<Id>, muted: bool, secs: Option<u32>, cx: &mut Context<Self>) {
         match channel {
             Some(id) => {
+                let mut category = false;
                 if let Some(ch) = self.channels.get_mut(&id) {
                     ch.muted = muted;
+                    category = ch.kind == ChannelKind::Category;
+                }
+                if muted && category && self.collapsed.insert(id) {
+                    self.save_nav_prefs();
                 }
             }
             None => {

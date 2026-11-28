@@ -84,7 +84,7 @@ pub fn mute_item(app: &PhoenixApp, e: &Entity<PhoenixApp>, t: Id) -> MenuItem {
     MenuItem::submenu(crate::t!(mute), rows)
 }
 
-fn muted_until(end_ms: i64) -> Option<String> {
+pub(crate) fn muted_until(end_ms: i64) -> Option<String> {
     use chrono::TimeZone;
     let dt = chrono::Local.timestamp_millis_opt(end_ms).single()?;
     let time = if crate::i18n::locale() == "en" { dt.format("%-m/%-d, %-I:%M %p") } else { dt.format("%d/%m %H:%M") };
