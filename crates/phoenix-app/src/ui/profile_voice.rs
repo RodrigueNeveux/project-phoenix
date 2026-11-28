@@ -165,7 +165,7 @@ pub fn card(app: &PhoenixApp, user: Id, col: Colors, entity: Entity<PhoenixApp>)
     let can_set_status = joined && perms.is_none_or(|p| p & SET_VOICE_CHANNEL_STATUS != 0);
     let light = crate::ui::profile_theme::is_light();
 
-    let header = div()
+    let header_text = div()
         .flex()
         .items_center()
         .gap(z(4.))
@@ -182,6 +182,25 @@ pub fn card(app: &PhoenixApp, user: Id, col: Colors, entity: Entity<PhoenixApp>)
                     .child(svg().path(crate::icons::path("info")).size(z(12.)).text_color(col.header)),
             )
         });
+    let header = div()
+        .flex()
+        .items_center()
+        .justify_between()
+        .gap(z(4.))
+        .child(header_text)
+        .child(
+            div()
+                .id(("profile-voice-more", user.0))
+                .mr(z(4.))
+                .flex_none()
+                .cursor_pointer()
+                .tooltip(crate::ui::tooltip::tip(crate::t!("profile.more")))
+                .on_click(move |ev, w, cx| {
+                    cx.stop_propagation();
+                    crate::ui::nav_menus::open(crate::ui::nav_menus::Target::Channel(cid), ev.position(), w);
+                })
+                .child(svg().path(crate::icons::path("more-horizontal")).size(z(16.)).text_color(c(tok(idx::INTERACTIVE_TEXT_DEFAULT)))),
+        );
 
     let e_join = entity.clone();
     let name = div()
