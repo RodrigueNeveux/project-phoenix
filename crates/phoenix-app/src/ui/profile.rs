@@ -721,6 +721,16 @@ fn role_text_w(cx: &gpui::App, s: &str) -> f32 {
     s.chars().map(|ch| ts.advance(id, px(12.), ch).map(|a| f32::from(a.width)).unwrap_or(0.)).sum()
 }
 
+fn role_circle(r: &crate::model::Role) -> Div {
+    let dot = div().size(z(12.)).mx(z(4.)).flex_none();
+    let Some([a, b, t]) = crate::ui::role_gradient::get(r.id) else {
+        return dot.rounded_full().bg(role_color(r.color.or(Some(0x99AAB5))));
+    };
+    let rgb = |v: u32| gpui::Hsla::from(gpui::rgb(v));
+    let half = |from: u32, to: u32| div().w(z(6.)).h_full().bg(gpui::linear_gradient(90., gpui::linear_color_stop(rgb(from), 0.), gpui::linear_color_stop(rgb(to), 1.)));
+    dot.flex().child(half(a, b).rounded_l(z(6.))).child(half(b, t).rounded_r(z(6.)))
+}
+
 fn role_pill_w(text: f32, r: &crate::model::Role, removable: bool) -> f32 {
     2. + 2. + 12. + 8. + (if r.connection { 16. } else { 0. }) + text + (if r.icon.is_some() { 16. } else { 0. }) + (if removable { 23. } else { 8. })
 }
@@ -872,7 +882,7 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
             .text_size(z(12.))
             .line_height(z(16.))
             .text_color(c(tok(idx::TEXT_DEFAULT)))
-            .child(div().size(z(12.)).mx(z(4.)).flex_none().rounded_full().bg(role_color(r.color.or(Some(0x99AAB5)))))
+            .child(role_circle(r))
             .when(r.connection, |d| {
                 d.child(gpui::svg().path(crate::icons::path("link")).size(z(12.)).mr(z(4.)).flex_none().text_color(c(tok(idx::ICON_DEFAULT))))
             })
