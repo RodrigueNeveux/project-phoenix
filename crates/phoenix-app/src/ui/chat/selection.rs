@@ -43,6 +43,28 @@ thread_local! {
     static CELLS: RefCell<Vec<Cell>> = const { RefCell::new(Vec::new()) };
     static TEXTS: RefCell<BTreeMap<(u64, usize), Block>> = const { RefCell::new(BTreeMap::new()) };
     static AREA: RefCell<Option<Bounds<Pixels>>> = const { RefCell::new(None) };
+    static POINTER: RefCell<Option<Point<Pixels>>> = const { RefCell::new(None) };
+}
+
+pub fn autoscroll_step(area: Bounds<Pixels>, p: Point<Pixels>) -> Option<Pixels> {
+    let over = if p.y < area.top() {
+        p.y - area.top()
+    } else if p.y > area.bottom() {
+        p.y - area.bottom()
+    } else {
+        return None;
+    };
+    let max = gpui::px(40.);
+    Some((over / 2.).clamp(-max, max))
+}
+
+fn set_focus(p: Pos) -> bool {
+    SEL.with(|s| {
+        let mut s = s.borrow_mut();
+        let moved = s.focus != Some(p);
+        s.focus = Some(p);
+        moved
+    })
 }
 
 pub fn selection_bg() -> Hsla {
@@ -258,12 +280,25 @@ pub fn on_down(ev: &MouseDownEvent, w: &mut Window, _: &mut App) {
     w.refresh();
 }
 
-pub fn listener() -> impl IntoElement {
+pub fn listener(list: gpui::ListState) -> impl IntoElement {
     canvas(
         |bounds, _, _| {
             AREA.with(|a| *a.borrow_mut() = Some(bounds));
         },
-        |_, _, w, _| {
+        move |_, _, w, _| {
+            let dragging = SEL.with(|s| s.borrow().drag);
+            let pointer = POINTER.with(|p| *p.borrow());
+            let area = AREA.with(|a| *a.borrow());
+            if let (true, Some(p), Some(area)) = (dragging, pointer, area)
+                && let Some(step) = autoscroll_step(area, p)
+            {
+                list.scroll_by(step);
+                let inside = gpui::point(p.x, p.y.clamp(area.top() + gpui::px(1.), area.bottom() - gpui::px(1.)));
+                if let Some(pos) = nearest(inside) {
+                    set_focus(pos);
+                }
+                w.request_animation_frame();
+            }
             w.on_mouse_event(|ev: &MouseMoveEvent, phase, w, _| {
                 if phase != DispatchPhase::Bubble || ev.pressed_button != Some(MouseButton::Left) {
                     return;
@@ -271,21 +306,22 @@ pub fn listener() -> impl IntoElement {
                 if !SEL.with(|s| s.borrow().drag) {
                     return;
                 }
-                if let Some(p) = nearest(ev.position) {
-                    let moved = SEL.with(|s| {
-                        let mut s = s.borrow_mut();
-                        let moved = s.focus != Some(p);
-                        s.focus = Some(p);
-                        moved
-                    });
-                    if moved {
-                        w.refresh();
-                    }
+                POINTER.with(|p| *p.borrow_mut() = Some(ev.position));
+                let scrolling = AREA.with(|a| a.borrow().and_then(|b| autoscroll_step(b, ev.position)).is_some());
+                if scrolling {
+                    w.refresh();
+                    return;
+                }
+                if let Some(p) = nearest(ev.position)
+                    && set_focus(p)
+                {
+                    w.refresh();
                 }
             });
             w.on_mouse_event(|ev: &MouseUpEvent, phase, _, _| {
                 if phase == DispatchPhase::Bubble && ev.button == MouseButton::Left {
                     SEL.with(|s| s.borrow_mut().drag = false);
+                    POINTER.with(|p| *p.borrow_mut() = None);
                 }
             });
             w.on_mouse_event(|ev: &MouseDownEvent, phase, w, _| {
@@ -392,6 +428,14 @@ mod tests {
         begin_frame(Some(2));
         assert!(!has_selection());
         assert!(selected_text().is_none());
+    }
+
+    #[test]
+    fn autoscroll_only_past_the_list_edges_and_capped() {
+        let area = Bounds { origin: gpui::point(gpui::px(0.), gpui::px(100.)), size: gpui::size(gpui::px(500.), gpui::px(400.)) };
+        assert_eq!(autoscroll_step(area, gpui::point(gpui::px(10.), gpui::px(300.))), None);
+        assert_eq!(autoscroll_step(area, gpui::point(gpui::px(10.), gpui::px(90.))), Some(gpui::px(-5.)));
+        assert_eq!(autoscroll_step(area, gpui::point(gpui::px(10.), gpui::px(700.))), Some(gpui::px(40.)));
     }
 
     #[test]

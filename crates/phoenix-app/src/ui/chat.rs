@@ -125,7 +125,7 @@ pub fn render(app: &PhoenixApp, window: &mut Window, cx: &mut Context<PhoenixApp
                                         .size_full(),
                                 )
                                 .child(rows::load_when_visible(cx.entity()))
-                                .child(selection::listener())
+                                .child(selection::listener(app.message_list.clone()))
                                 .children(scrollbar::auto_scrollbar(&app.message_list))
                                 .children(panels::new_messages_bar(app, cx))
                                 .children(panels::jump_bar(app, cx)),
