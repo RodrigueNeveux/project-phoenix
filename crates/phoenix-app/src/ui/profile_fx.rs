@@ -15,10 +15,28 @@ const MAX_ANIMS: usize = 4;
 const IDLE_DROP: Duration = Duration::from_secs(3);
 const INTRO_MS: u64 = 500;
 
+const AHEAD: usize = 4;
+
+type Decoded = (u64, u64, Arc<RenderImage>);
+
+enum Bytes {
+    Loading,
+    Ready(Arc<Vec<u8>>),
+    Failed,
+}
+
+struct Stream {
+    rx: std::sync::mpsc::Receiver<Decoded>,
+    shown: Option<Decoded>,
+    stale: Option<Arc<RenderImage>>,
+}
+
 #[derive(Default)]
 struct Store {
     products: HashMap<u64, Option<Collectible>>,
     anims: HashMap<SharedString, (Option<Arc<RenderImage>>, Instant)>,
+    bytes: HashMap<SharedString, (Bytes, Instant)>,
+    streams: HashMap<SharedString, (Stream, Instant)>,
     clocks: HashMap<u64, (Instant, Instant)>,
     sizes: HashMap<SharedString, Option<(f32, f32)>>,
 }
@@ -46,47 +64,135 @@ pub fn product(app: &PhoenixApp, sku: u64, cx: &mut Context<PhoenixApp>) -> Opti
 fn decode(bytes: &[u8], still: bool) -> anyhow::Result<RenderImage> {
     use image::{AnimationDecoder, codecs::png::PngDecoder};
     let dec = PngDecoder::new(std::io::Cursor::new(bytes))?;
-    let mut frames: Vec<image::Frame> = if dec.is_apng()? {
-        dec.apng()?.into_frames().collect_frames()?
-    } else {
+    let frames: Vec<image::Frame> = if !dec.is_apng()? {
         let img = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)?.into_rgba8();
         vec![image::Frame::new(img)]
-    };
-    if still && frames.len() > 1 {
+    } else if still {
         let ink = |f: &image::Frame| f.buffer().pixels().map(|p| p.0[3] as u64).sum::<u64>();
-        let best = (0..frames.len()).max_by_key(|&i| ink(&frames[i])).unwrap_or(0);
-        frames = vec![frames.swap_remove(best)];
-    }
-    let frames = frames
-        .into_iter()
-        .map(|f| {
-            let delay = f.delay();
-            let mut buf = f.into_buffer();
-            if buf.width() > MAX_W {
-                let h = (buf.height() as u64 * MAX_W as u64 / buf.width() as u64) as u32;
-                buf = image::imageops::resize(&buf, MAX_W, h.max(1), image::imageops::FilterType::Triangle);
+        let mut best: Option<(u64, image::Frame)> = None;
+        for f in dec.apng()?.into_frames() {
+            let f = f?;
+            let n = ink(&f);
+            if best.as_ref().is_none_or(|(b, _)| n >= *b) {
+                best = Some((n, f));
             }
-            for p in buf.as_chunks_mut::<4>().0 {
-                p.swap(0, 2);
-            }
-            image::Frame::from_parts(buf, 0, 0, delay)
-        })
-        .collect::<Vec<_>>();
-    Ok(RenderImage::new(frames))
+        }
+        best.map(|(_, f)| f).into_iter().collect()
+    } else {
+        dec.apng()?.into_frames().collect_frames()?
+    };
+    Ok(RenderImage::new(frames.into_iter().map(prepare).collect()))
 }
 
-pub fn sweep(cx: &mut App) {
-    let Some(s) = cx.try_global::<Store>() else { return };
-    if !s.anims.values().any(|(_, t)| t.elapsed() > IDLE_DROP) {
+fn prepare(f: image::Frame) -> image::Frame {
+    let delay = f.delay();
+    let mut buf = f.into_buffer();
+    if buf.width() > MAX_W {
+        let h = (buf.height() as u64 * MAX_W as u64 / buf.width() as u64) as u32;
+        buf = image::imageops::resize(&buf, MAX_W, h.max(1), image::imageops::FilterType::Triangle);
+    }
+    for p in buf.as_chunks_mut::<4>().0 {
+        p.swap(0, 2);
+    }
+    image::Frame::from_parts(buf, 0, 0, delay)
+}
+
+fn frame_ms(f: &image::Frame) -> u64 {
+    let (n, d) = f.delay().numer_denom_ms();
+    (u64::from(n) / u64::from(d.max(1))).max(1)
+}
+
+fn decode_frames(bytes: &[u8], tx: &std::sync::mpsc::SyncSender<Decoded>) {
+    use image::{AnimationDecoder, codecs::png::PngDecoder};
+    let Ok(dec) = PngDecoder::new(std::io::Cursor::new(bytes)) else { return };
+    if !dec.is_apng().unwrap_or(false) {
+        if let Ok(img) = image::load_from_memory_with_format(bytes, image::ImageFormat::Png) {
+            let f = prepare(image::Frame::new(img.into_rgba8()));
+            let _ = tx.send((0, u64::MAX, Arc::new(RenderImage::new(vec![f]))));
+        }
         return;
     }
-    let s = cx.global_mut::<Store>();
-    let stale: Vec<SharedString> = s.anims.iter().filter(|(_, (_, t))| t.elapsed() > IDLE_DROP).map(|(k, _)| k.clone()).collect();
-    let dropped: Vec<Arc<RenderImage>> = stale.iter().filter_map(|k| s.anims.remove(k)?.0).collect();
+    let Ok(apng) = dec.apng() else { return };
+    let mut t = 0;
+    for f in apng.into_frames() {
+        let Ok(f) = f else { return };
+        let ms = frame_ms(&f);
+        if tx.send((t, t + ms, Arc::new(RenderImage::new(vec![prepare(f)])))).is_err() {
+            return;
+        }
+        t += ms;
+    }
+}
+
+fn start_stream(bytes: Arc<Vec<u8>>) -> Stream {
+    let (tx, rx) = std::sync::mpsc::sync_channel(AHEAD);
+    let _ = std::thread::Builder::new().name("phoenix-fx".into()).spawn(move || decode_frames(&bytes, &tx));
+    Stream { rx, shown: None, stale: None }
+}
+
+fn effect_bytes(src: &SharedString, cx: &mut Context<PhoenixApp>) -> Option<Arc<Vec<u8>>> {
+    let s = cx.default_global::<Store>();
+    if let Some((b, used)) = s.bytes.get_mut(src) {
+        *used = Instant::now();
+        return match b {
+            Bytes::Ready(b) => Some(b.clone()),
+            _ => None,
+        };
+    }
+    s.bytes.insert(src.clone(), (Bytes::Loading, Instant::now()));
+    let http = cx.http_client();
+    let (key, fetch) = (src.clone(), src.clone());
+    cx.spawn(async move |this, cx| {
+        use futures::AsyncReadExt;
+        let mut bytes = Vec::new();
+        let ok = match http.get(&fetch, Default::default(), true).await {
+            Ok(mut r) => r.body_mut().read_to_end(&mut bytes).await.is_ok(),
+            Err(_) => false,
+        };
+        let _ = this.update(cx, |_, cx| {
+            if let Some(e) = cx.default_global::<Store>().bytes.get_mut(&key) {
+                e.0 = if ok { Bytes::Ready(Arc::new(bytes)) } else { Bytes::Failed };
+            }
+            cx.notify();
+        });
+    })
+    .detach();
+    None
+}
+
+fn stream_frame(src: &SharedString, at: Option<u64>, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderImage>> {
+    let bytes = effect_bytes(src, cx)?;
+    let s = cx.default_global::<Store>();
+    let mut stale = None;
+    if let Some(at) = at
+        && s.streams.get(src).is_some_and(|(st, _)| st.shown.as_ref().is_some_and(|(start, _, _)| at < *start))
+        && let Some((old, _)) = s.streams.remove(src)
+    {
+        stale = old.shown.map(|(_, _, i)| i).or(old.stale);
+    }
+    let (st, used) = s.streams.entry(src.clone()).or_insert_with(|| (start_stream(bytes), Instant::now()));
+    *used = Instant::now();
+    if stale.is_some() {
+        st.stale = stale;
+    }
+    let at = at?;
+    let mut dropped = Vec::new();
+    while st.shown.as_ref().is_none_or(|(_, end, _)| *end <= at) {
+        match st.rx.try_recv() {
+            Ok(next) => {
+                if let Some((_, _, old)) = st.shown.replace(next) {
+                    dropped.push(old);
+                }
+                dropped.extend(st.stale.take());
+            }
+            Err(_) => break,
+        }
+    }
+    let out = st.shown.as_ref().map(|(_, _, i)| i.clone()).or_else(|| st.stale.clone());
     for img in dropped {
         cx.drop_image(img, None);
     }
-    crate::memory::release_soon();
+    out
 }
 
 fn anim(src: &SharedString, still: bool, cx: &mut Context<PhoenixApp>) -> Option<Arc<RenderImage>> {
@@ -219,20 +325,21 @@ pub fn effect_adjusted(c: &Collectible, w: f32, banner_adj: f32, cx: &mut Contex
                 }
                 continue;
             }
-            let Some(a) = anim(&l.src, false, cx) else { continue };
             if el < INTRO_MS || t < l.start || l.duration == 0 {
+                stream_frame(&l.src, None, cx);
                 continue;
             }
             let since = t - l.start;
-            let (cycle, active) = if l.looping {
+            let (cycle, local) = if l.looping {
                 let period = l.duration + l.loop_delay;
-                (since / period, since % period < l.duration)
+                (since / period, since % period)
             } else {
-                (0, since < l.duration)
+                (0, since)
             };
-            if !active {
+            if local >= l.duration {
                 continue;
             }
+            let Some(a) = stream_frame(&l.src, Some(local), cx) else { continue };
             layers.push(layer(a, Some(SharedString::from(format!("pfx-{sku}-{i}-{cycle}"))), l.x, l.y - banner_adj));
         }
     }
