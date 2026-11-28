@@ -18,6 +18,19 @@ pub const APP_ICONS_ART: &str = "https://cdn.discordapp.com/assets/content/7bb19
 pub const CARD_W: f32 = 330.;
 pub const CARD_H: f32 = 380.;
 pub const MAX_CARDS: usize = 6;
+const SCROLL_GUTTER: f32 = 16.;
+
+thread_local! {
+    static PAGE_W: std::cell::Cell<f32> = const { std::cell::Cell::new(0.) };
+}
+
+pub(crate) fn grid_columns(page_w: f32) -> (usize, Option<f32>) {
+    if page_w <= 0. {
+        return (3, None);
+    }
+    let cols = if page_w >= 960. { 3 } else if page_w >= 720. { 2 } else { 1 };
+    (cols, Some((page_w - 64.).min(1200.)))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cta {
@@ -86,13 +99,13 @@ fn section_title(t: SharedString) -> gpui::Div {
         .child(SharedString::from(t.to_uppercase()))
 }
 
-fn card(ix: usize, p: &Perk, pill: Option<SharedString>, cx: &mut Context<PhoenixApp>) -> AnyElement {
+fn card(ix: usize, p: &Perk, pill: Option<SharedString>, w: f32, cx: &mut Context<PhoenixApp>) -> AnyElement {
     let group: SharedString = format!("nitro-card-{ix}").into();
     let cta = p.cta;
     div()
         .id(("nitro-card", ix))
         .group(group.clone())
-        .w(z(CARD_W))
+        .w(z(w))
         .h(z(CARD_H))
         .flex_none()
         .rounded(z(16.))
@@ -288,21 +301,23 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
         .flex()
         .flex_col()
         .gap(z(12.))
-        .child(crate::fonts::nitro(div().text_size(z(32.)).line_height(z(34.)), true).text_color(gpui::white()).child(SharedString::from(crate::t!("nitro.hello").to_uppercase())))
+        .child(crate::fonts::nitro(div().text_size(z(32.)).line_height(z(34.)), true).text_color(gpui::white()).child(SharedString::from(greeting(chrono::Timelike::hour(&chrono::Local::now())).to_uppercase())))
         .child(
             div()
                 .flex()
                 .items_center()
                 .gap(z(16.))
                 .child(avatar(Some(&me), 64.))
-                .child(div().text_size(z(40.)).line_height(z(58.)).font_weight(FontWeight::BOLD).text_color(gpui::white()).child(me.display_name.clone())),
+                .child(crate::fonts::styled_name(div().text_size(z(40.)).line_height(z(58.)).font_weight(FontWeight::BOLD).text_color(gpui::white()), Some(&me), false).child(me.display_name.clone())),
         );
     crate::ui::quests_page::ensure_loaded(app, cx);
+    let (cols, content_w) = grid_columns(PAGE_W.with(std::cell::Cell::get));
+    let card_w = content_w.map_or(CARD_W, |w| (w - 24. * (cols - 1) as f32) / cols as f32);
     let mut cards: Vec<AnyElement> = Vec::new();
     for (i, p) in perks(crate::ui::quests_page::premium_multiplier()).iter().enumerate() {
-        cards.push(card(i, p, None, cx));
+        cards.push(card(i, p, None, card_w, cx));
     }
-    let grid = div().flex().flex_wrap().gap_x(z(24.)).gap_y(z(20.)).children(cards);
+    let grid = div().flex().flex_wrap().gap_x(z(24.)).gap_y(z(24.)).children(cards);
     div()
         .id("nitro-home")
         .relative()
@@ -320,6 +335,11 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
                 .flex()
                 .flex_col()
                 .child(
+                    gpui::canvas(|b, _, _| PAGE_W.with(|w| w.set(f32::from(b.size.width) / crate::theme::zoom() - SCROLL_GUTTER)), |_, _, _, _| {})
+                        .w_full()
+                        .h(gpui::px(0.)),
+                )
+                .child(
                     div()
                         .bg(gpui::linear_gradient(
                             160.,
@@ -329,7 +349,7 @@ pub fn render(app: &mut PhoenixApp, _window: &mut Window, cx: &mut Context<Phoen
                         .flex()
                         .flex_col()
                         .child(nav)
-                        .child(div().px(z(32.)).pt(z(64.)).pb(z(48.)).child(hello)),
+                        .child(div().px(z(32.)).pt(z(80.)).pb(z(64.)).child(hello)),
                 )
                 .child(
                     div()
@@ -357,5 +377,24 @@ mod tests {
         assert_eq!(perks(None).len(), 5);
         assert!(perks(Some(1.2))[0].description.contains("1"));
         assert_eq!(perks(None)[0].cta, None);
+    }
+
+    #[test]
+    fn whats_new_grid_follows_the_container_queries() {
+        assert_eq!(grid_columns(881.67).0, 2);
+        assert_eq!(grid_columns(960.).0, 3);
+        assert_eq!(grid_columns(700.).0, 1);
+        let (cols, w) = grid_columns(881.67);
+        let card = (w.unwrap() - 24. * (cols - 1) as f32) / cols as f32;
+        assert!((card - 396.835).abs() < 0.01);
+        assert_eq!(grid_columns(1600.).1, Some(1200.));
+    }
+}
+
+pub(crate) fn greeting(hour: u32) -> SharedString {
+    match hour {
+        5..12 => crate::t!("nitro.hello_morning"),
+        12..17 => crate::t!("nitro.hello_afternoon"),
+        _ => crate::t!("nitro.hello_evening"),
     }
 }
