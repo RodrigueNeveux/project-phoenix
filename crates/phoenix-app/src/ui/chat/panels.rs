@@ -107,6 +107,61 @@ pub fn details_items(t: &MenuItemTarget, msg: crate::model::Id) -> Vec<context_m
     out
 }
 
+const REPLYABLE: [u8; 21] = [0, 7, 19, 20, 23, 24, 25, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 45, 46, 69];
+const FORWARDABLE: [u8; 5] = [0, 19, 20, 23, 35];
+const UNDELETABLE: [u8; 11] = [1, 2, 3, 4, 5, 21, 35, 56, 57, 64, 68];
+const USER_MESSAGE: [u8; 9] = [0, 19, 20, 23, 26, 41, 45, 47, 68];
+const NON_REPORTABLE: u8 = 67;
+
+pub fn wire_type(m: &crate::model::Message) -> u8 {
+    use crate::model::MessageKind as K;
+    if m.type_id != 0 {
+        return m.type_id;
+    }
+    match m.kind {
+        K::Default => 0,
+        K::Reply => 19,
+        K::Join => 7,
+        K::Pin => 6,
+        K::Boost(n) => 8 + n.min(3),
+        K::ThreadCreated => 18,
+        K::RecipientAdd(_) => 1,
+        K::RecipientRemove(_) => 2,
+        K::Call => 3,
+        K::ChannelNameChange => 4,
+        K::StageStart => 27,
+        K::StageEnd => 28,
+        K::StageSpeaker => 29,
+        K::StageTopic => 31,
+        K::PollResult(_) => 46,
+        K::OtherSystem => u8::MAX,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TypeRules {
+    pub reply: bool,
+    pub forward: bool,
+    pub thread: bool,
+    pub pin: bool,
+    pub delete: bool,
+    pub report: bool,
+    pub configure: bool,
+}
+
+pub fn type_rules(ty: u8) -> TypeRules {
+    let user = USER_MESSAGE.contains(&ty);
+    TypeRules {
+        reply: REPLYABLE.contains(&ty),
+        forward: FORWARDABLE.contains(&ty),
+        thread: user,
+        pin: user,
+        delete: !UNDELETABLE.contains(&ty),
+        report: ty != NON_REPORTABLE,
+        configure: ty == 7,
+    }
+}
+
 fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<PhoenixApp>) -> AnyElement {
     use context_menu::MenuItem;
     let e = cx.entity();
@@ -220,24 +275,35 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             })
         }));
     }
-    let system = msg.is_some_and(|m| !matches!(m.kind, crate::model::MessageKind::Default | crate::model::MessageKind::Reply));
-    if !system {
+    let rules = type_rules(msg.map_or(0, wire_type));
+    let voice_file = msg
+        .filter(|m| m.flags & phoenix_voice::audio::voice_message::FLAG_IS_VOICE_MESSAGE != 0)
+        .and_then(|m| m.attachments.first())
+        .map(|a| a.url.clone());
+    let editable = msg.is_some_and(|m| app.can_edit(m));
+    let threadable = rules.thread && in_guild && msg.is_some_and(|m| m.thread.is_none());
+    let forwardable = rules.forward && voice_file.is_none();
+    if editable || rules.reply || forwardable || threadable {
         items.push(MenuItem::Separator);
-        if msg.is_some_and(|m| app.can_edit(m)) {
+        if editable {
             let ee = e.clone();
             items.push(MenuItem::action(crate::t!("msg.edit"), ic(ChatIcon::Edit), move |_, w, cx| {
                 ee.update(cx, |a, cx| a.start_edit(id, w, cx))
             }));
         }
-        let ee = e.clone();
-        items.push(MenuItem::action(crate::t!("msg.reply"), Some(Icon::Reply.path()), move |_, w, cx| {
-            ee.update(cx, |a, cx| a.start_reply(id, w, cx))
-        }));
-        let ee = e.clone();
-        items.push(MenuItem::action(crate::t!("msg.forward"), Some(crate::icons::path("chat/forwarded")), move |_, _, cx| {
-            ee.update(cx, |a, cx| a.open_forward(ch, id, cx))
-        }));
-        if in_guild && msg.is_some_and(|m| m.thread.is_none()) {
+        if rules.reply {
+            let ee = e.clone();
+            items.push(MenuItem::action(crate::t!("msg.reply"), Some(Icon::Reply.path()), move |_, w, cx| {
+                ee.update(cx, |a, cx| a.start_reply(id, w, cx))
+            }));
+        }
+        if forwardable {
+            let ee = e.clone();
+            items.push(MenuItem::action(crate::t!("msg.forward"), Some(crate::icons::path("chat/forwarded")), move |_, _, cx| {
+                ee.update(cx, |a, cx| a.open_forward(ch, id, cx))
+            }));
+        }
+        if threadable {
             let ee = e.clone();
             items.push(MenuItem::action(crate::t!("msg.create_thread"), Some(crate::icons::path("chat/thread")), move |_, w, cx| {
                 ee.update(cx, |a, cx| a.open_create_thread_from(ch, id, w, cx))
@@ -253,7 +319,7 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     }
     let guild = app.channels.get(&ch).and_then(|c| c.guild);
     let manage = crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES);
-    if !system && (guild.is_none() || crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | (1 << 51))) {
+    if rules.pin && (guild.is_none() || crate::actions::has(app, guild, crate::actions::MANAGE_MESSAGES | (1 << 51))) {
         let ee = e.clone();
         items.push(MenuItem::action(
             if pinned { crate::t!("msg.unpin") } else { crate::t!("msg.pin") },
@@ -316,6 +382,15 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
     items.push(MenuItem::action(crate::t!("msg.mark_unread"), ic(ChatIcon::Unread), move |_, _, cx| {
         ee.update(cx, |a, cx| a.mark_unread_from(ch, id, cx))
     }));
+    if let Some(g) = guild.filter(|_| rules.configure && crate::actions::has(app, guild, crate::actions::MANAGE_GUILD)) {
+        let ee = e.clone();
+        items.push(MenuItem::action(crate::t!("tb.configure"), Some(crate::icons::path("help")), move |_, _, cx| {
+            ee.update(cx, |a, cx| {
+                a.chat.menu = None;
+                a.open_server_settings(g, crate::ui::modals::server_settings::section_index("menu.gs.engagement"), cx)
+            })
+        }));
+    }
     let ee = e.clone();
     items.push(MenuItem::action(crate::t!("msg.copy_link"), ic(ChatIcon::Link), move |_, _, cx| {
         ee.update(cx, |a, cx| a.copy_message_link(ch, id, cx))
@@ -348,14 +423,14 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
             ee.update(cx, |a, cx| a.remove_reactions(ch, id, None, cx))
         }));
     }
-    if own || manage {
+    if (own || manage) && rules.delete {
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.delete"), ic(ChatIcon::Trash), move |ev, _, cx| {
             let skip = ev.modifiers().shift;
             ee.update(cx, |a, cx| a.request_delete(ch, id, skip, cx))
         }));
     }
-    if !own {
+    if !own && rules.report {
         let ee = e.clone();
         items.push(MenuItem::danger(crate::t!("msg.report"), Some(crate::icons::path("flag")), move |_, _, cx| {
             ee.update(cx, |a, cx| a.report_message(ch, id, cx))
@@ -389,6 +464,17 @@ fn message_menu(app: &PhoenixApp, m: super::state::MenuState, cx: &mut Context<P
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(id.0.to_string()))
             })),
         }
+    }
+    if let Some(url) = voice_file {
+        items.push(MenuItem::Separator);
+        let ee = e.clone();
+        items.push(MenuItem::action(crate::t!("msg.save_voice_file"), Some(crate::icons::path("download")), move |_, _, cx| {
+            let u = url.clone();
+            ee.update(cx, |a, cx| {
+                a.chat.menu = None;
+                a.save_image(u, cx)
+            })
+        }));
     }
     if let Some(url) = MENU_MEDIA.with(|m| m.borrow().1.clone()) {
         items.push(MenuItem::Separator);
@@ -1122,6 +1208,25 @@ pub fn drop_overlay(app: &PhoenixApp) -> impl IntoElement {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn message_menu_follows_the_client_message_type_sets() {
+        use super::{TypeRules, type_rules, wire_type};
+        let text = type_rules(0);
+        assert_eq!(text, TypeRules { reply: true, forward: true, thread: true, pin: true, delete: true, report: true, configure: false });
+        let join = type_rules(7);
+        assert!(join.reply && join.configure && join.delete && !join.forward && !join.thread && !join.pin);
+        let pin = type_rules(6);
+        assert!(!pin.reply && !pin.forward && !pin.pin && pin.delete);
+        let added = type_rules(1);
+        assert!(!added.reply && !added.delete);
+        assert!(!type_rules(67).report);
+        let join_msg = crate::model::Message { kind: crate::model::MessageKind::Join, ..Default::default() };
+        assert_eq!(wire_type(&join_msg), 7);
+        let typed = crate::model::Message { kind: crate::model::MessageKind::OtherSystem, type_id: 24, ..Default::default() };
+        assert_eq!(wire_type(&typed), 24);
+        assert!(type_rules(wire_type(&typed)).reply);
+    }
+
     #[test]
     fn forum_post_reaction_keeps_custom_token() {
         let r = |emoji: &str, id: Option<u64>| crate::model::Reaction { emoji: emoji.to_string().into(), count: 1, me: false, emoji_id: id.map(crate::model::Id), ..Default::default() };
