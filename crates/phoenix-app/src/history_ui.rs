@@ -14,7 +14,21 @@ thread_local! {
 }
 
 pub fn on_refresh(app: &mut PhoenixApp, channel: Id, messages: Vec<Message>, cx: &mut Context<PhoenixApp>) {
-    let Some(e) = app.messages.get_mut(&channel).filter(|e| e.loaded_once && !e.loading && e.msgs.len() <= 50) else { return };
+    refresh_when_idle(app, channel, messages, 0, cx);
+}
+
+fn refresh_when_idle(app: &mut PhoenixApp, channel: Id, messages: Vec<Message>, tries: u8, cx: &mut Context<PhoenixApp>) {
+    let Some(e) = app.messages.get_mut(&channel).filter(|e| e.msgs.len() <= 50) else { return };
+    if !e.loaded_once || e.loading {
+        if tries < 40 {
+            cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_millis(250)).await;
+                let _ = this.update(cx, |a, cx| refresh_when_idle(a, channel, messages, tries + 1, cx));
+            })
+            .detach();
+        }
+        return;
+    }
     e.loading = true;
     cx.spawn(async move |this, cx| {
         let laid = layout(&this, cx, messages).await;
