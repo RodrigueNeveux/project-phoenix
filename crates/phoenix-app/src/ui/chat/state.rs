@@ -1075,7 +1075,7 @@ fn percent_decode(s: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-trait DetachChat {
+pub(crate) trait DetachChat {
     fn detach_ok_chat(self);
 }
 impl<T: Send + 'static> DetachChat for crate::backend::BoxFuture<T> {

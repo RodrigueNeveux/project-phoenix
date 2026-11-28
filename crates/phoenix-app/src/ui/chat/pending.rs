@@ -9,7 +9,7 @@ use crate::{
     theme::{generated::idx, z},
 };
 
-use super::tk;
+use super::{state::DetachChat, tk};
 
 pub const SYSTEM_BOT: Id = Id(1);
 
@@ -23,6 +23,7 @@ struct Payload {
 
 thread_local! {
     static PAYLOADS: RefCell<HashMap<u64, Payload>> = RefCell::new(HashMap::new());
+    static DISCARDED: RefCell<std::collections::HashSet<u64>> = RefCell::new(std::collections::HashSet::new());
 }
 
 pub fn make_nonce() -> u64 {
@@ -105,6 +106,12 @@ impl PhoenixApp {
                 if let Some(k) = upload {
                     this.chat.sending.retain(|s| s.key != k);
                 }
+                if DISCARDED.with(|d| d.borrow_mut().remove(&nonce)) {
+                    if let Ok(m) = res {
+                        this.backend.delete_message(channel, m.id).detach_ok_chat();
+                    }
+                    return;
+                }
                 match res {
                     Ok(mut m) => {
                         m.nonce.get_or_insert(nonce);
@@ -124,6 +131,9 @@ impl PhoenixApp {
         let Some(nonce) = m.nonce else { return false };
         if m.author != self.me.id {
             return false;
+        }
+        if DISCARDED.with(|d| d.borrow().contains(&nonce)) {
+            return true;
         }
         let ch = m.channel;
         let Some(ix) = self
@@ -215,6 +225,12 @@ impl PhoenixApp {
         let local = self.messages.get(&ch).and_then(|e| e.index_of(id).map(|i| &e.msgs[i])).is_some_and(is_local);
         if !local {
             return;
+        }
+        let sending = self.messages.get(&ch).and_then(|e| e.index_of(id).map(|i| &e.msgs[i])).filter(|m| m.send_state == SendState::Sending).and_then(|m| m.nonce);
+        if let Some(nonce) = sending
+            && PAYLOADS.with(|p| p.borrow().contains_key(&nonce))
+        {
+            DISCARDED.with(|d| d.borrow_mut().insert(nonce));
         }
         PAYLOADS.with(|p| p.borrow_mut().remove(&id.0));
         self.handle_event(AppEvent::MessageDelete { channel: ch, id }, cx);

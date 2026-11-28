@@ -397,6 +397,22 @@ impl Run<'_, '_> {
                 "last_edited" => b(last(a).is_some_and(|m| m.edited)),
                 "last_forward" => b(last(a).is_some_and(|m| m.forward.is_some())),
                 "last_flags" => last(a).map_or(0, |m| m.flags).to_string(),
+                "tail" => a
+                    .selected_channel
+                    .and_then(|c| a.messages.get(&c))
+                    .map_or_else(|| "-".into(), |e| e.msgs.iter().rev().take(6).map(|m| format!("{}:{:?}", m.id.0 % 100_000, m.kind)).collect::<Vec<_>>().join(",")),
+                "dupes" => a
+                    .selected_channel
+                    .and_then(|c| a.messages.get(&c))
+                    .map_or(0, |e| {
+                        let mut ids: Vec<u64> = e.msgs.iter().map(|m| m.id.0).collect();
+                        let n = ids.len();
+                        ids.sort_unstable();
+                        ids.dedup();
+                        n - ids.len()
+                    })
+                    .to_string(),
+                "rows" => a.selected_channel.and_then(|c| a.messages.get(&c)).map_or_else(|| "-".into(), |e| format!("{}/{}", e.msgs.len(), e.rendered.len())),
                 "inbox" => b(a.parity.inbox.open),
                 "threads_panel" => b(a.parity.threads_open),
                 "pins" => a.chat.pins.as_ref().map_or_else(|| "-1".into(), |p| if p.loading { "-2".into() } else { p.msgs.len().to_string() }),

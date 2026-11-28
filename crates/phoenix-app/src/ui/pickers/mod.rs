@@ -144,14 +144,6 @@ fn route_key(app: &mut PhoenixApp, ks: &Keystroke, window: &mut Window, cx: &mut
         ui::search::open(app, window, cx);
         return true;
     }
-    if m.control && !m.shift && ks.key == "e" && app.screen == crate::app::Screen::Main {
-        toggle(app, Tab::Emoji, EmojiTarget::Composer, window, cx);
-        return true;
-    }
-    if m.control && !m.shift && ks.key == "g" && app.screen == crate::app::Screen::Main {
-        toggle(app, Tab::Gif, EmojiTarget::Composer, window, cx);
-        return true;
-    }
     if is_open(cx) {
         return plain && picker_key(app, &ks.key, m.shift, window, cx);
     }
