@@ -1079,6 +1079,10 @@ fn main() -> anyhow::Result<()> {
                     .values()
                     .find(|c| c.guild.is_some() && c.voice_users.contains(&app.me.id))
                     .map(|c| c.id);
+                if app.voice_channel.is_some() {
+                    app.voice.apply(phoenix_app::voice::VoiceUiEvent::Status(phoenix_app::voice::VoiceStatus::Connected));
+                    app.voice.apply(phoenix_app::voice::VoiceUiEvent::Ping(40));
+                }
             }
             let view = std::env::var("PHX_VIEW").unwrap_or_else(|_| {
                 let home = guild.is_none() && channel.is_none() && std::env::var("PHX_ROUTE").ok().or_else(|| cdp("location.pathname")).as_deref() == Some("/channels/@me");
