@@ -912,14 +912,36 @@ Popouts: server menu 11.7 (header chevron turns up while open instead of a cross
 account popout 17.6 (voice card server name now one line with an ellipsis; the « … » menu of the voice section is still
 missing), poll creation modal: overall 5.2 (its box was not detected by the scorer).
 
+### Sources found for the store gaps (28/11 afternoon, not implemented yet)
+
+- Shop sale (« Vendredi en mode sombre », -25 %): not in `GET /collectibles-shop`, `/collectibles-categories/v2`,
+  `/collectibles-products/:sku` (prices `0` and `4` only, no tier `2` SALE), `/users/@me/collectibles-marketing` nor
+  `/collectibles-collection-sequenced-offers` (empty). The client builds it from a promotion whose
+  `tenantMetadata.collectibles.type` is `COLLECTION_SALE` with `rewardStatus === EARNED` and `skuIds` containing the SKU
+  (module 664749 `c`), and the banner card from `rX` (chunk 4a63ee7d92c2ac58: `percentOff`, `endsAt`, `countdownStyle`,
+  `showCountdownCta`; text `97Qza2` « Profite de -{percent} % sur les articles {collectionName} ! », countdown `z0`
+  dd:hh:mm:ss). The promotion feed that carries it is still to be found.
+- Nitro home art (live DOM): page gradient `https://discord.com/assets/3ebfa123a3805f56.svg` (881.67×984), flying
+  Wumpus `…/a3e8e17987398023e2afd61ec5078a9bce18b2832f2f1775a1ba3c033ce13270.webm` (loop, 174.56²) with four PNG
+  trinkets (bolt, hammer, key, star). Tenure card first: pill « Récompense » (12/16 semibold on white), badge
+  `…/d0e033cda164abbfc02c39e70afcccb410954ceb63544178608eff0323092ccd.png` 276×230 (Silver), « Abonné depuis 17/08/26 »
+  14/18, « Nitro Argent » 20/24 semibold, « 3 mois avant Nitro Or », button « Je veux y aller maintenant ».
+- Emoji picker: the Project Phoenix server has one emoji, locked to role 1574895462320709685, which the account does not
+  have; `EmojiStore.isUsable` (`0 === roles.length` or a member role in `emoji.roles`) hides it, so the server has no
+  section. Phoenix now filters the same way (`discord_backend/expressions.rs` `usable`).
+- « Montrer tous les salons »: `checked: !jN(guild)`, `jN = isOptInEnabled && (COMMUNITY || staff)`, opt-in = guild
+  settings flag `OPT_IN_CHANNELS_ON` 16384 (module 395504, chunk a8dfb64ebcb89184). Phoenix now reads it.
+- Profile voice section « … »: `contextMenu_Bu4Al8` 16×16 `MoreHorizontalIcon` xs, `margin-inline-end: 4px`, tooltip
+  `UKOtz+`, header `space-between`.
+- Profile popout message field: placeholder box 197.67 px in a 268 px field (`inner_2x8-Qn` pl 15, slate editor
+  207.67, placeholder 10 px narrower).
+- Invite modal not compared: opening it creates an invite (`POST /channels/:id/invites`).
+- Solo call view not compared: the user was in a voice call all day.
+
 ### Still open, by visibility
 
 - Quests: the hero is the sponsored quest from the quest placement API (DUNE trailer, « Sponsorisée »); Phoenix shows the static Orbs banner.
 - Shop: sale state (countdown card « Profite de -25 % », « RÉDUCTION DE 25 % » badges, struck prices), header search with rotating suggestions (`collectibles_search_bar` experiment, chunk 6b4565136c5e825f).
 - Nitro home: flying Wumpus video + trinkets, page gradient image, tenure reward card first.
 - Gift inventory: the banner art is a Lottie (`animatedGraphic_J9WkLo`, `aspect-ratio-6/4`); Phoenix draws a gift glyph.
-- Emoji picker: the client hides the Project Phoenix server section (cause not traced: roles or availability of its emojis).
-- Profile popout: the message field ellipsizes earlier in the client (reserved space before the emoji button).
-- Server menu: « Montrer tous les salons » is checked in the client and unchecked in Phoenix.
-- Account popout: « … » button of the voice section.
 - Gift inventory banner: the bullet text wraps one word earlier (icon widths 9.91 vs 12).
