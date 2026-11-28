@@ -560,3 +560,49 @@ The layout memory is a high-water mark: GPUI's list `measure_all()` lays out eve
 message of the channel in one frame when the list is reset, and neither taffy's node
 storage nor the element arena shrink afterwards. Fixing it means changing GPUI's
 list (measure across frames) or the message list, so it is left for later.
+
+### Fixes and their effect (8d6829b8, 5c2a9cd0, eb8c7993)
+
+1. `memory.rs`: `malloc_trim(0)` on a background thread 2 s after a server or channel
+   switch and every 90 s (1–53 ms per call, `PHX_TIMINGS` event `malloc_trim`). A fixed
+   `M_MMAP_THRESHOLD` was tried first and reverted: it sent every large per-frame buffer
+   through mmap/munmap and made frames several times slower.
+2. `media/lru.rs`: the root view provides one shared LRU (192 MiB of decoded pixels) to
+   every `img()`, so avatars, emoji, icons, GIF and APNG frames no longer pile up in
+   GPUI's asset cache. An image drawn in the last two frames or the last 5 s is never
+   evicted. Popouts drawn with `deferred()` still use GPUI's cache.
+3. `profile_fx.rs`: an effect animation not drawn for 3 s is released (each is 36–91 MiB
+   of frames).
+4. `fonts/built.rs`: cached fallback fonts are mapped from disk (`memory::map_file`)
+   instead of read into the heap.
+5. `phoenix-api` cache: messages kept for the 96 most recently active channels, not for
+   every channel that ever received one.
+
+Same session as above (dev build, load average 4–8 during every run, so the timings
+are noisy):
+
+| | before | after |
+|---|---|---|
+| PSS at ready | 760 MiB | 687 MiB |
+| PSS after 15 switches | 1,038 MiB | 725 MiB |
+| PSS peak (60 switches) | 2,016 MiB | 1,476 MiB |
+| PSS at the end | 1,477 MiB | 1,277 MiB |
+| live heap at 58 switches (tracer) | 1,389 MiB | 841 MiB |
+| of which profile effects / GIF / static images / fallback fonts | 290 / 216 / 143 / 112 MiB | 109 / 23 / 71 / < 4 MiB |
+| switch first frame p50, first pass guild / channel / DM | 1,312 / 249 / 953 ms | 1,728 / 474 / 535 ms |
+| same, second pass | 120 / 117 / 485 ms | 599 / 313 / 1,020 ms |
+
+The second pass is slower in this harness because images evicted by the budget are
+decoded again, and the headless runner decodes on the UI thread. In the app the decode
+runs on GPUI's background threads, so the first frame is not blocked, but images can
+appear a frame or two late on a revisit.
+
+Still in the numbers, and not fixed:
+- GPUI layout high-water mark, 292 MiB (taffy 158 + element arena 134): the message
+  list uses `measure_all()`, which renders and lays out every loaded message in one
+  frame on each reset, and `invite_embed.rs` calls `remeasure()` (all items) six times.
+  Measuring across frames, or `remeasure_items(ix..ix+1)` for the embed, would cut it.
+- 142 MiB of atlas upload buffers in the headless runner only (`real_shots` never
+  flushes them); the window app flushes them every frame.
+- Profile effects still decode every frame up front while they play (up to 91 MiB for
+  one); decoding frames on demand would bring that to a few frames.
