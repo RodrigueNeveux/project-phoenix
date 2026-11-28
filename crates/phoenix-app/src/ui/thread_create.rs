@@ -154,11 +154,17 @@ impl PhoenixApp {
             return;
         }
         let announcement = self.channels.get(&channel).is_some_and(|c| c.kind == ChannelKind::Announcement);
-        let _ = window;
+        let handle = window.window_handle();
+        let thread_name = name.clone();
         self.action(ActionRequest::CreateStandaloneThread { channel, name, private, announcement }, cx, move |a, r, cx| match r {
             Ok(ActionReply::Channel(id)) => {
                 a.close_create_thread(cx);
-                a.select_channel(id, cx);
+                let (e, tname) = (cx.entity(), thread_name.clone());
+                cx.defer(move |cx| {
+                    let _ = handle.update(cx, |_, w, cx| {
+                        e.update(cx, |a, cx| a.open_thread(crate::model::ThreadRef { id, name: tname.into(), message_count: 0 }, w, cx))
+                    });
+                });
                 if !starter.is_empty() {
                     let fut = a.backend.send_message(id, starter, None);
                     cx.spawn(async move |this, cx| {
