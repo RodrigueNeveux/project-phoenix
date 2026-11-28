@@ -13,7 +13,7 @@ input handler both see them). Between steps it reads app state and compares.
 cd /mnt/windata/project-phoenix/compare/qa-input
 PHX_AGENT=1 PHX_NO_SCROLL=1 PHX_MEMBERS=true PHX_IN_VOICE=false PHX_FOLDERS=0 \
 PHX_W=1280 PHX_H=800 PHX_SCALE=1.5 PHX_GUILD=1369382919948210248 \
-PHX_CHANNEL=1576039645127385188 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_input.qa \
+PHX_CHANNEL=1403447573389381652 PHX_SCRIPT=~/discord-phoenix/scripts/qa/basic_input.qa \
 flock /tmp/phoenix-render.lock phoenix-nice ~/discord-phoenix/int-bin/real_shots qa.png
 ```
 
@@ -66,7 +66,7 @@ wrong row), so the scenario pins them. `PHX_FOLDERS=0` closes every rail folder,
 guild step opens the second folder (40,173) and clicks its first server (40,229).
 
 #phoenix gets new test messages all the time, so the video steps do not click a
-fixed point: `jump <message id>` scrolls to the test video message the way a reply
+fixed point: `select` opens #phoenix and `jump <message id>` scrolls to the test video message (`1576040049177268324`, a generated 12 s test pattern) the way a reply
 or search jump does, `@video` is the bounds of the video player painted last
 (`region video @video` hashes its pixels, `@video.br+-16,-16` is the fullscreen
 button), and `action bottom` goes back to the present afterwards.

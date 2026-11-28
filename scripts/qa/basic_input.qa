@@ -44,7 +44,11 @@ wait 1500
 expect at_bottom == 1
 shot 05-present
 step Vidéo : lecture au clic
-jump 1575813162031382548
+select 1576039645127385188
+wait 3000
+expect channel == 1576039645127385188
+jump 1576040049177268324
+wait 1500
 region video @video
 mark px:video
 click @video
