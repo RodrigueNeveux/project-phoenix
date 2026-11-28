@@ -475,7 +475,18 @@ pub fn stream_activity_card(
     entity: gpui::Entity<crate::app::PhoenixApp>,
     cx: &mut gpui::App,
 ) -> Option<AnyElement> {
+    stream_card_with_header(app, user, entity, false, cx)
+}
+
+pub fn stream_card_with_header(
+    app: &crate::app::PhoenixApp,
+    user: Id,
+    entity: gpui::Entity<crate::app::PhoenixApp>,
+    sidebar: bool,
+    cx: &mut gpui::App,
+) -> Option<AnyElement> {
     use gpui::FontWeight;
+    let (header_px, header_fg) = if sidebar { (14., idx::TEXT_STRONG) } else { (12., idx::TEXT_DEFAULT) };
     if !crate::ui::voice_panel::flags(user).stream {
         return None;
     }
@@ -511,7 +522,7 @@ pub fn stream_activity_card(
         .flex()
         .justify_between()
         .gap(z(4.))
-        .h(z(16.))
+        .h(z(header_px + 4.))
         .child(
             div()
                 .flex()
@@ -519,10 +530,10 @@ pub fn stream_activity_card(
                 .gap(z(4.))
                 .min_w_0()
                 .overflow_hidden()
-                .text_size(z(12.))
-                .line_height(z(16.))
+                .text_size(z(header_px))
+                .line_height(z(header_px + 4.))
                 .font_weight(FontWeight::MEDIUM)
-                .text_color(c(tok(idx::TEXT_DEFAULT)))
+                .text_color(c(tok(header_fg)))
                 .child(div().min_w_0().text_ellipsis().child(crate::t!("profile.live_card")))
                 .child(badge),
         )

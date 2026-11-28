@@ -260,7 +260,7 @@ fn activity_cards(app: &PhoenixApp, i: &Info, uid: Id, cx: &mut Context<PhoenixA
     let bot = i.user.as_deref().is_some_and(|u| u.bot);
     let e = cx.entity();
     let mut cards: Vec<AnyElement> = Vec::new();
-    let stream = crate::ui::voice_row::stream_activity_card(app, uid, e.clone(), cx);
+    let stream = crate::ui::voice_row::stream_card_with_header(app, uid, e.clone(), true, cx);
     let streaming = stream.is_some();
     cards.extend(stream);
     let live = live_activities(i.acts);
