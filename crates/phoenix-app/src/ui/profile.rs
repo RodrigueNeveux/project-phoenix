@@ -882,7 +882,7 @@ fn roles_block(app: &PhoenixApp, guild: Option<Id>, uid: Id, roles: Vec<crate::m
             .text_size(z(12.))
             .line_height(z(16.))
             .text_color(c(tok(idx::TEXT_DEFAULT)))
-            .child(role_circle(r))
+            .child(role_circle(&r))
             .when(r.connection, |d| {
                 d.child(gpui::svg().path(crate::icons::path("link")).size(z(12.)).mr(z(4.)).flex_none().text_color(c(tok(idx::ICON_DEFAULT))))
             })
