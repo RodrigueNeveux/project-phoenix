@@ -272,7 +272,8 @@ pub fn show_all_item(app: &PhoenixApp, e: &Ent, guild: Id) -> Option<MenuItem> {
     if !app.backend.guild_features(guild).iter().any(|f| f == "COMMUNITY") {
         return None;
     }
-    let on = pins::shows_all(guild);
+    let opt_in = app.backend.notify_prefs().is_some_and(|p| p.is_opt_in_enabled(Some(guild.0)));
+    let on = !opt_in != pins::shows_all(guild);
     let e = e.clone();
     Some(MenuItem::check(crate::t!("menu.show_all_channels"), on, move |_, _, cx: &mut App| {
         pins::toggle_show_all(guild);
