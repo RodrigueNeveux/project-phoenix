@@ -540,7 +540,7 @@ pub fn render_body(_app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> AnyElemen
 
     let mut list_el = rail();
     let mut first_unicode = None;
-    if !searching && !op.grid.premium {
+    if !searching {
         list_el = list_el.child(
             div().flex_none().flex().justify_center().pb(px(8.)).mb(px(8.)).border_b_1().border_color(tk(idx::BORDER_SUBTLE)).child(
                 rail_item(("emoji-nitro", 0), false, false, 0.)

@@ -1223,16 +1223,29 @@ fn unread_card(app: &PhoenixApp, card: &crate::commands::state::UnreadCard, cx: 
 }
 
 fn day_divider(label: SharedString) -> gpui::Div {
-    let line = || div().flex_1().h(z(1.)).bg(tk(idx::BORDER_SUBTLE));
     div()
         .mx(z(16.))
-        .my(z(8.))
+        .mt(z(8.))
+        .h(z(1.))
+        .flex_none()
+        .bg(tk(idx::BORDER_SUBTLE))
         .flex()
+        .justify_center()
         .items_center()
-        .gap(z(4.))
-        .child(line())
-        .child(div().text_size(z(12.)).line_height(z(13.)).font_weight(FontWeight::SEMIBOLD).text_color(tk(idx::TEXT_MUTED)).child(label))
-        .child(line())
+        .child(
+            div()
+                .flex_none()
+                .bg(tk(idx::BACKGROUND_BASE_LOWER))
+                .rounded(z(8.))
+                .mt(z(-1.))
+                .px(z(4.))
+                .py(z(2.))
+                .text_size(z(12.))
+                .line_height(z(13.))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(tk(idx::TEXT_MUTED))
+                .child(label),
+        )
 }
 
 fn filter_menu(i: &crate::commands::state::InboxState, cx: &mut Context<PhoenixApp>) -> AnyElement {
@@ -1352,7 +1365,7 @@ fn inbox(app: &PhoenixApp, cx: &mut Context<PhoenixApp>) -> Option<AnyElement> {
 
     let inbox_scroll = INBOX_SCROLL.with(|h| h.clone());
     let mut list = div().id("inbox-list").flex_1().min_h_0().overflow_y_scroll().track_scroll(&inbox_scroll).flex().flex_col();
-    let scroller = |l: gpui::Stateful<gpui::Div>| l.pt(z(16.)).px(z(16.));
+    let scroller = |l: gpui::Stateful<gpui::Div>| l.pt(z(16.)).pl(z(16.)).pr(z(24.));
     match i.tab {
         InboxTab::Mentions => {
             if i.mentions.is_empty() && !i.loading {
